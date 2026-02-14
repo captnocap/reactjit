@@ -178,6 +178,85 @@ function findLibQuickJS(cwd) {
   process.exit(1);
 }
 
+// ── libmpv dep skiplist ───────────────────────────────────
+// Transitive deps of libmpv that are not needed for modern video playback.
+// Covers: encoders (playback-only), speech engines, linear algebra,
+// niche codecs, terminal UI, messaging, and legacy formats.
+// These can be patched back in by placing the .so in the project's lib/.
+const MPV_DEP_SKIPLIST = new Set([
+  // Encoders — playback doesn't need them
+  'libx264.so.164',
+  'libx265.so.215',
+  'libSvtAv1Enc.so.2',
+  'librav1e.so.0.7',
+  'libshine.so.3',
+  'libtwolame.so.0',
+  'libvo-amrwbenc.so.0',
+  'libxvidcore.so.4',
+  // Linear algebra (pulled in by fftw audio filters)
+  'libopenblas.so.0',
+  'liblapack.so.3',
+  'libblas.so.3',
+  'libgfortran.so.5',
+  // Text-to-speech / speech recognition
+  'libflite.so.1',
+  'libflite_cmulex.so.1',
+  'libflite_cmu_us_awb.so.1',
+  'libflite_cmu_us_kal.so.1',
+  'libflite_cmu_us_kal16.so.1',
+  'libflite_cmu_us_rms.so.1',
+  'libflite_cmu_us_slt.so.1',
+  'libflite_usenglish.so.1',
+  'libpocketsphinx.so.3',
+  'libsphinxbase.so.3',
+  // Niche / legacy codecs
+  'libcodec2.so.1.2',       // Amateur radio voice
+  'libopencore-amrnb.so.0',  // AMR narrowband (phone)
+  'libopencore-amrwb.so.0',  // AMR wideband (phone)
+  'libgsm.so.1',             // GSM voice
+  'libopenmpt.so.0',         // MOD/tracker music
+  'libgme.so.0',             // Chiptune emulation
+  // Terminal / ASCII output (mpv CLI, not Love2D)
+  'libcaca.so.0',
+  'libsixel.so.1',
+  'libslang.so.2',
+  'libncursesw.so.6',
+  'libtinfo.so.6',
+  // Teletext / niche broadcast captions
+  'libzvbi.so.0',
+  'libaribb24.so.0',
+  // CD/DVD/FireWire hardware
+  'libcdio.so.19',
+  'libcdio_cdda.so.2',
+  'libcdio_paranoia.so.2',
+  'libdc1394.so.25',
+  'libavc1394.so.0',
+  'libiec61883.so.0',
+  'libraw1394.so.11',
+  'librom1394.so.0',
+  // Messaging / streaming protocols (not needed for local playback)
+  'libzmq.so.5',
+  'libpgm-5.3.so.0',
+  'libnorm.so.1',
+  'libsodium.so.23',
+  'librabbitmq.so.4',
+  'libsrt-gnutls.so.1.5',
+  'librist.so.4',
+  // SVG rendering chain (subtitle edge case)
+  'librsvg-2.so.2',
+  'libgdk_pixbuf-2.0.so.0',
+  'libcairo-gobject.so.2',
+  // JPEG XL (image codec, not video)
+  'libjxl.so.0.11',
+  'libjxl_cms.so.0.11',
+  'libjxl_threads.so.0.11',
+  'libhwy.so.1',
+  // Misc unlikely deps
+  'libdb-5.3.so',            // Berkeley DB
+  'liblua5.2.so.0',          // mpv's own scripting (we use LuaJIT)
+  'libmujs.so.3',            // mpv JS scripting
+]);
+
 // ── Helper: resolve libmpv.so.2 (optional) ────────────────
 
 function findLibMpv(cwd) {
@@ -403,7 +482,8 @@ async function buildDistLove(cwd, projectName, opts = {}) {
   const libmpv = findLibMpv(cwd);
   if (libmpv) {
     cpSync(libmpv, join(payloadDir, 'lib', 'libmpv.so.2'));
-    // Bundle libmpv's transitive deps (ffmpeg libs, etc.)
+    // Bundle libmpv's transitive deps, skipping encoders/niche libs
+    let mpvIncluded = 0, mpvSkipped = 0;
     try {
       const mpvLdd = execSync(`ldd "${libmpv}"`, { encoding: 'utf-8' });
       for (const line of mpvLdd.split('\n')) {
@@ -411,17 +491,19 @@ async function buildDistLove(cwd, projectName, opts = {}) {
         const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
         if (match) {
           const [, soname, path] = match;
+          if (MPV_DEP_SKIPLIST.has(soname)) { mpvSkipped++; continue; }
           const dest = join(payloadDir, 'lib', soname);
           if (!existsSync(dest)) {
             try {
               const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
               cpSync(real, dest);
+              mpvIncluded++;
             } catch { /* skip unresolvable */ }
           }
         }
       }
     } catch { /* ldd failed — still have the .so itself */ }
-    console.log('  Bundled libmpv + dependencies');
+    console.log(`  Bundled libmpv + ${mpvIncluded} deps (skipped ${mpvSkipped} non-essential)`);
   }
 
   // Bundle tor binary if available (optional — .onion hosting)

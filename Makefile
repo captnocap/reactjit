@@ -147,6 +147,19 @@ dist-storybook: build-storybook-native setup
 		echo "  Bundled libmpv.so.2"; \
 		ldd "$$LIBMPV" | grep "=> /" | grep -v '$(VDSO_EXCLUDE)' | \
 			awk '{print $$1, $$3}' | while read soname path; do \
+				case "$$soname" in \
+					libx264.*|libx265.*|libSvtAv1Enc.*|librav1e.*|libshine.*|libtwolame.*|libvo-amrwbenc.*|libxvidcore.*) continue ;; \
+					libopenblas.*|liblapack.*|libblas.*|libgfortran.*) continue ;; \
+					libflite*|libpocketsphinx.*|libsphinxbase.*) continue ;; \
+					libcodec2.*|libopencore-amr*|libgsm.*|libopenmpt.*|libgme.*) continue ;; \
+					libcaca.*|libsixel.*|libslang.*|libncursesw.*|libtinfo.*) continue ;; \
+					libzvbi.*|libaribb24.*) continue ;; \
+					libcdio*|libdc1394.*|libavc1394.*|libiec61883.*|libraw1394.*|librom1394.*) continue ;; \
+					libzmq.*|libpgm-*|libnorm.*|libsodium.*|librabbitmq.*|libsrt-gnutls.*|librist.*) continue ;; \
+					librsvg*|libgdk_pixbuf*|libcairo-gobject.*) continue ;; \
+					libjxl*|libhwy.*) continue ;; \
+					libdb-5.3.*|liblua5.2.*|libmujs.*) continue ;; \
+				esac; \
 				if [ ! -f $(PAYLOAD_DIR)/lib/"$$soname" ]; then \
 					real=$$(readlink -f "$$path"); \
 					cp "$$real" $(PAYLOAD_DIR)/lib/"$$soname"; \
