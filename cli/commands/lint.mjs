@@ -6,7 +6,7 @@
  *
  * Rules:
  *   no-text-without-fontsize    (error)   Text without fontSize cannot be measured
- *   no-block-char-in-text       (error)   █ in Text renders as glyph, not filled pixel
+ *   no-unicode-symbol-in-text   (error)   Unicode symbols in Text won't render in Love2D
  *   no-mixed-text-children      (error)   Mixed text + expressions create overlapping __TEXT__ nodes
  *   no-row-justify-without-width (error)  Row with justifyContent but no width
  *   no-uncontexted-flexgrow     (warning) flexGrow where siblings lack explicit sizing
@@ -185,6 +185,39 @@ function extractJsxAttrs(element, ts) {
   return result;
 }
 
+// ── String content extraction from expressions ──────────────
+
+/**
+ * Recursively extract string literal content from an expression.
+ * Handles ternaries (both branches), concatenation, template literals,
+ * and parenthesized expressions. Returns empty string for non-analyzable nodes.
+ */
+function collectStringContent(node, ts) {
+  if (!node) return '';
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  if (ts.isConditionalExpression(node)) {
+    // Collect from BOTH branches — either could contain problematic chars
+    return collectStringContent(node.whenTrue, ts) + collectStringContent(node.whenFalse, ts);
+  }
+  if (ts.isParenthesizedExpression(node)) {
+    return collectStringContent(node.expression, ts);
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    return collectStringContent(node.left, ts) + collectStringContent(node.right, ts);
+  }
+  if (ts.isTemplateExpression(node)) {
+    let result = node.head.text || '';
+    for (const span of node.templateSpans) {
+      result += collectStringContent(span.expression, ts);
+      result += span.literal.text || '';
+    }
+    return result;
+  }
+  return '';
+}
+
 // ── AST walking — build JsxContext tree ──────────────────────
 
 function getTagName(element, ts) {
@@ -246,9 +279,7 @@ function buildContexts(sourceFile, filePath, ts) {
             textContent += child.text;
             if (child.text.trim() !== '') hasNonWhitespaceJsxText = true;
           } else if (ts.isJsxExpression(child) && child.expression) {
-            if (ts.isStringLiteral(child.expression) || ts.isNoSubstitutionTemplateLiteral(child.expression)) {
-              textContent += child.expression.text;
-            }
+            textContent += collectStringContent(child.expression, ts);
             hasJsxExpression = true;
           }
         }
@@ -453,18 +484,53 @@ const rules = [
     },
   },
 
-  // █ (FULL BLOCK) in Text renders as a font glyph with gaps, not a filled pixel.
-  // Use Box with backgroundColor instead.
+  // Unicode symbols (geometric shapes, arrows, dingbats, block elements, technical
+  // symbols, etc.) don't render in Love2D's default font. They must be converted to
+  // Box-based geometry — e.g., a play triangle as colored Box elements, pause bars as
+  // two narrow Box elements, block characters as a boolean grid with backgroundColor.
   {
-    name: 'no-block-char-in-text',
+    name: 'no-unicode-symbol-in-text',
     severity: 'error',
     check(ctx) {
       if (!TEXT_TAGS.has(ctx.tagName)) return null;
       if (!ctx.textContent) return null;
-      if (ctx.textContent.includes('\u2588')) {
-        return 'Text contains \u2588 (U+2588 FULL BLOCK) which renders as a font glyph, not a filled pixel — use Box with backgroundColor instead';
+
+      // Unicode blocks that contain "icon" characters Love2D's font won't render
+      const SYMBOL_RANGES = [
+        [0x2190, 0x21FF], // Arrows (← ↑ → ↓ ⇒ etc.)
+        [0x2200, 0x22FF], // Mathematical Operators (∞ ≤ ≥ ≠ etc.)
+        [0x2300, 0x23FF], // Miscellaneous Technical (⌘ ⏎ ⏸ ⏹ ⏺ etc.)
+        [0x2500, 0x257F], // Box Drawing (─ │ ┌ ┐ └ ┘ etc.)
+        [0x2580, 0x259F], // Block Elements (█ ▀ ▄ ▌ ▐ etc.)
+        [0x25A0, 0x25FF], // Geometric Shapes (■ □ ▲ ▶ ● ○ etc.)
+        [0x2600, 0x26FF], // Miscellaneous Symbols (☀ ☎ ♠ ♣ ♥ etc.)
+        [0x2700, 0x27BF], // Dingbats (✂ ✓ ✗ ✦ etc.)
+        [0x2B00, 0x2BFF], // Misc Symbols and Arrows (⬆ ⬇ ⬛ ⭐ etc.)
+        [0x1F300, 0x1F9FF], // Emoji / Symbols / Pictographs
+      ];
+
+      function isSymbol(cp) {
+        for (const [lo, hi] of SYMBOL_RANGES) {
+          if (cp >= lo && cp <= hi) return true;
+        }
+        return false;
       }
-      return null;
+
+      const found = [];
+      for (const ch of ctx.textContent) {
+        const cp = ch.codePointAt(0);
+        if (isSymbol(cp)) {
+          const hex = 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
+          if (!found.some(f => f.hex === hex)) {
+            found.push({ char: ch, hex });
+          }
+        }
+      }
+
+      if (found.length === 0) return null;
+
+      const chars = found.map(f => `${f.char} (${f.hex})`).join(', ');
+      return `Text contains Unicode symbol${found.length > 1 ? 's' : ''}: ${chars} — these won't render in Love2D's default font. Use Box-based geometry instead (colored Box elements for shapes, see NeofetchDemo heart pattern)`;
     },
   },
 

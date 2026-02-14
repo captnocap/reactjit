@@ -12,6 +12,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Box, Text } from './primitives';
 import { Video } from './Video';
+import { usePixelArt } from './usePixelArt';
 import type { VideoPlayerProps, VideoTimeEvent, Style } from './types';
 
 function formatTime(seconds: number | undefined): string {
@@ -160,9 +161,7 @@ export function VideoPlayer(props: VideoPlayerProps) {
             style={{ padding: 4, paddingLeft: 8, paddingRight: 8 }}
             hoverStyle={{ backgroundColor: [1, 1, 1, 0.15] }}
           >
-            <Text style={{ fontSize: 14, color: '#ffffff' }}>
-              {paused ? '\u25B6' : '\u23F8'}
-            </Text>
+            {paused ? usePixelArt('play', { size: 3, color: '#ffffff' }) : usePixelArt('pause', { size: 3, color: '#ffffff' })}
           </Box>
 
           {/* Seek bar */}

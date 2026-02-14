@@ -139,6 +139,9 @@ export {
 // Colors
 export { colors, type CatppuccinColor } from './colors';
 
+// Pixel art (Box-based Unicode symbol rendering)
+export { usePixelArt, PixelArt, getPixelArtSymbols, type PixelArtOptions, type PixelArtProps } from './usePixelArt';
+
 // Debug tools
 export { useDebug, getDebugData, registerDebug } from './useDebug';
 export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';

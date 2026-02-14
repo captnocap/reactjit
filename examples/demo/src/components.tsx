@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { Box, Text } from '../../../packages/shared/src/primitives';
 import { useLoveState, useLoveSend } from '../../../packages/shared/src/hooks';
+import { usePixelArt } from '../../../packages/shared/src/usePixelArt';
 import type { Style } from '../../../packages/shared/src/types';
 import type { ReactNode } from 'react';
 
@@ -295,7 +296,7 @@ function PowerControl({ label, stateKey, color }: {
             justifyContent: 'center',
           }}
         >
-          <Text style={{ color: TEXT_MID, fontSize: 11 }}>{'\u2212'}</Text>
+          {usePixelArt('minus', { size: 2, color: TEXT_MID })}
         </Box>
         <Box
           onClick={() => send('power:set', { system, delta: 1 })}

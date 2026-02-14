@@ -161,7 +161,7 @@ These cause the most bugs:
 5. **Keep flex trees shallow** — prefer `<Box flexDirection='row'>` over deep wrapper hierarchies
 6. **Fill the viewport** — Love2D is a fixed canvas, not a scrolling page
 7. **Row Boxes NEED explicit width for `justifyContent` to work** — Box nodes have no intrinsic width (only Text nodes do via measurement). A `flexDirection: 'row'` Box without an explicit width won't respond to `justifyContent: 'center'` or other justify values. Always add `width: '100%'` (or a fixed width) to row Boxes that need horizontal content distribution.
-8. **Use `█` (U+2588) as a grid blueprint, never in `<Text>`** — the block character renders as a font glyph in Text, not a filled pixel. Convert it to a boolean grid and render colored `<Box>` elements with `backgroundColor` instead (see NeofetchDemo pattern). The linter enforces this via `no-block-char-in-text`.
+8. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in Love2D's default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`.
 
 The static linter (`cli/commands/lint.mjs`) catches these as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
 
