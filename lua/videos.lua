@@ -356,13 +356,16 @@ local function getMpvString(handle, name)
   return nil
 end
 
---- Destroy a single video entry's mpv and GL resources.
---- Clean up a video entry's GL resources (FBO, texture, canvas).
---- Does NOT destroy the shared mpv handle/renderCtx — those live for the process lifetime.
+--- Destroy a single video entry's mpv handle, render context, and GL resources.
 local function destroyVideoEntry(entry)
-  -- Don't destroy shared handle/renderCtx
-  entry.renderCtx = nil
-  entry.handle = nil
+  if entry.renderCtx then
+    mpv.mpv_render_context_free(entry.renderCtx)
+    entry.renderCtx = nil
+  end
+  if entry.handle then
+    mpv.mpv_terminate_destroy(entry.handle)
+    entry.handle = nil
+  end
   if entry.fbo then
     local fb = ffi.new("GLuint[1]", entry.fbo)
     ffi.C.glDeleteFramebuffers(1, fb)
@@ -522,27 +525,48 @@ function Videos.getPaused(src)
 end
 
 -- ============================================================================
--- Eager mpv backend — handle + render context created once at love.load time
+-- Per-source mpv instances (each video source gets its own handle + render ctx)
 -- ============================================================================
 
-local sharedHandle = nil      -- mpv_handle* (created once at startup)
-local sharedRenderCtx = nil   -- mpv_render_context* (created once at startup)
 local backendReady = false
 
---- Pre-create mpv handle + render context during love.load().
---- Must be called before the frame loop starts (GL context must be current).
+--- Verify libmpv is available. Called during love.load().
 function Videos.initBackend()
-  if not libmpvAvailable then return end
+  if not libmpvAvailable then
+    io.write("[videos] initBackend: libmpv not available\n"); io.flush()
+    return
+  end
+  backendReady = true
+  io.write("[videos] initBackend: ready (per-source instances)\n"); io.flush()
+end
 
-  io.write("[videos] initBackend: creating mpv handle...\n"); io.flush()
-
-  local handle = mpv.mpv_create()
-  if handle == nil then
-    io.write("[videos] initBackend: mpv_create failed\n"); io.flush()
+--- Create a per-source mpv handle + render context + load the file.
+--- Each video source gets its own independent mpv pipeline.
+local function loadVideo(src)
+  if not backendReady then
+    videoStatus[src] = "error"
+    videoErrors[src] = "mpv backend not initialized"
     return
   end
 
-  -- Configure (matches working PoC exactly)
+  local resolvedPath = resolveVideoPath(src)
+  if not resolvedPath then
+    videoStatus[src] = "error"
+    videoErrors[src] = "Video file not found: " .. src
+    return
+  end
+
+  io.write("[videos] loadVideo: " .. src .. "\n"); io.flush()
+
+  -- Create mpv handle
+  local handle = mpv.mpv_create()
+  if handle == nil then
+    videoStatus[src] = "error"
+    videoErrors[src] = "mpv_create failed"
+    return
+  end
+
+  -- Configure
   mpv.mpv_set_option_string(handle, "vo", "libmpv")
   mpv.mpv_set_option_string(handle, "hwdec", "no")
   -- ao not set → mpv auto-detects (pulse, pipewire, alsa, etc.)
@@ -560,11 +584,11 @@ function Videos.initBackend()
 
   local err = mpv.mpv_initialize(handle)
   if err < 0 then
-    io.write("[videos] initBackend: mpv_initialize failed: " .. ffi.string(mpv.mpv_error_string(err)) .. "\n"); io.flush()
+    videoStatus[src] = "error"
+    videoErrors[src] = "mpv_initialize: " .. ffi.string(mpv.mpv_error_string(err))
     mpv.mpv_terminate_destroy(handle)
     return
   end
-  io.write("[videos] initBackend: mpv_initialize OK\n"); io.flush()
 
   -- Create OpenGL render context
   local glInit = ffi.new("mpv_opengl_init_params")
@@ -582,61 +606,39 @@ function Videos.initBackend()
 
   local ctxPtr = ffi.new("mpv_render_context*[1]")
 
-  -- Save full GL state including pixel-store (Love2D uses UNPACK_ALIGNMENT=1).
-  -- mpv_render_context_create changes UNPACK_ALIGNMENT to 4, which corrupts
-  -- Love2D's font atlas glyph uploads (single-byte-per-pixel, needs alignment=1).
+  -- Save full GL state including pixel-store (mpv_render_context_create
+  -- changes UNPACK_ALIGNMENT from 1→4, corrupting Love2D font rendering)
   saveGLState()
-
   err = mpv.mpv_render_context_create(ctxPtr, handle, createParams)
-
-  -- Restore ALL GL state including pixel-store
   restoreGLState()
 
   if err < 0 then
-    io.write("[videos] initBackend: render_context_create failed: " .. ffi.string(mpv.mpv_error_string(err)) .. "\n"); io.flush()
+    videoStatus[src] = "error"
+    videoErrors[src] = "render_context_create: " .. ffi.string(mpv.mpv_error_string(err))
     mpv.mpv_terminate_destroy(handle)
     return
   end
 
-  sharedHandle = handle
-  sharedRenderCtx = ctxPtr[0]
-  backendReady = true
-  io.write("[videos] initBackend: ready (idle, no file loaded)\n"); io.flush()
-end
+  local renderCtx = ctxPtr[0]
 
---- Load a video file into the pre-created mpv instance.
---- Called from syncWithTree — just does loadfile, no mpv_create/initialize.
-local function loadVideo(src)
-  if not backendReady then
-    videoStatus[src] = "error"
-    videoErrors[src] = "mpv backend not initialized"
-    return
-  end
-
-  local resolvedPath = resolveVideoPath(src)
-  if not resolvedPath then
-    videoStatus[src] = "error"
-    videoErrors[src] = "Video file not found: " .. src
-    return
-  end
-
-  io.write("[videos] loadVideo: " .. src .. "\n"); io.flush()
-
+  -- Load the file
   local cmd = ffi.new("const char*[4]")
   cmd[0] = ffi.cast("const char*", "loadfile")
   cmd[1] = ffi.cast("const char*", resolvedPath)
   cmd[2] = ffi.cast("const char*", "replace")
   cmd[3] = nil
-  local err = mpv.mpv_command(sharedHandle, cmd)
+  err = mpv.mpv_command(handle, cmd)
   if err < 0 then
     videoStatus[src] = "error"
     videoErrors[src] = "loadfile: " .. ffi.string(mpv.mpv_error_string(err))
+    mpv.mpv_render_context_free(renderCtx)
+    mpv.mpv_terminate_destroy(handle)
     return
   end
 
   videoCache[src] = {
-    handle = sharedHandle,
-    renderCtx = sharedRenderCtx,
+    handle = handle,
+    renderCtx = renderCtx,
     fbo = nil,
     fboTex = nil,
     canvas = nil,
@@ -660,6 +662,13 @@ function Videos.syncWithTree(nodes)
     if (node.type == "Video" or node.type == "VideoPlayer") and node.props and node.props.src and node.props.src ~= "" then
       activeSrcs[node.props.src] = true
       activeNodes[id] = node.props.src
+    end
+    -- View nodes with backgroundVideo or hoverVideo (loaded but not event-tracked)
+    if (node.type == "View" or node.type == "box") and node.props then
+      local bgv = node.props.backgroundVideo
+      if bgv and bgv ~= "" then activeSrcs[bgv] = true end
+      local hv = node.props.hoverVideo
+      if hv and hv ~= "" then activeSrcs[hv] = true end
     end
   end
 
@@ -820,6 +829,8 @@ function Videos.renderAll()
         mpv.mpv_render_context_report_swap(entry.renderCtx)
 
         -- Blit from private FBO → Canvas FBO (flip Y: mpv is bottom-up, canvas is top-down)
+        -- Disable scissor test to prevent mpv's scissor state from clipping the blit
+        ffi.C.glDisable(GL_SCISSOR_TEST)
         ffi.C.glBindFramebuffer(GL_READ_FRAMEBUFFER, entry.fbo)
         ffi.C.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, entry.canvasFboId)
         ffi.C.glBlitFramebuffer(
@@ -953,15 +964,6 @@ end
 
 function Videos.shutdown()
   Videos.clearCache()
-  -- Destroy the shared mpv backend
-  if sharedRenderCtx then
-    mpv.mpv_render_context_free(sharedRenderCtx)
-    sharedRenderCtx = nil
-  end
-  if sharedHandle then
-    mpv.mpv_terminate_destroy(sharedHandle)
-    sharedHandle = nil
-  end
   backendReady = false
 end
 

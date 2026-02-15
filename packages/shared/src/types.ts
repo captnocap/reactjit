@@ -226,6 +226,12 @@ export interface BoxProps {
   hidden?: boolean;
   z?: number;
 
+  // Video backgrounds
+  backgroundVideo?: string;
+  backgroundVideoFit?: 'fill' | 'contain' | 'cover';
+  hoverVideo?: string;
+  hoverVideoFit?: 'fill' | 'contain' | 'cover';
+
   focusable?: boolean;
   focusGroup?: boolean;
   focusGroupController?: number;

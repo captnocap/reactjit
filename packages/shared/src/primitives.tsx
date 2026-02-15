@@ -271,6 +271,7 @@ function resolveImageStyle(props: ImageProps): Style | undefined {
 
 export function Box(props: BoxProps) {
   const {
+    backgroundVideo, backgroundVideoFit, hoverVideo, hoverVideoFit,
     hoverStyle, activeStyle, focusStyle,
     focusable, focusGroup, focusGroupController, focusGroupRingColor,
     onClick, onRelease, onPointerEnter, onPointerLeave,
@@ -375,6 +376,10 @@ export function Box(props: BoxProps) {
     'View',
     {
       style: resolvedStyle,
+      backgroundVideo,
+      backgroundVideoFit,
+      hoverVideo,
+      hoverVideoFit,
       hoverStyle,
       activeStyle,
       focusStyle,

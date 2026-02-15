@@ -527,6 +527,64 @@ local function applyTransform(transform, c)
 end
 
 -- ============================================================================
+-- Video frame helper (shared by Video, backgroundVideo, hoverVideo)
+-- ============================================================================
+
+--- Draw a video canvas frame at a given rect with objectFit and optional borderRadius clipping.
+--- @param canvas love.Canvas  The video frame canvas
+--- @param src string          Video source key (for dimension lookup)
+--- @param c table             Computed rect {x, y, w, h}
+--- @param objectFit string    "fill", "contain", or "cover"
+--- @param borderRadius number Clip radius (0 = no clipping)
+--- @param stencilDepth number Current stencil nesting depth
+--- @param effectiveOpacity number Combined opacity
+local function drawVideoFrame(canvas, src, c, objectFit, borderRadius, stencilDepth, effectiveOpacity)
+  local vidW, vidH = Videos.getDimensions(src)
+  if not vidW then vidW, vidH = canvas:getWidth(), canvas:getHeight() end
+
+  local scaleX, scaleY, drawX, drawY
+  objectFit = objectFit or "cover"
+
+  if objectFit == "contain" then
+    local scale = math.min(c.w / vidW, c.h / vidH)
+    scaleX, scaleY = scale, scale
+    drawX = c.x + (c.w - vidW * scale) / 2
+    drawY = c.y + (c.h - vidH * scale) / 2
+  elseif objectFit == "cover" then
+    local scale = math.max(c.w / vidW, c.h / vidH)
+    scaleX, scaleY = scale, scale
+    drawX = c.x + (c.w - vidW * scale) / 2
+    drawY = c.y + (c.h - vidH * scale) / 2
+  else -- "fill"
+    scaleX = c.w / vidW
+    scaleY = c.h / vidH
+    drawX = c.x
+    drawY = c.y
+  end
+
+  -- Stencil clip for border radius
+  local needClip = borderRadius > 0
+  if needClip then
+    local stencilValue = stencilDepth + 1
+    love.graphics.stencil(function()
+      love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+    end, "replace", stencilValue)
+    love.graphics.setStencilTest("greater", stencilDepth)
+  end
+
+  love.graphics.setColor(1, 1, 1, effectiveOpacity)
+  love.graphics.draw(canvas, drawX, drawY, 0, scaleX, scaleY)
+
+  if needClip then
+    if stencilDepth > 0 then
+      love.graphics.setStencilTest("greater", stencilDepth - 1)
+    else
+      love.graphics.setStencilTest()
+    end
+  end
+end
+
+-- ============================================================================
 -- Node painter (recursive)
 -- ============================================================================
 
@@ -696,6 +754,25 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       else
         local or_ = borderRadius > 0 and (borderRadius + s.outlineWidth + outlineOffset) or 0
         love.graphics.rectangle("line", ox, oy, ow, oh, or_, or_)
+      end
+    end
+
+    -- Background video (renders behind children, always playing + looped + muted)
+    if Videos and node.props and node.props.backgroundVideo then
+      local bgSrc = node.props.backgroundVideo
+      if bgSrc ~= "" then
+        local bgStatus = Videos.getStatus(bgSrc)
+        if bgStatus == "ready" then
+          Videos.setPaused(bgSrc, false)
+          Videos.setLoop(bgSrc, true)
+          Videos.setMuted(bgSrc, true)
+          Videos.setVolume(bgSrc, 0)
+          local bgCanvas = Videos.get(bgSrc)
+          if bgCanvas then
+            local fit = node.props.backgroundVideoFit or "cover"
+            drawVideoFrame(bgCanvas, bgSrc, c, fit, borderRadius, stencilDepth, effectiveOpacity)
+          end
+        end
       end
     end
 
@@ -1092,6 +1169,32 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- Draw scrollbar indicators for scroll containers
   if isScroll and node.scrollState then
     Painter.drawScrollbars(node, effectiveOpacity)
+  end
+
+  -- Hover video overlay (renders ON TOP of children when mouse is inside bounds)
+  if not isHidden and (node.type == "View" or node.type == "box")
+     and Videos and node.props and node.props.hoverVideo then
+    local hvSrc = node.props.hoverVideo
+    if hvSrc ~= "" then
+      local mx, my = love.mouse.getPosition()
+      local isHovered = mx >= c.x and mx < c.x + c.w and my >= c.y and my < c.y + c.h
+      if isHovered then
+        Videos.setPaused(hvSrc, false)
+        Videos.setLoop(hvSrc, true)
+        Videos.setMuted(hvSrc, true)
+        Videos.setVolume(hvSrc, 0)
+        local hvCanvas = Videos.get(hvSrc)
+        if hvCanvas then
+          local fit = node.props.hoverVideoFit or "cover"
+          drawVideoFrame(hvCanvas, hvSrc, c, fit, borderRadius, stencilDepth, effectiveOpacity)
+        end
+      else
+        -- Pause when not hovered to save resources
+        if Videos.getStatus(hvSrc) == "ready" then
+          Videos.setPaused(hvSrc, true)
+        end
+      end
+    end
   end
 
   -- Restore clipping state
