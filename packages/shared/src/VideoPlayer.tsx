@@ -1,198 +1,101 @@
 /**
- * <VideoPlayer> — compound video component with built-in controls
+ * <VideoPlayer> — video surface with built-in Lua-native controls
  *
- * Wraps <Video> with a play/pause button, seek bar, and time display.
- * Controls auto-hide after 3 seconds of no interaction.
+ * In native mode: renders as a single 'VideoPlayer' host element.
+ * All controls (play/pause, seek bar, volume, time display) are rendered
+ * entirely in Lua's painter, avoiding the position:absolute layout problem.
+ *
+ * In web mode: falls back to a <video> element with HTML controls.
  *
  * Usage:
  *   <VideoPlayer src="movie.mp4" w={640} h={360} />
- *   <VideoPlayer src="movie.ogv" controls={false} />  // bare video, no controls
+ *   <VideoPlayer src="movie.ogv" controls={false} />
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Box, Text } from './primitives';
-import { Video } from './Video';
-import { usePixelArt } from './usePixelArt';
-import type { VideoPlayerProps, VideoTimeEvent, Style } from './types';
+import React from 'react';
+import { useRendererMode } from './context';
+import { styleToCSS } from './primitives';
+import type { VideoPlayerProps, Style } from './types';
 
-function formatTime(seconds: number | undefined): string {
-  if (seconds === undefined || isNaN(seconds)) return '--:--';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+/** Build a Style from VideoPlayer shorthand props. style={} overrides. */
+function resolveStyle(props: VideoPlayerProps): Style | undefined {
+  const { w, h, radius, style } = props;
+
+  if (w === undefined && h === undefined && radius === undefined) {
+    return style;
+  }
+
+  const base: Style = {};
+  if (w !== undefined) base.width = w;
+  if (h !== undefined) base.height = h;
+  if (radius !== undefined) base.borderRadius = radius;
+
+  return style ? { ...base, ...style } : base;
 }
 
 export function VideoPlayer(props: VideoPlayerProps) {
   const {
     controls = true,
     src,
-    paused: pausedProp,
-    loop,
-    muted,
-    volume,
-    style,
-    w,
-    h,
-    radius,
-    onTimeUpdate: onTimeUpdateProp,
-    onEnded: onEndedProp,
-    onPlay: onPlayProp,
-    onPause: onPauseProp,
+    paused = false,
+    loop = false,
+    muted = false,
+    volume = 1,
+    onTimeUpdate,
+    onEnded,
+    onPlay,
+    onPause,
     onReady,
     onError,
     onClick,
   } = props;
+  const resolvedStyle = resolveStyle(props);
+  const mode = useRendererMode();
 
-  const [paused, setPaused] = useState(pausedProp ?? false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState<number | undefined>(undefined);
-  const [showControls, setShowControls] = useState(true);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync controlled paused prop
-  useEffect(() => {
-    if (pausedProp !== undefined) {
-      setPaused(pausedProp);
-    }
-  }, [pausedProp]);
-
-  const resetHideTimer = useCallback(() => {
-    setShowControls(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => {
-      if (!paused) setShowControls(false);
-    }, 3000);
-  }, [paused]);
-
-  // Show controls when paused
-  useEffect(() => {
-    if (paused) {
-      setShowControls(true);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    } else {
-      resetHideTimer();
-    }
-    return () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [paused, resetHideTimer]);
-
-  const handleTimeUpdate = useCallback((event: VideoTimeEvent) => {
-    setCurrentTime(event.currentTime);
-    if (event.duration !== undefined) setDuration(event.duration);
-    onTimeUpdateProp?.(event);
-  }, [onTimeUpdateProp]);
-
-  const handleEnded = useCallback(() => {
-    setPaused(true);
-    setShowControls(true);
-    onEndedProp?.();
-  }, [onEndedProp]);
-
-  const togglePlay = useCallback(() => {
-    const next = !paused;
-    setPaused(next);
-    if (next) {
-      onPauseProp?.();
-    } else {
-      onPlayProp?.();
-    }
-    resetHideTimer();
-  }, [paused, onPlayProp, onPauseProp, resetHideTimer]);
-
-  const handleClick = useCallback((event: any) => {
-    if (controls) {
-      togglePlay();
-    }
-    onClick?.(event);
-    resetHideTimer();
-  }, [controls, togglePlay, onClick, resetHideTimer]);
-
-  const progress = duration && duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  // Must call hooks unconditionally (rules of hooks)
-  const playIcon = usePixelArt('play', { size: 3, color: '#ffffff' });
-  const pauseIcon = usePixelArt('pause', { size: 3, color: '#ffffff' });
-
-  const containerStyle: Style = {
-    ...(w !== undefined ? { width: w } : {}),
-    ...(h !== undefined ? { height: h } : {}),
-    ...(radius !== undefined ? { borderRadius: radius } : {}),
-    ...style,
-    overflow: 'hidden',
-  };
-
-  const videoStyle: Style = {
-    width: '100%',
-    height: '100%',
-    ...(style?.objectFit ? { objectFit: style.objectFit } : {}),
-  };
-
-  return (
-    <Box style={containerStyle}>
-      <Video
+  if (mode === 'web') {
+    // Web mode: native HTML video with browser controls
+    return (
+      <video
         src={src}
-        paused={paused}
+        autoPlay={!paused}
         loop={loop}
         muted={muted}
-        volume={volume}
-        style={videoStyle}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        onPlay={onPlayProp}
-        onPause={onPauseProp}
-        onReady={onReady}
-        onError={onError}
-        onClick={handleClick}
+        controls={controls}
+        style={{
+          ...styleToCSS(resolvedStyle),
+          display: 'block',
+          flexDirection: undefined,
+          objectFit: resolvedStyle?.objectFit as any,
+        }}
+        onClick={onClick as any}
+        onTimeUpdate={onTimeUpdate ? (e) => {
+          const el = e.currentTarget;
+          onTimeUpdate({ currentTime: el.currentTime, duration: el.duration });
+        } : undefined}
+        onEnded={onEnded}
+        onPlay={onPlay}
+        onPause={onPause}
+        onCanPlay={onReady}
+        onError={onError ? () => onError({ message: 'Video playback error' }) : undefined}
       />
-      {controls && showControls && (
-        <Box
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            width: '100%',
-            padding: 8,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            backgroundColor: [0, 0, 0, 0.6],
-          }}
-        >
-          {/* Play/Pause button */}
-          <Box
-            onClick={togglePlay}
-            style={{ padding: 4, paddingLeft: 8, paddingRight: 8 }}
-            hoverStyle={{ backgroundColor: [1, 1, 1, 0.15] }}
-          >
-            {paused ? playIcon : pauseIcon}
-          </Box>
+    );
+  }
 
-          {/* Seek bar */}
-          <Box
-            style={{
-              flexGrow: 1,
-              height: 4,
-              backgroundColor: [1, 1, 1, 0.3],
-              borderRadius: 2,
-            }}
-          >
-            <Box
-              style={{
-                width: `${progress}%`,
-                height: '100%',
-                backgroundColor: '#ffffff',
-                borderRadius: 2,
-              }}
-            />
-          </Box>
-
-          {/* Time display */}
-          <Text style={{ fontSize: 11, color: [1, 1, 1, 0.8] }}>
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </Text>
-        </Box>
-      )}
-    </Box>
-  );
+  // Native mode: single host element — Lua handles all rendering + controls
+  return React.createElement('VideoPlayer', {
+    src,
+    paused,
+    loop,
+    muted,
+    volume,
+    controls,
+    style: resolvedStyle,
+    onClick,
+    onTimeUpdate,
+    onEnded,
+    onPlay,
+    onPause,
+    onReady,
+    onError,
+  });
 }

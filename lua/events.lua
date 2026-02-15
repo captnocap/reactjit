@@ -90,6 +90,7 @@ function Events.hitTest(node, mx, my)
   if node.type == "TextEditor" then return node end
   if node.type == "CodeBlock" then return node end
   if node.type == "Video" then return node end
+  if node.type == "VideoPlayer" then return node end
   if node.type == "ContextMenu" then return node end
   return nil
 end

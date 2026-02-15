@@ -48,6 +48,20 @@ export function App() {
           </Box>
         )}
       </Box>
+      <Box style={{ marginTop: 16, gap: 4, alignItems: 'center' }}>
+        <Text style={{ color: '#e2e8f0', fontSize: 14 }}>
+          abcdefghijklmnopqrstuvwxyz
+        </Text>
+        <Text style={{ color: '#e2e8f0', fontSize: 14 }}>
+          ABCDEFGHIJKLMNOPQRSTUVWXYZ
+        </Text>
+        <Text style={{ color: '#e2e8f0', fontSize: 14 }}>
+          0123456789
+        </Text>
+        <Text style={{ color: '#e2e8f0', fontSize: 14 }}>
+          !@#$%^&*()_+-=;:,./
+        </Text>
+      </Box>
     </Box>
   );
 }

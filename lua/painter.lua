@@ -29,6 +29,7 @@ local Videos = nil   -- Injected at init time via Painter.init()
 local ZIndex = require("lua.zindex")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
+local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 
 local Painter = {}
@@ -1031,6 +1032,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
             cx + iconSize * 0.5, cy)
         end
       end
+    end
+
+  elseif not isHidden and node.type == "VideoPlayer" then
+    -- Lua-owned video player with controls: delegate entirely to videoplayer.lua
+    if not VideoPlayerModule then
+      VideoPlayerModule = require("lua.videoplayer")
+    end
+    -- Skip normal paint if fullscreen (init.lua draws it on top of everything)
+    local vpState = node._vp
+    if not (vpState and vpState.isFullscreen) then
+      VideoPlayerModule.draw(node, effectiveOpacity)
     end
 
   elseif not isHidden and node.type == "TextEditor" then

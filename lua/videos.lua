@@ -106,6 +106,7 @@ ffi.cdef[[
   void glBlendFunc(GLenum sfactor, GLenum dfactor);
   void glViewport(GLint x, GLint y, GLsizei width, GLsizei height);
   void glScissor(GLint x, GLint y, GLsizei width, GLsizei height);
+  void glPixelStorei(GLenum pname, GLint param);
 ]]
 
 -- ============================================================================
@@ -134,6 +135,7 @@ local GL_VERTEX_ARRAY_BINDING         = 0x85B5
 local GL_ARRAY_BUFFER_BINDING         = 0x8894
 local GL_ELEMENT_ARRAY_BUFFER_BINDING = 0x8895
 local GL_ACTIVE_TEXTURE               = 0x84E0
+local GL_TEXTURE0                     = 0x84C0
 local GL_TEXTURE_BINDING_2D           = 0x8069
 local GL_VIEWPORT                     = 0x0BA2
 local GL_SCISSOR_BOX                  = 0x0C10
@@ -146,6 +148,16 @@ local GL_STENCIL_TEST                 = 0x0B90
 local GL_CULL_FACE                    = 0x0B44
 local GL_ARRAY_BUFFER                 = 0x8892
 local GL_ELEMENT_ARRAY_BUFFER         = 0x8893
+
+-- Pixel store constants
+local GL_UNPACK_ALIGNMENT             = 0x0CF5
+local GL_UNPACK_ROW_LENGTH            = 0x0CF2
+local GL_UNPACK_SKIP_ROWS             = 0x0CF3
+local GL_UNPACK_SKIP_PIXELS           = 0x0CF4
+local GL_PACK_ALIGNMENT               = 0x0D05
+local GL_PACK_ROW_LENGTH              = 0x0D02
+local GL_PACK_SKIP_ROWS               = 0x0D04
+local GL_PACK_SKIP_PIXELS             = 0x0D03
 
 -- ============================================================================
 -- MPV constants
@@ -368,6 +380,43 @@ local function destroyVideoEntry(entry)
 end
 
 -- ============================================================================
+-- Pixel-store save/restore
+-- ============================================================================
+
+-- Love2D uses UNPACK_ALIGNMENT=1 for single-byte glyph atlas uploads.
+-- mpv_render_context_create changes it to 4, corrupting font rendering.
+local savedUnpackAlign  = ffi.new("GLint[1]")
+local savedUnpackRowLen = ffi.new("GLint[1]")
+local savedUnpackSkipR  = ffi.new("GLint[1]")
+local savedUnpackSkipP  = ffi.new("GLint[1]")
+local savedPackAlign    = ffi.new("GLint[1]")
+local savedPackRowLen   = ffi.new("GLint[1]")
+local savedPackSkipR    = ffi.new("GLint[1]")
+local savedPackSkipP    = ffi.new("GLint[1]")
+
+local function savePixelStore()
+  ffi.C.glGetIntegerv(GL_UNPACK_ALIGNMENT,  savedUnpackAlign)
+  ffi.C.glGetIntegerv(GL_UNPACK_ROW_LENGTH, savedUnpackRowLen)
+  ffi.C.glGetIntegerv(GL_UNPACK_SKIP_ROWS,  savedUnpackSkipR)
+  ffi.C.glGetIntegerv(GL_UNPACK_SKIP_PIXELS,savedUnpackSkipP)
+  ffi.C.glGetIntegerv(GL_PACK_ALIGNMENT,    savedPackAlign)
+  ffi.C.glGetIntegerv(GL_PACK_ROW_LENGTH,   savedPackRowLen)
+  ffi.C.glGetIntegerv(GL_PACK_SKIP_ROWS,    savedPackSkipR)
+  ffi.C.glGetIntegerv(GL_PACK_SKIP_PIXELS,  savedPackSkipP)
+end
+
+local function restorePixelStore()
+  ffi.C.glPixelStorei(GL_UNPACK_ALIGNMENT,   savedUnpackAlign[0])
+  ffi.C.glPixelStorei(GL_UNPACK_ROW_LENGTH,  savedUnpackRowLen[0])
+  ffi.C.glPixelStorei(GL_UNPACK_SKIP_ROWS,   savedUnpackSkipR[0])
+  ffi.C.glPixelStorei(GL_UNPACK_SKIP_PIXELS, savedUnpackSkipP[0])
+  ffi.C.glPixelStorei(GL_PACK_ALIGNMENT,     savedPackAlign[0])
+  ffi.C.glPixelStorei(GL_PACK_ROW_LENGTH,    savedPackRowLen[0])
+  ffi.C.glPixelStorei(GL_PACK_SKIP_ROWS,     savedPackSkipR[0])
+  ffi.C.glPixelStorei(GL_PACK_SKIP_PIXELS,   savedPackSkipP[0])
+end
+
+-- ============================================================================
 -- GL state save/restore (17 variables — proven in PoC)
 -- ============================================================================
 
@@ -388,6 +437,7 @@ local function saveGLState()
   ffi.C.glGetIntegerv(GL_DEPTH_TEST, savedDepthOn)
   ffi.C.glGetIntegerv(GL_STENCIL_TEST, savedStencilOn)
   ffi.C.glGetIntegerv(GL_CULL_FACE, savedCullOn)
+  savePixelStore()
 end
 
 local function restoreGLState()
@@ -406,11 +456,18 @@ local function restoreGLState()
   if savedDepthOn[0] ~= 0      then ffi.C.glEnable(GL_DEPTH_TEST)   else ffi.C.glDisable(GL_DEPTH_TEST) end
   if savedStencilOn[0] ~= 0    then ffi.C.glEnable(GL_STENCIL_TEST) else ffi.C.glDisable(GL_STENCIL_TEST) end
   if savedCullOn[0] ~= 0       then ffi.C.glEnable(GL_CULL_FACE)    else ffi.C.glDisable(GL_CULL_FACE) end
+  restorePixelStore()
 end
 
 -- ============================================================================
 -- Public API
 -- ============================================================================
+
+--- Ensure UNPACK_ALIGNMENT=1 for Love2D glyph uploads.
+--- Called at top of love.draw() as a safety net against mpv dirtying pixel-store.
+function Videos.ensurePixelStore()
+  ffi.C.glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+end
 
 --- Return the Canvas for a video source. Painter draws this.
 function Videos.get(src)
@@ -445,6 +502,25 @@ function Videos.getDimensions(src)
   return nil, nil
 end
 
+--- Get the current playback time in seconds.
+function Videos.getCurrentTime(src)
+  local entry = videoCache[src]
+  if entry and entry.handle then
+    return getMpvDouble(entry.handle, "time-pos")
+  end
+  return nil
+end
+
+--- Get whether the video is currently paused.
+function Videos.getPaused(src)
+  local entry = videoCache[src]
+  if entry and entry.handle then
+    local val = getMpvString(entry.handle, "pause")
+    return val == "yes"
+  end
+  return true
+end
+
 -- ============================================================================
 -- Eager mpv backend — handle + render context created once at love.load time
 -- ============================================================================
@@ -469,7 +545,7 @@ function Videos.initBackend()
   -- Configure (matches working PoC exactly)
   mpv.mpv_set_option_string(handle, "vo", "libmpv")
   mpv.mpv_set_option_string(handle, "hwdec", "no")
-  mpv.mpv_set_option_string(handle, "ao", "null")
+  -- ao not set → mpv auto-detects (pulse, pipewire, alsa, etc.)
   mpv.mpv_set_option_string(handle, "load-scripts", "no")
   mpv.mpv_set_option_string(handle, "ytdl", "no")
   mpv.mpv_set_option_string(handle, "osd-level", "0")
@@ -505,9 +581,17 @@ function Videos.initBackend()
   createParams[2].data = nil
 
   local ctxPtr = ffi.new("mpv_render_context*[1]")
-  io.write("[videos] initBackend: calling mpv_render_context_create...\n"); io.flush()
+
+  -- Save full GL state including pixel-store (Love2D uses UNPACK_ALIGNMENT=1).
+  -- mpv_render_context_create changes UNPACK_ALIGNMENT to 4, which corrupts
+  -- Love2D's font atlas glyph uploads (single-byte-per-pixel, needs alignment=1).
+  saveGLState()
+
   err = mpv.mpv_render_context_create(ctxPtr, handle, createParams)
-  io.write("[videos] initBackend: render_context_create returned " .. tostring(err) .. "\n"); io.flush()
+
+  -- Restore ALL GL state including pixel-store
+  restoreGLState()
+
   if err < 0 then
     io.write("[videos] initBackend: render_context_create failed: " .. ffi.string(mpv.mpv_error_string(err)) .. "\n"); io.flush()
     mpv.mpv_terminate_destroy(handle)
@@ -573,7 +657,7 @@ function Videos.syncWithTree(nodes)
   local activeSrcs = {}   -- src -> true
   local activeNodes = {}  -- nodeId -> src
   for id, node in pairs(nodes) do
-    if node.type == "Video" and node.props and node.props.src and node.props.src ~= "" then
+    if (node.type == "Video" or node.type == "VideoPlayer") and node.props and node.props.src and node.props.src ~= "" then
       activeSrcs[node.props.src] = true
       activeNodes[id] = node.props.src
     end
