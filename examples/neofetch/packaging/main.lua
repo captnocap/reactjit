@@ -175,6 +175,14 @@ function love.wheelmoved(x, y)
   ReactLove.wheelmoved(x, y)
 end
 
+function love.filedropped(file)
+  ReactLove.filedropped(file)
+end
+
+function love.directorydropped(dir)
+  ReactLove.directorydropped(dir)
+end
+
 function love.quit()
   ReactLove.quit()
 end

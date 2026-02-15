@@ -71,7 +71,7 @@ Example 3: After framework changes
 # In monorepo root:
 make cli-setup
 # In project directory:
-cd examples/storybook
+cd storybook
 ilovereact update
 ilovereact build
 ---

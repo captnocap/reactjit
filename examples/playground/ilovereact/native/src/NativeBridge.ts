@@ -42,6 +42,41 @@ export class NativeBridge implements IBridge {
 
     // Initialize event dispatching (connects bridge events to handlerRegistry)
     initEventDispatching(this);
+
+    // Wire HTTP responses from Lua to the fetch() polyfill.
+    // Payload arrives JSON-encoded in _json to avoid the QuickJS GC race
+    // that silently drops large string properties during FFI traversal.
+    this.subscribe('http:response', (payload: any) => {
+      if (!payload || !globalThis.__handleHttpResponse) return;
+      let response = payload;
+      if (payload._json) {
+        try { response = JSON.parse(payload._json); }
+        catch { return; }
+      }
+      if (response.id != null) {
+        globalThis.__handleHttpResponse(response.id, response);
+      }
+    });
+
+    // Wire WebSocket events from Lua to the WebSocket polyfill
+    const wsEventTypes = ['ws:open', 'ws:message', 'ws:error', 'ws:close'];
+    for (const eventType of wsEventTypes) {
+      this.subscribe(eventType, (payload: any) => {
+        if (payload && globalThis.__handleWsEvent) {
+          globalThis.__handleWsEvent({ ...payload, type: eventType });
+        }
+      });
+    }
+
+    // Wire WebSocket server (peer) events from Lua to the server API
+    const wsPeerEventTypes = ['ws:server:ready', 'ws:server:error', 'ws:peer:connect', 'ws:peer:message', 'ws:peer:disconnect'];
+    for (const eventType of wsPeerEventTypes) {
+      this.subscribe(eventType, (payload: any) => {
+        if (payload && globalThis.__handleWsPeerEvent) {
+          globalThis.__handleWsPeerEvent({ ...payload, type: eventType });
+        }
+      });
+    }
   }
 
   send(type: string, payload?: any): void {
@@ -50,7 +85,7 @@ export class NativeBridge implements IBridge {
 
   flush(): void {
     if (this.commandQueue.length === 0) return;
-    globalThis.__hostFlush(this.commandQueue);
+    globalThis.__hostFlush(JSON.stringify(this.commandQueue));
     this.commandQueue = [];
   }
 
@@ -86,11 +121,12 @@ export class NativeBridge implements IBridge {
         if (payload && payload.error) {
           reject(new Error(payload.error));
         } else {
-          resolve(payload as T);
+          resolve((payload && 'result' in payload ? payload.result : payload) as T);
         }
       });
 
       this.send('rpc:call', { id, method, args });
+      this.flush(); // Send immediately so Lua can process in current frame
     });
   }
 

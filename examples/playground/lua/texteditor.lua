@@ -526,7 +526,12 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     return true
   end
 
-  return true  -- consume all keys while focused
+  -- Unhandled modifier combo — don't consume, let it through to the bridge
+  if love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
+    return false
+  end
+
+  return true  -- consume regular keys while focused
 end
 
 function TextEditor.handleTextInput(node, text)

@@ -9,6 +9,7 @@
 ]]
 
 local Images = nil    -- Injected at init time via Tree.init()
+local Videos = nil    -- Injected at init time via Tree.init()
 local Animate = nil   -- Injected at init time via Tree.init()
 
 local Tree = {}
@@ -34,6 +35,8 @@ local function cleanup(id)
       Images.unload(n.props.src)
     end
 
+    -- Video cleanup is handled by Videos.syncWithTree() each frame
+
     -- Clean up active transitions/animations
     if Animate then
       Animate.onNodeRemoved(id)
@@ -57,6 +60,7 @@ end
 function Tree.init(config)
   config = config or {}
   Images = config.images
+  Videos = config.videos
   Animate = config.animate
   nodes = {}
   rootChildren = {}
@@ -80,18 +84,23 @@ function Tree.applyCommands(commands)
         children = {},
         parent = nil,
         computed = nil,
+        -- Debug info from React component (for inspector)
+        debugName = cmd.debugName,
+        debugSource = cmd.debugSource,
       }
       -- Pre-load image and establish ref count
       if Images and cmd.type == "Image" and props.src then
         Images.load(props.src)
       end
+      -- Video loading is handled by Videos.syncWithTree() each frame
       treeDirty = true
 
     elseif op == "CREATE_TEXT" then
+      local textVal = cmd.text
       nodes[cmd.id] = {
         id = cmd.id,
         type = "__TEXT__",
-        text = cmd.text,
+        text = textVal,
         style = {},
         children = {},
         parent = nil,
@@ -123,6 +132,8 @@ function Tree.applyCommands(commands)
           if node.props.src then Images.unload(node.props.src) end
           Images.load(cmd.props.src)
         end
+
+        -- Video src changes are handled by Videos.syncWithTree() each frame
 
         -- Apply changed props (partial diff)
         for k, v in pairs(cmd.props) do

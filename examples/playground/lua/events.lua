@@ -86,9 +86,70 @@ function Events.hitTest(node, mx, my)
   -- Also return scroll containers so wheel events can scroll them
   -- even when no JS handler is attached
   if isScroll then return node end
-  -- TextEditor nodes are always hittable (Lua-owned interaction)
+  -- Lua-owned interactive nodes are always hittable
   if node.type == "TextEditor" then return node end
+  if node.type == "CodeBlock" then return node end
+  if node.type == "Video" then return node end
+  if node.type == "ContextMenu" then return node end
   return nil
+end
+
+--- Hit test specifically for Text nodes (used by text selection).
+--- Only returns Text/__TEXT__ nodes, ignoring interactive ancestors.
+--- This is separate from hitTest so that Pressable clicks aren't intercepted.
+function Events.textHitTest(node, mx, my)
+  if not node or not node.computed then return nil end
+  local s = node.style or {}
+  local c = node.computed
+
+  if s.display == "none" then return nil end
+  if mx < c.x or mx > c.x + c.w or my < c.y or my > c.y + c.h then
+    return nil
+  end
+
+  local childMx, childMy = mx, my
+  local isScroll = s.overflow == "scroll"
+  if isScroll and node.scrollState then
+    childMx = mx + (node.scrollState.scrollX or 0)
+    childMy = my + (node.scrollState.scrollY or 0)
+  end
+
+  -- Check children first (deepest text node wins)
+  local children = node.children or {}
+  local paintOrder = ZIndex.getSortedChildren(children)
+  for i = #paintOrder, 1, -1 do
+    local hit = Events.textHitTest(paintOrder[i], childMx, childMy)
+    if hit then return hit end
+  end
+
+  -- Return this node only if it's a Text node and selectable
+  if node.type == "Text" and s.userSelect ~= "none" then
+    return node
+  end
+  if node.type == "__TEXT__" then
+    local ps = (node.parent and node.parent.style) or {}
+    if s.userSelect ~= "none" and ps.userSelect ~= "none" then
+      return node
+    end
+  end
+
+  return nil
+end
+
+--- Convert screen coordinates to content-space coordinates for a node.
+--- Walks up the parent chain accumulating scroll offsets.
+function Events.screenToContent(node, sx, sy)
+  local cx, cy = sx, sy
+  local current = node.parent
+  while current do
+    local cs = current.style or {}
+    if cs.overflow == "scroll" and current.scrollState then
+      cx = cx + (current.scrollState.scrollX or 0)
+      cy = cy + (current.scrollState.scrollY or 0)
+    end
+    current = current.parent
+  end
+  return cx, cy
 end
 
 --- Build the bubble path from a hit node up to the root.
@@ -124,6 +185,18 @@ function Events.findScrollContainer(node, mx, my)
   return nil
 end
 
+--- Walk up from a node to find the nearest ContextMenu ancestor.
+--- Returns the ContextMenu node or nil.
+function Events.findContextMenuAncestor(node)
+  if not node then return nil end
+  local current = node
+  while current do
+    if current.type == "ContextMenu" then return current end
+    current = current.parent
+  end
+  return nil
+end
+
 -- ============================================================================
 -- Event creation
 -- ============================================================================
@@ -154,6 +227,10 @@ function Events.createKeyEvent(eventType, key, scancode, isRepeat)
       key = key,
       scancode = scancode,
       isRepeat = isRepeat or false,
+      ctrl = love.keyboard.isDown("lctrl", "rctrl"),
+      shift = love.keyboard.isDown("lshift", "rshift"),
+      alt = love.keyboard.isDown("lalt", "ralt"),
+      meta = love.keyboard.isDown("lgui", "rgui"),
     }
   }
 end
@@ -257,6 +334,23 @@ function Events.createDragEvent(eventType, targetId, x, y, deltaX, deltaY, start
       startY = startY,
       totalDeltaX = x - startX,  -- total delta from start
       totalDeltaY = y - startY,
+      bubblePath = bubblePath,
+    }
+  }
+end
+
+--- Build a file drop event for drag-and-drop file/directory input.
+--- Format matches BridgeEvent: { type: string, payload: any }
+function Events.createFileDropEvent(eventType, targetId, x, y, filePath, fileSize, bubblePath)
+  return {
+    type = eventType,
+    payload = {
+      type = eventType,
+      targetId = targetId,
+      x = x,
+      y = y,
+      filePath = filePath,
+      fileSize = fileSize,
       bubblePath = bubblePath,
     }
   }
@@ -431,6 +525,14 @@ function Events.endDrag(x, y)
   dragState.thresholdCrossed = false
 
   return event
+end
+
+--- Cancel an active drag without emitting any events.
+--- Used when text selection takes over from a normal drag.
+function Events.cancelDrag()
+  dragState.active = false
+  dragState.targetId = nil
+  dragState.thresholdCrossed = false
 end
 
 --- Check if a drag is currently active.

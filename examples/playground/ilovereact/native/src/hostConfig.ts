@@ -36,7 +36,7 @@ interface Command {
 // ── Globals / FFI bridge ─────────────────────────────────
 
 declare const globalThis: {
-  __hostFlush: (commands: Command[]) => void;
+  __hostFlush: (commands: string | Command[]) => void;
   __hostGetEvents: () => any[];
   _pollAndDispatchEvents?: () => void;
   [key: string]: any;
@@ -138,7 +138,10 @@ export function flushToHost(): void {
 
   const coalesced = coalesceCommands(pendingCommands);
   try {
-    transportFlush(coalesced);
+    // Send as JSON string to avoid QuickJS GC race during FFI object traversal.
+    // Large strings (500+ chars) can be silently collected by GC during property
+    // enumeration of sibling properties, causing silent data loss across the bridge.
+    transportFlush(JSON.stringify(coalesced));
   } catch (e) {
     reportError(e, 'flushToHost (' + coalesced.length + ' commands)');
   }
@@ -310,11 +313,46 @@ export const hostConfig: HostConfig<
 
   // ── Instance creation ────────────────────────────────
 
-  createInstance(type: string, props: Props): Instance {
+  createInstance(
+    type: string,
+    props: Props,
+    _rootContainer: Container,
+    _hostContext: {},
+    internalHandle?: any // React fiber (opaque, but we bend the rules for debugging)
+  ): Instance {
     const id = ++nodeIdCounter;
     const { clean, handlers } = extractHandlers(props);
 
     const hasHandlers = Object.keys(handlers).length > 0;
+
+    // Extract component debug info from fiber (dev tooling only)
+    let debugName: string | undefined;
+    let debugSource: { fileName?: string; lineNumber?: number } | undefined;
+
+    if (internalHandle) {
+      try {
+        // Walk up the fiber tree to find the nearest component name
+        let fiber = internalHandle;
+        while (fiber) {
+          // Function/class components have a type with a name or displayName
+          if (fiber.type && typeof fiber.type === 'function') {
+            debugName = fiber.type.displayName || fiber.type.name;
+            break;
+          }
+          fiber = fiber.return;
+        }
+
+        // Try to get source location (requires JSX dev transform)
+        if (internalHandle._debugSource) {
+          debugSource = {
+            fileName: internalHandle._debugSource.fileName,
+            lineNumber: internalHandle._debugSource.lineNumber,
+          };
+        }
+      } catch (e) {
+        // Silently fail — fiber internals may change between React versions
+      }
+    }
 
     emit({
       op: 'CREATE',
@@ -322,6 +360,8 @@ export const hostConfig: HostConfig<
       type,
       props: clean,
       hasHandlers,
+      debugName,
+      debugSource,
     });
 
     if (hasHandlers) {

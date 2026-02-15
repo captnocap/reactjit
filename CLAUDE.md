@@ -138,7 +138,9 @@ npm workspaces monorepo. Path aliases (`@ilovereact/*`) defined in `tsconfig.bas
 
 **Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree, event handling, text measurement, error overlay, visual inspector (F12).
 
-**Examples** (`examples/`): `storybook/`, `native-hud/`, `terminal-demo/`, `cc-demo/`, `nvim-demo/`, `hs-demo/`, `awesome-demo/`, `neofetch/`, `playground/`, `web-overlay/`.
+**Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
+
+**Examples** (`examples/`): `native-hud/`, `terminal-demo/`, `cc-demo/`, `nvim-demo/`, `hs-demo/`, `awesome-demo/`, `neofetch/`, `playground/`, `web-overlay/`.
 
 ## esbuild Formats by Target
 
@@ -210,11 +212,32 @@ Container auto-sizes to fit both text elements with proper stacking.
 - ScrollView containers need explicit height for scrolling
 - Deep nesting (6+ levels) may impact performance (use explicit sizing at key levels)
 
+## Adding Event Handlers to Primitives (IMPORTANT)
+
+The `Box` component in `packages/shared/src/primitives.tsx` uses an **explicit whitelist** for event handlers. It destructures each `on*` prop by name and passes them individually to `React.createElement('View', { ... })`. If you add a new event type (e.g. `onFileDrop`), you must:
+
+1. Add the handler type to `BoxProps` in `packages/shared/src/types.ts`
+2. Add it to the destructure list in `Box()` in `primitives.tsx`
+3. Add it to the `createElement` props object in the native mode branch of `Box()`
+4. Subscribe to the bridge event in `packages/native/src/eventDispatcher.ts`
+
+If you skip steps 2-3, the handler silently disappears — `extractHandlers` in hostConfig never sees it, `hasHandlers` is false on the Lua node, and hit testing skips it. The symptom is events being pushed correctly from Lua but never reaching React.
+
 ## Primitives by Target
 
 **Love2D / Web:** Import from `@ilovereact/core` — `Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, etc.
 
 **Grid targets:** Use lowercase JSX intrinsics (`<view>`, `<text>`) and define local `Box`/`Text` wrappers.
+
+## The Storybook IS the Framework (CRITICAL)
+
+The storybook (`storybook/`) lives at the monorepo root, not in `examples/`. It is not a demo — it is the canonical reference implementation of iLoveReact. Every framework capability is demonstrated there. The long-term vision is that the storybook, the CLI, the docs, the playground, and the visual editor all converge into a single binary: `ilovereact`.
+
+This has two non-negotiable consequences:
+
+**1. What is true of the storybook is true of the framework.** If a configuration change, build flag, library filter, packaging rule, or runtime behavior is established in the storybook, it must be applied at the framework level (CLI templates, dist pipeline, `packaging/storybook/`, `cli/targets.mjs`, etc.) — not left as a one-off in a single project's files. The storybook is where things are proven; the framework is where they become permanent. Never solve something only for the storybook and call it done.
+
+**2. Every new feature gets a storybook story.** When you implement a new capability — a new component, hook, event type, Lua-side feature, layout behavior, anything user-facing — you must also create or update a story in `storybook/src/stories/` that demonstrates it. Do not wait to be asked. The story is part of the feature, not a follow-up task.
 
 ## Git Discipline (IMPORTANT)
 

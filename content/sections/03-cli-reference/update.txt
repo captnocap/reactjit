@@ -50,7 +50,7 @@ Example 1: After editing framework source files
 make cli-setup
 
 # Sync into project:
-cd examples/storybook
+cd storybook
 ilovereact update
 
 # Rebuild:

@@ -6,6 +6,9 @@ export type {
   BoxProps,
   TextProps,
   ImageProps,
+  VideoProps,
+  VideoPlayerProps,
+  VideoTimeEvent,
   ScrollEvent,
   ScrollViewProps,
   ScrollViewRef,
@@ -36,11 +39,22 @@ export {
   useLoveReady,
   useLoveSend,
   useLoveOverlays,
+  useFetch,
+  useWebSocket,
+  usePeerServer,
+  useHotkey,
+  useClipboard,
+  type WebSocketStatus,
+  type PeerMessage,
   type Overlay,
 } from './hooks';
 
 // Primitives
-export { Box, Text, Image, styleToCSS, colorToCSS } from './primitives';
+export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from './primitives';
+
+// Video
+export { Video } from './Video';
+export { VideoPlayer } from './VideoPlayer';
 
 // ScrollView
 export { ScrollView } from './ScrollView';
@@ -57,6 +71,14 @@ export { TextInput } from './TextInput';
 
 // TextEditor (Lua-owned document editor)
 export { TextEditor } from './TextEditor';
+
+// CodeBlock (Lua-owned code renderer)
+export { CodeBlock } from './CodeBlock';
+export type { CodeBlockProps } from './CodeBlock';
+
+// ContextMenu (Lua-owned right-click menu)
+export { ContextMenu } from './ContextMenu';
+export type { ContextMenuProps, ContextMenuItem, ContextMenuEvent, FocusGroupProps } from './types';
 
 // FlatList
 export { FlatList } from './FlatList';
@@ -118,6 +140,9 @@ export {
 
 // Colors
 export { colors, type CatppuccinColor } from './colors';
+
+// Pixel art (Box-based Unicode symbol rendering)
+export { usePixelArt, PixelArt, getPixelArtSymbols, type PixelArtOptions, type PixelArtProps } from './usePixelArt';
 
 // Debug tools
 export { useDebug, getDebugData, registerDebug } from './useDebug';

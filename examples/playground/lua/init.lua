@@ -30,16 +30,50 @@ local inspectorEnabled = true                 -- can be disabled via config.insp
 
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
+local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
+local codeblock  = nil                        -- codeblock.lua (loaded on demand)
+local textselection = nil                    -- textselection.lua (text highlight + copy)
+local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
+local http     = nil                          -- http.lua (async HTTP + local file fetch)
+local network  = nil                          -- network.lua (WebSocket connections)
+local tor      = nil                          -- tor.lua (Tor subprocess, loaded if config.tor)
+local torHostnameEmitted = false              -- true once tor:ready event sent to JS
+local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
+local lastDragHoverId = nil                   -- node ID of current drag-hover target
+
+-- Controller connection toast (auto-dismiss notification)
+local controllerToast = {
+  timer = nil,         -- seconds remaining, nil = not showing
+  text = nil,          -- "Controller connected" or "Controller disconnected"
+  fadeStart = 0.5,     -- start fading when timer < this value
+}
+
+local ok_json, json = pcall(require, "json")
+if not ok_json then ok_json, json = pcall(require, "lib.json") end
+if not ok_json then ok_json, json = pcall(require, "lua.json") end
+if not ok_json then error("[react-love] JSON library required but not found") end
+
+local rpcHandlers = {}  -- RPC method -> handler function
+
+-- Scrollbar drag state
+local scrollbarDrag = nil  -- { node, axis="v"|"h", startMouse, startScroll }
+
+-- Text selection pending state: stashed on mousedown, promoted to selection on drag
+local textSelectPending = nil  -- { node, startX, startY, line, col }
+local TEXT_SELECT_THRESHOLD = 3  -- pixels of movement before drag becomes selection
 
 local mode     = nil   -- "web", "native", or "canvas"
 local basePath = nil   -- directory containing these modules
 local initConfig = nil -- stashed config from init() for reload()
 
--- Interaction style overlay tracking (hoverStyle / activeStyle)
+-- Interaction style overlay tracking (hoverStyle / activeStyle / focusStyle)
 -- Maps nodeId -> { [propKey] = baseValue } for properties overridden by interaction
 local interactionBase = {}
+
+-- Track previously focused nodes for focusStyle updates
+local prevFocusedNodeIds = {}  -- { [nodeId] = true }
 
 -- HMR state
 local hmrFrameCounter = 0
@@ -105,22 +139,40 @@ local function pushEvent(evt)
 end
 
 -- ============================================================================
--- Interaction style overlay (hoverStyle / activeStyle)
+-- Gamepad helpers
 -- ============================================================================
 
---- Apply or remove hoverStyle/activeStyle overlays on a node based on current
---- hover and pressed state. Uses the transition system for smooth animations
---- when the node has a `transition` config in its style.
+--- Walk up from a node to find the nearest scroll ancestor.
+local function findScrollAncestor(node)
+  local current = node.parent
+  while current do
+    if current.style and current.style.overflow == "scroll" then
+      return current
+    end
+    current = current.parent
+  end
+  return nil
+end
+
+-- ============================================================================
+-- Interaction style overlay (hoverStyle / activeStyle / focusStyle)
+-- ============================================================================
+
+--- Apply or remove hoverStyle/activeStyle/focusStyle overlays on a node based
+--- on current hover, pressed, and focus state. Uses the transition system for
+--- smooth animations when the node has a `transition` config in its style.
 --- This runs entirely in Lua for 0-frame latency feedback.
 local function applyInteractionStyle(node)
   if not node or not node.props then return end
 
   local hoverStyle = node.props.hoverStyle
   local activeStyle = node.props.activeStyle
-  if not hoverStyle and not activeStyle then return end
+  local focusStyle = node.props.focusStyle
+  if not hoverStyle and not activeStyle and not focusStyle then return end
 
   local isHovered = events and events.getHoveredNode() == node
   local isPressed = events and events.getPressedNode() == node
+  local isFocused = focus.getInputMode() == "controller" and focus.isFocused(node)
 
   -- Get or create base style tracking for this node
   if not interactionBase[node.id] then
@@ -128,10 +180,11 @@ local function applyInteractionStyle(node)
   end
   local base = interactionBase[node.id]
 
-  -- Collect all overridable keys from both hover and active styles
+  -- Collect all overridable keys from hover, active, and focus styles
   local allKeys = {}
   if hoverStyle then for k in pairs(hoverStyle) do allKeys[k] = true end end
   if activeStyle then for k in pairs(activeStyle) do allKeys[k] = true end end
+  if focusStyle then for k in pairs(focusStyle) do allKeys[k] = true end end
 
   local oldValues = {}
   local newValues = {}
@@ -147,10 +200,12 @@ local function applyInteractionStyle(node)
       end
     end
 
-    -- Compute target: active > hover > base (priority order)
+    -- Compute target: active > focused > hover > base (priority order)
     local target
     if isPressed and activeStyle and activeStyle[k] ~= nil then
       target = activeStyle[k]
+    elseif isFocused and focusStyle and focusStyle[k] ~= nil then
+      target = focusStyle[k]
     elseif isHovered and hoverStyle and hoverStyle[k] ~= nil then
       target = hoverStyle[k]
     else
@@ -167,8 +222,8 @@ local function applyInteractionStyle(node)
     end
   end
 
-  -- Clean up base tracking if no longer hovered or pressed
-  if not isHovered and not isPressed then
+  -- Clean up base tracking if no longer hovered, pressed, or focused
+  if not isHovered and not isPressed and not isFocused then
     interactionBase[node.id] = nil
   end
 
@@ -251,10 +306,12 @@ function ReactLove.init(config)
 
     measure = require("lua.measure")
     images  = require("lua.images")
+    videos  = require("lua.videos")
+    videos.initBackend()
     animate = require("lua.animate")
 
     tree    = require("lua.tree")
-    tree.init({ images = images, animate = animate })
+    tree.init({ images = images, videos = videos, animate = animate })
 
     animate.init({ tree = tree })
 
@@ -262,13 +319,24 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images })
+    painter.init({ measure = measure, images = images, videos = videos })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
 
     texteditor = require("lua.texteditor")
     texteditor.init({ measure = measure })
+
+    codeblock = require("lua.codeblock")
+    codeblock.init({ measure = measure })
+
+    textselection = require("lua.textselection")
+    textselection.init({ measure = measure, events = events })
+
+    contextmenu = require("lua.contextmenu")
+    contextmenu.init({ measure = measure, events = events, textselection = textselection })
+
+    focus.init(tree, pushEvent)
 
     print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
 
@@ -279,6 +347,10 @@ function ReactLove.init(config)
       bundlePath = config.bundlePath or "bundle.js",
     }
 
+    -- Init mpv BEFORE QuickJS — libquickjs dlopen can interfere with mpv's GL setup
+    videos  = require("lua.videos")
+    videos.initBackend()
+
     local BridgeQJS = require("lua.bridge_quickjs")
     bridge = BridgeQJS.new(initConfig.libpath)
 
@@ -287,7 +359,7 @@ function ReactLove.init(config)
     animate = require("lua.animate")
 
     tree    = require("lua.tree")
-    tree.init({ images = images, animate = animate })
+    tree.init({ images = images, videos = videos, animate = animate })
 
     animate.init({ tree = tree })
 
@@ -295,13 +367,55 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images })
+    painter.init({ measure = measure, images = images, videos = videos })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
 
     texteditor = require("lua.texteditor")
     texteditor.init({ measure = measure })
+
+    codeblock = require("lua.codeblock")
+    codeblock.init({ measure = measure })
+
+    textselection = require("lua.textselection")
+    textselection.init({ measure = measure, events = events })
+
+    contextmenu = require("lua.contextmenu")
+    contextmenu.init({ measure = measure, events = events, textselection = textselection })
+
+    focus.init(tree, pushEvent)
+
+    -- Initialize async HTTP (love.thread + LuaSocket)
+    http = require("lua.http")
+    http.init()
+
+    -- Initialize WebSocket network manager
+    network = require("lua.network")
+    network.init()
+
+    -- Initialize Tor if enabled (opt-in via config.tor)
+    if config.tor then
+      tor = require("lua.tor")
+      torHostnameEmitted = false
+      if config.tor.autoStart ~= false then
+        local ok, err = tor.start({ hsPort = config.tor.hsPort or 8080 })
+        if ok then
+          io.write("[react-love] Tor hidden service starting...\n"); io.flush()
+        else
+          io.write("[react-love] Tor failed to start: " .. tostring(err) .. "\n"); io.flush()
+        end
+      end
+    end
+
+    -- Initialize drag-hover detection (X11 + SDL2, Linux only)
+    local ddOk, ddMod = pcall(require, "lua.dragdrop")
+    if ddOk then
+      dragdrop = ddMod
+      dragdrop.init()
+    else
+      io.write("[dragdrop] require failed: " .. tostring(ddMod) .. "\n"); io.flush()
+    end
 
     -- Load the bundled React app into QuickJS
     local bundleJS = love.filesystem.read(initConfig.bundlePath)
@@ -322,6 +436,38 @@ function ReactLove.init(config)
     ReactLove._needsMount = true
 
     print("[react-love] Initialized in NATIVE mode (QuickJS bridge)")
+  end
+
+  -- Load RPC handler modules (native and canvas modes)
+  if isRendering() then
+    local sok, storage = pcall(require, "lua.storage")
+    if sok then
+      for method, handler in pairs(storage.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
+  -- Register clipboard RPC handlers (available in all rendering modes)
+  if isRendering() then
+    rpcHandlers["clipboard:read"] = function()
+      return love.system.getClipboardText()
+    end
+    rpcHandlers["clipboard:write"] = function(args)
+      love.system.setClipboardText(args.text)
+      return true
+    end
+  end
+
+  -- Register Tor RPC handlers
+  if tor then
+    rpcHandlers["tor:getHostname"] = function()
+      local hostname = tor.getHostname()
+      return hostname  -- Only return first value (nil or string)
+    end
+    rpcHandlers["tor:getProxyPort"] = function()
+      return tor.getProxyPort()
+    end
   end
 
   -- Wire up console + inspector (only in rendering modes with inspector enabled)
@@ -388,6 +534,7 @@ function ReactLove.update(dt)
     if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" then
       texteditor.update(canvasFocusedNode, dt)
     end
+    if codeblock then codeblock.update(dt) end
 
     if inspectorEnabled then inspector.update(dt) end
     if inspectorEnabled then console.update(dt) end
@@ -449,17 +596,241 @@ function ReactLove.update(dt)
   -- 4. Drain mutation commands from JS and apply to retained tree
   local commands = bridge:drainCommands()
   if #commands > 0 then
-    if not ReactLove._loggedCommands then
-      ReactLove._loggedCommands = true
-      io.write("[react-love] First batch: " .. #commands .. " commands\n"); io.flush()
+    -- Filter out RPC calls and route them to registered handlers
+    local treeCommands = commands
+    local hasSpecial = false
+    for _, cmd in ipairs(commands) do
+      if type(cmd) == "table" then
+        local t = cmd.type
+        if t == "rpc:call" or t == "http:request" or t == "ws:connect" or t == "ws:send" or t == "ws:close"
+           or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop" then
+          hasSpecial = true
+          break
+        end
+      end
     end
-    tree.applyCommands(commands)
+
+    if hasSpecial then
+      treeCommands = {}
+      for _, cmd in ipairs(commands) do
+        if type(cmd) == "table" and cmd.type == "rpc:call" then
+          local payload = cmd.payload
+          if payload and payload.method and payload.id then
+            local handler = rpcHandlers[payload.method]
+            if handler then
+              local ok, result = pcall(handler, payload.args)
+              if ok then
+                pushEvent({ type = "rpc:" .. payload.id, payload = { result = result } })
+              else
+                pushEvent({ type = "rpc:" .. payload.id, payload = { error = tostring(result) } })
+              end
+            else
+              pushEvent({ type = "rpc:" .. payload.id, payload = { error = "Unknown RPC method: " .. payload.method } })
+            end
+          end
+        elseif type(cmd) == "table" and cmd.type == "http:request" then
+          -- HTTP fetch request: dispatch to http module
+          local payload = cmd.payload
+          if payload and payload.id and payload.url then
+            if http then
+              local immediate = http.request(payload.id, {
+                url = payload.url,
+                method = payload.method,
+                headers = payload.headers,
+                body = payload.body,
+                proxy = payload.proxy,
+              })
+              -- Local file reads return immediately
+              if immediate then
+                pushEvent({
+                  type = "http:response",
+                  payload = { _json = json.encode(immediate) },
+                })
+              end
+            else
+              pushEvent({
+                type = "http:response",
+                payload = { _json = json.encode({
+                  id = payload.id,
+                  status = 0,
+                  headers = {},
+                  body = "",
+                  error = "HTTP module not available",
+                }) },
+              })
+            end
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:connect" then
+          -- WebSocket connect
+          local payload = cmd.payload
+          if payload and payload.id and payload.url and network then
+            network.connect(payload.id, payload.url)
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:send" then
+          -- WebSocket send
+          local payload = cmd.payload
+          if payload and payload.id and network then
+            network.send(payload.id, payload.data or "")
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:close" then
+          -- WebSocket close
+          local payload = cmd.payload
+          if payload and payload.id and network then
+            network.close(payload.id, payload.code, payload.reason)
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:listen" then
+          -- Start WebSocket server
+          local payload = cmd.payload
+          if payload and payload.serverId and payload.port and network then
+            network.listen(payload.serverId, payload.port, payload.host)
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:broadcast" then
+          -- Broadcast to all server clients
+          local payload = cmd.payload
+          if payload and payload.serverId and network then
+            network.broadcast(payload.serverId, payload.data or "")
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:peer:send" then
+          -- Send to specific client on server
+          local payload = cmd.payload
+          if payload and payload.serverId and payload.clientId and network then
+            network.sendToClient(payload.serverId, payload.clientId, payload.data or "")
+          end
+        elseif type(cmd) == "table" and cmd.type == "ws:server:stop" then
+          -- Stop a server
+          local payload = cmd.payload
+          if payload and payload.serverId and network then
+            network.stopServer(payload.serverId)
+          end
+        else
+          treeCommands[#treeCommands + 1] = cmd
+        end
+      end
+    end
+
+    if #treeCommands > 0 then
+      if not ReactLove._loggedCommands then
+        ReactLove._loggedCommands = true
+        io.write("[react-love] First batch: " .. #treeCommands .. " commands\n"); io.flush()
+      end
+      tree.applyCommands(treeCommands)
+    end
   end
 
-  -- 5. Tick Lua-side transitions and animations (before layout)
+  -- 5. Poll for completed HTTP responses and deliver to JS
+  -- Payload is JSON-encoded into a single string to avoid the QuickJS GC race
+  -- that silently drops large string properties during recursive FFI traversal.
+  if http then
+    local responses = http.poll()
+    for _, resp in ipairs(responses) do
+      pushEvent({
+        type = "http:response",
+        payload = { _json = json.encode(resp) },
+      })
+    end
+  end
+
+  -- 6. Poll WebSocket connections and deliver events to JS
+  -- Network events arrive as flat tables {type="ws:open", id=N, ...}.
+  -- The bridge dispatcher passes event.payload to listeners, so we must
+  -- wrap the event data in a payload field.
+  if network then
+    local wsEvents = network.poll()
+    for _, evt in ipairs(wsEvents) do
+      local evtType = evt.type
+      evt.type = nil  -- remove type from payload
+      pushEvent({ type = evtType, payload = evt })
+    end
+  end
+
+  -- 7. Poll for Tor hostname (async — Tor takes 5-30s to bootstrap)
+  if tor and not torHostnameEmitted then
+    local onion = tor.getHostname()
+    if onion then
+      pushEvent({ type = "tor:ready", payload = { hostname = onion } })
+      torHostnameEmitted = true
+      io.write("[tor] Hidden service ready: " .. onion .. "\n"); io.flush()
+    end
+  end
+
+  -- 8. Sync video lifecycle with tree, then render frames into Canvases
+  if videos then
+    videos.syncWithTree(tree.getNodes())
+    videos.renderAll()
+  end
+
+  -- 9. Poll video status and playback events, emit to JS
+  if videos then
+    local videoEvents = videos.poll()
+    for _, evt in ipairs(videoEvents) do
+      -- Resolve src → tracked nodeIds so JS can dispatch to the right components
+      local nodes = videos.getNodesForSrc(evt.src)
+      for _, nodeId in ipairs(nodes) do
+        pushEvent({
+          type = "video:" .. evt.status,
+          payload = { src = evt.src, message = evt.message, targetId = nodeId },
+        })
+      end
+    end
+
+    -- Poll active video playback state for onTimeUpdate/onEnded/onPlay/onPause
+    local playbackEvents = videos.pollPlayback()
+    for _, evt in ipairs(playbackEvents) do
+      pushEvent({
+        type = evt.type,
+        payload = {
+          type = evt.type,
+          targetId = evt.nodeId,
+          currentTime = evt.currentTime,
+          duration = evt.duration,
+        },
+      })
+    end
+  end
+
+  -- 10. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
+  if dragdrop then
+    dragdrop.poll()
+    if dragdrop.isDragHovering() then
+      local root = tree.getTree()
+      if root then
+        local dx, dy = dragdrop.getPosition()
+        local hit = events.hitTest(root, dx, dy)
+        local hitId = hit and hit.id or nil
+
+        if hitId ~= lastDragHoverId then
+          -- Emit leave for old target
+          if lastDragHoverId then
+            io.write("[dragdrop] filedragleave node=" .. tostring(lastDragHoverId) .. "\n"); io.flush()
+            pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, dx, dy, nil, nil, nil))
+          end
+          -- Emit enter for new target (with bubble path)
+          if hit then
+            io.write("[dragdrop] filedragenter node=" .. tostring(hit.id) .. " at " .. dx .. "," .. dy .. "\n"); io.flush()
+            local bubblePath = events.buildBubblePath(hit)
+            pushEvent(events.createFileDropEvent("filedragenter", hit.id, dx, dy, nil, nil, bubblePath))
+          end
+          lastDragHoverId = hitId
+        end
+      end
+    elseif lastDragHoverId then
+      -- Drag left the window or ended
+      io.write("[dragdrop] filedragleave (drag ended) node=" .. tostring(lastDragHoverId) .. "\n"); io.flush()
+      pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, 0, 0, nil, nil, nil))
+      lastDragHoverId = nil
+    end
+  else
+    -- Log once if dragdrop module didn't load
+    if not ReactLove._loggedNoDragdrop then
+      ReactLove._loggedNoDragdrop = true
+      io.write("[dragdrop] module not loaded (dragdrop is nil)\n"); io.flush()
+    end
+  end
+
+  -- 11. Tick Lua-side transitions and animations (before layout)
   if animate then animate.tick(dt) end
 
-  -- 6. Relayout if tree changed
+  -- 11. Relayout if tree changed
   if tree.isDirty() then
     local root = tree.getTree()
     if root then
@@ -470,11 +841,58 @@ function ReactLove.update(dt)
     tree.clearDirty()
   end
 
+  -- Rebuild focusable node list and process stick navigation
+  local root = tree.getTree()
+  if root then
+    focus.rebuildFocusableList(root)
+  end
+  focus.updateStick(dt)
+  focus.updateRings(dt)
+
+  -- Update focusStyle overlays when focus changes
+  do
+    local currentFocusedIds = {}
+    local allFocused = focus.getAllFocused()
+    for _, entry in ipairs(allFocused) do
+      local id = entry.node.id
+      currentFocusedIds[id] = true
+      -- Apply focusStyle to newly focused nodes
+      if not prevFocusedNodeIds[id] then
+        applyInteractionStyle(entry.node)
+      end
+    end
+    -- Remove focusStyle from nodes that lost focus
+    for id in pairs(prevFocusedNodeIds) do
+      if not currentFocusedIds[id] then
+        local nodes = tree.getNodes()
+        local node = nodes and nodes[id]
+        if node then
+          applyInteractionStyle(node)
+        end
+      end
+    end
+    -- Also re-apply on currently focused nodes each frame (handles style changes)
+    for _, entry in ipairs(allFocused) do
+      applyInteractionStyle(entry.node)
+    end
+    prevFocusedNodeIds = currentFocusedIds
+  end
+
+  -- Controller toast countdown
+  if controllerToast.timer then
+    controllerToast.timer = controllerToast.timer - dt
+    if controllerToast.timer <= 0 then
+      controllerToast.timer = nil
+      controllerToast.text = nil
+    end
+  end
+
   -- Update TextEditor blink timer if one has focus
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     texteditor.update(focusedNode, dt)
   end
+  if codeblock then codeblock.update(dt) end
 
   if inspectorEnabled then inspector.update(dt) end
   if inspectorEnabled then console.update(dt) end
@@ -518,14 +936,174 @@ function ReactLove.draw()
     end
   end
 
+  -- Focus rings (after paint, before overlays) — animated, one per group
+  if focus.getInputMode() == "controller" then
+    local rings = focus.getAllRings()
+    for _, ring in ipairs(rings) do
+      painter.drawFocusRing(ring)
+    end
+  end
+
+  -- Controller toast (after focus rings, before overlays)
+  if controllerToast.timer and controllerToast.text then
+    painter.drawControllerToast(controllerToast.text, controllerToast.timer, controllerToast.fadeStart)
+  end
+
   -- Inspector overlay (after paint, before errors)
   if inspectorEnabled then inspector.draw(root) end
+
+  -- Context menu overlay (after inspector, before errors)
+  if contextmenu and contextmenu.isOpen() then
+    contextmenu.draw()
+  end
 
   -- Error overlay renders on top of everything, using raw Love2D calls
   errors.draw()
 
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
   if screenshot then screenshot.captureIfReady() end
+end
+
+-- ============================================================================
+-- Scrollbar interaction helpers
+-- ============================================================================
+
+local SCROLLBAR_THICKNESS = 8   -- hit area (wider than visual 4px for easier clicking)
+local SCROLLBAR_VISUAL = 4      -- must match painter.lua barThickness
+
+--- Check if screen point (mx,my) is on a scrollbar of any scroll container.
+--- Walks the tree to find scroll containers whose scrollbar area contains the point.
+--- Returns { node, axis, thumbPos, thumbSize, trackSize, maxScroll } or nil.
+local function hitTestScrollbar(root, mx, my)
+  if not root then return nil end
+  -- Walk all nodes to find scroll containers
+  local stack = { root }
+  local best = nil
+  while #stack > 0 do
+    local node = table.remove(stack)
+    local s = node.style or {}
+    local c = node.computed
+    if c and s.overflow == "scroll" and node.scrollState then
+      local ss = node.scrollState
+      local viewW, viewH = c.w, c.h
+      local contentW = ss.contentW or viewW
+      local contentH = ss.contentH or viewH
+
+      -- Vertical scrollbar hit area (right edge)
+      if contentH > viewH then
+        local barX = c.x + viewW - SCROLLBAR_THICKNESS
+        if mx >= barX and mx <= c.x + viewW and my >= c.y and my <= c.y + viewH then
+          local trackH = viewH
+          local thumbH = math.max(20, (viewH / contentH) * trackH)
+          local maxScroll = contentH - viewH
+          local scrollY = ss.scrollY or 0
+          local thumbY = c.y + (scrollY / maxScroll) * (trackH - thumbH)
+          best = { node = node, axis = "v", thumbY = thumbY, thumbH = thumbH,
+                   trackSize = trackH, maxScroll = maxScroll, trackStart = c.y }
+        end
+      end
+
+      -- Horizontal scrollbar hit area (bottom edge)
+      if contentW > viewW then
+        local barY = c.y + viewH - SCROLLBAR_THICKNESS
+        if mx >= c.x and mx <= c.x + viewW and my >= barY and my <= c.y + viewH then
+          local trackW = viewW
+          local thumbW = math.max(20, (viewW / contentW) * trackW)
+          local maxScroll = contentW - viewW
+          local scrollX = ss.scrollX or 0
+          local thumbX = c.x + (scrollX / maxScroll) * (trackW - thumbW)
+          best = { node = node, axis = "h", thumbX = thumbX, thumbW = thumbW,
+                   trackSize = trackW, maxScroll = maxScroll, trackStart = c.x }
+        end
+      end
+    end
+    -- Recurse children
+    for _, child in ipairs(node.children or {}) do
+      stack[#stack + 1] = child
+    end
+  end
+  return best
+end
+
+--- Start a scrollbar drag or jump-to-position on click.
+local function scrollbarMousePressed(root, mx, my, button)
+  if button ~= 1 then return false end
+  local hit = hitTestScrollbar(root, mx, my)
+  if not hit then return false end
+
+  local node = hit.node
+  local ss = node.scrollState
+
+  if hit.axis == "v" then
+    -- Check if clicking on thumb or track
+    if my >= hit.thumbY and my <= hit.thumbY + hit.thumbH then
+      -- Dragging the thumb
+      scrollbarDrag = { node = node, axis = "v", startMouse = my,
+                        startScroll = ss.scrollY or 0 }
+    else
+      -- Click on track: jump to position
+      local ratio = (my - hit.trackStart) / hit.trackSize
+      local newScroll = ratio * hit.maxScroll
+      tree.setScroll(node.id, ss.scrollX or 0, newScroll)
+      -- Start drag from new position
+      local thumbH = math.max(20, (node.computed.h / (ss.contentH or 1)) * hit.trackSize)
+      scrollbarDrag = { node = node, axis = "v", startMouse = my,
+                        startScroll = newScroll }
+    end
+  else
+    if mx >= hit.thumbX and mx <= hit.thumbX + hit.thumbW then
+      scrollbarDrag = { node = node, axis = "h", startMouse = mx,
+                        startScroll = ss.scrollX or 0 }
+    else
+      local ratio = (mx - hit.trackStart) / hit.trackSize
+      local newScroll = ratio * hit.maxScroll
+      tree.setScroll(node.id, newScroll, ss.scrollY or 0)
+      scrollbarDrag = { node = node, axis = "h", startMouse = mx,
+                        startScroll = newScroll }
+    end
+  end
+  return true
+end
+
+--- Update scrollbar drag on mouse move.
+local function scrollbarMouseMoved(mx, my)
+  if not scrollbarDrag then return false end
+  local d = scrollbarDrag
+  local ss = d.node.scrollState
+  if not ss then scrollbarDrag = nil; return false end
+
+  local c = d.node.computed
+  if not c then scrollbarDrag = nil; return false end
+
+  if d.axis == "v" then
+    local viewH = c.h
+    local contentH = ss.contentH or viewH
+    local trackH = viewH
+    local thumbH = math.max(20, (viewH / contentH) * trackH)
+    local maxScroll = contentH - viewH
+    local delta = my - d.startMouse
+    local scrollDelta = (delta / (trackH - thumbH)) * maxScroll
+    local newScroll = d.startScroll + scrollDelta
+    tree.setScroll(d.node.id, ss.scrollX or 0, newScroll)
+  else
+    local viewW = c.w
+    local contentW = ss.contentW or viewW
+    local trackW = viewW
+    local thumbW = math.max(20, (viewW / contentW) * trackW)
+    local maxScroll = contentW - viewW
+    local delta = mx - d.startMouse
+    local scrollDelta = (delta / (trackW - thumbW)) * maxScroll
+    local newScroll = d.startScroll + scrollDelta
+    tree.setScroll(d.node.id, newScroll, ss.scrollY or 0)
+  end
+  return true
+end
+
+--- End scrollbar drag on mouse release.
+local function scrollbarMouseReleased()
+  if not scrollbarDrag then return false end
+  scrollbarDrag = nil
+  return true
 end
 
 --- Call from love.mousepressed(x, y, button).
@@ -540,6 +1118,22 @@ function ReactLove.mousepressed(x, y, button)
 
   local root = tree.getTree()
   if not root then return end
+
+  -- Context menu: consume clicks when open (close on outside click, select on item)
+  if contextmenu and contextmenu.isOpen() then
+    contextmenu.handleMousePressed(x, y, button)
+    return
+  end
+
+  -- Right-click: open context menu instead of normal click handling
+  if button == 2 and contextmenu then
+    io.write("[init] right-click button=2, calling contextmenu.open\n"); io.flush()
+    contextmenu.open(x, y, root, pushEvent)
+    return
+  end
+
+  -- Scrollbar click/drag gets priority over normal hit testing
+  if scrollbarMousePressed(root, x, y, button) then return end
 
   local hit = events.hitTest(root, x, y)
 
@@ -577,6 +1171,13 @@ function ReactLove.mousepressed(x, y, button)
           })
         end
       end
+    elseif hit.type == "CodeBlock" then
+      -- Clicked a CodeBlock: check copy button
+      -- Convert screen coords to content-space (account for scroll ancestors)
+      if codeblock and codeblock.handleMousePressed then
+        local cx, cy = events.screenToContent(hit, x, y)
+        codeblock.handleMousePressed(hit, cx, cy, button)
+      end
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)
@@ -588,12 +1189,44 @@ function ReactLove.mousepressed(x, y, button)
       applyInteractionStyle(hit)
     end
   end
+
+  -- Always stash a text node under the cursor as a pending selection candidate.
+  -- If the user drags past the threshold, this becomes an active text selection.
+  -- This works regardless of whether an interactive node was also hit.
+  textSelectPending = nil
+  if textselection then
+    -- Clear any existing selection on new mousedown
+    textselection.clear()
+
+    local textHit = events.textHitTest(root, x, y)
+    if textHit then
+      local selNode = textHit
+      if textHit.type == "__TEXT__" and textHit.parent and textHit.parent.type == "Text" then
+        selNode = textHit.parent
+      end
+      if textselection.isSelectable(selNode) then
+        local line, col = textselection.screenToPos(selNode, x, y)
+        textSelectPending = { node = selNode, startX = x, startY = y, line = line, col = col }
+      end
+    end
+  end
 end
 
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactLove.mousereleased(x, y, button)
+  if scrollbarMouseReleased() then return end
   if not isRendering() then return end
+
+  -- Text selection: finalize on mouse release, clear pending
+  textSelectPending = nil
+  if textselection then
+    local sel = textselection.get()
+    if sel and sel.isDragging then
+      textselection.finalize()
+      return  -- Consumed by text selection
+    end
+  end
 
   -- TextEditor drag selection release
   local focusedNode = focus.get()
@@ -630,7 +1263,48 @@ end
 --- Also updates drag state if a drag is active.
 function ReactLove.mousemoved(x, y)
   if inspectorEnabled then inspector.mousemoved(x, y) end
+  if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
+
+  focus.setMouseMode()
+
+  -- Context menu hover tracking
+  if contextmenu and contextmenu.isOpen() then
+    contextmenu.handleMouseMoved(x, y)
+    return
+  end
+
+  -- Text selection: check pending → promote on threshold, or update active drag
+  if textselection then
+    local sel = textselection.get()
+    if sel and sel.isDragging then
+      -- Active selection: update end position
+      local line, col = textselection.screenToPos(sel.node, x, y)
+      textselection.update(line, col)
+      return  -- Consumed by text selection
+    elseif textSelectPending then
+      -- Pending: check if mouse moved past threshold
+      local dx = x - textSelectPending.startX
+      local dy = y - textSelectPending.startY
+      if dx * dx + dy * dy > TEXT_SELECT_THRESHOLD * TEXT_SELECT_THRESHOLD then
+        -- Promote to active selection — cancel any normal drag/press in progress
+        events.cancelDrag()
+        local prevPressed = events.getPressedNode()
+        events.clearPressedNode()
+        if prevPressed then applyInteractionStyle(prevPressed) end
+
+        -- Start text selection from the original mousedown position
+        local p = textSelectPending
+        textselection.start(p.node, p.line, p.col)
+        textSelectPending = nil
+
+        -- Update to current mouse position
+        local line, col = textselection.screenToPos(p.node, x, y)
+        textselection.update(line, col)
+        return  -- Consumed
+      end
+    end
+  end
 
   -- TextEditor drag selection
   local focusedNode = focus.get()
@@ -686,10 +1360,23 @@ function ReactLove.resize(w, h)
 end
 
 --- Call from love.keypressed(key, scancode, isrepeat).
---- Dispatches a global keydown event to all JS keyboard listeners.
+--- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.keypressed(key, scancode, isrepeat)
   if inspectorEnabled and inspector.keypressed(key) then return end
   if not isRendering() then return end
+
+  -- Context menu keyboard handling
+  if contextmenu and contextmenu.isOpen() then
+    contextmenu.handleKeyPressed(key)
+    return
+  end
+
+  -- Ctrl+C / Cmd+C: copy text selection to clipboard
+  if textselection and key == "c" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
+    if textselection.copyToClipboard() then
+      return  -- Consumed
+    end
+  end
 
   -- Route to focused TextEditor if any
   local focusedNode = focus.get()
@@ -716,16 +1403,39 @@ function ReactLove.keypressed(key, scancode, isrepeat)
           value = value,
         }
       })
+      return
+    elseif result == false then
+      -- TextEditor didn't handle this key combo, let it through to bridge
+      -- (falls through to pushEvent below)
+    else
+      return  -- consumed by TextEditor
     end
-    return  -- consumed by TextEditor, do NOT broadcast to bridge
+  end
+
+  -- Tab / Shift+Tab: sequential focus navigation
+  if key == "tab" then
+    focus.setControllerMode()  -- shows focus ring (same visual as gamepad)
+    if love.keyboard.isDown("lshift", "rshift") then
+      focus.navigateSequential("prev")
+    else
+      focus.navigateSequential("next")
+    end
+    return  -- consumed, don't push to bridge
   end
 
   if not bridge then return end
-  pushEvent(events.createKeyEvent("keydown", key, scancode, isrepeat))
+  -- Route keyboard events to focused node when in focus mode
+  local evt = events.createKeyEvent("keydown", key, scancode, isrepeat)
+  local focusTarget = focus.get()
+  if focusTarget and focus.getInputMode() == "controller" then
+    evt.payload.targetId = focusTarget.id
+    evt.payload.bubblePath = events.buildBubblePath(focusTarget)
+  end
+  pushEvent(evt)
 end
 
 --- Call from love.keyreleased(key, scancode).
---- Dispatches a global keyup event to all JS keyboard listeners.
+--- Routes keyup to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.keyreleased(key, scancode)
   if not isRendering() then return end
 
@@ -736,11 +1446,17 @@ function ReactLove.keyreleased(key, scancode)
   end
 
   if not bridge then return end
-  pushEvent(events.createKeyEvent("keyup", key, scancode, false))
+  local evt = events.createKeyEvent("keyup", key, scancode, false)
+  local focusTarget = focus.get()
+  if focusTarget and focus.getInputMode() == "controller" then
+    evt.payload.targetId = focusTarget.id
+    evt.payload.bubblePath = events.buildBubblePath(focusTarget)
+  end
+  pushEvent(evt)
 end
 
 --- Call from love.textinput(text).
---- Dispatches a text input event (handles unicode, IME, etc.).
+--- Routes text input to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.textinput(text)
   -- Inspector/console captures text input when active
   if inspectorEnabled and inspector.textinput(text) then return end
@@ -754,7 +1470,13 @@ function ReactLove.textinput(text)
   end
 
   if not bridge then return end
-  pushEvent(events.createTextInputEvent(text))
+  local evt = events.createTextInputEvent(text)
+  local focusTarget = focus.get()
+  if focusTarget and focus.getInputMode() == "controller" then
+    evt.payload.targetId = focusTarget.id
+    evt.payload.bubblePath = events.buildBubblePath(focusTarget)
+  end
+  pushEvent(evt)
 end
 
 --- Call from love.wheelmoved(x, y).
@@ -835,34 +1557,259 @@ function ReactLove.touchmoved(id, x, y, dx, dy, pressure)
   pushEvent(events.createTouchEvent("touchmove", nil, id, x, y, dx, dy, pressure))
 end
 
+--- Call from love.joystickadded(joystick).
+--- Shows a toast notification and emits event to JS.
+function ReactLove.joystickadded(joystick)
+  controllerToast.timer = 3.0
+  controllerToast.text = "Controller connected"
+  if bridge then
+    pushEvent({
+      type = "joystickadded",
+      payload = { joystickId = joystick:getID(), name = joystick:getName() },
+    })
+  end
+end
+
+--- Call from love.joystickremoved(joystick).
+--- Shows a toast, switches to mouse mode if no controllers remain.
+function ReactLove.joystickremoved(joystick)
+  controllerToast.timer = 3.0
+  controllerToast.text = "Controller disconnected"
+  -- If no joysticks remain, switch back to mouse mode
+  local joysticks = love.joystick.getJoysticks()
+  if #joysticks == 0 then
+    focus.setMouseMode()
+  end
+  if bridge then
+    pushEvent({
+      type = "joystickremoved",
+      payload = { joystickId = joystick:getID() },
+    })
+  end
+end
+
 --- Call from love.gamepadpressed(joystick, button).
---- Dispatches a global gamepad button press event.
+--- D-pad drives spatial navigation, A activates, B/Start synthesize Escape.
+--- Other buttons pass through as gamepad events for custom handling.
 function ReactLove.gamepadpressed(joystick, button)
   if not isRendering() then return end
   if not bridge then return end
 
   local joystickId = joystick:getID()
+  focus.setControllerMode()
+
+  -- D-pad → spatial navigation (routed to correct FocusGroup)
+  if button == "dpup" then focus.navigate("up", joystickId); return end
+  if button == "dpdown" then focus.navigate("down", joystickId); return end
+  if button == "dpleft" then focus.navigate("left", joystickId); return end
+  if button == "dpright" then focus.navigate("right", joystickId); return end
+
+  -- A button → activate focused node for this controller (synthesize click)
+  if button == "a" then
+    local node = focus.getForController(joystickId)
+    if node then
+      local bubblePath = events.buildBubblePath(node)
+      pushEvent({
+        type = "mousedown",
+        payload = {
+          type = "mousedown",
+          targetId = node.id,
+          x = node.computed.x + node.computed.w / 2,
+          y = node.computed.y + node.computed.h / 2,
+          button = 1,
+          bubblePath = bubblePath,
+          gamepadButton = "a",
+          joystickId = joystickId,
+        }
+      })
+      if events then events.setPressedNode(node) end
+    end
+    return
+  end
+
+  -- B button → synthesize Escape keydown
+  if button == "b" then
+    pushEvent(events.createKeyEvent("keydown", "escape", "escape", false))
+    return
+  end
+
+  -- Start button → synthesize Escape (pause menu pattern)
+  if button == "start" then
+    pushEvent(events.createKeyEvent("keydown", "escape", "escape", false))
+    return
+  end
+
+  -- Other buttons: pass through as gamepad events for custom handling
   pushEvent(events.createGamepadButtonEvent("gamepadpressed", button, joystickId))
 end
 
 --- Call from love.gamepadreleased(joystick, button).
---- Dispatches a global gamepad button release event.
+--- A release synthesizes mouseup on focused node.
 function ReactLove.gamepadreleased(joystick, button)
   if not isRendering() then return end
   if not bridge then return end
 
   local joystickId = joystick:getID()
+
+  if button == "a" then
+    local node = focus.getForController(joystickId)
+    if node then
+      local bubblePath = events.buildBubblePath(node)
+      pushEvent({
+        type = "mouseup",
+        payload = {
+          type = "mouseup",
+          targetId = node.id,
+          x = node.computed.x + node.computed.w / 2,
+          y = node.computed.y + node.computed.h / 2,
+          button = 1,
+          bubblePath = bubblePath,
+          gamepadButton = "a",
+          joystickId = joystickId,
+        }
+      })
+      if events then events.clearPressedNode() end
+    end
+    return
+  end
+
   pushEvent(events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
 end
 
 --- Call from love.gamepadaxis(joystick, axis, value).
---- Dispatches a global gamepad axis movement event.
+--- Left stick feeds focus navigation (processed in update).
+--- Right stick scrolls the nearest scroll ancestor of the focused node.
 function ReactLove.gamepadaxis(joystick, axis, value)
   if not isRendering() then return end
   if not bridge then return end
 
   local joystickId = joystick:getID()
+  focus.setControllerMode()
+
+  -- Left stick → focus navigation (handled in update via Focus.updateStick)
+  if axis == "leftx" or axis == "lefty" then
+    focus.setStickInput(axis, value, joystickId)
+    return
+  end
+
+  -- Right stick → scroll the nearest scroll ancestor of focused node
+  if axis == "rightx" or axis == "righty" then
+    local node = focus.getForController(joystickId)
+    if node then
+      local scrollNode = findScrollAncestor(node)
+      if scrollNode and scrollNode.scrollState then
+        local SCROLL_SPEED = 8
+        if axis == "rightx" and math.abs(value) > 0.3 then
+          scrollNode.scrollState.scrollX = (scrollNode.scrollState.scrollX or 0) + value * SCROLL_SPEED
+        elseif axis == "righty" and math.abs(value) > 0.3 then
+          scrollNode.scrollState.scrollY = (scrollNode.scrollState.scrollY or 0) + value * SCROLL_SPEED
+        end
+      end
+    end
+    return
+  end
+
+  -- Triggers and other axes: pass through
   pushEvent(events.createGamepadAxisEvent(axis, value, joystickId))
+end
+
+--- Call from love.filedropped(file).
+--- Hit-tests at current mouse position and dispatches a filedrop event to JS.
+function ReactLove.filedropped(file)
+  io.write("[filedrop] love.filedropped called\n"); io.flush()
+
+  if not isRendering() then
+    io.write("[filedrop] not rendering, bailing\n"); io.flush()
+    return
+  end
+  if not bridge then
+    io.write("[filedrop] no bridge, bailing\n"); io.flush()
+    return
+  end
+
+  local root = tree.getTree()
+  if not root then
+    io.write("[filedrop] no tree root, bailing\n"); io.flush()
+    return
+  end
+
+  -- love.mouse.getPosition() is stale during OS file drags.
+  -- Use SDL_GetGlobalMouseState via dragdrop module for the real position.
+  local mx, my
+  if dragdrop then
+    mx, my = dragdrop.getMousePosition()
+  end
+  if not mx then
+    mx, my = love.mouse.getPosition()
+  end
+  -- Debug: dump tree bounds to understand hit test failure
+  local function dumpBounds(node, depth)
+    if not node then return end
+    local indent = string.rep("  ", depth)
+    local c = node.computed
+    if c then
+      io.write(indent .. "node " .. tostring(node.id) .. " type=" .. tostring(node.type)
+        .. " bounds=" .. c.x .. "," .. c.y .. " " .. c.w .. "x" .. c.h
+        .. " handlers=" .. tostring(node.hasHandlers) .. "\n")
+    else
+      io.write(indent .. "node " .. tostring(node.id) .. " type=" .. tostring(node.type) .. " NO COMPUTED\n")
+    end
+    for _, child in ipairs(node.children or {}) do
+      dumpBounds(child, depth + 1)
+    end
+  end
+  io.write("[filedrop] mouse=" .. mx .. "," .. my .. " tree:\n"); io.flush()
+  dumpBounds(root, 1)
+  io.flush()
+
+  local hit = events.hitTest(root, mx, my)
+  if not hit then
+    io.write("[filedrop] no hit at " .. mx .. "," .. my .. ", bailing\n"); io.flush()
+    return
+  end
+
+  local path = file:getFilename()
+  io.write("[filedrop] path=" .. tostring(path) .. " hit=" .. tostring(hit.id) .. " at " .. mx .. "," .. my .. "\n"); io.flush()
+
+  -- DroppedFile:getSize() may fail if the file hasn't been opened yet.
+  -- Open → getSize → close, all wrapped in pcall for safety.
+  local size = nil
+  local sizeOk, sizeErr = pcall(function()
+    if file:open("r") then
+      size = file:getSize()
+      file:close()
+    end
+  end)
+  if not sizeOk then
+    io.write("[filedrop] getSize failed: " .. tostring(sizeErr) .. "\n"); io.flush()
+  end
+
+  io.write("[filedrop] pushing event: path=" .. tostring(path) .. " size=" .. tostring(size) .. "\n"); io.flush()
+  local bubblePath = events.buildBubblePath(hit)
+  pushEvent(events.createFileDropEvent("filedrop", hit.id, mx, my, path, size, bubblePath))
+end
+
+--- Call from love.directorydropped(path).
+--- Hit-tests at current mouse position and dispatches a directorydrop event to JS.
+function ReactLove.directorydropped(dir)
+  if not isRendering() then return end
+  if not bridge then return end
+
+  local root = tree.getTree()
+  if not root then return end
+
+  local mx, my
+  if dragdrop then
+    mx, my = dragdrop.getMousePosition()
+  end
+  if not mx then
+    mx, my = love.mouse.getPosition()
+  end
+  local hit = events.hitTest(root, mx, my)
+  if not hit then return end
+
+  local bubblePath = events.buildBubblePath(hit)
+  pushEvent(events.createFileDropEvent("directorydrop", hit.id, mx, my, dir, nil, bubblePath))
 end
 
 --- Hot-reload the JS bundle without restarting Love2D.
@@ -885,14 +1832,20 @@ function ReactLove.reload()
 
   -- 2. Teardown
   bridge:destroy()
+  if network then network.destroy() end
+  if http then http.destroy() end
+  -- Note: Tor is NOT restarted on reload — it stays running across hot reloads
+  torHostnameEmitted = false  -- Re-emit tor:ready to new JS context
   if images then images.clearCache() end
+  if videos then videos.clearCache() end
   if animate then animate.clear() end
-  tree.init({ images = images, animate = animate })
+  tree.init({ images = images, videos = videos, animate = animate })
   if animate then animate.init({ tree = tree }) end
   events.clearHover()
   events.clearPressedNode()
   interactionBase = {}
   focus.clear()
+  if contextmenu then contextmenu.close() end
   pcall(function() events.endDrag(0, 0) end)
   measure.clearCache()
 
@@ -900,7 +1853,13 @@ function ReactLove.reload()
   local BridgeQJS = require("lua.bridge_quickjs")
   bridge = BridgeQJS.new(initConfig.libpath)
 
-  -- 4. Re-read bundle from disk
+  -- 4. Re-init HTTP workers and network
+  http = require("lua.http")
+  http.init()
+  network = require("lua.network")
+  network.init()
+
+  -- 5. Re-read bundle from disk
   local bundleJS = love.filesystem.read(initConfig.bundlePath)
   if not bundleJS then
     errors.push({
@@ -947,6 +1906,11 @@ end
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
 function ReactLove.quit()
+  if dragdrop then dragdrop.cleanup() end
+  if videos then videos.shutdown() end
+  if tor then tor.stop() end
+  if network then network.destroy() end
+  if http then http.destroy() end
   if mode == "native" and bridge then
     bridge:destroy()
   end
@@ -974,6 +1938,14 @@ end
 --- Useful for game code that needs to measure text outside the layout pass.
 function ReactLove.getMeasure()
   return measure
+end
+
+--- Register an RPC handler for a given method name.
+--- Handlers receive args table and return a result (or throw).
+--- @param method string The RPC method name (e.g. "storage:get")
+--- @param handler function(args) -> result
+function ReactLove.rpc(method, handler)
+  rpcHandlers[method] = handler
 end
 
 --- Set the scroll position for a node programmatically.

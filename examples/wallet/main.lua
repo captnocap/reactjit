@@ -51,6 +51,14 @@ function love.textinput(text)
   ReactLove.textinput(text)
 end
 
+function love.filedropped(file)
+  ReactLove.filedropped(file)
+end
+
+function love.directorydropped(dir)
+  ReactLove.directorydropped(dir)
+end
+
 function love.quit()
   ReactLove.quit()
 end

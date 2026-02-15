@@ -12,6 +12,7 @@
     - lineHeight override (manual line-by-line rendering when set)
     - letterSpacing (character-by-character rendering -- known to be expensive)
     - Image: actual image rendering with scaling, opacity, and borderRadius
+    - Video: Theora video playback with objectFit, play/pause/loop/volume control
     - Opacity propagation: nested opacity values multiply down the tree
     - overflow:hidden with borderRadius > 0: stencil-based clipping with nesting support
     - overflow:hidden with borderRadius = 0: scissor-based rectangular clipping
@@ -24,8 +25,11 @@
 
 local Measure = nil  -- Injected at init time via Painter.init()
 local Images = nil   -- Injected at init time via Painter.init()
+local Videos = nil   -- Injected at init time via Painter.init()
 local ZIndex = require("lua.zindex")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
+local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
+local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 
 local Painter = {}
 
@@ -39,6 +43,7 @@ function Painter.init(config)
   config = config or {}
   Measure = config.measure
   Images = config.images
+  Videos = config.videos
   getFont = Measure.getFont
 end
 
@@ -135,6 +140,8 @@ end
 --- @param letterSpacing number|nil Extra space between characters.
 --- @return table  Array of line strings ready to render.
 function Painter.getVisibleLines(font, text, maxWidth, numberOfLines, textOverflow, letterSpacing)
+  -- Normalize line endings (Windows \r\n → \n)
+  text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
   -- When letterSpacing is set, reduce the wrap width to approximate wider characters
   local wrapConstraint = maxWidth
   if letterSpacing and letterSpacing ~= 0 then
@@ -692,6 +699,15 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     end
 
   elseif not isHidden and (node.type == "Text" or node.type == "__TEXT__") then
+    -- Draw text selection highlight BEFORE text (so text renders on top)
+    if not TextSelectionModule then
+      local ok, mod = pcall(require, "lua.textselection")
+      if ok then TextSelectionModule = mod end
+    end
+    if TextSelectionModule then
+      TextSelectionModule.drawHighlight(node)
+    end
+
     -- Resolve text style properties (with inheritance for __TEXT__ children)
     local fontSize = s.fontSize or 14
     local fontFamily = resolveFontFamily(node)
@@ -919,12 +935,120 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
+  elseif not isHidden and node.type == "Video" and Videos then
+    local src = node.props and node.props.src
+    if src then
+      local status = Videos.getStatus(src)
+
+      if status == "ready" then
+        local canvas = Videos.get(src)
+        if canvas then
+          -- Control playback via mpv property API
+          Videos.setPaused(src, node.props.paused)
+          Videos.setMuted(src, node.props.muted)
+          Videos.setVolume(src, node.props.volume or 1)
+          Videos.setLoop(src, node.props.loop)
+
+          -- Calculate scaling using same objectFit logic as Image
+          local objectFit = s.objectFit or "fill"
+          local vidW, vidH = Videos.getDimensions(src)
+          if not vidW then vidW, vidH = canvas:getWidth(), canvas:getHeight() end
+          local scaleX, scaleY, drawX, drawY, drawW, drawH
+
+          if objectFit == "contain" then
+            local scale = math.min(c.w / vidW, c.h / vidH)
+            scaleX = scale
+            scaleY = scale
+            drawW = vidW * scale
+            drawH = vidH * scale
+            drawX = c.x + (c.w - drawW) / 2
+            drawY = c.y + (c.h - drawH) / 2
+          elseif objectFit == "cover" then
+            local scale = math.max(c.w / vidW, c.h / vidH)
+            scaleX = scale
+            scaleY = scale
+            drawW = vidW * scale
+            drawH = vidH * scale
+            drawX = c.x + (c.w - drawW) / 2
+            drawY = c.y + (c.h - drawH) / 2
+          elseif objectFit == "none" then
+            scaleX = 1
+            scaleY = 1
+            drawW = vidW
+            drawH = vidH
+            drawX = c.x + (c.w - vidW) / 2
+            drawY = c.y + (c.h - vidH) / 2
+          else
+            -- "fill" (default)
+            scaleX = c.w / vidW
+            scaleY = c.h / vidH
+            drawX = c.x
+            drawY = c.y
+            drawW = c.w
+            drawH = c.h
+          end
+
+          -- Apply borderRadius clipping if needed
+          local videoStencil = borderRadius > 0
+          if videoStencil then
+            local stencilValue = stencilDepth + 1
+            love.graphics.stencil(function()
+              love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+            end, "replace", stencilValue)
+            love.graphics.setStencilTest("greater", stencilDepth)
+          end
+
+          -- Draw the video frame (Canvas is drawable just like Video)
+          love.graphics.setColor(1, 1, 1, effectiveOpacity)
+          love.graphics.draw(canvas, drawX, drawY, 0, scaleX, scaleY)
+
+          -- Restore stencil
+          if videoStencil then
+            if stencilDepth > 0 then
+              love.graphics.setStencilTest("greater", stencilDepth - 1)
+            else
+              love.graphics.setStencilTest()
+            end
+          end
+        end
+
+      else
+        -- Loading / error / no video: neutral dark surface with film icon
+        love.graphics.setColor(0.10, 0.11, 0.14, effectiveOpacity)
+        love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+        love.graphics.setColor(0.20, 0.22, 0.28, 0.5 * effectiveOpacity)
+        love.graphics.rectangle("line", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+
+        -- Play triangle icon in center
+        local iconSize = math.min(c.w, c.h) * 0.15
+        if iconSize > 6 then
+          local cx = c.x + c.w / 2
+          local cy = c.y + c.h / 2
+          love.graphics.setColor(0.30, 0.33, 0.40, 0.5 * effectiveOpacity)
+          love.graphics.polygon("fill",
+            cx - iconSize * 0.4, cy - iconSize * 0.5,
+            cx - iconSize * 0.4, cy + iconSize * 0.5,
+            cx + iconSize * 0.5, cy)
+        end
+      end
+    end
+
   elseif not isHidden and node.type == "TextEditor" then
     -- Lua-owned text editor: delegate rendering entirely to texteditor.lua
     if not TextEditorModule then
       TextEditorModule = require("lua.texteditor")
     end
     TextEditorModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "CodeBlock" then
+    -- Lua-owned code block: delegate rendering entirely to codeblock.lua
+    if not CodeBlockModule then
+      CodeBlockModule = require("lua.codeblock")
+    end
+    local c = node.computed
+    if c and c.w > 0 and c.h > 0 then
+      CodeBlockModule.render(node, c, effectiveOpacity)
+    end
   end
 
   -- Determine paint order: sort children by zIndex (stable, ascending)
@@ -1023,6 +1147,75 @@ function Painter.drawScrollbars(node, opacity)
     love.graphics.setColor(barColor)
     love.graphics.rectangle("fill", thumbX, thumbY, thumbW, barThickness, barRadius, barRadius)
   end
+end
+
+-- ============================================================================
+-- Focus ring (controller mode)
+-- ============================================================================
+
+--- Draw focus ring from interpolated rect data (controller mode only).
+--- Called from init.lua after paint, before overlays.
+--- @param ring table { x, y, w, h, ringColor, borderRadius }
+function Painter.drawFocusRing(ring)
+  if not ring then return end
+
+  local x = ring.x
+  local y = ring.y
+  local w = ring.w
+  local h = ring.h
+  local r = ring.borderRadius or 0
+  local width = 2    -- ring thickness
+
+  local color = ring.ringColor or { 0.3, 0.6, 1.0, 0.9 }
+  love.graphics.setColor(color[1], color[2], color[3], color[4] or 0.9)
+  love.graphics.setLineWidth(width)
+
+  if r > 0 then
+    love.graphics.rectangle("line", x, y, w, h, r, r)
+  else
+    love.graphics.rectangle("line", x, y, w, h)
+  end
+
+  love.graphics.setLineWidth(1)
+  love.graphics.setColor(1, 1, 1, 1)
+end
+
+--- Draw a controller connection toast at the bottom center of the screen.
+--- @param text string The toast message
+--- @param timer number Seconds remaining before auto-dismiss
+--- @param fadeStart number Start fading when timer drops below this value
+function Painter.drawControllerToast(text, timer, fadeStart)
+  local font = getFont(14)
+  local textW = font:getWidth(text)
+  local textH = font:getHeight()
+  local padX, padY = 16, 10
+  local boxW = textW + padX * 2
+  local boxH = textH + padY * 2
+  local screenW, screenH = love.graphics.getDimensions()
+  local x = (screenW - boxW) / 2
+  local y = screenH - boxH - 24
+
+  -- Fade alpha when timer < fadeStart
+  local alpha = 1.0
+  if timer < fadeStart then
+    alpha = timer / fadeStart
+  end
+
+  -- Background pill
+  love.graphics.setColor(0.12, 0.12, 0.15, 0.85 * alpha)
+  love.graphics.rectangle("fill", x, y, boxW, boxH, 8, 8)
+
+  -- Border
+  love.graphics.setColor(0.3, 0.6, 1.0, 0.6 * alpha)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", x, y, boxW, boxH, 8, 8)
+
+  -- Text
+  love.graphics.setFont(font)
+  love.graphics.setColor(0.9, 0.9, 0.95, alpha)
+  love.graphics.print(text, x + padX, y + padY)
+
+  love.graphics.setColor(1, 1, 1, 1)
 end
 
 -- ============================================================================

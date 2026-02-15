@@ -90,6 +90,7 @@ export interface Style {
   };
 
   // Text
+  userSelect?: 'none' | 'text' | 'auto';
   color?: Color;
   fontSize?: number;
   fontFamily?: string;
@@ -170,6 +171,11 @@ export interface LoveEvent {
   key?: string;
   scancode?: string;
   isRepeat?: boolean;
+  // Modifier key state (populated for keydown/keyup events)
+  ctrl?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  meta?: boolean;
   text?: string;
   // Wheel events
   deltaX?: number;
@@ -189,6 +195,9 @@ export interface LoveEvent {
   startY?: number;
   totalDeltaX?: number;
   totalDeltaY?: number;
+  // File drop events
+  filePath?: string;
+  fileSize?: number;
 
   // Bubbling support
   bubblePath?: number[];
@@ -197,9 +206,35 @@ export interface LoveEvent {
 }
 
 export interface BoxProps {
+  // Shorthand layout props — mapped to style, style={} wins if both set
+  direction?: 'row' | 'col';
+  gap?: number | string;
+  padding?: number | string;
+  px?: number | string;
+  py?: number | string;
+  margin?: number | string;
+  align?: 'start' | 'center' | 'end' | 'stretch';
+  justify?: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly';
+  fill?: boolean;
+  grow?: boolean;
+  bg?: Color;
+  radius?: number;
+  w?: number | string;
+  h?: number | string;
+  wrap?: boolean;
+  scroll?: boolean;
+  hidden?: boolean;
+  z?: number;
+
+  focusable?: boolean;
+  focusGroup?: boolean;
+  focusGroupController?: number;
+  focusGroupRingColor?: [number, number, number, number?];
+
   style?: Style;
   hoverStyle?: Style;
   activeStyle?: Style;
+  focusStyle?: Style;
   onClick?: (event: LoveEvent) => void;
   onRelease?: (event: LoveEvent) => void;
   onPointerEnter?: (event: LoveEvent) => void;
@@ -217,11 +252,26 @@ export interface BoxProps {
   onDragStart?: (event: LoveEvent) => void;
   onDrag?: (event: LoveEvent) => void;
   onDragEnd?: (event: LoveEvent) => void;
+  onFileDrop?: (event: LoveEvent) => void;
+  onDirectoryDrop?: (event: LoveEvent) => void;
+  onFileDragEnter?: (event: LoveEvent) => void;
+  onFileDragLeave?: (event: LoveEvent) => void;
+  onFocus?: (event: LoveEvent) => void;
+  onBlur?: (event: LoveEvent) => void;
   children?: React.ReactNode;
   key?: string | number;
 }
 
 export interface TextProps {
+  // Shorthand text props — mapped to style, style={} wins if both set
+  size?: number;
+  color?: Color;
+  bold?: boolean;
+  italic?: boolean;
+  align?: 'left' | 'center' | 'right';
+  font?: string;
+  lines?: number;
+
   style?: Style;
   numberOfLines?: number;
   onKeyDown?: (event: LoveEvent) => void;
@@ -233,10 +283,50 @@ export interface TextProps {
 
 export interface ImageProps {
   src: string;
+  // Shorthand props
+  w?: number | string;
+  h?: number | string;
+  radius?: number;
+
   style?: Style;
   onClick?: (event: LoveEvent) => void;
   onWheel?: (event: LoveEvent) => void;
   key?: string | number;
+}
+
+export interface VideoTimeEvent {
+  currentTime: number;
+  duration?: number;
+}
+
+export interface VideoProps {
+  src: string;
+  paused?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+  volume?: number;
+
+  // Shorthand props
+  w?: number | string;
+  h?: number | string;
+  radius?: number;
+
+  style?: Style;
+
+  // Events
+  onTimeUpdate?: (event: VideoTimeEvent) => void;
+  onEnded?: () => void;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onReady?: () => void;
+  onError?: (event: { message: string }) => void;
+  onClick?: (event: LoveEvent) => void;
+
+  key?: string | number;
+}
+
+export interface VideoPlayerProps extends VideoProps {
+  controls?: boolean;
 }
 
 export interface ScrollEvent {
@@ -349,5 +439,50 @@ export interface TextEditorProps {
   style?: Style;
   /** Text style (fontSize, color, fontFamily). */
   textStyle?: Style;
+  key?: string | number;
+}
+
+export interface ContextMenuItem {
+  /** Display label for the menu item. */
+  label: string;
+  /** Action identifier dispatched on selection. */
+  action: string;
+  /** Whether the item is grayed out / unclickable. */
+  disabled?: boolean;
+  /** Renders a divider line instead of an item. */
+  separator?: boolean;
+}
+
+export interface ContextMenuEvent {
+  /** The action string of the selected item. */
+  action: string;
+  /** ID of the node that was right-clicked. */
+  targetId?: number;
+  /** Whether text was selected when the menu opened. */
+  hasSelection?: boolean;
+  /** The selected text content (if any). */
+  selectedText?: string;
+}
+
+export interface FocusGroupProps {
+  /** Which controller (joystick ID) owns this group. Omit for any controller. */
+  controller?: number;
+  /** Focus ring color as [r, g, b, a] (0-1). Default: player-based (P1 blue, P2 red). */
+  ringColor?: [number, number, number, number?];
+  style?: Style;
+  children?: React.ReactNode;
+  key?: string | number;
+}
+
+export interface ContextMenuProps {
+  /** Custom menu items added by the app. */
+  items?: ContextMenuItem[];
+  /** Called when any menu item (built-in or custom) is selected. */
+  onSelect?: (event: ContextMenuEvent) => void;
+  /** Called when the context menu opens. */
+  onOpen?: () => void;
+  /** Called when the context menu closes. */
+  onClose?: () => void;
+  children?: React.ReactNode;
   key?: string | number;
 }

@@ -4,7 +4,7 @@
 QUICKJS_DIR = quickjs
 NATIVE_GAME = examples/native-hud/game
 LIB_DIR = $(NATIVE_GAME)/lib
-STORYBOOK_LOVE = examples/storybook/love
+STORYBOOK_LOVE = storybook/love
 STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 
 .PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native run dev dev-storybook storybook storybook-web install dist-storybook cli-setup
@@ -75,8 +75,8 @@ build-storybook: node_modules
 		--format=esm \
 		--target=es2020 \
 		--jsx=automatic \
-		--outfile=examples/storybook/dist/storybook.js \
-		examples/storybook/src/main.tsx
+		--outfile=storybook/dist/storybook.js \
+		storybook/src/main.tsx
 
 build-storybook-native: node_modules
 	npx esbuild \
@@ -86,7 +86,7 @@ build-storybook-native: node_modules
 		--target=es2020 \
 		--jsx=automatic \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
-		examples/storybook/src/native-main.tsx
+		storybook/src/native-main.tsx
 
 # ── Storybook ──────────────────────────────────────────
 
@@ -94,11 +94,11 @@ storybook: setup build-storybook-native build-storybook $(STORYBOOK_LIB)/libquic
 	@echo ""
 	@echo "=== Storybook ready ==="
 	@echo "  Native:  cd $(STORYBOOK_LOVE) && love ."
-	@echo "  Web:     cd examples/storybook && python3 -m http.server 8080"
+	@echo "  Web:     cd storybook && python3 -m http.server 8080"
 	@echo ""
 
 storybook-web: build-storybook
-	@echo "Web storybook built. Serve with: cd examples/storybook && python3 -m http.server 8080"
+	@echo "Web storybook built. Serve with: cd storybook && python3 -m http.server 8080"
 
 # ── Dist (consumer-facing distributable) ─────────────────
 #
@@ -228,7 +228,7 @@ dev-storybook: setup $(STORYBOOK_LIB)/libquickjs.so node_modules
 		--jsx=automatic \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
 		--watch \
-		examples/storybook/src/native-main.tsx
+		storybook/src/native-main.tsx
 
 # ── CLI setup (developer tooling — expects Love2D installed) ──
 
@@ -269,7 +269,7 @@ dist-clean:
 clean: dist-clean
 	rm -f $(NATIVE_GAME)/bundle.js
 	rm -f examples/web-overlay/dist/app.js
-	rm -f examples/storybook/dist/storybook.js
+	rm -f storybook/dist/storybook.js
 	rm -f $(STORYBOOK_LOVE)/bundle.js
 	rm -rf $(LIB_DIR)
 	rm -rf $(STORYBOOK_LIB)

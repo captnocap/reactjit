@@ -120,6 +120,7 @@ end
 function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight)
   fontSize = fontSize or 14
   text = tostring(text or "")
+  text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
 
   if text == "" then
     return { width = 0, height = 0 }

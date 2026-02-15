@@ -53,7 +53,7 @@ When you edit a framework file (e.g., lua/layout.lua or packages/shared/src/type
   make cli-setup
 
   # Step 3: For each project that needs the change
-  cd examples/storybook
+  cd storybook
   ilovereact update          # Syncs lua/, lib/, ilovereact/ from CLI runtime
   ilovereact build dist:love # Rebuild with new code
 ---

@@ -4,12 +4,15 @@
   LuaJIT FFI bindings to QuickJS. Creates a JavaScript runtime embedded
   inside the Love2D process. Exposes host functions to JS:
 
-    __hostFlush(commands)      -- JS sends mutation commands (raw array) to Lua
-    __hostGetEvents()          -- JS polls for input events from Lua (raw array)
-    __hostMeasureText(params)  -- JS queries text dimensions (raw object) from Love2D
+    __hostFlush(jsonStr)       -- JS sends mutation commands (JSON string) to Lua
+    __hostGetEvents()          -- JS polls for input events from Lua (JS array)
+    __hostMeasureText(params)  -- JS queries text dimensions (JS object) from Love2D
 
-  Values cross the bridge via direct QuickJS C API traversal (no JSON).
-  This eliminates per-frame GC pressure from JSON.stringify/parse on both sides.
+  __hostFlush receives a JSON string from JS (JSON.stringify on the command array).
+  This avoids a QuickJS GC race condition where large string properties get silently
+  dropped during recursive FFI object property enumeration.
+
+  Other host functions still use direct FFI traversal for small, predictable objects.
 
   Host functions use C trampolines (qjs_ffi_shim.c) because LuaJIT cannot
   create FFI callbacks that return structs by value (JSValue is a 16-byte struct).
@@ -19,7 +22,8 @@
 local ffi = require("ffi")
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
-if not ok_json then json = nil end  -- JSON fallback disabled; direct FFI only
+if not ok_json then ok_json, json = pcall(require, "lua.json") end
+if not ok_json then error("[react-love] JSON library required but not found (tried 'json', 'lib.json', 'lua.json')") end
 local Measure = require("lua.measure")
 
 -- ============================================================================
@@ -44,6 +48,7 @@ ffi.cdef[[
   void JS_FreeContext(JSContext *ctx);
   void JS_FreeRuntime(JSRuntime *rt);
   void JS_FreeValue(JSContext *ctx, JSValue val);
+  JSValue JS_DupValue(JSContext *ctx, JSValue val);
 
   /* Evaluation */
   JSValue JS_Eval(JSContext *ctx, const char *input, size_t input_len,
@@ -110,6 +115,7 @@ ffi.cdef[[
   void qjs_set_host_log(HostCallback cb);
   void qjs_set_host_measure(HostCallback cb);
   void qjs_set_host_report_error(HostCallback cb);
+  void qjs_set_host_random(HostCallback cb);
   void qjs_register_host_functions(JSContext *ctx);
 ]]
 
@@ -183,11 +189,19 @@ local function jsValueToLua(ctx, qjs, val, depth)
       end
       qjs.JS_FreeValue(ctx, lengthVal)
 
-      local arr = {}
+      -- Phase 1: Pin all elements to prevent GC during conversion
+      local elems = {}
       for i = 0, len - 1 do
         local elem = qjs.JS_GetPropertyUint32(ctx, val, i)
-        arr[i + 1] = jsValueToLua(ctx, qjs, elem, depth + 1)
+        elems[i + 1] = qjs.JS_DupValue(ctx, elem)
         qjs.JS_FreeValue(ctx, elem)
+      end
+
+      -- Phase 2: Convert pinned elements
+      local arr = {}
+      for i = 1, len do
+        arr[i] = jsValueToLua(ctx, qjs, elems[i], depth + 1)
+        qjs.JS_FreeValue(ctx, elems[i])
       end
       return arr
     else
@@ -200,18 +214,24 @@ local function jsValueToLua(ctx, qjs, val, depth)
         return {}
       end
 
-      local obj = {}
       local count = tonumber(plen[0])
 
+      -- Phase 1: Collect all keys and pin (JS_DupValue) all property values
+      -- BEFORE converting any of them. This prevents GC from collecting
+      -- large string values during the recursive conversion of other properties.
+      local keys = {}
+      local vals = {}
       for i = 0, count - 1 do
         local prop = ptab[0][i]
         local keyCstr = qjs.JS_AtomToCString(ctx, prop.atom)
         if keyCstr ~= nil then
           local key = ffi.string(keyCstr)
           qjs.JS_FreeCString(ctx, keyCstr)
-
           local propVal = qjs.JS_GetPropertyStr(ctx, val, key)
-          obj[key] = jsValueToLua(ctx, qjs, propVal, depth + 1)
+          -- Pin the value so GC cannot collect it during conversion
+          local pinned = qjs.JS_DupValue(ctx, propVal)
+          keys[#keys + 1] = key
+          vals[#vals + 1] = pinned
           qjs.JS_FreeValue(ctx, propVal)
         end
         qjs.JS_FreeAtom(ctx, prop.atom)
@@ -219,6 +239,13 @@ local function jsValueToLua(ctx, qjs, val, depth)
 
       -- Free the property names array
       qjs.js_free(ctx, ptab[0])
+
+      -- Phase 2: Convert pinned values to Lua (safe from GC now)
+      local obj = {}
+      for i = 1, #keys do
+        obj[keys[i]] = jsValueToLua(ctx, qjs, vals[i], depth + 1)
+        qjs.JS_FreeValue(ctx, vals[i])
+      end
 
       return obj
     end
@@ -471,12 +498,260 @@ function Bridge.new(libpath)
       };
     }
 
+    // ---- crypto.getRandomValues() polyfill ----
+    // Uses __hostRandomBytes to read /dev/urandom via Lua (synchronous call)
+    if (typeof globalThis.crypto === 'undefined') {
+      globalThis.crypto = {};
+    }
+    if (typeof globalThis.crypto.getRandomValues !== 'function') {
+      globalThis.crypto.getRandomValues = function(arr) {
+        var bytes = __hostRandomBytes(arr.length);
+        for (var i = 0; i < arr.length; i++) arr[i] = bytes[i];
+        return arr;
+      };
+    }
+
+    // ---- TextEncoder/TextDecoder polyfill ----
+    if (typeof globalThis.TextEncoder === 'undefined') {
+      globalThis.TextEncoder = function() {};
+      globalThis.TextEncoder.prototype.encode = function(str) {
+        var arr = new Uint8Array(str.length);
+        for (var i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i) & 0xFF;
+        return arr;
+      };
+    }
+    if (typeof globalThis.TextDecoder === 'undefined') {
+      globalThis.TextDecoder = function() {};
+      globalThis.TextDecoder.prototype.decode = function(arr) {
+        var s = '';
+        for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+        return s;
+      };
+    }
+
     // Override queueMicrotask to use our timer queue instead of QuickJS's
     // internal Promise job queue. React's scheduler uses queueMicrotask
     // which creates an infinite microtask chain that blocks JS_Eval return.
     globalThis.queueMicrotask = function(fn) {
       globalThis.setTimeout(fn, 0);
     };
+
+    // ---- fetch() polyfill ----
+    // Routes HTTP URLs to Lua's love.thread + LuaSocket workers,
+    // local file paths to love.filesystem.read(). Both resolve as Promises.
+    (function() {
+      var _fetchId = 0;
+      var _fetchCallbacks = {};  // id -> { resolve, reject }
+
+      // Called by Lua when an HTTP/file response arrives
+      globalThis.__handleHttpResponse = function(id, response) {
+        var cb = _fetchCallbacks[id];
+        if (!cb) return;
+        delete _fetchCallbacks[id];
+
+        if (response.error) {
+          cb.reject(new TypeError('fetch failed: ' + response.error));
+          return;
+        }
+
+        var status = response.status || 0;
+        var headers = response.headers || {};
+        var body = response.body || '';
+
+        // Build a Response-like object
+        var res = {
+          ok: status >= 200 && status < 300,
+          status: status,
+          statusText: '',
+          headers: headers,
+          url: response.url || '',
+          // body is already fully buffered — no streaming
+          text: function() { return Promise.resolve(body); },
+          json: function() {
+            return new Promise(function(resolve, reject) {
+              try { resolve(JSON.parse(body)); }
+              catch (e) { reject(e); }
+            });
+          },
+          blob: function() { return Promise.resolve(body); },
+          arrayBuffer: function() { return Promise.resolve(body); },
+        };
+
+        cb.resolve(res);
+      };
+
+      globalThis.fetch = function(url, init) {
+        init = init || {};
+        var id = ++_fetchId;
+
+        return new Promise(function(resolve, reject) {
+          _fetchCallbacks[id] = { resolve: resolve, reject: reject };
+
+          var headers = {};
+          if (init.headers) {
+            if (typeof init.headers.forEach === 'function') {
+              init.headers.forEach(function(v, k) { headers[k] = v; });
+            } else {
+              var keys = Object.keys(init.headers);
+              for (var i = 0; i < keys.length; i++) {
+                var k = keys[i];
+                headers[k] = init.headers[k];
+              }
+            }
+          }
+
+          __hostFlush(JSON.stringify([{
+            type: 'http:request',
+            payload: {
+              id: id,
+              url: String(url),
+              method: (init.method || 'GET').toUpperCase(),
+              headers: headers,
+              body: init.body ? String(init.body) : '',
+              proxy: init.proxy ? String(init.proxy) : '',
+            }
+          }]));
+        });
+      };
+    })();
+
+    // ---- WebSocket polyfill ----
+    // Mimics the browser WebSocket API. Sends ws:connect/ws:send/ws:close
+    // commands via __hostFlush. Receives ws:open/ws:message/ws:error/ws:close
+    // events from Lua via __handleWsEvent.
+    (function() {
+      var _wsId = 0;
+      var _wsInstances = {};  // id -> WebSocket instance
+
+      // Called by Lua when a WebSocket event arrives
+      globalThis.__handleWsEvent = function(event) {
+        var ws = _wsInstances[event.id];
+        if (!ws) return;
+
+        if (event.type === 'ws:open') {
+          ws.readyState = 1;  // OPEN
+          if (typeof ws.onopen === 'function') ws.onopen({ type: 'open' });
+        } else if (event.type === 'ws:message') {
+          if (typeof ws.onmessage === 'function') {
+            ws.onmessage({ type: 'message', data: event.data || '' });
+          }
+        } else if (event.type === 'ws:error') {
+          if (typeof ws.onerror === 'function') {
+            ws.onerror({ type: 'error', message: event.error || '' });
+          }
+        } else if (event.type === 'ws:close') {
+          ws.readyState = 3;  // CLOSED
+          delete _wsInstances[event.id];
+          if (typeof ws.onclose === 'function') {
+            ws.onclose({ type: 'close', code: event.code || 1005, reason: event.reason || '' });
+          }
+        }
+      };
+
+      globalThis.WebSocket = function(url) {
+        var id = ++_wsId;
+        var ws = {
+          url: url,
+          readyState: 0,  // CONNECTING
+          _id: id,
+          onopen: null,
+          onmessage: null,
+          onerror: null,
+          onclose: null,
+          send: function(data) {
+            if (ws.readyState !== 1) return;
+            __hostFlush(JSON.stringify([{
+              type: 'ws:send',
+              payload: { id: id, data: String(data) }
+            }]));
+          },
+          close: function(code, reason) {
+            ws.readyState = 2;  // CLOSING
+            __hostFlush(JSON.stringify([{
+              type: 'ws:close',
+              payload: { id: id, code: code || 1000, reason: reason || '' }
+            }]));
+          },
+        };
+
+        // Constants
+        ws.CONNECTING = 0;
+        ws.OPEN = 1;
+        ws.CLOSING = 2;
+        ws.CLOSED = 3;
+
+        _wsInstances[id] = ws;
+
+        // Send connect command
+        __hostFlush(JSON.stringify([{
+          type: 'ws:connect',
+          payload: { id: id, url: String(url) }
+        }]));
+
+        return ws;
+      };
+      globalThis.WebSocket.CONNECTING = 0;
+      globalThis.WebSocket.OPEN = 1;
+      globalThis.WebSocket.CLOSING = 2;
+      globalThis.WebSocket.CLOSED = 3;
+
+      // ---- WebSocket Server API ----
+      // Allows hosting a WebSocket server for P2P connections.
+      // Server events arrive via __handleWsPeerEvent.
+
+      var _serverListeners = {};  // serverId -> { onconnect, onmessage, ondisconnect, onready, onerror }
+
+      globalThis.__handleWsPeerEvent = function(event) {
+        var listeners = _serverListeners[event.serverId];
+        if (!listeners) return;
+
+        if (event.type === 'ws:server:ready') {
+          if (typeof listeners.onready === 'function') listeners.onready(event);
+        } else if (event.type === 'ws:server:error') {
+          if (typeof listeners.onerror === 'function') listeners.onerror(event);
+        } else if (event.type === 'ws:peer:connect') {
+          if (typeof listeners.onconnect === 'function') listeners.onconnect(event.clientId);
+        } else if (event.type === 'ws:peer:message') {
+          if (typeof listeners.onmessage === 'function') listeners.onmessage(event.clientId, event.data);
+        } else if (event.type === 'ws:peer:disconnect') {
+          if (typeof listeners.ondisconnect === 'function') listeners.ondisconnect(event.clientId, event.code, event.reason);
+        }
+      };
+
+      // globalThis.__wsListen(serverId, port, callbacks)
+      globalThis.__wsListen = function(serverId, port, callbacks) {
+        _serverListeners[serverId] = callbacks || {};
+        __hostFlush(JSON.stringify([{
+          type: 'ws:listen',
+          payload: { serverId: String(serverId), port: Number(port) }
+        }]));
+      };
+
+      // globalThis.__wsBroadcast(serverId, data)
+      globalThis.__wsBroadcast = function(serverId, data) {
+        __hostFlush(JSON.stringify([{
+          type: 'ws:broadcast',
+          payload: { serverId: String(serverId), data: String(data) }
+        }]));
+      };
+
+      // globalThis.__wsSendToClient(serverId, clientId, data)
+      globalThis.__wsSendToClient = function(serverId, clientId, data) {
+        __hostFlush(JSON.stringify([{
+          type: 'ws:peer:send',
+          payload: { serverId: String(serverId), clientId: Number(clientId), data: String(data) }
+        }]));
+      };
+
+      // globalThis.__wsStopServer(serverId)
+      globalThis.__wsStopServer = function(serverId) {
+        delete _serverListeners[serverId];
+        __hostFlush(JSON.stringify([{
+          type: 'ws:server:stop',
+          payload: { serverId: String(serverId) }
+        }]));
+      };
+    })();
   ]], "<polyfills>")
 
   return self
@@ -494,19 +769,30 @@ function Bridge:_setupHostFunctions()
   local selfRef = self
   local qjs = self.qjs
 
-  -- __hostFlush: JS sends mutation commands to Lua
+  -- __hostFlush: JS sends mutation commands as a JSON string to Lua.
+  -- The JS side calls JSON.stringify() on the command array before sending,
+  -- so we receive a single string and decode it here. This bypasses the
+  -- QuickJS GC race condition that silently drops large string properties
+  -- during recursive FFI object traversal.
   local flushCb = ffi.cast("HostCallback", function(ctx, argc, argv, ret)
     if argc < 1 then return end
 
-    -- Direct FFI: argv[0] is a raw JS array, traverse it directly
-    -- Do NOT free argv[0] -- it belongs to the JS caller
-    local ok, commands = pcall(jsValueToLua, ctx, qjs, argv[0])
-    if ok and type(commands) == "table" then
-      for _, cmd in ipairs(commands) do
-        selfRef.commandBuffer[#selfRef.commandBuffer + 1] = cmd
+    -- argv[0] is a JS string (JSON-encoded command array)
+    local cstr = qjs.JS_ToCString(ctx, argv[0])
+    if cstr ~= nil then
+      local jsonStr = ffi.string(cstr)
+      qjs.JS_FreeCString(ctx, cstr)
+      local ok, commands = pcall(json.decode, jsonStr)
+      if ok and type(commands) == "table" then
+        for _, cmd in ipairs(commands) do
+          selfRef.commandBuffer[#selfRef.commandBuffer + 1] = cmd
+        end
+      else
+        print("[react-love] __hostFlush JSON decode failed: " .. tostring(commands))
+        print("[react-love] Raw JSON string (first 200 chars): " .. jsonStr:sub(1, 200))
       end
     else
-      print("[react-love] __hostFlush FFI traversal failed: " .. tostring(commands))
+      print("[react-love] __hostFlush: JS_ToCString returned nil")
     end
     -- ret already points to JS_UNDEFINED (set by C trampoline)
   end)
@@ -532,8 +818,15 @@ function Bridge:_setupHostFunctions()
     if argc >= 1 then
       local cstr = qjs.JS_ToCString(ctx, argv[0])
       if cstr ~= nil then
-        print("[JS] " .. ffi.string(cstr))
+        local msg = ffi.string(cstr)
         qjs.JS_FreeCString(ctx, cstr)
+        -- Protocol: "CLIPBOARD:" prefix → copy to system clipboard
+        if msg:sub(1, 10) == "CLIPBOARD:" then
+          local text = msg:sub(11)
+          pcall(function() love.system.setClipboardText(text) end)
+          return
+        end
+        print("[JS] " .. msg)
       end
     end
   end)
@@ -605,12 +898,42 @@ function Bridge:_setupHostFunctions()
   end)
   self._callbacks[#self._callbacks + 1] = reportErrorCb
 
+  -- __hostRandomBytes: JS requests CSPRNG bytes from /dev/urandom
+  -- Returns a JS array of byte values (0-255). Used by crypto.getRandomValues() polyfill.
+  local randomCb = ffi.cast("HostCallback", function(ctx, argc, argv, ret)
+    local n = 32  -- default
+    if argc >= 1 then
+      if qjs.JS_ToInt32(ctx, _int32_buf, argv[0]) == 0 then
+        n = tonumber(_int32_buf[0])
+      end
+    end
+    if n < 1 then n = 1 end
+    if n > 65536 then n = 65536 end
+
+    local f = io.open("/dev/urandom", "rb")
+    if not f then
+      print("[react-love] __hostRandomBytes: cannot open /dev/urandom")
+      ret[0] = qjs.JS_NewArray(ctx)
+      return
+    end
+    local bytes = f:read(n)
+    f:close()
+
+    local arr = qjs.JS_NewArray(ctx)
+    for i = 1, #bytes do
+      qjs.JS_SetPropertyUint32(ctx, arr, i - 1, qjs.JS_NewInt32(ctx, string.byte(bytes, i)))
+    end
+    ret[0] = arr
+  end)
+  self._callbacks[#self._callbacks + 1] = randomCb
+
   -- Register callbacks in C shim, then register JS globals
   qjs.qjs_set_host_flush(flushCb)
   qjs.qjs_set_host_events(eventsCb)
   qjs.qjs_set_host_log(logCb)
   qjs.qjs_set_host_measure(measureCb)
   qjs.qjs_set_host_report_error(reportErrorCb)
+  qjs.qjs_set_host_random(randomCb)
   qjs.qjs_register_host_functions(self.ctx)
 end
 

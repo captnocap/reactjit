@@ -4,7 +4,7 @@ function love.load()
   love.graphics.setBackgroundColor(0.04, 0.04, 0.06)
   ReactLove.init({
     mode = "native",
-    bundlePath = "bundle.js",
+    bundlePath = "love/bundle.js",
     libpath = "lib/libquickjs",
   })
 end
@@ -48,6 +48,34 @@ end
 
 function love.textinput(text)
   ReactLove.textinput(text)
+end
+
+function love.filedropped(file)
+  ReactLove.filedropped(file)
+end
+
+function love.directorydropped(dir)
+  ReactLove.directorydropped(dir)
+end
+
+function love.joystickadded(joystick)
+  ReactLove.joystickadded(joystick)
+end
+
+function love.joystickremoved(joystick)
+  ReactLove.joystickremoved(joystick)
+end
+
+function love.gamepadpressed(joystick, button)
+  ReactLove.gamepadpressed(joystick, button)
+end
+
+function love.gamepadreleased(joystick, button)
+  ReactLove.gamepadreleased(joystick, button)
+end
+
+function love.gamepadaxis(joystick, axis, value)
+  ReactLove.gamepadaxis(joystick, axis, value)
 end
 
 function love.quit()

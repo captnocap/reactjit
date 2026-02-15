@@ -7,7 +7,8 @@
  * dispatches them to the appropriate handlers in handlerRegistry.
  *
  * For mouse events: dispatches to the specific targetId
- * For keyboard events: broadcasts to ALL registered handlers (global)
+ * For keyboard events: routes to focused node when targetId present, broadcasts globally otherwise
+ * For focus events: dispatches to the specific targetId
  */
 
 import type { LoveEvent } from '../../shared/src/types';
@@ -45,18 +46,30 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onPointerLeave');
   });
 
-  // ── Keyboard events (global broadcast) ──────────────────
+  // ── Keyboard events (focus-routed when targetId present, broadcast otherwise) ──
 
   bridge.subscribe('keydown', (event: LoveEvent) => {
-    broadcastToAll(event, 'onKeyDown');
+    if (event.targetId) {
+      dispatchWithBubbling(event, 'onKeyDown');
+    } else {
+      broadcastToAll(event, 'onKeyDown');
+    }
   });
 
   bridge.subscribe('keyup', (event: LoveEvent) => {
-    broadcastToAll(event, 'onKeyUp');
+    if (event.targetId) {
+      dispatchWithBubbling(event, 'onKeyUp');
+    } else {
+      broadcastToAll(event, 'onKeyUp');
+    }
   });
 
   bridge.subscribe('textinput', (event: LoveEvent) => {
-    broadcastToAll(event, 'onTextInput');
+    if (event.targetId) {
+      dispatchWithBubbling(event, 'onTextInput');
+    } else {
+      broadcastToAll(event, 'onTextInput');
+    }
   });
 
   // ── Wheel events (bubbling) ─────────────────────────────
@@ -107,6 +120,37 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchWithBubbling(event, 'onDragEnd');
   });
 
+  // ── File drop events (bubbling) ─────────────────────────
+
+  bridge.subscribe('filedrop', (event: LoveEvent) => {
+    console.log('[filedrop:js] received event targetId=' + event.targetId + ' filePath=' + event.filePath + ' bubblePath=' + JSON.stringify(event.bubblePath));
+    dispatchWithBubbling(event, 'onFileDrop');
+  });
+
+  bridge.subscribe('directorydrop', (event: LoveEvent) => {
+    dispatchWithBubbling(event, 'onDirectoryDrop');
+  });
+
+  // ── File drag hover events (bubbling) ─────────────────
+
+  bridge.subscribe('filedragenter', (event: LoveEvent) => {
+    dispatchWithBubbling(event, 'onFileDragEnter');
+  });
+
+  bridge.subscribe('filedragleave', (event: LoveEvent) => {
+    dispatchWithBubbling(event, 'onFileDragLeave');
+  });
+
+  // ── Focus events (target-only) ─────────────────────────
+
+  bridge.subscribe('focus', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onFocus');
+  });
+
+  bridge.subscribe('blur', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onBlur');
+  });
+
   // ── TextEditor events (Lua-owned, target-only) ────────
 
   bridge.subscribe('texteditor:focus', (event: LoveEvent) => {
@@ -120,6 +164,50 @@ export function initEventDispatching(bridge: Subscribable): void {
   bridge.subscribe('texteditor:submit', (event: LoveEvent) => {
     dispatchToTargetOnly(event, 'onTextEditorSubmit');
   });
+
+  // ── Video events (target-only) ────────────────────────
+
+  bridge.subscribe('video:ready', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onReady');
+  });
+
+  bridge.subscribe('video:error', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onError');
+  });
+
+  bridge.subscribe('onReady', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onReady');
+  });
+
+  bridge.subscribe('onTimeUpdate', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onTimeUpdate');
+  });
+
+  bridge.subscribe('onPlay', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onPlay');
+  });
+
+  bridge.subscribe('onPause', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onPause');
+  });
+
+  bridge.subscribe('onEnded', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onEnded');
+  });
+
+  // ── ContextMenu events (Lua-owned, target-only) ──────
+
+  bridge.subscribe('contextmenu:select', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onContextMenuSelect');
+  });
+
+  bridge.subscribe('contextmenu:open', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onContextMenuOpen');
+  });
+
+  bridge.subscribe('contextmenu:close', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onContextMenuClose');
+  });
 }
 
 /**
@@ -128,7 +216,10 @@ export function initEventDispatching(bridge: Subscribable): void {
  * until stopPropagation is called.
  */
 function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
-  if (!event.targetId) return;
+  if (!event.targetId) {
+    console.log('[dispatch] no targetId, bailing');
+    return;
+  }
 
   let stopped = false;
   const enrichedEvent: LoveEvent = {
@@ -140,16 +231,24 @@ function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
   const bubblePath = event.bubblePath;
 
   if (bubblePath && bubblePath.length > 0) {
+    console.log('[dispatch] ' + handlerName + ' target=' + event.targetId + ' bubblePath=[' + bubblePath.join(',') + ']');
     for (const nodeId of bubblePath) {
       if (stopped) break;
 
       enrichedEvent.currentTarget = nodeId;
 
       const handlers = handlerRegistry.get(nodeId);
-      if (!handlers) continue;
+      if (!handlers) {
+        console.log('[dispatch]   node ' + nodeId + ': NOT in registry');
+        continue;
+      }
+
+      const handlerKeys = Object.keys(handlers);
+      console.log('[dispatch]   node ' + nodeId + ': has [' + handlerKeys.join(',') + ']');
 
       const handler = handlers[handlerName];
       if (typeof handler === 'function') {
+        console.log('[dispatch] CALLING ' + handlerName + ' on node ' + nodeId);
         try {
           handler(enrichedEvent);
         } catch (e) {
@@ -158,6 +257,7 @@ function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
       }
     }
   } else {
+    console.log('[dispatch] ' + handlerName + ' no bubblePath, target-only for ' + event.targetId);
     // Fallback: no bubblePath, dispatch to target only
     const handlers = handlerRegistry.get(event.targetId);
     if (!handlers) return;

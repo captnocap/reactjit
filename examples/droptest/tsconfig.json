@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@ilovereact/core": [
+        "./ilovereact/shared/src"
+      ],
+      "@ilovereact/native": [
+        "./ilovereact/native/src"
+      ],
+      "@ilovereact/router": [
+        "./ilovereact/router/src"
+      ],
+      "@ilovereact/storage": [
+        "./ilovereact/storage/src"
+      ],
+      "@ilovereact/components": [
+        "./ilovereact/components/src"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}
