@@ -32,6 +32,7 @@ export {
 
 // Hooks
 export {
+  useWindowDimensions,
   useLove,
   useLoveEvent,
   useLoveRPC,

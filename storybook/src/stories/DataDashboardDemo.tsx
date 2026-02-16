@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge } from '../../../packages/shared/src';
+import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView, useWindowDimensions } from '../../../packages/shared/src';
 import type { TableColumn } from '../../../packages/shared/src';
 
 /* ── Data ─────────────────────────────────────────────────── */
@@ -42,18 +42,20 @@ const statusVariant = (s: string) => {
   return 'warning' as const;
 };
 
-const PRODUCT_COLUMNS: TableColumn<Product>[] = [
-  { key: 'name', title: 'Product', width: 100 },
-  { key: 'category', title: 'Category', width: 80 },
-  { key: 'sales', title: 'Sales', width: 60, align: 'right' },
-  { key: 'revenue', title: 'Revenue', width: 70, align: 'right' },
-  {
-    key: 'status',
-    title: 'Status',
-    width: 80,
-    render: (value: string) => <Badge label={value} variant={statusVariant(value)} />,
-  },
-];
+function makeProductColumns(scale: number): TableColumn<Product>[] {
+  return [
+    { key: 'name', title: 'Product', width: Math.round(100 * scale) },
+    { key: 'category', title: 'Category', width: Math.round(80 * scale) },
+    { key: 'sales', title: 'Sales', width: Math.round(60 * scale), align: 'right' },
+    { key: 'revenue', title: 'Revenue', width: Math.round(70 * scale), align: 'right' },
+    {
+      key: 'status',
+      title: 'Status',
+      width: Math.round(80 * scale),
+      render: (value: string) => <Badge label={value} variant={statusVariant(value)} />,
+    },
+  ];
+}
 
 /* ── Colors ────────────────────────────────────────────────── */
 
@@ -66,8 +68,23 @@ const DIM = '#64748b';
 /* ── Dashboard ─────────────────────────────────────────────── */
 
 export function DataDashboardDemoStory() {
+  const { width } = useWindowDimensions();
+  // Content area: viewport minus sidebar (~140px) minus padding (32px)
+  const contentWidth = Math.max(400, width - 172);
+  // Scale factor: 1.0 at ~500px content, grows proportionally
+  const scale = contentWidth / 500;
+  // Chart dimensions scale with available space
+  const targetsWidth = Math.round(Math.max(180, 200 * scale));
+  const chartCardWidth = contentWidth - targetsWidth - 12; // minus gap
+  const barCount = MONTHLY_REVENUE.length;
+  const chartGap = Math.round(10 * scale);
+  const barWidth = Math.max(16, Math.floor((chartCardWidth - 28 - (barCount - 1) * chartGap) / barCount)); // minus card padding
+  const chartHeight = Math.round(Math.max(70, 90 * scale));
+  const productColumns = makeProductColumns(Math.max(1, scale));
+
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 16, gap: 12 }}>
+    <ScrollView style={{ width: '100%', height: '100%', backgroundColor: BG }}>
+    <Box style={{ padding: 16, gap: 12 }}>
 
       {/* Header */}
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -106,10 +123,8 @@ export function DataDashboardDemoStory() {
         ))}
       </Box>
 
-      {/* Middle Row: Chart + Metrics */}
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 12, flexGrow: 1 }}>
-
-        {/* Bar Chart */}
+      {/* Chart + Targets row */}
+      <Box style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
         <Box style={{
           flexGrow: 1,
           backgroundColor: CARD,
@@ -122,17 +137,16 @@ export function DataDashboardDemoStory() {
           <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Monthly Revenue ($k)</Text>
           <BarChart
             data={MONTHLY_REVENUE}
-            height={90}
-            barWidth={24}
-            gap={10}
+            height={chartHeight}
+            barWidth={barWidth}
+            gap={chartGap}
             showValues
             color="#3b82f6"
           />
         </Box>
 
-        {/* Progress Metrics */}
         <Box style={{
-          width: 180,
+          width: targetsWidth,
           backgroundColor: CARD,
           borderRadius: 8,
           borderWidth: 1,
@@ -159,11 +173,11 @@ export function DataDashboardDemoStory() {
             </Box>
           ))}
         </Box>
-
       </Box>
 
-      {/* Bottom: Table */}
+      {/* Table */}
       <Box style={{
+        width: '100%',
         backgroundColor: CARD,
         borderRadius: 8,
         borderWidth: 1,
@@ -172,9 +186,10 @@ export function DataDashboardDemoStory() {
         gap: 8,
       }}>
         <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Top Products</Text>
-        <Table columns={PRODUCT_COLUMNS} data={PRODUCTS} rowKey="name" striped />
+        <Table columns={productColumns} data={PRODUCTS} rowKey="name" striped />
       </Box>
 
     </Box>
+    </ScrollView>
   );
 }

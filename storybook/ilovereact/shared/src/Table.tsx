@@ -29,10 +29,10 @@ const ROW_ALT_BG = '#1e293b';
 const HEADER_TEXT = '#e2e8f0';
 const CELL_TEXT = '#cbd5e1';
 
-function alignToJustify(align?: 'left' | 'center' | 'right'): 'start' | 'center' | 'end' {
+function alignToTextAlign(align?: 'left' | 'center' | 'right'): 'left' | 'center' | 'right' {
   if (align === 'center') return 'center';
-  if (align === 'right') return 'end';
-  return 'start';
+  if (align === 'right') return 'right';
+  return 'left';
 }
 
 function getRowKey<T>(row: T, index: number, rowKey?: string | ((row: T, index: number) => string)): string {
@@ -53,9 +53,11 @@ export function Table<T extends Record<string, any>>({
   style,
 }: TableProps<T>) {
   const border = borderless ? 0 : 1;
+  const hasFlexibleColumns = columns.some(col => !col.width);
 
   return (
     <Box style={{
+      alignSelf: hasFlexibleColumns ? undefined : 'flex-start',
       borderWidth: border,
       borderColor: BORDER_COLOR,
       borderRadius: 6,
@@ -65,7 +67,7 @@ export function Table<T extends Record<string, any>>({
       {/* Header row */}
       <Box style={{
         flexDirection: 'row',
-        width: '100%',
+        width: hasFlexibleColumns ? '100%' : undefined,
         backgroundColor: HEADER_BG,
         borderBottomWidth: border,
         borderColor: BORDER_COLOR,
@@ -78,12 +80,11 @@ export function Table<T extends Record<string, any>>({
             flexShrink: col.width ? 0 : 1,
             padding: 8,
             justifyContent: 'center',
-            alignItems: alignToJustify(col.align),
             borderRightWidth: ci < columns.length - 1 ? border : 0,
             borderColor: BORDER_COLOR,
             ...cellStyle,
           }}>
-            <Text style={{ color: HEADER_TEXT, fontSize: 11, fontWeight: 'bold' }}>
+            <Text style={{ color: HEADER_TEXT, fontSize: 11, fontWeight: 'bold', width: '100%', textAlign: alignToTextAlign(col.align) }} numberOfLines={1}>
               {col.title}
             </Text>
           </Box>
@@ -98,7 +99,7 @@ export function Table<T extends Record<string, any>>({
         return (
           <Box key={key} style={{
             flexDirection: 'row',
-            width: '100%',
+            width: hasFlexibleColumns ? '100%' : undefined,
             backgroundColor: bg,
             borderBottomWidth: ri < data.length - 1 ? border : 0,
             borderColor: BORDER_COLOR,
@@ -108,7 +109,7 @@ export function Table<T extends Record<string, any>>({
               const value = row[col.key];
               const content = col.render
                 ? col.render(value, row, ri)
-                : <Text style={{ color: CELL_TEXT, fontSize: 11 }} numberOfLines={1}>{String(value ?? '')}</Text>;
+                : <Text style={{ color: CELL_TEXT, fontSize: 11, width: '100%', textAlign: alignToTextAlign(col.align) }} numberOfLines={1}>{String(value ?? '')}</Text>;
 
               return (
                 <Box key={col.key} style={{
@@ -117,7 +118,6 @@ export function Table<T extends Record<string, any>>({
                   flexShrink: col.width ? 0 : 1,
                   padding: 8,
                   justifyContent: 'center',
-                  alignItems: alignToJustify(col.align),
                   borderRightWidth: ci < columns.length - 1 ? border : 0,
                   borderColor: BORDER_COLOR,
                   ...cellStyle,

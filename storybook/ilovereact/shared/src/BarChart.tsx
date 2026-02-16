@@ -35,6 +35,8 @@ export function BarChart({
 
   const maxValue = Math.max(...data.map(d => d.value)) || 1;
   const chartWidth = data.length * barWidth + (data.length - 1) * gap;
+  const valueLabelSpace = showValues ? 14 : 0;
+  const barAreaHeight = height - valueLabelSpace;
 
   return (
     <Box style={{ width: chartWidth, ...style }}>
@@ -47,7 +49,7 @@ export function BarChart({
         gap,
       }}>
         {data.map((bar, i) => {
-          const barHeight = Math.max(1, Math.round((bar.value / maxValue) * height));
+          const barHeight = Math.max(1, Math.round((bar.value / maxValue) * barAreaHeight));
           const barColor = bar.color ?? color;
 
           return (

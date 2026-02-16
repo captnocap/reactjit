@@ -90,13 +90,13 @@ export function TableStory() {
         <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Narrow Table</Text>
         <Table
           columns={[
-            { key: 'name', title: 'Name', width: 70 },
-            { key: 'role', title: 'Role', width: 60 },
-            { key: 'score', title: 'Score', width: 40, align: 'right' },
+            { key: 'name', title: 'Name', width: 90 },
+            { key: 'role', title: 'Role', width: 80 },
+            { key: 'score', title: 'Score', width: 55, align: 'right' },
           ]}
           data={EMPLOYEES}
           rowKey="name"
-          style={{ width: 190 }}
+          style={{ width: 245 }}
         />
       </Box>
 

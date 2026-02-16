@@ -9,6 +9,27 @@ import { useBridge } from './context';
 import type { LoveEvent } from './types';
 
 /**
+ * Returns the current window/viewport dimensions.
+ * Updates reactively on window resize.
+ *
+ * @example
+ * const { width, height } = useWindowDimensions();
+ * const isWide = width > 800;
+ */
+export function useWindowDimensions(): { width: number; height: number } {
+  const bridge = useBridge();
+  const [dims, setDims] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
+      setDims(payload);
+    });
+  }, [bridge]);
+
+  return dims;
+}
+
+/**
  * Subscribe to a Love2D event and get a send function.
  *
  * @example

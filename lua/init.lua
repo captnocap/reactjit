@@ -360,6 +360,8 @@ function ReactLove.init(config)
     focus.init(tree, pushEvent)
 
     print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
+    -- Push initial viewport dimensions for canvas mode
+    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
 
   else
     -- Native mode: use QuickJS bridge + retained tree + layout + painter.
@@ -751,6 +753,8 @@ function ReactLove.update(dt)
     io.write("[react-love] Mount call returned\n"); io.flush()
     -- Tick immediately to drain any scheduled microtasks/timers
     bridge:tick()
+    -- Push initial viewport dimensions so useWindowDimensions can pick them up
+    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
   end
 
   -- 1. Tick JS timers + microtasks
@@ -1586,6 +1590,9 @@ function ReactLove.resize(w, h)
   if tree then
     tree.markDirty()
   end
+  if bridge then
+    pushEvent({ type = "viewport", payload = { width = w, height = h } })
+  end
 end
 
 --- Call from love.keypressed(key, scancode, isrepeat).
@@ -1627,6 +1634,27 @@ function ReactLove.keypressed(key, scancode, isrepeat)
       controllerToast.text = "Text " .. pct .. "%"
       return
     end
+  end
+
+  -- PrintScreen / F2: capture screenshot to file
+  if key == "printscreen" or key == "f2" then
+    love.graphics.captureScreenshot(function(imageData)
+      local t = os.date("*t")
+      local filename = string.format("screenshot_%04d%02d%02d_%02d%02d%02d.png",
+        t.year, t.month, t.day, t.hour, t.min, t.sec)
+      local fileData = imageData:encode("png")
+      local f = io.open(filename, "wb")
+      if f then
+        f:write(fileData:getString())
+        f:close()
+        controllerToast.timer = 2.0
+        controllerToast.text = "Saved " .. filename
+      else
+        controllerToast.timer = 2.0
+        controllerToast.text = "Screenshot failed"
+      end
+    end)
+    return
   end
 
   -- Route to focused TextEditor if any
