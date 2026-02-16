@@ -123,7 +123,6 @@ export function initEventDispatching(bridge: Subscribable): void {
   // ── File drop events (bubbling) ─────────────────────────
 
   bridge.subscribe('filedrop', (event: LoveEvent) => {
-    console.log('[filedrop:js] received event targetId=' + event.targetId + ' filePath=' + event.filePath + ' bubblePath=' + JSON.stringify(event.bubblePath));
     dispatchWithBubbling(event, 'onFileDrop');
   });
 
@@ -216,10 +215,7 @@ export function initEventDispatching(bridge: Subscribable): void {
  * until stopPropagation is called.
  */
 function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
-  if (!event.targetId) {
-    console.log('[dispatch] no targetId, bailing');
-    return;
-  }
+  if (!event.targetId) return;
 
   let stopped = false;
   const enrichedEvent: LoveEvent = {
@@ -231,24 +227,16 @@ function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
   const bubblePath = event.bubblePath;
 
   if (bubblePath && bubblePath.length > 0) {
-    console.log('[dispatch] ' + handlerName + ' target=' + event.targetId + ' bubblePath=[' + bubblePath.join(',') + ']');
     for (const nodeId of bubblePath) {
       if (stopped) break;
 
       enrichedEvent.currentTarget = nodeId;
 
       const handlers = handlerRegistry.get(nodeId);
-      if (!handlers) {
-        console.log('[dispatch]   node ' + nodeId + ': NOT in registry');
-        continue;
-      }
-
-      const handlerKeys = Object.keys(handlers);
-      console.log('[dispatch]   node ' + nodeId + ': has [' + handlerKeys.join(',') + ']');
+      if (!handlers) continue;
 
       const handler = handlers[handlerName];
       if (typeof handler === 'function') {
-        console.log('[dispatch] CALLING ' + handlerName + ' on node ' + nodeId);
         try {
           handler(enrichedEvent);
         } catch (e) {
@@ -257,8 +245,6 @@ function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
       }
     }
   } else {
-    console.log('[dispatch] ' + handlerName + ' no bubblePath, target-only for ' + event.targetId);
-    // Fallback: no bubblePath, dispatch to target only
     const handlers = handlerRegistry.get(event.targetId);
     if (!handlers) return;
     const handler = handlers[handlerName];

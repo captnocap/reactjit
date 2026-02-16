@@ -45,6 +45,7 @@ local tor      = nil                          -- tor.lua (Tor subprocess, loaded
 local torHostnameEmitted = false              -- true once tor:ready event sent to JS
 local sqlite   = nil                          -- sqlite.lua (SQLite3 via LuaJIT FFI)
 local docstore = nil                          -- docstore.lua (schema-free document store over SQLite)
+local spellcheck = nil                        -- spellcheck.lua (dictionary-based spell checker)
 local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
 local lastDragHoverId = nil                   -- node ID of current drag-hover target
 
@@ -353,6 +354,8 @@ function ReactLove.init(config)
 
     sqlite = require("lua.sqlite")
     docstore = require("lua.docstore")
+    spellcheck = require("lua.spellcheck")
+    spellcheck.init()
 
     focus.init(tree, pushEvent)
 
@@ -410,6 +413,8 @@ function ReactLove.init(config)
 
     sqlite = require("lua.sqlite")
     docstore = require("lua.docstore")
+    spellcheck = require("lua.spellcheck")
+    spellcheck.init()
 
     focus.init(tree, pushEvent)
 
@@ -440,8 +445,6 @@ function ReactLove.init(config)
     if ddOk then
       dragdrop = ddMod
       dragdrop.init()
-    else
-      io.write("[dragdrop] require failed: " .. tostring(ddMod) .. "\n"); io.flush()
     end
 
     -- Load the bundled React app into QuickJS
@@ -591,6 +594,26 @@ function ReactLove.init(config)
       local store = stores[args.id]
       if not store then error("Unknown store id: " .. tostring(args.id)) end
       return store:drop(args.collection)
+    end
+  end
+
+  -- Register spell check RPC handlers
+  if spellcheck and spellcheck.available then
+    rpcHandlers["spell:check"] = function(args)
+      return spellcheck.check(args.word)
+    end
+
+    rpcHandlers["spell:checkText"] = function(args)
+      return spellcheck.checkText(args.text)
+    end
+
+    rpcHandlers["spell:suggest"] = function(args)
+      return spellcheck.suggest(args.word, args.limit)
+    end
+
+    rpcHandlers["spell:setLang"] = function(args)
+      spellcheck.setLang(args.lang)
+      return true
     end
   end
 
@@ -952,14 +975,10 @@ function ReactLove.update(dt)
         local hitId = hit and hit.id or nil
 
         if hitId ~= lastDragHoverId then
-          -- Emit leave for old target
           if lastDragHoverId then
-            io.write("[dragdrop] filedragleave node=" .. tostring(lastDragHoverId) .. "\n"); io.flush()
             pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, dx, dy, nil, nil, nil))
           end
-          -- Emit enter for new target (with bubble path)
           if hit then
-            io.write("[dragdrop] filedragenter node=" .. tostring(hit.id) .. " at " .. dx .. "," .. dy .. "\n"); io.flush()
             local bubblePath = events.buildBubblePath(hit)
             pushEvent(events.createFileDropEvent("filedragenter", hit.id, dx, dy, nil, nil, bubblePath))
           end
@@ -967,16 +986,8 @@ function ReactLove.update(dt)
         end
       end
     elseif lastDragHoverId then
-      -- Drag left the window or ended
-      io.write("[dragdrop] filedragleave (drag ended) node=" .. tostring(lastDragHoverId) .. "\n"); io.flush()
       pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, 0, 0, nil, nil, nil))
       lastDragHoverId = nil
-    end
-  else
-    -- Log once if dragdrop module didn't load
-    if not ReactLove._loggedNoDragdrop then
-      ReactLove._loggedNoDragdrop = true
-      io.write("[dragdrop] module not loaded (dragdrop is nil)\n"); io.flush()
     end
   end
 
@@ -1134,10 +1145,6 @@ function ReactLove.draw()
 
   -- Context menu overlay (after inspector, before errors)
   if contextmenu and contextmenu.isOpen() then
-    if not ReactLove._loggedContextDraw then
-      ReactLove._loggedContextDraw = true
-      io.write("[init:draw] contextmenu.isOpen()=true, calling contextmenu.draw()\n"); io.flush()
-    end
     contextmenu.draw()
   end
 
@@ -1320,10 +1327,7 @@ function ReactLove.mousepressed(x, y, button)
 
   -- Right-click: open context menu instead of normal click handling
   if button == 2 and contextmenu then
-    io.write("[init] right-click button=2 at " .. x .. "," .. y .. ", calling contextmenu.open\n"); io.flush()
-    local opened = contextmenu.open(x, y, root, pushEvent)
-    io.write("[init] contextmenu.open returned " .. tostring(opened) .. " isOpen=" .. tostring(contextmenu.isOpen()) .. "\n"); io.flush()
-    ReactLove._loggedContextDraw = nil  -- reset draw log so we see it again
+    contextmenu.open(x, y, root, pushEvent)
     return
   end
 
@@ -1997,22 +2001,11 @@ end
 --- Call from love.filedropped(file).
 --- Hit-tests at current mouse position and dispatches a filedrop event to JS.
 function ReactLove.filedropped(file)
-  io.write("[filedrop] love.filedropped called\n"); io.flush()
-
-  if not isRendering() then
-    io.write("[filedrop] not rendering, bailing\n"); io.flush()
-    return
-  end
-  if not bridge then
-    io.write("[filedrop] no bridge, bailing\n"); io.flush()
-    return
-  end
+  if not isRendering() then return end
+  if not bridge then return end
 
   local root = tree.getTree()
-  if not root then
-    io.write("[filedrop] no tree root, bailing\n"); io.flush()
-    return
-  end
+  if not root then return end
 
   -- love.mouse.getPosition() is stale during OS file drags.
   -- Use SDL_GetGlobalMouseState via dragdrop module for the real position.
@@ -2023,49 +2016,22 @@ function ReactLove.filedropped(file)
   if not mx then
     mx, my = love.mouse.getPosition()
   end
-  -- Debug: dump tree bounds to understand hit test failure
-  local function dumpBounds(node, depth)
-    if not node then return end
-    local indent = string.rep("  ", depth)
-    local c = node.computed
-    if c then
-      io.write(indent .. "node " .. tostring(node.id) .. " type=" .. tostring(node.type)
-        .. " bounds=" .. c.x .. "," .. c.y .. " " .. c.w .. "x" .. c.h
-        .. " handlers=" .. tostring(node.hasHandlers) .. "\n")
-    else
-      io.write(indent .. "node " .. tostring(node.id) .. " type=" .. tostring(node.type) .. " NO COMPUTED\n")
-    end
-    for _, child in ipairs(node.children or {}) do
-      dumpBounds(child, depth + 1)
-    end
-  end
-  io.write("[filedrop] mouse=" .. mx .. "," .. my .. " tree:\n"); io.flush()
-  dumpBounds(root, 1)
-  io.flush()
 
   local hit = events.hitTest(root, mx, my)
-  if not hit then
-    io.write("[filedrop] no hit at " .. mx .. "," .. my .. ", bailing\n"); io.flush()
-    return
-  end
+  if not hit then return end
 
   local path = file:getFilename()
-  io.write("[filedrop] path=" .. tostring(path) .. " hit=" .. tostring(hit.id) .. " at " .. mx .. "," .. my .. "\n"); io.flush()
 
   -- DroppedFile:getSize() may fail if the file hasn't been opened yet.
   -- Open → getSize → close, all wrapped in pcall for safety.
   local size = nil
-  local sizeOk, sizeErr = pcall(function()
+  pcall(function()
     if file:open("r") then
       size = file:getSize()
       file:close()
     end
   end)
-  if not sizeOk then
-    io.write("[filedrop] getSize failed: " .. tostring(sizeErr) .. "\n"); io.flush()
-  end
 
-  io.write("[filedrop] pushing event: path=" .. tostring(path) .. " size=" .. tostring(size) .. "\n"); io.flush()
   local bubblePath = events.buildBubblePath(hit)
   pushEvent(events.createFileDropEvent("filedrop", hit.id, mx, my, path, size, bubblePath))
 end
