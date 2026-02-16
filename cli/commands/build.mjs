@@ -267,6 +267,16 @@ function findLibMpv(cwd) {
   return null; // optional — video playback won't be available
 }
 
+// ── Helper: resolve libsqlite3.so.0 (optional) ────────────
+
+function findLibSqlite3(cwd) {
+  const local_ = join(cwd, 'lib', 'libsqlite3.so.0');
+  if (existsSync(local_)) return local_;
+  const cliRuntime = join(CLI_ROOT, 'runtime', 'lib', 'libsqlite3.so.0');
+  if (existsSync(cliRuntime)) return cliRuntime;
+  return null; // optional — SQLite features won't be available
+}
+
 // ── Helper: resolve tor binary (optional) ─────────────────
 
 function findTorBinary(cwd) {
@@ -426,6 +436,13 @@ async function buildDistLove(cwd, projectName, opts = {}) {
   cpSync(confLua, join(stagingDir, 'conf.lua'));
   cpSync(luaDir, join(stagingDir, 'lua'), { recursive: true });
 
+  // Copy fonts into staging if available
+  const fontsDirs = [join(cwd, 'fonts'), join(cwd, 'love', 'fonts')];
+  const fontsDir = fontsDirs.find(p => existsSync(p));
+  if (fontsDir) {
+    cpSync(fontsDir, join(stagingDir, 'fonts'), { recursive: true });
+  }
+
   // Inspector is now enabled by default in dist builds
   // (Previously disabled unless --debug was passed, but this was annoying for dev)
   // To disable: add `inspector = false` to ReactLove.init() in your main.lua
@@ -504,6 +521,13 @@ async function buildDistLove(cwd, projectName, opts = {}) {
       }
     } catch { /* ldd failed — still have the .so itself */ }
     console.log(`  Bundled libmpv + ${mpvIncluded} deps (skipped ${mpvSkipped} non-essential)`);
+  }
+
+  // Bundle libsqlite3 if available (optional — SQLite features)
+  const libsqlite3 = findLibSqlite3(cwd);
+  if (libsqlite3) {
+    cpSync(libsqlite3, join(payloadDir, 'lib', 'libsqlite3.so.0'));
+    console.log('  Bundled libsqlite3.so.0');
   }
 
   // Bundle tor binary if available (optional — .onion hosting)

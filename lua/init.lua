@@ -43,6 +43,8 @@ local http     = nil                          -- http.lua (async HTTP + local fi
 local network  = nil                          -- network.lua (WebSocket connections)
 local tor      = nil                          -- tor.lua (Tor subprocess, loaded if config.tor)
 local torHostnameEmitted = false              -- true once tor:ready event sent to JS
+local sqlite   = nil                          -- sqlite.lua (SQLite3 via LuaJIT FFI)
+local docstore = nil                          -- docstore.lua (schema-free document store over SQLite)
 local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
 local lastDragHoverId = nil                   -- node ID of current drag-hover target
 
@@ -349,6 +351,9 @@ function ReactLove.init(config)
     osk = require("lua.osk")
     osk.init({ measure = measure })
 
+    sqlite = require("lua.sqlite")
+    docstore = require("lua.docstore")
+
     focus.init(tree, pushEvent)
 
     print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
@@ -402,6 +407,9 @@ function ReactLove.init(config)
 
     osk = require("lua.osk")
     osk.init({ measure = measure })
+
+    sqlite = require("lua.sqlite")
+    docstore = require("lua.docstore")
 
     focus.init(tree, pushEvent)
 
@@ -464,6 +472,125 @@ function ReactLove.init(config)
       for method, handler in pairs(storage.getHandlers()) do
         rpcHandlers[method] = handler
       end
+    end
+  end
+
+  -- Register SQLite RPC handlers (available when libsqlite3 is loaded)
+  if sqlite and sqlite.available then
+    local sqliteDbs = {}  -- id -> Database
+    local sqliteNextId = 1
+
+    rpcHandlers["sqlite:open"] = function(args)
+      local db = sqlite.open(args.path)  -- nil = in-memory
+      local id = sqliteNextId
+      sqliteNextId = sqliteNextId + 1
+      sqliteDbs[id] = db
+      return { id = id, path = db.path }
+    end
+
+    rpcHandlers["sqlite:close"] = function(args)
+      local db = sqliteDbs[args.id]
+      if db then db:close(); sqliteDbs[args.id] = nil end
+      return true
+    end
+
+    rpcHandlers["sqlite:exec"] = function(args)
+      local db = sqliteDbs[args.id]
+      if not db then error("Unknown database id: " .. tostring(args.id)) end
+      db:exec(args.sql, args.params)
+      return { changes = db:changes(), lastInsertId = db:lastInsertId() }
+    end
+
+    rpcHandlers["sqlite:query"] = function(args)
+      local db = sqliteDbs[args.id]
+      if not db then error("Unknown database id: " .. tostring(args.id)) end
+      return db:query(args.sql, args.params)
+    end
+
+    rpcHandlers["sqlite:queryOne"] = function(args)
+      local db = sqliteDbs[args.id]
+      if not db then error("Unknown database id: " .. tostring(args.id)) end
+      return db:queryOne(args.sql, args.params)
+    end
+
+    rpcHandlers["sqlite:scalar"] = function(args)
+      local db = sqliteDbs[args.id]
+      if not db then error("Unknown database id: " .. tostring(args.id)) end
+      return db:scalar(args.sql, args.params)
+    end
+  end
+
+  -- Register docstore RPC handlers (schema-free document API)
+  if docstore and docstore.available then
+    local stores = {}  -- id -> Store
+    local storeNextId = 1
+
+    rpcHandlers["doc:open"] = function(args)
+      local store = docstore.open(args.path)
+      local id = storeNextId
+      storeNextId = storeNextId + 1
+      stores[id] = store
+      return { id = id }
+    end
+
+    rpcHandlers["doc:close"] = function(args)
+      local store = stores[args.id]
+      if store then store:close(); stores[args.id] = nil end
+      return true
+    end
+
+    rpcHandlers["doc:save"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:save(args.collection, args.doc)
+    end
+
+    rpcHandlers["doc:find"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:find(args.collection, args.query, args.opts)
+    end
+
+    rpcHandlers["doc:findOne"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:findOne(args.collection, args.query)
+    end
+
+    rpcHandlers["doc:get"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:get(args.collection, args.docId)
+    end
+
+    rpcHandlers["doc:update"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:update(args.collection, args.docId, args.patch)
+    end
+
+    rpcHandlers["doc:remove"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:remove(args.collection, args.docId)
+    end
+
+    rpcHandlers["doc:count"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:count(args.collection, args.query)
+    end
+
+    rpcHandlers["doc:collections"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:collections()
+    end
+
+    rpcHandlers["doc:drop"] = function(args)
+      local store = stores[args.id]
+      if not store then error("Unknown store id: " .. tostring(args.id)) end
+      return store:drop(args.collection)
     end
   end
 
@@ -2092,6 +2219,20 @@ end
 --- Useful for game code that needs to measure text outside the layout pass.
 function ReactLove.getMeasure()
   return measure
+end
+
+--- Return the SQLite module.
+--- Use sqlite.open(path) to create/open databases.
+--- Returns a stub with .available = false if libsqlite3 not found.
+function ReactLove.getSqlite()
+  return sqlite
+end
+
+--- Return the document store module.
+--- Use docstore.open(path) for a schema-free Mongo-like API over SQLite.
+--- Returns a stub with .available = false if libsqlite3 not found.
+function ReactLove.getDocStore()
+  return docstore
 end
 
 --- Register an RPC handler for a given method name.

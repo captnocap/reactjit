@@ -75,6 +75,17 @@ export async function updateCommand(args) {
     }
     cpSync(runtimeFonts, destFonts, { recursive: true });
     console.log('  Updated fonts/');
+
+    // Also copy into love/ subdirectory if it exists (Love2D filesystem root)
+    const loveDir = join(cwd, 'love');
+    if (existsSync(loveDir) && existsSync(join(loveDir, 'main.lua'))) {
+      const loveFonts = join(loveDir, 'fonts');
+      if (existsSync(loveFonts)) {
+        rmSync(loveFonts, { recursive: true });
+      }
+      cpSync(runtimeFonts, loveFonts, { recursive: true });
+      console.log('  Updated love/fonts/');
+    }
   }
 
   console.log('\n  Done! Runtime files are up to date.\n');

@@ -20,9 +20,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   Motion: '#ef4444',
 };
 
-const PREVIEW_SCALE = 0.25;
-const CARD_WIDTH = 220;
-const PREVIEW_HEIGHT = 130;
+const PREVIEW_SCALE = 0.35;
+const CARD_WIDTH = 240;
+const PREVIEW_HEIGHT = 150;
 const INNER_WIDTH = CARD_WIDTH / PREVIEW_SCALE;
 const INNER_HEIGHT = PREVIEW_HEIGHT / PREVIEW_SCALE;
 

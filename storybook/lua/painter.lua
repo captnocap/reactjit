@@ -626,6 +626,8 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   local needsClipping = s.overflow == "hidden" or isScroll
   local useStencil = needsClipping and hasRoundedCorners
   local useScissor = needsClipping and not hasRoundedCorners
+  local prevScissor
+  local prevStencilDepth = stencilDepth  -- save before any modification
 
   -- Apply stencil clipping for rounded corners
   if useStencil then
@@ -640,8 +642,13 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     love.graphics.setStencilTest("greater", stencilDepth)
     stencilDepth = stencilValue
   elseif useScissor then
-    -- Scissor clipping for rectangular overflow:hidden or scroll
-    love.graphics.setScissor(c.x, c.y, c.w, c.h)
+    -- Scissor clipping for rectangular overflow:hidden or scroll.
+    -- Save previous scissor and intersect so nested clips stack correctly
+    -- (e.g., overflow:scroll inside a scaled transform inside overflow:hidden).
+    prevScissor = {love.graphics.getScissor()}
+    local sx, sy = love.graphics.transformPoint(c.x, c.y)
+    local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
+    love.graphics.intersectScissor(sx, sy, sx2 - sx, sy2 - sy)
   end
 
   if not isHidden and (node.type == "View" or node.type == "box") then
@@ -816,15 +823,6 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local text = node.text or (node.props and node.props.children) or ""
     if type(text) == "table" then text = table.concat(text) end
     text = tostring(text)
-
-    -- DEBUG: log non-ASCII text and font info
-    if fontFamily and #text > 0 then
-      local firstByte = text:byte(1)
-      if firstByte and firstByte > 127 then
-        io.write("[painter] non-ASCII text: bytes=" .. #text .. " font=" .. tostring(fontFamily) .. " hasGlyphs=" .. tostring(font:hasGlyphs(text)) .. " first3bytes=" .. string.format("%02x %02x %02x", text:byte(1) or 0, text:byte(2) or 0, text:byte(3) or 0) .. "\n")
-        io.flush()
-      end
-    end
 
     local align = s.textAlign or "left"
     local hasCustomLineHeight = lineHeight and lineHeight ~= font:getHeight()
@@ -1210,14 +1208,19 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
 
   -- Restore clipping state
   if useStencil then
-    -- Restore stencil test to parent level or clear it
-    if stencilDepth > 1 then
-      love.graphics.setStencilTest("greater", stencilDepth - 1)
+    -- Restore stencil test to what it was before this node entered.
+    -- prevStencilDepth is the original parameter before modification.
+    if prevStencilDepth > 0 then
+      love.graphics.setStencilTest("greater", prevStencilDepth - 1)
     else
       love.graphics.setStencilTest()
     end
   elseif useScissor then
-    love.graphics.setScissor()
+    if prevScissor and prevScissor[1] then
+      love.graphics.setScissor(prevScissor[1], prevScissor[2], prevScissor[3], prevScissor[4])
+    else
+      love.graphics.setScissor()
+    end
   end
 
   -- Restore transform state

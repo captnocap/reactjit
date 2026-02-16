@@ -245,6 +245,13 @@ cli-setup: setup
 	else \
 		echo "  Warning: libmpv.so.2 not found — video playback won't be bundled"; \
 	fi
+	@LIBSQLITE=$$(ldconfig -p | grep 'libsqlite3.so.0 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBSQLITE" ]; then \
+		cp "$$LIBSQLITE" cli/runtime/lib/libsqlite3.so.0; \
+		echo "  Bundled libsqlite3.so.0"; \
+	else \
+		echo "  Warning: libsqlite3.so.0 not found — SQLite features won't be bundled"; \
+	fi
 	@TOR=$$(which tor 2>/dev/null); \
 	if [ -n "$$TOR" ]; then \
 		cp "$$(readlink -f "$$TOR")" cli/runtime/bin/tor; \
