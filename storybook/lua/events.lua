@@ -88,6 +88,7 @@ function Events.hitTest(node, mx, my)
   if isScroll then return node end
   -- Lua-owned interactive nodes are always hittable
   if node.type == "TextEditor" then return node end
+  if node.type == "TextInput" then return node end
   if node.type == "CodeBlock" then return node end
   if node.type == "Video" then return node end
   if node.type == "VideoPlayer" then return node end

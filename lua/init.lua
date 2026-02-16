@@ -35,6 +35,7 @@ local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
+local textinput  = nil                        -- textinput.lua (loaded on demand)
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
 local textselection = nil                    -- textselection.lua (text highlight + copy)
 local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
@@ -337,6 +338,9 @@ function ReactLove.init(config)
     texteditor = require("lua.texteditor")
     texteditor.init({ measure = measure })
 
+    textinput = require("lua.textinput")
+    textinput.init({ measure = measure })
+
     codeblock = require("lua.codeblock")
     codeblock.init({ measure = measure })
 
@@ -397,6 +401,9 @@ function ReactLove.init(config)
 
     texteditor = require("lua.texteditor")
     texteditor.init({ measure = measure })
+
+    textinput = require("lua.textinput")
+    textinput.init({ measure = measure })
 
     codeblock = require("lua.codeblock")
     codeblock.init({ measure = measure })
@@ -702,10 +709,12 @@ function ReactLove.update(dt)
       tree.clearDirty()
     end
 
-    -- Update TextEditor blink timer if one has focus (canvas mode)
+    -- Update TextEditor/TextInput blink timer if one has focus (canvas mode)
     local canvasFocusedNode = focus.get()
     if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" then
       texteditor.update(canvasFocusedNode, dt)
+    elseif canvasFocusedNode and canvasFocusedNode.type == "TextInput" then
+      textinput.update(canvasFocusedNode, dt)
     end
     if codeblock then codeblock.update(dt) end
 
@@ -1059,10 +1068,12 @@ function ReactLove.update(dt)
     end
   end
 
-  -- Update TextEditor blink timer if one has focus
+  -- Update TextEditor/TextInput blink timer if one has focus
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     texteditor.update(focusedNode, dt)
+  elseif focusedNode and focusedNode.type == "TextInput" then
+    textinput.update(focusedNode, dt)
   end
   if codeblock then codeblock.update(dt) end
 
@@ -1340,7 +1351,7 @@ function ReactLove.mousepressed(x, y, button)
 
   local hit = events.hitTest(root, x, y)
 
-  -- Handle TextEditor focus transitions
+  -- Handle TextEditor/TextInput focus transitions
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     if hit ~= focusedNode then
@@ -1351,6 +1362,20 @@ function ReactLove.mousepressed(x, y, button)
         type = "texteditor:blur",
         payload = {
           type = "texteditor:blur",
+          targetId = focusedNode.id,
+          value = value,
+        }
+      })
+    end
+  elseif focusedNode and focusedNode.type == "TextInput" then
+    if hit ~= focusedNode then
+      -- Clicking away from a focused TextInput: blur it
+      local value = textinput.blur(focusedNode)
+      focus.clear()
+      pushEvent({
+        type = "textinput:blur",
+        payload = {
+          type = "textinput:blur",
           targetId = focusedNode.id,
           value = value,
         }
@@ -1370,6 +1395,21 @@ function ReactLove.mousepressed(x, y, button)
               type = "texteditor:focus",
               targetId = hit.id,
               value = texteditor.getValue(hit),
+            }
+          })
+        end
+      end
+    elseif hit.type == "TextInput" then
+      -- Clicked a TextInput: handle internally
+      if textinput.handleMousePressed(hit, x, y, button) then
+        if not focus.isFocused(hit) then
+          focus.set(hit)
+          pushEvent({
+            type = "textinput:focus",
+            payload = {
+              type = "textinput:focus",
+              targetId = hit.id,
+              value = textinput.getValue(hit),
             }
           })
         end
@@ -1436,10 +1476,12 @@ function ReactLove.mousereleased(x, y, button)
     end
   end
 
-  -- TextEditor drag selection release
+  -- TextEditor/TextInput drag selection release
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     texteditor.handleMouseReleased(focusedNode)
+  elseif focusedNode and focusedNode.type == "TextInput" then
+    textinput.handleMouseReleased(focusedNode)
   end
 
   -- VideoPlayer seek/volume drag release (check all VideoPlayer nodes since
@@ -1527,11 +1569,15 @@ function ReactLove.mousemoved(x, y)
     end
   end
 
-  -- TextEditor drag selection
+  -- TextEditor/TextInput drag selection
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     if texteditor.handleMouseMoved(focusedNode, x, y) then
       return  -- TextEditor consumed the mouse move
+    end
+  elseif focusedNode and focusedNode.type == "TextInput" then
+    if textinput.handleMouseMoved(focusedNode, x, y) then
+      return  -- TextInput consumed the mouse move
     end
   end
 
@@ -1689,6 +1735,35 @@ function ReactLove.keypressed(key, scancode, isrepeat)
     else
       return  -- consumed by TextEditor
     end
+  elseif focusedNode and focusedNode.type == "TextInput" then
+    local result = textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+    if result == "blur" then
+      local value = textinput.blur(focusedNode)
+      focus.clear()
+      pushEvent({
+        type = "textinput:blur",
+        payload = {
+          type = "textinput:blur",
+          targetId = focusedNode.id,
+          value = value,
+        }
+      })
+    elseif result == "submit" then
+      local value = textinput.getValue(focusedNode)
+      pushEvent({
+        type = "textinput:submit",
+        payload = {
+          type = "textinput:submit",
+          targetId = focusedNode.id,
+          value = value,
+        }
+      })
+      return
+    elseif result == false then
+      -- TextInput didn't handle this key combo, let it through to bridge
+    else
+      return  -- consumed by TextInput
+    end
   end
 
   -- Route to fullscreen or hovered VideoPlayer (keyboard: space, arrows, m, f, l)
@@ -1735,9 +1810,9 @@ end
 function ReactLove.keyreleased(key, scancode)
   if not isRendering() then return end
 
-  -- Suppress keyup when TextEditor has focus
+  -- Suppress keyup when TextEditor or TextInput has focus
   local focusedNode = focus.get()
-  if focusedNode and focusedNode.type == "TextEditor" then
+  if focusedNode and (focusedNode.type == "TextEditor" or focusedNode.type == "TextInput") then
     return
   end
 
@@ -1758,10 +1833,13 @@ function ReactLove.textinput(text)
   if inspectorEnabled and devtools.textinput(text) then return end
   if not isRendering() then return end
 
-  -- Route to focused TextEditor if any
+  -- Route to focused TextEditor or TextInput if any
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     texteditor.handleTextInput(focusedNode, text)
+    return  -- consumed, no bridge traffic
+  elseif focusedNode and focusedNode.type == "TextInput" then
+    textinput.handleTextInput(focusedNode, text)
     return  -- consumed, no bridge traffic
   end
 

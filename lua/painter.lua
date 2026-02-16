@@ -28,6 +28,7 @@ local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local ZIndex = require("lua.zindex")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
+local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
@@ -1146,6 +1147,13 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       TextEditorModule = require("lua.texteditor")
     end
     TextEditorModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "TextInput" then
+    -- Lua-owned text input: delegate rendering entirely to textinput.lua
+    if not TextInputModule then
+      TextInputModule = require("lua.textinput")
+    end
+    TextInputModule.draw(node, effectiveOpacity)
 
   elseif not isHidden and node.type == "CodeBlock" then
     -- Lua-owned code block: delegate rendering entirely to codeblock.lua

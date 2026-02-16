@@ -164,6 +164,20 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onTextEditorSubmit');
   });
 
+  // ── TextInput events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('textinput:focus', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onTextInputFocus');
+  });
+
+  bridge.subscribe('textinput:blur', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onTextInputBlur');
+  });
+
+  bridge.subscribe('textinput:submit', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onTextInputSubmit');
+  });
+
   // ── Video events (target-only) ────────────────────────
 
   bridge.subscribe('video:ready', (event: LoveEvent) => {
