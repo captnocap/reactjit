@@ -18,7 +18,7 @@ export function Scene3DBasicStory() {
         3D Scene
       </Text>
       <Text style={{ fontSize: 12, color: '#6c7086' }}>
-        Spinning cube rendered via g3d on a Love2D Canvas
+        Spinning cubes with edge borders + sphere, rendered via g3d
       </Text>
 
       <Scene style={{ width: '100%', flexGrow: 1 }} backgroundColor="#12121b">
@@ -26,6 +26,8 @@ export function Scene3DBasicStory() {
         <Mesh
           geometry="box"
           color="#89b4fa"
+          edgeColor="#cdd6f4"
+          edgeWidth={0.04}
           rotation={[spin * 0.7, spin, spin * 0.3]}
         />
         <Mesh
@@ -37,6 +39,8 @@ export function Scene3DBasicStory() {
         <Mesh
           geometry="box"
           color="#a6e3a1"
+          edgeColor="#f9e2af"
+          edgeWidth={0.03}
           position={[-2.5, 0, 0]}
           scale={0.6}
           rotation={[spin * 0.4, 0, spin]}
@@ -53,7 +57,7 @@ export function Scene3DBasicStory() {
         }}
       >
         <Text style={{ fontSize: 11, color: '#6c7086' }}>
-          Blue cube (center) + Pink sphere (right) + Green cube (left)
+          Blue cube with white edges + Pink sphere + Green cube with yellow edges
         </Text>
       </Box>
     </Box>

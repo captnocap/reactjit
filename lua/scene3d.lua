@@ -172,6 +172,70 @@ local function getColorTexture(hexColor)
 end
 
 -- ============================================================================
+-- Edge shader (UV-based edge detection)
+-- ============================================================================
+
+local edgeShader = nil
+
+local edgeShaderVert = [[
+uniform mat4 projectionMatrix;
+uniform mat4 viewMatrix;
+uniform mat4 modelMatrix;
+uniform bool isCanvasEnabled;
+
+vec4 position(mat4 transformProjection, vec4 vertexPosition) {
+    vec4 screenPos = projectionMatrix * viewMatrix * modelMatrix * vertexPosition;
+    if (isCanvasEnabled) {
+        screenPos.y *= -1.0;
+    }
+    return screenPos;
+}
+]]
+
+local edgeShaderFrag = [[
+uniform vec4 edgeColor;
+uniform float edgeWidth;
+
+vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+    vec4 texColor = Texel(tex, texture_coords);
+    vec4 baseColor = texColor * color;
+
+    // Detect edges: UV near 0 or 1 on either axis
+    float u = texture_coords.x;
+    float v = texture_coords.y;
+    float edgeMask = 0.0;
+    if (u < edgeWidth || u > 1.0 - edgeWidth ||
+        v < edgeWidth || v > 1.0 - edgeWidth) {
+        edgeMask = 1.0;
+    }
+
+    return mix(baseColor, edgeColor, edgeMask);
+}
+]]
+
+local function getEdgeShader()
+  if not edgeShader then
+    edgeShader = love.graphics.newShader(edgeShaderVert, edgeShaderFrag)
+  end
+  return edgeShader
+end
+
+--- Parse a hex color to {r, g, b, a} floats
+local function parseHexColor(hex)
+  if not hex or type(hex) ~= "string" then return nil end
+  hex = hex:gsub("#", "")
+  if #hex == 6 then
+    return {
+      tonumber(hex:sub(1, 2), 16) / 255,
+      tonumber(hex:sub(3, 4), 16) / 255,
+      tonumber(hex:sub(5, 6), 16) / 255,
+      1,
+    }
+  end
+  return nil
+end
+
+-- ============================================================================
 -- Scene management
 -- ============================================================================
 
@@ -217,6 +281,9 @@ local function ensureMeshModel(scene, meshNode)
   local geometry = props.geometry or "box"
   local color = props.color
 
+  local edgeColor = props.edgeColor
+  local edgeWidth = props.edgeWidth or 0.03
+
   -- Check if we need to recreate the model
   local needsCreate = not entry
     or entry.geometry ~= geometry
@@ -243,6 +310,10 @@ local function ensureMeshModel(scene, meshNode)
     }
     scene.meshes[meshId] = entry
   end
+
+  -- Update edge properties (cheap, every frame)
+  entry.edgeColor = edgeColor and parseHexColor(edgeColor) or nil
+  entry.edgeWidth = edgeWidth
 
   -- Apply transform from props (these are cheap to update every frame)
   local pos = props.position or {0, 0, 0}
@@ -383,7 +454,15 @@ local function renderScene(scene)
   -- Draw all meshes
   for _, entry in pairs(scene.meshes) do
     if entry.model then
-      entry.model:draw()
+      if entry.edgeColor then
+        -- Use edge shader for meshes with edge highlighting
+        local shader = getEdgeShader()
+        shader:send("edgeColor", entry.edgeColor)
+        shader:send("edgeWidth", entry.edgeWidth)
+        entry.model:draw(shader)
+      else
+        entry.model:draw()
+      end
     end
   end
 

@@ -26,6 +26,8 @@ export function Mesh(props: MeshProps) {
     position: props.position,
     rotation: props.rotation,
     scale: props.scale,
+    edgeColor: props.edgeColor,
+    edgeWidth: props.edgeWidth,
     onClick: props.onClick,
     onPointerEnter: props.onPointerEnter,
     onPointerLeave: props.onPointerLeave,

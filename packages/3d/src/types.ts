@@ -45,6 +45,10 @@ export interface MeshProps {
   rotation?: Vec3;
   /** Scale — uniform number or [sx, sy, sz] */
   scale?: number | Vec3;
+  /** Edge/wireframe color (hex string) — draws borders on face edges */
+  edgeColor?: string;
+  /** Edge line width as fraction of face UV space (default: 0.03) */
+  edgeWidth?: number;
   /** Click handler (Phase 5 — raycasting) */
   onClick?: (event: LoveEvent) => void;
   /** Pointer enter handler (Phase 5 — raycasting) */
