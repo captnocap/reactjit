@@ -25,6 +25,7 @@
 ]]
 
 local Animate = {}
+local Color = require("lua.color")
 
 -- ============================================================================
 -- State
@@ -154,48 +155,9 @@ end
 -- Color parsing and interpolation
 -- ============================================================================
 
---- Parse a color value to RGBA components (0-1 range).
---- Accepts hex strings ("#rrggbb", "#rrggbbaa"), "transparent", or {r,g,b,a} tables.
---- @param c any Color value
---- @return number|nil r, number|nil g, number|nil b, number|nil a
-local function parseColor(c)
-  if type(c) == "table" then
-    return c[1] or 0, c[2] or 0, c[3] or 0, c[4] or 1
-  end
-  if type(c) ~= "string" then return nil end
-  if c == "transparent" then return 0, 0, 0, 0 end
-  local r, g, b, a = c:match("#(%x%x)(%x%x)(%x%x)(%x?%x?)")
-  if not r then
-    local rs, gs, bs, as = c:match("#(%x)(%x)(%x)(%x?)")
-    if rs then
-      r = rs .. rs; g = gs .. gs; b = bs .. bs
-      a = (as and as ~= "") and (as .. as) or ""
-    end
-  end
-  if r then
-    local alpha = 1
-    if a and a ~= "" then alpha = tonumber(a, 16) / 255 end
-    return tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, alpha
-  end
-  return nil
-end
-
---- Convert RGBA components (0-1) to a hex color string.
---- @param r number Red 0-1
---- @param g number Green 0-1
---- @param b number Blue 0-1
---- @param a number Alpha 0-1
---- @return string Hex color string
-local function colorToHex(r, g, b, a)
-  local ri = math.floor(r * 255 + 0.5)
-  local gi = math.floor(g * 255 + 0.5)
-  local bi = math.floor(b * 255 + 0.5)
-  if a ~= nil and a < 0.999 then
-    local ai = math.floor(a * 255 + 0.5)
-    return string.format("#%02x%02x%02x%02x", ri, gi, bi, ai)
-  end
-  return string.format("#%02x%02x%02x", ri, gi, bi)
-end
+-- Color parsing and hex conversion delegated to lua/color.lua
+local parseColor = Color.parse
+local colorToHex = Color.toHex
 
 -- ============================================================================
 -- Value interpolation

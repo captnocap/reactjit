@@ -27,6 +27,7 @@ local Measure = nil  -- Injected at init time via Painter.init()
 local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local ZIndex = require("lua.zindex")
+local Color = require("lua.color")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
@@ -54,41 +55,8 @@ end
 -- ============================================================================
 
 --- Set the active Love2D drawing color.
---- Accepts hex strings ("#ff00ff", "#ff00ff80") or number arrays ({r, g, b, a}).
-function Painter.setColor(c)
-  if not c then return end
-  if type(c) == "string" then
-    if c == "transparent" then
-      love.graphics.setColor(0, 0, 0, 0)
-      return
-    end
-    -- Try 6/8-digit hex first: #rrggbb or #rrggbbaa
-    local r, g, b, a = c:match("#(%x%x)(%x%x)(%x%x)(%x?%x?)")
-    if not r then
-      -- Try 3/4-digit shorthand: #rgb or #rgba
-      local rs, gs, bs, as = c:match("#(%x)(%x)(%x)(%x?)")
-      if rs then
-        r = rs .. rs
-        g = gs .. gs
-        b = bs .. bs
-        a = (as and as ~= "") and (as .. as) or ""
-      end
-    end
-    if r then
-      local alpha = 1
-      if a and a ~= "" then alpha = tonumber(a, 16) / 255 end
-      love.graphics.setColor(
-        tonumber(r, 16) / 255,
-        tonumber(g, 16) / 255,
-        tonumber(b, 16) / 255,
-        alpha
-      )
-    end
-  elseif type(c) == "table" then
-    local r, g, b, a = c[1] or 0, c[2] or 0, c[3] or 0, c[4] or 1
-    love.graphics.setColor(r, g, b, a)
-  end
-end
+--- Delegates to lua/color.lua for parsing (hex, named, rgb(), hsl(), tables).
+Painter.setColor = Color.set
 
 --- Apply opacity multiplier to the current drawing color.
 --- Call this after setColor to apply inherited/effective opacity.

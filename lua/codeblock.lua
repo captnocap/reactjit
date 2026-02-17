@@ -11,6 +11,7 @@
 ]]
 
 local Measure = nil
+local Color   = require("lua.color")
 
 local CodeBlock = {}
 
@@ -55,23 +56,14 @@ local TYPES = {
   ["symbol"] = true, ["bigint"] = true, ["unknown"] = true,
 }
 
-local function hexToRGBA(hex)
-  hex = hex:gsub("#", "")
-  local r = tonumber(hex:sub(1,2), 16) / 255
-  local g = tonumber(hex:sub(3,4), 16) / 255
-  local b = tonumber(hex:sub(5,6), 16) / 255
-  local color = {r, g, b, 1}
-  return color
-end
-
 local COLORS = {
-  comment = hexToRGBA("#6a9955"),
-  keyword = hexToRGBA("#569cd6"),
-  type = hexToRGBA("#4ec9b0"),
-  import = hexToRGBA("#c586c0"),
-  string = hexToRGBA("#ce9178"),
-  number = hexToRGBA("#b5cea8"),
-  default = hexToRGBA("#c9d1d9"),
+  comment = Color.toTable("#6a9955"),
+  keyword = Color.toTable("#569cd6"),
+  type = Color.toTable("#4ec9b0"),
+  import = Color.toTable("#c586c0"),
+  string = Color.toTable("#ce9178"),
+  number = Color.toTable("#b5cea8"),
+  default = Color.toTable("#c9d1d9"),
 }
 
 --- Determine line color based on content

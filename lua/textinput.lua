@@ -23,6 +23,7 @@
 
 local Measure = nil
 local Focus   = require("lua.focus")
+local Color   = require("lua.color")
 
 local TextInput = {}
 
@@ -611,32 +612,8 @@ end
 -- Drawing
 -- ============================================================================
 
-local function parseColor(c, fallback)
-  if not c then return fallback end
-  if type(c) == "table" then return c end
-  if type(c) == "string" then
-    if c == "transparent" then return { 0, 0, 0, 0 } end
-    local r, g, b, a = c:match("#(%x%x)(%x%x)(%x%x)(%x?%x?)")
-    if not r then
-      local rs, gs, bs, as = c:match("#(%x)(%x)(%x)(%x?)")
-      if rs then
-        r = rs .. rs; g = gs .. gs; b = bs .. bs
-        a = (as and as ~= "") and (as .. as) or ""
-      end
-    end
-    if r then
-      local alpha = 1
-      if a and a ~= "" then alpha = tonumber(a, 16) / 255 end
-      return {
-        tonumber(r, 16) / 255,
-        tonumber(g, 16) / 255,
-        tonumber(b, 16) / 255,
-        alpha,
-      }
-    end
-  end
-  return fallback
-end
+-- Color parsing delegated to lua/color.lua
+local parseColor = Color.toTable
 
 local function setColorWithOpacity(c, opacity)
   love.graphics.setColor(c[1], c[2], c[3], (c[4] or 1) * opacity)

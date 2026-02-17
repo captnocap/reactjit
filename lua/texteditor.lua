@@ -14,6 +14,7 @@
 local Measure = nil
 local Focus   = require("lua.focus")
 local Tooltips = require("lua.texteditor_tooltips")
+local Color   = require("lua.color")
 
 local TextEditor = {}
 
@@ -41,27 +42,17 @@ local colors = {
 -- Syntax highlighting (JSX tokenizer)
 -- ============================================================================
 
-local function hexToRGBA(hex)
-  hex = hex:gsub("#", "")
-  return {
-    tonumber(hex:sub(1,2), 16) / 255,
-    tonumber(hex:sub(3,4), 16) / 255,
-    tonumber(hex:sub(5,6), 16) / 255,
-    1
-  }
-end
-
 local syntaxColors = {
-  keyword     = hexToRGBA("#c678dd"),
-  string      = hexToRGBA("#98c379"),
-  number      = hexToRGBA("#d19a66"),
-  comment     = hexToRGBA("#5c6370"),
-  component   = hexToRGBA("#61afef"),
-  tag         = hexToRGBA("#e06c75"),
-  prop        = hexToRGBA("#d19a66"),
-  identifier  = hexToRGBA("#abb2bf"),
-  punctuation = hexToRGBA("#636d83"),
-  text        = hexToRGBA("#abb2bf"),
+  keyword     = Color.toTable("#c678dd"),
+  string      = Color.toTable("#98c379"),
+  number      = Color.toTable("#d19a66"),
+  comment     = Color.toTable("#5c6370"),
+  component   = Color.toTable("#61afef"),
+  tag         = Color.toTable("#e06c75"),
+  prop        = Color.toTable("#d19a66"),
+  identifier  = Color.toTable("#abb2bf"),
+  punctuation = Color.toTable("#636d83"),
+  text        = Color.toTable("#abb2bf"),
 }
 
 local KEYWORDS = {

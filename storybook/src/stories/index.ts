@@ -60,6 +60,7 @@ import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
 import { FontShowcaseStory } from './FontShowcase';
 import { SpellCheckStory } from './SpellCheckStory';
+import { KeyboardHooksStory } from './KeyboardHooksStory';
 import { LlmsTxtReader } from './LlmsTxtReader';
 import { AIChatDemoStory } from './AIChatDemo';
 import { AICanvasStory } from './AICanvasDemo';
@@ -110,6 +111,7 @@ export const stories: StoryDef[] = [
   // Input
   { id: 'text-editor', title: 'TextEditor', category: 'Input', component: TextEditorStory },
   { id: 'spell-check', title: 'Spell Check', category: 'Input', component: SpellCheckStory },
+  { id: 'keyboard-hooks', title: 'Keyboard Hooks', category: 'Input', component: KeyboardHooksStory },
 
   // Forms
   { id: 'checkbox', title: 'Checkbox', category: 'Forms', component: CheckboxStory },
