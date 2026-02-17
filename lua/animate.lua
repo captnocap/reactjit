@@ -165,6 +165,13 @@ local function parseColor(c)
   if type(c) ~= "string" then return nil end
   if c == "transparent" then return 0, 0, 0, 0 end
   local r, g, b, a = c:match("#(%x%x)(%x%x)(%x%x)(%x?%x?)")
+  if not r then
+    local rs, gs, bs, as = c:match("#(%x)(%x)(%x)(%x?)")
+    if rs then
+      r = rs .. rs; g = gs .. gs; b = bs .. bs
+      a = (as and as ~= "") and (as .. as) or ""
+    end
+  end
   if r then
     local alpha = 1
     if a and a ~= "" then alpha = tonumber(a, 16) / 255 end

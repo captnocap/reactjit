@@ -110,7 +110,7 @@ function StorybookPanel() {
       </Box>
 
       {/* Content */}
-      <Box style={{ flexGrow: 1, backgroundColor: '#08080f' }}>
+      <Box style={{ flexGrow: 1, backgroundColor: '#08080f', overflow: 'hidden' }}>
         {/* Header bar */}
         <Box style={{
           padding: 8,

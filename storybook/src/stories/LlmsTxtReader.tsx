@@ -44,15 +44,19 @@ export function LlmsTxtReader() {
   const { data: raw, loading, error } = useTextFile('data/llms.txt');
   const [mode, setMode] = useState<'single' | 'chunked'>('chunked');
 
-  const chunks = useMemo(() => {
+  const lines = useMemo(() => {
     if (!raw) return [];
-    const lines = raw.split('\n');
+    return raw.split('\n');
+  }, [raw]);
+
+  const chunks = useMemo(() => {
+    if (lines.length === 0) return [];
     const result: string[] = [];
     for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
       result.push(lines.slice(i, i + CHUNK_SIZE).join('\n'));
     }
     return result;
-  }, [raw]);
+  }, [lines]);
 
   if (loading) {
     return (
@@ -70,7 +74,7 @@ export function LlmsTxtReader() {
     );
   }
 
-  const lineCount = raw.split('\n').length;
+  const lineCount = lines.length;
   const sizeKB = Math.round(raw.length / 1024);
 
   return (
@@ -88,18 +92,22 @@ export function LlmsTxtReader() {
         <Text style={{ fontSize: 13, color: '#64748b' }}>
           {`llms.txt — ${lineCount} lines, ${sizeKB} KB`}
         </Text>
-        <Box style={{ flexDirection: 'row', gap: 4, width: 260 }}>
+        <Box style={{ flexDirection: 'row', gap: 4 }}>
           <ModeButton
-            label={`1 node`}
+            label="1 node"
             active={mode === 'single'}
             onPress={() => setMode('single')}
           />
           <ModeButton
-            label={`${chunks.length} chunks (${CHUNK_SIZE} lines each)`}
+            label={`${chunks.length} chunks`}
             active={mode === 'chunked'}
             onPress={() => setMode('chunked')}
           />
         </Box>
+        <Text style={{ fontSize: 9, color: '#475569' }}>
+          {mode === 'single' ? 'brute force: 1 Text node, all content'
+            : `${chunks.length} Text nodes, ${CHUNK_SIZE} lines each — paint culled`}
+        </Text>
       </Box>
 
       {/* Content */}

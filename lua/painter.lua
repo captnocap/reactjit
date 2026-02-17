@@ -62,7 +62,18 @@ function Painter.setColor(c)
       love.graphics.setColor(0, 0, 0, 0)
       return
     end
+    -- Try 6/8-digit hex first: #rrggbb or #rrggbbaa
     local r, g, b, a = c:match("#(%x%x)(%x%x)(%x%x)(%x?%x?)")
+    if not r then
+      -- Try 3/4-digit shorthand: #rgb or #rgba
+      local rs, gs, bs, as = c:match("#(%x)(%x)(%x)(%x?)")
+      if rs then
+        r = rs .. rs
+        g = gs .. gs
+        b = bs .. bs
+        a = (as and as ~= "") and (as .. as) or ""
+      end
+    end
     if r then
       local alpha = 1
       if a and a ~= "" then alpha = tonumber(a, 16) / 255 end
@@ -650,7 +661,8 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     prevScissor = {love.graphics.getScissor()}
     local sx, sy = love.graphics.transformPoint(c.x, c.y)
     local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
-    love.graphics.intersectScissor(sx, sy, sx2 - sx, sy2 - sy)
+    local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
+    love.graphics.intersectScissor(sx, sy, sw, sh)
   end
 
   if not isHidden and (node.type == "View" or node.type == "box") then

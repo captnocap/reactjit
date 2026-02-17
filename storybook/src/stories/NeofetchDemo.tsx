@@ -341,7 +341,7 @@ export function NeofetchDemoStory() {
       </Box>
 
       {/* Tab content */}
-      <ScrollView style={{ width: '100%', height: vpH - 180 }}>
+      <ScrollView style={{ width: '100%', height: Math.max(0, vpH - 180) }}>
         {tab === 'overview' && (
           <Box style={{ gap: 14, width: '100%' }}>
             {!sys.loading && <TaskSummary tasks={sys.tasks} />}

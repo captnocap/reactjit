@@ -265,6 +265,7 @@ end
 
 --- Handle mouse movement.
 function DevTools.mousemoved(x, y)
+  if not inspector then return end
   -- Inspector always tracks mouse for hover overlays
   inspector.mousemoved(x, y)
 end
