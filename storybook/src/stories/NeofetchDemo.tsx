@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Divider, Spacer } from '../../../packages/shared/src';
+import { Box, Text, Divider, Spacer, useSystemInfo, formatUptime, formatMemory } from '../../../packages/shared/src';
 
 /* ── heart pixel grid (13 wide x 10 tall) ──────────────────── */
 
@@ -43,10 +43,25 @@ const ACCENT = '#e94560';
 const BRIGHT = '#e0e0f0';
 const DIM    = '#444466';
 
+/* ── info row helper ─────────────────────────────────────────── */
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 4 }}>
+      <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>{`${label}:`}</Text>
+      <Text style={{ color: BRIGHT, fontSize: 14 }}>{value}</Text>
+    </Box>
+  );
+}
+
 /* ── main ────────────────────────────────────────────────────── */
 
 export function NeofetchDemoStory() {
-  const title = 'siah@archlinux';
+  const info = useSystemInfo(5000);
+
+  const title = info.loading
+    ? '...'
+    : `${info.user}@${info.hostname}`;
 
   return (
     <Box style={{ gap: 16, padding: 16 }}>
@@ -87,34 +102,13 @@ export function NeofetchDemoStory() {
 
           {/* Info */}
           <Box style={{ gap: 4 }}>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>OS:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>Arch Linux x86_64</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>Kernel:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>6.14.0-37-generic</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>Uptime:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>3 hours, 42 mins</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>Shell:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>/bin/zsh</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>CPU:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>AMD Ryzen 9 7950X (32)</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>Memory:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>8192 MiB / 32768 MiB</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 14, fontWeight: '700' }}>Arch:</Text>
-              <Text style={{ color: BRIGHT, fontSize: 14 }}>x86_64</Text>
-            </Box>
+            <InfoRow label="OS" value={info.os || '...'} />
+            <InfoRow label="Kernel" value={info.kernel || '...'} />
+            <InfoRow label="Uptime" value={info.loading ? '...' : formatUptime(info.uptime)} />
+            <InfoRow label="Shell" value={info.shell || '...'} />
+            <InfoRow label="CPU" value={info.cpu || '...'} />
+            <InfoRow label="Memory" value={info.loading ? '...' : formatMemory(info.memory)} />
+            <InfoRow label="Arch" value={info.arch || '...'} />
           </Box>
 
         </Box>
@@ -131,7 +125,7 @@ export function NeofetchDemoStory() {
 
       {/* Footer */}
       <Box style={{ alignItems: 'flex-end' }}>
-        <Text style={{ color: DIM, fontSize: 10 }}>60 FPS - press Escape to quit</Text>
+        <Text style={{ color: DIM, fontSize: 10 }}>Live system data - refreshes every 5s</Text>
       </Box>
     </Box>
   );

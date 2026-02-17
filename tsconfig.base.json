@@ -25,7 +25,8 @@
       "@ilovereact/storage": ["./packages/storage/src"],
       "@ilovereact/audio": ["./packages/audio/src"],
       "@ilovereact/server": ["./packages/server/src"],
-      "@ilovereact/ai": ["./packages/ai/src"]
+      "@ilovereact/ai": ["./packages/ai/src"],
+      "@ilovereact/apis": ["./packages/apis/src"]
     }
   }
 }

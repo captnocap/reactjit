@@ -5,8 +5,8 @@
  * clipped inside the card. Click to load into the editor.
  */
 
-import React, { useMemo } from 'react';
-import { Box, Text, Pressable } from '../../../packages/shared/src';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Box, Text, Pressable, useLoveRPC } from '../../../packages/shared/src';
 import { templates, type Template } from './templates';
 import { transformJSX } from './lib/jsx-transform';
 import { evalComponent } from './lib/eval-component';
@@ -18,11 +18,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   Widget: '#f59e0b',
   Navigation: '#06b6d4',
   Motion: '#ef4444',
+  Recent: '#a78bfa',
 };
 
 const PREVIEW_SCALE = 0.35;
-const CARD_WIDTH = 240;
-const PREVIEW_HEIGHT = 150;
+const CARD_WIDTH = 340;
+const PREVIEW_HEIGHT = 200;
 const INNER_WIDTH = CARD_WIDTH / PREVIEW_SCALE;
 const INNER_HEIGHT = PREVIEW_HEIGHT / PREVIEW_SCALE;
 
@@ -113,6 +114,35 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
 }
 
 export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }) {
+  const storageGet = useLoveRPC('storage:get');
+  const [lastSession, setLastSession] = useState<{ code: string; timestamp: number } | null>(null);
+
+  useEffect(() => {
+    // Check global cache first (set by PlaygroundPanel on mount)
+    const cached = (globalThis as any).__playgroundLastSession;
+    if (cached?.code) {
+      setLastSession(cached);
+      return;
+    }
+    // Otherwise load from storage
+    storageGet({ collection: 'playground', id: 'last-session' })
+      .then((data: any) => {
+        if (data?.code) setLastSession(data);
+      })
+      .catch(() => {});
+  }, [storageGet]);
+
+  const handleLastSessionSelect = () => {
+    if (!lastSession) return;
+    onSelect({
+      id: '__last-session',
+      name: 'Last Session',
+      description: 'Continue where you left off',
+      category: 'Recent',
+      code: lastSession.code,
+    });
+  };
+
   return (
     <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20, overflow: 'scroll' }}>
       {/* Header */}
@@ -126,7 +156,20 @@ export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }
       </Box>
 
       {/* Grid */}
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-around', width: '100%' }}>
+        {/* Last session card (if available) */}
+        {lastSession && (
+          <TemplateCard
+            template={{
+              id: '__last-session',
+              name: 'Last Session',
+              description: 'Continue where you left off',
+              category: 'Recent',
+              code: lastSession.code,
+            }}
+            onSelect={handleLastSessionSelect}
+          />
+        )}
         {templates.map(t => (
           <TemplateCard key={t.id} template={t} onSelect={onSelect} />
         ))}

@@ -450,12 +450,20 @@ export interface TextEditorProps {
   onFocus?: () => void;
   /** Called when the editor loses focus, with the final text value. */
   onBlur?: (text: string) => void;
+  /** Called after the user stops typing for `changeDelay` seconds. */
+  onChange?: (text: string) => void;
+  /** Seconds of idle time before onChange fires (default: 3). */
+  changeDelay?: number;
   /** Placeholder text shown when empty and unfocused. */
   placeholder?: string;
   /** Whether the editor is read-only. */
   readOnly?: boolean;
   /** Whether to show line numbers in the gutter (default: true). */
   lineNumbers?: boolean;
+  /** Enable JSX syntax highlighting (default: false). */
+  syntaxHighlight?: boolean;
+  /** Hover tooltip verbosity level for known identifiers (default: none). */
+  tooltipLevel?: 'beginner' | 'guided' | 'clean';
   /** Container style (sizing, layout). */
   style?: Style;
   /** Text style (fontSize, color, fontFamily). */

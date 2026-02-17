@@ -1,14 +1,13 @@
 /**
- * Select component for web and native (Love2D) modes.
+ * Select (dropdown) component for web and native (Love2D) modes.
  *
- * Web mode:   renders a styled native <select> element.
- * Native mode: inline accordion-style expand/collapse.
- *              Clicking the header toggles the option list.
- *              Clicking an option selects it and collapses.
+ * Uses a floating overlay panel (same pattern as inspector tooltips
+ * and BarChart interactive tooltips). The trigger button stays in flow,
+ * the options panel floats below it via absolute positioning.
  */
 
-import React, { useState, useCallback } from 'react';
-import { Box, Text } from './primitives';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Box, Text, styleToCSS } from './primitives';
 import type { Style, LoveEvent, Color } from './types';
 import { useRendererMode } from './context';
 
@@ -44,6 +43,7 @@ export function Select({
   const isControlled = controlledValue !== undefined;
   const selectedValue = isControlled ? controlledValue : internalValue;
   const [isOpen, setIsOpen] = useState(false);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const selectedOption = options.find(o => o.value === selectedValue);
   const displayText = selectedOption?.label ?? placeholder;
@@ -55,67 +55,151 @@ export function Select({
     }
     onValueChange?.(optionValue);
     setIsOpen(false);
+    setHoveredIndex(null);
   }, [disabled, isControlled, onValueChange]);
 
   const handleToggle = useCallback(() => {
     if (disabled) return;
     setIsOpen(prev => !prev);
+    setHoveredIndex(null);
   }, [disabled]);
+
+  // Web mode: click-outside detection
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (mode !== 'web' || !isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        setHoveredIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [mode, isOpen]);
+
+  // ── Shared styles ──────────────────────────────────────
+
+  const triggerStyle: Style = {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: isOpen ? color : '#334155',
+    borderRadius: 6,
+    padding: 8,
+    paddingLeft: 12,
+    paddingRight: 12,
+    minWidth: 160,
+    ...style,
+  };
+
+  const panelStyle: Style = {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    backgroundColor: [0.03, 0.03, 0.05, 0.92],
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#40405a',
+    overflow: 'hidden',
+    zIndex: 100,
+  };
+
+  // ── Web mode ───────────────────────────────────────────
 
   if (mode === 'web') {
     return (
-      <select
-        value={selectedValue ?? ''}
-        onChange={e => handleSelect(e.target.value)}
-        disabled={disabled}
+      <div
+        ref={containerRef}
         style={{
-          padding: '6px 10px',
-          fontSize: 14,
-          borderRadius: 6,
-          border: '1px solid #334155',
-          backgroundColor: '#1e293b',
-          color: selectedOption ? '#e2e8f0' : '#64748b',
-          cursor: disabled ? 'not-allowed' : 'pointer',
+          position: 'relative',
+          display: 'inline-flex',
+          flexDirection: 'column',
           opacity: disabled ? 0.5 : 1,
-          outline: 'none',
-          minWidth: 160,
-          ...style,
-        } as React.CSSProperties}
+        }}
       >
-        {!selectedOption && (
-          <option value="" disabled>{placeholder}</option>
+        {/* Trigger */}
+        <div
+          onClick={handleToggle}
+          style={{
+            ...styleToCSS(triggerStyle),
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          <span style={{
+            color: selectedOption ? '#e2e8f0' : '#64748b',
+            fontSize: 14,
+          }}>
+            {displayText}
+          </span>
+          <span style={{ color: '#64748b', fontSize: 8, marginLeft: 8 }}>
+            {isOpen ? '\u25B2' : '\u25BC'}
+          </span>
+        </div>
+
+        {/* Floating panel */}
+        {isOpen && (
+          <div style={styleToCSS(panelStyle)}>
+            {options.map((opt, i) => {
+              const isSelected = opt.value === selectedValue;
+              const isHovered = hoveredIndex === i;
+              return (
+                <div
+                  key={opt.value}
+                  onClick={() => handleSelect(opt.value)}
+                  onMouseEnter={() => setHoveredIndex(i)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  style={{
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    backgroundColor: isSelected
+                      ? 'rgba(97, 166, 250, 0.15)'
+                      : isHovered
+                        ? 'rgba(255, 255, 255, 0.06)'
+                        : 'transparent',
+                    borderBottom: i < options.length - 1 ? '1px solid rgba(64, 64, 89, 0.4)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    userSelect: 'none',
+                  }}
+                >
+                  <span style={{
+                    color: isSelected ? '#61a6fa' : isHovered ? '#e1e4f0' : '#94a3b8',
+                    fontSize: 14,
+                    fontWeight: isSelected ? 600 : 400,
+                  }}>
+                    {opt.label}
+                  </span>
+                  {isSelected && (
+                    <span style={{ color: '#61a6fa', fontSize: 11 }}>
+                      {'*'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
-        {options.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
+      </div>
     );
   }
 
-  // Native mode: inline accordion
+  // ── Native mode (Love2D) ───────────────────────────────
+
   return (
     <Box style={{
+      position: 'relative',
       opacity: disabled ? 0.5 : 1,
-      ...style,
     }}>
-      {/* Header / trigger */}
+      {/* Trigger */}
       <Box
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: '#1e293b',
-          borderWidth: 1,
-          borderColor: isOpen ? color : '#334155',
-          borderRadius: isOpen ? 0 : 6,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: isOpen ? 0 : 1,
-          padding: 8,
-          paddingLeft: 10,
-          paddingRight: 10,
-        }}
+        style={triggerStyle}
         onClick={handleToggle}
       >
         <Text style={{
@@ -129,16 +213,9 @@ export function Select({
         </Text>
       </Box>
 
-      {/* Option list (visible when open) */}
+      {/* Floating panel */}
       {isOpen && (
-        <Box style={{
-          backgroundColor: '#1e293b',
-          borderWidth: 1,
-          borderColor: color,
-          borderTopWidth: 0,
-          borderBottomLeftRadius: 6,
-          borderBottomRightRadius: 6,
-        }}>
+        <Box style={panelStyle}>
           {options.map((opt, i) => {
             const isSelected = opt.value === selectedValue;
             return (
@@ -146,20 +223,30 @@ export function Select({
                 key={opt.value}
                 style={{
                   padding: 8,
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  backgroundColor: isSelected ? '#334155' : 'transparent',
+                  paddingLeft: 12,
+                  paddingRight: 12,
+                  backgroundColor: isSelected ? 'rgba(97, 166, 250, 0.15)' : 'transparent',
                   borderBottomWidth: i < options.length - 1 ? 1 : 0,
-                  borderColor: '#0f172a',
+                  borderColor: 'rgba(64, 64, 89, 0.4)',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+                hoverStyle={{
+                  backgroundColor: isSelected ? 'rgba(97, 166, 250, 0.2)' : 'rgba(255, 255, 255, 0.06)',
                 }}
                 onClick={() => handleSelect(opt.value)}
               >
                 <Text style={{
-                  color: isSelected ? '#e2e8f0' : '#94a3b8',
+                  color: isSelected ? '#61a6fa' : '#94a3b8',
                   fontSize: 14,
+                  fontWeight: isSelected ? 'bold' : undefined,
                 }}>
                   {opt.label}
                 </Text>
+                {isSelected && (
+                  <Text style={{ color: '#61a6fa', fontSize: 11 }}>*</Text>
+                )}
               </Box>
             );
           })}

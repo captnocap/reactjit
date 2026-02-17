@@ -19,11 +19,15 @@
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
  *
+ * MCP discovery (async, connects to MCP servers at lint time):
+ *   mcp-permissions-required    (error)   useMCPServer() without permissions config
+ *   mcp-tool-stale              (warning) Tool in config no longer exposed by server
+ *
  * Bundle checks (post-build, runs on compiled output):
  *   no-duplicate-context         (error)   Multiple createContext("web") = duplicated shared module
  */
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createRequire } from 'node:module';
 
@@ -455,6 +459,462 @@ const callRules = [
   },
 ];
 
+// ── MCP server call detection ─────────────────────────────────
+
+/**
+ * Walk AST to find useMCPServer() calls and extract their config objects.
+ * Returns a list of { name, transport, command, args, url, env, timeout,
+ *                      hasPermissions, file, line, col, ignored }.
+ */
+function findMCPServerCalls(sourceFile, filePath, ts) {
+  const calls = [];
+  const sourceLines = sourceFile.getFullText().split('\n');
+
+  function isIgnored(lineNum) {
+    if (lineNum < 2) return false;
+    const prevLine = sourceLines[lineNum - 2];
+    return prevLine && /ilr-ignore-next-line/.test(prevLine);
+  }
+
+  /** Extract a string literal value from an AST node, or null */
+  function getString(node) {
+    if (ts.isStringLiteral(node)) return node.text;
+    if (ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+    return null;
+  }
+
+  /** Extract a numeric literal value from an AST node, or null */
+  function getNumber(node) {
+    if (ts.isNumericLiteral(node)) return Number(node.text);
+    return null;
+  }
+
+  /** Extract an array of string literals from an array literal node */
+  function getStringArray(node) {
+    if (!ts.isArrayLiteralExpression(node)) return null;
+    const result = [];
+    for (const el of node.elements) {
+      const s = getString(el);
+      if (s != null) result.push(s);
+      else return null; // non-string element — can't analyze
+    }
+    return result;
+  }
+
+  /** Extract a Record<string, string> from an object literal node */
+  function getStringRecord(node) {
+    if (!ts.isObjectLiteralExpression(node)) return null;
+    const result = {};
+    for (const prop of node.properties) {
+      if (!ts.isPropertyAssignment(prop)) return null;
+      const key = ts.isIdentifier(prop.name) ? prop.name.text
+        : ts.isStringLiteral(prop.name) ? prop.name.text : null;
+      if (!key) return null;
+      const val = getString(prop.initializer);
+      if (val == null) return null;
+      result[key] = val;
+    }
+    return result;
+  }
+
+  function visit(node) {
+    if (ts.isCallExpression(node)) {
+      let funcName = null;
+      if (ts.isIdentifier(node.expression)) {
+        funcName = node.expression.text;
+      }
+
+      if (funcName === 'useMCPServer' && node.arguments.length >= 1) {
+        const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
+        const line = pos.line + 1;
+        const configArg = node.arguments[0];
+
+        const info = {
+          name: null,
+          transport: null,
+          command: null,
+          args: null,
+          url: null,
+          env: null,
+          headers: null,
+          timeout: null,
+          hasPermissions: false,
+          file: filePath,
+          line,
+          col: pos.character + 1,
+          ignored: isIgnored(line),
+        };
+
+        // Extract config from object literal
+        if (ts.isObjectLiteralExpression(configArg)) {
+          for (const prop of configArg.properties) {
+            if (!ts.isPropertyAssignment(prop)) continue;
+            const key = ts.isIdentifier(prop.name) ? prop.name.text : null;
+            if (!key) continue;
+
+            switch (key) {
+              case 'name': info.name = getString(prop.initializer); break;
+              case 'transport': info.transport = getString(prop.initializer); break;
+              case 'command': info.command = getString(prop.initializer); break;
+              case 'args': info.args = getStringArray(prop.initializer); break;
+              case 'url': info.url = getString(prop.initializer); break;
+              case 'env': info.env = getStringRecord(prop.initializer); break;
+              case 'headers': info.headers = getStringRecord(prop.initializer); break;
+              case 'timeout': info.timeout = getNumber(prop.initializer); break;
+              case 'permissions': info.hasPermissions = true; break;
+            }
+          }
+        }
+
+        calls.push(info);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return calls;
+}
+
+// ── MCP async discovery and config management ────────────────
+
+const CHARS_PER_TOKEN = 4;
+const PER_TOOL_OVERHEAD = 20;
+
+function estimateToolTokensLint(tool) {
+  const json = JSON.stringify({ name: tool.name, description: tool.description, parameters: tool.inputSchema });
+  return Math.ceil(json.length / CHARS_PER_TOKEN) + PER_TOOL_OVERHEAD;
+}
+
+/**
+ * Connect to an MCP server, discover its tools, and manage mcp.tools.json.
+ * Returns diagnostics to append.
+ */
+async function runMCPDiscovery(mcpCalls, cwd, options = {}) {
+  const diagnostics = [];
+  if (mcpCalls.length === 0) return diagnostics;
+
+  // Read existing config
+  const configPath = join(cwd, 'mcp.tools.json');
+  let config = {};
+  if (existsSync(configPath)) {
+    try {
+      config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    } catch {
+      config = {};
+    }
+  }
+
+  let configModified = false;
+
+  for (const call of mcpCalls) {
+    if (call.ignored) continue;
+
+    // Must have a name to key the config
+    if (!call.name) {
+      diagnostics.push({
+        rule: 'mcp-permissions-required',
+        severity: 'error',
+        message: 'useMCPServer() config must have a string literal "name" property to identify the server in mcp.tools.json',
+        file: call.file,
+        line: call.line,
+        col: call.col,
+      });
+      continue;
+    }
+
+    // Must have a transport
+    if (!call.transport) {
+      diagnostics.push({
+        rule: 'mcp-permissions-required',
+        severity: 'error',
+        message: `useMCPServer('${call.name}'): config must have a "transport" property ('stdio' | 'sse' | 'streamable-http')`,
+        file: call.file,
+        line: call.line,
+        col: call.col,
+      });
+      continue;
+    }
+
+    // Try to connect and discover tools
+    let discoveredTools = null;
+    try {
+      discoveredTools = await discoverMCPTools(call);
+    } catch (err) {
+      diagnostics.push({
+        rule: 'mcp-permissions-required',
+        severity: 'warning',
+        message: `useMCPServer('${call.name}'): could not connect to MCP server (${err.message}). Tool permissions not verified.`,
+        file: call.file,
+        line: call.line,
+        col: call.col,
+      });
+    }
+
+    if (discoveredTools) {
+      const serverConfig = config[call.name] || { tools: {} };
+      const existingTools = serverConfig.tools || {};
+      let newToolCount = 0;
+      let staleToolCount = 0;
+
+      // Add missing tools (disabled by default)
+      for (const tool of discoveredTools) {
+        if (!existingTools[tool.name]) {
+          existingTools[tool.name] = {
+            enabled: false,
+            confirm: false,
+            description: tool.description || '',
+            inputSchema: tool.inputSchema || {},
+            tokenEstimate: estimateToolTokensLint(tool),
+          };
+          newToolCount++;
+        } else {
+          // Update schema and description from live server (keep user's enabled/confirm)
+          existingTools[tool.name].description = tool.description || existingTools[tool.name].description;
+          existingTools[tool.name].inputSchema = tool.inputSchema || existingTools[tool.name].inputSchema;
+          existingTools[tool.name].tokenEstimate = estimateToolTokensLint(tool);
+          // Clear stale flag if tool is back
+          if (existingTools[tool.name]._stale) {
+            delete existingTools[tool.name]._stale;
+          }
+        }
+      }
+
+      // Mark stale tools
+      const discoveredNames = new Set(discoveredTools.map(t => t.name));
+      for (const [name, perm] of Object.entries(existingTools)) {
+        if (!discoveredNames.has(name) && !perm._stale) {
+          existingTools[name]._stale = true;
+          staleToolCount++;
+        }
+      }
+
+      // Compute token budget
+      const allTokens = discoveredTools.reduce((sum, t) => sum + estimateToolTokensLint(t), 0);
+      const pct = ((allTokens / 128000) * 100).toFixed(1);
+
+      serverConfig.tools = existingTools;
+      serverConfig.lastDiscovered = new Date().toISOString();
+      serverConfig.tokenBudget = {
+        totalIfAllEnabled: allTokens,
+        note: `~${pct}% of 128K context`,
+      };
+
+      config[call.name] = serverConfig;
+      configModified = true;
+
+      // Determine if this is a first-time discovery or update
+      const isFirstTime = !existsSync(configPath) || !config[call.name]?.tools;
+
+      if (newToolCount > 0 && Object.keys(existingTools).length === newToolCount) {
+        // All tools are new — first discovery
+        diagnostics.push({
+          rule: 'mcp-permissions-required',
+          severity: 'info',
+          message: `useMCPServer('${call.name}'): discovered ${discoveredTools.length} tools, wrote mcp.tools.json (all disabled). Enable tools in mcp.tools.json and pass permissions to the hook.`,
+          file: call.file,
+          line: call.line,
+          col: call.col,
+        });
+      } else if (newToolCount > 0) {
+        // Some new tools added
+        const newNames = discoveredTools
+          .filter(t => !existingTools[t.name] || existingTools[t.name]._stale)
+          .map(t => `"${t.name}"`)
+          .join(', ');
+        diagnostics.push({
+          rule: 'mcp-permissions-required',
+          severity: 'warning',
+          message: `useMCPServer('${call.name}'): MCP server exposes ${newToolCount} new tool${newToolCount > 1 ? 's' : ''} not in mcp.tools.json — added as disabled.`,
+          file: call.file,
+          line: call.line,
+          col: call.col,
+        });
+      }
+
+      if (staleToolCount > 0) {
+        diagnostics.push({
+          rule: 'mcp-tool-stale',
+          severity: 'warning',
+          message: `useMCPServer('${call.name}'): ${staleToolCount} tool${staleToolCount > 1 ? 's' : ''} in mcp.tools.json no longer exposed by server (marked _stale).`,
+          file: call.file,
+          line: call.line,
+          col: call.col,
+        });
+      }
+    }
+
+    // Check that permissions prop is present in the hook call
+    if (!call.hasPermissions) {
+      diagnostics.push({
+        rule: 'mcp-permissions-required',
+        severity: 'error',
+        message: `useMCPServer('${call.name}'): missing "permissions" prop. Import mcp.tools.json and pass: permissions: mcpConfig.${call.name}`,
+        file: call.file,
+        line: call.line,
+        col: call.col,
+      });
+    }
+  }
+
+  // Write updated config
+  if (configModified) {
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    if (!options.silent) {
+      console.log(`  ${dim('wrote')} mcp.tools.json`);
+    }
+  }
+
+  return diagnostics;
+}
+
+/**
+ * Connect to an MCP server and list its tools.
+ * Uses child_process for stdio, fetch for HTTP transports.
+ * Timeout: 5 seconds for lint-time discovery.
+ */
+async function discoverMCPTools(callInfo) {
+  const DISCOVER_TIMEOUT = 5000;
+
+  if (callInfo.transport === 'stdio') {
+    return discoverStdio(callInfo, DISCOVER_TIMEOUT);
+  } else if (callInfo.transport === 'sse' || callInfo.transport === 'streamable-http') {
+    return discoverHttp(callInfo, DISCOVER_TIMEOUT);
+  }
+
+  throw new Error(`Unknown transport: ${callInfo.transport}`);
+}
+
+async function discoverStdio(info, timeout) {
+  const { spawn } = await import('node:child_process');
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error(`timeout after ${timeout}ms`));
+    }, timeout);
+
+    const env = { ...process.env, ...info.env };
+    const proc = spawn(info.command, info.args || [], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env,
+    });
+
+    let buffer = '';
+    let phase = 'initialize'; // initialize → list → done
+    let reqId = 1;
+
+    proc.stdout.on('data', (chunk) => {
+      buffer += chunk.toString('utf-8');
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const json = JSON.parse(trimmed);
+
+          if (phase === 'initialize' && json.id === 1) {
+            // Initialize response received — send initialized notification + tools/list
+            const notification = JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }) + '\n';
+            proc.stdin.write(notification);
+
+            reqId = 2;
+            const listReq = JSON.stringify({ jsonrpc: '2.0', id: reqId, method: 'tools/list', params: {} }) + '\n';
+            proc.stdin.write(listReq);
+            phase = 'list';
+          } else if (phase === 'list' && json.id === 2) {
+            // Tools list received
+            clearTimeout(timer);
+            proc.stdin.end();
+            proc.kill();
+            if (json.error) {
+              reject(new Error(`MCP error: ${json.error.message}`));
+            } else {
+              resolve(json.result?.tools || []);
+            }
+          }
+        } catch {}
+      }
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(`Failed to spawn: ${err.message}`));
+    });
+
+    proc.on('exit', (code) => {
+      clearTimeout(timer);
+      if (phase !== 'done') {
+        reject(new Error(`Process exited with code ${code} before discovery completed`));
+      }
+    });
+
+    // Send initialize request
+    const initReq = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-11-05',
+        capabilities: {},
+        clientInfo: { name: 'ilovereact-lint', version: '1.0.0' },
+      },
+    }) + '\n';
+    proc.stdin.write(initReq);
+  });
+}
+
+async function discoverHttp(info, timeout) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    // Initialize
+    const initResp = await fetch(info.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...info.headers },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-05',
+          capabilities: {},
+          clientInfo: { name: 'ilovereact-lint', version: '1.0.0' },
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!initResp.ok) throw new Error(`HTTP ${initResp.status}`);
+    const initJson = await initResp.json();
+    if (initJson.error) throw new Error(`MCP: ${initJson.error.message}`);
+
+    // Send initialized notification (fire and forget)
+    fetch(info.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...info.headers },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+    }).catch(() => {});
+
+    // List tools
+    const listResp = await fetch(info.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...info.headers },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+      signal: controller.signal,
+    });
+
+    if (!listResp.ok) throw new Error(`HTTP ${listResp.status}`);
+    const listJson = await listResp.json();
+    if (listJson.error) throw new Error(`MCP: ${listJson.error.message}`);
+
+    return listJson.result?.tools || [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Rules ────────────────────────────────────────────────────
 
 const rules = [
@@ -880,6 +1340,7 @@ export async function runLint(cwd, options = {}) {
   }
 
   const diagnostics = [];
+  const allMCPCalls = [];
 
   for (const filePath of files) {
     const source = readFileSync(filePath, 'utf-8');
@@ -928,6 +1389,19 @@ export async function runLint(cwd, options = {}) {
         }
       }
     }
+
+    // MCP server calls
+    const mcpCalls = findMCPServerCalls(sourceFile, filePath, ts);
+    allMCPCalls.push(...mcpCalls);
+  }
+
+  // Async MCP discovery pass — connect to servers and manage mcp.tools.json
+  if (allMCPCalls.length > 0) {
+    if (!options.silent) {
+      console.log(`  ${dim('MCP')} found ${allMCPCalls.length} useMCPServer() call${allMCPCalls.length > 1 ? 's' : ''}, discovering tools...`);
+    }
+    const mcpDiagnostics = await runMCPDiscovery(allMCPCalls, cwd, options);
+    diagnostics.push(...mcpDiagnostics);
   }
 
   // Sort diagnostics by file, then line
@@ -951,14 +1425,16 @@ export async function runLint(cwd, options = {}) {
         lastFile = relPath;
       }
 
-      const sev = d.severity === 'error' ? red('error') : yellow('warn ');
+      const sev = d.severity === 'error' ? red('error')
+        : d.severity === 'info' ? cyan('info ')
+        : yellow('warn ');
       const loc = dim(`${d.line}:${d.col}`);
       const ruleName = dim(`[${d.rule}]`);
 
       console.log(`    ${loc}  ${sev}  ${d.message}  ${ruleName}`);
 
       if (d.severity === 'error') errors++;
-      else warnings++;
+      else if (d.severity === 'warning') warnings++;
     }
 
     console.log('');

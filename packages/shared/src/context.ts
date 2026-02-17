@@ -23,6 +23,10 @@ export function useBridge(): IBridge {
   return bridge;
 }
 
+export function useBridgeOptional(): IBridge | null {
+  return useContext(BridgeContext);
+}
+
 // ── Renderer mode context (primitives switch on this) ───
 
 export type RendererMode = 'web' | 'native';

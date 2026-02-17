@@ -71,6 +71,12 @@ function styleToCSS(style?: Style): React.CSSProperties {
   if (style.borderColor) css.borderColor = colorToCSS(style.borderColor);
   if (style.overflow) css.overflow = style.overflow;
   if (style.opacity !== undefined) css.opacity = style.opacity;
+  if (style.position) css.position = style.position;
+  if (style.top !== undefined) css.top = style.top;
+  if (style.right !== undefined) css.right = style.right;
+  if (style.bottom !== undefined) css.bottom = style.bottom;
+  if (style.left !== undefined) css.left = style.left;
+  if (style.zIndex !== undefined) css.zIndex = style.zIndex;
 
   // Box shadow
   if (style.shadowColor) {

@@ -25,6 +25,7 @@ export type { IBridge, BridgeEvent, Listener, Unsubscribe } from './bridge';
 export {
   BridgeProvider,
   useBridge,
+  useBridgeOptional,
   RendererProvider,
   useRendererMode,
   type RendererMode,
@@ -144,6 +145,17 @@ export { colors, type CatppuccinColor } from './colors';
 
 // Pixel art (Box-based Unicode symbol rendering)
 export { usePixelArt, PixelArt, getPixelArtSymbols, type PixelArtOptions, type PixelArtProps } from './usePixelArt';
+
+// System info
+export {
+  useSystemInfo,
+  formatUptime,
+  formatBytes,
+  formatMemory,
+  type SystemInfo,
+  type MemoryInfo,
+  type UptimeInfo,
+} from './useSystemInfo';
 
 // Debug tools
 export { useDebug, getDebugData, registerDebug } from './useDebug';

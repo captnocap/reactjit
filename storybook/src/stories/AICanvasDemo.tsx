@@ -148,7 +148,7 @@ function RenderNode({ node, nodes, onAction }: {
           {p.label && (
             <Box style={{ flexDirection: 'row', gap: 8 }}>
               <Text style={{ fontSize: 10, color: TEXT_DIM, flexGrow: 1 }}>{p.label}</Text>
-              <Text style={{ fontSize: 10, color: TEXT_MUTED }}>{val}%</Text>
+              <Text style={{ fontSize: 10, color: TEXT_MUTED }}>{`${val}%`}</Text>
             </Box>
           )}
           <Box style={{ height: 8, backgroundColor: '#1e293b', borderRadius: 4 }}>

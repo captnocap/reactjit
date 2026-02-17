@@ -115,9 +115,13 @@ function NativeTextEditor({
   onSubmit,
   onFocus,
   onBlur,
+  onChange,
+  changeDelay,
   placeholder,
   readOnly,
   lineNumbers,
+  syntaxHighlight,
+  tooltipLevel,
   style,
   textStyle,
 }: TextEditorProps) {
@@ -129,6 +133,7 @@ function NativeTextEditor({
   //   texteditor:focus  — user clicked into the editor
   //   texteditor:blur   — user clicked away or pressed Escape
   //   texteditor:submit — user pressed Ctrl+Enter
+  //   texteditor:change — user stopped typing for changeDelay seconds
 
   // Merge text style into the main style so Lua can read fontSize/fontFamily/color
   const mergedStyle: Style = {
@@ -168,6 +173,14 @@ function NativeTextEditor({
     [onSubmit, onChangeText],
   );
 
+  const handleChange = useCallback(
+    (event: LoveEvent) => {
+      const text = (event as any).value ?? '';
+      onChange?.(text);
+    },
+    [onChange],
+  );
+
   // Data props that cross the bridge (Lua reads from node.props)
   const props: Record<string, any> = {
     style: mergedStyle,
@@ -175,7 +188,13 @@ function NativeTextEditor({
     placeholder: placeholder ?? '',
     readOnly: readOnly ?? false,
     lineNumbers: lineNumbers !== false,
+    syntaxHighlight: syntaxHighlight ?? false,
+    tooltipLevel: tooltipLevel ?? '',
   };
+
+  if (changeDelay !== undefined) {
+    props.changeDelay = changeDelay;
+  }
 
   // Controlled value support
   if (value !== undefined) {
@@ -187,6 +206,7 @@ function NativeTextEditor({
   if (onFocus) props['onTextEditorFocus'] = handleFocus;
   if (onBlur || onChangeText) props['onTextEditorBlur'] = handleBlur;
   if (onSubmit) props['onTextEditorSubmit'] = handleSubmit;
+  if (onChange) props['onTextEditorChange'] = handleChange;
 
   return React.createElement('TextEditor', props);
 }

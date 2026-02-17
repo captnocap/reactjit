@@ -640,6 +640,85 @@ function ReactLove.init(config)
     end
   end
 
+  -- Register system info RPC handler
+  rpcHandlers["sys:info"] = function()
+    local info = {}
+
+    -- User & hostname
+    info.user     = os.getenv("USER") or os.getenv("USERNAME") or "unknown"
+    local hh = io.popen("hostname")
+    if hh then info.hostname = hh:read("*l") or "unknown"; hh:close()
+    else info.hostname = "unknown" end
+
+    -- OS / distro
+    local rf = io.open("/etc/os-release")
+    if rf then
+      local content = rf:read("*a"); rf:close()
+      info.os = content:match('PRETTY_NAME="(.-)"') or "Linux"
+    else
+      info.os = "Unknown OS"
+    end
+
+    -- Kernel
+    local kh = io.popen("uname -r")
+    if kh then info.kernel = kh:read("*l") or "unknown"; kh:close()
+    else info.kernel = "unknown" end
+
+    -- Shell
+    local sh = os.getenv("SHELL") or "unknown"
+    info.shell = sh:match("([^/]+)$") or sh
+
+    -- CPU
+    local cf = io.open("/proc/cpuinfo")
+    if cf then
+      local cpuinfo = cf:read("*a"); cf:close()
+      local model = cpuinfo:match("model name%s*:%s*(.-)\n") or "unknown"
+      model = model:gsub("%s+", " "):gsub("%(R%)", ""):gsub("%(TM%)", "")
+      local cores = 0
+      for _ in cpuinfo:gmatch("processor%s*:") do cores = cores + 1 end
+      info.cpu = model .. " (" .. cores .. " cores)"
+    else
+      info.cpu = "unknown"
+    end
+
+    -- Architecture
+    local ah = io.popen("uname -m")
+    if ah then info.arch = ah:read("*l") or "unknown"; ah:close()
+    else info.arch = "unknown" end
+
+    -- Memory (structured: used/total in GiB)
+    local mf = io.open("/proc/meminfo")
+    if mf then
+      local meminfo = mf:read("*a"); mf:close()
+      local totalKB     = tonumber(meminfo:match("MemTotal:%s*(%d+)")) or 0
+      local availableKB = tonumber(meminfo:match("MemAvailable:%s*(%d+)")) or 0
+      local usedKB = totalKB - availableKB
+      info.memory = {
+        used  = usedKB / (1024 * 1024),
+        total = totalKB / (1024 * 1024),
+        unit  = "GiB",
+      }
+    else
+      info.memory = { used = 0, total = 0, unit = "GiB" }
+    end
+
+    -- Uptime (structured: days/hours/minutes)
+    local uf = io.open("/proc/uptime")
+    if uf then
+      local content = uf:read("*a"); uf:close()
+      local secs = tonumber(content:match("^(%S+)")) or 0
+      info.uptime = {
+        days    = math.floor(secs / 86400),
+        hours   = math.floor((secs % 86400) / 3600),
+        minutes = math.floor((secs % 3600) / 60),
+      }
+    else
+      info.uptime = { days = 0, hours = 0, minutes = 0 }
+    end
+
+    return info
+  end
+
   -- Register Tor RPC handlers
   if tor then
     rpcHandlers["tor:getHostname"] = function()
@@ -754,7 +833,17 @@ function ReactLove.update(dt)
     -- Update TextEditor/TextInput blink timer if one has focus (canvas mode)
     local canvasFocusedNode = focus.get()
     if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" then
-      texteditor.update(canvasFocusedNode, dt)
+      local result = texteditor.update(canvasFocusedNode, dt)
+      if result == "change" then
+        pushEvent({
+          type = "texteditor:change",
+          payload = {
+            type = "texteditor:change",
+            targetId = canvasFocusedNode.id,
+            value = texteditor.getValue(canvasFocusedNode),
+          }
+        })
+      end
     elseif canvasFocusedNode and canvasFocusedNode.type == "TextInput" then
       textinput.update(canvasFocusedNode, dt)
     end
@@ -1196,7 +1285,17 @@ function ReactLove.update(dt)
   -- Update TextEditor/TextInput blink timer if one has focus
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    texteditor.update(focusedNode, dt)
+    local result = texteditor.update(focusedNode, dt)
+    if result == "change" then
+      pushEvent({
+        type = "texteditor:change",
+        payload = {
+          type = "texteditor:change",
+          targetId = focusedNode.id,
+          value = texteditor.getValue(focusedNode),
+        }
+      })
+    end
   elseif focusedNode and focusedNode.type == "TextInput" then
     textinput.update(focusedNode, dt)
   end

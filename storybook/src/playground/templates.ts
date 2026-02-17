@@ -83,32 +83,53 @@ export const templates: Template[] = [
   {
     id: 'dashboard',
     name: 'Dashboard',
-    description: 'KPIs, charts, tables, progress bars',
+    description: 'Live KPIs, animated charts, tables, progress bars',
     category: 'Data',
     code: `function MyComponent() {
-  var MONTHLY_REVENUE = [
-    { label: 'Jul', value: 32 },
-    { label: 'Aug', value: 41 },
-    { label: 'Sep', value: 38 },
-    { label: 'Oct', value: 52 },
-    { label: 'Nov', value: 48 },
-    { label: 'Dec', value: 61 },
-    { label: 'Jan', value: 57 },
-  ];
+  var BG = '#0f172a';
+  var CARD = '#1e293b';
+  var BORDER = '#334155';
+  var BRIGHT = '#e2e8f0';
+  var DIM = '#64748b';
 
-  var SPARK_REVENUE = [28, 32, 30, 41, 38, 45, 52, 48, 55, 61, 57, 63];
-  var SPARK_USERS   = [120, 135, 142, 128, 155, 168, 172, 180, 195, 210, 225, 247];
-  var SPARK_ERRORS  = [12, 8, 15, 6, 4, 9, 3, 7, 2, 5, 3, 1];
-  var SPARK_LATENCY = [180, 165, 172, 155, 148, 162, 145, 138, 142, 135, 128, 142];
+  function rand(min, max) {
+    return Math.round(min + Math.random() * (max - min));
+  }
+  function drift(base, range) {
+    return Math.max(0, base + (Math.random() - 0.4) * range);
+  }
 
-  var PRODUCTS = [
-    { name: 'Widget Pro', category: 'Hardware', sales: 1247, revenue: '$48.2k', status: 'active' },
-    { name: 'DataSync', category: 'SaaS', sales: 892, revenue: '$35.6k', status: 'active' },
-    { name: 'CloudStore', category: 'Storage', sales: 634, revenue: '$28.1k', status: 'active' },
-    { name: 'NetGuard', category: 'Security', sales: 456, revenue: '$22.8k', status: 'beta' },
-    { name: 'FormBuilder', category: 'SaaS', sales: 321, revenue: '$12.8k', status: 'active' },
-    { name: 'OldTool', category: 'Legacy', sales: 89, revenue: '$3.5k', status: 'deprecated' },
-  ];
+  function generateRevenue() {
+    return [
+      { label: 'Jul', value: rand(28, 40) },
+      { label: 'Aug', value: rand(35, 48) },
+      { label: 'Sep', value: rand(32, 50) },
+      { label: 'Oct', value: rand(45, 60) },
+      { label: 'Nov', value: rand(40, 55) },
+      { label: 'Dec', value: rand(50, 68) },
+      { label: 'Jan', value: rand(48, 65) },
+    ];
+  }
+  function generateSpark(base, variance) {
+    return base.map(function(v) { return Math.max(1, Math.round(v + (Math.random() - 0.5) * variance)); });
+  }
+
+  var SPARK_BASE_REVENUE = [28, 32, 30, 41, 38, 45, 52, 48, 55, 61, 57, 63];
+  var SPARK_BASE_USERS   = [120, 135, 142, 128, 155, 168, 172, 180, 195, 210, 225, 247];
+  var SPARK_BASE_ERRORS  = [12, 8, 15, 6, 4, 9, 3, 7, 2, 5, 3, 1];
+  var SPARK_BASE_LATENCY = [180, 165, 172, 155, 148, 162, 145, 138, 142, 135, 128, 142];
+
+  function generateProducts() {
+    var baseSales = [1247, 892, 634, 456, 321, 89];
+    return [
+      { name: 'Widget Pro', category: 'Hardware', sales: baseSales[0] + rand(-50, 80), revenue: '$' + (48.2 + (Math.random() - 0.3) * 4).toFixed(1) + 'k', status: 'active' },
+      { name: 'DataSync', category: 'SaaS', sales: baseSales[1] + rand(-30, 60), revenue: '$' + (35.6 + (Math.random() - 0.3) * 3).toFixed(1) + 'k', status: 'active' },
+      { name: 'CloudStore', category: 'Storage', sales: baseSales[2] + rand(-20, 50), revenue: '$' + (28.1 + (Math.random() - 0.3) * 2.5).toFixed(1) + 'k', status: 'active' },
+      { name: 'NetGuard', category: 'Security', sales: baseSales[3] + rand(-15, 40), revenue: '$' + (22.8 + (Math.random() - 0.3) * 2).toFixed(1) + 'k', status: 'beta' },
+      { name: 'FormBuilder', category: 'SaaS', sales: baseSales[4] + rand(-10, 30), revenue: '$' + (12.8 + (Math.random() - 0.3) * 1.5).toFixed(1) + 'k', status: 'active' },
+      { name: 'OldTool', category: 'Legacy', sales: baseSales[5] + rand(-5, 15), revenue: '$' + (3.5 + (Math.random() - 0.3) * 0.8).toFixed(1) + 'k', status: 'deprecated' },
+    ];
+  }
 
   var statusVariant = function(s) {
     if (s === 'active') return 'success';
@@ -117,8 +138,8 @@ export const templates: Template[] = [
   };
 
   var PRODUCT_COLUMNS = [
-    { key: 'name', title: 'Product', width: 100 },
-    { key: 'category', title: 'Category', width: 80 },
+    { key: 'name', title: 'Product' },
+    { key: 'category', title: 'Category' },
     { key: 'sales', title: 'Sales', width: 60, align: 'right' },
     { key: 'revenue', title: 'Revenue', width: 70, align: 'right' },
     {
@@ -129,28 +150,95 @@ export const templates: Template[] = [
     },
   ];
 
-  var BG = '#0f172a';
-  var CARD = '#1e293b';
-  var BORDER = '#334155';
-  var BRIGHT = '#e2e8f0';
-  var DIM = '#64748b';
+  var [tick, setTick] = useState(0);
+  var [revenue, setRevenue] = useState(generateRevenue);
+  var [products, setProducts] = useState(generateProducts);
+  var [kpis, setKpis] = useState({
+    revenue: 63100, users: 1247, errors: 1, latency: 142,
+    revChange: 8.2, userChange: 12.1, errChange: -72, latChange: -5.3,
+  });
+  var [sparks, setSparks] = useState({
+    revenue: SPARK_BASE_REVENUE, users: SPARK_BASE_USERS,
+    errors: SPARK_BASE_ERRORS, latency: SPARK_BASE_LATENCY,
+  });
+  var [targets, setTargets] = useState([
+    { label: 'Revenue Goal', value: 0.78, color: '#22c55e' },
+    { label: 'User Growth', value: 0.62, color: '#3b82f6' },
+    { label: 'Uptime SLA', value: 0.995, color: '#06b6d4' },
+    { label: 'NPS Score', value: 0.84, color: '#8b5cf6' },
+    { label: 'Bug Backlog', value: 0.35, color: '#f59e0b' },
+  ]);
+
+  useEffect(function() {
+    var interval = setInterval(function() {
+      setTick(function(t) { return t + 1; });
+      setRevenue(generateRevenue());
+      setProducts(generateProducts());
+      setKpis(function(prev) {
+        return {
+          revenue: Math.round(drift(prev.revenue, 3000)),
+          users: Math.round(drift(prev.users, 80)),
+          errors: Math.max(0, Math.round(drift(prev.errors, 2))),
+          latency: Math.max(50, Math.round(drift(prev.latency, 20))),
+          revChange: +(drift(prev.revChange, 3)).toFixed(1),
+          userChange: +(drift(prev.userChange, 2)).toFixed(1),
+          errChange: Math.min(0, +(drift(prev.errChange, 15)).toFixed(1)),
+          latChange: Math.min(0, +(drift(prev.latChange, 3)).toFixed(1)),
+        };
+      });
+      setSparks({
+        revenue: generateSpark(SPARK_BASE_REVENUE, 10),
+        users: generateSpark(SPARK_BASE_USERS, 30),
+        errors: generateSpark(SPARK_BASE_ERRORS, 5),
+        latency: generateSpark(SPARK_BASE_LATENCY, 25),
+      });
+      setTargets(function(prev) {
+        return prev.map(function(t) {
+          return { label: t.label, color: t.color, value: Math.max(0.05, Math.min(1, t.value + (Math.random() - 0.45) * 0.08)) };
+        });
+      });
+    }, 3000);
+    return function() { clearInterval(interval); };
+  }, []);
+
+  function KpiValue(props) {
+    var animated = useSpring(props.value, { stiffness: 80, damping: 18 });
+    var display = animated >= 1000
+      ? (animated / 1000).toFixed(1) + 'k'
+      : String(Math.round(animated));
+    return ( // ilr-ignore-next-line
+      <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>
+        {props.prefix + display + props.suffix}
+      </Text>
+    );
+  }
+
+  var kpiCards = [
+    { label: 'Revenue', raw: kpis.revenue, prefix: '$', suffix: '', data: sparks.revenue, color: '#22c55e', change: kpis.revChange },
+    { label: 'Users', raw: kpis.users, prefix: '', suffix: '', data: sparks.users, color: '#3b82f6', change: kpis.userChange },
+    { label: 'Errors', raw: kpis.errors, prefix: '', suffix: '', data: sparks.errors, color: '#ef4444', change: kpis.errChange },
+    { label: 'Latency', raw: kpis.latency, prefix: '', suffix: 'ms', data: sparks.latency, color: '#f59e0b', change: kpis.latChange },
+  ];
+
+  var secondsAgo = tick * 3;
+  var timeLabel = secondsAgo === 0 ? 'just now' : secondsAgo + 's ago';
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 16, gap: 12 }}>
+    <ScrollView style={{ width: '100%', height: '100%', backgroundColor: BG }}>
+    <Box style={{ padding: 16, gap: 12 }}>
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={{ color: BRIGHT, fontSize: 18, fontWeight: 'bold' }}>Dashboard</Text>
-        <Text style={{ color: DIM, fontSize: 10 }}>Last updated: just now</Text>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
+          <Text style={{ color: DIM, fontSize: 10 }}>Live</Text>
+          <Text style={{ color: '#475569', fontSize: 10 }}>{'(' + timeLabel + ')'}</Text>
+        </Box>
       </Box>
 
       <Divider color={BORDER} />
 
       <Box style={{ flexDirection: 'row', width: '100%', gap: 10 }}>
-        {[
-          { label: 'Revenue', value: '$63.1k', data: SPARK_REVENUE, color: '#22c55e', change: '+8.2%' },
-          { label: 'Users', value: '1,247', data: SPARK_USERS, color: '#3b82f6', change: '+12.1%' },
-          { label: 'Errors', value: '1', data: SPARK_ERRORS, color: '#ef4444', change: '-72%' },
-          { label: 'Latency', value: '142ms', data: SPARK_LATENCY, color: '#f59e0b', change: '-5.3%' },
-        ].map(function(kpi) {
+        {kpiCards.map(function(kpi) {
           return (
             <Box key={kpi.label} style={{
               flexGrow: 1,
@@ -163,9 +251,11 @@ export const templates: Template[] = [
             }}>
               <Text style={{ color: DIM, fontSize: 10 }}>{kpi.label}</Text>
               <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box style={{ gap: 2, width: 70, height: 30 }}>
-                  <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>{kpi.value}</Text>
-                  <Text style={{ color: kpi.color, fontSize: 10, fontWeight: 'bold' }}>{kpi.change}</Text>
+                <Box style={{ gap: 2, width: 80, height: 30 }}>
+                  <KpiValue value={kpi.raw} prefix={kpi.prefix} suffix={kpi.suffix} />
+                  <Text style={{ color: kpi.color, fontSize: 10, fontWeight: 'bold' }}>
+                    {(kpi.change >= 0 ? '+' : '') + kpi.change + '%'}
+                  </Text>
                 </Box>
                 <Sparkline data={kpi.data} width={60} height={20} color={kpi.color} />
               </Box>
@@ -174,7 +264,7 @@ export const templates: Template[] = [
         })}
       </Box>
 
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 12, flexGrow: 1 }}>
+      <Box style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
         <Box style={{
           flexGrow: 1,
           backgroundColor: CARD,
@@ -185,11 +275,11 @@ export const templates: Template[] = [
           gap: 8,
         }}>
           <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Monthly Revenue ($k)</Text>
-          <BarChart data={MONTHLY_REVENUE} height={90} barWidth={24} gap={10} showValues color="#3b82f6" />
+          <BarChart data={revenue} height={120} showValues color="#3b82f6" />
         </Box>
 
         <Box style={{
-          width: 180,
+          width: 200,
           backgroundColor: CARD,
           borderRadius: 8,
           borderWidth: 1,
@@ -198,13 +288,7 @@ export const templates: Template[] = [
           gap: 10,
         }}>
           <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Targets</Text>
-          {[
-            { label: 'Revenue Goal', value: 0.78, color: '#22c55e' },
-            { label: 'User Growth', value: 0.62, color: '#3b82f6' },
-            { label: 'Uptime SLA', value: 0.995, color: '#06b6d4' },
-            { label: 'NPS Score', value: 0.84, color: '#8b5cf6' },
-            { label: 'Bug Backlog', value: 0.35, color: '#f59e0b' },
-          ].map(function(metric) {
+          {targets.map(function(metric) {
             return (
               <Box key={metric.label} style={{ gap: 3 }}>
                 <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
@@ -213,7 +297,7 @@ export const templates: Template[] = [
                     {Math.round(metric.value * 100) + '%'}
                   </Text>
                 </Box>
-                <ProgressBar value={metric.value} color={metric.color} height={6} />
+                <ProgressBar value={metric.value} color={metric.color} height={6} animated />
               </Box>
             );
           })}
@@ -221,6 +305,7 @@ export const templates: Template[] = [
       </Box>
 
       <Box style={{
+        width: '100%',
         backgroundColor: CARD,
         borderRadius: 8,
         borderWidth: 1,
@@ -229,9 +314,10 @@ export const templates: Template[] = [
         gap: 8,
       }}>
         <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Top Products</Text>
-        <Table columns={PRODUCT_COLUMNS} data={PRODUCTS} rowKey="name" striped />
+        <Table columns={PRODUCT_COLUMNS} data={products} rowKey="name" striped />
       </Box>
     </Box>
+    </ScrollView>
   );
 }`,
   },
@@ -434,151 +520,305 @@ export const templates: Template[] = [
   {
     id: 'weather',
     name: 'Weather',
-    description: 'Weather dashboard with pixel art and forecast',
+    description: 'Interactive weather app with city switching, charts, animated temp',
     category: 'Widget',
     code: `function MyComponent() {
+  var cityIdx = useState(0);
+  var activeTab = useState('today');
+  var currentCity = cityIdx[0];
+  var setCity = cityIdx[1];
+  var tab = activeTab[0];
+  var setTab = activeTab[1];
+
+  /* ── Pixel art icons ── */
   var SUN_LINES = [
     '  .  .  .  ',
     ' .       . ',
     '.  .   .  .',
-    '   .XXX.   ',
-    '.  XXXXX  .',
-    '   XXXXX   ',
-    '.  XXXXX  .',
-    '   .XXX.   ',
+    '   .###.   ',
+    '.  #####  .',
+    '   #####   ',
+    '.  #####  .',
+    '   .###.   ',
     '.  .   .  .',
     ' .       . ',
     '  .  .  .  ',
   ];
+  var CLOUD_LINES = [
+    '    ###      ',
+    '  #######    ',
+    ' #########   ',
+    '############ ',
+    '#############',
+    ' ########### ',
+  ];
+  var RAIN_LINES = [
+    '    ###      ',
+    '  #######    ',
+    ' #########   ',
+    '############ ',
+    '#############',
+    ' ########### ',
+    '  .    .     ',
+    '   .    .  . ',
+    '  .    .     ',
+  ];
+  var ICONS = {
+    sun:   { lines: SUN_LINES,   primary: '#FFD93D', accent: '#FFA726', accentR: 3 },
+    cloud: { lines: CLOUD_LINES, primary: '#90A4AE', accent: null,      accentR: 0 },
+    rain:  { lines: RAIN_LINES,  primary: '#78909C', accent: '#60A5FA', accentR: 2 },
+  };
 
-  var SUN_PX = 8;
-  var SUN_GRID = SUN_LINES.map(function(line) {
-    return line.split('').map(function(ch) {
-      if (ch === 'X') return 'core';
-      if (ch === '.') return 'ray';
-      return null;
-    });
-  });
+  function renderIcon(type, px) {
+    var def = ICONS[type];
+    var lines = def.lines;
+    var maxW = 0;
+    for (var li = 0; li < lines.length; li++) { if (lines[li].length > maxW) maxW = lines[li].length; }
+    return (
+      <Box style={{ width: maxW * px, height: lines.length * px }}>
+        {lines.map(function(line, r) {
+          var chars = line.split('');
+          while (chars.length < maxW) chars.push(' ');
+          return (
+            <Box key={r} style={{ flexDirection: 'row' }}>
+              {chars.map(function(ch, c) {
+                var color = ch === '#' ? def.primary : (ch === '.' && def.accent) ? def.accent : null;
+                var radius = (ch === '.' && def.accent) ? def.accentR : (color ? 1 : 0);
+                return (
+                  <Box key={c} style={{
+                    width: px, height: px,
+                    backgroundColor: color || 'transparent',
+                    borderRadius: radius,
+                  }} />
+                );
+              })}
+            </Box>
+          );
+        })}
+      </Box>
+    );
+  }
 
-  var BG_CARD = '#111827';
-  var BORDER = '#1E293B';
+  /* ── Colors ── */
+  var BG     = '#0b1120';
+  var CARD   = '#111827';
+  var BORDER = '#1e293b';
+  var BRIGHT = '#e2e8f0';
+  var DIM    = '#64748b';
+  var MUTED  = '#475569';
   var ACCENT = '#60A5FA';
-  var WARM = '#F59E0B';
-  var HOT = '#EF4444';
-  var COOL = '#06B6D4';
-  var BRIGHT = '#E2E8F0';
-  var DIM = '#64748B';
+  var WARM   = '#F59E0B';
+  var HOT    = '#EF4444';
+  var COOL   = '#06B6D4';
 
-  var FORECAST = [
-    { day: 'Mon', temp: 72 },
-    { day: 'Tue', temp: 68 },
-    { day: 'Wed', temp: 65 },
-    { day: 'Thu', temp: 70 },
-    { day: 'Fri', temp: 75 },
-    { day: 'Sat', temp: 78 },
-    { day: 'Sun', temp: 74 },
+  function tempColor(t) {
+    if (t >= 80) return HOT;
+    if (t >= 70) return WARM;
+    if (t >= 60) return ACCENT;
+    if (t >= 50) return COOL;
+    return '#8B5CF6';
+  }
+
+  function formatHour(h) {
+    if (h === 0) return '12a';
+    if (h < 12) return h + 'a';
+    if (h === 12) return '12p';
+    return (h - 12) + 'p';
+  }
+
+  /* ── City data ── */
+  var CITIES = [
+    {
+      name: 'San Francisco', temp: 62, feelsLike: 59, high: 66, low: 54,
+      condition: 'Partly Cloudy', badge: 'info', icon: 'cloud',
+      humidity: 0.72, windSpeed: 14, uvIndex: 0.36, cloudCover: 0.65,
+      sunrise: '6:52 AM', sunset: '5:48 PM', pressure: 30.12, dewPoint: 52,
+      hourly: [58,57,56,55,56,58,60,62,64,65,66,64,63,62,61,60,59,58,57,56,55,55,54,55],
+      forecast: [
+        { label: 'Mon', value: 64 }, { label: 'Tue', value: 61 },
+        { label: 'Wed', value: 58 }, { label: 'Thu', value: 63 },
+        { label: 'Fri', value: 66 }, { label: 'Sat', value: 68 },
+        { label: 'Sun', value: 65 },
+      ],
+    },
+    {
+      name: 'Miami', temp: 84, feelsLike: 89, high: 88, low: 76,
+      condition: 'Sunny', badge: 'warning', icon: 'sun',
+      humidity: 0.68, windSpeed: 8, uvIndex: 0.82, cloudCover: 0.12,
+      sunrise: '6:58 AM', sunset: '6:18 PM', pressure: 30.05, dewPoint: 72,
+      hourly: [78,77,76,76,77,79,81,83,85,87,88,87,86,85,84,83,82,81,80,79,78,78,77,77],
+      forecast: [
+        { label: 'Mon', value: 86 }, { label: 'Tue', value: 84 },
+        { label: 'Wed', value: 82 }, { label: 'Thu', value: 85 },
+        { label: 'Fri', value: 88 }, { label: 'Sat', value: 87 },
+        { label: 'Sun', value: 83 },
+      ],
+    },
+    {
+      name: 'Seattle', temp: 48, feelsLike: 43, high: 52, low: 41,
+      condition: 'Rainy', badge: 'default', icon: 'rain',
+      humidity: 0.89, windSpeed: 18, uvIndex: 0.09, cloudCover: 0.92,
+      sunrise: '7:12 AM', sunset: '5:32 PM', pressure: 29.85, dewPoint: 45,
+      hourly: [44,43,43,42,42,43,44,46,48,49,50,51,52,51,50,49,48,47,46,45,44,43,43,42],
+      forecast: [
+        { label: 'Mon', value: 50 }, { label: 'Tue', value: 47 },
+        { label: 'Wed', value: 45 }, { label: 'Thu', value: 48 },
+        { label: 'Fri', value: 52 }, { label: 'Sat', value: 54 },
+        { label: 'Sun', value: 51 },
+      ],
+    },
   ];
 
-  function tempColor(temp) {
-    if (temp >= 76) return HOT;
-    if (temp >= 72) return WARM;
-    if (temp >= 68) return ACCENT;
-    return COOL;
-  }
+  var city = CITIES[currentCity];
+  var animatedTemp = useSpring(city.temp, { stiffness: 60, damping: 14 });
 
-  function tempBarHeight(temp) {
-    var clamped = Math.max(60, Math.min(80, temp));
-    return 4 + Math.round(((clamped - 60) / 20) * 16);
-  }
+  var stats = [
+    { label: 'Humidity', value: city.humidity, display: Math.round(city.humidity * 100) + '%', color: COOL },
+    { label: 'Wind', value: Math.min(city.windSpeed / 40, 1), display: city.windSpeed + ' mph', color: ACCENT },
+    { label: 'UV Index', value: city.uvIndex, display: Math.round(city.uvIndex * 11) + '/11', color: city.uvIndex > 0.5 ? HOT : WARM },
+    { label: 'Cloud Cover', value: city.cloudCover, display: Math.round(city.cloudCover * 100) + '%', color: '#90A4AE' },
+  ];
+
+  var TAB_ITEMS = [
+    { id: 'today', label: 'Today' },
+    { id: 'forecast', label: '7-Day Forecast' },
+  ];
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
-      <Box style={{
-        flexDirection: 'row',
-        gap: 20,
-        flexGrow: 1,
-        backgroundColor: BG_CARD,
-        borderRadius: 12,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: BORDER,
-      }}>
-        <Box style={{ width: 11 * SUN_PX, height: 11 * SUN_PX }}>
-          {SUN_GRID.map(function(row, r) {
+    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 14, gap: 10 }}>
+
+      <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 6 }}>
+          {CITIES.map(function(c, i) {
             return (
-              <Box key={r} style={{ flexDirection: 'row' }}>
-                {row.map(function(cell, c) {
-                  return (
-                    <Box key={c} style={{
-                      width: SUN_PX,
-                      height: SUN_PX,
-                      borderRadius: cell === 'core' ? 2 : cell === 'ray' ? 4 : 0,
-                      backgroundColor: cell === 'core' ? '#FFD93D' : cell === 'ray' ? '#FFA726' : 'transparent',
-                    }} />
-                  );
-                })}
-              </Box>
+              <Pressable
+                key={c.name}
+                onPress={function() { setCity(i); }}
+                style={function(state) { return {
+                  paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4,
+                  borderRadius: 6,
+                  backgroundColor: i === currentCity ? '#334155' : state.hovered ? '#1e293b' : 'transparent',
+                  borderWidth: 1,
+                  borderColor: i === currentCity ? ACCENT : 'transparent',
+                }; }}
+              >
+                <Text style={{
+                  color: i === currentCity ? BRIGHT : DIM,
+                  fontSize: 11,
+                  fontWeight: i === currentCity ? 'bold' : 'normal',
+                }}>
+                  {c.name}
+                </Text>
+              </Pressable>
             );
           })}
         </Box>
-
-        <Box style={{ flexGrow: 1, gap: 4 }}>
-          <Text style={{ color: DIM, fontSize: 12 }}>San Francisco, CA</Text>
-          <Text style={{ color: '#FFFFFF', fontSize: 48, fontWeight: 'bold' }}>72</Text>
-          <Text style={{ color: WARM, fontSize: 16, fontWeight: 'bold' }}>Sunny</Text>
-          <Text style={{ color: DIM, fontSize: 12 }}>Feels like 70F</Text>
-        </Box>
-
-        <Box style={{ width: 160, gap: 6 }}>
-          {[
-            ['Humidity', '58%', COOL],
-            ['Wind', '12 mph NW', ACCENT],
-            ['Pressure', '30.12 inHg', DIM],
-            ['UV Index', '6 (High)', WARM],
-          ].map(function(item) {
-            return (
-              <Box key={item[0]} style={{ flexDirection: 'row', gap: 6 }}>
-                <Text style={{ color: item[2], fontSize: 13, fontWeight: 'bold' }}>{item[0] + ':'}</Text>
-                <Text style={{ color: BRIGHT, fontSize: 13 }}>{item[1]}</Text>
-              </Box>
-            );
-          })}
-        </Box>
+        <Text style={{ color: MUTED, fontSize: 10 }}>Feb 16, 2026</Text>
       </Box>
 
       <Box style={{
-        flexGrow: 1,
-        backgroundColor: BG_CARD,
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: BORDER,
-        gap: 10,
+        flexDirection: 'row', backgroundColor: CARD, borderRadius: 12,
+        padding: 16, borderWidth: 1, borderColor: BORDER, gap: 16, alignItems: 'center',
       }}>
-        <Text style={{ color: BRIGHT, fontSize: 14, fontWeight: 'bold' }}>7-Day Forecast</Text>
-        <Divider color={BORDER} />
-        <Box style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          flexGrow: 1,
-          width: '100%',
-        }}>
-          {FORECAST.map(function(f) {
+        {renderIcon(city.icon, 6)}
+        <Box style={{ flexGrow: 1, gap: 2 }}>
+          <Text style={{ color: tempColor(city.temp), fontSize: 48, fontWeight: 'bold' }}>
+            {Math.round(animatedTemp) + 'F'}
+          </Text>
+          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <Badge label={city.condition} variant={city.badge} />
+            <Text style={{ color: DIM, fontSize: 11 }}>{'Feels like ' + city.feelsLike + 'F'}</Text>
+          </Box>
+          <Text style={{ color: MUTED, fontSize: 11 }}>{'H:' + city.high + 'F  L:' + city.low + 'F'}</Text>
+        </Box>
+        <Box style={{ gap: 4, alignItems: 'center' }}>
+          <Text style={{ color: DIM, fontSize: 9 }}>24h Trend</Text>
+          <Sparkline data={city.hourly} width={80} height={32} color={tempColor(city.temp)} />
+        </Box>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', width: '100%', gap: 8 }}>
+        {stats.map(function(s) {
+          return (
+            <Box key={s.label} style={{
+              flexGrow: 1, backgroundColor: CARD, borderRadius: 8,
+              padding: 10, gap: 6, borderWidth: 1, borderColor: BORDER,
+            }}>
+              <Text style={{ color: DIM, fontSize: 9 }}>{s.label}</Text>
+              <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>{s.display}</Text>
+              <ProgressBar value={s.value} color={s.color} height={4} />
+            </Box>
+          );
+        })}
+      </Box>
+
+      <Box style={{ flexGrow: 1, backgroundColor: CARD, borderRadius: 12, borderWidth: 1, borderColor: BORDER }}>
+        <Box style={{ padding: 8 }}>
+          <Tabs tabs={TAB_ITEMS} activeId={tab} onSelect={setTab} variant="pill" />
+        </Box>
+        {tab === 'today' ? (
+          <Box style={{ flexGrow: 1, padding: 14, gap: 8 }}>
+            <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Hourly Temperature</Text>
+            <BarChart
+              data={city.hourly.map(function(t, i) {
+                return { label: i % 3 === 0 ? formatHour(i) : '', value: t, color: tempColor(t) };
+              })}
+              height={80}
+              gap={1}
+              showLabels
+              interactive
+            />
+            <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
+              {[
+                { label: 'Now', temp: city.temp },
+                { label: 'Peak', temp: city.high },
+                { label: 'Low', temp: city.low },
+              ].map(function(item) {
+                return (
+                  <Box key={item.label} style={{ flexDirection: 'row', gap: 4 }}>
+                    <Text style={{ color: DIM, fontSize: 10 }}>{item.label + ':'}</Text>
+                    <Text style={{ color: tempColor(item.temp), fontSize: 10, fontWeight: 'bold' }}>{item.temp + 'F'}</Text>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        ) : (
+          <Box style={{ flexGrow: 1, padding: 14, gap: 8 }}>
+            <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Weekly Forecast</Text>
+            <BarChart
+              data={city.forecast.map(function(f) {
+                return { label: f.label, value: f.value, color: tempColor(f.value) };
+              })}
+              height={110}
+              showLabels
+              showValues
+              interactive
+              color={ACCENT}
+            />
+          </Box>
+        )}
+      </Box>
+
+      <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 12 }}>
+          {[
+            { label: 'Sunrise', value: city.sunrise, color: WARM },
+            { label: 'Sunset', value: city.sunset, color: '#F97316' },
+            { label: 'Pressure', value: city.pressure + ' inHg', color: DIM },
+            { label: 'Dew Point', value: city.dewPoint + 'F', color: COOL },
+          ].map(function(item) {
             return (
-              <Box key={f.day} style={{ gap: 4, alignItems: 'center' }}>
-                <Text style={{ color: DIM, fontSize: 10, fontWeight: 'bold' }}>{f.day}</Text>
-                <Text style={{ color: tempColor(f.temp), fontSize: 13, fontWeight: 'bold' }}>
-                  {f.temp + 'F'}
-                </Text>
-                <Box style={{
-                  width: 16,
-                  height: tempBarHeight(f.temp),
-                  borderRadius: 3,
-                  backgroundColor: tempColor(f.temp),
-                }} />
+              <Box key={item.label} style={{ flexDirection: 'row', gap: 3 }}>
+                <Text style={{ color: item.color, fontSize: 10, fontWeight: 'bold' }}>{item.label + ':'}</Text>
+                <Text style={{ color: BRIGHT, fontSize: 10 }}>{item.value}</Text>
               </Box>
             );
+          })}
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 2 }}>
+          {[COOL, ACCENT, '#3B82F6', WARM, HOT, '#22C55E', '#8B5CF6'].map(function(color, i) {
+            return <Box key={i} style={{ width: 16, height: 6, backgroundColor: color, borderRadius: 1 }} />;
           })}
         </Box>
       </Box>

@@ -63,6 +63,8 @@ import { SpellCheckStory } from './SpellCheckStory';
 import { LlmsTxtReader } from './LlmsTxtReader';
 import { AIChatDemoStory } from './AIChatDemo';
 import { AICanvasStory } from './AICanvasDemo';
+import { MCPDemoStory } from './MCPDemo';
+import { APIsStory } from './APIsStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -141,10 +143,12 @@ export const stories: StoryDef[] = [
   // AI
   { id: 'ai-chat', title: 'AI Chat', category: 'AI', component: AIChatDemoStory },
   { id: 'ai-canvas', title: 'AI Canvas', category: 'AI', component: AICanvasStory },
+  { id: 'mcp', title: 'MCP Server', category: 'AI', component: MCPDemoStory },
 
   // Networking
   { id: 'fetch', title: 'Fetch', category: 'Networking', component: FetchStory },
   { id: 'websocket', title: 'WebSocket', category: 'Networking', component: WebSocketStory },
+  { id: 'apis', title: 'REST APIs', category: 'Networking', component: APIsStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },

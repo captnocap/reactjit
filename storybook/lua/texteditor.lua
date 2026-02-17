@@ -13,6 +13,7 @@
 
 local Measure = nil
 local Focus   = require("lua.focus")
+local Tooltips = require("lua.texteditor_tooltips")
 
 local TextEditor = {}
 
@@ -31,7 +32,218 @@ local colors = {
   activeLine = { 0.16, 0.16, 0.19, 1 },
   scrollbar  = { 0.30, 0.30, 0.35, 0.6 },
   placeholder= { 0.45, 0.45, 0.50, 1 },
+  tooltipBg  = { 0.10, 0.10, 0.13, 0.95 },
+  tooltipText= { 0.82, 0.84, 0.88, 1 },
+  tooltipBorder = { 0.25, 0.25, 0.30, 0.8 },
 }
+
+-- ============================================================================
+-- Syntax highlighting (JSX tokenizer)
+-- ============================================================================
+
+local function hexToRGBA(hex)
+  hex = hex:gsub("#", "")
+  return {
+    tonumber(hex:sub(1,2), 16) / 255,
+    tonumber(hex:sub(3,4), 16) / 255,
+    tonumber(hex:sub(5,6), 16) / 255,
+    1
+  }
+end
+
+local syntaxColors = {
+  keyword     = hexToRGBA("#c678dd"),
+  string      = hexToRGBA("#98c379"),
+  number      = hexToRGBA("#d19a66"),
+  comment     = hexToRGBA("#5c6370"),
+  component   = hexToRGBA("#61afef"),
+  tag         = hexToRGBA("#e06c75"),
+  prop        = hexToRGBA("#d19a66"),
+  identifier  = hexToRGBA("#abb2bf"),
+  punctuation = hexToRGBA("#636d83"),
+  text        = hexToRGBA("#abb2bf"),
+}
+
+local KEYWORDS = {
+  ["const"]=true, ["let"]=true, ["var"]=true, ["function"]=true,
+  ["return"]=true, ["if"]=true, ["else"]=true, ["for"]=true,
+  ["while"]=true, ["do"]=true, ["switch"]=true, ["case"]=true,
+  ["break"]=true, ["continue"]=true, ["new"]=true, ["this"]=true,
+  ["class"]=true, ["extends"]=true, ["import"]=true, ["export"]=true,
+  ["from"]=true, ["default"]=true, ["true"]=true, ["false"]=true,
+  ["null"]=true, ["undefined"]=true, ["typeof"]=true, ["instanceof"]=true,
+  ["in"]=true, ["of"]=true, ["try"]=true, ["catch"]=true,
+  ["finally"]=true, ["throw"]=true, ["async"]=true, ["await"]=true,
+  ["yield"]=true,
+}
+
+local PUNCT_SET = {}
+for i = 1, #"{}()[];:,.=+->!&|?" do
+  PUNCT_SET[("{}()[];:,.=+->!&|?"):sub(i,i)] = true
+end
+
+local THREE_CHAR = { ["==="]=true, ["!=="]=true, ["..."]=true }
+local TWO_CHAR   = { ["=>"]=true, ["=="]=true, ["!="]=true, ["&&"]=true, ["||"]=true }
+
+--- Tokenize a single line into {text, color} pairs.
+local function tokenizeLine(line)
+  local tokens = {}
+  local i = 1
+  local len = #line
+  local inJSXTag = false
+
+  while i <= len do
+    local ch = line:sub(i, i)
+
+    -- Single-line comment
+    if ch == "/" and line:sub(i+1, i+1) == "/" then
+      tokens[#tokens+1] = { text = line:sub(i), color = syntaxColors.comment }
+      break
+    end
+
+    -- Block comment
+    if ch == "/" and line:sub(i+1, i+1) == "*" then
+      local endPos = line:find("%*/", i + 2, true)
+      if endPos then
+        tokens[#tokens+1] = { text = line:sub(i, endPos + 1), color = syntaxColors.comment }
+        i = endPos + 2
+      else
+        tokens[#tokens+1] = { text = line:sub(i), color = syntaxColors.comment }
+        break
+      end
+      goto continue
+    end
+
+    -- Strings
+    if ch == '"' or ch == "'" or ch == '`' then
+      local quote = ch
+      local j = i + 1
+      while j <= len and line:sub(j, j) ~= quote do
+        if line:sub(j, j) == '\\' then j = j + 1 end
+        j = j + 1
+      end
+      if j <= len then j = j + 1 end
+      tokens[#tokens+1] = { text = line:sub(i, j - 1), color = syntaxColors.string }
+      i = j
+      goto continue
+    end
+
+    -- Closing JSX tag </
+    if ch == '<' and line:sub(i+1, i+1) == '/' then
+      tokens[#tokens+1] = { text = '</', color = syntaxColors.tag }
+      i = i + 2
+      inJSXTag = true
+      local s = i
+      while i <= len and line:sub(i,i):match("[a-zA-Z0-9_.]") do i = i + 1 end
+      if i > s then
+        local name = line:sub(s, i - 1)
+        local first = name:sub(1,1)
+        tokens[#tokens+1] = { text = name, color = (first >= 'A' and first <= 'Z') and syntaxColors.component or syntaxColors.tag }
+      end
+      goto continue
+    end
+
+    -- Fragment <>
+    if ch == '<' and line:sub(i+1, i+1) == '>' then
+      tokens[#tokens+1] = { text = '<>', color = syntaxColors.tag }
+      i = i + 2
+      goto continue
+    end
+
+    -- Opening JSX tag
+    if ch == '<' and i + 1 <= len and line:sub(i+1, i+1):match("[a-zA-Z]") then
+      tokens[#tokens+1] = { text = '<', color = syntaxColors.tag }
+      i = i + 1
+      inJSXTag = true
+      local s = i
+      while i <= len and line:sub(i,i):match("[a-zA-Z0-9_.]") do i = i + 1 end
+      if i > s then
+        local name = line:sub(s, i - 1)
+        local first = name:sub(1,1)
+        tokens[#tokens+1] = { text = name, color = (first >= 'A' and first <= 'Z') and syntaxColors.component or syntaxColors.tag }
+      end
+      goto continue
+    end
+
+    -- Self-closing />
+    if ch == '/' and line:sub(i+1, i+1) == '>' then
+      tokens[#tokens+1] = { text = '/>', color = syntaxColors.tag }
+      i = i + 2
+      inJSXTag = false
+      goto continue
+    end
+
+    -- Closing >
+    if ch == '>' and inJSXTag then
+      tokens[#tokens+1] = { text = '>', color = syntaxColors.tag }
+      i = i + 1
+      inJSXTag = false
+      goto continue
+    end
+
+    -- Numbers
+    if ch:match("[0-9]") then
+      local s = i
+      if ch == '0' and (line:sub(i+1, i+1) == 'x' or line:sub(i+1, i+1) == 'X') then
+        i = i + 2
+        while i <= len and line:sub(i,i):match("[0-9a-fA-F]") do i = i + 1 end
+      else
+        while i <= len and line:sub(i,i):match("[0-9.]") do i = i + 1 end
+      end
+      tokens[#tokens+1] = { text = line:sub(s, i - 1), color = syntaxColors.number }
+      goto continue
+    end
+
+    -- Identifiers and keywords
+    if ch:match("[a-zA-Z_$]") then
+      local s = i
+      while i <= len and line:sub(i,i):match("[a-zA-Z0-9_$]") do i = i + 1 end
+      local word = line:sub(s, i - 1)
+      local color
+      if inJSXTag and i <= len and line:sub(i, i) == '=' then
+        color = syntaxColors.prop
+      elseif KEYWORDS[word] then
+        color = syntaxColors.keyword
+      else
+        color = syntaxColors.identifier
+      end
+      tokens[#tokens+1] = { text = word, color = color }
+      goto continue
+    end
+
+    -- Whitespace
+    if ch:match("%s") then
+      local s = i
+      while i <= len and line:sub(i,i):match("%s") do i = i + 1 end
+      tokens[#tokens+1] = { text = line:sub(s, i - 1), color = syntaxColors.text }
+      goto continue
+    end
+
+    -- Punctuation
+    if PUNCT_SET[ch] then
+      local three = line:sub(i, i + 2)
+      local two = line:sub(i, i + 1)
+      if #three == 3 and THREE_CHAR[three] then
+        tokens[#tokens+1] = { text = three, color = syntaxColors.punctuation }
+        i = i + 3
+      elseif #two == 2 and TWO_CHAR[two] then
+        tokens[#tokens+1] = { text = two, color = syntaxColors.punctuation }
+        i = i + 2
+      else
+        tokens[#tokens+1] = { text = ch, color = syntaxColors.punctuation }
+        i = i + 1
+      end
+      goto continue
+    end
+
+    -- Fallback
+    tokens[#tokens+1] = { text = ch, color = syntaxColors.text }
+    i = i + 1
+
+    ::continue::
+  end
+  return tokens
+end
 
 -- ============================================================================
 -- Init
@@ -78,6 +290,16 @@ function TextEditor.initState(node)
     blinkOn = true,
     isDragging = false,
     lastValue = initialText,  -- track for controlled value changes
+    dirty = false,            -- text changed since last change event
+    changeTimer = 0,          -- seconds since last edit (for idle detection)
+    -- Hover tooltip state
+    hoverWord = nil,          -- currently hovered identifier (string or nil)
+    hoverLine = 0,            -- line of hovered word
+    hoverCol = 0,             -- start col of hovered word
+    hoverTimer = 0,           -- seconds hovering on current word
+    hoverVisible = false,     -- whether tooltip is showing
+    lastMouseX = 0,           -- last known mouse X
+    lastMouseY = 0,           -- last known mouse Y
   }
 end
 
@@ -138,6 +360,11 @@ end
 local function resetBlink(es)
   es.blinkTimer = 0
   es.blinkOn = true
+end
+
+local function markDirty(es)
+  es.dirty = true
+  es.changeTimer = 0
 end
 
 local function clearSelection(es)
@@ -269,6 +496,82 @@ local function screenToPos(node, es, mx, my)
 end
 
 -- ============================================================================
+-- Hover tooltip helpers
+-- ============================================================================
+
+--- Extract the word (identifier) under the given line/col position.
+--- Returns word, startCol, endCol or nil if no identifier at that position.
+local function wordAtPos(es, line, col)
+  local lineStr = es.lines[line]
+  if not lineStr or #lineStr == 0 then return nil end
+  -- col is 0-based character offset; convert to 1-based for string ops
+  local pos = col + 1
+  if pos < 1 or pos > #lineStr then return nil end
+  local ch = lineStr:sub(pos, pos)
+  if not ch:match("[a-zA-Z_$]") then return nil end
+  -- scan left
+  local s = pos
+  while s > 1 and lineStr:sub(s - 1, s - 1):match("[a-zA-Z0-9_$]") do
+    s = s - 1
+  end
+  -- scan right
+  local e = pos
+  while e < #lineStr and lineStr:sub(e + 1, e + 1):match("[a-zA-Z0-9_$]") do
+    e = e + 1
+  end
+  return lineStr:sub(s, e), s - 1, e  -- word, startCol(0-based), endCol(1-based)
+end
+
+--- Update hover state based on current mouse position.
+--- Called from update() each frame.
+local function updateHover(node, es, dt)
+  local props = node.props or {}
+  local level = props.tooltipLevel
+  if not level or level == "" then
+    es.hoverVisible = false
+    es.hoverWord = nil
+    return
+  end
+
+  local mx, my = es.lastMouseX, es.lastMouseY
+  local va = visibleArea(node, es)
+
+  -- Check if mouse is within the text area
+  if mx < va.textAreaX or mx > va.textAreaX + va.textAreaW or
+     my < va.nodeY or my > va.nodeY + va.nodeH then
+    es.hoverWord = nil
+    es.hoverTimer = 0
+    es.hoverVisible = false
+    return
+  end
+
+  local line, col = screenToPos(node, es, mx, my)
+  local word = wordAtPos(es, line, col)
+
+  if word and Tooltips[word] then
+    if word == es.hoverWord then
+      -- Same word — advance timer
+      es.hoverTimer = es.hoverTimer + dt
+      if es.hoverTimer >= 0.4 then
+        es.hoverVisible = true
+      end
+    else
+      -- New word — reset timer
+      es.hoverWord = word
+      es.hoverLine = line
+      es.hoverCol = col
+      es.hoverTimer = 0
+      es.hoverVisible = false
+    end
+  else
+    -- No known word under cursor
+    es.hoverWord = nil
+    es.hoverTimer = 0
+    es.hoverVisible = false
+  end
+end
+
+-- ============================================================================
 -- Public API: get value
 -- ============================================================================
 
@@ -283,11 +586,29 @@ end
 
 function TextEditor.update(node, dt)
   local es = ensureState(node)
+
+  -- Track mouse position for hover tooltips (always, even when unfocused)
+  local mx, my = love.mouse.getPosition()
+  es.lastMouseX = mx
+  es.lastMouseY = my
+  updateHover(node, es, dt)
+
   if not Focus.isFocused(node) then return end
   es.blinkTimer = es.blinkTimer + dt
   if es.blinkTimer >= 0.53 then
     es.blinkTimer = es.blinkTimer - 0.53
     es.blinkOn = not es.blinkOn
+  end
+
+  -- Idle change detection: when dirty, wait for changeDelay then signal
+  if es.dirty then
+    es.changeTimer = es.changeTimer + dt
+    local delay = (node.props or {}).changeDelay or 3.0
+    if es.changeTimer >= delay then
+      es.dirty = false
+      es.changeTimer = 0
+      return "change"
+    end
   end
 end
 
@@ -349,6 +670,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
       if not isReadOnly(node) and hasSelection(es) then
         love.system.setClipboardText(getSelectedText(es))
         deleteSelection(es)
+        markDirty(es)
         resetBlink(es)
       end
       return true
@@ -377,6 +699,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
           es.cursorCol = #pasteLines[#pasteLines]
         end
         clearSelection(es)
+        markDirty(es)
         resetBlink(es)
         ensureCursorVisible(node, es)
       end
@@ -490,7 +813,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
       table.remove(es.lines, es.cursorLine)
       es.cursorLine = es.cursorLine - 1
     end
-    resetBlink(es); ensureCursorVisible(node, es)
+    markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "delete" then
     if hasSelection(es) then
@@ -502,7 +825,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
       es.lines[es.cursorLine] = currentLine(es) .. es.lines[es.cursorLine + 1]
       table.remove(es.lines, es.cursorLine + 1)
     end
-    resetBlink(es); ensureCursorVisible(node, es)
+    markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "return" then
     if hasSelection(es) then deleteSelection(es) end
@@ -514,7 +837,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     table.insert(es.lines, es.cursorLine + 1, indent .. after)
     es.cursorLine = es.cursorLine + 1
     es.cursorCol = #indent
-    resetBlink(es); ensureCursorVisible(node, es)
+    markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "tab" then
     if hasSelection(es) then deleteSelection(es) end
@@ -522,7 +845,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     local spaces = "    "
     es.lines[es.cursorLine] = line:sub(1, es.cursorCol) .. spaces .. line:sub(es.cursorCol + 1)
     es.cursorCol = es.cursorCol + #spaces
-    resetBlink(es); ensureCursorVisible(node, es)
+    markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   end
 
@@ -542,6 +865,7 @@ function TextEditor.handleTextInput(node, text)
   local line = currentLine(es)
   es.lines[es.cursorLine] = line:sub(1, es.cursorCol) .. text .. line:sub(es.cursorCol + 1)
   es.cursorCol = es.cursorCol + #text
+  markDirty(es)
   resetBlink(es)
   ensureCursorVisible(node, es)
 end
@@ -630,6 +954,7 @@ function TextEditor.draw(node, effectiveOpacity)
   local isFocused = Focus.isFocused(node)
   local va = visibleArea(node, es)
   local lh = va.lineHeight
+  local useSyntax = (node.props or {}).syntaxHighlight == true
 
   -- Sync controlled value
   TextEditor.syncValue(node)
@@ -703,15 +1028,27 @@ function TextEditor.draw(node, effectiveOpacity)
     -- Text (clip to text area, not gutter)
     love.graphics.setScissor(va.textAreaX, c.y, va.textAreaW, c.h)
 
-    -- Resolve text color from style or default
-    local textColor = colors.text
-    if s.color and type(s.color) == "table" then
-      textColor = s.color
+    local textY = y + (lh - font:getHeight()) / 2
+    local textX = va.textAreaX + va.padding - es.scrollX
+
+    if useSyntax then
+      -- Per-token colored rendering
+      local tokens = tokenizeLine(lineStr)
+      local xOff = textX
+      for _, tok in ipairs(tokens) do
+        setColorWithOpacity(tok.color, effectiveOpacity)
+        love.graphics.print(tok.text, xOff, textY)
+        xOff = xOff + font:getWidth(tok.text)
+      end
+    else
+      -- Monochrome fallback
+      local textColor = colors.text
+      if s.color and type(s.color) == "table" then
+        textColor = s.color
+      end
+      setColorWithOpacity(textColor, effectiveOpacity)
+      love.graphics.print(lineStr, textX, textY)
     end
-    setColorWithOpacity(textColor, effectiveOpacity)
-    love.graphics.print(lineStr,
-      va.textAreaX + va.padding - es.scrollX,
-      y + (lh - font:getHeight()) / 2)
 
     -- Restore full-node scissor
     love.graphics.setScissor(c.x, c.y, c.w, c.h)
@@ -758,6 +1095,87 @@ function TextEditor.draw(node, effectiveOpacity)
   end
 
   love.graphics.setScissor()
+
+  -- ── Hover tooltip (drawn OUTSIDE the scissor so it can overflow) ──
+  local tooltipLevel = (node.props or {}).tooltipLevel
+  if tooltipLevel and tooltipLevel ~= "" and es.hoverVisible and es.hoverWord then
+    local entry = Tooltips[es.hoverWord]
+    if entry then
+      local tooltipText = entry[tooltipLevel]
+      if tooltipText and tooltipText ~= "" then
+        -- Use a slightly smaller font for the tooltip
+        local tooltipFontSize = (node.style or {}).fontSize or 14
+        tooltipFontSize = math.max(10, tooltipFontSize - 2)
+        local tooltipFont
+        if Measure then
+          tooltipFontSize = Measure.scaleFontSize(tooltipFontSize, node)
+          tooltipFont = Measure.getFont(tooltipFontSize, nil, nil)
+        else
+          tooltipFont = love.graphics.getFont()
+        end
+
+        local maxW = 300
+        local padX, padY = 10, 8
+        local textW = maxW - padX * 2
+
+        -- Wrap text manually
+        local wrappedLines = {}
+        for _, segment in ipairs({tooltipText}) do
+          local words = {}
+          for w in segment:gmatch("%S+") do words[#words+1] = w end
+          local line = ""
+          for _, w in ipairs(words) do
+            local test = line == "" and w or (line .. " " .. w)
+            if tooltipFont:getWidth(test) > textW then
+              if line ~= "" then wrappedLines[#wrappedLines+1] = line end
+              line = w
+            else
+              line = test
+            end
+          end
+          if line ~= "" then wrappedLines[#wrappedLines+1] = line end
+        end
+
+        local lineH = math.floor(tooltipFont:getHeight() * 1.4)
+        local contentH = #wrappedLines * lineH
+        local boxW = maxW
+        local boxH = contentH + padY * 2
+
+        -- Position: above the hovered word, or below if near top
+        local wordY = va.textAreaY + (es.hoverLine - 1) * lh - es.scrollY
+        local wordX = va.textAreaX + va.padding + font:getWidth(
+          (es.lines[es.hoverLine] or ""):sub(1, es.hoverCol)
+        ) - es.scrollX
+
+        local tooltipX = math.max(c.x + 4, math.min(wordX, c.x + c.w - boxW - 4))
+        local tooltipY = wordY - boxH - 6
+        if tooltipY < c.y then
+          tooltipY = wordY + lh + 4  -- below the word if no room above
+        end
+
+        -- Draw tooltip background
+        love.graphics.setFont(tooltipFont)
+        setColorWithOpacity(colors.tooltipBg, effectiveOpacity)
+        love.graphics.rectangle("fill", tooltipX, tooltipY, boxW, boxH, 6, 6)
+
+        -- Border
+        setColorWithOpacity(colors.tooltipBorder, effectiveOpacity)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", tooltipX, tooltipY, boxW, boxH, 6, 6)
+
+        -- Text
+        setColorWithOpacity(colors.tooltipText, effectiveOpacity)
+        for li, wline in ipairs(wrappedLines) do
+          love.graphics.print(wline,
+            tooltipX + padX,
+            tooltipY + padY + (li - 1) * lineH)
+        end
+
+        -- Restore original font
+        love.graphics.setFont(font)
+      end
+    end
+  end
 end
 
 return TextEditor

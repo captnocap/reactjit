@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, TextEditor, Pressable } from '../../../packages/shared/src';
+import { Box, Text, TextEditor, Pressable, useLoveRPC } from '../../../packages/shared/src';
 import { Preview } from './Preview';
 import { StatusBar } from './StatusBar';
 import { TemplatePicker } from './TemplatePicker';
@@ -27,10 +27,23 @@ export function PlaygroundPanel() {
   const [errors, setErrors] = useState<string[]>([]);
   const [lintMessages, setLintMessages] = useState<LintMessage[]>([]);
   const [jumpToLine, setJumpToLine] = useState<number | undefined>(undefined);
-  const debounceRef = useRef<any>(null);
+  const [tooltipLevel, setTooltipLevel] = useState<'beginner' | 'guided' | 'clean'>('beginner');
+
+  const storageSet = useLoveRPC('storage:set');
+  const storageGet = useLoveRPC('storage:get');
+  const sessionLoaded = useRef(false);
 
   // Expose for HMR state sync
   (globalThis as any).__currentPlaygroundCode = code;
+
+  // Persist code to storage on every successful processCode
+  const persistCode = useCallback((src: string) => {
+    storageSet({
+      collection: 'playground',
+      id: 'last-session',
+      data: { code: src, timestamp: Date.now() },
+    }).catch(() => {}); // silent fail
+  }, [storageSet]);
 
   const processCode = useCallback((src: string) => {
     const msgs = lint(src);
@@ -43,15 +56,28 @@ export function PlaygroundPanel() {
     if (evalResult.error) { setErrors([evalResult.error]); return; }
     setErrors([]);
     setUserComponent(() => evalResult.component);
-  }, []);
+    persistCode(src);
+  }, [persistCode]);
 
   // Process code on mount if we have HMR code
   useEffect(() => { if (code) processCode(code); }, []);
 
+  // Load last session from storage on mount (for TemplatePicker)
+  useEffect(() => {
+    if (sessionLoaded.current) return;
+    sessionLoaded.current = true;
+    storageGet({ collection: 'playground', id: 'last-session' })
+      .then((data: any) => {
+        if (data?.code) {
+          (globalThis as any).__playgroundLastSession = data;
+        }
+      })
+      .catch(() => {});
+  }, [storageGet]);
+
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => processCode(src), 300);
+    processCode(src);
   }, [processCode]);
 
   const handleJumpToLine = useCallback((line: number) => {
@@ -78,27 +104,56 @@ export function PlaygroundPanel() {
   return (
     <Box style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
       <Box style={{ flexGrow: 1, flexBasis: 0, height: '100%', borderRightWidth: 1, borderColor: '#1e293b' }}>
-        <Box style={{ height: 32, paddingLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#181825', borderBottomWidth: 1, borderColor: '#1e293b' }}>
-          <Pressable
-            onPress={() => setShowPicker(true)}
-            style={(state) => ({
-              backgroundColor: state.hovered ? '#334155' : '#1e293b',
-              paddingLeft: 8,
-              paddingRight: 8,
-              paddingTop: 2,
-              paddingBottom: 2,
-              borderRadius: 4,
-            })}
-          >
-            <Text style={{ color: '#94a3b8', fontSize: 10 }}>Templates</Text>
-          </Pressable>
-          <Text style={{ color: '#cdd6f4', fontSize: 12, fontWeight: 'bold' }}>Editor</Text>
+        <Box style={{ height: 32, paddingLeft: 12, paddingRight: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#181825', borderBottomWidth: 1, borderColor: '#1e293b', width: '100%', justifyContent: 'space-between' }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Pressable
+              onPress={() => setShowPicker(true)}
+              style={(state) => ({
+                backgroundColor: state.hovered ? '#334155' : '#1e293b',
+                paddingLeft: 8,
+                paddingRight: 8,
+                paddingTop: 2,
+                paddingBottom: 2,
+                borderRadius: 4,
+              })}
+            >
+              <Text style={{ color: '#94a3b8', fontSize: 10 }}>Templates</Text>
+            </Pressable>
+            <Text style={{ color: '#cdd6f4', fontSize: 12, fontWeight: 'bold' }}>Editor</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            <Text style={{ color: '#64748b', fontSize: 9, marginRight: 4 }}>Hints</Text>
+            {(['beginner', 'guided', 'clean'] as const).map((level) => (
+              <Pressable
+                key={level}
+                onPress={() => setTooltipLevel(level)}
+                style={(state) => ({
+                  backgroundColor: tooltipLevel === level ? '#334155' : (state.hovered ? '#262637' : 'transparent'),
+                  paddingLeft: 6,
+                  paddingRight: 6,
+                  paddingTop: 2,
+                  paddingBottom: 2,
+                  borderRadius: 3,
+                })}
+              >
+                <Text style={{
+                  color: tooltipLevel === level ? '#e2e8f0' : '#64748b',
+                  fontSize: 9,
+                  fontWeight: tooltipLevel === level ? 'bold' : 'normal',
+                }}>{level.charAt(0).toUpperCase() + level.slice(1)}</Text>
+              </Pressable>
+            ))}
+          </Box>
         </Box>
         <TextEditor
           key={editorKey}
           initialValue={code}
+          onChange={handleCodeChange}
           onBlur={handleCodeChange}
           onSubmit={handleCodeChange}
+          changeDelay={3}
+          syntaxHighlight
+          tooltipLevel={tooltipLevel}
           placeholder="Write JSX here..."
           style={{ flexGrow: 1, width: '100%' }}
           textStyle={{ fontSize: 13, fontFamily: 'monospace' }}

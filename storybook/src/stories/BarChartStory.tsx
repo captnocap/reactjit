@@ -51,7 +51,7 @@ export function BarChartStory() {
       }}>
         <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Basic Bar Chart</Text>
         <Text style={{ color: '#64748b', fontSize: 11 }}>Monthly revenue ($k) -- bars fill available width</Text>
-        <BarChart data={REVENUE_DATA} height={120} />
+        <BarChart data={REVENUE_DATA} height={120} interactive />
       </Box>
 
       {/* Two cards side by side — both fluid */}
@@ -68,7 +68,7 @@ export function BarChartStory() {
         }}>
           <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Custom Colors</Text>
           <Text style={{ color: '#64748b', fontSize: 11 }}>Per-bar colors</Text>
-          <BarChart data={COLORED_DATA} height={120} gap={12} />
+          <BarChart data={COLORED_DATA} height={120} gap={12} interactive />
         </Box>
 
         {/* Compact — fluid, shorter bars */}
@@ -99,7 +99,7 @@ export function BarChartStory() {
       }}>
         <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>With Values</Text>
         <Text style={{ color: '#64748b', fontSize: 11 }}>Value labels above each bar</Text>
-        <BarChart data={REVENUE_DATA} height={120} showValues color="#8b5cf6" />
+        <BarChart data={REVENUE_DATA} height={120} showValues color="#8b5cf6" interactive />
       </Box>
 
       {/* Dense — 120 bars, no labels, looks like a waveform */}
@@ -112,8 +112,8 @@ export function BarChartStory() {
         padding: 16,
       }}>
         <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Dense (120 bars)</Text>
-        <Text style={{ color: '#64748b', fontSize: 11 }}>Stress test -- no labels, 2px gap</Text>
-        <BarChart data={DENSE_DATA} height={100} gap={2} showLabels={false} color="#22c55e" />
+        <Text style={{ color: '#64748b', fontSize: 11 }}>120 bars -- hover for tooltip</Text>
+        <BarChart data={DENSE_DATA} height={100} gap={2} showLabels={false} color="#22c55e" interactive />
       </Box>
 
       {/* Side-by-Side Comparison */}
@@ -129,11 +129,11 @@ export function BarChartStory() {
         <Box style={{ flexDirection: 'row', gap: 24, width: '100%' }}>
           <Box style={{ gap: 4, flexGrow: 1 }}>
             <Text style={{ color: '#64748b', fontSize: 11 }}>Q1 Revenue</Text>
-            <BarChart data={Q1} height={100} gap={10} color="#3b82f6" showValues />
+            <BarChart data={Q1} height={100} gap={10} color="#3b82f6" showValues interactive />
           </Box>
           <Box style={{ gap: 4, flexGrow: 1 }}>
             <Text style={{ color: '#64748b', fontSize: 11 }}>Q2 Revenue</Text>
-            <BarChart data={Q2} height={100} gap={10} color="#22c55e" showValues />
+            <BarChart data={Q2} height={100} gap={10} color="#22c55e" showValues interactive />
           </Box>
         </Box>
       </Box>
