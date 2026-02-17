@@ -27,7 +27,8 @@
       "@ilovereact/server": ["./packages/server/src"],
       "@ilovereact/ai": ["./packages/ai/src"],
       "@ilovereact/apis": ["./packages/apis/src"],
-      "@ilovereact/rss": ["./packages/rss/src"]
+      "@ilovereact/rss": ["./packages/rss/src"],
+      "@ilovereact/webhooks": ["./packages/webhooks/src"]
     }
   }
 }
