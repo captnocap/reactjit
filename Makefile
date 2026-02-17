@@ -259,6 +259,13 @@ cli-setup: setup
 	else \
 		echo "  Warning: libsqlite3.so.0 not found — SQLite features won't be bundled"; \
 	fi
+	@LIBARCHIVE=$$(ldconfig -p | grep 'libarchive.so.13 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBARCHIVE" ]; then \
+		cp "$$LIBARCHIVE" cli/runtime/lib/libarchive.so.13; \
+		echo "  Bundled libarchive.so.13"; \
+	else \
+		echo "  Warning: libarchive.so.13 not found — archive features won't be bundled"; \
+	fi
 	@TOR=$$(which tor 2>/dev/null); \
 	if [ -n "$$TOR" ]; then \
 		cp "$$(readlink -f "$$TOR")" cli/runtime/bin/tor; \
@@ -279,6 +286,7 @@ cli-setup: setup
 	cp -r packages/rss cli/runtime/ilovereact/rss
 	cp -r packages/webhooks cli/runtime/ilovereact/webhooks
 	cp -r packages/crypto cli/runtime/ilovereact/crypto
+	cp -r packages/media cli/runtime/ilovereact/media
 	@if [ -d fonts ]; then \
 		mkdir -p cli/runtime/fonts; \
 		cp -r fonts/* cli/runtime/fonts/; \

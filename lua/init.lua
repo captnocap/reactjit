@@ -702,6 +702,24 @@ function ReactLove.init(config)
     io.write("[react-love] Browse module loaded\n"); io.flush()
   end
 
+  -- Load archive module (optional — requires libarchive)
+  local arOk, arMod = pcall(require, "lua.archive")
+  if arOk and arMod and arMod.available then
+    for method, handler in pairs(arMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    io.write("[react-love] Archive module loaded\n"); io.flush()
+  end
+
+  -- Load media scanner module (optional — directory scanning + indexing)
+  local mdOk, mdMod = pcall(require, "lua.media")
+  if mdOk and mdMod then
+    for method, handler in pairs(mdMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    io.write("[react-love] Media scanner loaded\n"); io.flush()
+  end
+
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })

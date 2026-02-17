@@ -30,6 +30,7 @@
       "@ilovereact/rss": ["./packages/rss/src"],
       "@ilovereact/webhooks": ["./packages/webhooks/src"],
       "@ilovereact/crypto": ["./packages/crypto/src"],
+      "@ilovereact/media": ["./packages/media/src"],
       "@ilovereact/3d": ["./packages/3d/src"]
     }
   }

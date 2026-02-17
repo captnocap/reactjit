@@ -69,6 +69,7 @@ import { APIsStory } from './APIsStory';
 import { RSSStory } from './RSSStory';
 import { WebhooksStory } from './WebhooksStory';
 import { CryptoStory } from './CryptoStory';
+import { MediaStory } from './MediaStory';
 import { HorizontalBarChartStory } from './HorizontalBarChartStory';
 import { StackedBarChartStory } from './StackedBarChartStory';
 import { LineChartStory } from './LineChartStory';
@@ -172,6 +173,9 @@ export const stories: StoryDef[] = [
 
   // Security
   { id: 'crypto', title: 'Crypto', category: 'Security', component: CryptoStory },
+
+  // Media
+  { id: 'media', title: 'Media Library', category: 'Media', component: MediaStory },
 
   // 3D
   { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
