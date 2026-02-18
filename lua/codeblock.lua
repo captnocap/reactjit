@@ -216,11 +216,11 @@ function CodeBlock.render(node, c, effectiveOpacity)
   -- Background
   local bgColor = s.backgroundColor
   if type(bgColor) == "string" then
-    bgColor = hexToRGBA(bgColor)
+    bgColor = Color.toTable(bgColor)
   elseif type(bgColor) == "table" then
     -- Already RGBA array
   else
-    bgColor = hexToRGBA("#0d1117")
+    bgColor = Color.toTable("#0d1117")
   end
   setColorWithOpacity(bgColor, effectiveOpacity)
   local br = s.borderRadius or 4
@@ -230,11 +230,11 @@ function CodeBlock.render(node, c, effectiveOpacity)
   if s.borderWidth and s.borderWidth > 0 then
     local borderColor = s.borderColor
     if type(borderColor) == "string" then
-      borderColor = hexToRGBA(borderColor)
+      borderColor = Color.toTable(borderColor)
     elseif type(borderColor) == "table" then
       -- Already RGBA array
     else
-      borderColor = hexToRGBA("#1e293b")
+      borderColor = Color.toTable("#1e293b")
     end
     setColorWithOpacity(borderColor, effectiveOpacity)
     love.graphics.setLineWidth(s.borderWidth)
@@ -273,11 +273,11 @@ function CodeBlock.render(node, c, effectiveOpacity)
   local btnFont = Measure.getFont(9, nil, nil)
   local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
-  local btnBg = cs.copied and hexToRGBA("#1a3a2a") or hexToRGBA("#1e293b")
+  local btnBg = cs.copied and Color.toTable("#1a3a2a") or Color.toTable("#1e293b")
   setColorWithOpacity(btnBg, effectiveOpacity)
   love.graphics.rectangle("fill", bx, by, bw, bh, 3, 3)
 
-  local btnColor = cs.copied and hexToRGBA("#4ade80") or hexToRGBA("#64748b")
+  local btnColor = cs.copied and Color.toTable("#4ade80") or Color.toTable("#64748b")
   setColorWithOpacity(btnColor, effectiveOpacity)
   love.graphics.setFont(btnFont)
   local label = cs.copied and "Copied!" or "Copy"
