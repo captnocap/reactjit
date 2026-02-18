@@ -250,14 +250,28 @@ This has two non-negotiable consequences:
 
 **2. Every new feature gets a storybook story.** When you implement a new capability — a new component, hook, event type, Lua-side feature, layout behavior, anything user-facing — you must also create or update a story in `storybook/src/stories/` that demonstrates it. Do not wait to be asked. The story is part of the feature, not a follow-up task.
 
-## Git Discipline (IMPORTANT)
+## Git Discipline (CRITICAL)
 
-Commit early and often. This project has no test suite, so git history is the safety net. Follow these rules:
+Commit early and often. This project has no test suite, so git history IS the safety net. **You must commit your own work as you go. Do not leave it for the user or another Claude to deal with.**
 
-- **Commit after every meaningful change** — finished a feature, fixed a bug, refactored something? Commit it before moving on. Don't batch unrelated changes into one mega-commit.
-- **Commit before risky operations** — about to refactor a core file, change the build pipeline, or touch Lua runtime code? Commit your current working state first so there's a clean rollback point.
-- **Use descriptive commit messages** — say what changed and why. `feat: add scroll support to grid layout engine` not `update stuff`.
-- **Don't let work pile up uncommitted** — if you've touched 3+ files, that's a commit. If you've been working for a while, that's a commit. The working tree should rarely have more than one logical change uncommitted.
+### When to commit (non-negotiable)
+
+- **After completing each logical unit of work.** Finished a feature? Commit. Fixed a bug? Commit. Added a new component? Commit. Do NOT move on to the next thing with uncommitted changes sitting in the working tree.
+- **Before risky operations.** About to refactor a core file, change the build pipeline, or touch Lua runtime code? Commit your current working state first so there's a clean rollback point.
+- **When you've touched 3+ files.** That's already a commit-sized change. Stop and commit before continuing.
+- **At natural breakpoints in multi-step work.** If a task has phases (e.g., add types → add Lua shader → add React component → update story), commit after each phase, not all at the end.
+
+### How to commit
+
+- **Use descriptive conventional-commit messages.** Say what changed and why: `feat(3d): add Blinn-Phong lighting shader with directional + ambient lights` not `update stuff`.
+- **Don't batch unrelated changes.** One logical change per commit. If you added a feature AND fixed a bug, that's two commits.
+- **Never leave a session with uncommitted work.** If the conversation is winding down and there are unstaged changes, commit them. The next Claude instance that picks up this repo should start from a clean tree.
+
+### What NOT to do
+
+- Do not accumulate a dozen file changes across multiple features and dump them in one mega-commit.
+- Do not assume the user will commit for you. They won't. That's your job.
+- Do not skip committing because "it's just a small change." Small changes are the easiest to commit and the hardest to reconstruct later.
 
 ## TypeScript
 
