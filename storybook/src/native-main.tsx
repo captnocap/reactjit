@@ -13,7 +13,7 @@ import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
 import { Box, Text, Pressable, ScaleProvider } from '../../packages/shared/src';
-import { ThemeProvider, useTheme, useThemeColors, themeNames } from '../../packages/theme/src';
+import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
 import { PlaygroundPanel } from './playground/PlaygroundPanel';
@@ -168,36 +168,6 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
   );
 }
 
-function ThemeCycleButton() {
-  const { themeId, setTheme } = useTheme();
-  const c = useThemeColors();
-  const cycleTheme = useCallback(() => {
-    const idx = themeNames.indexOf(themeId);
-    const next = themeNames[(idx + 1) % themeNames.length];
-    setTheme(next);
-  }, [themeId, setTheme]);
-
-  // Truncate theme name to fit button
-  const label = themeId.length > 14 ? themeId.slice(0, 12) + '..' : themeId;
-
-  return (
-    <Pressable
-      onPress={cycleTheme}
-      style={{
-        paddingLeft: 8,
-        paddingRight: 8,
-        paddingTop: 4,
-        paddingBottom: 4,
-        borderRadius: 4,
-        borderWidth: 1,
-        borderColor: c.primary,
-      }}
-    >
-      <Text style={{ color: c.primary, fontSize: 9 }}>{label}</Text>
-    </Pressable>
-  );
-}
-
 type Mode = 'stories' | 'docs' | 'playground';
 
 function Storybook() {
@@ -223,7 +193,7 @@ function Storybook() {
         <TabButton label="Docs" active={mode === 'docs'} onPress={() => setMode('docs')} />
         <TabButton label="Playground" active={mode === 'playground'} onPress={() => setMode('playground')} />
         <Box style={{ flexGrow: 1 }} />
-        <ThemeCycleButton />
+        <ThemeSwitcher />
       </Box>
 
       {/* Content */}

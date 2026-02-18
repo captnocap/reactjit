@@ -85,6 +85,7 @@ import { BlackholeStory } from './BlackholeStory';
 import { AudioRackStory } from './AudioRackStory';
 import { ControlsStory } from './ControlsStory';
 import { ThemeStory } from './ThemeStory';
+import { ThemeSwitcherStory } from './ThemeSwitcherStory';
 import SettingsMenuStory from './SettingsMenuStory';
 
 export const stories: StoryDef[] = [
@@ -202,6 +203,7 @@ export const stories: StoryDef[] = [
 
   // Theme
   { id: 'theme', title: 'Theme System', category: 'Theme', component: ThemeStory },
+  { id: 'theme-switcher', title: 'Theme Switcher', category: 'Theme', component: ThemeSwitcherStory },
 
   // Settings
   { id: 'settings-menu', title: 'Settings Menu', category: 'Dev Tools', component: SettingsMenuStory },
