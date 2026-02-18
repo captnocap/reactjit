@@ -12,6 +12,7 @@
 
 local Measure = nil
 local Color   = require("lua.color")
+local Syntax  = require("lua.syntax")
 
 local CodeBlock = {}
 
@@ -25,84 +26,10 @@ function CodeBlock.init(config)
 end
 
 -- ============================================================================
--- Syntax highlighting colors
+-- Syntax highlighting (shared tokenizer from lua/syntax.lua)
 -- ============================================================================
 
-local KEYWORDS = {
-  ["const"] = true, ["let"] = true, ["var"] = true, ["function"] = true,
-  ["class"] = true, ["interface"] = true, ["type"] = true, ["enum"] = true,
-  ["return"] = true, ["if"] = true, ["else"] = true, ["for"] = true,
-  ["while"] = true, ["switch"] = true, ["case"] = true, ["break"] = true,
-  ["continue"] = true, ["new"] = true, ["throw"] = true, ["try"] = true,
-  ["catch"] = true, ["finally"] = true, ["async"] = true, ["await"] = true,
-  ["yield"] = true, ["do"] = true, ["in"] = true, ["of"] = true,
-  ["typeof"] = true, ["instanceof"] = true, ["void"] = true, ["delete"] = true,
-  ["default"] = true, ["extends"] = true, ["implements"] = true, ["super"] = true,
-  ["this"] = true, ["static"] = true, ["get"] = true, ["set"] = true,
-  ["true"] = true, ["false"] = true, ["nil"] = true, ["null"] = true,
-  ["undefined"] = true, ["local"] = true, ["then"] = true, ["end"] = true,
-  ["elseif"] = true, ["not"] = true, ["and"] = true, ["or"] = true,
-  ["require"] = true,
-}
-
-local IMPORTS = {
-  ["import"] = true, ["export"] = true, ["from"] = true,
-}
-
-local TYPES = {
-  ["string"] = true, ["number"] = true, ["boolean"] = true, ["any"] = true,
-  ["never"] = true, ["Record"] = true, ["Array"] = true, ["Promise"] = true,
-  ["void"] = true, ["null"] = true, ["undefined"] = true, ["object"] = true,
-  ["symbol"] = true, ["bigint"] = true, ["unknown"] = true,
-}
-
-local COLORS = {
-  comment = Color.toTable("#6a9955"),
-  keyword = Color.toTable("#569cd6"),
-  type = Color.toTable("#4ec9b0"),
-  import = Color.toTable("#c586c0"),
-  string = Color.toTable("#ce9178"),
-  number = Color.toTable("#b5cea8"),
-  default = Color.toTable("#c9d1d9"),
-}
-
---- Determine line color based on content
-local function getLineColor(line)
-  local trimmed = line:match("^%s*(.-)%s*$") or ""
-
-  -- Comments
-  if trimmed:match("^//") or trimmed:match("^#") or trimmed:match("^%-%-") or
-     trimmed:match("^%*") or trimmed:match("^/%*") then
-    return COLORS.comment
-  end
-
-  -- Imports
-  if trimmed:match("^import%s") or trimmed:match("^export%s") or
-     trimmed:match("^from%s") or trimmed:match("^require%s") then
-    return COLORS.import
-  end
-
-  -- Keywords (check first word)
-  local firstWord = trimmed:match("^([%w_]+)")
-  if firstWord and KEYWORDS[firstWord] then
-    return COLORS.keyword
-  end
-  if firstWord and TYPES[firstWord] then
-    return COLORS.type
-  end
-
-  -- String-heavy lines
-  if trimmed:match("['\"`]") then
-    return COLORS.string
-  end
-
-  -- Number-heavy lines
-  if trimmed:match("^%d") or trimmed:match("[,:=]%s*%d") then
-    return COLORS.number
-  end
-
-  return COLORS.default
-end
+local tokenizeLine = Syntax.tokenizeLine
 
 -- ============================================================================
 -- Measurement
@@ -257,12 +184,16 @@ function CodeBlock.render(node, c, effectiveOpacity)
   local sx, sy = love.graphics.transformPoint(c.x, c.y)
   love.graphics.setScissor(sx, sy, c.w, c.h)
 
-  -- Render each line
+  -- Render each line with token-based syntax highlighting
   for i, line in ipairs(lines) do
     local y = c.y + padding + (i - 1) * lineHeight
-    local color = getLineColor(line)
-    setColorWithOpacity(color, effectiveOpacity)
-    love.graphics.print(line, c.x + padding, y)
+    local tokens = tokenizeLine(line)
+    local x = c.x + padding
+    for _, tok in ipairs(tokens) do
+      setColorWithOpacity(tok.color, effectiveOpacity)
+      love.graphics.print(tok.text, x, y)
+      x = x + font:getWidth(tok.text)
+    end
   end
 
   -- Reset scissor
