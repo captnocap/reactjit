@@ -135,6 +135,10 @@ local PROP_KEY_COL  = { 0.70, 0.55, 0.85, 1 }    -- purple for style keys
 local PROP_VAL_COL  = { 0.88, 0.90, 0.94, 1 }    -- bright for values
 local SECTION_COL   = { 0.45, 0.48, 0.55, 1 }    -- section headers
 
+-- Forward declarations (defined later, called in mousepressed)
+local startEditing
+local commitEdit
+
 -- Cached fonts (created lazily on first draw, avoids allocation per frame)
 local fontSmall = nil   -- 11px, used by tooltip/tree/detail/perf
 local function getFont()
@@ -1215,7 +1219,7 @@ local function parseStyleValue(text)
 end
 
 --- Start editing a property from a detailPropPositions entry
-local function startEditing(entry, idx)
+startEditing = function(entry, idx)
   local valStr
   if entry.value == nil then
     valStr = ""
@@ -1241,7 +1245,7 @@ local function startEditing(entry, idx)
 end
 
 --- Commit the current edit (apply value and exit edit mode)
-local function commitEdit()
+commitEdit = function()
   if not state.editState then return end
   local es = state.editState
   local value = parseStyleValue(es.text)
