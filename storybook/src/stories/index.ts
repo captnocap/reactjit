@@ -56,6 +56,7 @@ import { AutoSizeBasic } from './AutoSizeBasic';
 import { OverflowStressStory } from './OverflowStress';
 import { FetchStory } from './FetchStory';
 import { WebSocketStory } from './WebSocketStory';
+import { TorIRCStory } from './TorIRCStory';
 import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
 import { FontShowcaseStory } from './FontShowcase';
@@ -177,6 +178,7 @@ export const stories: StoryDef[] = [
   // Networking
   { id: 'fetch', title: 'Fetch', category: 'Networking', component: FetchStory },
   { id: 'websocket', title: 'WebSocket', category: 'Networking', component: WebSocketStory },
+  { id: 'tor-irc', title: 'Tor IRC', category: 'Networking', component: TorIRCStory },
   { id: 'apis', title: 'REST APIs', category: 'Networking', component: APIsStory },
   { id: 'rss', title: 'RSS Feeds', category: 'Networking', component: RSSStory },
   { id: 'webhooks', title: 'Webhooks', category: 'Networking', component: WebhooksStory },
