@@ -82,6 +82,7 @@ import { GamePlatformerStory } from './GamePlatformerStory';
 import { GameRogueliteStory } from './GameRogueliteStory';
 import { GameTurnBasedStory } from './GameTurnBasedStory';
 import { AudioRackStory } from './AudioRackStory';
+import { ControlsStory } from './ControlsStory';
 import { ThemeStory } from './ThemeStory';
 import SettingsMenuStory from './SettingsMenuStory';
 
@@ -195,6 +196,7 @@ export const stories: StoryDef[] = [
 
   // Audio
   { id: 'audio-rack', title: 'Audio Rack', category: 'Audio', component: AudioRackStory },
+  { id: 'controls', title: 'Controls', category: 'Audio', component: ControlsStory },
 
   // Theme
   { id: 'theme', title: 'Theme System', category: 'Theme', component: ThemeStory },

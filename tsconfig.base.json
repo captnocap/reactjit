@@ -33,7 +33,8 @@
       "@ilovereact/media": ["./packages/media/src"],
       "@ilovereact/3d": ["./packages/3d/src"],
       "@ilovereact/game": ["./packages/game/src"],
-      "@ilovereact/theme": ["./packages/theme/src"]
+      "@ilovereact/theme": ["./packages/theme/src"],
+      "@ilovereact/controls": ["./packages/controls/src"]
     }
   }
 }

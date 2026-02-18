@@ -192,6 +192,14 @@ export {
   type PortMonitor,
 } from './usePorts';
 
+// Chat / messaging UI
+export { MessageBubble, type MessageBubbleProps, type MessageBubbleVariant } from './MessageBubble';
+export { ChatInput, type ChatInputProps } from './ChatInput';
+export { MessageList, type MessageListProps } from './MessageList';
+export { LoadingDots, type LoadingDotsProps } from './LoadingDots';
+export { ActionBar, type ActionBarProps, type ActionBarItem } from './ActionBar';
+export { ConversationCard, type ConversationCardProps } from './ConversationCard';
+
 // Debug tools
 export { useDebug, getDebugData, registerDebug } from './useDebug';
 export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';

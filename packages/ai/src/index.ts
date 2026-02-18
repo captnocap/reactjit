@@ -57,3 +57,26 @@ export type {
   MCPTool,
   MCPTransportType,
 } from './mcp';
+
+// ── Components (Tier 2 — AI-wired) ───────────────────
+export {
+  AIMessageList,
+  AIChatInput,
+  AIModelSelector,
+  AISettingsPanel,
+  AIConversationSidebar,
+  AIMessageWithActions,
+} from './components';
+export type {
+  AIMessageListProps,
+  AIChatInputProps,
+  AIModelSelectorProps,
+  AISettingsPanelProps,
+  AIConversationSidebarProps,
+  Conversation,
+  AIMessageWithActionsProps,
+} from './components';
+
+// ── Templates (Tier 3 — drop-in UIs) ─────────────────
+export { MinimalChat, SimpleChatUI, PowerChatUI } from './templates';
+export type { MinimalChatProps, SimpleChatUIProps, PowerChatUIProps } from './templates';
