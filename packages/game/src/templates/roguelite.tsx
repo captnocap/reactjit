@@ -5,13 +5,11 @@ import { useInput } from '../core/useInput';
 import { useTilemap } from '../world/useTilemap';
 import { useProcGen } from '../world/useProcGen';
 import { useFogOfWar } from '../world/useFogOfWar';
-import { usePathfinding } from '../world/usePathfinding';
 import { useEntityPool } from '../entity/useEntityPool';
 import { useCombat } from '../systems/useCombat';
 import { useInventory } from '../systems/useInventory';
 import { useLoot } from '../systems/useLoot';
 import { HealthBar } from '../components/HealthBar';
-import { Minimap } from '../components/Minimap';
 import type { EntityState } from '../types';
 
 const MAP_W = 40;
@@ -22,6 +20,12 @@ const VIEW_H = 15;
 const MOVE_COOLDOWN = 0.12;
 
 export function RogueliteTemplate() {
+  const renderCount = React.useRef(0);
+  renderCount.current++;
+  if (renderCount.current % 10 === 0 || renderCount.current < 20) {
+    console.log('[rl:render] #' + renderCount.current);
+  }
+
   const loop = useGameLoop();
   const input = useInput({
     actions: {
@@ -50,7 +54,6 @@ export function RogueliteTemplate() {
   });
 
   const fog = useFogOfWar({ width: MAP_W, height: MAP_H });
-  const pathfinding = usePathfinding(tilemap, { allowDiagonal: false, maxSearchNodes: 500 });
   const enemies = useEntityPool({ poolSize: 20 });
 
   const combat = useCombat({
@@ -77,6 +80,13 @@ export function RogueliteTemplate() {
   const [gameOver, setGameOver] = useState(false);
   const [messages, setMessages] = useState<string[]>(['Entered the dungeon...']);
   const moveTimerRef = useRef(0);
+
+  // Stable ref so the game loop interval (empty deps) always reads current values
+  const gsRef = useRef({
+    loop, input, tilemap, enemies, combat, loot, inventory,
+    playerGx, playerGy, gameOver,
+  });
+  gsRef.current = { loop, input, tilemap, enemies, combat, loot, inventory, playerGx, playerGy, gameOver };
 
   // Place player in first room
   useEffect(() => {
@@ -105,13 +115,14 @@ export function RogueliteTemplate() {
     fog.updateVisibility(playerGx, playerGy, 4);
   }, [playerGx, playerGy]);
 
-  // Game loop
+  // Game loop — empty deps so the interval is created ONCE and never recreated.
+  // All game state is read from gsRef.current which is updated every render.
   useEffect(() => {
     const id = setInterval(() => {
-      if (loop.paused || gameOver) return;
-      const dt = 1 / 60;
-      moveTimerRef.current += dt;
+      const { loop, input, tilemap, enemies, combat, loot, inventory, playerGx, playerGy, gameOver } = gsRef.current;
 
+      if (loop.paused || gameOver) return;
+      moveTimerRef.current += 1 / 60;
       if (moveTimerRef.current < MOVE_COOLDOWN) return;
 
       let dx = 0, dy = 0;
@@ -143,11 +154,9 @@ export function RogueliteTemplate() {
           setScore(s => s + (enemyAtPos.type === 'boss' ? 50 : 10));
           setMessages(prev => [...prev.slice(-4), `Defeated ${enemyAtPos.type}!`]);
         } else {
-          // Enemy counter-attacks
           const eDmg = Math.max(1, (enemyAtPos.attack as number) - combat.stats.defense * 0.5);
           combat.takeDamage({ amount: eDmg, type: 'physical' });
           setMessages(prev => [...prev.slice(-4), `${enemyAtPos.type} hits back for ${Math.floor(eDmg)}`]);
-
           if (combat.isDead) {
             setGameOver(true);
             setMessages(prev => [...prev.slice(-4), 'You died!']);
@@ -159,24 +168,37 @@ export function RogueliteTemplate() {
       setPlayerGx(nx);
       setPlayerGy(ny);
 
-      // Move enemies toward player
+      // Move enemies toward player (greedy step — O(3) per enemy, safe for QuickJS)
       enemies.all.forEach(e => {
         if (!e.alive) return;
-        const dist = Math.abs(e.x - nx) + Math.abs(e.y - ny);
-        if (dist > 8) return; // Only chase if close
-        const path = pathfinding.findPathGrid(e.x as number, e.y as number, nx, ny);
-        if (path && path.length > 1) {
-          const next = path[1];
-          // Don't move onto player or other enemies
-          if (next.x === nx && next.y === ny) return;
-          if (enemies.all.some(o => o !== e && o.alive && o.x === next.x && o.y === next.y)) return;
-          e.x = next.x;
-          e.y = next.y;
+        const ex = e.x as number;
+        const ey = e.y as number;
+        const dist = Math.abs(ex - nx) + Math.abs(ey - ny);
+        if (dist > 8) return;
+
+        const ddx = nx > ex ? 1 : nx < ex ? -1 : 0;
+        const ddy = ny > ey ? 1 : ny < ey ? -1 : 0;
+
+        const candidates: [number, number][] = ddx !== 0 && ddy !== 0
+          ? [[ddx, 0], [0, ddy]]
+          : ddx !== 0
+            ? [[ddx, 0], [0, 1], [0, -1]]
+            : [[0, ddy], [1, 0], [-1, 0]];
+
+        for (const [cx, cy] of candidates) {
+          const tx = ex + cx;
+          const ty = ey + cy;
+          if (tilemap.isSolid(tx, ty)) continue;
+          if (tx === nx && ty === ny) break;
+          if (enemies.all.some(o => o !== e && o.alive && o.x === tx && o.y === ty)) continue;
+          e.x = tx;
+          e.y = ty;
+          break;
         }
       });
     }, 16);
     return () => clearInterval(id);
-  }, [loop.paused, gameOver, playerGx, playerGy, input, tilemap, enemies, combat, pathfinding, loot, inventory, floor]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Camera offset for viewport centering
   const camGx = playerGx - Math.floor(VIEW_W / 2);
@@ -262,15 +284,11 @@ export function RogueliteTemplate() {
             <Text style={{ fontSize: 9, color: '#6c7086' }}>{`${combat.stats.hp}/${combat.stats.maxHp}`}</Text>
           </Box>
 
-          <Minimap
-            tilemap={tilemap}
-            width={120}
-            height={90}
-            fog={fog}
-            player={{ id: 0, x: playerGx * TILE_SIZE, y: playerGy * TILE_SIZE, vx: 0, vy: 0, width: 1, height: 1, alive: true } as EntityState}
-            entities={enemies.all.filter(e => e.alive && fog.getVisibility(e.x as number, e.y as number) === 'visible')
-              .map(e => ({ entity: { ...e, x: (e.x as number) * TILE_SIZE, y: (e.y as number) * TILE_SIZE } as EntityState, color: '#f38ba8' }))}
-          />
+          {/* Minimap placeholder — full map as Box nodes is too many Lua nodes for QuickJS.
+              Needs canvas/image-based implementation. */}
+          <Box style={{ width: 120, height: 90, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155', borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ fontSize: 9, color: '#334155' }}>map</Text>
+          </Box>
 
           {/* Inventory summary */}
           <Box style={{ gap: 2 }}>

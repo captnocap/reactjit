@@ -21,43 +21,52 @@ const updateCallbacks = new Set<(dt: number) => void>();
 export function useGameLoop(config: GameLoopConfig = {}): GameLoopState {
   const { fixedStep = 1 / 60, maxSteps = 4, timeScale: initialTimeScale = 1 } = config;
 
-  const [state, setState] = useState({
-    dt: 0, tick: 0, fps: 60, paused: false, timeScale: initialTimeScale,
-  });
+  // Only paused/timeScale are React state — changing these needs a re-render.
+  // dt/tick/fps are refs: they change every frame and must NOT trigger renders.
+  const [pausedState, setPausedState] = useState(false);
+  const [timeScaleState, setTimeScaleState] = useState(initialTimeScale);
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const dtRef = useRef(0);
+  const tickRef = useRef(0);
+  const fpsRef = useRef(60);
 
   const accumulatorRef = useRef(0);
   const lastTimeRef = useRef(0);
   const fpsFramesRef = useRef<number[]>([]);
-  const tickRef = useRef(0);
+
+  // Stable ref for paused so interval callback sees current value without recreating
+  const pausedRef = useRef(pausedState);
+  pausedRef.current = pausedState;
+  const timeScaleRef = useRef(timeScaleState);
+  timeScaleRef.current = timeScaleState;
 
   const pause = useCallback(() => {
-    setState(s => { const n = { ...s, paused: true }; stateRef.current = n; return n; });
+    pausedRef.current = true;
+    setPausedState(true);
   }, []);
 
   const resume = useCallback(() => {
-    setState(s => { const n = { ...s, paused: false }; stateRef.current = n; return n; });
+    pausedRef.current = false;
+    setPausedState(false);
     lastTimeRef.current = performance.now();
   }, []);
 
   const setTimeScale = useCallback((scale: number) => {
-    setState(s => { const n = { ...s, timeScale: scale }; stateRef.current = n; return n; });
+    timeScaleRef.current = scale;
+    setTimeScaleState(scale);
   }, []);
 
   useEffect(() => {
     lastTimeRef.current = performance.now();
 
     const intervalId = setInterval(() => {
-      const s = stateRef.current;
-      if (s.paused) return;
+      if (pausedRef.current) return;
 
       const now = performance.now();
       const rawDt = Math.min((now - lastTimeRef.current) / 1000, 0.25);
       lastTimeRef.current = now;
 
-      const scaledDt = rawDt * s.timeScale;
+      const scaledDt = rawDt * timeScaleRef.current;
       accumulatorRef.current += scaledDt;
 
       let steps = 0;
@@ -69,6 +78,7 @@ export function useGameLoop(config: GameLoopConfig = {}): GameLoopState {
       if (steps >= maxSteps) accumulatorRef.current = 0;
 
       tickRef.current++;
+      dtRef.current = scaledDt;
 
       // Rolling FPS
       fpsFramesRef.current.push(now);
@@ -76,20 +86,20 @@ export function useGameLoop(config: GameLoopConfig = {}): GameLoopState {
       while (fpsFramesRef.current.length > 0 && fpsFramesRef.current[0] < cutoff) {
         fpsFramesRef.current.shift();
       }
+      fpsRef.current = fpsFramesRef.current.length;
 
-      setState(prev => ({
-        ...prev,
-        dt: scaledDt,
-        tick: tickRef.current,
-        fps: fpsFramesRef.current.length,
-      }));
+      // No setState here — dt/tick/fps do not need to trigger re-renders
     }, fixedStep * 1000);
 
     return () => clearInterval(intervalId);
   }, [fixedStep, maxSteps]);
 
   return {
-    ...state,
+    dt: dtRef.current,
+    tick: tickRef.current,
+    fps: fpsRef.current,
+    paused: pausedState,
+    timeScale: timeScaleState,
     pause,
     resume,
     setTimeScale,
