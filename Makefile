@@ -85,6 +85,8 @@ build-storybook-native: node_modules
 		--global-name=ReactLoveStorybook \
 		--target=es2020 \
 		--jsx=automatic \
+		--external:child_process \
+		--external:ws \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
 		storybook/src/native-main.tsx
 
@@ -128,13 +130,14 @@ dist-storybook: build-storybook-native setup
 	rm -rf $(DIST_BINARY)
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua/audio/modules
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
 	cp lua/*.lua $(STAGING_DIR)/lua/
 	cp lua/audio/*.lua $(STAGING_DIR)/lua/audio/
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
+	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
 	# ── Assemble payload directory ──
 	# Don't fuse — ld-linux invocation breaks /proc/self/exe detection.
@@ -287,6 +290,10 @@ cli-setup: setup
 	cp -r packages/webhooks cli/runtime/ilovereact/webhooks
 	cp -r packages/crypto cli/runtime/ilovereact/crypto
 	cp -r packages/media cli/runtime/ilovereact/media
+	cp -r packages/game cli/runtime/ilovereact/game
+	cp -r packages/theme cli/runtime/ilovereact/theme
+	mkdir -p cli/runtime/lua/themes
+	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts ]; then \
 		mkdir -p cli/runtime/fonts; \
 		cp -r fonts/* cli/runtime/fonts/; \

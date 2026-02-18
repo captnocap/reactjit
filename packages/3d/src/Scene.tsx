@@ -13,7 +13,7 @@ import type { SceneProps } from './types';
  *
  * Children should be 3D elements: <Camera>, <Mesh>, etc.
  */
-export function Scene({ style, backgroundColor, children }: SceneProps) {
+export function Scene({ style, backgroundColor, stars, orbitControls, children }: SceneProps) {
   const mode = useRendererMode();
 
   if (mode === 'web') {
@@ -37,5 +37,7 @@ export function Scene({ style, backgroundColor, children }: SceneProps) {
   return React.createElement('Scene3D', {
     style,
     backgroundColor,
+    stars,
+    orbitControls,
   }, children);
 }

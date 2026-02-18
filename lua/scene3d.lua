@@ -77,8 +77,8 @@ end
 --- Generate vertex data for a UV sphere
 local function generateSphere(radius, segments, rings)
   radius = radius or 0.5
-  segments = segments or 16
-  rings = rings or 12
+  segments = segments or 48
+  rings = rings or 32
   local verts = {}
   local pi = math.pi
 
@@ -172,6 +172,179 @@ local function getColorTexture(hexColor)
 end
 
 -- ============================================================================
+-- Procedural texture generators
+-- ============================================================================
+
+-- Simple hash-based noise (no bit library needed)
+local function hashNoise(x, y, seed)
+  local n = x * 374761393 + y * 668265263 + (seed or 0) * 1013904223
+  n = math.abs(n)
+  n = (n % 65537) / 65537
+  -- Extra scramble
+  n = math.sin(n * 12345.6789) * 0.5 + 0.5
+  return n
+end
+
+-- Smoothed noise with bilinear interpolation
+local function smoothNoise(x, y, seed)
+  local ix = math.floor(x)
+  local iy = math.floor(y)
+  local fx = x - ix
+  local fy = y - iy
+  -- Smoothstep
+  fx = fx * fx * (3 - 2 * fx)
+  fy = fy * fy * (3 - 2 * fy)
+
+  local n00 = hashNoise(ix, iy, seed)
+  local n10 = hashNoise(ix + 1, iy, seed)
+  local n01 = hashNoise(ix, iy + 1, seed)
+  local n11 = hashNoise(ix + 1, iy + 1, seed)
+
+  local nx0 = n00 + (n10 - n00) * fx
+  local nx1 = n01 + (n11 - n01) * fx
+  return nx0 + (nx1 - nx0) * fy
+end
+
+-- Multi-octave fractal noise
+local function fbm(x, y, octaves, seed)
+  local value = 0
+  local amplitude = 0.5
+  local frequency = 1
+  local total = 0
+  for _ = 1, (octaves or 5) do
+    value = value + smoothNoise(x * frequency, y * frequency, seed) * amplitude
+    total = total + amplitude
+    amplitude = amplitude * 0.5
+    frequency = frequency * 2
+  end
+  return value / total
+end
+
+--- Generate a procedural planet texture (equirectangular projection)
+local function generatePlanetTexture(seed)
+  seed = seed or 42
+  local tw, th = 512, 256
+  local imgData = love.image.newImageData(tw, th)
+
+  for py = 0, th - 1 do
+    local v = py / th             -- 0=north pole, 1=south pole
+    local lat = (v - 0.5) * math.pi  -- -pi/2 to pi/2
+
+    for px = 0, tw - 1 do
+      local u = px / tw           -- 0-1 longitude
+
+      -- Sample terrain height from noise
+      local nx = u * 6
+      local ny = v * 3
+      local terrain = fbm(nx, ny, 6, seed)
+
+      -- Add continental-scale features
+      local continent = fbm(nx * 0.5, ny * 0.5, 3, seed + 100)
+
+      local h = terrain * 0.6 + continent * 0.4
+      local seaLevel = 0.45
+
+      local r, g, b
+
+      -- Ice caps at poles
+      local absLat = math.abs(lat)
+      if absLat > 1.25 then
+        -- Polar ice
+        local iceBlend = (absLat - 1.25) / 0.3
+        iceBlend = math.min(iceBlend, 1)
+        local snowNoise = fbm(nx * 2, ny * 2, 3, seed + 200) * 0.15
+        r = 0.85 + snowNoise
+        g = 0.88 + snowNoise
+        b = 0.92 + snowNoise
+        -- Blend with underlying terrain at edges
+        if iceBlend < 1 and h > seaLevel then
+          r = r * iceBlend + (0.25 + h * 0.3) * (1 - iceBlend)
+          g = g * iceBlend + (0.4 + h * 0.25) * (1 - iceBlend)
+          b = b * iceBlend + 0.15 * (1 - iceBlend)
+        end
+      elseif h < seaLevel then
+        -- Ocean: deep blue with depth variation
+        local depth = (seaLevel - h) / seaLevel
+        r = 0.04 + depth * 0.03
+        g = 0.10 + depth * 0.06
+        b = 0.35 + depth * 0.25
+        -- Shallow water near coastlines
+        if h > seaLevel - 0.05 then
+          local shallow = 1 - (seaLevel - h) / 0.05
+          r = r + shallow * 0.05
+          g = g + shallow * 0.12
+          b = b - shallow * 0.05
+        end
+      else
+        -- Land: varies by altitude and latitude
+        local elevation = (h - seaLevel) / (1 - seaLevel)
+        local tropicness = 1 - math.abs(lat) / (math.pi * 0.4)
+        tropicness = math.max(0, math.min(1, tropicness))
+
+        if elevation > 0.6 then
+          -- Mountains/highlands (grey-brown)
+          local rock = fbm(nx * 4, ny * 4, 3, seed + 300) * 0.1
+          r = 0.45 + rock
+          g = 0.40 + rock
+          b = 0.35 + rock
+        elseif elevation > 0.35 then
+          -- Hills (brown-green transition)
+          local mix = (elevation - 0.35) / 0.25
+          r = 0.25 * (1 - mix) + 0.40 * mix
+          g = 0.40 * (1 - mix) + 0.35 * mix
+          b = 0.12 * (1 - mix) + 0.20 * mix
+        else
+          -- Lowlands: tropical=lush green, temperate=green, arid=tan
+          local moisture = fbm(nx * 1.5 + 50, ny * 1.5 + 50, 4, seed + 400)
+          if moisture > 0.5 and tropicness > 0.5 then
+            -- Lush tropical
+            r = 0.10 + elevation * 0.15
+            g = 0.35 + elevation * 0.20
+            b = 0.08
+          elseif moisture > 0.35 then
+            -- Temperate green
+            r = 0.18 + elevation * 0.12
+            g = 0.32 + elevation * 0.18
+            b = 0.10
+          else
+            -- Arid/desert
+            r = 0.55 + elevation * 0.15
+            g = 0.45 + elevation * 0.10
+            b = 0.25
+          end
+        end
+      end
+
+      -- Clamp
+      r = math.max(0, math.min(1, r))
+      g = math.max(0, math.min(1, g))
+      b = math.max(0, math.min(1, b))
+
+      imgData:setPixel(px, py, r, g, b, 1)
+    end
+  end
+
+  local img = love.graphics.newImage(imgData)
+  img:setFilter("linear", "linear")
+  img:setWrap("repeat", "clamp")
+  return img
+end
+
+-- Cache for procedural textures
+local proceduralTextureCache = {}
+
+--- Get a procedural texture by name
+local function getProceduralTexture(name, seed)
+  local key = name .. ":" .. tostring(seed or 0)
+  if not proceduralTextureCache[key] then
+    if name == "planet" then
+      proceduralTextureCache[key] = generatePlanetTexture(seed)
+    end
+  end
+  return proceduralTextureCache[key]
+end
+
+-- ============================================================================
 -- Edge shader (UV-based edge detection)
 -- ============================================================================
 
@@ -195,18 +368,31 @@ vec4 position(mat4 transformProjection, vec4 vertexPosition) {
 local edgeShaderFrag = [[
 uniform vec4 edgeColor;
 uniform float edgeWidth;
+uniform float gridLines;  // 0 = edge-only mode, >0 = grid with N divisions
 
 vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
     vec4 texColor = Texel(tex, texture_coords);
     vec4 baseColor = texColor * color;
 
-    // Detect edges: UV near 0 or 1 on either axis
     float u = texture_coords.x;
     float v = texture_coords.y;
     float edgeMask = 0.0;
-    if (u < edgeWidth || u > 1.0 - edgeWidth ||
-        v < edgeWidth || v > 1.0 - edgeWidth) {
-        edgeMask = 1.0;
+
+    if (gridLines > 0.0) {
+        // Grid mode: draw lines at regular UV intervals
+        float gu = fract(u * gridLines);
+        float gv = fract(v * gridLines);
+        float lineW = edgeWidth * gridLines;
+        if (gu < lineW || gu > 1.0 - lineW ||
+            gv < lineW || gv > 1.0 - lineW) {
+            edgeMask = 1.0;
+        }
+    } else {
+        // Edge-only mode: lines at UV boundaries (0 and 1)
+        if (u < edgeWidth || u > 1.0 - edgeWidth ||
+            v < edgeWidth || v > 1.0 - edgeWidth) {
+            edgeMask = 1.0;
+        }
     }
 
     return mix(baseColor, edgeColor, edgeMask);
@@ -218,6 +404,91 @@ local function getEdgeShader()
     edgeShader = love.graphics.newShader(edgeShaderVert, edgeShaderFrag)
   end
   return edgeShader
+end
+
+-- ============================================================================
+-- Lighting shader (Blinn-Phong)
+-- ============================================================================
+
+local lightingShader = nil
+
+local lightingShaderVert = [[
+uniform mat4 projectionMatrix;
+uniform mat4 viewMatrix;
+uniform mat4 modelMatrix;
+uniform bool isCanvasEnabled;
+
+attribute vec3 VertexNormal;
+
+varying vec3 fragWorldPos;
+varying vec3 fragNormal;
+
+vec4 position(mat4 transformProjection, vec4 vertexPosition) {
+    vec4 worldPos = modelMatrix * vertexPosition;
+    fragWorldPos = worldPos.xyz;
+
+    // Normal transform (correct for uniform scale; re-normalize in frag)
+    fragNormal = mat3(modelMatrix) * VertexNormal;
+
+    vec4 screenPos = projectionMatrix * viewMatrix * worldPos;
+    if (isCanvasEnabled) {
+        screenPos.y *= -1.0;
+    }
+    return screenPos;
+}
+]]
+
+local lightingShaderFrag = [[
+uniform vec3 ambientColor;
+uniform vec3 lightDirection;   // normalized, points TOWARD the light
+uniform vec3 lightColor;
+uniform vec3 cameraPosition;
+
+uniform float specularPower;   // shininess (32-128 typical)
+uniform float fresnelPower;    // 0 = disabled, 3-5 = atmosphere rim
+uniform float meshOpacity;     // overall alpha
+
+varying vec3 fragWorldPos;
+varying vec3 fragNormal;
+
+vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+    vec4 texColor = Texel(tex, texture_coords);
+    vec3 baseColor = texColor.rgb * color.rgb;
+
+    vec3 N = normalize(fragNormal);
+    vec3 L = normalize(lightDirection);
+    vec3 V = normalize(cameraPosition - fragWorldPos);
+
+    // Diffuse (Lambert)
+    float diff = max(dot(N, L), 0.0);
+
+    // Specular (Blinn-Phong)
+    vec3 H = normalize(L + V);
+    float spec = pow(max(dot(N, H), 0.0), specularPower);
+
+    // Combine
+    vec3 ambient = ambientColor * baseColor;
+    vec3 diffuse = lightColor * baseColor * diff;
+    vec3 specular = lightColor * spec * 0.4;
+
+    vec3 finalColor = ambient + diffuse + specular;
+
+    // Fresnel rim
+    float alpha = meshOpacity;
+    if (fresnelPower > 0.0) {
+        float fresnel = pow(1.0 - max(dot(N, V), 0.0), fresnelPower);
+        alpha *= fresnel;
+    }
+
+    return vec4(finalColor, alpha * texColor.a);
+}
+]]
+
+local function getLightingShader()
+  if not lightingShader then
+    lightingShader = love.graphics.newShader(lightingShaderVert, lightingShaderFrag)
+  end
+  return lightingShader
 end
 
 --- Parse a hex color to {r, g, b, a} floats
@@ -280,6 +551,8 @@ local function ensureMeshModel(scene, meshNode)
   -- Determine geometry key
   local geometry = props.geometry or "box"
   local color = props.color
+  local textureProp = props.texture
+  local seed = props.seed
 
   local edgeColor = props.edgeColor
   local edgeWidth = props.edgeWidth or 0.03
@@ -288,6 +561,8 @@ local function ensureMeshModel(scene, meshNode)
   local needsCreate = not entry
     or entry.geometry ~= geometry
     or entry.color ~= color
+    or entry.textureProp ~= textureProp
+    or entry.seed ~= seed
 
   if needsCreate then
     -- Generate or load vertices
@@ -300,13 +575,23 @@ local function ensureMeshModel(scene, meshNode)
       verts = generateBox()
     end
 
-    local texture = getColorTexture(color)
+    -- Resolve texture: procedural name, or flat color
+    local texture
+    if textureProp and type(textureProp) == "string" then
+      texture = getProceduralTexture(textureProp, seed)
+    end
+    if not texture then
+      texture = getColorTexture(color)
+    end
+
     local model = g3d.newModel(verts, texture)
 
     entry = {
       model = model,
       geometry = geometry,
       color = color,
+      textureProp = textureProp,
+      seed = seed,
     }
     scene.meshes[meshId] = entry
   end
@@ -314,6 +599,14 @@ local function ensureMeshModel(scene, meshNode)
   -- Update edge properties (cheap, every frame)
   entry.edgeColor = edgeColor and parseHexColor(edgeColor) or nil
   entry.edgeWidth = edgeWidth
+  entry.wireframe = props.wireframe or false
+  entry.gridLines = props.gridLines or 0
+
+  -- Material properties
+  entry.opacity = props.opacity or 1.0
+  entry.specular = props.specular or 32
+  entry.fresnel = props.fresnel or 0
+  entry.unlit = props.unlit or false
 
   -- Apply transform from props (these are cheap to update every frame)
   local pos = props.position or {0, 0, 0}
@@ -380,8 +673,26 @@ local function syncScene(node)
     end
   end
 
-  -- Walk children to find Camera3D and Mesh3D nodes
+  -- Stars prop
+  scene.stars = props.stars or false
+  scene.nodeId = node.id
+
+  -- Orbit controls (Lua-side mouse polling, zero-latency rotation)
+  scene.orbitControls = props.orbitControls or false
+  scene.screenX = c.x or 0
+  scene.screenY = c.y or 0
+  -- Preserve orbit state across frames (don't reset)
+  if scene.orbitRotX == nil then
+    scene.orbitRotX = 0
+    scene.orbitRotY = 0
+    scene.orbitPrevMX = nil
+    scene.orbitPrevMY = nil
+  end
+
+  -- Walk children to find Camera3D, Mesh3D, and Light nodes
   scene.cameraNode = nil
+  scene.directionalLight = nil
+  scene.ambientLight = nil
   local activeMeshIds = {}
 
   local function walkChildren(parent)
@@ -391,11 +702,13 @@ local function syncScene(node)
       elseif child.type == "Mesh3D" then
         ensureMeshModel(scene, child)
         activeMeshIds[child.id] = true
+      elseif child.type == "DirectionalLight3D" then
+        scene.directionalLight = child.props
+      elseif child.type == "AmbientLight3D" then
+        scene.ambientLight = child.props
       elseif child.type == "Group3D" then
-        -- Recurse into groups
         walkChildren(child)
       end
-      -- Light nodes will be handled in Phase 3
     end
   end
 
@@ -411,6 +724,69 @@ local function syncScene(node)
       scene.meshes[meshId] = nil
     end
   end
+end
+
+-- ============================================================================
+-- Rendering
+-- ============================================================================
+
+-- ============================================================================
+-- Procedural starfield
+-- ============================================================================
+
+local starCache = {}  -- sceneId -> { points, colors }
+
+local function getStars(sceneId, w, h)
+  local key = sceneId .. ":" .. w .. "x" .. h
+  if starCache[key] then return starCache[key] end
+
+  local stars = {}
+  local count = 300
+  -- Seeded pseudo-random using the sceneId hash
+  local seed = 12345
+  for i = 1, count do
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    local sx = (seed % w)
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    local sy = (seed % h)
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    local brightness = 0.3 + (seed % 700) / 1000  -- 0.3 to 1.0
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    local size = 1 + (seed % 2)  -- 1 or 2 px
+    stars[i] = { x = sx, y = sy, brightness = brightness, size = size }
+  end
+
+  starCache[key] = stars
+  return stars
+end
+
+-- ============================================================================
+-- Light helpers
+-- ============================================================================
+
+--- Parse a hex color string to {r, g, b} floats (0-1), with optional intensity multiplier
+local function parseLightColor(hex, intensity)
+  intensity = intensity or 1.0
+  local r, g, b = 1, 1, 1
+  if hex and type(hex) == "string" then
+    hex = hex:gsub("#", "")
+    if #hex == 6 then
+      r = tonumber(hex:sub(1, 2), 16) / 255
+      g = tonumber(hex:sub(3, 4), 16) / 255
+      b = tonumber(hex:sub(5, 6), 16) / 255
+    end
+  end
+  return { r * intensity, g * intensity, b * intensity }
+end
+
+--- Normalize a vec3 table
+local function normalizeVec3(v)
+  local x, y, z = v[1] or 0, v[2] or 0, v[3] or 0
+  local len = math.sqrt(x*x + y*y + z*z)
+  if len > 0.0001 then
+    return { x/len, y/len, z/len }
+  end
+  return { 0, -1, 0 }
 end
 
 -- ============================================================================
@@ -436,11 +812,24 @@ local function renderScene(scene)
   -- Reset color to white for textured rendering
   love.graphics.setColor(1, 1, 1, 1)
 
+  -- Draw starfield (2D, before 3D)
+  if scene.stars then
+    love.graphics.setDepthMode()  -- disable depth for 2D stars
+    love.graphics.setShader()
+    local stars = getStars(scene.nodeId or "default", scene.width, scene.height)
+    for _, star in ipairs(stars) do
+      love.graphics.setColor(star.brightness, star.brightness, star.brightness * 0.95, 1)
+      love.graphics.setPointSize(star.size)
+      love.graphics.points(star.x, star.y)
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setDepthMode("lequal", true)  -- re-enable for 3D
+  end
+
   -- Set up camera
   if scene.cameraNode then
     applyCamera(scene.cameraNode, scene.width, scene.height)
   else
-    -- Default camera: look at origin from a reasonable angle
     g3d.camera.position = {0, -3, 2}
     g3d.camera.target = {0, 0, 0}
     g3d.camera.fov = math.pi / 3
@@ -451,19 +840,119 @@ local function renderScene(scene)
     g3d.camera.updateViewMatrix()
   end
 
-  -- Draw all meshes
-  for _, entry in pairs(scene.meshes) do
-    if entry.model then
-      if entry.edgeColor then
-        -- Use edge shader for meshes with edge highlighting
-        local shader = getEdgeShader()
-        shader:send("edgeColor", entry.edgeColor)
-        shader:send("edgeWidth", entry.edgeWidth)
-        entry.model:draw(shader)
+  -- Orbit controls: poll mouse directly for zero-latency rotation
+  if scene.orbitControls then
+    local mx, my = love.mouse.getPosition()
+    local mouseDown = love.mouse.isDown(1)
+
+    if mouseDown then
+      if scene.orbitPrevMX then
+        -- Already tracking: accumulate delta
+        local dx = mx - scene.orbitPrevMX
+        local dy = my - scene.orbitPrevMY
+        scene.orbitRotY = scene.orbitRotY + dx * 0.008
+        scene.orbitRotX = scene.orbitRotX + dy * 0.008
+        scene.orbitPrevMX = mx
+        scene.orbitPrevMY = my
       else
-        entry.model:draw()
+        -- Start tracking only if mouse is within scene bounds
+        local inBounds = mx >= scene.screenX and mx <= scene.screenX + scene.width
+                     and my >= scene.screenY and my <= scene.screenY + scene.height
+        if inBounds then
+          scene.orbitPrevMX = mx
+          scene.orbitPrevMY = my
+        end
+      end
+    else
+      scene.orbitPrevMX = nil
+      scene.orbitPrevMY = nil
+    end
+
+    -- Apply orbit rotation offset to all meshes
+    if scene.orbitRotX ~= 0 or scene.orbitRotY ~= 0 then
+      for _, entry in pairs(scene.meshes) do
+        if entry.model then
+          local r = entry.model.rotation
+          entry.model:setRotation(r[1] + scene.orbitRotX, r[2] + scene.orbitRotY, r[3])
+        end
       end
     end
+  end
+
+  -- Resolve lighting
+  local dirLight = scene.directionalLight or {}
+  local ambLight = scene.ambientLight or {}
+
+  local lightDir = normalizeVec3(dirLight.direction or {-1, 0.5, -0.3})
+  local lightColor = parseLightColor(dirLight.color, dirLight.intensity)
+  local ambientColor = parseLightColor(ambLight.color or "#1a1a2e", ambLight.intensity or 0.15)
+  local camPos = g3d.camera.position
+
+  -- Separate opaque and transparent meshes
+  local opaque = {}
+  local transparent = {}
+  for _, entry in pairs(scene.meshes) do
+    if entry.model then
+      if entry.opacity < 1.0 then
+        transparent[#transparent + 1] = entry
+      else
+        opaque[#opaque + 1] = entry
+      end
+    end
+  end
+
+  -- Helper: draw a mesh with the appropriate shader
+  local function drawMesh(entry)
+    local useEdgeShader = entry.edgeColor or entry.wireframe
+
+    if useEdgeShader then
+      -- Edge/wireframe shader (no lighting)
+      local shader = getEdgeShader()
+      local ec = entry.edgeColor or {1, 1, 1, 0.6}
+      local gl = entry.gridLines
+      if entry.wireframe and gl == 0 then gl = 8 end
+      shader:send("edgeColor", ec)
+      shader:send("edgeWidth", entry.edgeWidth)
+      shader:send("gridLines", gl)
+      entry.model:draw(shader)
+    elseif entry.unlit then
+      -- Unlit: use lighting shader with full ambient, no diffuse/specular
+      local shader = getLightingShader()
+      shader:send("ambientColor", {1, 1, 1})
+      shader:send("lightDirection", {0, 0, 0})
+      shader:send("lightColor", {0, 0, 0})
+      shader:send("cameraPosition", camPos)
+      shader:send("specularPower", 1.0)
+      shader:send("fresnelPower", entry.fresnel)
+      shader:send("meshOpacity", entry.opacity)
+      entry.model:draw(shader)
+    else
+      -- Lighting shader
+      local shader = getLightingShader()
+      shader:send("ambientColor", ambientColor)
+      shader:send("lightDirection", lightDir)
+      shader:send("lightColor", lightColor)
+      shader:send("cameraPosition", camPos)
+      shader:send("specularPower", entry.specular)
+      shader:send("fresnelPower", entry.fresnel)
+      shader:send("meshOpacity", entry.opacity)
+      entry.model:draw(shader)
+    end
+  end
+
+  -- Draw opaque meshes first
+  for _, entry in ipairs(opaque) do
+    drawMesh(entry)
+  end
+
+  -- Draw transparent meshes with depth write disabled
+  if #transparent > 0 then
+    love.graphics.setDepthMode("lequal", false)  -- test depth but don't write
+    love.graphics.setBlendMode("alpha")
+    for _, entry in ipairs(transparent) do
+      drawMesh(entry)
+    end
+    love.graphics.setDepthMode("lequal", true)
   end
 
   -- Restore Love2D graphics state (canvas, depth mode, shader, etc.)
