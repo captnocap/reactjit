@@ -601,9 +601,10 @@ export function TorIRCStory() {
     };
 
     ws.onerror = () => {
-      addMsg('', `Failed to connect to ${nick}`, false, true);
-      setPeers(p => p.map(x => x.onion === onion ? { ...x, status: 'closed' } : x));
-      outgoingRef.current.delete(onion);
+      addMsg('', `Failed to connect to ${nick} — retrying...`, false, true);
+      setPeers(p => p.map(x => x.onion === onion ? { ...x, status: 'connecting' } : x));
+      // Don't delete from outgoingRef — Lua auto-reconnects with the same id,
+      // so ws.onopen will fire again when the circuit eventually establishes.
     };
   }, [addMsg]);
 
