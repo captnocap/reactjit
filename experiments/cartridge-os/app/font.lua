@@ -1,10 +1,9 @@
 --[[
-  sdl2_font.lua -- FreeType glyph rasterizer + per-glyph GL texture cache
-  Framework version of experiments/sdl2-painter/font.lua.
-  Loads ft_helper.so from lib/ (placed there by ilovereact update / make cli-setup).
+  font.lua -- FreeType glyph rasterizer + per-glyph GL texture cache
+  CartridgeOS version: searches Alpine, Debian, and Arch font paths.
 ]]
 local ffi = require("ffi")
-local GL  = require("lua.sdl2_gl")
+local GL  = require("gl")
 
 ffi.cdef[[
   int  ft_init(void);
@@ -23,66 +22,44 @@ ffi.cdef[[
   int  ft_measure_text_utf8(const char *text, int byte_len);
 ]]
 
-local function findFtHelper()
-  local candidates = {
-    "lib/ft_helper.so",
-    "lib/libft_helper.so",
-  }
-  for _, p in ipairs(candidates) do
-    local f = io.open(p, "r")
-    if f then f:close(); return p end
-  end
-  -- Try next to this file (storybook / dev layout)
-  local dir = debug.getinfo(1, "S").source:match("@(.*/)") or "./"
-  local p = dir .. "../lib/ft_helper.so"
-  local f = io.open(p, "r")
-  if f then f:close(); return p end
-  error("[sdl2_font] ft_helper.so not found in lib/. Run: make cli-setup")
-end
-
-local ft = ffi.load(findFtHelper())
+-- ft_helper.so lives in the same directory as this script
+local script_dir = debug.getinfo(1, "S").source:match("@(.*/)") or "./"
+local ft = ffi.load(script_dir .. "ft_helper.so")
 
 local Font = {}
-
 local cache       = {}
 local currentSize = nil
 
 local FONT_CANDIDATES = {
-  -- Debian/Ubuntu paths
+  -- Alpine Linux
+  "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+  "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+  -- Debian/Ubuntu
   "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
   "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
-  "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf",
-  -- Alpine Linux paths
-  "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-  "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-  -- Arch Linux paths
-  "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+  -- Arch Linux
   "/usr/share/fonts/TTF/DejaVuSans.ttf",
-  -- Generic fallbacks
+  -- Generic
   "/usr/share/fonts/LiberationSans-Regular.ttf",
   "/usr/share/fonts/DejaVuSans.ttf",
 }
 
-local function findFont(fontFamily)
-  if fontFamily then
-    local f = io.open(fontFamily, "r")
-    if f then f:close(); return fontFamily end
-  end
+local function findFont()
   for _, p in ipairs(FONT_CANDIDATES) do
     local f = io.open(p, "r")
     if f then f:close(); return p end
   end
-  error("[sdl2_font] No suitable font found.")
+  error("[font] No suitable font found. FONT_CANDIDATES exhausted.")
 end
 
-function Font.init(fontFamily)
+function Font.init()
   local err = ft.ft_init()
-  if err ~= 0 then error("[sdl2_font] FreeType init failed: " .. err) end
-  local path = findFont(fontFamily)
+  if err ~= 0 then error("[font] FreeType init failed: " .. err) end
+  local path = findFont()
   err = ft.ft_load_font(path)
-  if err ~= 0 then error("[sdl2_font] Load failed (" .. err .. "): " .. path) end
-  print("[sdl2_font] loaded: " .. path)
+  if err ~= 0 then error("[font] FreeType load failed (" .. err .. "): " .. path) end
+  io.write("[font] loaded: " .. path .. "\n"); io.flush()
 end
 
 local function ensureSize(size)
@@ -90,22 +67,6 @@ local function ensureSize(size)
   ft.ft_set_size(size)
   currentSize = size
   if not cache[size] then cache[size] = {} end
-end
-
-local function utf8next(s, i)
-  local c = s:byte(i)
-  if not c then return nil, 0 end
-  local cp, len
-  if     c < 0x80 then cp = c;                    len = 1
-  elseif c < 0xE0 then cp = bit.band(c, 0x1F);   len = 2
-  elseif c < 0xF0 then cp = bit.band(c, 0x0F);   len = 3
-  else                  cp = bit.band(c, 0x07);   len = 4
-  end
-  for j = 1, len - 1 do
-    local nb = s:byte(i + j) or 0x80
-    cp = bit.bor(bit.lshift(cp, 6), bit.band(nb, 0x3F))
-  end
-  return cp, len
 end
 
 local function loadGlyph(size, cp)
@@ -121,8 +82,7 @@ local function loadGlyph(size, cp)
   local obuf = ffi.new("unsigned char*[1]")
 
   local ok = ft.ft_render_char(cp, ow, oh, ol, ot, oa, obl, obuf)
-
-  local g = { texId = 0, w = 0, h = 0, left = 0, top = 0, advance = 0 }
+  local g  = { texId = 0, w = 0, h = 0, left = 0, top = 0, advance = 0 }
 
   if ok ~= 0 then
     g.left    = ol[0]
@@ -135,6 +95,7 @@ local function loadGlyph(size, cp)
       local ids = ffi.new("unsigned int[1]")
       GL.glGenTextures(1, ids)
       g.texId = ids[0]
+
       GL.glBindTexture(GL.TEXTURE_2D, g.texId)
       GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 1)
       GL.glTexImage2D(GL.TEXTURE_2D, 0, GL.ALPHA,
@@ -152,9 +113,25 @@ local function loadGlyph(size, cp)
   return g
 end
 
+local function utf8next(s, i)
+  local c = s:byte(i)
+  if not c then return nil, 0 end
+  local cp, len
+  if     c < 0x80 then cp = c;                  len = 1
+  elseif c < 0xE0 then cp = bit.band(c, 0x1F); len = 2
+  elseif c < 0xF0 then cp = bit.band(c, 0x0F); len = 3
+  else                  cp = bit.band(c, 0x07); len = 4
+  end
+  for j = 1, len - 1 do
+    local nb = s:byte(i + j) or 0x80
+    cp = bit.bor(bit.lshift(cp, 6), bit.band(nb, 0x3F))
+  end
+  return cp, len
+end
+
 function Font.draw(text, x, y, size, r, g, b, a)
   ensureSize(size)
-  local ascender  = ft.ft_get_ascender()
+  local ascender = ft.ft_get_ascender()
   local baselineY = y + ascender
   local cx = x
   local i  = 1
@@ -163,15 +140,16 @@ function Font.draw(text, x, y, size, r, g, b, a)
     if not cp then break end
     local gi = loadGlyph(size, cp)
     if gi.texId ~= 0 then
-      local gx, gy = cx + gi.left, baselineY - gi.top
+      local gx = cx + gi.left
+      local gy = baselineY - gi.top
       GL.glEnable(GL.TEXTURE_2D)
       GL.glBindTexture(GL.TEXTURE_2D, gi.texId)
       GL.glColor4f(r, g, b, a)
       GL.glBegin(GL.TRIANGLE_STRIP)
-        GL.glTexCoord2f(0,0); GL.glVertex2f(gx,         gy)
-        GL.glTexCoord2f(1,0); GL.glVertex2f(gx + gi.w,  gy)
-        GL.glTexCoord2f(0,1); GL.glVertex2f(gx,         gy + gi.h)
-        GL.glTexCoord2f(1,1); GL.glVertex2f(gx + gi.w,  gy + gi.h)
+        GL.glTexCoord2f(0, 0); GL.glVertex2f(gx,         gy)
+        GL.glTexCoord2f(1, 0); GL.glVertex2f(gx + gi.w,  gy)
+        GL.glTexCoord2f(0, 1); GL.glVertex2f(gx,         gy + gi.h)
+        GL.glTexCoord2f(1, 1); GL.glVertex2f(gx + gi.w,  gy + gi.h)
       GL.glEnd()
       GL.glBindTexture(GL.TEXTURE_2D, 0)
       GL.glDisable(GL.TEXTURE_2D)
