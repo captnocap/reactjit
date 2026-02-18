@@ -26,8 +26,10 @@ local errors     = require("lua.errors")      -- error overlay (always loaded, s
 local inspector  = require("lua.inspector")   -- debug inspector (F12 toggle, self-contained)
 local console    = require("lua.console")     -- interactive eval console (` toggle, self-contained)
 local devtools   = require("lua.devtools")    -- unified bottom panel with tabs (Elements + Console)
+local settings   = require("lua.settings")    -- API key management overlay (F10 toggle)
 local screenshot = nil                        -- screenshot.lua (loaded on demand)
 local inspectorEnabled = true                 -- can be disabled via config.inspector = false
+local settingsEnabled  = true                 -- can be disabled via config.settings = false
 
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
@@ -309,6 +311,18 @@ function ReactLove.init(config)
   -- Inspector/console can be disabled for production builds
   inspectorEnabled = config.inspector ~= false
 
+  -- Settings overlay can be disabled or configured
+  settingsEnabled = config.settings ~= false
+  if settingsEnabled then
+    local settingsKey = "f10"
+    if type(config.settings) == "table" and config.settings.key then
+      settingsKey = config.settings.key
+    elseif type(config.settingsKey) == "string" then
+      settingsKey = config.settingsKey
+    end
+    settings.init({ key = settingsKey })
+  end
+
   mode = detectMode(config)
   local ns = config.namespace or "default"
 
@@ -521,6 +535,19 @@ function ReactLove.init(config)
       for method, handler in pairs(storage.getHandlers()) do
         rpcHandlers[method] = handler
       end
+    end
+  end
+
+  -- Register settings RPC handlers (API key management)
+  if settingsEnabled then
+    rpcHandlers["settings:getKeys"] = function()
+      return settings.getKeys()
+    end
+    rpcHandlers["settings:getKey"] = function(args)
+      if args and args.serviceId then
+        return settings.getKey(args.serviceId, args.fieldKey)
+      end
+      return nil
     end
   end
 
@@ -895,8 +922,9 @@ function ReactLove.update(dt)
     })
   end
 
-  -- 3. Tick again (event handlers may have triggered state updates)
-  bridge:tick()
+  -- Note: no second bridge:tick() here. Input-triggered state updates
+  -- are deferred and will be processed on the next frame's tick.
+  -- The double-tick was halving JS throughput at high framerates.
 
   -- 4. Drain mutation commands from JS and apply to retained tree
   local commands = bridge:drainCommands()
@@ -910,7 +938,8 @@ function ReactLove.update(dt)
         if t == "rpc:call" or t == "http:request" or t == "http:stream" or t == "browse:request"
            or t == "ws:connect" or t == "ws:send" or t == "ws:close"
            or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop"
-           or t == "theme:set" then
+           or t == "theme:set"
+           or t == "settings:registry" or t == "settings:keys:set" then
           hasSpecial = true
           break
         end
@@ -1059,6 +1088,22 @@ function ReactLove.update(dt)
             if tree then tree.markDirty() end
             io.write("[react-love] Theme switched to: " .. name .. "\n"); io.flush()
           end
+
+        elseif type(cmd) == "table" and cmd.type == "settings:registry" then
+          -- Receive service definitions from React
+          local payload = cmd.payload
+          if payload and payload.services and settingsEnabled then
+            settings.setServices(payload.services)
+            io.write("[react-love] Settings: registered " .. #payload.services .. " services\n"); io.flush()
+          end
+
+        elseif type(cmd) == "table" and cmd.type == "settings:keys:set" then
+          -- React-side programmatic key update
+          local payload = cmd.payload
+          if payload and payload.serviceId and payload.fieldKey and settingsEnabled then
+            settings.setKey(payload.serviceId, payload.fieldKey, payload.value)
+          end
+
         else
           treeCommands[#treeCommands + 1] = cmd
         end
@@ -1399,6 +1444,9 @@ function ReactLove.draw()
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   if inspectorEnabled then devtools.draw(root) end
 
+  -- Settings overlay (after devtools, before context menu/errors)
+  if settingsEnabled and settings.isOpen() then settings.draw() end
+
   -- Context menu overlay (after inspector, before errors)
   if contextmenu and contextmenu.isOpen() then
     contextmenu.draw()
@@ -1559,6 +1607,7 @@ end
 function ReactLove.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
+  if settingsEnabled and settings.mousepressed(x, y, button) then return end
   if inspectorEnabled and devtools.mousepressed(x, y, button) then return end
 
   if not isRendering() then return end
@@ -1709,6 +1758,7 @@ end
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactLove.mousereleased(x, y, button)
+  if settingsEnabled and settings.mousereleased(x, y, button) then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
 
@@ -1783,6 +1833,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactLove.mousemoved(x, y)
+  if settingsEnabled then settings.mousemoved(x, y) end
   if inspectorEnabled then devtools.mousemoved(x, y) end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
@@ -1914,6 +1965,7 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.keypressed(key, scancode, isrepeat)
+  if settingsEnabled and settings.keypressed(key) then return end
   if inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
 
@@ -2099,6 +2151,8 @@ end
 --- Call from love.textinput(text).
 --- Routes text input to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.textinput(text)
+  -- Settings overlay captures text input when active
+  if settingsEnabled and settings.textinput(text) then return end
   -- Inspector/console captures text input when active
   if inspectorEnabled and devtools.textinput(text) then return end
   if not isRendering() then return end
@@ -2128,6 +2182,7 @@ end
 --- directly in Lua for immediate visual response AND send the event to JS.
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactLove.wheelmoved(x, y)
+  if settingsEnabled and settings.wheelmoved(x, y) then return end
   if inspectorEnabled and devtools.wheelmoved(x, y) then return end
   if not isRendering() then return end
 
