@@ -8,12 +8,11 @@
  * Navigation: click story names, or use Up/Down + Enter keys.
  */
 
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
-import { Box, Text, Pressable, ScrollView, ScaleProvider } from '../../packages/shared/src';
-import type { ScrollEvent } from '../../packages/shared/src/types';
+import { Box, Text, Pressable, ScaleProvider } from '../../packages/shared/src';
 import { ThemeProvider, useTheme, useThemeColors, themeNames } from '../../packages/theme/src';
 import { stories, type StoryDef } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -24,13 +23,11 @@ import contentData from './generated/content.json';
 
 let currentActiveIdx = 0;
 let currentMode: 'stories' | 'docs' | 'playground' = 'stories';
-let currentViewMode: 'pages' | 'scroll' = 'pages';
 
 // Expose state getter for HMR — Lua calls this before teardown
 (globalThis as any).__getDevState = () => ({
   activeIdx: currentActiveIdx,
   mode: currentMode,
-  viewMode: currentViewMode,
   playgroundCode: (globalThis as any).__currentPlaygroundCode,
 });
 
@@ -45,126 +42,10 @@ function groupByCategory(list: StoryDef[]): Map<string, StoryDef[]> {
   return map;
 }
 
-// ── Virtualization helpers ───────────────────────────────
-
-const ESTIMATED_STORY_HEIGHT = 500;
-const SECTION_HEADER_HEIGHT = 32;
-const STORY_SEPARATOR_HEIGHT = 1;
-const ITEM_HEIGHT = ESTIMATED_STORY_HEIGHT + SECTION_HEADER_HEIGHT + STORY_SEPARATOR_HEIGHT;
-const OVERSCAN = 2;
-
-/** Binary search: find the first index whose bottom edge is past scrollTop */
-function findFirstVisible(count: number, scrollTop: number): number {
-  let lo = 0;
-  let hi = count - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if ((mid + 1) * ITEM_HEIGHT <= scrollTop) {
-      lo = mid + 1;
-    } else {
-      hi = mid;
-    }
-  }
-  return lo;
-}
-
-// ── Story scroll view (all stories in one continuous scroll) ──
-
-function StoryScrollContent({ stories: storyList, activeIdx, onActiveChange }: {
-  stories: StoryDef[];
-  activeIdx: number;
-  onActiveChange: (idx: number) => void;
-}) {
-  const c = useThemeColors();
-  const totalHeight = storyList.length * ITEM_HEIGHT;
-  const [visibleRange, setVisibleRange] = useState<[number, number]>([0, 5]);
-
-  const handleScroll = useCallback((e: ScrollEvent) => {
-    const scrollTop = e.scrollY;
-    const viewportHeight = e.contentHeight;
-    const scrollBottom = scrollTop + viewportHeight;
-    const count = storyList.length;
-    if (count === 0) return;
-
-    const first = findFirstVisible(count, scrollTop);
-    const last = Math.min(count - 1, Math.floor(scrollBottom / ITEM_HEIGHT));
-    const start = Math.max(0, first - OVERSCAN);
-    const end = Math.min(count - 1, last + OVERSCAN);
-    setVisibleRange([start, end]);
-
-    // Active story: topmost story that's at least partially visible
-    const activeStoryIdx = Math.max(0, Math.min(first, count - 1));
-    if (activeStoryIdx !== activeIdx) {
-      onActiveChange(activeStoryIdx);
-    }
-  }, [storyList.length, activeIdx, onActiveChange]);
-
-  const [start, end] = visibleRange;
-  const topSpacerHeight = start * ITEM_HEIGHT;
-  const bottomSpacerHeight = Math.max(0, totalHeight - (end + 1) * ITEM_HEIGHT);
-
-  return (
-    <ScrollView
-      style={{ flexGrow: 1, backgroundColor: c.bg }}
-      onScroll={handleScroll}
-    >
-      {/* Top spacer */}
-      {topSpacerHeight > 0 && <Box style={{ height: topSpacerHeight }} />}
-
-      {/* Visible stories */}
-      {storyList.slice(start, end + 1).map((story, i) => {
-        const StoryComp = story.component;
-        return (
-          <Box key={story.id} style={{ height: ITEM_HEIGHT }}>
-            {/* Section header */}
-            <Box style={{
-              height: SECTION_HEADER_HEIGHT,
-              paddingLeft: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              backgroundColor: c.bgAlt,
-            }}>
-              <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
-                {story.title}
-              </Text>
-              <Text style={{ color: c.textDim, fontSize: 9 }}>
-                {story.category}
-              </Text>
-            </Box>
-
-            {/* Story content */}
-            <ScaleProvider reference={{ width: 800, height: 600 }}>
-              <Box style={{
-                height: ESTIMATED_STORY_HEIGHT,
-                overflow: 'hidden',
-                backgroundColor: c.bg,
-              }}>
-                <StoryComp />
-              </Box>
-            </ScaleProvider>
-
-            {/* Separator */}
-            <Box style={{ height: STORY_SEPARATOR_HEIGHT, backgroundColor: c.border }} />
-          </Box>
-        );
-      })}
-
-      {/* Bottom spacer */}
-      {bottomSpacerHeight > 0 && <Box style={{ height: bottomSpacerHeight }} />}
-    </ScrollView>
-  );
-}
-
-// ── Story browser (sidebar + viewer) ─────────────────────
-
 function StorybookPanel() {
   const initialIdx = (globalThis as any).__devState?.activeIdx ?? 0;
-  const initialViewMode = (globalThis as any).__devState?.viewMode ?? 'pages';
   const [activeIdx, setActiveIdx] = useState(initialIdx);
-  const [viewMode, setViewMode] = useState<'pages' | 'scroll'>(initialViewMode);
-  currentActiveIdx = activeIdx;
-  currentViewMode = viewMode;
+  currentActiveIdx = activeIdx; // sync for __getDevState
   const groups = groupByCategory(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;
@@ -193,39 +74,6 @@ function StorybookPanel() {
         {/* Header */}
         <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
           <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>iLoveReact</Text>
-        </Box>
-        <Box style={{ height: 1, backgroundColor: c.border }} />
-
-        {/* View mode toggle */}
-        <Box style={{
-          flexDirection: 'row',
-          padding: 4,
-          gap: 2,
-        }}>
-          <Pressable
-            onPress={() => setViewMode('pages')}
-            style={{
-              paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
-              borderRadius: 3,
-              backgroundColor: viewMode === 'pages' ? c.surface : 'transparent',
-            }}
-          >
-            <Text style={{ color: viewMode === 'pages' ? c.text : c.textDim, fontSize: 9, fontWeight: 'bold' }}>
-              Pages
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setViewMode('scroll')}
-            style={{
-              paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
-              borderRadius: 3,
-              backgroundColor: viewMode === 'scroll' ? c.surface : 'transparent',
-            }}
-          >
-            <Text style={{ color: viewMode === 'scroll' ? c.text : c.textDim, fontSize: 9, fontWeight: 'bold' }}>
-              Scroll
-            </Text>
-          </Pressable>
         </Box>
         <Box style={{ height: 1, backgroundColor: c.border }} />
 
@@ -265,39 +113,29 @@ function StorybookPanel() {
 
       {/* Content */}
       <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'hidden' }}>
-        {viewMode === 'scroll' ? (
-          <StoryScrollContent
-            stories={stories}
-            activeIdx={activeIdx}
-            onActiveChange={setActiveIdx}
-          />
-        ) : (
-          <>
-            {/* Header bar */}
-            <Box style={{
-              padding: 8,
-              paddingLeft: 12,
-              borderWidth: 0,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
-                {active?.title}
-              </Text>
-              <Text style={{ color: c.textDim, fontSize: 9 }}>
-                {active?.category}
-              </Text>
-            </Box>
+        {/* Header bar */}
+        <Box style={{
+          padding: 8,
+          paddingLeft: 12,
+          borderWidth: 0,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
+            {active?.title}
+          </Text>
+          <Text style={{ color: c.textDim, fontSize: 9 }}>
+            {active?.category}
+          </Text>
+        </Box>
 
-            {/* Story content */}
-            <ScaleProvider reference={{ width: 800, height: 600 }}>
-              <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
-                {StoryComp && <StoryComp key={active.id} />}
-              </Box>
-            </ScaleProvider>
-          </>
-        )}
+        {/* Story content */}
+        <ScaleProvider reference={{ width: 800, height: 600 }}>
+          <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
+            {StoryComp && <StoryComp key={active.id} />}
+          </Box>
+        </ScaleProvider>
       </Box>
     </Box>
   );
