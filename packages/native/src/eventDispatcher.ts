@@ -235,6 +235,20 @@ export function initEventDispatching(bridge: Subscribable): void {
   bridge.subscribe('contextmenu:close', (event: LoveEvent) => {
     dispatchToTargetOnly(event, 'onContextMenuClose');
   });
+
+  // ── Slider events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('slider:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onValueChange');
+  });
+
+  bridge.subscribe('slider:start', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingStart');
+  });
+
+  bridge.subscribe('slider:end', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingEnd');
+  });
 }
 
 /**

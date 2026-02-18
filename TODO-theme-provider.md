@@ -309,3 +309,128 @@ Shows a preview swatch for each theme, current theme highlighted, click to switc
 7. **Shaders** — Love2D-specific wow factor
 8. **Sprite maps** — advanced theming
 9. **Reactive/auto themes** — convenience
+
+---
+
+notes from the dev:
+i didnt write the todo, you did claude but i read it. looks good. here are some notes.
+
+Smart. **Theme definitions live in Lua.** React only needs to know the current theme ID, not the entire object.
+
+Flow:
+1. React: `setTheme('dracula')`
+2. Bridge sends: `{ setTheme: 'dracula' }`
+3. Lua: loads/caches the theme table
+4. Lua painter reads from `currentTheme.colors.primary` directly on the next frame
+5. Zero deserialization, zero object construction, just table lookups
+
+No frame delay. No bridge saturation. Pure Lua-side state.
+
+**This means:**
+
+- **`packages/theme/src/themes/`** — TypeScript definitions that match Lua structure (for IDE autocomplete in React code)
+- **`lua/themes/`** — The actual theme tables (one file per theme, or one big themes.lua with all of them)
+- **`lua/painter.lua`** — already reads `currentTheme` when rendering primitives
+- **`lua/theme_shaders.lua`** — compiles shaders from theme defs, posts-processes using Love2D's shader API
+- **`lua/bridge.lua`** or similar — `setTheme(id)` function that validates the ID and switches the global `currentTheme` reference
+
+**React side:**
+```tsx
+const { theme, setTheme } = useTheme();
+// theme is just the ID string: 'dracula'
+// setTheme('nord') sends 1 message to Lua, Lua does all the work
+```
+
+**Lua side:**
+```lua
+-- lua/themes.lua
+return {
+  ['catppuccin-mocha'] = {
+    colors = {
+      bg = '#1e1e2e',
+      text = '#cdd6f4',
+      primary = '#89b4fa',
+      -- ...
+    },
+    typography = { /* ... */ },
+    -- ...
+  },
+  ['dracula'] = { /* ... */ },
+  -- ...
+}
+
+-- lua/painter.lua or main loop
+local themes = require('themes')
+currentTheme = themes['catppuccin-mocha']
+
+-- In drawBox():
+love.graphics.setColor(parseHex(currentTheme.colors.bg))
+```
+
+**For shaders:**
+```lua
+-- lua/theme_shaders.lua
+local function compileShader(themeDef)
+  if themeDef.shader then
+    return love.graphics.newShader(themeDef.shader.fragment)
+  end
+  return nil
+end
+
+-- In painter loop:
+local themeShader = compileShader(currentTheme)
+if themeShader then
+  love.graphics.setShader(themeShader)
+  -- draw to canvas
+  love.graphics.setShader()
+end
+```
+
+**For sprite maps:**
+```lua
+-- In painter.lua, when rendering a checkbox:
+if currentTheme.sprites and currentTheme.sprites.checkbox then
+  local spriteRect = checked and 
+    currentTheme.sprites.checkbox.checked or 
+    currentTheme.sprites.checkbox.unchecked
+  drawSprite(spriteRect.sheet, spriteRect.rect, x, y)
+else
+  -- fallback to Box rendering
+  drawBox(...)
+end
+```
+
+**The TypeScript definitions in React are just hints:**
+
+```typescript
+// packages/theme/src/types.ts
+export interface Theme {
+  colors: {
+    bg: string;
+    text: string;
+    primary: string;
+    // ...
+  };
+  typography: { /* ... */ };
+  sprites?: {
+    checkbox: { checked: [x, y, w, h]; unchecked: [x, y, w, h] };
+    // ...
+  };
+  shader?: {
+    fragment: string;
+    uniforms?: Record<string, number>;
+  };
+}
+```
+
+They live in TypeScript for IDE support, but the *actual* theme data is in Lua. React's `useTheme()` hook doesn't fetch the full theme object — it just tracks the current theme ID.
+
+This is genuinely elegant. You get:
+- **Zero serialization cost**
+- **No bridge overhead on theme switch**
+- **Shader compilation happens once per theme, not per frame**
+- **Sprite map lookups are just table indexing**
+- **IDE autocomplete in React via TypeScript**
+- **All the heavy lifting happens where it's cheap**
+
+When do you want to start building this?
