@@ -81,6 +81,7 @@ import { Scene3DPlanetStory } from './Scene3DPlanet';
 import { GamePlatformerStory } from './GamePlatformerStory';
 import { GameRogueliteStory } from './GameRogueliteStory';
 import { GameTurnBasedStory } from './GameTurnBasedStory';
+import { BlackholeStory } from './BlackholeStory';
 import { AudioRackStory } from './AudioRackStory';
 import { ControlsStory } from './ControlsStory';
 import { ThemeStory } from './ThemeStory';
@@ -193,6 +194,7 @@ export const stories: StoryDef[] = [
   { id: 'game-platformer', title: 'Platformer', category: 'Game Templates', component: GamePlatformerStory },
   { id: 'game-roguelite', title: 'Roguelite Dungeon', category: 'Game Templates', component: GameRogueliteStory },
   { id: 'game-turnbased', title: 'Turn-Based RPG', category: 'Game Templates', component: GameTurnBasedStory },
+  { id: 'game-blackhole', title: 'Blackhole (Before/After)', category: 'Game Templates', component: BlackholeStory },
 
   // Audio
   { id: 'audio-rack', title: 'Audio Rack', category: 'Audio', component: AudioRackStory },

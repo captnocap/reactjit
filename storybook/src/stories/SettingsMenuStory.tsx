@@ -53,8 +53,10 @@ function ServiceCard({ service }: { service: ServiceDefinition }) {
         <Box style={{
           backgroundColor: catColor,
           borderRadius: 3,
-          paddingHorizontal: 5,
-          paddingVertical: 2,
+          paddingLeft: 5,
+          paddingRight: 5,
+          paddingTop: 2,
+          paddingBottom: 2,
         }}>
           <Text style={{ fontSize: 8, color: '#000', fontWeight: '700' }}>
             {CATEGORY_LABELS[service.category] || service.category}

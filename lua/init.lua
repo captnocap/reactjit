@@ -35,6 +35,7 @@ local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
 local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
 local scene3d  = nil   -- scene3d.lua module (3D scene rendering via g3d)
+local gamemod  = nil   -- game.lua module (game canvas rendering + module system)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
@@ -347,6 +348,8 @@ function ReactLove.init(config)
     animate = require("lua.animate")
     scene3d = require("lua.scene3d")
     scene3d.init()
+    gamemod = require("lua.game")
+    gamemod.init()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -357,7 +360,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, game = gamemod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -424,6 +427,8 @@ function ReactLove.init(config)
     animate = require("lua.animate")
     scene3d = require("lua.scene3d")
     scene3d.init()
+    gamemod = require("lua.game")
+    gamemod.init()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -434,7 +439,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, game = gamemod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -536,6 +541,11 @@ function ReactLove.init(config)
         rpcHandlers[method] = handler
       end
     end
+  end
+
+  -- Register game module RPC handler (JS → Lua commands)
+  rpcHandlers["game:command"] = function(args)
+    if gamemod then return gamemod.handleCommand(args) end
   end
 
   -- Register settings RPC handlers (API key management)
@@ -1207,6 +1217,13 @@ function ReactLove.update(dt)
     scene3d.renderAll()
   end
 
+  -- 8d. Sync game modules with tree, update game logic, render to off-screen Canvases
+  if gamemod then
+    gamemod.syncWithTree(tree.getNodes())
+    gamemod.updateAll(dt, pushEvent)
+    gamemod.renderAll()
+  end
+
   -- 9. Poll video status and playback events, emit to JS
   if videos then
     local videoEvents = videos.poll()
@@ -1612,6 +1629,9 @@ function ReactLove.mousepressed(x, y, button)
 
   if not isRendering() then return end
 
+  -- Route to game module (click-to-focus + game mouse handling)
+  if gamemod and gamemod.mousepressed(x, y, button) then return end
+
   local root = tree.getTree()
   if not root then return end
 
@@ -1837,6 +1857,7 @@ function ReactLove.mousemoved(x, y)
   if inspectorEnabled then devtools.mousemoved(x, y) end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
+  if gamemod then gamemod.mousemoved(x, y, 0, 0) end
 
   focus.setMouseMode()
 
@@ -2116,6 +2137,9 @@ function ReactLove.keypressed(key, scancode, isrepeat)
     return  -- consumed, don't push to bridge
   end
 
+  -- Route to focused GameCanvas (game input stays in Lua, zero latency)
+  if gamemod then gamemod.keypressed(key, scancode, isrepeat) end
+
   if not bridge then return end
   -- Route keyboard events to focused node when in focus mode
   local evt = events.createKeyEvent("keydown", key, scancode, isrepeat)
@@ -2131,6 +2155,7 @@ end
 --- Routes keyup to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.keyreleased(key, scancode)
   if not isRendering() then return end
+  if gamemod then gamemod.keyreleased(key, scancode) end
 
   -- Suppress keyup when TextEditor or TextInput has focus
   local focusedNode = focus.get()

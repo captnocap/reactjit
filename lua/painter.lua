@@ -27,6 +27,7 @@ local Measure = nil  -- Injected at init time via Painter.init()
 local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
+local GameModule = nil    -- Injected at init time via Painter.init()
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
@@ -58,6 +59,7 @@ function Painter.init(config)
   Images = config.images
   Videos = config.videos
   Scene3DModule = config.scene3d
+  GameModule = config.game
   getFont = Measure.getFont
 end
 
@@ -1170,6 +1172,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         love.graphics.draw(canvas, c.x, c.y)
       end
     end
+
+  elseif not isHidden and node.type == "GameCanvas" then
+    -- Game viewport: draw the pre-rendered Canvas from game.lua
+    if GameModule then
+      local canvas = GameModule.get(node.id)
+      if canvas then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(canvas, c.x, c.y)
+      end
+    end
+    -- Note: children (React UI overlay) are painted by the normal child recursion below
 
   elseif not isHidden and node.type == "Slider" then
     if not SliderModule then

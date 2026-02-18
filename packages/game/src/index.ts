@@ -90,6 +90,10 @@ export type { EconomyConfig, EconomyState } from './systems/useEconomy';
 export { useAchievements } from './systems/useAchievements';
 export type { AchievementInstance, AchievementsState } from './systems/useAchievements';
 
+// ── Game Canvas primitive ──
+export { Game } from './GameCanvas';
+export type { GameProps } from './GameCanvas';
+
 // ── Components ──
 export { TilemapView } from './components/TilemapView';
 export type { TilemapViewProps } from './components/TilemapView';
