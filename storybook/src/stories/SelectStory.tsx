@@ -24,7 +24,7 @@ export function SelectStory() {
   const [difficulty, setDifficulty] = useState('normal');
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Basic select */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>With placeholder</Text>

@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function PerSideBorderStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Individual sides */}
       <Box style={{ backgroundColor: c.bgElevated, padding: 8, borderRadius: 4, gap: 8 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Individual border sides</Text>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
+import { ScaleProvider } from '../../packages/shared/src/ScaleContext';
 import { stories, type StoryDef } from './stories';
 import { StoryBridge } from './StoryBridge';
 import { DocsViewer } from './docs/DocsViewer';
@@ -169,7 +170,9 @@ export function App() {
                 {StoryComponent && (
                   <BridgeProvider bridge={webBridge}>
                     <RendererProvider mode="web">
-                      <StoryComponent key={activeId} />
+                      <ScaleProvider reference={{ width: 800, height: 600 }}>
+                        <StoryComponent key={activeId} />
+                      </ScaleProvider>
                     </RendererProvider>
                   </BridgeProvider>
                 )}

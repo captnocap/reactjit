@@ -83,7 +83,7 @@ export function SettingsDemoStory() {
   const [screenShake, setScreenShake] = useState(true);
 
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
         {/* ── Title ──────────────────────────────── */}
         <Text style={{

@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function TextStylesStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       <Text style={{ color: c.text, fontSize: 24, fontWeight: 'bold' }}>
         Bold 24px
       </Text>

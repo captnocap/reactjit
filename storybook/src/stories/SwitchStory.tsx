@@ -8,7 +8,7 @@ export function SwitchStory() {
   const [on2, setOn2] = useState(true);
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Default switch */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Switch value={on1} onValueChange={setOn1} />

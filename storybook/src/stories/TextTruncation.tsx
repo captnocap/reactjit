@@ -7,7 +7,7 @@ const LONG_TEXT = 'The quick brown fox jumps over the lazy dog. This sentence is
 export function TextTruncationStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Single line truncation */}
       <Box style={{ width: 200, backgroundColor: c.bgElevated, padding: 8, borderRadius: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>numberOfLines: 1</Text>

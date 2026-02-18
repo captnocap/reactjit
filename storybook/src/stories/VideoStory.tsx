@@ -49,7 +49,7 @@ export function VideoStory() {
   const [time, setTime] = useState('0:00');
 
   return (
-    <Box style={{ gap: 20, padding: 20 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 20 }}>
       {/* Header */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Video</Text>

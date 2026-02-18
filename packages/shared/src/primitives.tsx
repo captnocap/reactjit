@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { useRendererMode } from './context';
+import { useScaledStyle } from './ScaleContext';
 import type { BoxProps, TextProps, ImageProps, FocusGroupProps, Style, Color } from './types';
 
 // ── Web-mode style conversion ──────────────────────────
@@ -292,23 +293,27 @@ export function Box(props: BoxProps) {
   } = props;
 
   const resolvedStyle = resolveBoxStyle(props);
+  const scaledStyle = useScaledStyle(resolvedStyle);
+  const scaledHoverStyle = useScaledStyle(hoverStyle);
+  const scaledActiveStyle = useScaledStyle(activeStyle);
+  const scaledFocusStyle = useScaledStyle(focusStyle);
   const mode = useRendererMode();
 
   if (mode === 'web') {
     const [isHovered, setIsHovered] = React.useState(false);
     const [isActive, setIsActive] = React.useState(false);
-    const baseCSS = styleToCSS(resolvedStyle);
+    const baseCSS = styleToCSS(scaledStyle);
     if (onClick) baseCSS.cursor = 'pointer';
     baseCSS.userSelect = 'none';
 
     // Merge hover and active styles for web
     let css = baseCSS;
-    if (isHovered && hoverStyle) {
-      css = { ...css, ...styleToCSS({ ...resolvedStyle, ...hoverStyle }) };
+    if (isHovered && scaledHoverStyle) {
+      css = { ...css, ...styleToCSS({ ...scaledStyle, ...scaledHoverStyle }) };
       css.userSelect = 'none';
     }
-    if (isActive && activeStyle) {
-      css = { ...css, ...styleToCSS({ ...resolvedStyle, ...(isHovered ? hoverStyle : {}), ...activeStyle }) };
+    if (isActive && scaledActiveStyle) {
+      css = { ...css, ...styleToCSS({ ...scaledStyle, ...(isHovered ? scaledHoverStyle : {}), ...scaledActiveStyle }) };
       css.userSelect = 'none';
     }
 
@@ -382,14 +387,14 @@ export function Box(props: BoxProps) {
   return React.createElement(
     'View',
     {
-      style: resolvedStyle,
+      style: scaledStyle,
       backgroundVideo,
       backgroundVideoFit,
       hoverVideo,
       hoverVideoFit,
-      hoverStyle,
-      activeStyle,
-      focusStyle,
+      hoverStyle: scaledHoverStyle,
+      activeStyle: scaledActiveStyle,
+      focusStyle: scaledFocusStyle,
       focusable,
       focusGroup,
       focusGroupController,
@@ -437,16 +442,17 @@ export function Col(props: BoxProps) {
 export function Text(props: TextProps) {
   const { lines, numberOfLines, onKeyDown, onKeyUp, onTextInput, children } = props;
   const resolvedStyle = resolveTextStyle(props);
+  const scaledStyle = useScaledStyle(resolvedStyle);
   // lines shorthand takes precedence, falls back to numberOfLines
   const resolvedLines = lines ?? numberOfLines;
   const mode = useRendererMode();
 
   if (mode === 'web') {
     const baseCSS: React.CSSProperties = {
-      ...styleToCSS(resolvedStyle),
+      ...styleToCSS(scaledStyle),
       display: 'inline',
       flexDirection: undefined,
-      userSelect: resolvedStyle?.userSelect === 'none' ? 'none' : undefined,
+      userSelect: scaledStyle?.userSelect === 'none' ? 'none' : undefined,
     };
 
     if (resolvedLines !== undefined) {
@@ -469,12 +475,13 @@ export function Text(props: TextProps) {
     );
   }
 
-  return React.createElement('Text', { style: resolvedStyle, numberOfLines: resolvedLines, onKeyDown, onKeyUp, onTextInput }, children);
+  return React.createElement('Text', { style: scaledStyle, numberOfLines: resolvedLines, onKeyDown, onKeyUp, onTextInput }, children);
 }
 
 export function Image(props: ImageProps) {
   const { src, onClick, onWheel } = props;
   const resolvedStyle = resolveImageStyle(props);
+  const scaledStyle = useScaledStyle(resolvedStyle);
   const mode = useRendererMode();
 
   if (mode === 'web') {
@@ -482,7 +489,7 @@ export function Image(props: ImageProps) {
       <img
         src={src}
         style={{
-          ...styleToCSS(resolvedStyle),
+          ...styleToCSS(scaledStyle),
           display: 'block',
           flexDirection: undefined,
         }}
@@ -492,7 +499,7 @@ export function Image(props: ImageProps) {
     );
   }
 
-  return React.createElement('Image', { src, style: resolvedStyle, onClick, onWheel });
+  return React.createElement('Image', { src, style: scaledStyle, onClick, onWheel });
 }
 
 // ── FocusGroup ────────────────────────────────────────

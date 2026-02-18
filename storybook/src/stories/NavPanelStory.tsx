@@ -36,7 +36,7 @@ export function NavPanelStory() {
   const [activeId, setActiveId] = useState('intro');
 
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic NavPanel */}
       <Box style={{ gap: 6 }}>

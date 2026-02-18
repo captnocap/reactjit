@@ -12,6 +12,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { Style, Color } from './types';
 import { useRendererMode } from './context';
+import { useScaledStyle, useScale } from './ScaleContext';
 
 export interface SliderProps {
   value?: number;
@@ -64,6 +65,7 @@ export function Slider({
   vertical = false,
 }: SliderProps) {
   const mode = useRendererMode();
+  const scale = useScale();
 
   // Controlled vs uncontrolled
   const [internalValue, setInternalValue] = useState(
@@ -83,9 +85,19 @@ export function Slider({
     [isControlled, onValueChange]
   );
 
+  // Scale visual props
+  const scaledThumbSize = Math.round(thumbSize * scale);
+  const scaledTrackHeight = Math.round(trackHeight * scale);
+  const scaledStyle = useScaledStyle(style);
+
   // ── Native mode: single Lua-owned host element ──────────────────
   if (mode !== 'web') {
-    const trackWidth = (style?.width as number) || 200;
+    const trackWidth = Math.round(((style?.width as number) || 200) * scale);
+    const nativeStyle: Style = {
+      width: trackWidth,
+      height: scaledThumbSize + Math.round(8 * scale),
+      ...scaledStyle,
+    };
 
     return React.createElement('Slider', {
       value: currentValue,
@@ -96,13 +108,9 @@ export function Slider({
       trackColor,
       activeTrackColor,
       thumbColor,
-      thumbSize,
-      trackHeight,
-      style: {
-        width: trackWidth,
-        height: thumbSize + 8,
-        ...style,
-      },
+      thumbSize: scaledThumbSize,
+      trackHeight: scaledTrackHeight,
+      style: nativeStyle,
       // Lua events arrive as full event objects — unwrap to match public API
       onValueChange: handleValueChange
         ? (event: any) => handleValueChange(event.value)
@@ -195,37 +203,39 @@ export function Slider({
 
   const thumbPosition = valueToPosition(currentValue);
 
+  const sDefaultLen = Math.round(200 * scale);
+  const sPad = Math.round(8 * scale);
   const containerStyle: Style = {
     flexDirection: vertical ? 'column' : 'row',
     alignItems: 'center',
     justifyContent: 'start',
-    ...(vertical ? { height: 200, width: thumbSize + 8 } : { width: 200, height: thumbSize + 8 }),
+    ...(vertical ? { height: sDefaultLen, width: scaledThumbSize + sPad } : { width: sDefaultLen, height: scaledThumbSize + sPad }),
     opacity: disabled ? 0.5 : 1,
-    ...style,
+    ...scaledStyle,
   };
 
   const trackStyle: Style = {
     position: 'relative',
     backgroundColor: trackColor,
-    borderRadius: trackHeight / 2,
+    borderRadius: scaledTrackHeight / 2,
     ...(vertical
-      ? { width: trackHeight, height: '100%', flexGrow: 1 }
-      : { height: trackHeight, width: '100%', flexGrow: 1 }),
+      ? { width: scaledTrackHeight, height: '100%', flexGrow: 1 }
+      : { height: scaledTrackHeight, width: '100%', flexGrow: 1 }),
   };
 
   const activeTrackStyle: Style = {
     position: 'absolute',
     backgroundColor: activeTrackColor,
-    borderRadius: trackHeight / 2,
+    borderRadius: scaledTrackHeight / 2,
     ...(vertical
       ? {
-          width: trackHeight,
+          width: scaledTrackHeight,
           height: `${thumbPosition * 100}%`,
           bottom: 0,
           left: 0,
         }
       : {
-          height: trackHeight,
+          height: scaledTrackHeight,
           width: `${thumbPosition * 100}%`,
           top: 0,
           left: 0,
@@ -234,18 +244,18 @@ export function Slider({
 
   const thumbStyle: Style = {
     position: 'absolute',
-    width: thumbSize,
-    height: thumbSize,
-    borderRadius: thumbSize / 2,
+    width: scaledThumbSize,
+    height: scaledThumbSize,
+    borderRadius: scaledThumbSize / 2,
     backgroundColor: thumbColor,
     ...(vertical
       ? {
-          bottom: `calc(${thumbPosition * 100}% - ${thumbSize / 2}px)`,
-          left: `calc(50% - ${thumbSize / 2}px)`,
+          bottom: `calc(${thumbPosition * 100}% - ${scaledThumbSize / 2}px)`,
+          left: `calc(50% - ${scaledThumbSize / 2}px)`,
         }
       : {
-          left: `calc(${thumbPosition * 100}% - ${thumbSize / 2}px)`,
-          top: `calc(50% - ${thumbSize / 2}px)`,
+          left: `calc(${thumbPosition * 100}% - ${scaledThumbSize / 2}px)`,
+          top: `calc(50% - ${scaledThumbSize / 2}px)`,
         }),
   };
 

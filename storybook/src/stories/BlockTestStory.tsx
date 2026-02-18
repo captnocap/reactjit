@@ -3,7 +3,7 @@ import { Box, Text } from '../../../packages/shared/src';
 
 export function BlockTestStory() {
   return (
-    <Box style={{ padding: 16 }}>
+    <Box style={{ width: '100%', padding: 16 }}>
       <Box style={{ flexDirection: 'row', justifyContent: 'flex-start', height: 20 }}>
         <Text style={{ fontSize: 14 }}>block</Text>
         <Text style={{ fontSize: 14 }}>block</Text>

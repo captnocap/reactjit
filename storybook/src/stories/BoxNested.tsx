@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function BoxNestedStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Nested with padding */}
       <Box style={{
         padding: 16,

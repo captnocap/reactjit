@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function ShadowStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 24 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 24 }}>
       <Box style={{
         width: 160, height: 60,
         backgroundColor: c.bgElevated,

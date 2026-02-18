@@ -13,6 +13,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRendererMode } from './context';
 import { styleToCSS, colorToCSS } from './primitives';
+import { useScaledStyle } from './ScaleContext';
 import type { TextEditorProps, Style, LoveEvent } from './types';
 
 // ── Web mode component ──────────────────────────────────
@@ -181,9 +182,12 @@ function NativeTextEditor({
     [onChange],
   );
 
+  // Scale style for viewport-proportional rendering
+  const scaledMergedStyle = useScaledStyle(mergedStyle);
+
   // Data props that cross the bridge (Lua reads from node.props)
   const props: Record<string, any> = {
-    style: mergedStyle,
+    style: scaledMergedStyle,
     initialValue: initialValue ?? '',
     placeholder: placeholder ?? '',
     readOnly: readOnly ?? false,

@@ -53,9 +53,9 @@ function HashDemo() {
 
         {hashes.map(h => (
           <Box key={h.label} style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: h.color, fontWeight: '700' }}>{h.label}:</Text>
+            <Text style={{ fontSize: 10, color: h.color, fontWeight: '700' }}>{`${h.label}:`}</Text>
             <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-              <Text style={{ fontSize: 8, color: c.textSecondary }}>{h.hex.slice(0, 64)}{h.hex.length > 64 ? '...' : ''}</Text>
+              <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${h.hex.slice(0, 64)}${h.hex.length > 64 ? '...' : ''}`}</Text>
             </Box>
           </Box>
         ))}
@@ -158,7 +158,7 @@ function SignDemo() {
           <Box style={{ gap: 2 }}>
             <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>Signature:</Text>
             <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-              <Text style={{ fontSize: 8, color: c.textSecondary }}>{result.signature.slice(0, 64)}...</Text>
+              <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${result.signature.slice(0, 64)}...`}</Text>
             </Box>
           </Box>
 
@@ -209,7 +209,7 @@ function EncryptDemo() {
       </Box>
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>Encrypted ({algo}):</Text>
+        <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>{`Encrypted (${algo}):`}</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
           <Text style={{ fontSize: 9, color: c.textSecondary }}>{encrypted}</Text>
         </Box>

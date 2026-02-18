@@ -19,7 +19,7 @@ function Chip({ label, color }: { label: string; color: string }) {
 export function FlexRowStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* justify: start */}
       <Box style={{ backgroundColor: c.bgElevated, padding: 8, borderRadius: 4, gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>justify: start</Text>

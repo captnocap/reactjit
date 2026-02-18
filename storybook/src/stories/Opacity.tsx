@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function OpacityStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Opacity levels */}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         {[1.0, 0.75, 0.5, 0.25, 0.1].map(op => (

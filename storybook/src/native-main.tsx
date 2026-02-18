@@ -12,7 +12,7 @@ import React, { useState, useCallback } from 'react';
 import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
-import { Box, Text, Pressable } from '../../packages/shared/src';
+import { Box, Text, Pressable, ScaleProvider } from '../../packages/shared/src';
 import { ThemeProvider, useTheme, useThemeColors, themeNames } from '../../packages/theme/src';
 import { stories, type StoryDef } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -131,9 +131,11 @@ function StorybookPanel() {
         </Box>
 
         {/* Story content */}
-        <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
-          {StoryComp && <StoryComp key={active.id} />}
-        </Box>
+        <ScaleProvider reference={{ width: 800, height: 600 }}>
+          <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
+            {StoryComp && <StoryComp key={active.id} />}
+          </Box>
+        </ScaleProvider>
       </Box>
     </Box>
   );

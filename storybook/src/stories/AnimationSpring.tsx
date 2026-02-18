@@ -9,7 +9,7 @@ export function AnimationSpringStory() {
   const scale = useSpring(toggled ? 1.2 : 1.0, { stiffness: 200, damping: 10 });
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       <Pressable
         onPress={() => setToggled(t => !t)}
         style={{

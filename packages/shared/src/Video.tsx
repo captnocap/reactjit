@@ -11,6 +11,7 @@
 import React from 'react';
 import { useRendererMode } from './context';
 import { styleToCSS } from './primitives';
+import { useScaledStyle } from './ScaleContext';
 import type { VideoProps, Style } from './types';
 
 /** Build a Style from Video shorthand props. style={} overrides. */
@@ -45,6 +46,7 @@ export function Video(props: VideoProps) {
     onError,
   } = props;
   const resolvedStyle = resolveVideoStyle(props);
+  const scaledStyle = useScaledStyle(resolvedStyle);
   const mode = useRendererMode();
 
   if (mode === 'web') {
@@ -55,10 +57,10 @@ export function Video(props: VideoProps) {
         loop={loop}
         muted={muted}
         style={{
-          ...styleToCSS(resolvedStyle),
+          ...styleToCSS(scaledStyle),
           display: 'block',
           flexDirection: undefined,
-          objectFit: resolvedStyle?.objectFit as any,
+          objectFit: scaledStyle?.objectFit as any,
         }}
         onClick={onClick as any}
         onTimeUpdate={onTimeUpdate ? (e) => {
@@ -80,7 +82,7 @@ export function Video(props: VideoProps) {
     loop,
     muted,
     volume,
-    style: resolvedStyle,
+    style: scaledStyle,
     onClick,
     onTimeUpdate,
     onEnded,

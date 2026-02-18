@@ -83,9 +83,7 @@ export function ThemeStory() {
   return (
     <Box style={{ padding: 16, gap: 16, width: '100%', height: '100%' }}>
       <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Theme System</Text>
-      <Text style={{ color: c.textSecondary, fontSize: 11 }}>
-        {themeNames.length} themes across {families.size} families. Click a card to switch.
-      </Text>
+      <Text style={{ color: c.textSecondary, fontSize: 11 }}>{`${themeNames.length} themes across ${families.size} families. Click a card to switch.`}</Text>
 
       {/* Current theme info */}
       <Box style={{

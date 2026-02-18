@@ -25,7 +25,7 @@ const PERF_DATA = [78, 65, 82, 55, 70, 88];
 export function RadarChartStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic */}
       <Box style={{ gap: 6 }}>

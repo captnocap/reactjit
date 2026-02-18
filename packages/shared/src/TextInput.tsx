@@ -15,6 +15,7 @@ import React, {
 } from 'react';
 import { useRendererMode } from './context';
 import { styleToCSS, colorToCSS } from './primitives';
+import { useScaledStyle } from './ScaleContext';
 import type { TextInputProps, Style, LoveEvent } from './types';
 
 // ── Web mode component ──────────────────────────────────
@@ -204,9 +205,12 @@ function NativeTextInput({
     [onSubmit, onChangeText],
   );
 
+  // Scale style for viewport-proportional rendering
+  const scaledMergedStyle = useScaledStyle(mergedStyle);
+
   // Data props that cross the bridge (Lua reads from node.props)
   const props: Record<string, any> = {
-    style: mergedStyle,
+    style: scaledMergedStyle,
     defaultValue: defaultValue ?? '',
     placeholder: placeholder ?? '',
     editable: editable !== false,

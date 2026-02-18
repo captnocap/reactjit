@@ -9,7 +9,7 @@ export function RadioStory() {
   const [size, setSize] = useState('medium');
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Basic radio group */}
       <Box style={{ gap: 8 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Favorite fruit</Text>

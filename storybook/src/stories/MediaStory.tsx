@@ -68,7 +68,7 @@ function FormatSizeDemo() {
       <Box style={{ gap: 3 }}>
         {sizes.map(s => (
           <Box key={s} style={{ flexDirection: 'row', gap: 8 }}>
-            <Text style={{ fontSize: 10, color: c.textDim, width: 120 }}>{s.toLocaleString()} bytes</Text>
+            <Text style={{ fontSize: 10, color: c.textDim, width: 120 }}>{`${s.toLocaleString()} bytes`}</Text>
             <Text style={{ fontSize: 10, color: c.success, fontWeight: '700' }}>{formatSize(s)}</Text>
           </Box>
         ))}

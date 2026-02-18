@@ -8,7 +8,7 @@ export function AnimationTimingStory() {
   const width = useSpring(expanded ? 260 : 80, { stiffness: 120, damping: 14 });
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       <Pressable
         onPress={() => setExpanded(e => !e)}
         style={{

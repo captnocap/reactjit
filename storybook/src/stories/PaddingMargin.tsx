@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function PaddingMarginStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Uniform padding */}
       <Box style={{ backgroundColor: c.bgElevated, padding: 4, borderRadius: 4, gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>padding: 20</Text>

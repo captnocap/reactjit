@@ -35,7 +35,7 @@ export function TabsStory() {
   const [activeMany, setActiveMany] = useState('all');
 
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Underline Tabs */}
       <Box style={{ gap: 6 }}>

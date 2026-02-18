@@ -25,7 +25,7 @@ const STORAGE = [
 export function PieChartStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Pie */}
       <Box style={{ gap: 6 }}>

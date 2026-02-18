@@ -19,7 +19,7 @@ function Bar({ label, color }: { label: string; color: string }) {
 export function FlexColumnStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', flexDirection: 'row', gap: 12, padding: 16 }}>
       {/* alignItems: start */}
       <Box style={{
         width: 120, height: 200,

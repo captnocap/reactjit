@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function AspectRatioStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Square (1:1) from width */}
       <Box style={{ backgroundColor: c.bgElevated, padding: 8, borderRadius: 4, gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>aspectRatio: 1 (square from width: 80)</Text>

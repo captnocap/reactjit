@@ -67,7 +67,7 @@ const CUSTOM_COLUMNS: TableColumn<Employee>[] = [
 export function TableStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic Table */}
       <Box style={{ gap: 6 }}>

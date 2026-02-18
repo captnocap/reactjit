@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function TransformStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 24, padding: 24 }}>
+    <Box style={{ width: '100%', gap: 24, padding: 24 }}>
       {/* Rotation */}
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
         <Text style={{ color: c.textDim, fontSize: 10, width: 60 }}>rotate</Text>

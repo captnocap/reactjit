@@ -31,6 +31,11 @@ export {
   type RendererMode,
 } from './context';
 
+// Viewport-proportional scaling
+export { ScaleProvider, ScaleContext, useScale, useScaledStyle } from './ScaleContext';
+export type { ScaleProviderProps, ScaleContextValue } from './ScaleContext';
+export { scaleStyle } from './scaleStyle';
+
 // Hooks
 export {
   useWindowDimensions,

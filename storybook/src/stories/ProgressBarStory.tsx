@@ -7,7 +7,7 @@ export function ProgressBarStory() {
   const [animValue, setAnimValue] = useState(0.3);
 
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic Progress */}
       <Box style={{ gap: 6 }}>

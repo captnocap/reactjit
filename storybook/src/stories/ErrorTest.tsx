@@ -34,7 +34,7 @@ export function ErrorTestStory() {
   const [triggerRenderError, setTriggerRenderError] = useState(false);
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>
         Error Reporting Test
       </Text>

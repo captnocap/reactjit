@@ -20,7 +20,7 @@ export function TextEditorStory() {
   const [focused, setFocused] = useState(false);
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Main editor */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>

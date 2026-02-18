@@ -8,7 +8,7 @@ export function PressableStory() {
   const [lastAction, setLastAction] = useState('none');
 
   return (
-    <Box style={{ gap: 20, padding: 20 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 20 }}>
 
       {/* Primary buttons */}
       <Box style={{ gap: 6 }}>

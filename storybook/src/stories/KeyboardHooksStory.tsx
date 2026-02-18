@@ -41,7 +41,7 @@ export function KeyboardHooksStory() {
   };
 
   return (
-    <Box style={{ gap: 20, padding: 20 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 20 }}>
 
       {/* 1. useHotkey */}
       <Box style={{ gap: 6 }}>

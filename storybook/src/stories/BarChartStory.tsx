@@ -40,7 +40,7 @@ const Q2 = [
 export function BarChartStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 20 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 20 }}>
 
       {/* Basic Bar Chart — fluid width, contained in card */}
       <Box style={{

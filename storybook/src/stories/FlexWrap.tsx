@@ -10,7 +10,7 @@ const COLORS = [
 export function FlexWrapStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Wrap with gap */}
       <Box style={{ backgroundColor: c.bgElevated, padding: 8, borderRadius: 4, gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>flexWrap + gap: 6</Text>

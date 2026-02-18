@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function ZIndexStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       <Text style={{ color: c.textDim, fontSize: 10 }}>Overlapping boxes with zIndex</Text>
 
       <Box style={{ height: 120, position: 'relative' }}>

@@ -8,6 +8,7 @@
 import React from 'react';
 import { useRendererMode } from './context';
 import { styleToCSS } from './primitives';
+import { useScaledStyle, useScale } from './ScaleContext';
 import type { Style } from './types';
 
 export interface CodeBlockProps {
@@ -42,12 +43,14 @@ function WebCodeBlock({ code, fontSize = 10, style }: CodeBlockProps) {
 }
 
 function NativeCodeBlock({ code, language, fontSize = 10, style }: CodeBlockProps) {
+  const scale = useScale();
+  const scaledStyle = useScaledStyle(style);
   // Lua owns all rendering - just pass props
   const props: Record<string, any> = {
     code,
     language: language ?? 'auto',
-    fontSize,
-    style: style || {},
+    fontSize: Math.round(fontSize * scale),
+    style: scaledStyle || {},
   };
 
   return React.createElement('CodeBlock', props);

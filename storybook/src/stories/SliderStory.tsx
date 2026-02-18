@@ -8,7 +8,7 @@ export function SliderStory() {
   const [value2, setValue2] = useState(30);
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Default slider */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Default (0-1)</Text>

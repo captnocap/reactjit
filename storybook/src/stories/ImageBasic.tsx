@@ -13,7 +13,7 @@ const PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
 export function ImageBasicStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Basic image */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Default (fill)</Text>

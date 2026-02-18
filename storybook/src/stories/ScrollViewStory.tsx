@@ -11,7 +11,7 @@ const COLORS = [
 export function ScrollViewStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Vertical scroll */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Vertical scroll (height: 150)</Text>

@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function BorderRadiusStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
         {[0, 4, 8, 16, 32, 50].map(r => (
           <Box key={r} style={{

@@ -3,7 +3,7 @@ import { Box, Text } from '../../../packages/shared/src';
 
 export function GradientStory() {
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       <Box style={{
         width: 200, height: 60,
         backgroundGradient: { direction: 'horizontal', colors: ['#3b82f6', '#8b5cf6'] },

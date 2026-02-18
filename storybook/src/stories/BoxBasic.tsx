@@ -5,7 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 export function BoxBasicStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 12, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Simple colored box */}
       <Box style={{
         width: 120, height: 60,

@@ -31,7 +31,7 @@ export function BreadcrumbsStory() {
   const handleReset = () => setPath(DEEP_PATH);
 
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic Breadcrumbs */}
       <Box style={{ gap: 6 }}>

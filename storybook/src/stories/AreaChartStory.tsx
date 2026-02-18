@@ -20,7 +20,7 @@ const TEMPERATURE = Array.from({ length: 24 }, (_, i) => ({
 export function AreaChartStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic */}
       <Box style={{ gap: 6 }}>

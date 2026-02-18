@@ -10,7 +10,7 @@ const VOLATILE = [10, 2, 15, 1, 12, 3, 14, 2, 11, 4, 13, 1, 10, 5, 15, 2, 8, 3, 
 export function SparklineStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 20, padding: 16 }}>
 
       {/* Basic Sparkline */}
       <Box style={{ gap: 6 }}>

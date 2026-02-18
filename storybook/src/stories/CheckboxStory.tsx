@@ -10,7 +10,7 @@ export function CheckboxStory() {
   const [checked3, setChecked3] = useState(false);
 
   return (
-    <Box style={{ gap: 16, padding: 16 }}>
+    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
       {/* Basic checkbox */}
       <Box style={{ gap: 8 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Basic</Text>
