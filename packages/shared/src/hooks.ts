@@ -16,12 +16,17 @@ import type { LoveEvent } from './types';
  * const { width, height } = useWindowDimensions();
  * const isWide = width > 800;
  */
+// Cache last known viewport so remounts (e.g. tab switches) pick it up
+// instantly without waiting for a new resize event from Lua.
+let _lastViewport = { width: 0, height: 0 };
+
 export function useWindowDimensions(): { width: number; height: number } {
   const bridge = useBridge();
-  const [dims, setDims] = useState({ width: 0, height: 0 });
+  const [dims, setDims] = useState(_lastViewport);
 
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
+      _lastViewport = payload;
       setDims(payload);
     });
   }, [bridge]);
