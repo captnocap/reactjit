@@ -59,3 +59,16 @@ export function useScaledStyle(style: Style | undefined): Style | undefined {
   if (!style || scale === 1) return style;
   return scaleStyle(style, scale);
 }
+
+/**
+ * Opt out of viewport scaling for a subtree.
+ * Everything inside <NoScale> renders at its authored pixel size,
+ * regardless of the surrounding ScaleProvider.
+ */
+export function NoScale({ children }: { children: React.ReactNode }) {
+  return (
+    <ScaleContext.Provider value={{ scale: 1 }}>
+      {children}
+    </ScaleContext.Provider>
+  );
+}
