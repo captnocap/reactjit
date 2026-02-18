@@ -33,7 +33,7 @@ type IRCPacket =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const IRC_PORT = 6667;
+const IRC_EXTERNAL_PORT = 6667; // the port exposed on the .onion (what peers connect to)
 
 const C = {
   bg:           '#0d1117',
@@ -153,7 +153,7 @@ function Header({ myOnion, torStatus, serverReady }: HeaderProps) {
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
         <StatusDot color={serverReady ? C.success : C.warning} />
         <Text style={{ fontSize: 10, color: C.dim }}>
-          {serverReady ? `:${IRC_PORT}` : 'server...'}
+          {serverReady ? `:${IRC_EXTERNAL_PORT}` : 'server...'}
         </Text>
       </Box>
     </Box>
@@ -470,13 +470,16 @@ export function App() {
   // ── Tor ────────────────────────────────────────────────────────────────────
   const [myOnion, setMyOnion] = useState<string | null>(null);
   const [torStatus, setTorStatus] = useState<TorStatus>('bootstrapping');
+  const [localPort, setLocalPort] = useState<number | null>(null);
   const getHostname = useLoveRPC<string>('tor:getHostname');
+  const getLocalPort = useLoveRPC<number>('tor:getLocalPort');
 
   // Query once on mount — catches case where Tor was already ready
   useEffect(() => {
     getHostname().then(h => {
       if (h) { setMyOnion(h); setTorStatus('ready'); }
     }).catch(() => {});
+    getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
   }, []);
 
   // Fires when Tor finishes bootstrapping after mount
@@ -485,6 +488,8 @@ export function App() {
       setMyOnion(payload.hostname);
       setTorStatus('ready');
     }
+    // Re-query local port in case it wasn't ready at mount
+    getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
   });
 
   const myNickRef = useRef<string>('???');
@@ -493,7 +498,9 @@ export function App() {
   myOnionRef.current = myOnion;
 
   // ── Server (accepts incoming peers) ────────────────────────────────────────
-  const server = usePeerServer(IRC_PORT);
+  // localPort is assigned by Tor (maps .onion:6667 → 127.0.0.1:localPort)
+  // so multiple instances on the same machine never conflict
+  const server = usePeerServer(localPort);
 
   // ── Chat state ─────────────────────────────────────────────────────────────
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -578,7 +585,7 @@ export function App() {
     setPeers(p => [...p, { onion, nick, direction: 'out', status: 'connecting' }]);
     addMsg('', `Connecting to ${nick}...`, false, true);
 
-    const ws = new WebSocket(`ws://${onion}:${IRC_PORT}`);
+    const ws = new WebSocket(`ws://${onion}:${IRC_EXTERNAL_PORT}`);
     outgoingRef.current.set(onion, ws);
 
     ws.onopen = () => {

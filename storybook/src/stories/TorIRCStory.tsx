@@ -33,7 +33,7 @@ type IRCPacket =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const IRC_PORT = 6667;
+const IRC_EXTERNAL_PORT = 6667; // port on the .onion (what peers connect to)
 
 const C = {
   bg:        '#0d1117',
@@ -140,7 +140,7 @@ function Header({ myOnion, torStatus, serverReady }: {
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
         <StatusDot color={serverReady ? C.success : C.warning} />
         <Text style={{ fontSize: 10, color: C.dim }}>
-          {serverReady ? `:${IRC_PORT}` : 'server...'}
+          {serverReady ? `:${IRC_EXTERNAL_PORT}` : 'server...'}
         </Text>
       </Box>
     </Box>
@@ -432,11 +432,14 @@ export function TorIRCStory() {
   const [myOnion, setMyOnion] = useState<string | null>(null);
   const [torStatus, setTorStatus] = useState<TorStatus>('bootstrapping');
   const getHostname = useLoveRPC<string>('tor:getHostname');
+  const getLocalPort = useLoveRPC<number>('tor:getLocalPort');
+  const [localPort, setLocalPort] = useState<number | null>(null);
 
   useEffect(() => {
     getHostname().then(h => {
       if (h) { setMyOnion(h); setTorStatus('ready'); }
     }).catch(() => {});
+    getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
   }, []);
 
   useLoveEvent('tor:ready', (payload: any) => {
@@ -444,6 +447,7 @@ export function TorIRCStory() {
       setMyOnion(payload.hostname);
       setTorStatus('ready');
     }
+    getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
   });
 
   const myNickRef = useRef<string>('???');
@@ -452,7 +456,7 @@ export function TorIRCStory() {
   myOnionRef.current = myOnion;
 
   // ── Server (accepts incoming peers) ─────────────────────────────────────────
-  const server = usePeerServer(IRC_PORT);
+  const server = usePeerServer(localPort);
 
   // ── State ────────────────────────────────────────────────────────────────────
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -558,7 +562,7 @@ export function TorIRCStory() {
     setPeers(p => [...p, { onion, nick, direction: 'out', status: 'connecting' }]);
     addMsg('', `Connecting to ${nick}...`, false, true);
 
-    const ws = new WebSocket(`ws://${onion}:${IRC_PORT}`);
+    const ws = new WebSocket(`ws://${onion}:${IRC_EXTERNAL_PORT}`);
     outgoingRef.current.set(onion, ws);
 
     ws.onopen = () => {

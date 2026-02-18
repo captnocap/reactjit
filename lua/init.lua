@@ -779,6 +779,9 @@ function ReactLove.init(config)
     rpcHandlers["tor:getProxyPort"] = function()
       return tor.getProxyPort()
     end
+    rpcHandlers["tor:getLocalPort"] = function()
+      return tor.getLocalPort()
+    end
   end
 
   -- Load audio engine (optional — graceful degradation if not available)

@@ -32,6 +32,7 @@ local Tor = {}
 
 local torPid = nil
 local socksPort = nil
+local hsLocalPort = nil  -- local port the WebSocket server binds to
 local hsDir = nil
 local configDir = nil
 local hostname = nil
@@ -88,10 +89,17 @@ function Tor.start(opts)
   opts = opts or {}
   local hsPort = opts.hsPort or 8080
 
-  -- Find an open SOCKS port (skip 9050 if already taken by system Tor)
+  -- Find open ports: SOCKS proxy and local hidden-service target (both must be free)
   socksPort = findOpenPort(9050)
   if not socksPort then
     return false, "Could not find an open port for Tor SOCKS proxy (tried 9050-9150)"
+  end
+
+  -- Local port the WebSocket server will bind to.
+  -- Start search well away from the SOCKS range to avoid collisions.
+  hsLocalPort = findOpenPort(16667)
+  if not hsLocalPort then
+    return false, "Could not find an open port for hidden service target (tried 16667+)"
   end
 
   -- Build config dir namespaced by app identity.
@@ -141,7 +149,7 @@ function Tor.start(opts)
 
   f:write("SocksPort " .. socksPort .. "\n")
   f:write("HiddenServiceDir " .. hsDir .. "\n")
-  f:write("HiddenServicePort " .. hsPort .. " 127.0.0.1:" .. hsPort .. "\n")
+  f:write("HiddenServicePort " .. hsPort .. " 127.0.0.1:" .. hsLocalPort .. "\n")
   f:write("DataDirectory " .. dataDir .. "\n")
   f:close()
 
@@ -214,6 +222,13 @@ end
 --- @return number|nil
 function Tor.getProxyPort()
   return socksPort
+end
+
+--- Get the local port the WebSocket server should bind to.
+--- Tor maps .onion:<hsPort> → 127.0.0.1:<localPort>.
+--- @return number|nil
+function Tor.getLocalPort()
+  return hsLocalPort
 end
 
 --- Stop Tor subprocess via SIGTERM.
