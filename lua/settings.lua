@@ -139,6 +139,87 @@ local function getFont(size)
 end
 
 -- ============================================================================
+-- Built-in service definitions (always available, no bridge needed)
+-- ============================================================================
+
+local BUILTIN_SERVICES = {
+  -- AI
+  { id = "openai",    name = "OpenAI",    category = "ai", auth = { type = "bearer", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "sk-..." },
+    { key = "baseURL", label = "Base URL (optional)", secret = false, placeholder = "https://api.openai.com" },
+  }}},
+  { id = "anthropic", name = "Anthropic", category = "ai", auth = { type = "header", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "sk-ant-..." },
+    { key = "baseURL", label = "Base URL (optional)", secret = false, placeholder = "https://api.anthropic.com" },
+  }}},
+  -- Media
+  { id = "spotify",   name = "Spotify",   category = "media", auth = { type = "bearer", fields = {
+    { key = "token", label = "OAuth2 Token", placeholder = "Bearer token from OAuth flow" },
+  }}},
+  { id = "tmdb",      name = "TMDB",      category = "media", auth = { type = "query", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "v3 API key" },
+  }}},
+  { id = "plex",      name = "Plex",      category = "media", auth = { type = "header", fields = {
+    { key = "baseUrl", label = "Server URL", secret = false, placeholder = "http://localhost:32400" },
+    { key = "token",   label = "X-Plex-Token", placeholder = "Plex authentication token" },
+  }}},
+  { id = "jellyfin",  name = "Jellyfin",  category = "media", auth = { type = "header", fields = {
+    { key = "baseUrl", label = "Server URL", secret = false, placeholder = "http://localhost:8096" },
+    { key = "apiKey",  label = "API Key", placeholder = "Jellyfin API key" },
+  }}},
+  { id = "trakt",     name = "Trakt",     category = "media", auth = { type = "header", fields = {
+    { key = "clientId", label = "Client ID", placeholder = "Trakt application client ID" },
+    { key = "token",    label = "Access Token (optional)", placeholder = "OAuth token for user data" },
+  }}},
+  { id = "lastfm",    name = "Last.fm",   category = "media", auth = { type = "query", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "Last.fm API key" },
+  }}},
+  -- Dev
+  { id = "github",    name = "GitHub",    category = "dev", auth = { type = "bearer", fields = {
+    { key = "token", label = "Personal Access Token", placeholder = "ghp_..." },
+  }}},
+  { id = "steam",     name = "Steam",     category = "dev", auth = { type = "query", fields = {
+    { key = "apiKey", label = "Web API Key", placeholder = "Steam Web API key" },
+  }}},
+  { id = "nasa",      name = "NASA",      category = "dev", auth = { type = "query", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "DEMO_KEY or api.nasa.gov key" },
+  }}},
+  -- Smart Home
+  { id = "homeassistant", name = "Home Assistant", category = "smart-home", auth = { type = "bearer", fields = {
+    { key = "baseUrl", label = "Server URL", secret = false, placeholder = "http://homeassistant.local:8123" },
+    { key = "token",   label = "Long-Lived Access Token", placeholder = "ey..." },
+  }}},
+  { id = "hue",       name = "Philips Hue", category = "smart-home", auth = { type = "url-path", fields = {
+    { key = "bridgeIp", label = "Bridge IP", secret = false, placeholder = "192.168.1.x" },
+    { key = "apiKey",   label = "API Key", placeholder = "Press bridge button then generate" },
+  }}},
+  -- Productivity
+  { id = "notion",    name = "Notion",    category = "productivity", auth = { type = "bearer", fields = {
+    { key = "token", label = "Internal Integration Token", placeholder = "secret_..." },
+  }}},
+  { id = "todoist",   name = "Todoist",   category = "productivity", auth = { type = "bearer", fields = {
+    { key = "token", label = "API Token", placeholder = "Todoist API token" },
+  }}},
+  { id = "google",    name = "Google",    category = "productivity", auth = { type = "bearer", fields = {
+    { key = "token", label = "OAuth2 Token", placeholder = "Bearer token from OAuth flow" },
+  }}},
+  -- Finance
+  { id = "ynab",      name = "YNAB",      category = "finance", auth = { type = "bearer", fields = {
+    { key = "token", label = "Personal Access Token", placeholder = "YNAB API token" },
+  }}},
+  { id = "coingecko", name = "CoinGecko", category = "finance", auth = { type = "header", fields = {
+    { key = "apiKey", label = "API Key (optional)", placeholder = "Free tier works without key" },
+  }}},
+  -- Social
+  { id = "telegram",  name = "Telegram Bot", category = "social", auth = { type = "url-path", fields = {
+    { key = "botToken", label = "Bot Token", placeholder = "123456:ABC-DEF..." },
+  }}},
+  { id = "weather",   name = "OpenWeatherMap", category = "social", auth = { type = "query", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "OpenWeatherMap API key" },
+  }}},
+}
+
+-- ============================================================================
 -- Category display names and order
 -- ============================================================================
 
@@ -814,6 +895,8 @@ function Settings.init(config)
   config = config or {}
   state.toggleKey = config.key or "f10"
   state.keys = loadKeys()
+  -- Load built-in services immediately — no bridge needed
+  Settings.setServices(BUILTIN_SERVICES)
 end
 
 function Settings.isOpen()
