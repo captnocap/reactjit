@@ -21,6 +21,7 @@ import { PressableStory } from './PressableStory';
 import { SliderStory } from './SliderStory';
 import { SwitchStory } from './SwitchStory';
 import { ScrollViewStory } from './ScrollViewStory';
+import { ModalStory } from './ModalStory';
 import { GradientStory } from './Gradient';
 import { ShadowStory } from './Shadow';
 import { TransformStory } from './Transform';
@@ -112,6 +113,7 @@ export const stories: StoryDef[] = [
   { id: 'slider', title: 'Slider', category: 'Components', component: SliderStory },
   { id: 'switch', title: 'Switch', category: 'Components', component: SwitchStory },
   { id: 'scrollview', title: 'ScrollView', category: 'Components', component: ScrollViewStory },
+  { id: 'modal', title: 'Modal', category: 'Components', component: ModalStory },
 
   // Visual
   { id: 'gradient', title: 'Gradients', category: 'Visual', component: GradientStory },

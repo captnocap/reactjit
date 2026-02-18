@@ -1,15 +1,19 @@
 /**
  * Modal component for react-love
  *
- * Displays content in a full-screen overlay with backdrop. Works in both web mode
- * and native mode via the Portal system.
+ * Displays content in a full-screen overlay with backdrop. Works in both web
+ * and native mode via the Portal / PortalHost system.
  *
  * Features:
- * - Backdrop with customizable color and transparency
- * - Centered content with flexbox
- * - Dismissal via backdrop press or Escape key
- * - Simple animations (none, fade, slide)
- * - Lifecycle callbacks (onShow, onRequestClose)
+ * - Backdrop with customizable color (tap/click to dismiss)
+ * - Centered content via flexbox
+ * - Escape key dismissal
+ * - Fade / slide animations (web only — native always uses instant show/hide)
+ * - onShow / onRequestClose lifecycle callbacks
+ *
+ * Native requirements:
+ * - Wrap your root component with <PortalHost> (already done in native-main.tsx).
+ *   Without it the portal registers with a null context and renders nothing.
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -23,11 +27,14 @@ export interface ModalProps {
   visible: boolean;
   onRequestClose?: () => void;
   onShow?: () => void;
+  /** Animations only apply in web mode. Native always shows/hides instantly. */
   animationType?: 'none' | 'fade' | 'slide';
   transparent?: boolean;
   backdropColor?: Color;
+  /** Close when tapping/clicking outside the content. Default true. */
   backdropDismiss?: boolean;
   children: React.ReactNode;
+  /** Applied to the content wrapper Box. */
   style?: Style;
 }
 
@@ -43,29 +50,29 @@ export function Modal({
   style,
 }: ModalProps) {
   const mode = useRendererMode();
+
+  // Native: setInterval is unreliable in QuickJS — always instant show/hide.
+  const effectiveAnimationType = mode === 'native' ? 'none' : animationType;
+
   const [animationState, setAnimationState] = useState<'entering' | 'entered' | 'exiting' | 'exited'>(
     visible ? 'entered' : 'exited'
   );
   const previousVisibleRef = useRef(visible);
   const onShowCalledRef = useRef(false);
 
-  // Handle visibility changes
   useEffect(() => {
     if (visible === previousVisibleRef.current) return;
     previousVisibleRef.current = visible;
 
     if (visible) {
       onShowCalledRef.current = false;
-      if (animationType === 'none') {
+      if (effectiveAnimationType === 'none') {
         setAnimationState('entered');
       } else {
         setAnimationState('entering');
-        // Trigger animation
         const steps = 4;
-        const duration = 200;
-        const stepDuration = duration / steps;
+        const stepDuration = 200 / steps;
         let currentStep = 0;
-
         const interval = setInterval(() => {
           currentStep++;
           if (currentStep >= steps) {
@@ -73,18 +80,16 @@ export function Modal({
             setAnimationState('entered');
           }
         }, stepDuration);
+        return () => clearInterval(interval);
       }
     } else {
-      if (animationType === 'none') {
+      if (effectiveAnimationType === 'none') {
         setAnimationState('exited');
       } else {
         setAnimationState('exiting');
-        // Trigger exit animation
         const steps = 4;
-        const duration = 200;
-        const stepDuration = duration / steps;
+        const stepDuration = 200 / steps;
         let currentStep = 0;
-
         const interval = setInterval(() => {
           currentStep++;
           if (currentStep >= steps) {
@@ -92,11 +97,11 @@ export function Modal({
             setAnimationState('exited');
           }
         }, stepDuration);
+        return () => clearInterval(interval);
       }
     }
-  }, [visible, animationType]);
+  }, [visible, effectiveAnimationType]);
 
-  // Call onShow when animation completes
   useEffect(() => {
     if (animationState === 'entered' && !onShowCalledRef.current && onShow) {
       onShowCalledRef.current = true;
@@ -104,147 +109,149 @@ export function Modal({
     }
   }, [animationState, onShow]);
 
-  // Escape key handler
+  // Web: Escape via DOM listener
   useEffect(() => {
-    if (!visible || !onRequestClose) return;
-
-    const handleKeyDown = (event: KeyboardEvent | LoveEvent) => {
-      const key = (event as any).key;
-      if (key === 'Escape') {
-        onRequestClose();
-      }
+    if (mode !== 'web' || !visible || !onRequestClose) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onRequestClose();
     };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mode, visible, onRequestClose]);
 
-    if (mode === 'web') {
-      document.addEventListener('keydown', handleKeyDown as any);
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown as any);
-      };
-    }
-    // Native mode: key handler is attached to the Box component
-  }, [visible, onRequestClose, mode]);
-
-  // Prevent body scroll in web mode
+  // Web: prevent body scroll while open
   useEffect(() => {
-    if (mode === 'web' && visible) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
+    if (mode !== 'web' || !visible) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, [mode, visible]);
 
-  // Backdrop press handler
   const handleBackdropPress = useCallback(() => {
-    if (backdropDismiss && onRequestClose) {
-      onRequestClose();
-    }
+    if (backdropDismiss && onRequestClose) onRequestClose();
   }, [backdropDismiss, onRequestClose]);
 
-  // Native mode key handler
-  const handleKeyDown = useCallback((event: LoveEvent) => {
-    if (event.key === 'Escape' && onRequestClose) {
-      onRequestClose();
-    }
+  // Native: Escape via onKeyDown broadcast (Love2D key names are lowercase)
+  const handleNativeKeyDown = useCallback((event: LoveEvent) => {
+    if (event.key === 'escape' && onRequestClose) onRequestClose();
   }, [onRequestClose]);
 
-  // Don't render if not visible and animation is complete
-  if (!visible && animationState === 'exited') {
-    return null;
-  }
+  if (!visible && animationState === 'exited') return null;
 
-  // Calculate animation styles
-  let contentOpacity = 1;
-  let contentTranslateY = 0;
-  let backdropOpacity = 1;
-
-  if (animationType === 'fade') {
-    if (animationState === 'entering') {
-      contentOpacity = 0.25;
-      backdropOpacity = 0.25;
-    } else if (animationState === 'exiting') {
-      contentOpacity = 0.25;
-      backdropOpacity = 0.25;
-    }
-  } else if (animationType === 'slide') {
-    if (animationState === 'entering') {
-      contentTranslateY = 100;
-    } else if (animationState === 'exiting') {
-      contentTranslateY = 100;
-    }
-  }
-
-  // Compute backdrop color
   const finalBackdropColor = transparent ? [0, 0, 0, 0] as Color : backdropColor;
 
-  // Web mode: use CSS transitions
-  const webTransition = animationType !== 'none' ? 'all 0.2s ease-out' : undefined;
+  // ── Web path (uses CSS transitions + div wrapper) ────────────────────────
 
-  const contentStyle: Style = {
-    ...style,
-    opacity: contentOpacity,
-    transform: contentTranslateY !== 0 ? { translateY: contentTranslateY } : undefined,
-  };
+  if (mode === 'web') {
+    let contentOpacity = 1;
+    let contentTranslateY = 0;
+    let backdropOpacity = 1;
 
-  const content = (
-    <Box
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-      onKeyDown={mode === 'native' ? handleKeyDown : undefined}
-    >
-      {/* Backdrop */}
-      <Pressable
-        onPress={handleBackdropPress}
+    if (effectiveAnimationType === 'fade' &&
+        (animationState === 'entering' || animationState === 'exiting')) {
+      contentOpacity = 0.25;
+      backdropOpacity = 0.25;
+    } else if (effectiveAnimationType === 'slide' &&
+               (animationState === 'entering' || animationState === 'exiting')) {
+      contentTranslateY = 100;
+    }
+
+    const webTransition = effectiveAnimationType !== 'none' ? 'all 0.2s ease-out' : undefined;
+
+    return (
+      <Portal>
+        <Box
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <Pressable
+            onPress={handleBackdropPress}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: finalBackdropColor,
+              opacity: backdropOpacity,
+            }}
+          >
+            <Box style={{ width: '100%', height: '100%' }} />
+          </Pressable>
+
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              opacity: contentOpacity,
+              transition: webTransition,
+              transform: contentTranslateY !== 0
+                ? `translateY(${contentTranslateY}px)`
+                : undefined,
+              ...(style as React.CSSProperties),
+            } as React.CSSProperties}
+          >
+            {children}
+          </div>
+        </Box>
+      </Portal>
+    );
+  }
+
+  // ── Native path ──────────────────────────────────────────────────────────
+  //
+  // Layout:
+  //   Outer Box (position:absolute, fills viewport, flex-center)
+  //     Backdrop Pressable (position:absolute, fills viewport, zIndex:0)
+  //     Content Pressable  (in flow, centered, zIndex:1, onPress={noop})
+  //
+  // The content Pressable has a no-op onPress so that clicks anywhere inside
+  // the content area are consumed and do not fall through to the backdrop.
+
+  return (
+    <Portal>
+      <Box
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
           width: '100%',
           height: '100%',
-          backgroundColor: finalBackdropColor,
-          opacity: backdropOpacity,
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
+        onKeyDown={handleNativeKeyDown}
       >
-        <Box style={{ width: '100%', height: '100%' }} />
-      </Pressable>
-
-      {/* Content */}
-      {mode === 'web' ? (
-        <div
+        {/* Backdrop — position:absolute so it doesn't participate in flex flow */}
+        <Pressable
+          onPress={handleBackdropPress}
           style={{
-            position: 'relative',
-            zIndex: 1,
-            ...contentStyle,
-            transition: webTransition,
-            opacity: contentStyle.opacity,
-            transform: contentStyle.transform
-              ? `translateY(${contentStyle.transform.translateY}px)`
-              : undefined,
-          } as React.CSSProperties}
-        >
-          {children}
-        </div>
-      ) : (
-        <Box
-          style={{
-            position: 'relative',
-            zIndex: 1,
-            ...contentStyle,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: finalBackdropColor,
           }}
         >
-          {children}
-        </Box>
-      )}
-    </Box>
-  );
+          <Box style={{ width: '100%', height: '100%' }} />
+        </Pressable>
 
-  return <Portal>{content}</Portal>;
+        {/* Content — in-flow, centered by parent, zIndex above backdrop */}
+        <Pressable
+          onPress={() => {/* consume clicks so they don't reach the backdrop */}}
+          style={{ zIndex: 1, ...style }}
+        >
+          {children}
+        </Pressable>
+      </Box>
+    </Portal>
+  );
 }

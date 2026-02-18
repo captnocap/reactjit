@@ -12,7 +12,7 @@ import React, { useState, useCallback } from 'react';
 import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
-import { Box, Text, Pressable, ScaleProvider } from '../../packages/shared/src';
+import { Box, Text, Pressable, ScaleProvider, PortalHost } from '../../packages/shared/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -219,7 +219,9 @@ const root = createRoot();
     <BridgeProvider bridge={bridge}>
       <ThemeProvider>
         <RendererProvider mode="native">
-          <Storybook />
+          <PortalHost>
+            <Storybook />
+          </PortalHost>
         </RendererProvider>
       </ThemeProvider>
     </BridgeProvider>
