@@ -17,20 +17,8 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { useBridgeOptional } from '../../shared/src/context';
 import { builtinServices, type ServiceDefinition } from './registry';
-
-type Bridge = {
-  send(type: string, payload?: any): void;
-  flush(): void;
-};
-
-/**
- * Try to get the bridge from the global context.
- * Works without requiring @ilovereact/core as a hard dependency.
- */
-function getBridge(): Bridge | null {
-  return (globalThis as any).__bridge || null;
-}
 
 let registrySent = false;
 
@@ -43,19 +31,17 @@ let registrySent = false;
 export function useSettingsRegistry(
   services: ServiceDefinition[] = builtinServices,
 ): void {
+  const bridge = useBridgeOptional();
   const servicesRef = useRef(services);
   servicesRef.current = services;
 
   useEffect(() => {
-    if (registrySent) return;
-
-    const bridge = getBridge();
-    if (!bridge) return;
+    if (registrySent || !bridge) return;
 
     bridge.send('settings:registry', { services: servicesRef.current });
     bridge.flush();
     registrySent = true;
-  }, []);
+  }, [bridge]);
 }
 
 /**

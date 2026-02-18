@@ -17,15 +17,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-
-type Bridge = {
-  rpc<T>(method: string, args?: any, timeoutMs?: number): Promise<T>;
-  subscribe(type: string, fn: (payload: any) => void): () => void;
-};
-
-function getBridge(): Bridge | null {
-  return (globalThis as any).__bridge || null;
-}
+import { useBridgeOptional } from '../../shared/src/context';
 
 export interface ServiceKeyResult {
   /** The stored key value, or null if not configured. */
@@ -49,6 +41,7 @@ export function useServiceKey(
   serviceId: string,
   fieldKey?: string,
 ): ServiceKeyResult {
+  const bridge = useBridgeOptional();
   const [key, setKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
@@ -60,12 +53,12 @@ export function useServiceKey(
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => {
-    let cancelled = false;
-    const bridge = getBridge();
     if (!bridge) {
       setLoading(false);
       return;
     }
+
+    let cancelled = false;
 
     bridge.rpc<string | null>('settings:getKey', {
       serviceId: serviceIdRef.current,
@@ -80,7 +73,7 @@ export function useServiceKey(
     });
 
     return () => { cancelled = true; };
-  }, [serviceId, fieldKey, tick]);
+  }, [bridge, serviceId, fieldKey, tick]);
 
   return {
     key,
@@ -99,6 +92,7 @@ export function useServiceKey(
 export function useServiceKeys(
   serviceId: string,
 ): { keys: Record<string, string>; loading: boolean; refetch: () => void } {
+  const bridge = useBridgeOptional();
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
@@ -106,12 +100,12 @@ export function useServiceKeys(
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => {
-    let cancelled = false;
-    const bridge = getBridge();
     if (!bridge) {
       setLoading(false);
       return;
     }
+
+    let cancelled = false;
 
     bridge.rpc<Record<string, string>>('settings:getKeys').then(allKeys => {
       if (!cancelled && allKeys) {
@@ -130,7 +124,7 @@ export function useServiceKeys(
     });
 
     return () => { cancelled = true; };
-  }, [serviceId, tick]);
+  }, [bridge, serviceId, tick]);
 
   return { keys, loading, refetch };
 }
