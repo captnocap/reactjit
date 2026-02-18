@@ -111,6 +111,10 @@ function DevTools.init(config)
   console   = config.console
   tree      = config.tree
   state.pushEvent = config.pushEvent
+  -- Wire up the re-layout callback for inspector style editing
+  if inspector and tree then
+    inspector.setMarkDirty(function() tree.markDirty() end)
+  end
 end
 
 function DevTools.isOpen()
@@ -180,6 +184,11 @@ function DevTools.keypressed(key)
 
   if not state.open then return false end
 
+  -- Elements tab: route to inspector first when editing (edit mode handles Escape, Tab, etc.)
+  if state.activeTab == "elements" and inspector.isEditing() then
+    if inspector.keypressed(key) then return true end
+  end
+
   -- Escape: clear selection first, then close devtools
   if key == "escape" then
     if state.activeTab == "elements" and inspector.getSelectedNode() then
@@ -201,8 +210,7 @@ function DevTools.keypressed(key)
   if state.activeTab == "console" then
     return console.keypressed(key)
   elseif state.activeTab == "elements" then
-    -- Elements tab: Escape already handled above, other keys not used
-    return false
+    return inspector.keypressed(key)
   end
 
   return false
@@ -212,7 +220,9 @@ end
 function DevTools.textinput(text)
   if not state.open then return false end
 
-  if state.activeTab == "console" then
+  if state.activeTab == "elements" then
+    return inspector.textinput(text)
+  elseif state.activeTab == "console" then
     return console.textinput(text)
   end
 

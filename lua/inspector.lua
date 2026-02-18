@@ -60,6 +60,9 @@ local state = {
   -- Region bounds (set by drawTreeInRegion/drawDetailInRegion, used for input routing)
   treeRegion = nil,   -- {x, y, w, h}
   detailRegion = nil,  -- {x, y, w, h}
+  -- Inline style editing
+  editState = nil,  -- nil or { node, section, prop, propIndex, text, cursor, originalValue, liveApplied }
+  detailPropPositions = {},  -- { section, prop, y, h, valueX, value }
 }
 
 -- ============================================================================
@@ -121,6 +124,16 @@ local JSX_CLOSE_BRK = { 0.50, 0.52, 0.58, 0.50 } -- closing tag brackets (dim)
 local JSX_GUIDE     = { 0.25, 0.27, 0.35, 0.35 } -- guide lines (very dim)
 local JSX_DOTS      = { 0.55, 0.55, 0.60, 1 }    -- "..." collapsed indicator
 local JSX_DIMS      = { 0.50, 0.52, 0.58, 0.8 }  -- dimensions on anonymous nodes
+
+-- Inline edit colors
+local EDIT_BG       = { 0.12, 0.12, 0.20, 1 }
+local EDIT_BORDER   = { 0.38, 0.65, 0.98, 0.6 }
+local EDIT_TEXT     = { 0.92, 0.94, 0.96, 1 }
+local EDIT_CURSOR   = { 0.38, 0.65, 0.98, 1 }
+-- Detail panel property colors
+local PROP_KEY_COL  = { 0.70, 0.55, 0.85, 1 }    -- purple for style keys
+local PROP_VAL_COL  = { 0.88, 0.90, 0.94, 1 }    -- bright for values
+local SECTION_COL   = { 0.45, 0.48, 0.55, 1 }    -- section headers
 
 -- Cached fonts (created lazily on first draw, avoids allocation per frame)
 local fontSmall = nil   -- 11px, used by tooltip/tree/detail/perf
@@ -310,8 +323,20 @@ end
 
 --- Clear the selected node (used by devtools Escape handling).
 function Inspector.clearSelection()
+  state.editState = nil
   state.selectedNode = nil
   state.detailScrollY = 0
+end
+
+--- Whether the inspector is in inline edit mode.
+function Inspector.isEditing()
+  return state.editState ~= nil
+end
+
+--- Set callback for triggering tree re-layout after style edits.
+local markDirtyCallback = nil
+function Inspector.setMarkDirty(fn)
+  markDirtyCallback = fn
 end
 
 --- Enable inspector overlays (called by devtools when panel opens).
@@ -324,6 +349,7 @@ function Inspector.disable()
   state.enabled = false
   state.hoveredNode = nil
   state.selectedNode = nil
+  state.editState = nil
   state.treePanel = false
   state.treeRegion = nil
   state.detailRegion = nil
@@ -378,6 +404,11 @@ function Inspector.keypressed(key)
 
   if not state.enabled then return false end
 
+  -- Edit mode gets highest priority
+  if state.editState then
+    return handleEditKey(key)
+  end
+
   -- Console toggle (backtick)
   if key == "`" then
     if console then
@@ -413,6 +444,11 @@ end
 function Inspector.textinput(text)
   if not state.enabled then return false end
 
+  -- Edit mode
+  if state.editState then
+    return handleEditTextInput(text)
+  end
+
   -- Route to console
   if console and console.isVisible() then
     return console.textinput(text)
@@ -430,7 +466,21 @@ function Inspector.mousepressed(x, y, button)
   if state.selectedNode and state.detailRegion then
     local dr = state.detailRegion
     if x >= dr.x and x < dr.x + dr.w and y >= dr.y and y < dr.y + dr.h then
-      return true  -- consumed by detail panel
+      -- Check if click is on an editable property value
+      for i, entry in ipairs(state.detailPropPositions) do
+        if entry.y + entry.h > dr.y and entry.y < dr.y + dr.h then  -- visible
+          if y >= entry.y and y < entry.y + entry.h and x >= entry.valueX then
+            if state.editState then commitEdit() end
+            startEditing(entry, i)
+            return true
+          end
+        end
+      end
+      -- Click elsewhere in detail: commit current edit
+      if state.editState then
+        commitEdit()
+      end
+      return true
     end
   end
 
@@ -1150,6 +1200,205 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
 end
 
 -- ============================================================================
+-- Inline style editing
+-- ============================================================================
+
+--- Parse a text value into the appropriate Lua type
+local function parseStyleValue(text)
+  if text == "" or text == "nil" then return nil end
+  if text == "true" then return true end
+  if text == "false" then return false end
+  local num = tonumber(text)
+  if num then return num end
+  -- Keep as string (percentages, colors, etc.)
+  return text
+end
+
+--- Start editing a property from a detailPropPositions entry
+local function startEditing(entry, idx)
+  local valStr
+  if entry.value == nil then
+    valStr = ""
+  elseif type(entry.value) == "number" then
+    if entry.value == math.floor(entry.value) then
+      valStr = tostring(math.floor(entry.value))
+    else
+      valStr = string.format("%.2f", entry.value)
+    end
+  else
+    valStr = tostring(entry.value)
+  end
+  state.editState = {
+    node = state.selectedNode,
+    section = entry.section,
+    prop = entry.prop,
+    propIndex = idx or 0,
+    text = valStr,
+    cursor = #valStr,
+    originalValue = entry.value,
+    liveApplied = false,
+  }
+end
+
+--- Commit the current edit (apply value and exit edit mode)
+local function commitEdit()
+  if not state.editState then return end
+  local es = state.editState
+  local value = parseStyleValue(es.text)
+  if es.section == "style" and es.node and es.node.style then
+    es.node.style[es.prop] = value
+  end
+  if markDirtyCallback then markDirtyCallback() end
+  state.editState = nil
+end
+
+--- Cancel the current edit (restore original value if live-applied)
+local function cancelEdit()
+  if not state.editState then return end
+  local es = state.editState
+  if es.liveApplied and es.node and es.node.style then
+    es.node.style[es.prop] = es.originalValue
+    if markDirtyCallback then markDirtyCallback() end
+  end
+  state.editState = nil
+end
+
+--- Apply edit value live (for arrow key increment/decrement)
+local function applyEditLive()
+  if not state.editState then return end
+  local es = state.editState
+  local value = parseStyleValue(es.text)
+  if es.section == "style" and es.node and es.node.style then
+    es.node.style[es.prop] = value
+    es.liveApplied = true
+  end
+  if markDirtyCallback then markDirtyCallback() end
+end
+
+--- Handle a keypress while in edit mode. Returns true if consumed.
+local function handleEditKey(key)
+  local es = state.editState
+  if not es then return false end
+
+  if key == "return" or key == "kpenter" then
+    commitEdit()
+    return true
+
+  elseif key == "escape" then
+    cancelEdit()
+    return true
+
+  elseif key == "backspace" then
+    if es.cursor > 0 then
+      es.text = es.text:sub(1, es.cursor - 1) .. es.text:sub(es.cursor + 1)
+      es.cursor = es.cursor - 1
+    end
+    return true
+
+  elseif key == "delete" then
+    if es.cursor < #es.text then
+      es.text = es.text:sub(1, es.cursor) .. es.text:sub(es.cursor + 2)
+    end
+    return true
+
+  elseif key == "left" then
+    es.cursor = math.max(0, es.cursor - 1)
+    return true
+
+  elseif key == "right" then
+    es.cursor = math.min(#es.text, es.cursor + 1)
+    return true
+
+  elseif key == "home" then
+    es.cursor = 0
+    return true
+
+  elseif key == "end" then
+    es.cursor = #es.text
+    return true
+
+  elseif key == "up" then
+    local num = tonumber(es.text)
+    if num then
+      local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
+      num = num + step
+      if num == math.floor(num) then
+        es.text = tostring(math.floor(num))
+      else
+        es.text = string.format("%.2f", num)
+      end
+      es.cursor = #es.text
+      applyEditLive()
+    end
+    return true
+
+  elseif key == "down" then
+    local num = tonumber(es.text)
+    if num then
+      local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
+      num = num - step
+      if num == math.floor(num) then
+        es.text = tostring(math.floor(num))
+      else
+        es.text = string.format("%.2f", num)
+      end
+      es.cursor = #es.text
+      applyEditLive()
+    end
+    return true
+
+  elseif key == "tab" then
+    local prevIndex = es.propIndex
+    commitEdit()
+    -- Navigate to next/prev property
+    local shift = love.keyboard.isDown("lshift", "rshift")
+    local nextIdx = shift and (prevIndex - 1) or (prevIndex + 1)
+    if nextIdx >= 1 and nextIdx <= #state.detailPropPositions then
+      startEditing(state.detailPropPositions[nextIdx], nextIdx)
+    end
+    return true
+  end
+
+  return false
+end
+
+--- Handle text input while in edit mode. Returns true if consumed.
+local function handleEditTextInput(text)
+  local es = state.editState
+  if not es then return false end
+  es.text = es.text:sub(1, es.cursor) .. text .. es.text:sub(es.cursor + 1)
+  es.cursor = es.cursor + #text
+  return true
+end
+
+--- Draw the inline text editor at the given position
+local function drawInlineEditor(ex, ey, maxW, lineH, font)
+  local es = state.editState
+  if not es then return end
+
+  -- Editor background
+  local textW = math.max(font:getWidth(es.text) + 12, 60)
+  local edW = math.min(textW, maxW)
+  love.graphics.setColor(EDIT_BG)
+  love.graphics.rectangle("fill", ex - 2, ey - 1, edW, lineH + 1, 2, 2)
+  love.graphics.setColor(EDIT_BORDER)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", ex - 2, ey - 1, edW, lineH + 1, 2, 2)
+
+  -- Text
+  love.graphics.setColor(EDIT_TEXT)
+  love.graphics.print(es.text, ex + 1, ey)
+
+  -- Blinking cursor (blink every 0.5s)
+  local blink = (love.timer.getTime() % 1.0) < 0.6
+  if blink then
+    local cursorX = ex + 1 + font:getWidth(es.text:sub(1, es.cursor))
+    love.graphics.setColor(EDIT_CURSOR)
+    love.graphics.rectangle("fill", cursorX, ey + 1, 1, lineH - 2)
+  end
+end
+
+-- ============================================================================
 -- Drawing: Detail panel (right side, shows full props/style of selected node)
 -- ============================================================================
 
@@ -1157,9 +1406,17 @@ function drawDetailPanel(rx, ry, rw, rh)
   local node = state.selectedNode
   if not node then return end
 
+  -- Cancel edit if the selected node changed
+  if state.editState and state.editState.node ~= node then
+    state.editState = nil
+  end
+
   local font = getFont()
   local lineH = font:getHeight() + 2
   local pad = 10
+
+  -- Reset property positions cache
+  state.detailPropPositions = {}
 
   -- Background
   love.graphics.setColor(DETAIL_BG)
@@ -1175,6 +1432,7 @@ function drawDetailPanel(rx, ry, rw, rh)
 
   local x = rx + pad
   local y = ry + pad - state.detailScrollY
+  local contentW = rw - pad * 2
 
   -- Header with component name
   local header
@@ -1194,75 +1452,201 @@ function drawDetailPanel(rx, ry, rw, rh)
     if node.debugSource.fileName then
       local file = node.debugSource.fileName
       local shortFile = file:match("([^/]+)$") or file
-      love.graphics.print(shortFile, x, y)
-      y = y + lineH
+      local loc = shortFile
       if node.debugSource.lineNumber then
-        love.graphics.print("  line " .. tostring(node.debugSource.lineNumber), x, y)
-        y = y + lineH
+        loc = loc .. ":" .. tostring(node.debugSource.lineNumber)
       end
+      love.graphics.print(loc, x, y)
+      y = y + lineH
     end
   end
-  y = y + 4
+  y = y + 6
 
-  -- Computed layout
+  -- ── Box model diagram ──
   local c = node.computed
+  local s = node.style or {}
   if c then
-    love.graphics.setColor(TREE_DIM)
-    love.graphics.print("-- layout --", x, y)
-    y = y + lineH
+    local mt, mr, mb, ml = getMargins(s)
+    local pt, pr, pb, pl = getPadding(s)
+    local boxW = math.min(contentW, 220)
+    local boxH = 100
+    local boxX = x + math.floor((contentW - boxW) / 2)
+    local boxY = y
+
+    -- Margin layer (outermost)
+    love.graphics.setColor(0.96, 0.62, 0.04, 0.12)
+    love.graphics.rectangle("fill", boxX, boxY, boxW, boxH, 3, 3)
+    love.graphics.setColor(0.96, 0.62, 0.04, 0.3)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", boxX, boxY, boxW, boxH, 3, 3)
+
+    -- Padding layer
+    local padX = boxX + 24
+    local padY = boxY + 18
+    local padW = boxW - 48
+    local padH = boxH - 36
+    love.graphics.setColor(0.13, 0.77, 0.37, 0.12)
+    love.graphics.rectangle("fill", padX, padY, padW, padH, 2, 2)
+    love.graphics.setColor(0.13, 0.77, 0.37, 0.3)
+    love.graphics.rectangle("line", padX, padY, padW, padH, 2, 2)
+
+    -- Content layer (innermost)
+    local cntX = padX + 18
+    local cntY = padY + 14
+    local cntW = padW - 36
+    local cntH = padH - 28
+    love.graphics.setColor(0.24, 0.52, 0.97, 0.15)
+    love.graphics.rectangle("fill", cntX, cntY, cntW, cntH, 2, 2)
+    love.graphics.setColor(0.24, 0.52, 0.97, 0.3)
+    love.graphics.rectangle("line", cntX, cntY, cntW, cntH, 2, 2)
+
+    -- Content dimensions
     love.graphics.setColor(TOOLTIP_TEXT)
-    love.graphics.print(string.format("x: %d", math.floor(c.x)), x, y); y = y + lineH
-    love.graphics.print(string.format("y: %d", math.floor(c.y)), x, y); y = y + lineH
-    love.graphics.print(string.format("w: %d", math.floor(c.w)), x, y); y = y + lineH
-    love.graphics.print(string.format("h: %d", math.floor(c.h)), x, y); y = y + lineH
-    y = y + 4
+    local dimStr = math.floor(c.w) .. " x " .. math.floor(c.h)
+    local dimW = font:getWidth(dimStr)
+    love.graphics.print(dimStr, cntX + math.floor((cntW - dimW) / 2), cntY + math.floor((cntH - lineH) / 2))
+
+    -- Margin values (top, right, bottom, left)
+    love.graphics.setColor(0.96, 0.62, 0.04, 0.8)
+    local mtStr = tostring(mt)
+    love.graphics.print(mtStr, boxX + math.floor((boxW - font:getWidth(mtStr)) / 2), boxY + 2)
+    love.graphics.print(tostring(mb), boxX + math.floor((boxW - font:getWidth(tostring(mb))) / 2), boxY + boxH - lineH - 1)
+    love.graphics.print(tostring(ml), boxX + 3, boxY + math.floor((boxH - lineH) / 2))
+    love.graphics.print(tostring(mr), boxX + boxW - font:getWidth(tostring(mr)) - 3, boxY + math.floor((boxH - lineH) / 2))
+
+    -- Padding values
+    love.graphics.setColor(0.13, 0.77, 0.37, 0.8)
+    local ptStr = tostring(pt)
+    love.graphics.print(ptStr, padX + math.floor((padW - font:getWidth(ptStr)) / 2), padY + 1)
+    love.graphics.print(tostring(pb), padX + math.floor((padW - font:getWidth(tostring(pb))) / 2), padY + padH - lineH)
+    love.graphics.print(tostring(pl), padX + 2, padY + math.floor((padH - lineH) / 2))
+    love.graphics.print(tostring(pr), padX + padW - font:getWidth(tostring(pr)) - 2, padY + math.floor((padH - lineH) / 2))
+
+    -- Labels
+    love.graphics.setColor(SECTION_COL)
+    love.graphics.print("margin", boxX + 2, boxY - lineH + 2)
+    love.graphics.print("padding", padX + 2, padY - lineH + 3)
+
+    y = boxY + boxH + 6
   end
 
-  -- Props (excluding style)
+  -- Separator
+  love.graphics.setColor(TOOLTIP_BORDER)
+  love.graphics.rectangle("fill", rx + 4, y, rw - 8, 1)
+  y = y + 6
+
+  -- ── Computed layout (read-only) ──
+  if c then
+    love.graphics.setColor(SECTION_COL)
+    love.graphics.print("computed", x, y)
+    y = y + lineH
+    love.graphics.setColor(TREE_DIM)
+    love.graphics.print(string.format("x: %d   y: %d   w: %d   h: %d",
+      math.floor(c.x), math.floor(c.y), math.floor(c.w), math.floor(c.h)), x, y)
+    y = y + lineH + 4
+  end
+
+  -- Separator
+  love.graphics.setColor(TOOLTIP_BORDER)
+  love.graphics.rectangle("fill", rx + 4, y, rw - 8, 1)
+  y = y + 6
+
+  -- ── Style (editable) ──
+  if s then
+    -- Collect and sort style keys for stable ordering
+    local styleKeys = {}
+    for k, v in pairs(s) do
+      if v ~= nil and v ~= "" then
+        styleKeys[#styleKeys + 1] = k
+      end
+    end
+    table.sort(styleKeys)
+
+    if #styleKeys > 0 then
+      love.graphics.setColor(SECTION_COL)
+      love.graphics.print("style", x, y)
+      y = y + lineH
+
+      for _, k in ipairs(styleKeys) do
+        local v = s[k]
+        local keyStr = k .. ": "
+        local keyW = font:getWidth(keyStr)
+        local valueX = x + keyW
+
+        -- Check if this property is being edited
+        local isEditing = state.editState
+          and state.editState.section == "style"
+          and state.editState.prop == k
+          and state.editState.node == node
+
+        -- Draw key
+        love.graphics.setColor(PROP_KEY_COL)
+        love.graphics.print(keyStr, x, y)
+
+        if isEditing then
+          -- Draw inline editor
+          drawInlineEditor(valueX, y, rx + rw - valueX - pad, lineH, font)
+        else
+          -- Draw value (clickable)
+          -- Hover highlight: check if mouse is over this value
+          local isHovered = state.mouseX >= valueX and state.mouseY >= y
+            and state.mouseY < y + lineH and state.mouseX < rx + rw - pad
+            and y + lineH > ry and y < ry + rh  -- visible
+          if isHovered then
+            love.graphics.setColor(TOOLTIP_ACCENT)
+          else
+            love.graphics.setColor(PROP_VAL_COL)
+          end
+          love.graphics.print(fmtVal(v), valueX, y)
+
+          -- Store position for click detection
+          state.detailPropPositions[#state.detailPropPositions + 1] = {
+            section = "style",
+            prop = k,
+            y = y,
+            h = lineH,
+            valueX = valueX,
+            value = v,
+          }
+        end
+
+        y = y + lineH
+      end
+      y = y + 4
+    end
+  end
+
+  -- Separator
+  love.graphics.setColor(TOOLTIP_BORDER)
+  love.graphics.rectangle("fill", rx + 4, y, rw - 8, 1)
+  y = y + 6
+
+  -- ── Props (excluding style, read-only) ──
   if node.props then
     local hasProps = false
     for k, v in pairs(node.props) do
       if k ~= "style" then
         if not hasProps then
-          love.graphics.setColor(TREE_DIM)
-          love.graphics.print("-- props --", x, y)
+          love.graphics.setColor(SECTION_COL)
+          love.graphics.print("props", x, y)
           y = y + lineH
           hasProps = true
         end
+        love.graphics.setColor(TREE_DIM)
+        love.graphics.print(k, x, y)
         love.graphics.setColor(TOOLTIP_TEXT)
-        local val = fmtVal(v)
-        love.graphics.print(k .. ": " .. val, x, y)
+        love.graphics.print(fmtVal(v), x + font:getWidth(k .. "  "), y)
         y = y + lineH
       end
     end
     if hasProps then y = y + 4 end
   end
 
-  -- Style (full dump, no truncation)
-  local s = node.style
-  if s then
-    local hasStyle = false
-    for k, v in pairs(s) do
-      if v ~= nil and v ~= "" then
-        if not hasStyle then
-          love.graphics.setColor(TREE_DIM)
-          love.graphics.print("-- style --", x, y)
-          y = y + lineH
-          hasStyle = true
-        end
-        love.graphics.setColor(TOOLTIP_TEXT)
-        love.graphics.print(k .. ": " .. fmtVal(v), x, y)
-        y = y + lineH
-      end
-    end
-    if hasStyle then y = y + 4 end
-  end
-
-  -- Children summary
+  -- ── Children summary ──
   local nc = node.children and #node.children or 0
   if nc > 0 then
-    love.graphics.setColor(TREE_DIM)
-    love.graphics.print("-- children: " .. nc .. " --", x, y)
+    love.graphics.setColor(SECTION_COL)
+    love.graphics.print("children (" .. nc .. ")", x, y)
     y = y + lineH
     for i, child in ipairs(node.children) do
       if i > 20 then
@@ -1273,8 +1657,9 @@ function drawDetailPanel(rx, ry, rw, rh)
       end
       local cc = child.computed
       local dims = cc and string.format("%dx%d", math.floor(cc.w), math.floor(cc.h)) or "?"
+      local childName = child.debugName and ("<" .. child.debugName .. ">") or (child.type or "?")
       love.graphics.setColor(TOOLTIP_TEXT)
-      love.graphics.print(string.format("[%d] %s #%s  %s", i, child.type or "?", tostring(child.id), dims), x, y)
+      love.graphics.print(string.format("[%d] %s  %s", i, childName, dims), x, y)
       y = y + lineH
     end
   end
@@ -1283,14 +1668,14 @@ function drawDetailPanel(rx, ry, rw, rh)
   if node.hasHandlers then
     y = y + 4
     love.graphics.setColor(PERF_GOOD)
-    love.graphics.print("has event handlers", x, y)
+    love.graphics.print("event handlers active", x, y)
     y = y + lineH
   end
 
   -- Hint
   y = y + 8
   love.graphics.setColor(TREE_DIM)
-  love.graphics.print("Esc to deselect", x, y)
+  love.graphics.print("Click values to edit  |  Arrow keys +/-", x, y)
 
   love.graphics.setScissor()
 end
