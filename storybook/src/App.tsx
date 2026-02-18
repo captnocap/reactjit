@@ -5,6 +5,7 @@ import { stories, type StoryDef } from './stories';
 import { StoryBridge } from './StoryBridge';
 import { DocsViewer } from './docs/DocsViewer';
 import { StoryScroll, type StoryScrollHandle } from './StoryScroll';
+import { useSettingsRegistry } from '../../packages/apis/src';
 import contentData from './generated/content.json';
 
 function groupByCategory(list: StoryDef[]): Map<string, StoryDef[]> {
@@ -29,6 +30,10 @@ function getInitialMode(): 'stories' | 'docs' {
 }
 
 export function App() {
+  // Register all built-in API services with the Lua settings overlay (F10).
+  // This runs at the root so keys are configurable from any story or the playground.
+  useSettingsRegistry();
+
   const [mode, setMode] = useState<'stories' | 'docs'>(getInitialMode);
   const [viewMode, setViewMode] = useState<'pages' | 'scroll'>('pages');
   const [activeId, setActiveId] = useState(getInitialStory);
