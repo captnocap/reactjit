@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box, Text, Pressable, ScrollView, TextInput, Modal,
+  Box, Text, Pressable, ScrollView, TextInput,
   useLoveRPC, useLoveEvent, usePeerServer, useClipboard,
 } from '@ilovereact/core';
 
@@ -383,7 +383,14 @@ interface AddPeerModalProps {
 
 function AddPeerModal({ value, onChange, onConfirm, onCancel, torReady }: AddPeerModalProps) {
   return (
-    <Modal visible onDismiss={onCancel}>
+    <Box style={{
+      position: 'absolute',
+      top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+    }}>
       <Box style={{
         width: 460,
         backgroundColor: C.surface,
@@ -460,7 +467,7 @@ function AddPeerModal({ value, onChange, onConfirm, onCancel, torReady }: AddPee
           </Pressable>
         </Box>
       </Box>
-    </Modal>
+    </Box>
   );
 }
 
