@@ -19,6 +19,9 @@
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
  *
+ * API settings detection:
+ *   suggest-settings-menu       (info)    API hooks used without useSettingsRegistry()
+ *
  * MCP discovery (async, connects to MCP servers at lint time):
  *   mcp-permissions-required    (error)   useMCPServer() without permissions config
  *   mcp-tool-stale              (warning) Tool in config no longer exposed by server
@@ -458,6 +461,49 @@ const callRules = [
     },
   },
 ];
+
+// ── API usage detection ───────────────────────────────────────
+
+const API_IMPORT_SOURCES = new Set([
+  '@ilovereact/apis',
+  '@ilovereact/ai',
+]);
+
+/**
+ * Scan a source file for imports from @ilovereact/apis or @ilovereact/ai,
+ * and for useSettingsRegistry() calls. Mutates the apiUsage accumulator.
+ */
+function detectAPIUsage(sourceFile, filePath, ts, apiUsage) {
+  function visit(node) {
+    // Detect import declarations from API packages
+    if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
+      const spec = node.moduleSpecifier;
+      if (ts.isStringLiteral(spec)) {
+        const mod = spec.text;
+        if (API_IMPORT_SOURCES.has(mod) || mod.startsWith('@ilovereact/apis/')) {
+          const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
+          apiUsage.imports.push({
+            module: mod,
+            file: filePath,
+            line: pos.line + 1,
+            col: pos.character + 1,
+          });
+        }
+      }
+    }
+
+    // Detect useSettingsRegistry() calls
+    if (ts.isCallExpression(node)) {
+      if (ts.isIdentifier(node.expression) && node.expression.text === 'useSettingsRegistry') {
+        apiUsage.hasSettingsRegistry = true;
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  ts.forEachChild(sourceFile, visit);
+}
 
 // ── MCP server call detection ─────────────────────────────────
 
@@ -1341,6 +1387,7 @@ export async function runLint(cwd, options = {}) {
 
   const diagnostics = [];
   const allMCPCalls = [];
+  const apiUsage = { imports: [], hasSettingsRegistry: false };
 
   for (const filePath of files) {
     const source = readFileSync(filePath, 'utf-8');
@@ -1393,6 +1440,9 @@ export async function runLint(cwd, options = {}) {
     // MCP server calls
     const mcpCalls = findMCPServerCalls(sourceFile, filePath, ts);
     allMCPCalls.push(...mcpCalls);
+
+    // API usage detection — find imports from @ilovereact/apis or @ilovereact/ai
+    detectAPIUsage(sourceFile, filePath, ts, apiUsage);
   }
 
   // Async MCP discovery pass — connect to servers and manage mcp.tools.json
@@ -1402,6 +1452,19 @@ export async function runLint(cwd, options = {}) {
     }
     const mcpDiagnostics = await runMCPDiscovery(allMCPCalls, cwd, options);
     diagnostics.push(...mcpDiagnostics);
+  }
+
+  // API settings menu suggestion
+  if (apiUsage.imports.length > 0 && !apiUsage.hasSettingsRegistry) {
+    const first = apiUsage.imports[0];
+    diagnostics.push({
+      rule: 'suggest-settings-menu',
+      severity: 'info',
+      message: `API hooks detected (${apiUsage.imports.length} import${apiUsage.imports.length > 1 ? 's' : ''}) without useSettingsRegistry(). Add it to enable the in-app API key manager (F10).`,
+      file: first.file,
+      line: first.line,
+      col: first.col,
+    });
   }
 
   // Sort diagnostics by file, then line
