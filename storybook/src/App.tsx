@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
 import { ScaleProvider } from '../../packages/shared/src/ScaleContext';
 import { stories, type StoryDef } from './stories';
 import { StoryBridge } from './StoryBridge';
 import { DocsViewer } from './docs/DocsViewer';
+import { StoryScroll, type StoryScrollHandle } from './StoryScroll';
 import contentData from './generated/content.json';
 
 function groupByCategory(list: StoryDef[]): Map<string, StoryDef[]> {
@@ -29,22 +30,32 @@ function getInitialMode(): 'stories' | 'docs' {
 
 export function App() {
   const [mode, setMode] = useState<'stories' | 'docs'>(getInitialMode);
+  const [viewMode, setViewMode] = useState<'pages' | 'scroll'>('pages');
   const [activeId, setActiveId] = useState(getInitialStory);
   const groups = useMemo(() => groupByCategory(stories), []);
   const activeStory = stories.find(s => s.id === activeId);
   const StoryComponent = activeStory?.component;
 
   const [webBridge] = useState(() => new StoryBridge());
+  const scrollRef = useRef<StoryScrollHandle>(null);
 
-  const selectStory = (id: string) => {
+  const selectStory = useCallback((id: string) => {
     setActiveId(id);
     window.location.hash = id;
-  };
+    if (viewMode === 'scroll') {
+      scrollRef.current?.scrollToStory(id);
+    }
+  }, [viewMode]);
 
   const switchMode = (m: 'stories' | 'docs') => {
     setMode(m);
     if (m === 'docs') window.location.hash = 'docs';
   };
+
+  const handleActiveStoryChange = useCallback((id: string) => {
+    setActiveId(id);
+    window.location.hash = id;
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: "'Inter', system-ui, -apple-system, sans-serif", color: '#e2e8f0' }}>
@@ -87,6 +98,42 @@ export function App() {
         >
           Docs
         </button>
+
+        {/* View mode toggle (stories only) */}
+        {mode === 'stories' && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, backgroundColor: '#0f0f1a', borderRadius: 5, padding: 2 }}>
+            <button
+              onClick={() => setViewMode('pages')}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 4,
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 10,
+                fontWeight: 600,
+                color: viewMode === 'pages' ? '#e2e8f0' : '#475569',
+                backgroundColor: viewMode === 'pages' ? '#1e293b' : 'transparent',
+              }}
+            >
+              Pages
+            </button>
+            <button
+              onClick={() => setViewMode('scroll')}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 4,
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 10,
+                fontWeight: 600,
+                color: viewMode === 'scroll' ? '#e2e8f0' : '#475569',
+                backgroundColor: viewMode === 'scroll' ? '#1e293b' : 'transparent',
+              }}
+            >
+              Scroll
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -147,37 +194,47 @@ export function App() {
 
           {/* Main area */}
           <main style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#08080f', minWidth: 0 }}>
-            {/* Header */}
-            <header style={{
-              padding: '8px 16px',
-              borderBottom: '1px solid #1e293b',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              flexShrink: 0,
-            }}>
-              <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>
-                {activeStory?.title}
-              </span>
-              <span style={{ fontSize: 10, color: '#334155' }}>
-                {activeStory?.category}
-              </span>
-            </header>
+            {viewMode === 'scroll' ? (
+              <StoryScroll
+                ref={scrollRef}
+                stories={stories}
+                onActiveStoryChange={handleActiveStoryChange}
+              />
+            ) : (
+              <>
+                {/* Header */}
+                <header style={{
+                  padding: '8px 16px',
+                  borderBottom: '1px solid #1e293b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  flexShrink: 0,
+                }}>
+                  <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>
+                    {activeStory?.title}
+                  </span>
+                  <span style={{ fontSize: 10, color: '#334155' }}>
+                    {activeStory?.category}
+                  </span>
+                </header>
 
-            {/* Story content */}
-            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-              <div style={{ maxWidth: 1100, margin: '0 auto', minHeight: '100%' }}>
-                {StoryComponent && (
-                  <BridgeProvider bridge={webBridge}>
-                    <RendererProvider mode="web">
-                      <ScaleProvider reference={{ width: 800, height: 600 }}>
-                        <StoryComponent key={activeId} />
-                      </ScaleProvider>
-                    </RendererProvider>
-                  </BridgeProvider>
-                )}
-              </div>
-            </div>
+                {/* Story content */}
+                <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                  <div style={{ maxWidth: 1100, margin: '0 auto', minHeight: '100%' }}>
+                    {StoryComponent && (
+                      <BridgeProvider bridge={webBridge}>
+                        <RendererProvider mode="web">
+                          <ScaleProvider reference={{ width: 800, height: 600 }}>
+                            <StoryComponent key={activeId} />
+                          </ScaleProvider>
+                        </RendererProvider>
+                      </BridgeProvider>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </main>
         </div>
       )}
