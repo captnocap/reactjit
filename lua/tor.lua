@@ -101,7 +101,10 @@ function Tor.start(opts)
   local baseDir = os.getenv("HOME") .. "/.cache/ilovereact-tor/" .. appIdentity
 
   local function isProcessAlive(pid)
-    return os.execute("kill -0 " .. tostring(pid) .. " 2>/dev/null") == true
+    local result = os.execute("kill -0 " .. tostring(pid) .. " 2>/dev/null")
+    -- LuaJIT/Lua 5.1: os.execute returns exit code integer (0 = alive)
+    -- Lua 5.2+: returns true on success
+    return result == 0 or result == true
   end
 
   local function isDirOccupied(dir)
