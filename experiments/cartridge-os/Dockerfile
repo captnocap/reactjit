@@ -5,6 +5,8 @@
 # The glibc-built ft_helper.so from the host won't load in Alpine.
 FROM alpine:3.21 AS builder
 
+# ft_helper.so must be compiled against Alpine's musl + musl FreeType headers.
+# init.c is compiled on the host via `zig cc -target x86_64-linux-musl` (see build.sh).
 RUN apk add --no-cache gcc musl-dev freetype-dev
 
 COPY lua/sdl2_ft_helper.c /build/ft_helper.c
@@ -12,7 +14,7 @@ COPY lua/sdl2_ft_helper.c /build/ft_helper.c
 RUN gcc -shared -fPIC -O2 /build/ft_helper.c \
         -o /build/ft_helper.so \
         $(pkg-config --cflags --libs freetype2) \
-    && echo "[builder] ft_helper.so compiled against musl" \
+    && echo "[builder] ft_helper.so compiled" \
     && ls -lh /build/ft_helper.so
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,7 +39,7 @@ RUN apk add --no-cache \
     font-liberation \
     linux-virt
 
-# ft_helper.so compiled against musl (from Stage 1)
+# ft_helper.so from Stage 1 (init is compiled on the host via zig cc, see build.sh)
 COPY --from=builder /build/ft_helper.so /app/ft_helper.so
 
 # App placeholder — build.sh copies real app files after docker export
