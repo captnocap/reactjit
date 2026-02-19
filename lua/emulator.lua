@@ -101,58 +101,47 @@ local function buildInput()
 end
 
 --- Load ROM data into a fresh agnes instance.
+--- IMPORTANT: agnes stores a pointer to the ROM data (does NOT copy it).
+--- We must keep the data alive in a C allocation that won't be GC'd.
 --- @param data string Raw ROM bytes
 --- @param label string Display name for logging
---- @return agnes_t*|nil
+--- @return agnes_t*|nil, cdata|nil romBuf (must be kept alive while agnes uses it)
 local function loadROMData(data, label)
   local agnes = loadAgnes()
-  if not agnes then return nil end
+  if not agnes then return nil, nil end
 
   local emu = agnes.agnes_make()
   if emu == nil then
     io.write("[emulator] agnes_make() failed\n"); io.flush()
-    return nil
+    return nil, nil
   end
 
-  local romPtr = ffi.cast("void*", ffi.cast("const char*", data))
-  if not agnes.agnes_load_ines_data(emu, romPtr, #data) then
+  -- Copy ROM data into a C-allocated buffer that won't be GC'd by Lua.
+  -- agnes_load_ines_data stores a pointer into this buffer — if the backing
+  -- memory is freed (e.g. Lua string GC), mapper reads will segfault.
+  local romBuf = ffi.new("uint8_t[?]", #data)
+  ffi.copy(romBuf, data, #data)
+
+  if not agnes.agnes_load_ines_data(emu, romBuf, #data) then
     io.write("[emulator] Failed to parse iNES data: " .. tostring(label) .. "\n"); io.flush()
     agnes.agnes_destroy(emu)
-    return nil
+    return nil, nil
   end
 
   io.write("[emulator] Loaded ROM: " .. label .. " (" .. #data .. " bytes)\n"); io.flush()
-  return emu
+  return emu, romBuf
 end
 
 --- Load a ROM from Love2D's virtual filesystem.
 --- @param src string ROM path (relative to Love2D filesystem)
---- @return agnes_t*|nil
+--- @return agnes_t*|nil, cdata|nil romBuf
 local function loadROM(src)
   local ok, data = pcall(love.filesystem.read, "data", src)
   if not ok or not data then
     io.write("[emulator] Failed to read ROM: " .. tostring(src) .. " — " .. tostring(data) .. "\n"); io.flush()
-    return nil
+    return nil, nil
   end
   return loadROMData(data, src)
-end
-
---- Load a ROM from an OS filesystem path (e.g. from a file drop).
---- @param path string Absolute OS path to .nes file
---- @return agnes_t*|nil, string|nil data
-local function loadROMFromPath(path)
-  local f = io.open(path, "rb")
-  if not f then
-    io.write("[emulator] Failed to open file: " .. tostring(path) .. "\n"); io.flush()
-    return nil, nil
-  end
-  local data = f:read("*a")
-  f:close()
-  if not data or #data == 0 then
-    io.write("[emulator] Empty file: " .. tostring(path) .. "\n"); io.flush()
-    return nil, nil
-  end
-  return loadROMData(data, path), data
 end
 
 --- Called per-frame from init.lua. Discovers Emulator nodes, loads ROMs, manages canvases.
@@ -166,12 +155,13 @@ function Emulator.syncWithTree(nodes)
 
       if not instances[id] then
         -- New emulator node: create instance (ROM may come later via file drop)
-        local emu = nil
+        local emu, romBuf = nil, nil
         if src then
-          emu = loadROM(src)
+          emu, romBuf = loadROM(src)
         end
         instances[id] = {
           agnes = emu,
+          romBuf = romBuf,  -- prevent GC of ROM data (agnes stores a pointer into it)
           canvas = love.graphics.newCanvas(NES_W, NES_H),
           imageData = love.image.newImageData(NES_W, NES_H),
           image = nil,
@@ -200,7 +190,7 @@ function Emulator.syncWithTree(nodes)
           if agnes and entry.agnes then
             agnes.agnes_destroy(entry.agnes)
           end
-          entry.agnes = loadROM(src)
+          entry.agnes, entry.romBuf = loadROM(src)
           entry.src = src
         end
       end
@@ -317,10 +307,11 @@ local function hotSwapROM(entry, data, label)
   if entry.agnes then
     agnes.agnes_destroy(entry.agnes)
     entry.agnes = nil
+    entry.romBuf = nil
   end
 
   -- Load new ROM
-  entry.agnes = loadROMData(data, label)
+  entry.agnes, entry.romBuf = loadROMData(data, label)
   if entry.agnes then
     entry.src = label
     entry.playing = true
