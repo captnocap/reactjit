@@ -323,6 +323,9 @@ export const hostConfig: HostConfig<
   ): Instance {
     const id = ++nodeIdCounter;
     const { clean, handlers } = extractHandlers(props);
+    if (handlers.onLayout) {
+      clean.__hasOnLayout = true;
+    }
 
     const hasHandlers = Object.keys(handlers).length > 0;
 
@@ -463,6 +466,12 @@ export const hostConfig: HostConfig<
   ): UpdatePayload {
     const { clean: oldClean, handlers: oldH } = extractHandlers(oldProps);
     const { clean: newClean, handlers: newH } = extractHandlers(newProps);
+    if (oldH.onLayout) {
+      oldClean.__hasOnLayout = true;
+    }
+    if (newH.onLayout) {
+      newClean.__hasOnLayout = true;
+    }
 
     const handlersChanged = !handlersEqual(oldH, newH);
     const propsDiff = diffCleanProps(oldClean, newClean);
@@ -484,6 +493,9 @@ export const hostConfig: HostConfig<
     newProps: Props
   ) {
     const { clean, handlers } = extractHandlers(newProps);
+    if (handlers.onLayout) {
+      clean.__hasOnLayout = true;
+    }
 
     // Update handler registry
     if (Object.keys(handlers).length > 0) {

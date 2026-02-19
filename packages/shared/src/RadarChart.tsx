@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Text } from './primitives';
-import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 
 export interface RadarChartAxis {
@@ -29,11 +28,9 @@ export function RadarChart({
 }: RadarChartProps) {
   const [hovered, setHovered] = useState(false);
 
-  const cellSize = 2;
-  const gridSize = Math.floor(size / cellSize);
-  const cx = gridSize / 2;
-  const cy = gridSize / 2;
-  const radius = gridSize / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size / 2 - 2; // 2px margin so rings aren't clipped
   const numAxes = axes.length;
 
   const normalized = useMemo(() => {
@@ -43,82 +40,19 @@ export function RadarChart({
     });
   }, [data, axes]);
 
+  // Vertex positions in box-local coords (origin = box top-left)
   const vertices = useMemo(() => {
     return normalized.map((val, i) => {
       const angle = (i / numAxes) * Math.PI * 2 - Math.PI / 2;
-      const r = val * (radius - 1);
+      const r = val * radius;
       return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
     });
   }, [normalized, numAxes, radius, cx, cy]);
 
-  function pointInPolygon(px: number, py: number): boolean {
-    let inside = false;
-    const n = vertices.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const xi = vertices[i].x, yi = vertices[i].y;
-      const xj = vertices[j].x, yj = vertices[j].y;
-      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
-        inside = !inside;
-      }
-    }
-    return inside;
-  }
-
-  function isGridLine(px: number, py: number): boolean {
-    const dx = px - cx + 0.5;
-    const dy = py - cy + 0.5;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    for (const pct of [0.25, 0.5, 0.75, 1.0]) {
-      const ringR = pct * (radius - 1);
-      if (Math.abs(dist - ringR) < 0.8) return true;
-    }
-    for (let a = 0; a < numAxes; a++) {
-      const angle = (a / numAxes) * Math.PI * 2 - Math.PI / 2;
-      const axX = Math.cos(angle);
-      const axY = Math.sin(angle);
-      const cross = Math.abs(dx * axY - dy * axX);
-      const dot = dx * axX + dy * axY;
-      if (cross < 0.8 && dot >= 0 && dot <= radius) return true;
-    }
-    return false;
-  }
-
-  // Build row-based rendering with run-length encoding
-  const rows = useMemo(() => {
-    const result: { type: 'empty' | 'fill' | 'grid'; width: number }[][] = [];
-    for (let row = 0; row < gridSize; row++) {
-      const rowRuns: { type: 'empty' | 'fill' | 'grid'; width: number }[] = [];
-      let currentType: 'empty' | 'fill' | 'grid' = 'empty';
-      let runWidth = 0;
-      for (let col = 0; col < gridSize; col++) {
-        const px = col + 0.5;
-        const py = row + 0.5;
-        const dx = px - cx;
-        const dy = py - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        let cellType: 'empty' | 'fill' | 'grid';
-        if (dist > radius) {
-          cellType = 'empty';
-        } else if (pointInPolygon(px, py)) {
-          cellType = 'fill';
-        } else if (isGridLine(px, py)) {
-          cellType = 'grid';
-        } else {
-          cellType = 'empty';
-        }
-        if (cellType === currentType) {
-          runWidth += cellSize;
-        } else {
-          if (runWidth > 0) rowRuns.push({ type: currentType, width: runWidth });
-          currentType = cellType;
-          runWidth = cellSize;
-        }
-      }
-      if (runWidth > 0) rowRuns.push({ type: currentType, width: runWidth });
-      result.push(rowRuns);
-    }
-    return result;
-  }, [gridSize, radius, cx, cy, vertices]);
+  const polygonPoints = useMemo(
+    () => vertices.flatMap(v => [v.x, v.y]),
+    [vertices],
+  );
 
   return (
     <Box
@@ -126,26 +60,61 @@ export function RadarChart({
       onPointerLeave={interactive ? () => setHovered(false) : undefined}
       style={{ position: 'relative', width: size, height: size, ...style }}
     >
-      {rows.map((row, rowIdx) => (
-        <Box key={rowIdx} style={{ flexDirection: 'row', height: cellSize }}>
-          {row.map((run, runIdx) => {
-            if (run.type === 'empty') {
-              return <Box key={runIdx} style={{ width: run.width, height: cellSize }} />;
-            }
-            return (
-              <Box
-                key={runIdx}
-                style={{
-                  width: run.width,
-                  height: cellSize,
-                  backgroundColor: run.type === 'fill' ? color : gridColor,
-                  opacity: run.type === 'fill' ? 0.6 : 1,
-                }}
-              />
-            );
-          })}
-        </Box>
-      ))}
+      {/* Grid rings at 25 / 50 / 75 / 100% */}
+      {([0.25, 0.5, 0.75, 1.0] as const).map((pct, i) => {
+        const ringD = radius * 2 * pct;
+        const offset = (size - ringD) / 2;
+        return (
+          <Box
+            key={`ring-${i}`}
+            style={{
+              position: 'absolute',
+              top: offset,
+              left: offset,
+              width: ringD,
+              height: ringD,
+              borderRadius: ringD / 2,
+              borderWidth: 1,
+              borderColor: gridColor,
+            }}
+          />
+        );
+      })}
+
+      {/* Axis lines from center to each vertex direction */}
+      {axes.map((_axis, i) => {
+        const rotateDeg = (i / numAxes) * 360;
+        return (
+          <Box
+            key={`axis-${i}`}
+            style={{
+              position: 'absolute',
+              width: 1,
+              height: radius,
+              top: cy - radius,
+              left: cx,
+              backgroundColor: gridColor,
+              transform: { rotate: rotateDeg, originX: 0.5, originY: 1 },
+            }}
+          />
+        );
+      })}
+
+      {/* Data polygon fill */}
+      {polygonPoints.length >= 6 && (
+        <Box
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: size,
+            height: size,
+            backgroundColor: color,
+            polygonPoints,
+            opacity: 0.6,
+          }}
+        />
+      )}
 
       {/* Tooltip */}
       {interactive && hovered && (

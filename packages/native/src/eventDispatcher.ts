@@ -78,6 +78,16 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchWithBubbling(event, 'onWheel');
   });
 
+  // ── Scroll events (target-only) ─────────────────────────
+
+  bridge.subscribe('scroll', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onScroll');
+  });
+
+  bridge.subscribe('layout', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onLayout');
+  });
+
   // ── Touch events (bubbling for start/end, broadcast for move) ──
 
   bridge.subscribe('touchstart', (event: LoveEvent) => {

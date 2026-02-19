@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Text } from './primitives';
-import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 
 export interface PieChartSegment {
@@ -26,18 +25,16 @@ export function PieChart({
 }: PieChartProps) {
   const [hovered, setHovered] = useState(false);
 
-  const cellSize = 2;
-  const gridSize = Math.floor(size / cellSize);
-  const radius = gridSize / 2;
-  const inner = (innerRadius / size) * gridSize;
-  const cx = radius;
-  const cy = radius;
-
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
 
   const segments = useMemo(() => {
-    const result: { startAngle: number; endAngle: number; segment: PieChartSegment; pct: number }[] = [];
-    let cumAngle = -Math.PI / 2;
+    const result: {
+      startAngle: number;
+      endAngle: number;
+      segment: PieChartSegment;
+      pct: number;
+    }[] = [];
+    let cumAngle = -Math.PI / 2; // start at 12 o'clock
     for (const seg of data) {
       const sliceAngle = (seg.value / total) * Math.PI * 2;
       result.push({
@@ -51,67 +48,29 @@ export function PieChart({
     return result;
   }, [data, total]);
 
-  // Build row-based rendering: for each row, produce runs of same-segment cells
-  const rows = useMemo(() => {
-    const result: { segIdx: number; width: number }[][] = [];
-    for (let row = 0; row < gridSize; row++) {
-      const rowRuns: { segIdx: number; width: number }[] = [];
-      let currentSeg = -1;
-      let runWidth = 0;
-      for (let col = 0; col < gridSize; col++) {
-        const dx = col - cx + 0.5;
-        const dy = row - cy + 0.5;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        let segIdx = -1;
-        if (dist <= radius && dist >= inner) {
-          let angle = Math.atan2(dy, dx);
-          if (angle < -Math.PI / 2) angle += Math.PI * 2;
-          for (let s = 0; s < segments.length; s++) {
-            if (angle >= segments[s].startAngle && angle < segments[s].endAngle) {
-              segIdx = s;
-              break;
-            }
-          }
-          if (segIdx === -1 && segments.length > 0) segIdx = segments.length - 1;
-        }
-        if (segIdx === currentSeg) {
-          runWidth += cellSize;
-        } else {
-          if (runWidth > 0) rowRuns.push({ segIdx: currentSeg, width: runWidth });
-          currentSeg = segIdx;
-          runWidth = cellSize;
-        }
-      }
-      if (runWidth > 0) rowRuns.push({ segIdx: currentSeg, width: runWidth });
-      result.push(rowRuns);
-    }
-    return result;
-  }, [gridSize, radius, inner, cx, cy, segments]);
-
   return (
     <Box
       onPointerEnter={interactive ? () => setHovered(true) : undefined}
       onPointerLeave={interactive ? () => setHovered(false) : undefined}
       style={{ position: 'relative', width: size, height: size, ...style }}
     >
-      {rows.map((row, rowIdx) => (
-        <Box key={rowIdx} style={{ flexDirection: 'row', height: cellSize }}>
-          {row.map((run, runIdx) => {
-            if (run.segIdx === -1) {
-              return <Box key={runIdx} style={{ width: run.width, height: cellSize }} />;
-            }
-            return (
-              <Box
-                key={runIdx}
-                style={{
-                  width: run.width,
-                  height: cellSize,
-                  backgroundColor: segments[run.segIdx].segment.color,
-                }}
-              />
-            );
-          })}
-        </Box>
+      {segments.map((seg, i) => (
+        <Box
+          key={i}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: size,
+            height: size,
+            backgroundColor: seg.segment.color,
+            arcShape: {
+              startAngle: seg.startAngle,
+              endAngle: seg.endAngle,
+              innerRadius,
+            },
+          }}
+        />
       ))}
 
       {/* Tooltip */}

@@ -139,6 +139,17 @@ export interface Style {
   outlineWidth?: number;
   outlineOffset?: number;
 
+  // Vector shape overrides (Love2D-only; ignored in web mode)
+  // When set, backgroundColor paints this shape instead of a rectangle.
+  arcShape?: {
+    startAngle: number;   // radians, 0 = right, clockwise
+    endAngle: number;     // radians
+    innerRadius?: number; // pixels — creates a donut slice when > 0
+  };
+  // Flat [x0,y0, x1,y1, ...] polygon coords relative to box top-left.
+  // backgroundColor fills this polygon instead of a rectangle.
+  polygonPoints?: number[];
+
   // CSS Transitions (Lua-side: JS declares targets, Lua interpolates)
   // Per-property: transition: { backgroundColor: { duration: 300, easing: 'easeInOut' } }
   // Or all props:  transition: { all: { duration: 300 } }
@@ -216,6 +227,14 @@ export interface LoveEvent {
   stopPropagation?: () => void;
 }
 
+export interface LayoutEvent {
+  targetId?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface BoxProps {
   // Shorthand layout props — mapped to style, style={} wins if both set
   direction?: 'row' | 'col';
@@ -277,6 +296,7 @@ export interface BoxProps {
   onFileDragLeave?: (event: LoveEvent) => void;
   onFocus?: (event: LoveEvent) => void;
   onBlur?: (event: LoveEvent) => void;
+  onLayout?: (event: LayoutEvent) => void;
   children?: React.ReactNode;
   key?: string | number;
 }
@@ -353,6 +373,8 @@ export interface ScrollEvent {
   scrollY: number;
   contentWidth: number;
   contentHeight: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
 }
 
 export interface ScrollViewProps {

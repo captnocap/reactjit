@@ -41,7 +41,7 @@ export interface MeshProps {
   model?: string;
   /** Flat color (hex string) — used when no texture is provided */
   color?: string;
-  /** Texture — path to image file, or procedural name: "planet" */
+  /** Texture — procedural name (for example: "planet", "framework-canvas") */
   texture?: string;
   /** Seed for procedural textures (different seeds = different terrain) */
   seed?: number;
