@@ -15,6 +15,15 @@
 ]]
 
 local Measure = {}
+local ok_utf8, utf8lib = pcall(function() return utf8 end)
+if not ok_utf8 or not utf8lib then
+  local ok_require, mod = pcall(require, "utf8")
+  if ok_require then
+    utf8lib = mod
+  else
+    utf8lib = nil
+  end
+end
 
 -- ============================================================================
 -- Global text scale
@@ -188,7 +197,13 @@ function Measure.getWidthWithSpacing(font, text, letterSpacing)
   if not letterSpacing or letterSpacing == 0 then
     return font:getWidth(text)
   end
-  local len = #text
+  local len
+  if utf8lib and utf8lib.len then
+    len = utf8lib.len(text)
+  end
+  if not len then
+    len = #text
+  end
   if len == 0 then return 0 end
   -- Total width = natural width + (charCount - 1) * letterSpacing
   return font:getWidth(text) + (len - 1) * letterSpacing

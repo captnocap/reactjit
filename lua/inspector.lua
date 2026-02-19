@@ -280,26 +280,28 @@ function Inspector.isEnabled()
 end
 
 function Inspector.beginLayout()
-  if not state.enabled then return end
   state.layoutStart = love.timer.getTime()
   state.nodeCountDirty = true  -- tree changed, recount after layout
 end
 
-function Inspector.endLayout()
-  if not state.enabled then return end
+function Inspector.endLayout(root)
   state.layoutMs = (love.timer.getTime() - state.layoutStart) * 1000
-  -- Invalidate hit test cache since node positions may have changed
-  state.lastHitX = -1
-  state.lastHitY = -1
+  if root then
+    state.nodeCount = countNodes(root)
+    state.nodeCountDirty = false
+  end
+  if state.enabled then
+    -- Invalidate hit test cache since node positions may have changed
+    state.lastHitX = -1
+    state.lastHitY = -1
+  end
 end
 
 function Inspector.beginPaint()
-  if not state.enabled then return end
   state.paintStart = love.timer.getTime()
 end
 
 function Inspector.endPaint()
-  if not state.enabled then return end
   state.paintMs = (love.timer.getTime() - state.paintStart) * 1000
 end
 
@@ -374,8 +376,6 @@ end
 -- ============================================================================
 
 function Inspector.update(dt)
-  if not state.enabled then return end
-
   -- FPS counter (sampled every 0.5s)
   state.fpsFrames = state.fpsFrames + 1
   state.fpsTimer = state.fpsTimer + dt

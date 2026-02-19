@@ -95,6 +95,7 @@ function Events.hitTest(node, mx, my)
   if node.type == "ContextMenu" then return node end
   if node.type == "Scene3D" then return node end
   if node.type == "Slider" then return node end
+  if node.type == "GameCanvas" then return node end
   return nil
 end
 
@@ -189,6 +190,63 @@ function Events.findScrollContainer(node, mx, my)
   return nil
 end
 
+--- Find the nearest scroll container that can consume a wheel delta.
+--- Walks from hit node upward and skips saturated scroll containers so wheel
+--- input can chain to parent containers naturally.
+--- @param node table|nil
+--- @param dx number Wheel delta X from love.wheelmoved
+--- @param dy number Wheel delta Y from love.wheelmoved
+--- @return table|nil
+function Events.findScrollableContainer(node, dx, dy)
+  if not node then return nil end
+
+  local current = node
+  local fallback = nil
+
+  while current do
+    local s = current.style or {}
+    if s.overflow == "scroll" and current.scrollState and current.computed then
+      local ss = current.scrollState
+      local c = current.computed
+      local maxX = math.max(0, (ss.contentW or c.w or 0) - (c.w or 0))
+      local maxY = math.max(0, (ss.contentH or c.h or 0) - (c.h or 0))
+      local sx = ss.scrollX or 0
+      local sy = ss.scrollY or 0
+
+      local canScrollX = false
+      local canScrollY = false
+
+      -- x > 0 means scrolling left (decreasing scrollX)
+      -- x < 0 means scrolling right (increasing scrollX)
+      if dx > 0 then
+        canScrollX = sx > 0
+      elseif dx < 0 then
+        canScrollX = sx < maxX
+      end
+
+      -- y > 0 means scrolling up (decreasing scrollY)
+      -- y < 0 means scrolling down (increasing scrollY)
+      if dy > 0 then
+        canScrollY = sy > 0
+      elseif dy < 0 then
+        canScrollY = sy < maxY
+      end
+
+      if canScrollX or canScrollY then
+        return current
+      end
+
+      if not fallback then
+        fallback = current
+      end
+    end
+    current = current.parent
+  end
+
+  -- Preserve previous behavior when no container can scroll further.
+  return fallback
+end
+
 --- Walk up from a node to find the nearest ContextMenu ancestor.
 --- Returns the ContextMenu node or nil.
 function Events.findContextMenuAncestor(node)
@@ -264,6 +322,41 @@ function Events.createWheelEvent(targetId, x, y, dx, dy, bubblePath)
       deltaX = dx,
       deltaY = dy,
       bubblePath = bubblePath,
+    }
+  }
+end
+
+--- Build a scroll event for ScrollView updates.
+--- Format matches BridgeEvent: { type: string, payload: any }
+function Events.createScrollEvent(targetId, scrollX, scrollY, contentWidth, contentHeight, viewportWidth, viewportHeight, bubblePath)
+  return {
+    type = "scroll",
+    payload = {
+      type = "scroll",
+      targetId = targetId,
+      scrollX = scrollX or 0,
+      scrollY = scrollY or 0,
+      contentWidth = contentWidth or 0,
+      contentHeight = contentHeight or 0,
+      viewportWidth = viewportWidth or 0,
+      viewportHeight = viewportHeight or 0,
+      bubblePath = bubblePath,
+    }
+  }
+end
+
+--- Build a layout event for node geometry updates.
+--- Emitted when a node with onLayout changes computed bounds.
+function Events.createLayoutEvent(targetId, x, y, width, height)
+  return {
+    type = "layout",
+    payload = {
+      type = "layout",
+      targetId = targetId,
+      x = x or 0,
+      y = y or 0,
+      width = width or 0,
+      height = height or 0,
     }
   }
 end

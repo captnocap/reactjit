@@ -36,6 +36,15 @@ local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local SliderModule = nil     -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
+local ok_utf8, utf8lib = pcall(function() return utf8 end)
+if not ok_utf8 or not utf8lib then
+  local ok_require, mod = pcall(require, "utf8")
+  if ok_require then
+    utf8lib = mod
+  else
+    utf8lib = nil
+  end
+end
 
 local Painter = {}
 
@@ -200,11 +209,27 @@ local function drawLineWithSpacing(font, text, x, y, letterSpacing, align, maxWi
     startX = x + maxWidth - totalW
   end
 
-  local cx = startX
-  for i = 1, #text do
-    local ch = text:sub(i, i)
-    love.graphics.print(ch, cx, y)
-    cx = cx + font:getWidth(ch) + letterSpacing
+  local ok, err = pcall(function()
+    local cx = startX
+    if utf8lib and utf8lib.codes and utf8lib.char then
+      for _, codepoint in utf8lib.codes(text) do
+        local ch = utf8lib.char(codepoint)
+        love.graphics.print(ch, cx, y)
+        cx = cx + font:getWidth(ch) + letterSpacing
+      end
+    else
+      for i = 1, #text do
+        local ch = text:sub(i, i)
+        love.graphics.print(ch, cx, y)
+        cx = cx + font:getWidth(ch) + letterSpacing
+      end
+    end
+  end)
+
+  -- Defensive fallback: invalid UTF-8 should not crash the entire frame.
+  if not ok then
+    print("[painter] drawLineWithSpacing UTF-8 error: " .. tostring(err))
+    drawLineNormal(font, text, x, y, align, maxWidth)
   end
 end
 
@@ -376,6 +401,67 @@ local function drawGradient(x, y, w, h, direction, color1, color2, effectiveOpac
   local mesh = love.graphics.newMesh(vertices, "fan", "static")
   love.graphics.setColor(1, 1, 1, 1)  -- Reset to white so mesh colors show correctly
   love.graphics.draw(mesh)
+end
+
+-- ============================================================================
+-- Arc sector / polygon helpers (for PieChart, RadarChart, etc.)
+-- ============================================================================
+
+--- Draw a filled pie/donut slice.
+--- @param c     table  Computed rect {x, y, w, h}
+--- @param arc   table  { startAngle, endAngle, innerRadius? }
+local function drawArcSector(c, arc)
+  local cx = c.x + c.w * 0.5
+  local cy = c.y + c.h * 0.5
+  local r  = math.min(c.w, c.h) * 0.5
+  local ir = arc.innerRadius or 0
+  local a0 = arc.startAngle
+  local a1 = arc.endAngle
+
+  -- Enough steps for a smooth curve (≥ 1 step per ~2px of arc length)
+  local span  = math.abs(a1 - a0)
+  local steps = math.max(8, math.floor(span * r * 0.5))
+
+  local verts = {}
+  if ir > 0 then
+    -- Annular sector: outer arc forward, inner arc backward
+    for i = 0, steps do
+      local a = a0 + (a1 - a0) * (i / steps)
+      verts[#verts + 1] = cx + math.cos(a) * r
+      verts[#verts + 1] = cy + math.sin(a) * r
+    end
+    for i = steps, 0, -1 do
+      local a = a0 + (a1 - a0) * (i / steps)
+      verts[#verts + 1] = cx + math.cos(a) * ir
+      verts[#verts + 1] = cy + math.sin(a) * ir
+    end
+  else
+    -- Solid slice: fan from center
+    verts[1] = cx
+    verts[2] = cy
+    for i = 0, steps do
+      local a = a0 + (a1 - a0) * (i / steps)
+      verts[#verts + 1] = cx + math.cos(a) * r
+      verts[#verts + 1] = cy + math.sin(a) * r
+    end
+  end
+
+  if #verts >= 6 then
+    love.graphics.polygon("fill", verts)
+  end
+end
+
+--- Draw a filled polygon from a flat [x0,y0,x1,y1,...] list relative to box origin.
+--- @param c    table   Computed rect {x, y, w, h}
+--- @param pts  table   Flat array of coordinates
+local function drawPolygon(c, pts)
+  if #pts < 6 then return end
+  local verts = {}
+  for i = 1, #pts, 2 do
+    verts[#verts + 1] = c.x + pts[i]
+    verts[#verts + 1] = c.y + pts[i + 1]
+  end
+  love.graphics.polygon("fill", verts)
 end
 
 -- ============================================================================
@@ -688,7 +774,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       -- Solid background fill
       Painter.setColor(s.backgroundColor)
       Painter.applyOpacity(effectiveOpacity)
-      if isPerCorner then
+      if s.arcShape then
+        drawArcSector(c, s.arcShape)
+      elseif s.polygonPoints and #s.polygonPoints >= 6 then
+        drawPolygon(c, s.polygonPoints)
+      elseif isPerCorner then
         drawRoundedRect("fill", c.x, c.y, c.w, c.h, tl, tr, bl, br)
       else
         love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)

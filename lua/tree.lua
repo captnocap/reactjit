@@ -329,8 +329,18 @@ function Tree.setScroll(nodeId, scrollX, scrollY)
     maxScrollY = math.max(0, (ss.contentH or 0) - c.h)
   end
 
-  ss.scrollX = math.max(0, math.min(scrollX or 0, maxScrollX))
-  ss.scrollY = math.max(0, math.min(scrollY or 0, maxScrollY))
+  local function sanitize(v, maxValue)
+    if type(v) ~= "number" then return 0 end
+    if v ~= v then return 0 end -- NaN
+    if v == math.huge then return maxValue end
+    if v == -math.huge then return 0 end
+    return v
+  end
+
+  local nextX = sanitize(scrollX, maxScrollX)
+  local nextY = sanitize(scrollY, maxScrollY)
+  ss.scrollX = math.max(0, math.min(nextX, maxScrollX))
+  ss.scrollY = math.max(0, math.min(nextY, maxScrollY))
 end
 
 return Tree
