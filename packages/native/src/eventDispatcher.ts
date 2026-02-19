@@ -324,6 +324,20 @@ export function initEventDispatching(bridge: Subscribable): void {
       dispatchToTargetOnly(event, event.handler);
     }
   });
+
+  // ── Map events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('map:viewchange', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onViewChange');
+  });
+
+  bridge.subscribe('map:click', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onClick');
+  });
+
+  bridge.subscribe('map:featureclick', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onFeatureClick');
+  });
 }
 
 /**
