@@ -95,6 +95,7 @@ import { ThemeStory } from './ThemeStory';
 import { ThemeSwitcherStory } from './ThemeSwitcherStory';
 import SettingsMenuStory from './SettingsMenuStory';
 import { CapabilitiesStory } from './CapabilitiesStory';
+import { MapBasicStory } from './MapBasicStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -205,6 +206,9 @@ export const stories: StoryDef[] = [
   { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
   { id: 'scene-3d-planet', title: 'Planet', category: '3D', component: Scene3DPlanetStory },
   { id: 'scene-3d-framework-cube', title: 'Framework Cube', category: '3D', component: Scene3DFrameworkCubeStory },
+
+  // Geo / Maps
+  { id: 'map-basic', title: 'Map', category: 'Geo', component: MapBasicStory },
 
   // Game Templates
   { id: 'game-platformer', title: 'Platformer', category: 'Game Templates', component: GamePlatformerStory },
