@@ -15,6 +15,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Commiting Work:** If you choose to commit work on your own, then do not commit the work of other Claudes. If I prompt you to commit work, I expect you to commit all the work left unaccounted for, its from you in a parallel universe who forgot to anyways.
 
+## One-Liner Design Philosophy
+
+When adding a new capability, feature, or integration — always ask: **can someone who doesn't code use this in one line?** If the answer is no, wrap it until it is. The target user is someone who knows their domain (music, art, data, games) but doesn't know bridges, RPCs, or Lua internals. An AI should be able to discover and control it without documentation.
+
+The pattern is the **declarative capability system** (`lua/capabilities.lua`):
+1. Lua side: `Capabilities.register("Audio", { schema, create, update, tick, destroy })`
+2. React side: `<Audio src="beat.mp3" playing volume={0.8} />`
+3. AI discovery: `useCapabilities()` returns schemas for everything registered
+
+Every new native feature (audio, timers, sensors, file watchers, notifications, whatever) should follow this pattern. The Lua module does the work, the React component is a one-liner, and the schema is the documentation. If you're adding something that requires the user to call `bridge.rpc()` or understand the transport layer, you haven't finished — wrap it in a capability.
+
 ## Model Selection
 
 **Always use Opus 4.6 (`claude-opus-4-6`) for debugging.** Sonnet is fine for scaffolding, writing new components, and routine tasks. But when tracking down layout bugs, inspector issues, coordinate mismatches, or anything where the real problem is structural and not obvious — use Opus. It finds the actual bug instead of proposing workarounds that mask it.
