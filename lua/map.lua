@@ -524,6 +524,469 @@ local function renderMarkers(m, effectiveOpacity)
 end
 
 -- ============================================================================
+-- GeoJSON rendering
+-- ============================================================================
+
+--- Extract features from a GeoJSON data table.
+--- Handles FeatureCollection, single Feature, and raw Geometry objects.
+--- GeoJSON coordinates are [longitude, latitude] (reversed from our convention).
+local function extractGeoJSONFeatures(data)
+  if not data then return {} end
+
+  if data.type == "FeatureCollection" and data.features then
+    return data.features
+  elseif data.type == "Feature" then
+    return { data }
+  elseif data.type == "Point" or data.type == "LineString" or data.type == "Polygon"
+      or data.type == "MultiPoint" or data.type == "MultiLineString" or data.type == "MultiPolygon" then
+    -- Raw geometry → wrap as feature
+    return {{ type = "Feature", geometry = data, properties = {} }}
+  end
+
+  return {}
+end
+
+--- Get style for a GeoJSON feature from its properties.
+local function getFeatureStyle(feature)
+  local props = feature.properties or {}
+  return {
+    fillColor   = props.fillColor   or props.fill        or "#3498db40",
+    strokeColor = props.strokeColor or props.stroke      or "#333333",
+    strokeWidth = props.strokeWidth or props["stroke-width"] or 1,
+    extrude     = props.extrude     or props.height      or 0,
+  }
+end
+
+--- Render a GeoJSON polygon ring in 2D.
+local function renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
+  if not ring or #ring < 3 then return end
+
+  local verts = {}
+  for _, coord in ipairs(ring) do
+    -- GeoJSON: [lng, lat]
+    local px, py = projectToCanvas(m, coord[2], coord[1])
+    verts[#verts + 1] = px
+    verts[#verts + 1] = py
+  end
+
+  if #verts < 6 then return end
+
+  -- Fill
+  local fr, fg, fb, fa = parseHexColor(style.fillColor)
+  love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+  local ok, triangles = pcall(love.math.triangulate, verts)
+  if ok and triangles then
+    for _, tri in ipairs(triangles) do
+      love.graphics.polygon("fill", tri)
+    end
+  end
+
+  -- Stroke
+  local sr, sg, sb, sa = parseHexColor(style.strokeColor)
+  love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
+  love.graphics.setLineWidth(style.strokeWidth)
+  local closed = {}
+  for i = 1, #verts do closed[i] = verts[i] end
+  closed[#closed + 1] = verts[1]
+  closed[#closed + 1] = verts[2]
+  love.graphics.line(closed)
+  love.graphics.setLineWidth(1)
+end
+
+--- Render GeoJSON features in 2D mode.
+local function renderGeoJSON(m, effectiveOpacity)
+  for _, layer in pairs(m.geojsonLayers) do
+    local features = extractGeoJSONFeatures(layer.data)
+
+    for _, feature in ipairs(features) do
+      local geom = feature.geometry
+      if not geom then goto nextFeature end
+      local style = getFeatureStyle(feature)
+
+      if geom.type == "Point" then
+        local coord = geom.coordinates
+        if coord then
+          local px, py = projectToCanvas(m, coord[2], coord[1])
+          local fr, fg, fb, fa = parseHexColor(style.fillColor)
+          love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+          love.graphics.circle("fill", px, py, 5)
+          local sr, sg, sb, sa = parseHexColor(style.strokeColor)
+          love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
+          love.graphics.circle("line", px, py, 5)
+        end
+
+      elseif geom.type == "MultiPoint" then
+        for _, coord in ipairs(geom.coordinates or {}) do
+          local px, py = projectToCanvas(m, coord[2], coord[1])
+          local fr, fg, fb, fa = parseHexColor(style.fillColor)
+          love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+          love.graphics.circle("fill", px, py, 5)
+        end
+
+      elseif geom.type == "LineString" then
+        local points = {}
+        for _, coord in ipairs(geom.coordinates or {}) do
+          local px, py = projectToCanvas(m, coord[2], coord[1])
+          points[#points + 1] = px
+          points[#points + 1] = py
+        end
+        if #points >= 4 then
+          local sr, sg, sb, sa = parseHexColor(style.strokeColor)
+          love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
+          love.graphics.setLineWidth(style.strokeWidth)
+          love.graphics.line(points)
+          love.graphics.setLineWidth(1)
+        end
+
+      elseif geom.type == "MultiLineString" then
+        for _, line in ipairs(geom.coordinates or {}) do
+          local points = {}
+          for _, coord in ipairs(line) do
+            local px, py = projectToCanvas(m, coord[2], coord[1])
+            points[#points + 1] = px
+            points[#points + 1] = py
+          end
+          if #points >= 4 then
+            local sr, sg, sb, sa = parseHexColor(style.strokeColor)
+            love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
+            love.graphics.setLineWidth(style.strokeWidth)
+            love.graphics.line(points)
+            love.graphics.setLineWidth(1)
+          end
+        end
+
+      elseif geom.type == "Polygon" then
+        local ring = geom.coordinates and geom.coordinates[1]
+        renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
+
+      elseif geom.type == "MultiPolygon" then
+        for _, polygon in ipairs(geom.coordinates or {}) do
+          local ring = polygon[1]
+          renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
+        end
+      end
+
+      ::nextFeature::
+    end
+  end
+end
+
+-- ============================================================================
+-- 3D Building Extrusion
+-- ============================================================================
+
+-- Shader for extruded buildings: MVP + Canvas flip + simple directional lighting
+local buildingShader = nil
+
+local function getBuildingShader()
+  if buildingShader then return buildingShader end
+  if not g3d then return mapShader end
+
+  buildingShader = love.graphics.newShader([[
+    // Vertex shader for extruded buildings with simple lighting
+    uniform mat4 projectionMatrix;
+    uniform mat4 viewMatrix;
+    uniform mat4 modelMatrix;
+    uniform bool isCanvasEnabled;
+
+    attribute vec3 VertexNormal;
+
+    varying vec3 fragNormal;
+    varying vec3 fragPosition;
+
+    vec4 position(mat4 transformProjection, vec4 vertexPosition) {
+      vec4 worldPos = modelMatrix * vertexPosition;
+      fragPosition = worldPos.xyz;
+
+      // Transform normal to world space (simplified, no non-uniform scale)
+      fragNormal = mat3(modelMatrix) * VertexNormal;
+
+      vec4 pos = projectionMatrix * viewMatrix * worldPos;
+      if (isCanvasEnabled) {
+        pos.y *= -1.0;
+      }
+      return pos;
+    }
+  ]], [[
+    // Fragment shader: ambient + directional diffuse lighting
+    uniform vec3 lightDirection;
+    uniform vec3 ambientColor;
+    uniform vec3 lightColor;
+
+    varying vec3 fragNormal;
+    varying vec3 fragPosition;
+
+    vec4 effect(vec4 vertColor, Image tex, vec2 texCoord, vec2 screenCoord) {
+      vec3 normal = normalize(fragNormal);
+      vec3 lightDir = normalize(lightDirection);
+
+      // Diffuse lighting
+      float diff = max(dot(normal, lightDir), 0.0);
+      vec3 diffuse = lightColor * diff;
+
+      vec3 finalColor = (ambientColor + diffuse) * vertColor.rgb;
+      return vec4(finalColor, vertColor.a);
+    }
+  ]])
+
+  return buildingShader
+end
+
+--- Cache for extruded building meshes: mapNodeId → { layers: { layerNodeId → { model, zoom, dataRef } } }
+local buildingMeshCache = {}
+
+--- Build a 3D extruded mesh for a set of polygon features.
+--- Returns a g3d model positioned at the map center.
+local function buildExtrusionModel(features, m)
+  if not g3d then return nil end
+
+  local intZoom = math.floor(m.zoom)
+  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
+  local allVerts = {}
+
+  for _, feature in ipairs(features) do
+    local geom = feature.geometry
+    if not geom then goto skip end
+    local style = getFeatureStyle(feature)
+    if style.extrude <= 0 then goto skip end
+
+    local rings = {}
+    if geom.type == "Polygon" then
+      rings = { geom.coordinates and geom.coordinates[1] }
+    elseif geom.type == "MultiPolygon" then
+      for _, polygon in ipairs(geom.coordinates or {}) do
+        rings[#rings + 1] = polygon[1]
+      end
+    end
+
+    for _, ring in ipairs(rings) do
+      if not ring or #ring < 3 then goto skipRing end
+
+      -- Compute world-space ring positions
+      local worldRing = {}
+      local flatVerts2D = {}
+      for _, coord in ipairs(ring) do
+        local lat, lng = coord[2], coord[1]  -- GeoJSON: [lng, lat]
+        local px, py = Geo.latlngToPixel(lat, lng, intZoom)
+        local wx = px - centerPx
+        local wy = -(py - centerPy)  -- Y-north
+        worldRing[#worldRing + 1] = { wx, wy }
+        flatVerts2D[#flatVerts2D + 1] = wx
+        flatVerts2D[#flatVerts2D + 1] = wy
+      end
+
+      -- Extrusion height in pixels (rough: 1 meter ≈ metersPerPixel at this zoom)
+      local mpp = Geo.metersPerPixel(m.centerLat, intZoom)
+      local height = style.extrude / math.max(mpp, 0.001)
+
+      -- Parse building color
+      local cr, cg, cb, ca = parseHexColor(style.fillColor)
+      local r8 = math.floor(cr * 255)
+      local g8 = math.floor(cg * 255)
+      local b8 = math.floor(cb * 255)
+      local a8 = math.floor(ca * 255)
+
+      -- Top face: triangulate the polygon at Z=height
+      local okTri, triangles = pcall(love.math.triangulate, flatVerts2D)
+      if okTri and triangles then
+        for _, tri in ipairs(triangles) do
+          -- tri is {x1,y1, x2,y2, x3,y3}
+          allVerts[#allVerts + 1] = {tri[1], tri[2], height,  0, 0,  0, 0, 1,  r8, g8, b8, a8}
+          allVerts[#allVerts + 1] = {tri[3], tri[4], height,  0, 0,  0, 0, 1,  r8, g8, b8, a8}
+          allVerts[#allVerts + 1] = {tri[5], tri[6], height,  0, 0,  0, 0, 1,  r8, g8, b8, a8}
+        end
+      end
+
+      -- Side walls: quads connecting top ring to ground
+      -- Slightly darken sides for visual depth
+      local sr8 = math.floor(cr * 200)
+      local sg8 = math.floor(cg * 200)
+      local sb8 = math.floor(cb * 200)
+
+      for i = 1, #worldRing do
+        local j = (i % #worldRing) + 1
+        local x1, y1 = worldRing[i][1], worldRing[i][2]
+        local x2, y2 = worldRing[j][1], worldRing[j][2]
+
+        -- Wall normal (perpendicular to edge, horizontal)
+        local edgeX = x2 - x1
+        local edgeY = y2 - y1
+        local edgeLen = math.sqrt(edgeX * edgeX + edgeY * edgeY)
+        local nx, ny = 0, 0
+        if edgeLen > 0 then
+          nx = -edgeY / edgeLen
+          ny = edgeX / edgeLen
+        end
+
+        -- Two triangles for the wall quad (CCW from outside)
+        -- Bottom-left, top-left, top-right
+        allVerts[#allVerts + 1] = {x1, y1, 0,       0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
+        allVerts[#allVerts + 1] = {x1, y1, height,   0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
+        allVerts[#allVerts + 1] = {x2, y2, height,   0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
+        -- Bottom-left, top-right, bottom-right
+        allVerts[#allVerts + 1] = {x1, y1, 0,       0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
+        allVerts[#allVerts + 1] = {x2, y2, height,   0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
+        allVerts[#allVerts + 1] = {x2, y2, 0,       0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
+      end
+
+      ::skipRing::
+    end
+    ::skip::
+  end
+
+  if #allVerts == 0 then return nil end
+
+  -- Create the dummy white texture for vertex-colored rendering
+  local dummyData = love.image.newImageData(1, 1)
+  dummyData:setPixel(0, 0, 1, 1, 1, 1)
+  local dummyTex = love.graphics.newImage(dummyData)
+
+  return g3d.newModel(allVerts, dummyTex, {0, 0, 0}, {0, 0, 0}, {1, 1, 1})
+end
+
+local renderExtrudedBuildings3D  -- forward declaration (defined below)
+
+--- Render GeoJSON features in 3D mode with building extrusion.
+local function renderGeoJSON3D(m, effectiveOpacity)
+  local hasExtruded = false
+
+  -- First pass: render non-extruded features as screen-projected 2D overlays
+  for _, layer in pairs(m.geojsonLayers) do
+    local features = extractGeoJSONFeatures(layer.data)
+
+    for _, feature in ipairs(features) do
+      local geom = feature.geometry
+      if not geom then goto nextFlat end
+      local style = getFeatureStyle(feature)
+
+      -- Skip extruded features (handled in second pass)
+      if style.extrude > 0 then
+        hasExtruded = true
+        goto nextFlat
+      end
+
+      if geom.type == "Point" then
+        local coord = geom.coordinates
+        if coord then
+          local wx, wy = projectToWorld3D(m, coord[2], coord[1])
+          local sx, sy = worldToScreen3D(m, wx, wy, 0)
+          if sx and sy then
+            local fr, fg, fb, fa = parseHexColor(style.fillColor)
+            love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+            love.graphics.circle("fill", sx, sy, 5)
+          end
+        end
+
+      elseif geom.type == "LineString" then
+        local points = {}
+        for _, coord in ipairs(geom.coordinates or {}) do
+          local wx, wy = projectToWorld3D(m, coord[2], coord[1])
+          local sx, sy = worldToScreen3D(m, wx, wy, 0)
+          if sx and sy then
+            points[#points + 1] = sx
+            points[#points + 1] = sy
+          end
+        end
+        if #points >= 4 then
+          local sr, sg, sb, sa = parseHexColor(style.strokeColor)
+          love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
+          love.graphics.setLineWidth(style.strokeWidth)
+          love.graphics.line(points)
+          love.graphics.setLineWidth(1)
+        end
+
+      elseif geom.type == "Polygon" then
+        local ring = geom.coordinates and geom.coordinates[1]
+        if ring and #ring >= 3 then
+          local verts = {}
+          for _, coord in ipairs(ring) do
+            local wx, wy = projectToWorld3D(m, coord[2], coord[1])
+            local sx, sy = worldToScreen3D(m, wx, wy, 0)
+            if sx and sy then
+              verts[#verts + 1] = sx
+              verts[#verts + 1] = sy
+            end
+          end
+          if #verts >= 6 then
+            local fr, fg, fb, fa = parseHexColor(style.fillColor)
+            love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+            local ok2, triangles = pcall(love.math.triangulate, verts)
+            if ok2 and triangles then
+              for _, tri in ipairs(triangles) do
+                love.graphics.polygon("fill", tri)
+              end
+            end
+          end
+        end
+      end
+
+      ::nextFlat::
+    end
+  end
+
+  -- Second pass: render extruded buildings as 3D meshes (requires depth + shader)
+  if hasExtruded and g3d then
+    renderExtrudedBuildings3D(m, effectiveOpacity)
+  end
+end
+
+--- Render extruded buildings using g3d meshes with lighting.
+--- Called from renderGeoJSON3D when extruded features exist.
+renderExtrudedBuildings3D = function(m, effectiveOpacity)
+  local intZoom = math.floor(m.zoom)
+  local fracScale = math.pow(2, m.zoom - intZoom)
+
+  -- Get or create cached meshes
+  local cache = buildingMeshCache[m] or {}
+  buildingMeshCache[m] = cache
+
+  for layerId, layer in pairs(m.geojsonLayers) do
+    local features = extractGeoJSONFeatures(layer.data)
+
+    -- Check if we need to rebuild (data changed or zoom changed)
+    local cached = cache[layerId]
+    if cached and cached.zoom == intZoom and cached.dataRef == layer.data then
+      -- Use cached mesh
+    else
+      -- Rebuild mesh
+      local model = buildExtrusionModel(features, m)
+      if cached and cached.model then
+        -- Release old mesh
+        if cached.model.mesh then cached.model.mesh:release() end
+      end
+      cached = { model = model, zoom = intZoom, dataRef = layer.data }
+      cache[layerId] = cached
+    end
+
+    if cached.model then
+      -- Set transform: scale by fractional zoom, no rotation
+      cached.model:setTransform(
+        {0, 0, 0},
+        {0, 0, 0},
+        {fracScale, fracScale, fracScale}
+      )
+
+      -- Draw with building shader (lighting)
+      local shader = getBuildingShader()
+      if shader then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.setDepthMode("lequal", true)
+
+        -- Set lighting uniforms
+        if shader ~= mapShader then
+          shader:send("lightDirection", {0.5, 0.3, 0.8})
+          shader:send("ambientColor", {0.35, 0.35, 0.40})
+          shader:send("lightColor", {0.8, 0.75, 0.65})
+        end
+
+        cached.model:draw(shader)
+        love.graphics.setDepthMode()
+      end
+    end
+  end
+end
+
+-- ============================================================================
 -- 3D Rendering (pitch > 0)
 -- ============================================================================
 
@@ -804,6 +1267,12 @@ local function renderMap3D(nodeId)
   -- Render tile layers as 3D textured quads on the ground plane
   renderTileLayers3D(m)
 
+  -- Render GeoJSON (handles both flat overlays and extruded 3D buildings)
+  -- Extruded buildings are rendered here with depth testing enabled
+  love.graphics.setShader()
+  love.graphics.setColor(1, 1, 1, 1)
+  renderGeoJSON3D(m, 1)
+
   -- Switch to 2D for overlays (disable depth, clear shader)
   love.graphics.setDepthMode()
   love.graphics.setShader()
@@ -890,6 +1359,7 @@ local function renderMap(nodeId)
   -- Render overlays
   renderPolygons(m, 1)
   renderPolylines(m, 1)
+  renderGeoJSON(m, 1)
   renderMarkers(m, 1)
 
   -- Attribution text (bottom-right)
@@ -1214,6 +1684,17 @@ end
 function Map.cleanup(nodeId)
   local m = maps[nodeId]
   if not m then return end
+
+  -- Release building mesh cache
+  local cache = buildingMeshCache[m]
+  if cache then
+    for _, cached in pairs(cache) do
+      if cached.model and cached.model.mesh then
+        cached.model.mesh:release()
+      end
+    end
+    buildingMeshCache[m] = nil
+  end
 
   if m.canvas then m.canvas:release() end
   maps[nodeId] = nil

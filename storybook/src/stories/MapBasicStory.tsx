@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text, Pressable } from '@ilovereact/core';
-import { Map, TileLayer, Marker, Polyline, Polygon, useMapView } from '@ilovereact/geo';
+import { Map, TileLayer, Marker, Polyline, Polygon, GeoJSON, useMapView } from '@ilovereact/geo';
 
 function MapControls() {
   const view = useMapView();
@@ -24,6 +24,85 @@ function MapControls() {
   );
 }
 
+// Sample GeoJSON buildings in central London (approximate footprints)
+const londonBuildings = {
+  type: 'FeatureCollection' as const,
+  features: [
+    {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [-0.0876, 51.5045],
+          [-0.0870, 51.5045],
+          [-0.0870, 51.5040],
+          [-0.0876, 51.5040],
+          [-0.0876, 51.5045],
+        ]],
+      },
+      properties: { name: 'Building A', fillColor: '#2980b9cc', strokeColor: '#1a5276', extrude: 80 },
+    },
+    {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [-0.0862, 51.5048],
+          [-0.0855, 51.5048],
+          [-0.0855, 51.5042],
+          [-0.0862, 51.5042],
+          [-0.0862, 51.5048],
+        ]],
+      },
+      properties: { name: 'Building B', fillColor: '#e74c3ccc', strokeColor: '#922b21', extrude: 120 },
+    },
+    {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [-0.0845, 51.5043],
+          [-0.0838, 51.5043],
+          [-0.0840, 51.5038],
+          [-0.0843, 51.5036],
+          [-0.0847, 51.5038],
+          [-0.0845, 51.5043],
+        ]],
+      },
+      properties: { name: 'Tower C', fillColor: '#27ae60cc', strokeColor: '#1e8449', extrude: 200 },
+    },
+    {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [-0.0900, 51.5035],
+          [-0.0890, 51.5035],
+          [-0.0890, 51.5028],
+          [-0.0900, 51.5028],
+          [-0.0900, 51.5035],
+        ]],
+      },
+      properties: { name: 'Block D', fillColor: '#8e44adcc', strokeColor: '#6c3483', extrude: 50 },
+    },
+    // A flat polygon (no extrusion) — park area
+    {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [-0.0920, 51.5050],
+          [-0.0905, 51.5050],
+          [-0.0905, 51.5042],
+          [-0.0920, 51.5042],
+          [-0.0920, 51.5050],
+        ]],
+      },
+      properties: { name: 'Park', fillColor: '#27ae6040', strokeColor: '#27ae60', strokeWidth: 2, extrude: 0 },
+    },
+  ],
+};
+
 export function MapBasicStory() {
   const [markers] = useState([
     { id: 1, position: [51.505, -0.09] as [number, number], label: 'London' },
@@ -41,6 +120,10 @@ export function MapBasicStory() {
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [pitch, setPitch] = useState(0);
   const [bearing, setBearing] = useState(0);
+  const [showBuildings, setShowBuildings] = useState(true);
+
+  // Memoize GeoJSON data to avoid unnecessary rerenders
+  const buildingData = useMemo(() => showBuildings ? londonBuildings : null, [showBuildings]);
 
   const handleViewChange = useCallback((event: any) => {
     // View changes from pan/zoom are handled reactively via useMapView
@@ -77,7 +160,7 @@ export function MapBasicStory() {
           Map Demo
         </Text>
         <Text fontSize={12} style={{ color: '#888888' }}>
-          {selectedCity ? `Selected: ${selectedCity}` : 'Click a marker'}
+          {selectedCity ? `Selected: ${selectedCity}` : 'Pitch > 0 for 3D buildings'}
         </Text>
       </Box>
 
@@ -119,6 +202,8 @@ export function MapBasicStory() {
             strokeColor="#3498db"
             strokeWidth={2}
           />
+
+          {buildingData && <GeoJSON data={buildingData} />}
         </Map>
 
         <MapControls />
@@ -202,6 +287,26 @@ export function MapBasicStory() {
             </Text>
           </Pressable>
         ))}
+
+        {/* Separator */}
+        <Box style={{ width: 1, height: 24, backgroundColor: '#333355' }} />
+
+        {/* Buildings toggle */}
+        <Pressable
+          onClick={() => setShowBuildings(!showBuildings)}
+          style={{
+            backgroundColor: showBuildings ? '#f39c12' : '#2a2a4a',
+            paddingLeft: 8,
+            paddingRight: 8,
+            paddingTop: 4,
+            paddingBottom: 4,
+            borderRadius: 3,
+          }}
+        >
+          <Text fontSize={10} style={{ color: '#ffffff' }}>
+            {showBuildings ? '3D ON' : '3D OFF'}
+          </Text>
+        </Pressable>
       </Box>
     </Box>
   );
