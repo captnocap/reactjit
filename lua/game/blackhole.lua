@@ -717,16 +717,23 @@ function M.mousemoved(x, y, dx, dy)
 end
 
 function M.mousepressed(x, y, button)
+    io.write("[bh] mousepressed btn=" .. button .. " screen=" .. screen .. " x=" .. math.floor(x) .. " y=" .. math.floor(y) .. "\n"); io.flush()
     if button ~= 1 then return end
 
     if screen == "title" then
+        io.write("[bh] -> enter_playing\n"); io.flush()
         enter_playing()
     elseif screen == "roundover" then
+        io.write("[bh] -> enter_shop\n"); io.flush()
         enter_shop()
     elseif screen == "shop" then
+        io.write("[bh] shop click: hover_index=" .. tostring(shop_hover_index) .. " W=" .. W .. " H=" .. H .. "\n"); io.flush()
         if shop_hover_index then
             local name = UPGRADE_ORDER[shop_hover_index]
+            io.write("[bh] -> shop_try_buy(" .. name .. ")\n"); io.flush()
             shop_try_buy(name)
+        else
+            io.write("[bh] -> no hover, mouse at " .. math.floor(mouse_x) .. "," .. math.floor(mouse_y) .. "\n"); io.flush()
         end
     end
 end
@@ -801,16 +808,25 @@ function M.update(dt)
         end
 
     elseif screen == "shop" then
-        -- Update hover state based on mouse position
-        local start_y = 150
+        -- Update hover state based on mouse position (adaptive to canvas size)
+        local card_w = math.min(440, W - 20)
+        local card_x = math.floor((W - card_w) / 2)
+        local start_y = math.max(120, math.floor(H * 0.2))
+        local prev_hover = shop_hover_index
         shop_hover_index = nil
         for i = 1, #UPGRADE_ORDER do
             local card_y = start_y + (i - 1) * 52
-            if mouse_x >= W / 2 - 220 and mouse_x <= W / 2 + 220
+            if mouse_x >= card_x and mouse_x <= card_x + card_w
                and mouse_y >= card_y and mouse_y <= card_y + 54 then
                 shop_hover_index = i
                 break
             end
+        end
+        if shop_hover_index ~= prev_hover then
+            io.write("[bh] hover changed: " .. tostring(prev_hover) .. " -> " .. tostring(shop_hover_index)
+                .. " mouse=" .. math.floor(mouse_x) .. "," .. math.floor(mouse_y)
+                .. " cardX=" .. math.floor(card_x) .. " startY=" .. math.floor(start_y)
+                .. " W=" .. W .. " H=" .. H .. "\n"); io.flush()
         end
     end
 end
@@ -820,8 +836,10 @@ end
 -- ---------------------------------------------------------------------------
 
 function M.draw()
+    -- Game entities + cursor. No text, no card backgrounds, no UI labels.
+    -- React handles all text/layout overlay for title/shop/roundover.
     if screen == "title" then
-        -- Draw cursor circle on title screen
+        -- Cursor circle (game feel, not UI)
         love.graphics.setColor(0.4, 0.2, 0.9, 0.15)
         love.graphics.circle("fill", mouse_x, mouse_y, 20)
         love.graphics.setColor(0.6, 0.3, 1.0, 0.5)
@@ -830,52 +848,21 @@ function M.draw()
 
     elseif screen == "playing" then
         blackhole_draw(blackhole)
-
         for _, a in ipairs(asteroids) do
             asteroid_draw(a)
         end
-
         field_draw(field)
         particles_draw()
 
     elseif screen == "roundover" then
-        -- Small cursor dot
+        -- Cursor dot (game feel, not UI)
         love.graphics.setColor(0.6, 0.3, 1.0, 0.5)
         love.graphics.circle("fill", mouse_x, mouse_y, 5)
 
     elseif screen == "shop" then
-        -- Draw upgrade card backgrounds and borders (geometry only, no text)
-        local start_y = 150
-        for i, name in ipairs(UPGRADE_ORDER) do
-            local maxed = shop_is_maxed(name)
-            local cost = shop_get_upgrade_cost(name)
-            local can_afford = (not maxed) and cost and game_data.points >= cost
-            local is_hovered = (shop_hover_index == i)
-
-            local y = start_y + (i - 1) * 52
-            local card_x = W / 2 - 220
-
-            -- Card background
-            if is_hovered and can_afford then
-                love.graphics.setColor(0.3, 0.15, 0.5, 0.5)
-            elseif is_hovered then
-                love.graphics.setColor(0.2, 0.1, 0.3, 0.4)
-            else
-                love.graphics.setColor(0.1, 0.05, 0.15, 0.3)
-            end
-            love.graphics.rectangle("fill", card_x, y, 440, 54, 8, 8)
-
-            -- Border
-            if is_hovered then
-                love.graphics.setColor(0.6, 0.3, 1.0, 0.4)
-            else
-                love.graphics.setColor(0.3, 0.15, 0.5, 0.2)
-            end
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", card_x, y, 440, 54, 8, 8)
-        end
-
-        -- Cursor
+        -- Cursor dot only — no card highlight in draw().
+        -- drawWithUI() draws card highlights for the "original" canvas.
+        -- React's hoverStyle handles highlights for the "react" canvas.
         love.graphics.setColor(0.6, 0.3, 1.0, 0.5)
         love.graphics.circle("fill", mouse_x, mouse_y, 5)
     end
@@ -886,7 +873,56 @@ end
 -- ---------------------------------------------------------------------------
 
 function M.drawWithUI()
-    M.draw()
+    -- Draw game entities (same as draw() for playing)
+    if screen == "playing" then
+        M.draw()
+    end
+
+    -- Title cursor
+    if screen == "title" then
+        love.graphics.setColor(0.4, 0.2, 0.9, 0.15)
+        love.graphics.circle("fill", mouse_x, mouse_y, 20)
+        love.graphics.setColor(0.6, 0.3, 1.0, 0.5)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle("line", mouse_x, mouse_y, 20)
+    end
+
+    -- Roundover cursor
+    if screen == "roundover" then
+        love.graphics.setColor(0.6, 0.3, 1.0, 0.5)
+        love.graphics.circle("fill", mouse_x, mouse_y, 5)
+    end
+
+    -- Shop card backgrounds + cursor (original UI mode)
+    if screen == "shop" then
+        local card_w = math.min(440, W - 20)
+        local card_x = math.floor((W - card_w) / 2)
+        local start_y = math.max(120, math.floor(H * 0.2))
+        for i, name in ipairs(UPGRADE_ORDER) do
+            local maxed = shop_is_maxed(name)
+            local cost = shop_get_upgrade_cost(name)
+            local can_afford = (not maxed) and cost and game_data.points >= cost
+            local is_hovered = (shop_hover_index == i)
+            local y = start_y + (i - 1) * 52
+            if is_hovered and can_afford then
+                love.graphics.setColor(0.3, 0.15, 0.5, 0.5)
+            elseif is_hovered then
+                love.graphics.setColor(0.2, 0.1, 0.3, 0.4)
+            else
+                love.graphics.setColor(0.1, 0.05, 0.15, 0.3)
+            end
+            love.graphics.rectangle("fill", card_x, y, card_w, 54, 8, 8)
+            if is_hovered then
+                love.graphics.setColor(0.6, 0.3, 1.0, 0.4)
+            else
+                love.graphics.setColor(0.3, 0.15, 0.5, 0.2)
+            end
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", card_x, y, card_w, 54, 8, 8)
+        end
+        love.graphics.setColor(0.6, 0.3, 1.0, 0.5)
+        love.graphics.circle("fill", mouse_x, mouse_y, 5)
+    end
 
     if screen == "title" then
         love.graphics.setFont(getFont(48))
@@ -959,7 +995,9 @@ function M.drawWithUI()
         love.graphics.printf("Preparing Round " .. (game_data.round + 1), 0, 105, W, "center")
 
         -- Upgrade card text (backgrounds/borders already drawn by draw())
-        local start_y = 150
+        local card_w = math.min(440, W - 20)
+        local card_x = math.floor((W - card_w) / 2)
+        local start_y = math.max(120, math.floor(H * 0.2))
         for i, name in ipairs(UPGRADE_ORDER) do
             local def = UPGRADES[name]
             local level = game_data.upgrade_levels[name]
@@ -968,7 +1006,6 @@ function M.drawWithUI()
             local can_afford = (not maxed) and cost and game_data.points >= cost
 
             local y = start_y + (i - 1) * 52
-            local card_x = W / 2 - 220
 
             -- Label and level
             love.graphics.setFont(getFont(18))
@@ -988,13 +1025,13 @@ function M.drawWithUI()
             love.graphics.setFont(getFont(18))
             if maxed then
                 love.graphics.setColor(0.5, 0.5, 0.5, 0.4)
-                love.graphics.printf("MAX", card_x, y + 18, 420, "right")
+                love.graphics.printf("MAX", card_x, y + 18, card_w - 15, "right")
             elseif can_afford then
                 love.graphics.setColor(0.3, 0.9, 0.4, 1)
-                love.graphics.printf(tostring(cost), card_x, y + 18, 420, "right")
+                love.graphics.printf(tostring(cost), card_x, y + 18, card_w - 15, "right")
             else
                 love.graphics.setColor(0.6, 0.3, 0.3, 0.6)
-                love.graphics.printf(tostring(cost), card_x, y + 18, 420, "right")
+                love.graphics.printf(tostring(cost), card_x, y + 18, card_w - 15, "right")
             end
         end
 

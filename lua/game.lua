@@ -181,9 +181,12 @@ end
 --- Mouse events: hit-test against canvas bounds. Click to focus.
 --- Coordinates are translated to be relative to the canvas origin.
 function Game.mousepressed(x, y, button)
+  io.write("[game] mousepressed x=" .. math.floor(x) .. " y=" .. math.floor(y) .. " canvases=" .. tostring(next(canvases) ~= nil) .. "\n"); io.flush()
   for nodeId, entry in pairs(canvases) do
     local b = entry.bounds
+    io.write("[game]   canvas " .. nodeId .. " bounds=" .. (b and (math.floor(b.x) .. "," .. math.floor(b.y) .. " " .. math.floor(b.w) .. "x" .. math.floor(b.h)) or "nil") .. " mode=" .. entry.mode .. "\n"); io.flush()
     if b and x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h then
+      io.write("[game]   -> HIT! relative=" .. math.floor(x - b.x) .. "," .. math.floor(y - b.y) .. "\n"); io.flush()
       focusedNodeId = nodeId
       local mod = loadedModules[entry.moduleName]
       if mod and mod.mousepressed then
@@ -209,10 +212,15 @@ function Game.mousereleased(x, y, button)
   return false
 end
 
+local _mmLogCount = 0
 function Game.mousemoved(x, y, dx, dy)
   for _, entry in pairs(canvases) do
     local b = entry.bounds
     if b and x >= b.x and x < b.x + b.w and y >= b.y and y < b.y + b.h then
+      if _mmLogCount < 3 then
+        _mmLogCount = _mmLogCount + 1
+        io.write("[game] mousemoved hit canvas, relative=" .. math.floor(x - b.x) .. "," .. math.floor(y - b.y) .. " W=" .. b.w .. " H=" .. b.h .. "\n"); io.flush()
+      end
       local mod = loadedModules[entry.moduleName]
       if mod and mod.mousemoved then
         mod.mousemoved(x - b.x, y - b.y, dx, dy)
@@ -225,12 +233,21 @@ end
 -- Command routing (JS → Lua via RPC)
 -- ============================================================================
 
---- Route a command from JS to the correct module, identified by nodeId.
---- @param args table { nodeId, command, args }
+--- Route a command from JS to the correct module.
+--- Tries nodeId first, falls back to module name.
+--- @param args table { nodeId?, module?, command, args }
 function Game.handleCommand(args)
+  -- Try routing by nodeId
   local entry = canvases[args.nodeId]
   if entry then
     local mod = loadedModules[entry.moduleName]
+    if mod and mod.onCommand then
+      return mod.onCommand(args.command, args.args)
+    end
+  end
+  -- Fallback: route by module name
+  if args.module then
+    local mod = loadedModules[args.module]
     if mod and mod.onCommand then
       return mod.onCommand(args.command, args.args)
     end

@@ -3,7 +3,10 @@
   Boots directly into iLoveReact on KMS/DRM.
   No X11. No Wayland. No display server.
   Just: kernel → SDL2 (kmsdrm) → OpenGL → LuaJIT → this.
---]]
+]]
+
+-- /app/ contains gl.lua, font.lua, ft_helper.so
+package.path = "/app/?.lua;" .. package.path
 
 local ffi = require("ffi")
 local bit = require("bit")
@@ -40,16 +43,19 @@ local SDL_WINDOW_FULLSCREEN = 0x00000001
 local SDL_WINDOWPOS_UNDEFINED = 0x1FFF0000
 local SDL_QUIT_EVENT        = 0x100
 
--- In kmsdrm mode, use the screen's native resolution
+-- In kmsdrm mode the window covers the full screen native resolution
 local W, H = 1280, 720
 
 -- ── Init ──────────────────────────────────────────────────────────────────────
 
 io.write("[cartridge] SDL_Init...\n"); io.flush()
-if sdl.SDL_Init(SDL_INIT_VIDEO) ~= 0 then
+local initErr = sdl.SDL_Init(SDL_INIT_VIDEO)
+io.write("[cartridge] SDL_Init returned: " .. initErr .. "\n"); io.flush()
+if initErr ~= 0 then
   error("[cartridge] SDL_Init: " .. ffi.string(sdl.SDL_GetError()))
 end
 
+io.write("[cartridge] Setting GL attributes...\n"); io.flush()
 sdl.SDL_GL_SetAttribute(0,  8)   -- GL_RED_SIZE
 sdl.SDL_GL_SetAttribute(1,  8)   -- GL_GREEN_SIZE
 sdl.SDL_GL_SetAttribute(2,  8)   -- GL_BLUE_SIZE
@@ -57,9 +63,8 @@ sdl.SDL_GL_SetAttribute(3,  8)   -- GL_ALPHA_SIZE
 sdl.SDL_GL_SetAttribute(5,  1)   -- GL_DOUBLEBUFFER
 sdl.SDL_GL_SetAttribute(6,  24)  -- GL_DEPTH_SIZE
 sdl.SDL_GL_SetAttribute(7,  8)   -- GL_STENCIL_SIZE
-sdl.SDL_GL_SetAttribute(17, 2)   -- GL_CONTEXT_MAJOR_VERSION
-sdl.SDL_GL_SetAttribute(18, 1)   -- GL_CONTEXT_MINOR_VERSION
 
+io.write("[cartridge] SDL_CreateWindow (fullscreen)...\n"); io.flush()
 local window = sdl.SDL_CreateWindow(
   "CartridgeOS",
   SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -67,7 +72,7 @@ local window = sdl.SDL_CreateWindow(
   bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_FULLSCREEN)
 )
 if window == nil then
-  -- Fallback: try without fullscreen (useful when testing in X11)
+  io.write("[cartridge] fullscreen failed: " .. ffi.string(sdl.SDL_GetError()) .. ", trying windowed\n"); io.flush()
   window = sdl.SDL_CreateWindow(
     "CartridgeOS",
     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -78,13 +83,16 @@ end
 if window == nil then
   error("[cartridge] SDL_CreateWindow: " .. ffi.string(sdl.SDL_GetError()))
 end
+io.write("[cartridge] window created\n"); io.flush()
 
+io.write("[cartridge] SDL_GL_CreateContext...\n"); io.flush()
 local ctx = sdl.SDL_GL_CreateContext(window)
 if ctx == nil then
   error("[cartridge] SDL_GL_CreateContext: " .. ffi.string(sdl.SDL_GetError()))
 end
+io.write("[cartridge] GL context created\n"); io.flush()
 
--- Get actual drawable size (handles HiDPI)
+-- Get actual drawable size (handles HiDPI / kmsdrm native res)
 local dw = ffi.new("int[1]"); local dh = ffi.new("int[1]")
 sdl.SDL_GL_GetDrawableSize(window, dw, dh)
 W, H = dw[0], dh[0]
@@ -92,7 +100,9 @@ io.write("[cartridge] drawable: " .. W .. "x" .. H .. "\n"); io.flush()
 
 -- ── OpenGL setup ──────────────────────────────────────────────────────────────
 
+io.write("[cartridge] require gl...\n"); io.flush()
 local GL = require("gl")
+io.write("[cartridge] GL loaded\n"); io.flush()
 
 GL.glViewport(0, 0, W, H)
 GL.glEnable(GL.BLEND)
@@ -105,8 +115,11 @@ GL.glLoadIdentity()
 
 -- ── Font ──────────────────────────────────────────────────────────────────────
 
+io.write("[cartridge] require font...\n"); io.flush()
 local Font = require("font")
+io.write("[cartridge] font loaded, init...\n"); io.flush()
 Font.init()
+io.write("[cartridge] font ready\n"); io.flush()
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -121,7 +134,6 @@ local function rect(x, y, w, h, r, g, b, a)
 end
 
 local function roundedRect(x, y, w, h, radius, r, g, b, a)
-  -- Approximate rounded rect using triangle fan for each corner + fills
   a = a or 1
   local segments = 12
   GL.glColor4f(r, g, b, a)
@@ -137,12 +149,10 @@ local function roundedRect(x, y, w, h, radius, r, g, b, a)
     GL.glEnd()
   end
 
-  -- Center fill
   rect(x + radius, y,          w - radius*2, h,          r, g, b, a)
   rect(x,          y + radius, radius,       h - radius*2, r, g, b, a)
   rect(x + w - radius, y + radius, radius,  h - radius*2, r, g, b, a)
 
-  -- Corners
   corner(x + radius,         y + radius,         math.pi)
   corner(x + w - radius,     y + radius,         math.pi * 1.5)
   corner(x + w - radius,     y + h - radius,     0)
@@ -158,7 +168,7 @@ local function centeredText(str, cx, y, size, r, g, b, a)
   text(str, cx - tw/2, y, size, r, g, b, a)
 end
 
--- ── Read system info ──────────────────────────────────────────────────────────
+-- ── System info ───────────────────────────────────────────────────────────────
 
 local function readFile(path)
   local f = io.open(path, "r")
@@ -167,8 +177,8 @@ local function readFile(path)
   return s
 end
 
-local kernel  = readFile("/proc/version"):match("Linux version (%S+)") or "unknown"
-local uptime  = readFile("/proc/uptime"):match("^(%S+)") or "0"
+local kernel    = readFile("/proc/version"):match("Linux version (%S+)") or "unknown"
+local uptime    = readFile("/proc/uptime"):match("^(%S+)") or "0"
 local uptimeSec = math.floor(tonumber(uptime) or 0)
 
 local dri_devs = {}
@@ -186,44 +196,37 @@ local running  = true
 local TARGET_MS = math.floor(1000 / 60)
 local t0       = sdl.SDL_GetTicks()
 
-io.write("[cartridge] entering render loop\n"); io.flush()
+io.write("[cartridge] entering render loop at " .. W .. "x" .. H .. "\n"); io.flush()
 
 local function paintFrame(t)
   local elapsed = (t - t0) / 1000.0
 
-  -- Background
   GL.glClearColor(0.04, 0.04, 0.08, 1)
   GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
   GL.glLoadIdentity()
 
-  -- ── Decorative accent bar (left edge) ─────────────────────────────────────
+  -- Left accent bar
   local accentH = H
   rect(0, 0, 6, accentH, 0.4, 0.3, 1.0)
 
-  -- ── Header card ───────────────────────────────────────────────────────────
+  -- Header card
   local cardW = W - 120
   local cardX = 60
   local cardY = 60
-
   roundedRect(cardX, cardY, cardW, 200, 16, 0.10, 0.10, 0.16, 1)
 
-  -- Accent stripe on card
   GL.glEnable(GL.SCISSOR_TEST)
   GL.glScissor(cardX, H - (cardY + 200), cardW, 200)
   rect(cardX, cardY, 4, 200, 0.4, 0.3, 1.0)
   GL.glDisable(GL.SCISSOR_TEST)
 
-  -- Title
   centeredText("CartridgeOS", W/2, cardY + 30, 56, 1, 1, 1, 1)
-
-  -- Tagline
   centeredText("iLoveReact  --  no X11, no Wayland, no display server",
                W/2, cardY + 110, 18, 0.6, 0.6, 0.8, 1)
-
   centeredText("just kernel -> kmsdrm -> SDL2 -> OpenGL -> LuaJIT -> React",
                W/2, cardY + 140, 16, 0.4, 0.4, 0.6, 1)
 
-  -- ── Status panel ──────────────────────────────────────────────────────────
+  -- Status panels
   local statY = cardY + 230
   local statW = (cardW - 40) / 2
   local stat2X = cardX + statW + 40
@@ -239,7 +242,7 @@ local function paintFrame(t)
   text("driver  kmsdrm",           stat2X + 20, statY + 44, 15, 0.7, 0.7, 0.9, 1)
   text("DRI     " .. dri_str,      stat2X + 20, statY + 70, 15, 0.7, 0.7, 0.9, 1)
 
-  -- ── Color palette ─────────────────────────────────────────────────────────
+  -- Colour palette
   local palY  = statY + 160
   local palW  = math.floor((cardW - 7 * 12) / 8)
   local colors = {
@@ -252,7 +255,7 @@ local function paintFrame(t)
     roundedRect(bx, palY, palW, 36, 8, c[1], c[2], c[3], 1)
   end
 
-  -- ── Animated pulse bar ────────────────────────────────────────────────────
+  -- Animated pulse bar
   local pulseY = palY + 60
   roundedRect(cardX, pulseY, cardW, 24, 6, 0.08, 0.08, 0.13, 1)
   local pct  = (math.sin(elapsed * 1.5) + 1) / 2
@@ -261,11 +264,10 @@ local function paintFrame(t)
   roundedRect(cardX + 8, pulseY + 6, barW, 12, 4,
               0.4 + 0.3 * pct, 0.3 + 0.2 * (1-pct), 1.0, alpha)
 
-  -- ── Footer ────────────────────────────────────────────────────────────────
+  -- Footer
   local footerY = H - 44
   rect(0, footerY, W, 44, 0.06, 0.06, 0.10, 1)
   rect(0, footerY, W, 1,  0.15, 0.15, 0.25, 1)
-
   text("iLoveReact", cardX, footerY + 14, 14, 0.4, 0.3, 0.9, 1)
   centeredText("Press Ctrl+Alt+Del to quit", W/2, footerY + 14, 13, 0.3, 0.3, 0.4, 1)
 

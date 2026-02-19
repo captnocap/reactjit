@@ -330,6 +330,155 @@ local function generatePlanetTexture(seed)
   return img
 end
 
+--- Generate a UI showcase canvas texture (2D primitives/components)
+local function generateFrameworkCanvasTexture(seed)
+  seed = seed or 7
+  local tw, th = 512, 512
+  local canvas = love.graphics.newCanvas(tw, th)
+  canvas:setFilter("linear", "linear")
+  canvas:setWrap("clamp", "clamp")
+
+  love.graphics.push("all")
+  love.graphics.setCanvas(canvas)
+  love.graphics.clear(0.05, 0.07, 0.11, 1)
+
+  -- Gradient backdrop
+  for y = 0, th do
+    local t = y / th
+    local r = 0.06 + t * 0.05
+    local g = 0.08 + t * 0.06
+    local b = 0.12 + t * 0.10
+    love.graphics.setColor(r, g, b, 1)
+    love.graphics.line(0, y, tw, y)
+  end
+
+  -- Subtle grid
+  love.graphics.setColor(1, 1, 1, 0.05)
+  for gx = 0, tw, 32 do
+    love.graphics.line(gx, 0, gx, th)
+  end
+  for gy = 0, th, 32 do
+    love.graphics.line(0, gy, tw, gy)
+  end
+
+  -- Header card
+  love.graphics.setColor(0.09, 0.12, 0.18, 0.96)
+  love.graphics.rectangle("fill", 20, 20, tw - 40, 74, 14, 14)
+  love.graphics.setColor(0.35, 0.72, 0.96, 1)
+  love.graphics.rectangle("fill", 20, 20, tw - 40, 4, 2, 2)
+  love.graphics.setColor(0.92, 0.96, 1, 1)
+  love.graphics.print("iLoveReact 2D Canvas", 36, 40)
+  love.graphics.setColor(0.62, 0.72, 0.84, 1)
+  love.graphics.print("Box  Text  Badge  ProgressBar  Sparkline", 36, 63)
+
+  -- Primitive cards + badges
+  local cards = {
+    { title = "Status", value = "LIVE", color = {0.16, 0.65, 0.34} },
+    { title = "Target", value = "NATIVE", color = {0.20, 0.47, 0.90} },
+    { title = "Render", value = "G3D", color = {0.73, 0.53, 0.16} },
+  }
+
+  for i, card in ipairs(cards) do
+    local x = 30 + (i - 1) * 160
+    local y = 120
+    love.graphics.setColor(0.13, 0.16, 0.24, 0.96)
+    love.graphics.rectangle("fill", x, y, 138, 86, 12, 12)
+    love.graphics.setColor(0.24, 0.30, 0.43, 1)
+    love.graphics.rectangle("line", x, y, 138, 86, 12, 12)
+
+    love.graphics.setColor(0.74, 0.82, 0.92, 1)
+    love.graphics.print(card.title, x + 10, y + 11)
+
+    local pulse = hashNoise(seed + i * 7, seed + i * 11, seed) * 0.18
+    love.graphics.setColor(0.58 + pulse, 0.74 + pulse * 0.4, 0.97, 1)
+    love.graphics.print(string.format("%d%%", math.floor(60 + i * 10 + pulse * 80)), x + 10, y + 34)
+
+    love.graphics.setColor(card.color[1], card.color[2], card.color[3], 1)
+    love.graphics.rectangle("fill", x + 72, y + 55, 56, 20, 10, 10)
+    love.graphics.setColor(0.07, 0.08, 0.12, 1)
+    love.graphics.print(card.value, x + 82, y + 59)
+  end
+
+  -- Progress bars
+  love.graphics.setColor(0.13, 0.16, 0.22, 0.96)
+  love.graphics.rectangle("fill", 30, 226, 452, 114, 12, 12)
+  love.graphics.setColor(0.74, 0.82, 0.92, 1)
+  love.graphics.print("ProgressBar + Switch", 42, 238)
+
+  local progressVals = {0.81, 0.66, 0.92}
+  local progressColors = {
+    {0.35, 0.74, 0.98},
+    {0.55, 0.84, 0.56},
+    {0.98, 0.66, 0.39},
+  }
+
+  for i, v in ipairs(progressVals) do
+    local y = 258 + (i - 1) * 24
+    love.graphics.setColor(0.21, 0.25, 0.34, 1)
+    love.graphics.rectangle("fill", 44, y, 300, 14, 7, 7)
+    local col = progressColors[i]
+    love.graphics.setColor(col[1], col[2], col[3], 1)
+    love.graphics.rectangle("fill", 44, y, 300 * v, 14, 7, 7)
+  end
+
+  -- Switch pill
+  local switchOn = (seed % 2) == 0
+  local sx, sy = 370, 258
+  if switchOn then
+    love.graphics.setColor(0.28, 0.72, 0.38, 1)
+  else
+    love.graphics.setColor(0.34, 0.38, 0.50, 1)
+  end
+  love.graphics.rectangle("fill", sx, sy, 96, 38, 19, 19)
+  local knobX = switchOn and (sx + 96 - 34) or (sx + 4)
+  love.graphics.setColor(0.96, 0.98, 1, 1)
+  love.graphics.circle("fill", knobX + 15, sy + 19, 15)
+  love.graphics.setColor(0.10, 0.12, 0.18, 1)
+  love.graphics.print(switchOn and "ON" or "OFF", sx + 32, sy + 11)
+
+  -- Chart panel (bar chart + sparkline)
+  love.graphics.setColor(0.13, 0.16, 0.22, 0.96)
+  love.graphics.rectangle("fill", 30, 356, 452, 130, 12, 12)
+  love.graphics.setColor(0.74, 0.82, 0.92, 1)
+  love.graphics.print("Primitive Chart", 42, 368)
+
+  local bw = 26
+  local gap = 10
+  local baseY = 472
+  for i = 1, 7 do
+    local n = 0.35 + hashNoise(seed * 13 + i * 17, seed * 23 + i * 37, seed) * 0.55
+    local h = n * 86
+    local x = 46 + (i - 1) * (bw + gap)
+    local tint = math.min(1, 0.35 + i * 0.08)
+    love.graphics.setColor(0.20, 0.35 + tint * 0.3, 0.85, 1)
+    love.graphics.rectangle("fill", x, baseY - h, bw, h, 6, 6)
+  end
+
+  love.graphics.setLineWidth(2)
+  love.graphics.setColor(0.95, 0.74, 0.96, 1)
+  local sparkX, sparkY = 340, 448
+  local step = 18
+  local prevX, prevY = nil, nil
+  for i = 0, 7 do
+    local n = hashNoise(seed * 31 + i * 11, seed * 47 + i * 5, seed)
+    local px = sparkX + i * step
+    local py = sparkY - 42 * n
+    if prevX then
+      love.graphics.line(prevX, prevY, px, py)
+    end
+    love.graphics.circle("fill", px, py, 2)
+    prevX, prevY = px, py
+  end
+  love.graphics.setLineWidth(1)
+
+  love.graphics.setColor(1, 1, 1, 0.13)
+  love.graphics.rectangle("line", 12, 12, tw - 24, th - 24, 16, 16)
+
+  love.graphics.setCanvas()
+  love.graphics.pop()
+  return canvas
+end
+
 -- Cache for procedural textures
 local proceduralTextureCache = {}
 
@@ -339,6 +488,8 @@ local function getProceduralTexture(name, seed)
   if not proceduralTextureCache[key] then
     if name == "planet" then
       proceduralTextureCache[key] = generatePlanetTexture(seed)
+    elseif name == "framework-canvas" or name == "framework" or name == "ui-canvas" then
+      proceduralTextureCache[key] = generateFrameworkCanvasTexture(seed)
     end
   end
   return proceduralTextureCache[key]
