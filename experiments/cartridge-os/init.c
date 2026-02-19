@@ -65,9 +65,20 @@ int main(void) {
     else
         puts("  WARNING: /dev/dri/card0 missing");
     if (access("/dev/dri/renderD128", F_OK) == 0)
-        puts("  DRM: /dev/dri/renderD128 ready\n");
+        puts("  DRM: /dev/dri/renderD128 ready");
     else
-        puts("  DRM: /dev/dri/renderD128 not found (EGL render node)\n");
+        puts("  DRM: /dev/dri/renderD128 not found (EGL render node)");
+
+    /* Sanity check: confirm we have virtio-gpu (1af4:1050), not stdvga (1234:1111) */
+    puts("  GPU PCI:");
+    char *gpucheck[] = { "/bin/sh", "-c",
+        "for d in /sys/bus/pci/devices/*; do "
+        "  if [ -f \"$d/class\" ] && grep -q '^0x030' \"$d/class\"; then "
+        "    printf '    %s vendor=%s device=%s\\n' "
+        "      \"$(basename $d)\" \"$(cat $d/vendor)\" \"$(cat $d/device)\"; "
+        "  fi; "
+        "done", NULL };
+    run_wait(gpucheck);
     fflush(stdout);
 
     /* ── Environment ─────────────────────────────────────────────────────── */
@@ -78,6 +89,10 @@ int main(void) {
     setenv("EGL_PLATFORM",       "gbm",               1);
     setenv("MESA_EGL_NO_X11",    "1",                 1);
     setenv("MESA_LOADER_DRIVER_OVERRIDE", "virtio_gpu", 1);
+    /* SDL2's KMSDRM backend hardcodes GBM_FORMAT_ARGB8888 for scanout
+     * surfaces. virtio-gpu only supports XRGB8888 for drmModeSetCrtc.
+     * This shim intercepts gbm_surface_create and swaps the format. */
+    setenv("LD_PRELOAD",  "/app/gbm_format_shim.so",  1);
 
     /* ── Launch luajit as child (not exec — so crash = shell, not panic) ─── */
     puts("  Launching iLoveReact...\n");

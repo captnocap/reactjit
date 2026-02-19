@@ -110,12 +110,34 @@ cp "$SCRIPT_DIR/app/main.lua"   "$STAGING/app/"
 cp "$SCRIPT_DIR/app/gl.lua"     "$STAGING/app/"
 cp "$SCRIPT_DIR/app/font.lua"   "$STAGING/app/"
 cp "$SCRIPT_DIR/app/probe.lua"  "$STAGING/app/" 2>/dev/null || true
+cp "$SCRIPT_DIR/app/gbm_format_shim.so" "$STAGING/app/" 2>/dev/null || true
 
 # GBM's DRI loader has /usr/lib/dri hardcoded at compile time.
 # Alpine installs DRI drivers under xorg/modules/dri — symlink so GBM finds them.
 # Must rm first: mesa creates /usr/lib/dri/ as a real directory.
 rm -rf "$STAGING/usr/lib/dri"
 ln -s xorg/modules/dri "$STAGING/usr/lib/dri"
+
+# SDL2's KMSDRM backend hardcodes GBM_FORMAT_ARGB8888 (fourcc 'AR24') for scanout
+# surfaces. virtio-gpu only supports XRGB8888 for drmModeSetCrtc/drmModePageFlip.
+# Binary-patch SDL2 to use XRGB8888 instead.
+SDL2_LIB=$(find "$STAGING/usr/lib" -name 'libSDL2-2.0.so.*' -type f | head -1)
+if [ -n "$SDL2_LIB" ]; then
+  PATCHED=$(python3 -c "
+import sys
+with open('$SDL2_LIB', 'rb') as f: data = bytearray(f.read())
+old, new = bytes([0x41,0x52,0x32,0x34]), bytes([0x58,0x52,0x32,0x34])
+n = 0
+i = 0
+while True:
+    j = data.find(old, i)
+    if j == -1: break
+    data[j:j+4] = new; n += 1; i = j + 4
+with open('$SDL2_LIB', 'wb') as f: f.write(data)
+print(n)
+")
+  echo "        SDL2 patched: ARGB8888→XRGB8888 ($PATCHED occurrences)"
+fi
 
 echo "        staging: $(du -sh "$STAGING" | cut -f1)"
 echo ""

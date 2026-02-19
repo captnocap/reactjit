@@ -37,14 +37,15 @@ ffi.cdef[[
 local sdl = ffi.load("SDL2")
 
 local SDL_INIT_VIDEO        = 0x00000020
-local SDL_WINDOW_OPENGL     = 0x00000002
-local SDL_WINDOW_SHOWN      = 0x00000004
-local SDL_WINDOW_FULLSCREEN = 0x00000001
+local SDL_WINDOW_OPENGL              = 0x00000002
+local SDL_WINDOW_SHOWN               = 0x00000004
+local SDL_WINDOW_FULLSCREEN          = 0x00000001
+local SDL_WINDOW_FULLSCREEN_DESKTOP  = 0x00001001
 local SDL_WINDOWPOS_UNDEFINED = 0x1FFF0000
 local SDL_QUIT_EVENT        = 0x100
 
--- In kmsdrm mode the window covers the full screen native resolution
-local W, H = 1280, 720
+-- kmsdrm will pick the native mode; these are just initial hints
+local W, H = 0, 0
 
 -- ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -64,20 +65,25 @@ sdl.SDL_GL_SetAttribute(5,  1)   -- GL_DOUBLEBUFFER
 sdl.SDL_GL_SetAttribute(6,  24)  -- GL_DEPTH_SIZE
 sdl.SDL_GL_SetAttribute(7,  8)   -- GL_STENCIL_SIZE
 
-io.write("[cartridge] SDL_CreateWindow (fullscreen)...\n"); io.flush()
+-- FULLSCREEN_DESKTOP lets kmsdrm pick the native CRTC mode instead of
+-- trying to modeset to a specific resolution (which causes ENOSPC pageflip
+-- errors on virtio-gpu when the requested mode doesn't match).
+io.write("[cartridge] SDL_CreateWindow (fullscreen desktop)...\n"); io.flush()
 local window = sdl.SDL_CreateWindow(
   "CartridgeOS",
   SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
   W, H,
-  bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_FULLSCREEN)
+  bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_FULLSCREEN_DESKTOP)
 )
 if window == nil then
-  io.write("[cartridge] fullscreen failed: " .. ffi.string(sdl.SDL_GetError()) .. ", trying windowed\n"); io.flush()
+  io.write("[cartridge] fullscreen_desktop failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n"); io.flush()
+  -- fallback: try real fullscreen with explicit mode
+  W, H = 1280, 720
   window = sdl.SDL_CreateWindow(
     "CartridgeOS",
     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
     W, H,
-    bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN)
+    bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_FULLSCREEN)
   )
 end
 if window == nil then
