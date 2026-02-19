@@ -955,6 +955,19 @@ function ReactLove.init(config)
     io.write("[react-love] Media scanner loaded\n"); io.flush()
   end
 
+  -- Register map RPC handlers (panTo, zoomTo, flyTo, fitBounds, etc.)
+  if mapmod then
+    local mapRpcMethods = {
+      "map:panTo", "map:zoomTo", "map:flyTo", "map:fitBounds",
+      "map:setBearing", "map:setPitch", "map:getView",
+      "map:downloadRegion", "map:downloadProgress", "map:cacheStats",
+    }
+    for _, method in ipairs(mapRpcMethods) do
+      rpcHandlers[method] = function(args) return mapmod.handleRPC(method, args) end
+    end
+    io.write("[react-love] Map module loaded\n"); io.flush()
+  end
+
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
@@ -2716,6 +2729,12 @@ function ReactLove.wheelmoved(x, y)
   if hit.type == "TextEditor" then
     texteditor.handleWheel(hit, x, y)
     return  -- no bridge traffic
+  end
+
+  -- Map2D handles zoom via wheel entirely in Lua
+  if hit.type == "Map2D" and mapmod then
+    mapmod.handleWheel(hit, x, y)
+    return  -- no bridge traffic (map emits viewchange events)
   end
 
   -- Find the nearest ancestor scroll container that can consume this wheel
