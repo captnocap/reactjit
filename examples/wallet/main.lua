@@ -4,7 +4,7 @@ function love.load()
   love.graphics.setBackgroundColor(0.04, 0.04, 0.06)
   ReactLove.init({
     mode = "native",
-    bundlePath = "bundle.js",
+    bundlePath = "love/bundle.js",
     libpath = "lib/libquickjs",
     tor = { autoStart = true },
   })

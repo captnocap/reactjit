@@ -23,7 +23,7 @@ local fps = 0
 function love.load()
   ReactLove.init({
     mode = "native",
-    bundlePath = "bundle.js",
+    bundlePath = "love/bundle.js",
   })
 end
 
