@@ -28,6 +28,7 @@ local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
 local GameModule = nil    -- Injected at init time via Painter.init()
+local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
@@ -680,6 +681,14 @@ end
 --- @param stencilDepth number Current stencil nesting depth (default 0)
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
+
+  -- Non-visual capability nodes (Audio, Timer, etc.) are managed by capabilities.lua.
+  -- They don't paint anything — skip entirely.
+  if not CapabilitiesModule then
+    local ok, mod = pcall(require, "lua.capabilities")
+    if ok then CapabilitiesModule = mod end
+  end
+  if CapabilitiesModule and CapabilitiesModule.isNonVisual(node.type) then return end
 
   -- 3D child nodes (Mesh3D, Camera3D, Light3D, etc.) are rendered by scene3d.lua,
   -- not by the 2D painter. Skip them entirely.

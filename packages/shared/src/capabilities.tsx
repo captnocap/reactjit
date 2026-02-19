@@ -1,0 +1,44 @@
+/**
+ * Typed sugar components for declarative native capabilities.
+ *
+ * Each component is a one-liner wrapper around <Native>.
+ * The music person writes:  <Audio src="beat.mp3" playing />
+ * The AI writes:            <Audio src="beat.mp3" playing volume={0.8} />
+ * Nobody talks to a bridge.
+ *
+ * @example
+ * import { Audio, Timer } from '@ilovereact/core';
+ *
+ * // Play audio
+ * <Audio src="music/track.mp3" playing loop volume={0.8} />
+ *
+ * // Countdown timer
+ * <Timer interval={1000} onTick={() => setSeconds(s => s - 1)} />
+ */
+
+import React from 'react';
+import { Native } from './Native';
+import type { AudioProps, TimerProps } from './types';
+
+/**
+ * Declarative audio playback.
+ *
+ * @example
+ * <Audio src="beat.mp3" playing />
+ * <Audio src="ambient.ogg" playing loop volume={0.3} />
+ * <Audio src="track.mp3" playing onProgress={(e) => setPos(e.position)} onEnded={() => next()} />
+ */
+export function Audio(props: AudioProps) {
+  return <Native type="Audio" {...props} />;
+}
+
+/**
+ * Declarative timer.
+ *
+ * @example
+ * <Timer interval={1000} onTick={() => setCount(c => c + 1)} />
+ * <Timer interval={5000} repeat={false} running={gameStarted} onTick={() => timeout()} />
+ */
+export function Timer(props: TimerProps) {
+  return <Native type="Timer" {...props} />;
+}

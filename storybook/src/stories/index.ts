@@ -13,6 +13,7 @@ import { BoxNestedStory } from './BoxNested';
 import { TextStylesStory } from './TextStyles';
 import { TextTruncationStory } from './TextTruncation';
 import { ImageBasicStory } from './ImageBasic';
+import { ImageGalleryStory } from './ImageGalleryStory';
 import { FlexRowStory } from './FlexRow';
 import { FlexColumnStory } from './FlexColumn';
 import { FlexWrapStory } from './FlexWrap';
@@ -93,6 +94,7 @@ import { ControlsStory } from './ControlsStory';
 import { ThemeStory } from './ThemeStory';
 import { ThemeSwitcherStory } from './ThemeSwitcherStory';
 import SettingsMenuStory from './SettingsMenuStory';
+import { CapabilitiesStory } from './CapabilitiesStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -101,6 +103,7 @@ export const stories: StoryDef[] = [
   { id: 'text-styles', title: 'Text', category: 'Primitives', component: TextStylesStory },
   { id: 'text-truncation', title: 'Text Truncation', category: 'Primitives', component: TextTruncationStory },
   { id: 'image-basic', title: 'Image', category: 'Primitives', component: ImageBasicStory },
+  { id: 'image-gallery', title: 'Image Gallery', category: 'Primitives', component: ImageGalleryStory },
   { id: 'video', title: 'Video', category: 'Primitives', component: VideoStory },
   { id: 'file-drop', title: 'File Drop', category: 'Primitives', component: FileDropStory },
   { id: 'font-showcase', title: 'Font Packs', category: 'Primitives', component: FontShowcaseStory },
@@ -212,6 +215,9 @@ export const stories: StoryDef[] = [
   // Audio
   { id: 'audio-rack', title: 'Audio Rack', category: 'Audio', component: AudioRackStory },
   { id: 'controls', title: 'Controls', category: 'Audio', component: ControlsStory },
+
+  // Capabilities (declarative native)
+  { id: 'capabilities', title: 'Capabilities', category: 'Capabilities', component: CapabilitiesStory },
 
   // Theme
   { id: 'theme', title: 'Theme System', category: 'Theme', component: ThemeStory },

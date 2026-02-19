@@ -74,6 +74,15 @@ export { Portal, PortalHost, type PortalProps, type PortalHostProps } from './Po
 // Components
 export { Pressable, type PressableProps, type PressableState, type HitSlop } from './Pressable';
 export { Modal, type ModalProps } from './Modal';
+export {
+  ImageGallery,
+  type ImageGalleryProps,
+} from './ImageGallery';
+export {
+  ImageViewerModal,
+  type ImageViewerModalProps,
+  type ImageGalleryItem,
+} from './ImageViewerModal';
 
 // TextInput
 export { TextInput } from './TextInput';
@@ -205,3 +214,9 @@ export { ConversationCard, type ConversationCardProps } from './ConversationCard
 // Debug tools
 export { useDebug, getDebugData, registerDebug } from './useDebug';
 export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
+
+// Declarative native capabilities
+export { Native } from './Native';
+export { Audio, Timer } from './capabilities';
+export { useCapabilities } from './useCapabilities';
+export type { NativeProps, AudioProps, TimerProps, CapabilitySchema } from './types';

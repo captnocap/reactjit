@@ -365,13 +365,15 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     -- Proportional fallback: empty surfaces get 1/4 of parent dimension
     -- instead of collapsing to zero. Only when parent size is definite
     -- (not the 9999 auto-height sentinel).
-    if isSurface(node) then
+    -- Skip nodes with flexGrow — they're actively flex-managed, and their
+    -- cross-axis size comes from alignItems:stretch, not proportional fallback.
+    if isSurface(node) and (s.flexGrow or 0) <= 0 then
       local parentMain = isRow and (pw or 0) or (ph or 0)
       if parentMain > 0 and parentMain < AUTO_SENTINEL then
         return math.max(padMain, parentMain / 4)
       end
     end
-    return padMain  -- Empty container (non-surface or indefinite parent)
+    return padMain  -- Empty container (non-surface, flex-managed, or indefinite parent)
   end
 
   local gap = ru(s.gap, isRow and pw or ph) or 0
@@ -443,6 +445,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- Its children are NOT laid out.
   -- ==================================================================
   if s.display == "none" then
+    node.computed = { x = px, y = py, w = 0, h = 0 }
+    return
+  end
+
+  -- Non-visual capability nodes (Audio, Timer, etc.) have no layout.
+  if not Layout._capabilities then
+    local ok, mod = pcall(require, "lua.capabilities")
+    if ok then Layout._capabilities = mod end
+  end
+  if Layout._capabilities and Layout._capabilities.isNonVisual(node.type) then
     node.computed = { x = px, y = py, w = 0, h = 0 }
     return
   end
@@ -1072,7 +1084,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
         elseif not isRow and ci.grow > 0 then
           child._stretchH = ch_final
         elseif not isRow and isSurface(child) and ch_final > 0
-               and #(child.children or {}) == 0 then
+               and #(child.children or {}) == 0
+               and (cs.flexGrow or 0) <= 0 then
           child._stretchH = ch_final
         end
       end
@@ -1147,6 +1160,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- (which was computed from the proportional basis). For absolute children,
   -- ph is the estimated height from estimateIntrinsicMain.
   if not isScrollContainer and isSurface(node) and h < 1
+     and (s.flexGrow or 0) <= 0
      and (ph or 0) > 0 and (ph or 0) < AUTO_SENTINEL then
     h = ph
   end

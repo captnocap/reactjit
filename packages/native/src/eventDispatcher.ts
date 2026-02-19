@@ -311,6 +311,18 @@ export function initEventDispatching(bridge: Subscribable): void {
   bridge.subscribe('select:change', (event: LoveEvent) => {
     dispatchToTargetOnly(event, 'onValueChange');
   });
+
+  // ── Capability events (Audio, Timer, etc.) ───────────
+  //
+  // Single subscription handles ALL capabilities. The Lua side specifies
+  // which handler to invoke via event.handler (e.g. "onProgress", "onTick").
+  // No per-capability wiring needed — new capabilities just work.
+
+  bridge.subscribe('capability', (event: LoveEvent) => {
+    if (event.handler) {
+      dispatchToTargetOnly(event, event.handler);
+    }
+  });
 }
 
 /**

@@ -241,6 +241,8 @@ cli-setup: setup
 	mkdir -p cli/runtime/lua/audio/modules
 	cp lua/audio/*.lua cli/runtime/lua/audio/
 	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/
+	mkdir -p cli/runtime/lua/capabilities
+	cp lua/capabilities/*.lua cli/runtime/lua/capabilities/
 	cp $(QUICKJS_DIR)/libquickjs.so cli/runtime/lib/
 	@echo "  Compiling ft_helper.so (FreeType bridge for SDL2 target)..."
 	@zig build ft-helper \

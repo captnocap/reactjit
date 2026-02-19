@@ -63,6 +63,7 @@ local spellcheck = nil                        -- spellcheck.lua (dictionary-base
 local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
 local lastDragHoverId = nil                   -- node ID of current drag-hover target
 local audioEngine = nil                       -- audio/engine.lua (modular audio framework)
+local capabilities = nil                      -- capabilities.lua (declarative capability registry)
 local httpserver = nil                        -- httpserver.lua (HTTP server for static files + API routes)
 local browse   = nil                          -- browse.lua (TCP client for stealth browse session)
 local sysmon   = nil                          -- sysmon.lua (system monitoring: CPU, memory, processes, GPU, etc.)
@@ -900,6 +901,17 @@ function ReactLove.init(config)
     io.write("[react-love] Audio engine loaded\n"); io.flush()
   end
 
+  -- Load declarative capabilities (Audio, Timer, etc.)
+  local capOk, capMod = pcall(require, "lua.capabilities")
+  if capOk and capMod then
+    capabilities = capMod
+    capabilities.loadAll()
+    for method, handler in pairs(capabilities.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    io.write("[react-love] Capabilities registry loaded\n"); io.flush()
+  end
+
   -- Load HTTP server (optional — graceful degradation if not available)
   local hsOk, hsMod = pcall(require, "lua.httpserver")
   if hsOk and hsMod then
@@ -1379,6 +1391,11 @@ function ReactLove.update(dt)
     gamemod.syncWithTree(tree.getNodes())
     gamemod.updateAll(dt, pushEvent)
     gamemod.renderAll()
+  end
+
+  -- 8e. Sync declarative capabilities (Audio, Timer, etc.) with tree
+  if capabilities then
+    capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
   end
 
   -- 9. Poll video status and playback events, emit to JS

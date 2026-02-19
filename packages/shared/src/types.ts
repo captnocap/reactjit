@@ -221,6 +221,14 @@ export interface LoveEvent {
   filePath?: string;
   fileSize?: number;
 
+  // Capability events (Audio, Timer, etc.)
+  handler?: string;         // Which handler to invoke (e.g. "onProgress", "onTick")
+  position?: number;        // Audio: current playback position
+  duration?: number;        // Audio: total duration
+  count?: number;           // Timer: tick count
+  elapsed?: number;         // Timer: elapsed time
+  message?: string;         // Error message
+
   // Bubbling support
   bubblePath?: number[];
   currentTarget?: number;
@@ -536,4 +544,65 @@ export interface ContextMenuProps {
   onClose?: () => void;
   children?: React.ReactNode;
   key?: string | number;
+}
+
+// ── Declarative Capability Components ────────────────────
+
+/**
+ * Props for the generic <Native> component.
+ * Passes all props through to the Lua capability registry.
+ */
+export interface NativeProps {
+  type: string;
+  [key: string]: any;
+}
+
+/**
+ * Declarative audio playback.
+ *
+ * @example
+ * <Audio src="beat.mp3" playing loop volume={0.8} />
+ * <Audio src="ambient.ogg" playing volume={0.3} onEnded={() => next()} />
+ */
+export interface AudioProps {
+  src?: string;
+  playing?: boolean;
+  volume?: number;
+  loop?: boolean;
+  pitch?: number;
+  onProgress?: (event: LoveEvent) => void;
+  onEnded?: (event: LoveEvent) => void;
+  onError?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
+ * Declarative timer.
+ *
+ * @example
+ * <Timer interval={1000} onTick={() => setCount(c => c + 1)} />
+ * <Timer interval={5000} repeat={false} onTick={() => showTimeout()} />
+ */
+export interface TimerProps {
+  interval: number;
+  repeat?: boolean;
+  running?: boolean;
+  onTick?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
+ * Schema returned by capabilities:list RPC for AI discovery.
+ */
+export interface CapabilitySchema {
+  schema: Record<string, {
+    type: string;
+    desc?: string;
+    default?: any;
+    min?: number;
+    max?: number;
+    values?: string[];
+  }>;
+  events: string[];
+  visual: boolean;
 }
