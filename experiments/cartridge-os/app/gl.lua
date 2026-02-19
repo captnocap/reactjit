@@ -41,7 +41,10 @@ ffi.cdef[[
   unsigned int glGetError(void);
 ]]
 
-local lib = ffi.load("GL")
+-- Alpine ships libGL.so.1 (versioned soname only, no dev symlink).
+-- Try the unversioned name first (works on most distros), fall back to soname.
+local ok, lib = pcall(ffi.load, "GL")
+if not ok then lib = ffi.load("libGL.so.1") end
 
 local GL = setmetatable({
   COLOR_BUFFER_BIT   = 0x4000,
@@ -53,6 +56,7 @@ local GL = setmetatable({
   MODELVIEW  = 0x1700,
   TRIANGLES      = 0x0004,
   TRIANGLE_FAN   = 0x0006,
+  TRIANGLE_STRIP = 0x0005,
   QUADS          = 0x0007,
   TEXTURE_2D         = 0x0DE1,
   RGBA               = 0x1908,

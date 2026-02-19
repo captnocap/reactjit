@@ -78,6 +78,8 @@ mkdir -p "$STAGING"
     libgcc \
     font-liberation \
     linux-virt \
+    eudev-libs \
+    strace \
     2>&1 | grep -E "^(\(|OK:)" || true
 echo ""
 
@@ -104,9 +106,10 @@ cp "$DIST_DIR/init" "$STAGING/init"
 cp "$REPO_ROOT/zig-out/lib/libft_helper.so" "$STAGING/app/ft_helper.so"
 
 # App Lua files
-cp "$SCRIPT_DIR/app/main.lua"  "$STAGING/app/"
-cp "$SCRIPT_DIR/app/gl.lua"    "$STAGING/app/"
-cp "$SCRIPT_DIR/app/font.lua"  "$STAGING/app/"
+cp "$SCRIPT_DIR/app/main.lua"   "$STAGING/app/"
+cp "$SCRIPT_DIR/app/gl.lua"     "$STAGING/app/"
+cp "$SCRIPT_DIR/app/font.lua"   "$STAGING/app/"
+cp "$SCRIPT_DIR/app/probe.lua"  "$STAGING/app/" 2>/dev/null || true
 
 # GBM's DRI loader has /usr/lib/dri hardcoded at compile time.
 # Alpine installs DRI drivers under xorg/modules/dri — symlink so GBM finds them.

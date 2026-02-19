@@ -33,6 +33,10 @@ int main(void) {
     int con = open("/dev/console", O_RDWR);
     if (con >= 0) { dup2(con, 0); dup2(con, 1); dup2(con, 2); if (con > 2) close(con); }
 
+    /* ── Install busybox applets (cat, ls, modprobe, etc.) ────────────────── */
+    char *bb[] = { "/bin/busybox", "--install", "-s", "/bin", NULL };
+    run_wait(bb);
+
     /* ── Banner ──────────────────────────────────────────────────────────── */
     puts("\n  CartridgeOS v0.1");
     puts("  iLoveReact  --  no X11, no Wayland, no display server");
@@ -69,20 +73,11 @@ int main(void) {
     /* ── Environment ─────────────────────────────────────────────────────── */
     setenv("SDL_VIDEODRIVER",    "kmsdrm",            1);
     setenv("LD_LIBRARY_PATH",    "/app:/usr/lib:/lib", 1);
-    /* Alpine installs Mesa DRI drivers under xorg/modules/dri, not /usr/lib/dri.
-     * Without this Mesa's DRI loader cannot find the virtio_gpu / swrast drivers
-     * and crashes with a NULL deref inside gbm_create_device(). */
     setenv("LIBGL_DRIVERS_PATH", "/usr/lib/xorg/modules/dri", 1);
     setenv("LIBGL_DRIVERS_DIR",  "/usr/lib/xorg/modules/dri", 1);
-    /* GBM is the EGL platform SDL2's kmsdrm backend uses. */
     setenv("EGL_PLATFORM",       "gbm",               1);
-    /* Stop Mesa probing the X11 EGL platform (crashes with no X display). */
     setenv("MESA_EGL_NO_X11",    "1",                 1);
-    /* Lead 2: skip driver name detection, load virtio_gpu_dri.so directly. */
     setenv("MESA_LOADER_DRIVER_OVERRIDE", "virtio_gpu", 1);
-    /* Mesa verbose output — helps identify the crash location */
-    setenv("LIBGL_DEBUG",        "verbose",           1);
-    setenv("EGL_LOG_LEVEL",      "debug",             1);
 
     /* ── Launch luajit as child (not exec — so crash = shell, not panic) ─── */
     puts("  Launching iLoveReact...\n");
