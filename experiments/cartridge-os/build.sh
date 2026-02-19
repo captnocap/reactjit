@@ -85,6 +85,7 @@ echo ""
 
 # ── Step 4: Assemble final staging tree ──────────────────────────────────
 echo "  [4/5] Assembling initramfs..."
+BEFORE_TRIM=$(du -sm "$STAGING" | cut -f1)
 
 # Extract kernel from the installed linux-virt package
 cp "$STAGING/boot/vmlinuz-virt" "$DIST_DIR/vmlinuz"
@@ -95,6 +96,51 @@ rm -rf "$STAGING/boot"
 
 # Remove apk metadata (not needed at runtime)
 rm -rf "$STAGING/etc/apk" "$STAGING/lib/apk" "$STAGING/var"
+
+# ── Trim: remove unused GPU drivers, X11, and other bloat ────────────
+# gallium-pipe/ has per-GPU pipe drivers (iris, radeonsi, nouveau, etc.)
+# but NO pipe_virtio — virgl is compiled into libgallium itself.
+rm -rf "$STAGING/usr/lib/gallium-pipe"
+
+# Kernel modules: keep only virtio-gpu + its DRM dependency chain
+KVER=$(ls "$STAGING/lib/modules/" | head -1)
+if [ -n "$KVER" ]; then
+    MODDIR="$STAGING/lib/modules/$KVER"
+    # Preserve the modules we need
+    mkdir -p /tmp/cartridge-mods
+    cp "$MODDIR/kernel/drivers/gpu/drm/virtio/virtio-gpu.ko.gz" /tmp/cartridge-mods/ 2>/dev/null || true
+    cp "$MODDIR/modules.dep" /tmp/cartridge-mods/ 2>/dev/null || true
+    cp "$MODDIR/modules.alias" /tmp/cartridge-mods/ 2>/dev/null || true
+    cp "$MODDIR/modules.dep.bin" /tmp/cartridge-mods/ 2>/dev/null || true
+    cp "$MODDIR/modules.alias.bin" /tmp/cartridge-mods/ 2>/dev/null || true
+    # Wipe and restore
+    rm -rf "$MODDIR/kernel"
+    mkdir -p "$MODDIR/kernel/drivers/gpu/drm/virtio"
+    cp /tmp/cartridge-mods/virtio-gpu.ko.gz "$MODDIR/kernel/drivers/gpu/drm/virtio/" 2>/dev/null || true
+    cp /tmp/cartridge-mods/modules.dep "$MODDIR/" 2>/dev/null || true
+    cp /tmp/cartridge-mods/modules.alias "$MODDIR/" 2>/dev/null || true
+    cp /tmp/cartridge-mods/modules.dep.bin "$MODDIR/" 2>/dev/null || true
+    cp /tmp/cartridge-mods/modules.alias.bin "$MODDIR/" 2>/dev/null || true
+    rm -rf /tmp/cartridge-mods
+fi
+
+# Fonts: keep only LiberationSans-Regular (the one font.lua actually loads)
+find "$STAGING/usr/share/fonts" -type f ! -name "LiberationSans-Regular.ttf" -delete 2>/dev/null
+find "$STAGING/usr/share/fonts" -type d -empty -delete 2>/dev/null
+
+# X11 data (locale, xkb configs — not needed for kmsdrm)
+rm -rf "$STAGING/usr/share/X11"
+
+# strace (debug tool — keep binary but don't include in prod by default)
+rm -f "$STAGING/usr/bin/strace"
+
+# Other unnecessary data
+rm -rf "$STAGING/usr/share/doc" "$STAGING/usr/share/man" "$STAGING/usr/share/info"
+rm -rf "$STAGING/usr/share/misc" "$STAGING/usr/share/terminfo"
+rm -rf "$STAGING/etc/udev" "$STAGING/usr/share/hwdata"
+
+AFTER_TRIM=$(du -sm "$STAGING" | cut -f1)
+echo "        trimmed: ${BEFORE_TRIM}M → ${AFTER_TRIM}M (saved $((BEFORE_TRIM - AFTER_TRIM))M)"
 
 # Create required mount points
 mkdir -p "$STAGING"/{dev,proc,sys,tmp,app}
@@ -150,3 +196,46 @@ echo ""
 
 echo "  Done! Boot with: bash experiments/cartridge-os/run.sh"
 echo ""
+
+# ── Step 6: Create bootable ISO ─────────────────────────────────────────
+# Wraps vmlinuz + initrd.cpio.gz in a GRUB2 hybrid ISO (boots on BIOS and
+# UEFI). Requires: grub-pc-bin, grub-efi-amd64-bin, xorriso.
+# Install: sudo apt install grub-pc-bin grub-efi-amd64-bin xorriso mtools
+
+ISO_OUT="$DIST_DIR/cartridge-os.iso"
+ISO_STAGE="/tmp/cartridge-iso-staging"
+
+if ! command -v grub-mkrescue &>/dev/null; then
+    echo "  [6/6] ISO: SKIPPED (grub-mkrescue not found)"
+    echo "        Install: sudo apt install grub-pc-bin grub-efi-amd64-bin xorriso mtools"
+    echo ""
+else
+    echo "  [6/6] Creating bootable ISO..."
+    rm -rf   "$ISO_STAGE"
+    mkdir -p "$ISO_STAGE/boot/grub"
+
+    cp "$DIST_DIR/vmlinuz"        "$ISO_STAGE/boot/"
+    cp "$DIST_DIR/initrd.cpio.gz" "$ISO_STAGE/boot/"
+
+    cat > "$ISO_STAGE/boot/grub/grub.cfg" << 'GRUBCFG'
+set timeout=3
+set default=0
+
+menuentry "CartridgeOS" {
+    linux  /boot/vmlinuz rdinit=/init quiet loglevel=0
+    initrd /boot/initrd.cpio.gz
+}
+
+menuentry "CartridgeOS (debug)" {
+    linux  /boot/vmlinuz rdinit=/init console=ttyS0,115200 loglevel=7
+    initrd /boot/initrd.cpio.gz
+}
+GRUBCFG
+
+    grub-mkrescue -o "$ISO_OUT" "$ISO_STAGE" 2>/dev/null
+    rm -rf "$ISO_STAGE"
+
+    echo "        iso:  $(du -sh "$ISO_OUT" | cut -f1)  →  $ISO_OUT"
+    echo "        Test: bash experiments/cartridge-os/run-iso.sh"
+    echo ""
+fi
