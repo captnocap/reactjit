@@ -29,6 +29,37 @@ local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
 
 local Layout = {}
 
+-- ============================================================================
+-- Proportional surface fallback
+-- ============================================================================
+-- "Surface" node types are visual canvases (boxes, images, video) that should
+-- occupy proportional space when unsized, rather than collapsing to zero.
+-- Interactive elements (buttons, inputs, text) size from their content instead.
+-- When a surface has no explicit dimensions and no children to measure from,
+-- it falls back to 1/4 of its parent's available space on the relevant axis.
+-- This cascades naturally: window 800 → box 200 → nested box 50.
+
+local SURFACE_TYPES = {
+  View     = true,
+  Image    = true,
+  Video    = true,
+  VideoPlayer = true,
+  Scene3D  = true,
+}
+
+--- Check if a node is a visual surface (eligible for proportional fallback).
+--- Excludes scroll containers (they intentionally need explicit height).
+local function isSurface(node)
+  if not SURFACE_TYPES[node.type] then return false end
+  local s = node.style or {}
+  if s.overflow == "scroll" then return false end
+  return true
+end
+
+-- Sentinel value used for auto-height containers where height is unknown.
+-- Proportional fallback must not use this as a base dimension.
+local AUTO_SENTINEL = 9900
+
 --- Initialize the layout engine with target-specific dependencies.
 --- Must be called before any layout operations.
 --- @param config table  { measure = MeasureModule }
@@ -331,7 +362,16 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
   -- 3. Container nodes: recursively estimate from children
   local children = node.children or {}
   if #children == 0 then
-    return padMain  -- Empty container
+    -- Proportional fallback: empty surfaces get 1/4 of parent dimension
+    -- instead of collapsing to zero. Only when parent size is definite
+    -- (not the 9999 auto-height sentinel).
+    if isSurface(node) then
+      local parentMain = isRow and (pw or 0) or (ph or 0)
+      if parentMain > 0 and parentMain < AUTO_SENTINEL then
+        return math.max(padMain, parentMain / 4)
+      end
+    end
+    return padMain  -- Empty container (non-surface or indefinite parent)
   end
 
   local gap = ru(s.gap, isRow and pw or ph) or 0
@@ -1023,11 +1063,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
       -- Signal parent-determined height to child so its layoutNode uses it
       -- instead of auto-sizing (which would give 0 for scroll containers, etc.)
-      -- Covers: row cross-axis stretch, column main-axis flex-grow
+      -- Covers: row cross-axis stretch, column main-axis flex-grow,
+      -- and empty surface nodes whose proportional basis would be lost
+      -- if the child self-sized to zero in its own layoutNode.
       if ci.explicitH == nil then
         if isRow and childAlign == "stretch" then
           child._stretchH = ch_final
         elseif not isRow and ci.grow > 0 then
+          child._stretchH = ch_final
+        elseif not isRow and isSurface(child) and ch_final > 0
+               and #(child.children or {}) == 0 then
           child._stretchH = ch_final
         end
       end
@@ -1092,6 +1137,18 @@ function Layout.layoutNode(node, px, py, pw, ph)
       -- contentMainEnd already includes padT (from cc.y - y), so only add padB.
       h = contentMainEnd + padB
     end
+  end
+
+  -- Proportional surface fallback (safety net):
+  -- Covers absolute-positioned surfaces and edge cases where _stretchH
+  -- was not signaled by the parent. If a surface node ended up with near-zero
+  -- height and the parent provided a definite height, accept the parent's
+  -- allocation. For flex children, ph is already the flex-distributed height
+  -- (which was computed from the proportional basis). For absolute children,
+  -- ph is the estimated height from estimateIntrinsicMain.
+  if not isScrollContainer and isSurface(node) and h < 1
+     and (ph or 0) > 0 and (ph or 0) < AUTO_SENTINEL then
+    h = ph
   end
 
   -- Final min/max height clamping for auto-height
