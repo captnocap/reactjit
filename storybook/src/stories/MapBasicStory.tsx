@@ -25,7 +25,7 @@ function MapControls() {
 }
 
 export function MapBasicStory() {
-  const [markers, setMarkers] = useState([
+  const [markers] = useState([
     { id: 1, position: [51.505, -0.09] as [number, number], label: 'London' },
     { id: 2, position: [48.8566, 2.3522] as [number, number], label: 'Paris' },
     { id: 3, position: [52.52, 13.405] as [number, number], label: 'Berlin' },
@@ -39,10 +39,26 @@ export function MapBasicStory() {
   ];
 
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
+  const [pitch, setPitch] = useState(0);
+  const [bearing, setBearing] = useState(0);
 
   const handleViewChange = useCallback((event: any) => {
     // View changes from pan/zoom are handled reactively via useMapView
   }, []);
+
+  const pitchPresets = [
+    { label: 'Flat', value: 0 },
+    { label: '30', value: 30 },
+    { label: '45', value: 45 },
+    { label: '60', value: 60 },
+  ];
+
+  const bearingPresets = [
+    { label: 'N', value: 0 },
+    { label: 'E', value: 90 },
+    { label: 'S', value: 180 },
+    { label: 'W', value: 270 },
+  ];
 
   return (
     <Box style={{ width: '100%', height: '100%' }}>
@@ -70,6 +86,8 @@ export function MapBasicStory() {
         <Map
           center={[50.0, 2.0]}
           zoom={5}
+          pitch={pitch}
+          bearing={bearing}
           style={{ width: '100%', height: '100%' }}
           onViewChange={handleViewChange}
         >
@@ -106,31 +124,81 @@ export function MapBasicStory() {
         <MapControls />
       </Box>
 
-      {/* City buttons */}
+      {/* Controls bar */}
       <Box style={{
         height: 44,
         backgroundColor: '#16213e',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         paddingLeft: 12,
+        paddingRight: 12,
         width: '100%',
       }}>
+        {/* City selectors */}
         {markers.map(m => (
           <Pressable
             key={m.id}
             onClick={() => setSelectedCity(m.label)}
             style={{
               backgroundColor: selectedCity === m.label ? '#3498db' : '#2a2a4a',
-              paddingLeft: 12,
-              paddingRight: 12,
-              paddingTop: 6,
-              paddingBottom: 6,
+              paddingLeft: 10,
+              paddingRight: 10,
+              paddingTop: 5,
+              paddingBottom: 5,
               borderRadius: 4,
             }}
           >
-            <Text fontSize={12} style={{ color: '#ffffff' }}>
+            <Text fontSize={11} style={{ color: '#ffffff' }}>
               {m.label}
+            </Text>
+          </Pressable>
+        ))}
+
+        {/* Separator */}
+        <Box style={{ width: 1, height: 24, backgroundColor: '#333355' }} />
+
+        {/* Pitch controls */}
+        <Text fontSize={10} style={{ color: '#666688' }}>Pitch:</Text>
+        {pitchPresets.map(p => (
+          <Pressable
+            key={p.label}
+            onClick={() => setPitch(p.value)}
+            style={{
+              backgroundColor: pitch === p.value ? '#e67e22' : '#2a2a4a',
+              paddingLeft: 8,
+              paddingRight: 8,
+              paddingTop: 4,
+              paddingBottom: 4,
+              borderRadius: 3,
+            }}
+          >
+            <Text fontSize={10} style={{ color: '#ffffff' }}>
+              {p.label}
+            </Text>
+          </Pressable>
+        ))}
+
+        {/* Separator */}
+        <Box style={{ width: 1, height: 24, backgroundColor: '#333355' }} />
+
+        {/* Bearing controls */}
+        <Text fontSize={10} style={{ color: '#666688' }}>Bearing:</Text>
+        {bearingPresets.map(b => (
+          <Pressable
+            key={b.label}
+            onClick={() => setBearing(b.value)}
+            style={{
+              backgroundColor: bearing === b.value ? '#27ae60' : '#2a2a4a',
+              paddingLeft: 8,
+              paddingRight: 8,
+              paddingTop: 4,
+              paddingBottom: 4,
+              borderRadius: 3,
+            }}
+          >
+            <Text fontSize={10} style={{ color: '#ffffff' }}>
+              {b.label}
             </Text>
           </Pressable>
         ))}

@@ -31,6 +31,9 @@ local Map = {}
 
 local Geo = nil
 local TileCache = nil
+local g3d = nil           -- lazy-loaded for 3D rendering (pitch > 0)
+local mapShader = nil     -- MVP + Canvas Y-flip shader for 3D tiles
+local sharedQuad = nil    -- reusable unit quad model for tile rendering
 
 -- ============================================================================
 -- State
@@ -79,6 +82,46 @@ function Map.init()
 
   -- Add built-in tile sources
   TileCache.addSource(globalCache, "osm", {})
+
+  -- Initialize g3d for 3D map rendering (pitch > 0)
+  local ok, g3dMod = pcall(require, "lua.g3d")
+  if ok then
+    g3d = g3dMod
+
+    -- Shader: MVP transform + Canvas Y-flip (no lighting — tiles are pre-rendered)
+    mapShader = love.graphics.newShader([[
+      uniform mat4 projectionMatrix;
+      uniform mat4 viewMatrix;
+      uniform mat4 modelMatrix;
+      uniform bool isCanvasEnabled;
+      attribute vec3 VertexNormal;
+
+      vec4 position(mat4 transformProjection, vec4 vertexPosition) {
+        vec4 pos = projectionMatrix * viewMatrix * modelMatrix * vertexPosition;
+        if (isCanvasEnabled) {
+          pos.y *= -1.0;
+        }
+        return pos;
+      }
+    ]])
+
+    -- Shared unit quad on XY plane (Y goes negative = south, UV matches tile image)
+    -- Winding: CCW from +Z (front face points up)
+    local verts = {
+      -- Triangle 1: NW → SE → NE
+      {0,  0, 0,   0, 0,   0, 0, 1},
+      {1, -1, 0,   1, 1,   0, 0, 1},
+      {1,  0, 0,   1, 0,   0, 0, 1},
+      -- Triangle 2: NW → SW → SE
+      {0,  0, 0,   0, 0,   0, 0, 1},
+      {0, -1, 0,   0, 1,   0, 0, 1},
+      {1, -1, 0,   1, 1,   0, 0, 1},
+    }
+    local dummyData = love.image.newImageData(1, 1)
+    dummyData:setPixel(0, 0, 1, 1, 1, 1)
+    local dummyTex = love.graphics.newImage(dummyData)
+    sharedQuad = g3d.newModel(verts, dummyTex, {0,0,0}, {0,0,0}, {1,1,1})
+  end
 end
 
 -- ============================================================================
@@ -480,10 +523,334 @@ local function renderMarkers(m, effectiveOpacity)
   end
 end
 
+-- ============================================================================
+-- 3D Rendering (pitch > 0)
+-- ============================================================================
+
+--- Project lat/lng to 3D world coordinates.
+--- Uses Y-north convention: +X=east, +Y=north, Z=up.
+local function projectToWorld3D(m, lat, lng)
+  local intZoom = math.floor(m.zoom)
+  local fracScale = math.pow(2, m.zoom - intZoom)
+  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
+  local pointPx, pointPy = Geo.latlngToPixel(lat, lng, intZoom)
+  local worldX = (pointPx - centerPx) * fracScale
+  local worldY = -((pointPy - centerPy) * fracScale)  -- flip Y: north = +Y
+  return worldX, worldY
+end
+
+--- Project a 3D world point to canvas pixel coordinates using the current camera.
+--- Returns nil, nil if the point is behind the camera.
+local function worldToScreen3D(m, wx, wy, wz)
+  wz = wz or 0
+
+  -- Apply view matrix
+  local vm = g3d.camera.viewMatrix
+  local vx = vm[1]*wx  + vm[2]*wy  + vm[3]*wz  + vm[4]
+  local vy = vm[5]*wx  + vm[6]*wy  + vm[7]*wz  + vm[8]
+  local vz = vm[9]*wx  + vm[10]*wy + vm[11]*wz + vm[12]
+  local vw = vm[13]*wx + vm[14]*wy + vm[15]*wz + vm[16]
+
+  -- Apply projection matrix
+  local pm = g3d.camera.projectionMatrix
+  local cx = pm[1]*vx  + pm[2]*vy  + pm[3]*vz  + pm[4]*vw
+  local cy = pm[5]*vx  + pm[6]*vy  + pm[7]*vz  + pm[8]*vw
+  local cw = pm[13]*vx + pm[14]*vy + pm[15]*vz + pm[16]*vw
+
+  -- Behind camera check
+  if cw <= 0.001 then return nil, nil end
+
+  -- Perspective divide + Canvas Y-flip (matches shader)
+  local ndcX = cx / cw
+  local ndcY = -cy / cw
+
+  -- NDC to Love2D Canvas coordinates
+  local screenX = (ndcX + 1) * 0.5 * m.width
+  local screenY = (1 - ndcY) * 0.5 * m.height
+
+  return screenX, screenY
+end
+
+--- Render tile layers in 3D using g3d textured quads.
+local function renderTileLayers3D(m)
+  local intZoom = math.floor(m.zoom)
+  local fracScale = math.pow(2, m.zoom - intZoom)
+  local tileSize = Geo.tileSize()
+  local scaledTileSize = tileSize * fracScale
+  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
+
+  -- Expand visible area for perspective (tiles near horizon must be loaded)
+  local pitchRad = m.pitch * math.pi / 180
+  local expandFactor = 1 + math.tan(pitchRad) * 2.5
+  local minTx, minTy, maxTx, maxTy = Geo.visibleTiles(
+    m.centerLat, m.centerLng, m.zoom,
+    m.width * expandFactor, m.height * expandFactor
+  )
+
+  for _, layer in ipairs(m.tileLayers) do
+    if layer.source and intZoom >= layer.minZoom and intZoom <= layer.maxZoom then
+      for ty = minTy, maxTy do
+        for tx = minTx, maxTx do
+          local wrappedTx = Geo.wrapTileX(tx, intZoom)
+          local img = TileCache.getTile(globalCache, layer.source, intZoom, wrappedTx, ty)
+
+          if img then
+            -- Tile world position (Y-north convention: flip pixel Y)
+            local tilePxX = tx * tileSize
+            local tilePxY = ty * tileSize
+            local worldX = (tilePxX - centerPx) * fracScale
+            local worldY = -((tilePxY - centerPy) * fracScale)
+
+            -- Reuse shared quad: set texture and transform
+            -- Quad spans (0,0) to (1,-1) in local space, scaled to tile size
+            -- Translation places NW corner; scale stretches to full tile
+            sharedQuad.mesh:setTexture(img)
+            sharedQuad:setTransform(
+              {worldX, worldY, 0},
+              {0, 0, 0},
+              {scaledTileSize, scaledTileSize, 1}
+            )
+            sharedQuad:draw(mapShader)
+          end
+        end
+      end
+    end
+  end
+end
+
+--- Render polylines projected to screen in 3D mode.
+local function renderPolylines3D(m, effectiveOpacity)
+  for _, poly in pairs(m.polylines) do
+    local positions = poly.positions
+    if positions and #positions >= 2 then
+      local r, g, b, a = parseHexColor(poly.color)
+      love.graphics.setColor(r, g, b, a * effectiveOpacity)
+      love.graphics.setLineWidth(poly.width or 2)
+
+      local points = {}
+      for _, pos in ipairs(positions) do
+        local wx, wy = projectToWorld3D(m, pos[1] or 0, pos[2] or 0)
+        local sx, sy = worldToScreen3D(m, wx, wy, 0)
+        if sx and sy then
+          points[#points + 1] = sx
+          points[#points + 1] = sy
+        end
+      end
+
+      if #points >= 4 then
+        love.graphics.line(points)
+      end
+
+      -- Arrowheads
+      if poly.arrowheads and #points >= 4 then
+        local arrowSize = (poly.width or 2) * 3
+        love.graphics.setColor(r, g, b, a * effectiveOpacity)
+        local accumDist = 0
+        for i = 3, #points, 2 do
+          local x1, y1 = points[i - 2], points[i - 1]
+          local x2, y2 = points[i], points[i + 1]
+          local dx = x2 - x1
+          local dy = y2 - y1
+          local segLen = math.sqrt(dx * dx + dy * dy)
+          accumDist = accumDist + segLen
+          if accumDist >= 100 then
+            accumDist = 0
+            local angle = math.atan2(dy, dx)
+            local mx = (x1 + x2) / 2
+            local my = (y1 + y2) / 2
+            love.graphics.polygon("fill",
+              mx + math.cos(angle) * arrowSize, my + math.sin(angle) * arrowSize,
+              mx + math.cos(angle + 2.5) * arrowSize * 0.6, my + math.sin(angle + 2.5) * arrowSize * 0.6,
+              mx + math.cos(angle - 2.5) * arrowSize * 0.6, my + math.sin(angle - 2.5) * arrowSize * 0.6
+            )
+          end
+        end
+      end
+
+      love.graphics.setLineWidth(1)
+    end
+  end
+end
+
+--- Render polygons projected to screen in 3D mode.
+local function renderPolygons3D(m, effectiveOpacity)
+  for _, poly in pairs(m.polygons) do
+    local positions = poly.positions
+    if positions and #positions >= 3 then
+      local verts = {}
+      for _, pos in ipairs(positions) do
+        local wx, wy = projectToWorld3D(m, pos[1] or 0, pos[2] or 0)
+        local sx, sy = worldToScreen3D(m, wx, wy, 0)
+        if sx and sy then
+          verts[#verts + 1] = sx
+          verts[#verts + 1] = sy
+        end
+      end
+
+      if #verts >= 6 then
+        -- Fill
+        local fr, fg, fb, fa = parseHexColor(poly.fillColor)
+        love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+        local ok, triangles = pcall(love.math.triangulate, verts)
+        if ok and triangles then
+          for _, tri in ipairs(triangles) do
+            love.graphics.polygon("fill", tri)
+          end
+        end
+
+        -- Stroke
+        local sr, sg, sb, sa = parseHexColor(poly.strokeColor)
+        love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
+        love.graphics.setLineWidth(poly.strokeWidth or 2)
+        local closedVerts = {}
+        for i = 1, #verts do closedVerts[i] = verts[i] end
+        closedVerts[#closedVerts + 1] = verts[1]
+        closedVerts[#closedVerts + 1] = verts[2]
+        love.graphics.line(closedVerts)
+        love.graphics.setLineWidth(1)
+      end
+    end
+  end
+end
+
+--- Render markers projected to screen in 3D mode.
+local function renderMarkers3D(m, effectiveOpacity)
+  for _, marker in pairs(m.markers) do
+    local wx, wy = projectToWorld3D(m, marker.lat, marker.lng)
+    local px, py = worldToScreen3D(m, wx, wy, 0)
+    if not px or not py then goto continue end
+
+    local markerW = 20
+    local markerH = 20
+
+    local ox, oy = 0, 0
+    if marker.anchor == "bottom-center" then
+      ox = -markerW / 2
+      oy = -markerH
+    elseif marker.anchor == "center" then
+      ox = -markerW / 2
+      oy = -markerH / 2
+    elseif marker.anchor == "top-center" then
+      ox = -markerW / 2
+      oy = 0
+    end
+
+    love.graphics.setColor(0.91, 0.30, 0.24, effectiveOpacity)
+    love.graphics.circle("fill", px + ox + markerW / 2, py + oy + markerH / 2, markerW / 2)
+    love.graphics.setColor(1, 1, 1, effectiveOpacity)
+    love.graphics.circle("line", px + ox + markerW / 2, py + oy + markerH / 2, markerW / 2)
+
+    ::continue::
+  end
+end
+
+--- Render a single map in 3D mode (pitch > 0).
+local function renderMap3D(nodeId)
+  local m = maps[nodeId]
+  if not m or not m.canvas then return end
+
+  -- Poll tile cache
+  TileCache.poll(globalCache)
+  TileCache.advanceDownloads(globalCache)
+
+  -- Advance zoom animation
+  if m.zoomAnimating then
+    m.zoomT = m.zoomT + love.timer.getDelta() / m.zoomDuration
+    if m.zoomT >= 1 then
+      m.zoom = m.zoomTo
+      m.zoomAnimating = false
+    else
+      local t = 1 - math.pow(1 - m.zoomT, 3)
+      m.zoom = m.zoomFrom + (m.zoomTo - m.zoomFrom) * t
+    end
+  end
+
+  -- Camera geometry from pitch/bearing/zoom
+  local pitchRad = m.pitch * math.pi / 180
+  local bearingRad = m.bearing * math.pi / 180
+  local fov = math.pi / 3  -- 60 degrees
+
+  -- Altitude: camera distance from ground that matches 2D viewport coverage
+  local altitude = m.height / (2 * math.tan(fov / 2))
+
+  -- Split altitude into horizontal + vertical distance based on pitch
+  local hDist = altitude * math.sin(pitchRad)
+  local vDist = altitude * math.cos(pitchRad)
+
+  -- Camera orbits map center based on bearing (clockwise from north)
+  -- bearing=0: camera south of center (-Y), looking north
+  -- bearing=90: camera west of center (-X), looking east
+  local camX = -hDist * math.sin(bearingRad)
+  local camY = -hDist * math.cos(bearingRad)
+  local camZ = vDist
+
+  g3d.camera.position = {camX, camY, camZ}
+  g3d.camera.target = {0, 0, 0}
+  g3d.camera.up = {0, 0, 1}
+  g3d.camera.fov = fov
+  g3d.camera.nearClip = 1
+  g3d.camera.farClip = altitude * 10
+  g3d.camera.aspectRatio = m.width / m.height
+  g3d.camera.updateProjectionMatrix()
+  g3d.camera.updateViewMatrix()
+
+  -- Begin 3D rendering to Canvas with depth buffer
+  love.graphics.push("all")
+  love.graphics.setCanvas({m.canvas, depth = true})
+  love.graphics.setDepthMode("lequal", true)
+  love.graphics.clear(0.93, 0.93, 0.90, 1)
+  love.graphics.setColor(1, 1, 1, 1)
+
+  -- Render tile layers as 3D textured quads on the ground plane
+  renderTileLayers3D(m)
+
+  -- Switch to 2D for overlays (disable depth, clear shader)
+  love.graphics.setDepthMode()
+  love.graphics.setShader()
+  love.graphics.setColor(1, 1, 1, 1)
+
+  -- Render overlays projected to screen coordinates
+  renderPolygons3D(m, 1)
+  renderPolylines3D(m, 1)
+  renderMarkers3D(m, 1)
+
+  -- Attribution text (same as 2D)
+  if #m.tileLayers > 0 then
+    local attrText = ""
+    for _, layer in ipairs(m.tileLayers) do
+      local src = globalCache.sources[layer.source]
+      if src and src.attribution and src.attribution ~= "" then
+        if #attrText > 0 then attrText = attrText .. " | " end
+        attrText = attrText .. src.attribution
+      end
+    end
+    if #attrText > 0 then
+      local font = love.graphics.getFont()
+      local tw = font:getWidth(attrText)
+      local th = font:getHeight()
+      local padding = 4
+      love.graphics.setColor(1, 1, 1, 0.8)
+      love.graphics.rectangle("fill",
+        m.width - tw - padding * 2, m.height - th - padding * 2,
+        tw + padding * 2, th + padding * 2)
+      love.graphics.setColor(0.2, 0.2, 0.2, 0.9)
+      love.graphics.print(attrText, m.width - tw - padding, m.height - th - padding)
+    end
+  end
+
+  love.graphics.pop()
+end
+
 --- Render a single map to its Canvas.
 local function renderMap(nodeId)
   local m = maps[nodeId]
   if not m or not m.canvas then return end
+
+  -- Use 3D rendering when pitch > 0 and g3d is available
+  if m.pitch > 0 and g3d and sharedQuad and mapShader then
+    renderMap3D(nodeId)
+    return
+  end
 
   -- Poll tile cache for completed fetches
   TileCache.poll(globalCache)
