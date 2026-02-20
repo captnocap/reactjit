@@ -15,6 +15,19 @@ local bit = require("bit")
 
 ffi.cdef[[
   typedef union { uint32_t type; uint8_t padding[56]; } SDL2_Event;
+
+  typedef struct {
+    uint32_t type;
+    uint32_t timestamp;
+    uint32_t windowID;
+    uint32_t which;
+    uint32_t state;
+    int32_t  x;
+    int32_t  y;
+    int32_t  xrel;
+    int32_t  yrel;
+  } SDL_MouseMotionEvent;
+
   typedef void SDL_Window;
   typedef void *SDL_GLContext;
 
@@ -32,6 +45,10 @@ ffi.cdef[[
   void          SDL_Delay(uint32_t ms);
   const char   *SDL_GetError(void);
   void          SDL_GL_GetDrawableSize(SDL_Window *win, int *w, int *h);
+  int           SDL_ShowCursor(int toggle);
+  uint32_t      SDL_GetMouseState(int *x, int *y);
+  uint32_t      SDL_GetRelativeMouseState(int *x, int *y);
+  int           SDL_SetRelativeMouseMode(int enabled);
 ]]
 
 local sdl = ffi.load("SDL2")
@@ -42,12 +59,35 @@ local SDL_WINDOW_SHOWN               = 0x00000004
 local SDL_WINDOW_FULLSCREEN          = 0x00000001
 local SDL_WINDOW_FULLSCREEN_DESKTOP  = 0x00001001
 local SDL_WINDOWPOS_UNDEFINED = 0x1FFF0000
-local SDL_QUIT_EVENT        = 0x100
+local SDL_QUIT_EVENT         = 0x100
+local SDL_MOUSEMOTION_EVENT  = 0x400
+local SDL_MOUSEBUTTONDOWN    = 0x401
+local SDL_MOUSEBUTTONUP      = 0x402
+local SDL_KEYDOWN_EVENT      = 0x300
 
 -- kmsdrm will pick the native mode; these are just initial hints
 local W, H = 0, 0
+local mouseX, mouseY = 0, 0
 
 -- ── Init ──────────────────────────────────────────────────────────────────────
+
+-- Load input modules (PS/2 mouse + evdev for /dev/input/eventN)
+io.write("[cartridge] loading input modules...\n"); io.flush()
+os.execute("modprobe psmouse 2>&1")
+os.execute("modprobe evdev 2>&1")
+os.execute("modprobe mousedev 2>&1")
+-- Give the kernel a moment to enumerate input devices
+local function usleep(ms) local t=os.clock()+ms/1000 while os.clock()<t do end end
+usleep(200)
+
+-- Check what we got
+local pi = io.popen("ls /dev/input/ 2>&1")
+if pi then
+  io.write("[cartridge] /dev/input/: ")
+  for line in pi:lines() do io.write(line .. " ") end
+  io.write("\n"); pi:close()
+end
+io.flush()
 
 io.write("[cartridge] SDL_Init...\n"); io.flush()
 local initErr = sdl.SDL_Init(SDL_INIT_VIDEO)
@@ -98,10 +138,14 @@ if ctx == nil then
 end
 io.write("[cartridge] GL context created\n"); io.flush()
 
+-- Hide hardware cursor
+sdl.SDL_ShowCursor(0)
+
 -- Get actual drawable size (handles HiDPI / kmsdrm native res)
 local dw = ffi.new("int[1]"); local dh = ffi.new("int[1]")
 sdl.SDL_GL_GetDrawableSize(window, dw, dh)
 W, H = dw[0], dh[0]
+mouseX, mouseY = math.floor(W/2), math.floor(H/2)
 io.write("[cartridge] drawable: " .. W .. "x" .. H .. "\n"); io.flush()
 
 -- ── OpenGL setup ──────────────────────────────────────────────────────────────
@@ -201,6 +245,96 @@ local event    = ffi.new("SDL2_Event")
 local running  = true
 local TARGET_MS = math.floor(1000 / 60)
 local t0       = sdl.SDL_GetTicks()
+local cursorStyle = "arrow"
+local mouseLogCount = 0
+
+-- ── Cursor rendering ────────────────────────────────────────────────────────
+
+local function drawArrowCursor(x, y, scale)
+  scale = scale or 1.0
+  GL.glColor4f(1, 1, 1, 1)
+  GL.glBegin(GL.TRIANGLES)
+    -- Main arrow body (pointing down-right from tip)
+    GL.glVertex2f(x,              y)
+    GL.glVertex2f(x + 4*scale,    y + 18*scale)
+    GL.glVertex2f(x + 8*scale,    y + 14*scale)
+
+    GL.glVertex2f(x,              y)
+    GL.glVertex2f(x + 4*scale,    y + 18*scale)
+    GL.glVertex2f(x,              y + 22*scale)
+  GL.glEnd()
+  -- Shaft
+  GL.glBegin(GL.QUADS)
+    GL.glVertex2f(x + 3*scale,  y + 16*scale)
+    GL.glVertex2f(x + 7*scale,  y + 13*scale)
+    GL.glVertex2f(x + 13*scale, y + 19*scale)
+    GL.glVertex2f(x + 9*scale,  y + 22*scale)
+  GL.glEnd()
+
+  -- Black outline
+  GL.glColor4f(0, 0, 0, 1)
+  GL.glLineWidth(2)
+  GL.glBegin(GL.LINE_STRIP)
+    GL.glVertex2f(x,              y)
+    GL.glVertex2f(x,              y + 22*scale)
+    GL.glVertex2f(x + 4*scale,    y + 18*scale)
+    GL.glVertex2f(x + 9*scale,    y + 22*scale)
+    GL.glVertex2f(x + 13*scale,   y + 19*scale)
+    GL.glVertex2f(x + 8*scale,    y + 14*scale)
+    GL.glVertex2f(x,              y)
+  GL.glEnd()
+  GL.glLineWidth(1)
+end
+
+-- Rune Scimitar — pixel art, 16x16 grid, rendered as quads
+-- The scimitar curves right and down from the hotspot
+local scimitar_pixels = {
+  -- {row, col, r, g, b} — 0-indexed grid
+  -- Blade (cyan-white steel)
+  {0,10, 0.6,0.8,0.9}, {0,11, 0.7,0.9,1.0},
+  {1,9,  0.5,0.7,0.9}, {1,10, 0.8,0.9,1.0}, {1,11, 0.9,1.0,1.0}, {1,12, 0.6,0.7,0.8},
+  {2,8,  0.4,0.6,0.8}, {2,9,  0.7,0.9,1.0}, {2,10, 0.9,1.0,1.0}, {2,11, 0.8,0.9,1.0}, {2,12, 0.5,0.6,0.7},
+  {3,7,  0.4,0.5,0.7}, {3,8,  0.7,0.8,1.0}, {3,9,  0.9,1.0,1.0}, {3,10, 0.8,0.9,1.0}, {3,11, 0.5,0.6,0.7},
+  {4,6,  0.3,0.5,0.7}, {4,7,  0.6,0.8,1.0}, {4,8,  0.9,1.0,1.0}, {4,9,  0.7,0.8,0.9}, {4,10, 0.4,0.5,0.6},
+  {5,5,  0.3,0.4,0.6}, {5,6,  0.6,0.8,0.9}, {5,7,  0.8,0.9,1.0}, {5,8,  0.6,0.7,0.8},
+  {6,5,  0.3,0.4,0.5}, {6,6,  0.5,0.7,0.8}, {6,7,  0.5,0.6,0.7},
+  {7,5,  0.3,0.3,0.4}, {7,6,  0.4,0.5,0.6},
+  -- Guard (gold/bronze crossbar)
+  {8,3,  0.7,0.6,0.2}, {8,4,  0.9,0.8,0.3}, {8,5,  1.0,0.9,0.4}, {8,6,  0.9,0.8,0.3}, {8,7,  0.7,0.6,0.2},
+  -- Grip (brown/dark)
+  {9,5,   0.4,0.25,0.1}, {10,5, 0.35,0.2,0.08}, {11,5, 0.4,0.25,0.1},
+  -- Pommel (gold dot)
+  {12,4, 0.6,0.5,0.2}, {12,5, 0.9,0.8,0.3}, {12,6, 0.6,0.5,0.2},
+  {13,5, 0.5,0.4,0.15},
+}
+
+local function drawScimitarCursor(x, y, scale)
+  scale = scale or 2.0
+  local px = scale
+  for _, p in ipairs(scimitar_pixels) do
+    local row, col, r, g, b = p[1], p[2], p[3], p[4], p[5]
+    rect(x + col*px, y + row*px, px, px, r, g, b, 1)
+  end
+  -- Black outline pixel border
+  for _, p in ipairs(scimitar_pixels) do
+    local row, col = p[1], p[2]
+    local bx, by = x + col*px, y + row*px
+    GL.glColor4f(0, 0, 0, 0.6)
+    -- tiny outline quads on exposed edges
+    rect(bx - 1, by, 1, px, 0, 0, 0, 0.5)
+    rect(bx + px, by, 1, px, 0, 0, 0, 0.5)
+    rect(bx, by - 1, px, 1, 0, 0, 0, 0.5)
+    rect(bx, by + px, px, 1, 0, 0, 0, 0.5)
+  end
+end
+
+local function drawCursor(x, y)
+  if cursorStyle == "scimitar" then
+    drawScimitarCursor(x, y, 2.0)
+  else
+    drawArrowCursor(x, y, 1.4)
+  end
+end
 
 io.write("[cartridge] entering render loop at " .. W .. "x" .. H .. "\n"); io.flush()
 
@@ -285,13 +419,43 @@ end
 while running do
   local frameStart = sdl.SDL_GetTicks()
 
+  -- Debug: log first N mouse events to serial console
   while sdl.SDL_PollEvent(event) == 1 do
-    if event.type == SDL_QUIT_EVENT then
+    local etype = event.type
+    if etype == SDL_QUIT_EVENT then
       running = false
+    elseif etype == SDL_MOUSEMOTION_EVENT then
+      local m = ffi.cast("SDL_MouseMotionEvent*", event)
+      mouseX = math.max(0, math.min(W, mouseX + m.xrel))
+      mouseY = math.max(0, math.min(H, mouseY + m.yrel))
+      if mouseLogCount < 20 then
+        io.write(string.format("[mouse] x=%d y=%d xrel=%d yrel=%d | cursor=%d,%d\n",
+          m.x, m.y, m.xrel, m.yrel, mouseX, mouseY))
+        io.flush()
+        mouseLogCount = mouseLogCount + 1
+      end
+    elseif etype == SDL_KEYDOWN_EVENT then
+      local ptr = ffi.cast("uint32_t*", event)
+      local scancode = ptr[4]
+      if mouseLogCount < 20 then
+        io.write(string.format("[key] scancode=%d\n", scancode))
+        io.flush()
+      end
+      -- F2 (scancode 59) toggles cursor style
+      if scancode == 59 then
+        cursorStyle = (cursorStyle == "arrow") and "scimitar" or "arrow"
+      end
+    else
+      -- Log unknown event types to see what SDL2 is actually sending
+      if mouseLogCount < 5 then
+        io.write(string.format("[event] type=0x%x\n", etype))
+        io.flush()
+      end
     end
   end
 
   paintFrame(frameStart)
+  drawCursor(mouseX, mouseY)
 
   sdl.SDL_GL_SwapWindow(window)
 

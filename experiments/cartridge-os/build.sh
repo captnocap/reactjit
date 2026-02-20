@@ -259,9 +259,10 @@ else
     echo "        WARNING: could not determine LLVM soname"
 fi
 
-# ── Kernel modules: virtio-gpu + full dependency chain ──
+# ── Kernel modules: virtio-gpu + deps + input (psmouse, evdev) ──
 # virtio-gpu.ko depends on: drm, drm_kms_helper, drm_shmem_helper, drm_panel_orientation_quirks,
 # i2c-core, fb, fb_sys_fops, syscopyarea, sysfillrect, sysimgblt, virtio_dma_buf
+# Input: psmouse (PS/2 mouse), evdev (/dev/input/eventN), mousedev (/dev/input/mice)
 KVER=$(ls "$PARTS/lib/modules/" 2>/dev/null | head -1)
 if [ -n "$KVER" ]; then
     SRCMOD="$PARTS/lib/modules/$KVER"
@@ -287,6 +288,19 @@ if [ -n "$KVER" ]; then
         done
         echo "        kernel modules: $(echo $ALL_MODS | wc -w) files"
     fi
+
+    # Input modules (not in virtio-gpu's dep chain, but needed for mouse/keyboard)
+    INPUT_MODS=(
+        "kernel/drivers/input/evdev.ko.gz"
+        "kernel/drivers/input/mouse/psmouse.ko.gz"
+        "kernel/drivers/input/mousedev.ko.gz"
+    )
+    for mod in "${INPUT_MODS[@]}"; do
+        if [ -f "$SRCMOD/$mod" ]; then
+            mkdir -p "$MODDIR/$(dirname "$mod")"
+            cp "$SRCMOD/$mod" "$MODDIR/$mod"
+        fi
+    done
 
     # Copy module metadata (modprobe needs these)
     for f in modules.dep modules.alias modules.dep.bin modules.alias.bin \
