@@ -60,6 +60,19 @@ ffi.cdef[[
 
   typedef void SDL_Window;
   typedef void *SDL_GLContext;
+  typedef struct SDL_Surface {
+    uint32_t flags;
+    void    *format;
+    int      w, h;
+    int      pitch;
+    void    *pixels;
+    void    *userdata;
+    int      locked;
+    void    *list_blitmap;
+    int      clip_x, clip_y, clip_w, clip_h;
+    int      refcount;
+  } SDL_Surface;
+  typedef struct SDL_Cursor SDL_Cursor;
 
   int           SDL_Init(uint32_t flags);
   void          SDL_Quit(void);
@@ -81,6 +94,14 @@ ffi.cdef[[
   int           SDL_SetRelativeMouseMode(int enabled);
   void          SDL_StartTextInput(void);
   void          SDL_StopTextInput(void);
+
+  SDL_Surface  *SDL_CreateRGBSurfaceFrom(void *pixels, int w, int h,
+                  int depth, int pitch, uint32_t Rmask, uint32_t Gmask,
+                  uint32_t Bmask, uint32_t Amask);
+  void          SDL_FreeSurface(SDL_Surface *surface);
+  SDL_Cursor   *SDL_CreateColorCursor(SDL_Surface *surface, int hot_x, int hot_y);
+  void          SDL_SetCursor(SDL_Cursor *cursor);
+  void          SDL_FreeCursor(SDL_Cursor *cursor);
 ]]
 
 local sdl = ffi.load("SDL2")
@@ -183,9 +204,6 @@ if ctx == nil then
   error("[cartridge] SDL_GL_CreateContext: " .. ffi.string(sdl.SDL_GetError()))
 end
 io.write("[cartridge] GL context created\n"); io.flush()
-
--- Hide hardware cursor
-sdl.SDL_ShowCursor(0)
 
 -- Get actual drawable size (handles HiDPI / kmsdrm native res)
 local dw = ffi.new("int[1]"); local dh = ffi.new("int[1]")
@@ -491,49 +509,104 @@ local appError = nil  -- set if paintFrame pcall fails
 local textInputActive = false
 local appPhase = "boot"  -- "boot" | "running" | "denied"
 
--- ── Cursor rendering ────────────────────────────────────────────────────────
+-- ── Hardware cursors ─────────────────────────────────────────────────────────
 
-local function drawArrowCursor(x, y, scale)
-  scale = scale or 1.0
-  GL.glColor4f(1, 1, 1, 1)
-  GL.glBegin(GL.TRIANGLES)
-    -- Main arrow body (pointing down-right from tip)
-    GL.glVertex2f(x,              y)
-    GL.glVertex2f(x + 4*scale,    y + 18*scale)
-    GL.glVertex2f(x + 8*scale,    y + 14*scale)
-
-    GL.glVertex2f(x,              y)
-    GL.glVertex2f(x + 4*scale,    y + 18*scale)
-    GL.glVertex2f(x,              y + 22*scale)
-  GL.glEnd()
-  -- Shaft
-  GL.glBegin(GL.QUADS)
-    GL.glVertex2f(x + 3*scale,  y + 16*scale)
-    GL.glVertex2f(x + 7*scale,  y + 13*scale)
-    GL.glVertex2f(x + 13*scale, y + 19*scale)
-    GL.glVertex2f(x + 9*scale,  y + 22*scale)
-  GL.glEnd()
-
-  -- Black outline
-  GL.glColor4f(0, 0, 0, 1)
-  GL.glLineWidth(2)
-  GL.glBegin(GL.LINE_STRIP)
-    GL.glVertex2f(x,              y)
-    GL.glVertex2f(x,              y + 22*scale)
-    GL.glVertex2f(x + 4*scale,    y + 18*scale)
-    GL.glVertex2f(x + 9*scale,    y + 22*scale)
-    GL.glVertex2f(x + 13*scale,   y + 19*scale)
-    GL.glVertex2f(x + 8*scale,    y + 14*scale)
-    GL.glVertex2f(x,              y)
-  GL.glEnd()
-  GL.glLineWidth(1)
+-- Build an ARGB pixel buffer and create an SDL hardware cursor from it.
+-- pixelFunc(pixels, size) fills the uint32_t[size*size] ARGB buffer.
+local function makeHWCursor(size, hotX, hotY, pixelFunc)
+  local pixels = ffi.new("uint32_t[?]", size * size)
+  ffi.fill(pixels, size * size * 4, 0)  -- transparent
+  pixelFunc(pixels, size)
+  local surface = sdl.SDL_CreateRGBSurfaceFrom(
+    pixels, size, size, 32, size * 4,
+    0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000)
+  if surface == nil then
+    io.write("[cursor] SDL_CreateRGBSurfaceFrom failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n")
+    return nil, pixels  -- keep pixels alive
+  end
+  local cursor = sdl.SDL_CreateColorCursor(surface, hotX, hotY)
+  sdl.SDL_FreeSurface(surface)
+  if cursor == nil then
+    io.write("[cursor] SDL_CreateColorCursor failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n")
+  end
+  return cursor, pixels  -- must keep pixels alive while cursor exists
 end
 
--- Rune Scimitar — pixel art, 16x16 grid, rendered as quads
--- The scimitar curves right and down from the hotspot
-local scimitar_pixels = {
-  -- {row, col, r, g, b} — 0-indexed grid
-  -- Blade (cyan-white steel)
+local function argb(a, r, g, b)
+  return bit.bor(
+    bit.lshift(math.floor(a * 255), 24),
+    bit.lshift(math.floor(r * 255), 16),
+    bit.lshift(math.floor(g * 255), 8),
+    math.floor(b * 255))
+end
+
+local function setPixel(pixels, size, x, y, color)
+  if x >= 0 and x < size and y >= 0 and y < size then
+    pixels[y * size + x] = color
+  end
+end
+
+-- Arrow cursor: 32x32, classic pointer with black outline + white fill
+local arrowCursor, arrowPixels = makeHWCursor(32, 0, 0, function(px, sz)
+  -- Define arrow shape as scanlines: {y, x_start, x_end}
+  -- Classic arrow pointing down-right from (0,0)
+  local shape = {
+    {0,  0, 0},
+    {1,  0, 1},
+    {2,  0, 2},
+    {3,  0, 3},
+    {4,  0, 4},
+    {5,  0, 5},
+    {6,  0, 6},
+    {7,  0, 7},
+    {8,  0, 8},
+    {9,  0, 9},
+    {10, 0, 10},
+    {11, 0, 11},
+    {12, 0, 5},
+    {13, 0, 4},  {13, 5, 6},
+    {14, 0, 3},  {14, 6, 7},
+    {15, 0, 2},  {15, 7, 8},
+    {16, 0, 1},  {16, 8, 9},
+    {17, 0, 0},  {17, 9, 10},
+  }
+  local black = argb(1, 0, 0, 0)
+  local white = argb(1, 1, 1, 1)
+
+  -- Fill shape with white
+  for _, s in ipairs(shape) do
+    for x = s[2], s[3] do
+      setPixel(px, sz, x, s[1], white)
+    end
+  end
+
+  -- Black border: scan for white pixels with transparent neighbors
+  for y = 0, sz - 1 do
+    for x = 0, sz - 1 do
+      if px[y * sz + x] == 0 then  -- transparent
+        -- Check if any neighbor is white
+        local hasWhite = false
+        for dy = -1, 1 do
+          for dx = -1, 1 do
+            if not (dx == 0 and dy == 0) then
+              local nx, ny = x + dx, y + dy
+              if nx >= 0 and nx < sz and ny >= 0 and ny < sz then
+                if px[ny * sz + nx] == white then hasWhite = true end
+              end
+            end
+          end
+        end
+        if hasWhite then
+          setPixel(px, sz, x, y, black)
+        end
+      end
+    end
+  end
+end)
+
+-- Scimitar cursor: 32x32, pixel art scaled 2x
+local scimPixelDef = {
+  -- {row, col, r, g, b}
   {0,10, 0.6,0.8,0.9}, {0,11, 0.7,0.9,1.0},
   {1,9,  0.5,0.7,0.9}, {1,10, 0.8,0.9,1.0}, {1,11, 0.9,1.0,1.0}, {1,12, 0.6,0.7,0.8},
   {2,8,  0.4,0.6,0.8}, {2,9,  0.7,0.9,1.0}, {2,10, 0.9,1.0,1.0}, {2,11, 0.8,0.9,1.0}, {2,12, 0.5,0.6,0.7},
@@ -542,40 +615,70 @@ local scimitar_pixels = {
   {5,5,  0.3,0.4,0.6}, {5,6,  0.6,0.8,0.9}, {5,7,  0.8,0.9,1.0}, {5,8,  0.6,0.7,0.8},
   {6,5,  0.3,0.4,0.5}, {6,6,  0.5,0.7,0.8}, {6,7,  0.5,0.6,0.7},
   {7,5,  0.3,0.3,0.4}, {7,6,  0.4,0.5,0.6},
-  -- Guard (gold/bronze crossbar)
   {8,3,  0.7,0.6,0.2}, {8,4,  0.9,0.8,0.3}, {8,5,  1.0,0.9,0.4}, {8,6,  0.9,0.8,0.3}, {8,7,  0.7,0.6,0.2},
-  -- Grip (brown/dark)
   {9,5,   0.4,0.25,0.1}, {10,5, 0.35,0.2,0.08}, {11,5, 0.4,0.25,0.1},
-  -- Pommel (gold dot)
   {12,4, 0.6,0.5,0.2}, {12,5, 0.9,0.8,0.3}, {12,6, 0.6,0.5,0.2},
   {13,5, 0.5,0.4,0.15},
 }
 
-local function drawScimitarCursor(x, y, scale)
-  scale = scale or 2.0
-  local px = scale
-  for _, p in ipairs(scimitar_pixels) do
+local scimCursor, scimPixels = makeHWCursor(32, 10, 0, function(px, sz)
+  local black = argb(0.7, 0, 0, 0)
+  -- Draw each pixel at 2x scale
+  for _, p in ipairs(scimPixelDef) do
     local row, col, r, g, b = p[1], p[2], p[3], p[4], p[5]
-    rect(x + col*px, y + row*px, px, px, r, g, b, 1)
+    local color = argb(1, r, g, b)
+    local bx, by = col * 2, row * 2
+    setPixel(px, sz, bx,     by,     color)
+    setPixel(px, sz, bx + 1, by,     color)
+    setPixel(px, sz, bx,     by + 1, color)
+    setPixel(px, sz, bx + 1, by + 1, color)
   end
-  -- Black outline pixel border
-  for _, p in ipairs(scimitar_pixels) do
-    local row, col = p[1], p[2]
-    local bx, by = x + col*px, y + row*px
-    GL.glColor4f(0, 0, 0, 0.6)
-    -- tiny outline quads on exposed edges
-    rect(bx - 1, by, 1, px, 0, 0, 0, 0.5)
-    rect(bx + px, by, 1, px, 0, 0, 0, 0.5)
-    rect(bx, by - 1, px, 1, 0, 0, 0, 0.5)
-    rect(bx, by + px, px, 1, 0, 0, 0, 0.5)
+  -- Black outline on exposed edges
+  local filled = {}
+  for _, p in ipairs(scimPixelDef) do
+    local bx, by = p[2] * 2, p[1] * 2
+    filled[by * sz + bx] = true
+    filled[by * sz + bx + 1] = true
+    filled[(by+1) * sz + bx] = true
+    filled[(by+1) * sz + bx + 1] = true
   end
+  for _, p in ipairs(scimPixelDef) do
+    local bx, by = p[2] * 2, p[1] * 2
+    for _, fy in ipairs({by, by+1}) do
+      for _, fx in ipairs({bx, bx+1}) do
+        for dy = -1, 1 do
+          for dx = -1, 1 do
+            if not (dx == 0 and dy == 0) then
+              local nx, ny = fx + dx, fy + dy
+              if nx >= 0 and nx < sz and ny >= 0 and ny < sz then
+                if not filled[ny * sz + nx] and px[ny * sz + nx] == 0 then
+                  setPixel(px, sz, nx, ny, black)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end)
+
+-- Activate arrow cursor by default
+if arrowCursor ~= nil then
+  sdl.SDL_SetCursor(arrowCursor)
+  sdl.SDL_ShowCursor(1)
+  io.write("[cursor] hardware arrow cursor active\n"); io.flush()
+else
+  io.write("[cursor] hardware cursor failed, using default\n"); io.flush()
+  sdl.SDL_ShowCursor(1)
 end
 
-local function drawCursor(x, y)
-  if cursorStyle == "scimitar" then
-    drawScimitarCursor(x, y, 2.0)
-  else
-    drawArrowCursor(x, y, 1.4)
+local function setCursorStyle(style)
+  cursorStyle = style
+  if style == "scimitar" and scimCursor ~= nil then
+    sdl.SDL_SetCursor(scimCursor)
+  elseif arrowCursor ~= nil then
+    sdl.SDL_SetCursor(arrowCursor)
   end
 end
 
@@ -747,7 +850,7 @@ while running do
       else
         -- Normal app key handling (running phase)
         if scancode == 59 then
-          cursorStyle = (cursorStyle == "arrow") and "scimitar" or "arrow"
+          setCursorStyle(cursorStyle == "arrow" and "scimitar" or "arrow")
         end
       end
     end
@@ -792,7 +895,6 @@ while running do
 
   -- Console always draws on top (all phases)
   Console.draw()
-  drawCursor(mouseX, mouseY)
 
   sdl.SDL_GL_SwapWindow(window)
   sdl.SDL_Delay(1)
@@ -803,6 +905,8 @@ if textInputActive then
   sdl.SDL_StopTextInput()
 end
 Font.done()
+if arrowCursor ~= nil then sdl.SDL_FreeCursor(arrowCursor) end
+if scimCursor  ~= nil then sdl.SDL_FreeCursor(scimCursor)  end
 sdl.SDL_GL_DeleteContext(ctx)
 sdl.SDL_DestroyWindow(window)
 sdl.SDL_Quit()
