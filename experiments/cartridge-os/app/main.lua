@@ -91,6 +91,7 @@ ffi.cdef[[
   int           SDL_SetRelativeMouseMode(int enabled);
   void          SDL_StartTextInput(void);
   void          SDL_StopTextInput(void);
+  uint16_t      SDL_GetModState(void);
 
   SDL_Surface  *SDL_CreateRGBSurfaceFrom(void *pixels, int w, int h,
                   int depth, int pitch, uint32_t Rmask, uint32_t Gmask,
@@ -811,6 +812,7 @@ while running do
     elseif etype == SDL_KEYDOWN_EVENT then
       local ptr = ffi.cast("uint32_t*", event)
       local scancode = ptr[4]
+      local modState = sdl.SDL_GetModState()
 
       -- Backtick (scancode 53) — ALWAYS toggles console regardless of phase
       if scancode == 53 then
@@ -825,7 +827,7 @@ while running do
 
       elseif Console.isOpen() then
         -- Console eats all key events when open
-        local consumed, action = Console.handleKeyDown(scancode)
+        local consumed, action = Console.handleKeyDown(scancode, modState)
         if action == "close" then
           sdl.SDL_StopTextInput()
           textInputActive = false

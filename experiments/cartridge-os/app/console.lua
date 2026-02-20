@@ -6,6 +6,7 @@
   These are passed in via Console.init(deps).
 ]]
 
+local bit      = require("bit")
 local EventBus = require("eventbus")
 local Commands = require("commands")
 
@@ -21,7 +22,11 @@ local W, H = 0, 0
 
 local open          = false
 local height        = 0        -- current animated height in px
-local targetHeight  = 0        -- 40% of screen when open
+local targetHeight  = 0        -- starts at 40% of screen, resizable
+local heightStep    = 0.1      -- resize by 10% of screen per step
+local minHeightPct  = 0.2      -- minimum 20%
+local maxHeightPct  = 1.0      -- maximum 100% (fullscreen)
+local currentPct    = 0.4      -- current height as fraction of screen
 local animSpeed     = 2400     -- px/sec slide speed
 
 local outputLines   = {}       -- {text, color={r,g,b}}
@@ -78,9 +83,15 @@ function Console.setBackdrop(cfg)
   if cfg.fontSize then backdrop.fontSize = cfg.fontSize end
 end
 
+-- ── SDL modifier constants ──────────────────────────────────────────────────
+
+local KMOD_CTRL = 0x00C0   -- KMOD_LCTRL (0x40) | KMOD_RCTRL (0x80)
+
 -- ── Layout constants ───────────────────────────────────────────────────────
 
 local FONT_SIZE     = 14
+local MIN_FONT_SIZE = 8
+local MAX_FONT_SIZE = 28
 local LINE_HEIGHT   = 20
 local PADDING       = 12
 local INPUT_HEIGHT  = 28
@@ -96,7 +107,7 @@ function Console.init(deps)
   rect = deps.rect
   W    = deps.W
   H    = deps.H
-  targetHeight = math.floor(H * 0.4)
+  targetHeight = math.floor(H * currentPct)
 
   -- Welcome hint (single line, not a wall of ASCII)
   Console.addOutput("  Type 'help' for commands. Double-tab for Lua mode.", {0.4, 0.4, 0.6})
@@ -112,7 +123,7 @@ end
 
 function Console.updateSize(w, h)
   W, H = w, h
-  targetHeight = math.floor(H * 0.4)
+  targetHeight = math.floor(H * currentPct)
 end
 
 -- ── Public API ─────────────────────────────────────────────────────────────
@@ -176,8 +187,38 @@ function Console.handleTextInput(text)
   return true
 end
 
-function Console.handleKeyDown(scancode, keycode)
+function Console.handleKeyDown(scancode, modState)
   if not open then return false end
+  modState = modState or 0
+  local ctrl = bit.band(modState, KMOD_CTRL) ~= 0
+
+  -- Ctrl+Up — grow console
+  if ctrl and scancode == 82 then
+    currentPct = math.min(maxHeightPct, currentPct + heightStep)
+    targetHeight = math.floor(H * currentPct)
+    return true
+  end
+
+  -- Ctrl+Down — shrink console
+  if ctrl and scancode == 81 then
+    currentPct = math.max(minHeightPct, currentPct - heightStep)
+    targetHeight = math.floor(H * currentPct)
+    return true
+  end
+
+  -- Ctrl+Plus (scancode 87 = KP+, or 46 = =+) — increase font size
+  if ctrl and (scancode == 87 or scancode == 46) then
+    FONT_SIZE = math.min(MAX_FONT_SIZE, FONT_SIZE + 1)
+    LINE_HEIGHT = math.floor(FONT_SIZE * 1.45)
+    return true
+  end
+
+  -- Ctrl+Minus (scancode 86 = KP-, or 45 = -_) — decrease font size
+  if ctrl and (scancode == 86 or scancode == 45) then
+    FONT_SIZE = math.max(MIN_FONT_SIZE, FONT_SIZE - 1)
+    LINE_HEIGHT = math.floor(FONT_SIZE * 1.45)
+    return true
+  end
 
   -- Enter (scancode 40)
   if scancode == 40 then
@@ -480,7 +521,7 @@ function Console.draw()
   local modeStr = mode == "lua" and "LUA MODE" or "CONSOLE"
   Font.draw(modeStr, PADDING + 4, statusY + 4, 12, 0.4, 0.3, 0.9, 1)
 
-  local rightInfo = "F2:scim  `:toggle"
+  local rightInfo = "C-+/-:font  C-Up/Dn:size  `:toggle"
   local riw = Font.measureWidth(rightInfo, 12)
   Font.draw(rightInfo, w - PADDING - riw, statusY + 4, 12, 0.3, 0.3, 0.5, 1)
 
