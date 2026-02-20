@@ -147,27 +147,42 @@ Commands.register("clear", {
 })
 
 Commands.register("files", {
-  desc = "List directory contents",
+  desc = "List directory contents (default: /app)",
   usage = "files [path]",
   exec = function(args)
-    local path = args:match("^(%S+)") or "/"
-    local p = io.popen('ls -la "' .. path:gsub('"', '') .. '" 2>&1')
+    local path = args:match("^(%S+)") or "/app"
+
+    -- Sanitize: strip quotes, reject shell metacharacters
+    path = path:gsub('"', ''):gsub("'", '')
+    if path:find("[;|&$`]") then
+      return { type = "error", data = "invalid path" }
+    end
+
+    local p = io.popen('ls -1p "' .. path .. '" 2>&1')
     if not p then
       return { type = "error", data = "cannot list: " .. path }
     end
+
     local lines = {}
-    for line in p:lines() do
-      table.insert(lines, { text = "  " .. line, color = {0.7, 0.8, 0.7} })
+    table.insert(lines, { text = "  " .. path .. "/", color = {0.5, 0.5, 0.7} })
+
+    for entry in p:lines() do
+      if entry == "" then goto continue end
+      -- Color directories differently
+      local isDir = entry:sub(-1) == "/"
+      local color = isDir and {0.4, 0.7, 1.0} or {0.7, 0.8, 0.7}
+      table.insert(lines, { text = "    " .. entry, color = color })
+      ::continue::
     end
     p:close()
-    if #lines == 0 then
+
+    if #lines <= 1 then
       return { type = "error", data = "empty or not found: " .. path }
     end
     return { type = "lines", data = lines }
   end,
   complete = function(partial)
-    -- Complete directory paths
-    local dir = partial:match("^(.*/)")  or "/"
+    local dir = partial:match("^(.*/)")  or "/app/"
     local prefix = partial:match("([^/]*)$") or ""
     local p = io.popen('ls -1 "' .. dir:gsub('"', '') .. '" 2>/dev/null')
     if not p then return {} end

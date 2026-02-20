@@ -32,6 +32,16 @@ ffi.cdef[[
     uint32_t type;
     uint32_t timestamp;
     uint32_t windowID;
+    uint32_t which;
+    int32_t  x;
+    int32_t  y;
+    uint32_t direction;
+  } SDL_MouseWheelEvent;
+
+  typedef struct {
+    uint32_t type;
+    uint32_t timestamp;
+    uint32_t windowID;
     char     text[32];
   } SDL_TextInputEvent;
 
@@ -72,6 +82,7 @@ local SDL_QUIT_EVENT         = 0x100
 local SDL_MOUSEMOTION_EVENT  = 0x400
 local SDL_MOUSEBUTTONDOWN    = 0x401
 local SDL_MOUSEBUTTONUP      = 0x402
+local SDL_MOUSEWHEEL_EVENT   = 0x403
 local SDL_KEYDOWN_EVENT      = 0x300
 local SDL_TEXTINPUT_EVENT    = 0x303
 
@@ -658,6 +669,12 @@ while running do
       -- fullscreen means window coords == drawable coords.
       mouseX = math.max(0, math.min(W, m.x))
       mouseY = math.max(0, math.min(H, m.y))
+
+    elseif etype == SDL_MOUSEWHEEL_EVENT then
+      if Console.isOpen() then
+        local mw = ffi.cast("SDL_MouseWheelEvent*", event)
+        Console.handleScroll(mw.y)
+      end
 
     elseif etype == SDL_TEXTINPUT_EVENT then
       if Console.isOpen() then

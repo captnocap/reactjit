@@ -118,6 +118,17 @@ function Console.isOpen()
   return open or height > 0
 end
 
+function Console.handleScroll(y)
+  if not open then return end
+  -- y > 0 = scroll up (show older), y < 0 = scroll down (show newer)
+  local SCROLL_SPEED = 3
+  if y > 0 then
+    scrollOffset = math.min(scrollOffset + SCROLL_SPEED, math.max(0, #outputLines - 3))
+  elseif y < 0 then
+    scrollOffset = math.max(0, scrollOffset - SCROLL_SPEED)
+  end
+end
+
 function Console.toggle()
   open = not open
   if open then
