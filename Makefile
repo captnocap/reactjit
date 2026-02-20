@@ -6,8 +6,10 @@ NATIVE_GAME = examples/native-hud/game
 LIB_DIR = $(NATIVE_GAME)/lib
 STORYBOOK_LOVE = storybook/love
 STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
+STORYBOOK_SDL2 = storybook/sdl2
+STORYBOOK_SDL2_LIB = $(STORYBOOK_SDL2)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native run dev dev-storybook storybook storybook-web install dist-storybook dist-storybook-windows cli-setup
+.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows cli-setup
 
 all: setup build
 
@@ -84,7 +86,33 @@ build-storybook-native: node_modules
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
 		storybook/src/native-main.tsx
 
+build-storybook-sdl2: node_modules
+	npx esbuild \
+		--bundle \
+		--format=iife \
+		--global-name=ReactLoveStorybook \
+		--target=es2020 \
+		--jsx=automatic \
+		--external:child_process \
+		--external:ws \
+		--outfile=$(STORYBOOK_SDL2)/bundle.js \
+		storybook/src/native-main.tsx
+
 # ── Storybook ──────────────────────────────────────────
+
+storybook-sdl2: build-storybook-sdl2 $(STORYBOOK_SDL2_LIB)/libquickjs.so $(STORYBOOK_SDL2_LIB)/libft_helper.so
+	@echo ""
+	@echo "=== SDL2 Storybook ready ==="
+	@echo "  Run:  cd $(STORYBOOK_SDL2) && luajit main.lua"
+	@echo ""
+
+$(STORYBOOK_SDL2_LIB)/libquickjs.so: zig-out/lib/libquickjs.so
+	mkdir -p $(STORYBOOK_SDL2_LIB)
+	cp $< $@
+
+$(STORYBOOK_SDL2_LIB)/libft_helper.so: zig-out/lib/libft_helper.so
+	mkdir -p $(STORYBOOK_SDL2_LIB)
+	cp $< $@
 
 storybook: setup build-storybook-native build-storybook $(STORYBOOK_LIB)/libquickjs.so
 	@echo ""
@@ -232,7 +260,12 @@ zig-out/bin/ilr-launcher.exe:
 	zig build win-launcher
 	@echo "  Built ilr-launcher.exe"
 
-dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/ilr-launcher.exe
+# Cross-compile libmpv for Windows using zig cc (FFmpeg statically linked in).
+# First build only — subsequent runs are skipped by Make's file check.
+vendor/mpv-win64/mpv-2.dll:
+	bash scripts/build-libmpv-windows.sh
+
+dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/ilr-launcher.exe vendor/mpv-win64/mpv-2.dll
 	@echo "=== Packaging single-file Windows exe ==="
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
@@ -247,11 +280,12 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
 	rm -rf $(STAGING_DIR)
-	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll ──
+	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll + mpv-2.dll ──
 	mkdir -p $(WIN_STAGING)/lib
 	cat $(LOVE_WIN_DIR)/love.exe /tmp/ilovereact-demo.love > $(WIN_STAGING)/ilovereact-demo.exe
 	cp $(LOVE_WIN_DIR)/*.dll $(WIN_STAGING)/
 	cp zig-out-win/bin/quickjs.dll $(WIN_STAGING)/lib/libquickjs.dll
+	cp vendor/mpv-win64/mpv-2.dll $(WIN_STAGING)/
 	cd $(WIN_STAGING) && zip -9 -r /tmp/ilovereact-payload.zip .
 	rm -rf $(WIN_STAGING) /tmp/ilovereact-demo.love
 	# ── Concatenate: launcher.exe + payload.zip + 8-byte offset footer ──

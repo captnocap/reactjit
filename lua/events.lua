@@ -295,7 +295,21 @@ end
 
 --- Build a keyboard event for keydown/keyup.
 --- Format matches BridgeEvent: { type: string, payload: any }
-function Events.createKeyEvent(eventType, key, scancode, isRepeat)
+function Events.createKeyEvent(eventType, key, scancode, isRepeat, modifiers)
+  local ctrl, shift, alt, meta
+  if modifiers then
+    ctrl  = modifiers.ctrl  or false
+    shift = modifiers.shift or false
+    alt   = modifiers.alt   or false
+    meta  = modifiers.meta  or false
+  elseif love then
+    ctrl  = love.keyboard.isDown("lctrl", "rctrl")
+    shift = love.keyboard.isDown("lshift", "rshift")
+    alt   = love.keyboard.isDown("lalt", "ralt")
+    meta  = love.keyboard.isDown("lgui", "rgui")
+  else
+    ctrl, shift, alt, meta = false, false, false, false
+  end
   return {
     type = eventType,
     payload = {
@@ -303,10 +317,7 @@ function Events.createKeyEvent(eventType, key, scancode, isRepeat)
       key = key,
       scancode = scancode,
       isRepeat = isRepeat or false,
-      ctrl = love.keyboard.isDown("lctrl", "rctrl"),
-      shift = love.keyboard.isDown("lshift", "rshift"),
-      alt = love.keyboard.isDown("lalt", "ralt"),
-      meta = love.keyboard.isDown("lgui", "rgui"),
+      ctrl = ctrl, shift = shift, alt = alt, meta = meta,
     }
   }
 end
@@ -452,18 +463,24 @@ end
 
 --- Build a file drop event for drag-and-drop file/directory input.
 --- Format matches BridgeEvent: { type: string, payload: any }
-function Events.createFileDropEvent(eventType, targetId, x, y, filePath, fileSize, bubblePath)
+function Events.createFileDropEvent(eventType, targetId, x, y, filePath, fileSize, bubblePath, extraPayload)
+  local payload = {
+    type = eventType,
+    targetId = targetId,
+    x = x,
+    y = y,
+    filePath = filePath,
+    fileSize = fileSize,
+    bubblePath = bubblePath,
+  }
+  if type(extraPayload) == "table" then
+    for k, v in pairs(extraPayload) do
+      payload[k] = v
+    end
+  end
   return {
     type = eventType,
-    payload = {
-      type = eventType,
-      targetId = targetId,
-      x = x,
-      y = y,
-      filePath = filePath,
-      fileSize = fileSize,
-      bubblePath = bubblePath,
-    }
+    payload = payload,
   }
 end
 

@@ -73,6 +73,7 @@ ffi.cdef[[
   void          SDL_Delay(uint32_t ms);
   const char   *SDL_GetError(void);
   void          SDL_GL_GetDrawableSize(SDL_Window *win, int *w, int *h);
+  void          SDL_GetWindowSize(SDL_Window *win, int *w, int *h);
   void          SDL_StartTextInput(void);
 ]]
 
@@ -187,7 +188,13 @@ function SDL2Init.run(config)
   -- Actual drawable size (handles HiDPI scaling)
   local dw = ffi.new("int[1]"); local dh = ffi.new("int[1]")
   sdl.SDL_GL_GetDrawableSize(window, dw, dh)
+  -- Window size (for mouse coordinate mapping)
+  local ww = ffi.new("int[1]"); local wh = ffi.new("int[1]")
+  sdl.SDL_GetWindowSize(window, ww, wh)
   W, H = dw[0], dh[0]
+  local scaleX = W / ww[0]
+  local scaleY = H / wh[0]
+  io.write("[sdl2_init] " .. W .. "x" .. H .. " (scale " .. scaleX .. "x" .. scaleY .. ")\n"); io.flush()
 
   -- ------------------------------------------------------------------
   -- 2. OpenGL state
@@ -224,10 +231,11 @@ function SDL2Init.run(config)
   local layout  = require("lua.layout")
   local events  = require("lua.events")
   events.setTreeModule(tree)
-  layout.setMeasure(Measure)
+  layout.init({ measure = Measure })
 
   local Bridge  = require("lua.bridge_quickjs")
   local bridge  = Bridge.new("lib/libquickjs.so")
+  bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
   bridge:eval(io.open(bundle):read("*a"), bundle)
   bridge:callGlobal("__mount")
   bridge:tick()
@@ -259,9 +267,12 @@ function SDL2Init.run(config)
 
       elseif t == SDL_WINDOWEVENT then
         if event.window.event == SDL_WINDOWEVENT_RESIZED then
-          local nw = event.window.data1
-          local nh = event.window.data2
-          W, H = nw, nh
+          -- Recalculate drawable vs window sizes for HiDPI
+          sdl.SDL_GL_GetDrawableSize(window, dw, dh)
+          sdl.SDL_GetWindowSize(window, ww, wh)
+          W, H = dw[0], dh[0]
+          scaleX = W / ww[0]
+          scaleY = H / wh[0]
           GL.glViewport(0, 0, W, H)
           GL.glMatrixMode(GL.PROJECTION)
           GL.glLoadIdentity()
@@ -273,27 +284,29 @@ function SDL2Init.run(config)
         end
 
       elseif t == SDL_MOUSEMOTION then
-        mx = event.motion.x
-        my = event.motion.y
+        mx = event.motion.x * scaleX
+        my = event.motion.y * scaleY
         if root then
           events.updateHover(root, mx, my)
         end
 
       elseif t == SDL_MOUSEBTNDOWN or t == SDL_MOUSEBTNUP then
-        local evtype = (t == SDL_MOUSEBTNDOWN) and "mousedown" or "mouseup"
         local btn    = event.button.button  -- 1=left, 2=middle, 3=right
-        mx = event.button.x
-        my = event.button.y
+        mx = event.button.x * scaleX
+        my = event.button.y * scaleY
         if root then
-          local target = events.hitTest(root, mx, my)
-          if target then
-            local path = events.buildBubblePath(target)
-            bridge:pushEvent(
-              events.createEvent(evtype, target.id, mx, my, btn, path))
+          local hit = events.hitTest(root, mx, my)
+          if hit then
             if t == SDL_MOUSEBTNDOWN then
-              events.setPressedNode(target)
+              events.setPressedNode(hit)
+              local path = events.buildBubblePath(hit)
+              bridge:pushEvent(
+                events.createEvent("click", hit.id, mx, my, btn, path))
             else
               events.clearPressedNode()
+              local path = events.buildBubblePath(hit)
+              bridge:pushEvent(
+                events.createEvent("release", hit.id, mx, my, btn, path))
             end
           elseif t == SDL_MOUSEBTNUP then
             events.clearPressedNode()
@@ -304,11 +317,22 @@ function SDL2Init.run(config)
         local dx = event.wheel.x
         local dy = event.wheel.y
         if root then
-          local target = events.findScrollContainer(root, mx, my)
-          if target then
-            local path = events.buildBubblePath(target)
+          local hit = events.hitTest(root, mx, my)
+          if hit then
+            -- Update Lua-side scroll state for immediate visual response
+            local scrollContainer = events.findScrollableContainer(hit, dx, -dy)
+            if scrollContainer and scrollContainer.scrollState then
+              local ss = scrollContainer.scrollState
+              local scrollSpeed = 40
+              local newScrollX = (ss.scrollX or 0) - dx * scrollSpeed
+              local newScrollY = (ss.scrollY or 0) - dy * scrollSpeed
+              tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
+              needsLayout = true
+            end
+            -- Send wheel event to JS
+            local path = events.buildBubblePath(hit)
             bridge:pushEvent(
-              events.createWheelEvent(target.id, mx, my, dx, -dy, path))
+              events.createWheelEvent(hit.id, mx, my, dx, -dy, path))
           end
         end
 
@@ -316,9 +340,16 @@ function SDL2Init.run(config)
         local evtype  = (t == SDL_KEYDOWN) and "keydown" or "keyup"
         local sym     = event.key.keysym.sym
         local scan    = event.key.keysym.scancode
-        local isRep   = event.key.repeat ~= 0
+        local kmod    = event.key.keysym.mod
+        local isRep   = event.key["repeat"] ~= 0
         local keyname = sdlKeynameToLove(sym)
-        bridge:pushEvent(events.createKeyEvent(evtype, keyname, tostring(scan), isRep))
+        local mods = {
+          ctrl  = bit.band(kmod, 0x00C0) ~= 0,  -- KMOD_CTRL
+          shift = bit.band(kmod, 0x0003) ~= 0,  -- KMOD_SHIFT
+          alt   = bit.band(kmod, 0x0300) ~= 0,  -- KMOD_ALT
+          meta  = bit.band(kmod, 0x0C00) ~= 0,  -- KMOD_GUI
+        }
+        bridge:pushEvent(events.createKeyEvent(evtype, keyname, tostring(scan), isRep, mods))
 
       elseif t == SDL_TEXTINPUT then
         local text = ffi.string(event.text.text)
@@ -340,9 +371,9 @@ function SDL2Init.run(config)
     end
 
     -- ---- Layout ----
-    root = tree.getRoot()
+    root = tree.getTree()
     if root and needsLayout then
-      layout.performLayout(root, W, H)
+      layout.layout(root, 0, 0, W, H)
       needsLayout = false
     end
 
