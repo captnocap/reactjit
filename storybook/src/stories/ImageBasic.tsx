@@ -1,30 +1,32 @@
 import React from 'react';
-import { Box, Text, Image } from '../../../packages/shared/src';
+import { Box, Text, Image, useRendererMode } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
-// Use a simple data URI so no external assets are needed
-const PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">' +
-  '<rect width="200" height="150" fill="#334155"/>' +
-  '<text x="100" y="75" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="14">200x150</text>' +
+const WEB_PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220" viewBox="0 0 320 220">' +
+  '<rect width="320" height="220" fill="#334155"/>' +
+  '<text x="160" y="115" text-anchor="middle" fill="#cbd5e1" font-family="sans-serif" font-size="18">placeholder</text>' +
   '</svg>'
 );
+const NATIVE_PLACEHOLDER_SRC = 'lib/placeholder.png';
 
 export function ImageBasicStory() {
   const c = useThemeColors();
+  const mode = useRendererMode();
+  const placeholderSrc = mode === 'native' ? NATIVE_PLACEHOLDER_SRC : WEB_PLACEHOLDER_SRC;
   return (
     <Box style={{ width: '100%', gap: 12, padding: 16 }}>
       {/* Basic image */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>Default (fill)</Text>
-        <Image src={PLACEHOLDER_SRC} style={{ width: 200, height: 100 }} />
+        <Image src={placeholderSrc} style={{ width: 200, height: 100 }} />
       </Box>
 
       {/* objectFit: contain */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>objectFit: contain</Text>
         <Box style={{ width: 200, height: 100, backgroundColor: c.bgElevated, borderRadius: 4 }}>
-          <Image src={PLACEHOLDER_SRC} style={{ width: 200, height: 100, objectFit: 'contain' }} />
+          <Image src={placeholderSrc} style={{ width: 200, height: 100, objectFit: 'contain' }} />
         </Box>
       </Box>
 
@@ -32,14 +34,14 @@ export function ImageBasicStory() {
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>objectFit: cover</Text>
         <Box style={{ width: 200, height: 80, borderRadius: 4, overflow: 'hidden' }}>
-          <Image src={PLACEHOLDER_SRC} style={{ width: 200, height: 80, objectFit: 'cover' }} />
+          <Image src={placeholderSrc} style={{ width: 200, height: 80, objectFit: 'cover' }} />
         </Box>
       </Box>
 
       {/* Rounded image */}
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.textDim, fontSize: 10 }}>With borderRadius</Text>
-        <Image src={PLACEHOLDER_SRC} style={{ width: 80, height: 80, borderRadius: 40 }} />
+        <Image src={placeholderSrc} style={{ width: 80, height: 80, borderRadius: 40 }} />
       </Box>
     </Box>
   );

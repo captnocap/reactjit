@@ -292,7 +292,7 @@ static int extract_payload(const char *cart_path, uint64_t payload_offset,
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
         "dd if='%s' bs=1 skip=%llu count=%llu 2>/dev/null | "
-        "(cd '%s' && /bin/busybox cpio -i -d --no-preserve-owner 2>/dev/null)",
+        "(cd '%s' && /bin/busybox cpio -i -d -u)",
         cart_path,
         (unsigned long long)(CART_HEADER_SIZE + payload_offset),
         (unsigned long long)payload_len,

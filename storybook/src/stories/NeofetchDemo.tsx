@@ -88,24 +88,36 @@ function Val({ text, color }: { text: string; color?: string }) {
 /* ── CPU bars ────────────────────────────────────────────────── */
 
 function CpuPanel({ cores, total, loadAvg }: { cores: CoreInfo[]; total: number; loadAvg: [number, number, number] }) {
-  const barW = 120;
+  const chipBarW = 46;
   return (
     <Section title="CPU">
       <Box style={{ flexDirection: 'row', gap: 4 }}>
         <Label text={`${total.toFixed(0)}%`} color={total > 80 ? ACCENT : total > 50 ? YELLOW : GREEN} />
         <Label text={`load ${loadAvg[0].toFixed(2)} ${loadAvg[1].toFixed(2)} ${loadAvg[2].toFixed(2)}`} />
       </Box>
-      {cores.map((c) => (
-        <Box key={c.id} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-          <Box style={{ width: 20 }}>
-            <Label text={`${c.id}`} />
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, width: '100%' }}>
+        {cores.map((c) => (
+          <Box key={c.id} style={{
+            flexBasis: 62,
+            flexGrow: 1,
+            minWidth: 58,
+            maxWidth: 78,
+            backgroundColor: '#1a1a2a',
+            borderRadius: 4,
+            paddingLeft: 4,
+            paddingRight: 4,
+            paddingTop: 3,
+            paddingBottom: 3,
+            gap: 2,
+          }}>
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <Label text={`c${c.id}`} />
+              <Label text={`${c.usage.toFixed(0)}%`} color={BRIGHT} />
+            </Box>
+            <Bar value={c.usage} max={100} width={chipBarW} color={c.usage > 80 ? ACCENT : c.usage > 50 ? YELLOW : GREEN} height={4} />
           </Box>
-          <Bar value={c.usage} max={100} width={barW} color={c.usage > 80 ? ACCENT : c.usage > 50 ? YELLOW : GREEN} />
-          <Box style={{ width: 32 }}>
-            <Label text={`${c.usage.toFixed(0)}%`} color={BRIGHT} />
-          </Box>
-        </Box>
-      ))}
+        ))}
+      </Box>
     </Section>
   );
 }
@@ -347,16 +359,20 @@ export function NeofetchDemoStory() {
             {!sys.loading && <TaskSummary tasks={sys.tasks} />}
 
             {/* CPU + Memory side by side */}
-            <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
+            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, width: '100%' }}>
               <Box style={{
-                width: 240,
+                flexBasis: 300,
+                flexGrow: 1,
+                minWidth: 280,
                 backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
                 borderWidth: 1, borderColor: BORDER,
               }}>
                 {!sys.loading && <CpuPanel cores={sys.cpu.cores} total={sys.cpu.total} loadAvg={sys.cpu.loadAvg as [number, number, number]} />}
               </Box>
               <Box style={{
-                width: 320,
+                flexBasis: 320,
+                flexGrow: 1,
+                minWidth: 300,
                 backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
                 borderWidth: 1, borderColor: BORDER, gap: 10,
               }}>

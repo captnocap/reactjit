@@ -5,77 +5,96 @@
   Text nodes are selectable by default unless style.userSelect == "none".
 
   Flow:
-    1. mousepressed on a Text node → start(node, line, col)
-    2. mousemoved while dragging   → update(line, col)
-    3. mousereleased               → finalize() (extract text, clear if zero-length)
-    4. Ctrl+C / Cmd+C              → copyToClipboard()
-    5. Click outside text           → clear()
+    1. mousepressed on a Text node -> start(node, line, col)
+    2. mousemoved while dragging   -> update(node, line, col)
+    3. mousereleased               -> finalize() (extract text, clear if zero-length)
+    4. Ctrl+C / Cmd+C              -> copyToClipboard()
+    5. Click outside text           -> clear()
 
-  Requires: measure.lua (injected via init)
+  Requires: measure.lua, events.lua, tree.lua (injected via init)
 ]]
+
+local ZIndex = require("lua.zindex")
 
 local TextSelection = {}
 
 local Measure = nil
-local Events  = nil
+local Events = nil
+local Tree = nil
 
 function TextSelection.init(config)
   config = config or {}
   Measure = config.measure
-  Events  = config.events
+  Events = config.events
+  Tree = config.tree
 end
 
 -- ============================================================================
--- Global selection state (singleton — only one selection at a time)
+-- Global selection state (singleton -- only one selection at a time)
 -- ============================================================================
 
 local selection = nil
 -- {
---   node       = <node>,       -- the Text node being selected
+--   node       = <node>,       -- legacy alias for startNode (compat)
+--   startNode  = <node>,       -- canonical Text node where drag started
 --   startLine  = number,       -- line where drag started (1-based)
---   startCol   = number,       -- col where drag started (0-based, chars before cursor)
+--   startCol   = number,       -- col where drag started (0-based byte offset)
+--   endNode    = <node>,       -- canonical Text node where drag currently is
 --   endLine    = number,       -- line where drag currently is
 --   endCol     = number,       -- col where drag currently is
 --   isDragging = boolean,      -- true while mouse button is held
 --   text       = string|nil,   -- extracted text after finalize()
---   lines      = table,        -- cached wrapped lines for the node
+--   order      = table|nil,    -- cached text-node order for range ops
 -- }
 
 -- ============================================================================
 -- Helpers
 -- ============================================================================
 
+local function getRoot()
+  if Tree and Tree.getTree then
+    return Tree.getTree()
+  end
+  return nil
+end
+
+local function hasTextParent(node)
+  return node and node.parent and node.parent.type == "Text"
+end
+
+local function canonicalTextNode(node)
+  if not node then return nil end
+
+  local current = node
+  if current.type == "__TEXT__" and current.parent then
+    current = current.parent
+  end
+
+  if current.type ~= "Text" then
+    return nil
+  end
+
+  -- Collapse nested Text spans into a single selectable block.
+  while hasTextParent(current) do
+    current = current.parent
+  end
+  return current
+end
+
 --- Check if a node allows text selection.
 --- Default is selectable (true) unless userSelect == "none".
 function TextSelection.isSelectable(node)
-  if not node then return false end
-  if node.type ~= "Text" and node.type ~= "__TEXT__" then return false end
-  local s = node.style or {}
-  if s.userSelect == "none" then return false end
-  -- Check parent for __TEXT__ nodes
-  if node.type == "__TEXT__" and node.parent then
-    local ps = node.parent.style or {}
-    if ps.userSelect == "none" then return false end
-  end
-  return true
+  local canonical = canonicalTextNode(node)
+  if not canonical then return false end
+  local s = canonical.style or {}
+  return s.userSelect ~= "none"
 end
 
---- Resolve the font for a text node (mirrors painter.lua logic).
-local function getFont(node)
-  local s = node.style or {}
-  local fontSize = s.fontSize or 14
-  local fontFamily = s.fontFamily
-  local fontWeight = s.fontWeight
-
-  -- __TEXT__ inherits from parent
-  if node.type == "__TEXT__" and node.parent then
-    local ps = node.parent.style or {}
-    if not s.fontSize and ps.fontSize then fontSize = ps.fontSize end
-    if not fontFamily then fontFamily = ps.fontFamily end
-    if not fontWeight then fontWeight = ps.fontWeight end
-  end
-
-  return Measure.getFont(fontSize, fontFamily, fontWeight), fontSize
+local function isTopLevelTextNode(node)
+  return node
+    and node.type == "Text"
+    and not hasTextParent(node)
+    and TextSelection.isSelectable(node)
 end
 
 --- Resolve style properties for a text node.
@@ -104,8 +123,8 @@ local function resolveTextContent(node)
   if node.type == "__TEXT__" then
     return node.text or ""
   end
+
   if node.type == "Text" then
-    -- Check children first
     if node.children then
       local parts = {}
       for _, child in ipairs(node.children) do
@@ -115,13 +134,16 @@ local function resolveTextContent(node)
           parts[#parts + 1] = resolveTextContent(child)
         end
       end
-      if #parts > 0 then return table.concat(parts) end
+      if #parts > 0 then
+        return table.concat(parts)
+      end
     end
-    -- Fall back to props
+
     local text = node.text or (node.props and node.props.children) or ""
     if type(text) == "table" then text = table.concat(text) end
     return tostring(text)
   end
+
   return ""
 end
 
@@ -135,7 +157,6 @@ local function getWrappedLines(node)
   local text = resolveTextContent(node)
   if text == "" then return { "" }, font, fontSize, lineHeight, letterSpacing end
 
-  -- Normalize line endings
   text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
 
   local maxWidth = c.w
@@ -148,6 +169,7 @@ local function getWrappedLines(node)
         wrapConstraint = maxWidth * ratio
       end
     end
+
     local _, lines = font:getWrap(text, wrapConstraint)
     if #lines == 0 then lines = { "" } end
     return lines, font, fontSize, lineHeight, letterSpacing
@@ -156,36 +178,197 @@ local function getWrappedLines(node)
   return { text }, font, fontSize, lineHeight, letterSpacing
 end
 
---- Map screen coordinates (mx, my) to (line, col) within a Text node.
---- Returns 1-based line, 0-based col (chars before cursor position).
-function TextSelection.screenToPos(node, mx, my)
-  if not node or not node.computed then return 1, 0 end
+local function clampPos(node, line, col, linesOpt)
+  local lines = linesOpt or getWrappedLines(node)
+  if #lines == 0 then lines = { "" } end
 
-  local c = node.computed
-  local lines, font, fontSize, lineHeight, letterSpacing = getWrappedLines(node)
-  local effectiveLineH = lineHeight or font:getHeight()
+  local clampedLine = math.max(1, math.min(tonumber(line) or 1, #lines))
+  local lineText = lines[clampedLine] or ""
+  local maxCol = #lineText
+  local clampedCol = math.max(0, math.min(tonumber(col) or 0, maxCol))
+  return clampedLine, clampedCol
+end
 
-  -- Account for scroll ancestors
-  local sx, sy = mx, my
-  if Events and Events.screenToContent then
-    sx, sy = Events.screenToContent(node, mx, my)
+local function collectSelectableTextNodes(node, out)
+  if not node or not node.computed then return end
+  local s = node.style or {}
+  if s.display == "none" then return end
+
+  if isTopLevelTextNode(node) then
+    out[#out + 1] = node
   end
 
-  -- Vertical: which line?
+  local children = ZIndex.getSortedChildren(node.children or {})
+  for i = 1, #children do
+    collectSelectableTextNodes(children[i], out)
+  end
+end
+
+local function buildNodeOrder(root)
+  local nodes = {}
+  collectSelectableTextNodes(root, nodes)
+
+  local indexByNode = {}
+  for i, node in ipairs(nodes) do
+    indexByNode[node] = i
+  end
+
+  return {
+    nodes = nodes,
+    indexByNode = indexByNode,
+    root = root,
+  }
+end
+
+local function refreshOrder(root)
+  if not selection then return nil end
+  local treeRoot = root or getRoot()
+  if not treeRoot then
+    selection.order = nil
+    return nil
+  end
+  selection.order = buildNodeOrder(treeRoot)
+  return selection.order
+end
+
+local function ensureOrder()
+  if not selection then return nil end
+  local order = selection.order
+  if not order then
+    return refreshOrder()
+  end
+
+  local startNode = selection.startNode
+  local endNode = selection.endNode
+  if not startNode or not endNode then
+    return refreshOrder()
+  end
+
+  if not order.indexByNode[startNode] or not order.indexByNode[endNode] then
+    return refreshOrder()
+  end
+
+  return order
+end
+
+local function nearestSelectableTextNode(root, mx, my)
+  if not root then return nil end
+  local order = buildNodeOrder(root)
+  local bestNode = nil
+  local bestDist2 = nil
+
+  for _, node in ipairs(order.nodes) do
+    local c = node.computed
+    if c then
+      local dx = 0
+      if mx < c.x then
+        dx = c.x - mx
+      elseif mx > c.x + c.w then
+        dx = mx - (c.x + c.w)
+      end
+
+      local dy = 0
+      if my < c.y then
+        dy = c.y - my
+      elseif my > c.y + c.h then
+        dy = my - (c.y + c.h)
+      end
+
+      local d2 = dx * dx + dy * dy
+      if not bestDist2 or d2 < bestDist2 then
+        bestDist2 = d2
+        bestNode = node
+      end
+    end
+  end
+
+  return bestNode
+end
+
+local function comparePositions(a, b, order)
+  if a.node == b.node then
+    if a.line ~= b.line then
+      return (a.line < b.line) and -1 or 1
+    end
+    if a.col ~= b.col then
+      return (a.col < b.col) and -1 or 1
+    end
+    return 0
+  end
+
+  local ai = order and order.indexByNode[a.node] or nil
+  local bi = order and order.indexByNode[b.node] or nil
+  if ai and bi and ai ~= bi then
+    return (ai < bi) and -1 or 1
+  end
+
+  if ai and not bi then return -1 end
+  if bi and not ai then return 1 end
+
+  local aid = tonumber(a.node and a.node.id) or 0
+  local bid = tonumber(b.node and b.node.id) or 0
+  if aid ~= bid then
+    return (aid < bid) and -1 or 1
+  end
+
+  if a.line ~= b.line then
+    return (a.line < b.line) and -1 or 1
+  end
+  if a.col ~= b.col then
+    return (a.col < b.col) and -1 or 1
+  end
+  return 0
+end
+
+local function normalizedRange()
+  if not selection or not selection.startNode or not selection.endNode then
+    return nil, nil, nil
+  end
+
+  local order = ensureOrder()
+  local a = {
+    node = selection.startNode,
+    line = selection.startLine,
+    col = selection.startCol,
+  }
+  local b = {
+    node = selection.endNode,
+    line = selection.endLine,
+    col = selection.endCol,
+  }
+
+  if comparePositions(a, b, order) <= 0 then
+    return a, b, order
+  end
+  return b, a, order
+end
+
+--- Map screen coordinates (mx, my) to (line, col) within a Text node.
+--- Returns 1-based line, 0-based col (byte offset before cursor position).
+function TextSelection.screenToPos(node, mx, my)
+  local canonical = canonicalTextNode(node)
+  if not canonical or not canonical.computed then return 1, 0 end
+
+  local c = canonical.computed
+  local lines, font, _, lineHeight, letterSpacing = getWrappedLines(canonical)
+  local effectiveLineH = lineHeight or font:getHeight()
+
+  local sx, sy = mx, my
+  if Events and Events.screenToContent then
+    sx, sy = Events.screenToContent(canonical, mx, my)
+  end
+
   local relY = sy - c.y
   local line = math.floor(relY / effectiveLineH) + 1
   line = math.max(1, math.min(line, #lines))
 
-  -- Horizontal: which byte offset? (iterate by UTF-8 codepoint boundaries)
-  -- Returns byte-based col so downstream sub() calls stay valid.
   local relX = sx - c.x
   local lineText = lines[line] or ""
-  local col = 0  -- byte offset of the cursor position
+  local col = 0
   local bytePos = 1
   local len = #lineText
 
   while bytePos <= len do
-    -- Determine codepoint length from lead byte
     local b = lineText:byte(bytePos)
     local cpLen = (b < 0x80 and 1) or (b < 0xE0 and 2) or (b < 0xF0 and 3) or 4
     local endByte = math.min(bytePos + cpLen - 1, len)
@@ -199,11 +382,37 @@ function TextSelection.screenToPos(node, mx, my)
       break
     end
     col = endByte
-
     bytePos = endByte + 1
   end
 
   return line, col
+end
+
+--- Resolve best selection endpoint for a screen point.
+--- Returns canonical node + line/col.
+function TextSelection.screenToSelectionPos(root, mx, my, fallbackNode)
+  local treeRoot = root or getRoot()
+  local node = nil
+
+  if treeRoot and Events and Events.textHitTest then
+    local hit = Events.textHitTest(treeRoot, mx, my)
+    node = canonicalTextNode(hit)
+  end
+
+  if not TextSelection.isSelectable(node) and treeRoot then
+    node = nearestSelectableTextNode(treeRoot, mx, my)
+  end
+
+  if not TextSelection.isSelectable(node) then
+    node = canonicalTextNode(fallbackNode)
+  end
+
+  if not TextSelection.isSelectable(node) then
+    return nil, 1, 0
+  end
+
+  local line, col = TextSelection.screenToPos(node, mx, my)
+  return node, line, col
 end
 
 -- ============================================================================
@@ -212,30 +421,58 @@ end
 
 --- Begin selection on a Text node at (line, col).
 function TextSelection.start(node, line, col)
-  if not TextSelection.isSelectable(node) then return end
-  local lines = getWrappedLines(node)
+  local canonical = canonicalTextNode(node)
+  if not TextSelection.isSelectable(canonical) then return end
+
+  local lines = getWrappedLines(canonical)
+  local clampedLine, clampedCol = clampPos(canonical, line, col, lines)
+
   selection = {
-    node = node,
-    startLine = line,
-    startCol = col,
-    endLine = line,
-    endCol = col,
+    node = canonical,
+    startNode = canonical,
+    startLine = clampedLine,
+    startCol = clampedCol,
+    endNode = canonical,
+    endLine = clampedLine,
+    endCol = clampedCol,
     isDragging = true,
     text = nil,
-    lines = lines,
+    order = nil,
   }
+
+  refreshOrder()
 end
 
 --- Update the end position during drag.
-function TextSelection.update(line, col)
+--- Supports:
+---   update(line, col) for same-node updates
+---   update(node, line, col) for cross-node updates
+function TextSelection.update(a, b, c)
   if not selection or not selection.isDragging then return end
-  selection.endLine = line
-  selection.endCol = col
+
+  local node, line, col
+  if type(a) == "table" then
+    node, line, col = a, b, c
+  else
+    node, line, col = selection.endNode or selection.startNode, a, b
+  end
+
+  node = canonicalTextNode(node) or selection.endNode or selection.startNode
+  if not TextSelection.isSelectable(node) then
+    return
+  end
+
+  local lines = getWrappedLines(node)
+  local clampedLine, clampedCol = clampPos(node, line, col, lines)
+
+  selection.endNode = node
+  selection.endLine = clampedLine
+  selection.endCol = clampedCol
+  selection.text = nil
 end
 
 --- Extract text from wrapped lines between (startLine, startCol) and (endLine, endCol).
 local function extractText(lines, startLine, startCol, endLine, endCol)
-  -- Normalize direction (ensure start <= end)
   if startLine > endLine or (startLine == endLine and startCol > endCol) then
     startLine, startCol, endLine, endCol = endLine, endCol, startLine, startCol
   end
@@ -246,20 +483,82 @@ local function extractText(lines, startLine, startCol, endLine, endCol)
   end
 
   local parts = {}
-  -- First line: from startCol to end
   local firstLine = lines[startLine] or ""
   parts[#parts + 1] = firstLine:sub(startCol + 1)
 
-  -- Middle lines: full content
   for i = startLine + 1, endLine - 1 do
     parts[#parts + 1] = lines[i] or ""
   end
 
-  -- Last line: from start to endCol
   local lastLine = lines[endLine] or ""
   parts[#parts + 1] = lastLine:sub(1, endCol)
 
   return table.concat(parts, "\n")
+end
+
+local function separatorBetween(prevNode, nextNode)
+  if not prevNode or not nextNode then return "\n" end
+  local pc = prevNode.computed
+  local nc = nextNode.computed
+  if not pc or not nc then return "\n" end
+
+  local rowThreshold = math.max(2, math.min(pc.h or 0, nc.h or 0) * 0.35)
+  local sameRow = math.abs((pc.y or 0) - (nc.y or 0)) <= rowThreshold
+
+  if sameRow and (nc.x or 0) >= (pc.x or 0) then
+    local gap = (nc.x or 0) - ((pc.x or 0) + (pc.w or 0))
+    if gap > 4 then
+      return " "
+    end
+    return ""
+  end
+
+  return "\n"
+end
+
+local function extractSelectionText()
+  local rangeStart, rangeEnd, order = normalizedRange()
+  if not rangeStart or not rangeEnd then
+    return ""
+  end
+
+  if rangeStart.node == rangeEnd.node then
+    local lines = getWrappedLines(rangeStart.node)
+    return extractText(lines, rangeStart.line, rangeStart.col, rangeEnd.line, rangeEnd.col)
+  end
+
+  local indexByNode = order and order.indexByNode or nil
+  local nodes = order and order.nodes or nil
+  local startIdx = indexByNode and indexByNode[rangeStart.node] or nil
+  local endIdx = indexByNode and indexByNode[rangeEnd.node] or nil
+  if not startIdx or not endIdx or not nodes then
+    return ""
+  end
+
+  local parts = {}
+  for i = startIdx, endIdx do
+    local node = nodes[i]
+    local lines = getWrappedLines(node)
+    local nodeStartLine, nodeStartCol = 1, 0
+    local nodeEndLine = #lines
+    local nodeEndCol = #(lines[nodeEndLine] or "")
+
+    if node == rangeStart.node then
+      nodeStartLine, nodeStartCol = rangeStart.line, rangeStart.col
+    end
+    if node == rangeEnd.node then
+      nodeEndLine, nodeEndCol = rangeEnd.line, rangeEnd.col
+    end
+
+    local chunk = extractText(lines, nodeStartLine, nodeStartCol, nodeEndLine, nodeEndCol)
+    parts[#parts + 1] = chunk
+
+    if i < endIdx then
+      parts[#parts + 1] = separatorBetween(node, nodes[i + 1])
+    end
+  end
+
+  return table.concat(parts)
 end
 
 --- Finalize selection after mouse release. Extracts text, clears if zero-length.
@@ -267,20 +566,13 @@ function TextSelection.finalize()
   if not selection then return end
   selection.isDragging = false
 
-  -- Re-fetch lines in case they changed
-  selection.lines = getWrappedLines(selection.node)
-
-  local text = extractText(
-    selection.lines,
-    selection.startLine, selection.startCol,
-    selection.endLine, selection.endCol
-  )
-
+  local text = extractSelectionText()
   if #text == 0 then
-    selection = nil  -- Zero-length selection, clear
-  else
-    selection.text = text
+    selection = nil
+    return
   end
+
+  selection.text = text
 end
 
 --- Clear the current selection.
@@ -310,38 +602,46 @@ end
 --- Draw selection highlight rectangles for the given node.
 --- Call this BEFORE drawing the text so text renders on top.
 function TextSelection.drawHighlight(node)
-  if not selection or selection.node ~= node then return end
+  if not selection then return end
+  if not node or node.type ~= "Text" then return end
+  if canonicalTextNode(node) ~= node then return end
+
+  local rangeStart, rangeEnd, order = normalizedRange()
+  if not rangeStart or not rangeEnd or not order then return end
+
+  local indexByNode = order.indexByNode or {}
+  local nodeIdx = indexByNode[node]
+  local startIdx = indexByNode[rangeStart.node]
+  local endIdx = indexByNode[rangeEnd.node]
+  if not nodeIdx or not startIdx or not endIdx then return end
+  if nodeIdx < startIdx or nodeIdx > endIdx then return end
 
   local c = node.computed
   if not c then return end
 
-  local lines, font, fontSize, lineHeight, letterSpacing = getWrappedLines(node)
+  local lines, font, _, lineHeight, letterSpacing = getWrappedLines(node)
+  if #lines == 0 then return end
   local effectiveLineH = lineHeight or font:getHeight()
 
-  -- Normalize selection range (ensure start <= end)
-  local startLine, startCol, endLine, endCol
-  if selection.startLine < selection.endLine or
-     (selection.startLine == selection.endLine and selection.startCol <= selection.endCol) then
-    startLine, startCol = selection.startLine, selection.startCol
-    endLine, endCol = selection.endLine, selection.endCol
-  else
-    startLine, startCol = selection.endLine, selection.endCol
-    endLine, endCol = selection.startLine, selection.startCol
+  local startLine, startCol = 1, 0
+  local endLine = #lines
+  local endCol = #(lines[endLine] or "")
+
+  if nodeIdx == startIdx then
+    startLine, startCol = clampPos(node, rangeStart.line, rangeStart.col, lines)
+  end
+  if nodeIdx == endIdx then
+    endLine, endCol = clampPos(node, rangeEnd.line, rangeEnd.col, lines)
   end
 
-  -- Draw highlight rectangles
-  love.graphics.setColor(0.22, 0.35, 0.55, 0.55)  -- Match TextEditor selection color
+  love.graphics.setColor(0.22, 0.35, 0.55, 0.55)
 
   for i = startLine, endLine do
-    if i < 1 or i > #lines then goto continue end
-
     local lineText = lines[i] or ""
     local x0 = c.x
     local y0 = c.y + (i - 1) * effectiveLineH
 
-    -- Calculate start and end x positions for this line
     local sx, ex
-
     if i == startLine then
       if startCol > 0 then
         sx = Measure.getWidthWithSpacing(font, lineText:sub(1, startCol), letterSpacing)
@@ -362,12 +662,9 @@ function TextSelection.drawHighlight(node)
       ex = Measure.getWidthWithSpacing(font, lineText, letterSpacing)
     end
 
-    -- Draw highlight rectangle
     if ex > sx then
       love.graphics.rectangle("fill", x0 + sx, y0, ex - sx, effectiveLineH)
     end
-
-    ::continue::
   end
 end
 

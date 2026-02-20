@@ -158,6 +158,10 @@ function NativeTextInput({
   cursorColor,
   keyboardType,
 }: TextInputProps) {
+  const anyProps = arguments[0] as any;
+  const playgroundLine = anyProps.__ilrPlaygroundLine;
+  const playgroundTag = anyProps.__ilrPlaygroundTag;
+
   // In native mode, we emit a 'TextInput' host element.
   // Lua's textinput.lua handles ALL interaction -- cursor, selection,
   // keyboard input. No per-keystroke bridge traffic.
@@ -229,6 +233,8 @@ function NativeTextInput({
   if (placeholderColor) props.placeholderColor = placeholderColor;
   if (cursorColor) props.cursorColor = cursorColor;
   if (keyboardType) props.keyboardType = keyboardType;
+  if (playgroundLine !== undefined) props.__ilrPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) props.__ilrPlaygroundTag = playgroundTag;
 
   // Handlers -- these are extracted by the reconciler's extractHandlers()
   // and stored in handlerRegistry, NOT sent to Lua

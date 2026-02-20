@@ -998,7 +998,7 @@ export const templates: Template[] = [
   var [step, setStep] = useState(0);
 
   var audioReady = useAudioInit();
-  var rack = useRack();
+  var rack = useRack({ topologyOnly: true, maxFps: 2 });
 
   var [pattern, setPattern] = useState([
     [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
@@ -1007,6 +1007,7 @@ export const templates: Template[] = [
     [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
   ]);
   var [levels, setLevels] = useState([0.35, 0.22, 0.3, 0.24]);
+  var [grooveHistory, setGrooveHistory] = useState([58, 61, 59, 63, 64, 60, 65, 68, 66, 70, 69, 72, 68, 71, 73, 75, 74, 77, 76, 78, 79, 80, 78, 81]);
   var [messages, setMessages] = useState([
     { role: 'assistant', content: 'Co-producer online. Ask for drums, bass, or arrangement ideas.' },
   ]);
@@ -1027,6 +1028,7 @@ export const templates: Template[] = [
     if (!playing) return;
     var msPerStep = Math.max(80, Math.round((60000 / tempo) / 4));
     var interval = setInterval(function() {
+      var densNow = density();
       setStep(function(prev) {
         var next = (prev + 1) % 16;
         setLevels(function(old) {
@@ -1038,6 +1040,11 @@ export const templates: Template[] = [
             return v * 0.42 + target * 0.58;
           });
         });
+        return next;
+      });
+      setGrooveHistory(function(prev) {
+        var next = prev.slice(1);
+        next.push(Math.round(38 + densNow * 52 + energy * 16 + Math.random() * 6));
         return next;
       });
     }, msPerStep);
@@ -1091,11 +1098,50 @@ export const templates: Template[] = [
     });
   }
 
+  var i = 0;
+  var t = 0;
+  var stepBars = [];
+  for (i = 0; i < 16; i += 1) {
+    var hits = 0;
+    for (t = 0; t < pattern.length; t += 1) {
+      if (pattern[t] && pattern[t][i]) hits += 1;
+    }
+    stepBars.push({
+      label: String(i + 1),
+      value: hits,
+      color: i === step ? '#fbbf24' : '#38bdf8',
+    });
+  }
+
+  var grooveLine = grooveHistory.map(function(value, index) {
+    return { x: String(index + 1), value: value };
+  });
+
+  var radarData = [
+    Math.round((1 - swing / 0.3) * 100),
+    Math.round(energy * 100),
+    Math.round(density() * 100),
+    Math.round((tempo - 90) / 70 * 100),
+    Math.round((levels[0] + levels[1] + levels[2] + levels[3]) / 4 * 100),
+  ];
+
+  var pieData = [
+    { label: 'kick', value: Math.round(levels[0] * 100), color: '#22d3ee' },
+    { label: 'snare', value: Math.round(levels[1] * 100), color: '#f97316' },
+    { label: 'hat', value: Math.round(levels[2] * 100), color: '#a3e635' },
+    { label: 'bass', value: Math.round(levels[3] * 100), color: '#f472b6' },
+  ];
+
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#090f1f', padding: 12, gap: 10 }}>
       <Box style={{ flexDirection: 'row', width: '100%', height: '100%', gap: 12 }}>
-        <Card style={{ flexGrow: 1 }} title="AI Co-Producer Studio" subtitle="Compose with controls + chat loop">
-          <Box style={{ gap: 10 }}>
+        <Card
+          style={{ flexGrow: 1, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 10 }}
+          title="AI Co-Producer Studio"
+          subtitle="Compose with controls + chat loop"
+        >
+          <Box style={{ width: '100%', height: '100%', gap: 10 }}>
             <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: '#94a3b8', fontSize: 11 }}>
                 {'Audio engine: ' + (audioReady ? 'ready' : 'loading') + ' | Modules: ' + rack.modules.length + ' | Wires: ' + rack.connections.length}
@@ -1151,11 +1197,73 @@ export const templates: Template[] = [
                 if (key === 'hook') sendToAI('Give me a melodic hook idea');
               }}
             />
+
+            <Box style={{ flexDirection: 'row', width: '100%', gap: 10, flexGrow: 1 }}>
+              <Box style={{
+                flexGrow: 1,
+                backgroundColor: '#0e1729',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#1e2d45',
+                padding: 8,
+                gap: 6,
+              }}>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Groove Contour</Text>
+                <AreaChart data={grooveLine} width={360} height={120} color="#22d3ee" interactive />
+                <BarChart data={stepBars} height={72} showLabels={false} interactive />
+              </Box>
+
+              <Box style={{
+                width: 210,
+                backgroundColor: '#0e1729',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#1e2d45',
+                padding: 8,
+                gap: 8,
+              }}>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Mix DNA</Text>
+                <RadarChart
+                  axes={[
+                    { label: 'tight' },
+                    { label: 'energy' },
+                    { label: 'density' },
+                    { label: 'pace' },
+                    { label: 'headroom' },
+                  ]}
+                  data={radarData}
+                  size={130}
+                  color="#a78bfa"
+                  interactive
+                />
+                <PieChart data={pieData} size={118} innerRadius={24} />
+                <Text style={{ color: '#64748b', fontSize: 10 }}>
+                  {'Pattern density: ' + Math.round(density() * 100) + '%'}
+                </Text>
+              </Box>
+            </Box>
           </Box>
         </Card>
 
-        <Card style={{ width: 360 }} title="AI Notes" subtitle="Prompt ideas and get production guidance">
-          <Box style={{ width: '100%', height: 360 }}>
+        <Card
+          style={{ width: 360, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 10 }}
+          title="AI Notes"
+          subtitle="Prompt ideas and get production guidance"
+        >
+          <ActionBar
+            items={[
+              { key: 'drums', label: 'Drum Fill', color: '#93c5fd' },
+              { key: 'bass', label: 'Bass Motif', color: '#f9a8d4' },
+              { key: 'mix', label: 'Mix Move', color: '#86efac' },
+            ]}
+            onAction={function(key) {
+              if (key === 'drums') sendToAI('Suggest one 16-step drum variation');
+              if (key === 'bass') sendToAI('Give me a bass motif for this groove');
+              if (key === 'mix') sendToAI('What is one smart mix adjustment right now');
+            }}
+          />
+          <Box style={{ width: '100%', flexGrow: 1, minHeight: 0 }}>
             <AIMessageList messages={messages} />
           </Box>
           <AIChatInput send={sendToAI} placeholder="ex: Give me a darker bassline and tighter hats" />
@@ -1178,6 +1286,7 @@ export const templates: Template[] = [
   var [chaos, setChaos] = useState(0.32);
   var [glow, setGlow] = useState(0.7);
   var [meshType, setMeshType] = useState('sphere');
+  var [trace, setTrace] = useState([44, 48, 52, 50, 47, 45, 49, 53, 58, 61, 57, 54, 49, 46, 43, 45, 50, 56, 60, 63, 59, 55, 51, 48]);
   var [messages, setMessages] = useState([
     { role: 'assistant', content: 'Describe a vibe and I will reshape the scene.' },
   ]);
@@ -1229,32 +1338,64 @@ export const templates: Template[] = [
     });
   }
 
+  useEffect(function() {
+    var interval = setInterval(function() {
+      setTrace(function(prev) {
+        var next = prev.slice(1);
+        var value = Math.round(30 + mood * 38 + glow * 22 + Math.sin(Date.now() / 900 + chaos * 8) * (8 + chaos * 12));
+        next.push(Math.max(6, value));
+        return next;
+      });
+    }, 850);
+    return function() { clearInterval(interval); };
+  }, [mood, chaos, glow]);
+
   var colorMain = mood > 0.5 ? '#22d3ee' : '#fb7185';
   var colorAlt = mood > 0.5 ? '#60a5fa' : '#f59e0b';
   var panelBg = mood > 0.5 ? '#06122b' : '#1d0f19';
+
+  var lineData = trace.map(function(value, index) {
+    return { x: String(index + 1), value: value };
+  });
+
+  var pulseBars = [];
+  var i = 0;
+  for (i = 0; i < 8; i += 1) {
+    var idx = i * 3;
+    var barColor = i % 2 === 0 ? colorMain : colorAlt;
+    pulseBars.push({
+      label: String(i + 1),
+      value: Math.max(5, trace[idx] || 0),
+      color: barColor,
+    });
+  }
 
   var radarData = [
     Math.round((1 - chaos) * 100),
     Math.round(glow * 100),
     Math.round(mood * 100),
     Math.round((0.35 + chaos * 0.65) * 100),
-    Math.round((0.25 + mood * 0.75) * 100),
+    Math.round((0.2 + glow * 0.8) * 100),
   ];
 
-  var lineData = [];
-  var i = 0;
-  for (i = 0; i < 24; i += 1) {
-    var wave = 35 + Math.sin((i / 24) * Math.PI * 2 + chaos * 3) * (14 + glow * 16) + mood * 30;
-    lineData.push({ x: String(i), value: Math.round(Math.max(3, wave)) });
-  }
+  var paletteWeight = [
+    { label: 'base', value: Math.round((1 - glow) * 100), color: '#1f2937' },
+    { label: 'accent', value: Math.round(glow * 100), color: colorMain },
+    { label: 'contrast', value: Math.round((chaos * 0.7 + 0.15) * 100), color: colorAlt },
+  ];
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#070b16', padding: 12, gap: 10 }}>
       <Box style={{ flexDirection: 'row', width: '100%', height: '100%', gap: 12 }}>
-        <Card style={{ flexGrow: 1 }} title="Scene Alchemist" subtitle="3D canvas + prompt steering">
-          <Box style={{ gap: 10 }}>
+        <Card
+          style={{ flexGrow: 1, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 10 }}
+          title="Scene Alchemist"
+          subtitle="3D canvas + prompt steering"
+        >
+          <Box style={{ width: '100%', height: '100%', gap: 10 }}>
             <Scene
-              style={{ width: '100%', height: 220, borderRadius: 10, overflow: 'hidden' }}
+              style={{ width: '100%', height: 260, borderRadius: 10, overflow: 'hidden' }}
               backgroundColor={panelBg}
               stars={true}
               orbitControls={true}
@@ -1309,28 +1450,66 @@ export const templates: Template[] = [
                 if (key === 'quiet-fog') sendPrompt('calm ambient low chaos with soft plane horizon');
               }}
             />
+
+            <Box style={{ flexDirection: 'row', width: '100%', gap: 10, flexGrow: 1 }}>
+              <Box style={{
+                flexGrow: 1,
+                backgroundColor: '#0d1323',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#1f2a44',
+                padding: 8,
+                gap: 6,
+              }}>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Atmosphere Wave</Text>
+                <AreaChart data={lineData} width={360} height={126} color={colorMain} interactive />
+                <BarChart data={pulseBars} height={68} showLabels={false} interactive />
+              </Box>
+
+              <Box style={{
+                width: 190,
+                backgroundColor: '#0d1323',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#1f2a44',
+                padding: 8,
+                gap: 8,
+              }}>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Palette Weight</Text>
+                <PieChart data={paletteWeight} size={126} innerRadius={24} />
+                <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Mesh: ' + meshType}</Text>
+                <Text style={{ color: '#64748b', fontSize: 10 }}>
+                  {'Vibe score: ' + Math.round((mood * 0.4 + glow * 0.35 + (1 - chaos) * 0.25) * 100)}
+                </Text>
+              </Box>
+            </Box>
           </Box>
         </Card>
 
-        <Card style={{ width: 360 }} title="AI + Metrics" subtitle="Prompt log and vibe telemetry">
+        <Card
+          style={{ width: 360, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 10 }}
+          title="AI + Metrics"
+          subtitle="Prompt log and vibe telemetry"
+        >
           <Box style={{ gap: 8 }}>
             <RadarChart
               axes={[
-                { label: 'focus', max: 100 },
-                { label: 'glow', max: 100 },
-                { label: 'cool', max: 100 },
-                { label: 'motion', max: 100 },
-                { label: 'depth', max: 100 },
+                { label: 'focus' },
+                { label: 'glow' },
+                { label: 'cool' },
+                { label: 'motion' },
+                { label: 'depth' },
               ]}
               data={radarData}
-              size={150}
+              size={138}
               color={colorMain}
               interactive
             />
-            <LineChart data={lineData} width={320} height={80} color={colorAlt} showArea interactive />
+            <LineChart data={lineData.slice(8)} width={320} height={78} color={colorAlt} showArea interactive />
           </Box>
 
-          <Box style={{ width: '100%', height: 220, marginTop: 10 }}>
+          <Box style={{ width: '100%', flexGrow: 1, minHeight: 0 }}>
             <AIMessageList messages={messages} />
           </Box>
           <AIChatInput send={sendPrompt} placeholder="ex: Make it darker, calmer, and more cinematic" />

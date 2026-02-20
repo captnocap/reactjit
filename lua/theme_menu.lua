@@ -851,53 +851,90 @@ local function drawPrimitiveShowcase(layout, ui, fontName, fontStatus)
 
   drawText("Text / Box / Pressable / Input / Status", contentX + 8, contentY + 6, fontStatus, textSecondary or text)
 
-  local rowY = contentY + 24
   local rowW = contentW - 16
   local rowX = contentX + 8
+  local blockTopY = contentY + 24
+  local blockBottomY = contentY + contentH - 8
+  local availableH = math.max(160, blockBottomY - blockTopY)
+  local spacing = math.max(6, math.floor(availableH * 0.04))
+
+  local boxH = math.max(36, math.floor(availableH * 0.22))
+  local actionH = math.max(28, math.floor(availableH * 0.16))
+  local inputH = math.max(26, math.floor(availableH * 0.15))
+  local progressH = math.max(10, math.floor(availableH * 0.07))
+  local chipH = math.max(18, math.floor(availableH * 0.14))
+  local usedH = boxH + actionH + inputH + progressH + chipH + spacing * 4
+
+  if usedH > availableH then
+    local overflow = usedH - availableH
+    local shrink = math.min(overflow, math.max(0, chipH - 18))
+    chipH = chipH - shrink
+    overflow = overflow - shrink
+    if overflow > 0 then
+      shrink = math.min(overflow, math.max(0, actionH - 28))
+      actionH = actionH - shrink
+      overflow = overflow - shrink
+    end
+    if overflow > 0 then
+      shrink = math.min(overflow, math.max(0, boxH - 36))
+      boxH = boxH - shrink
+      overflow = overflow - shrink
+    end
+    if overflow > 0 then
+      shrink = math.min(overflow, math.max(0, inputH - 26))
+      inputH = inputH - shrink
+      overflow = overflow - shrink
+    end
+    if overflow > 0 then
+      spacing = math.max(4, spacing - math.ceil(overflow / 4))
+    end
+  end
+
+  local y = blockTopY
 
   -- Box primitive
   setColor(withAlpha(surface, 0.95))
-  drawRoundedRect("fill", rowX, rowY, rowW, 32, 4)
+  drawRoundedRect("fill", rowX, y, rowW, boxH, 4)
   setColor(withAlpha(border, 0.85))
-  drawRoundedRect("line", rowX, rowY, rowW, 32, 4)
-  drawText("Box", rowX + 8, rowY + 9, fontName, text)
+  drawRoundedRect("line", rowX, y, rowW, boxH, 4)
+  drawCenteredText("Box", rowX, y + math.floor((boxH - 14) / 2), rowW, fontName, text)
+
+  y = y + boxH + spacing
 
   -- Pressable + Badge row
-  local actionY = rowY + 40
   local buttonW = math.floor(rowW * 0.58)
   local onPrimary = pickTextColor(primary, text, bg)
   setColor(primary)
-  drawRoundedRect("fill", rowX, actionY, buttonW, 25, 4)
-  drawCenteredText("Pressable", rowX, actionY + 6, buttonW, fontStatus, onPrimary)
+  drawRoundedRect("fill", rowX, y, buttonW, actionH, 4)
+  drawCenteredText("Pressable", rowX, y + math.floor((actionH - 12) / 2), buttonW, fontStatus, onPrimary)
 
   local badgeX = rowX + buttonW + 8
   local badgeW = rowW - buttonW - 8
   local onAccent = pickTextColor(accent, text, bg)
   setColor(accent)
-  drawRoundedRect("fill", badgeX, actionY, badgeW, 25, 13)
-  drawCenteredText("Badge", badgeX, actionY + 6, badgeW, fontStatus, onAccent)
+  drawRoundedRect("fill", badgeX, y, badgeW, actionH, math.floor(actionH / 2))
+  drawCenteredText("Badge", badgeX, y + math.floor((actionH - 12) / 2), badgeW, fontStatus, onAccent)
+
+  y = y + actionH + spacing
 
   -- TextInput primitive
-  local inputY = actionY + 33
   setColor(withAlpha(bgAlt or bg, 0.94))
-  drawRoundedRect("fill", rowX, inputY, rowW, 24, 4)
+  drawRoundedRect("fill", rowX, y, rowW, inputH, 4)
   setColor(withAlpha(borderFocus or border, 0.95))
-  drawRoundedRect("line", rowX, inputY, rowW, 24, 4)
-  drawText("TextInput placeholder", rowX + 8, inputY + 6, fontStatus, textDim or textSecondary or text)
+  drawRoundedRect("line", rowX, y, rowW, inputH, 4)
+  drawText("TextInput placeholder", rowX + 8, y + math.floor((inputH - 12) / 2), fontStatus, textDim or textSecondary or text)
 
-  -- Divider + Progress primitive
-  local dividerY = inputY + 30
-  setColor(withAlpha(border, 0.8))
-  love.graphics.line(rowX, dividerY, rowX + rowW, dividerY)
+  y = y + inputH + spacing
 
-  local progressY = dividerY + 8
+  -- Progress primitive
   setColor(withAlpha(bgElevated or surface, 0.95))
-  drawRoundedRect("fill", rowX, progressY, rowW, 10, 5)
+  drawRoundedRect("fill", rowX, y, rowW, progressH, math.floor(progressH / 2))
   setColor(success)
-  drawRoundedRect("fill", rowX, progressY, math.floor(rowW * 0.63), 10, 5)
+  drawRoundedRect("fill", rowX, y, math.floor(rowW * 0.63), progressH, math.floor(progressH / 2))
+
+  y = y + progressH + spacing
 
   -- Status chips (Error / Warn / Success)
-  local chipY = progressY + 17
   local chipGap = 6
   local chipW = math.floor((rowW - chipGap * 2) / 3)
 
@@ -906,16 +943,16 @@ local function drawPrimitiveShowcase(layout, ui, fontName, fontStatus)
   local onSuccess = pickTextColor(success, text, bg)
 
   setColor(error)
-  drawRoundedRect("fill", rowX, chipY, chipW, 18, 9)
-  drawCenteredText("Error", rowX, chipY + 4, chipW, fontStatus, onError)
+  drawRoundedRect("fill", rowX, y, chipW, chipH, math.floor(chipH / 2))
+  drawCenteredText("Error", rowX, y + math.floor((chipH - 12) / 2), chipW, fontStatus, onError)
 
   setColor(warning)
-  drawRoundedRect("fill", rowX + chipW + chipGap, chipY, chipW, 18, 9)
-  drawCenteredText("Warning", rowX + chipW + chipGap, chipY + 4, chipW, fontStatus, onWarn)
+  drawRoundedRect("fill", rowX + chipW + chipGap, y, chipW, chipH, math.floor(chipH / 2))
+  drawCenteredText("Warning", rowX + chipW + chipGap, y + math.floor((chipH - 12) / 2), chipW, fontStatus, onWarn)
 
   setColor(success)
-  drawRoundedRect("fill", rowX + (chipW + chipGap) * 2, chipY, chipW, 18, 9)
-  drawCenteredText("Success", rowX + (chipW + chipGap) * 2, chipY + 4, chipW, fontStatus, onSuccess)
+  drawRoundedRect("fill", rowX + (chipW + chipGap) * 2, y, chipW, chipH, math.floor(chipH / 2))
+  drawCenteredText("Success", rowX + (chipW + chipGap) * 2, y + math.floor((chipH - 12) / 2), chipW, fontStatus, onSuccess)
 end
 
 local function drawTokenEditor(layout, ui, fontName, fontStatus)

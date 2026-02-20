@@ -31,6 +31,32 @@ import type {
   UseSequencerResult,
 } from './types';
 
+interface UseRackOptions {
+  /**
+   * Update only when module/connection topology changes (id/type/wiring),
+   * ignoring high-frequency param/state updates.
+   */
+  topologyOnly?: boolean;
+  /**
+   * Cap state updates to this FPS. Useful for dashboards that don't need
+   * per-frame fidelity.
+   */
+  maxFps?: number;
+}
+
+function topologySignature(modules: ModuleState[], connections: Connection[]): string {
+  if (modules.length === 0 && connections.length === 0) return '';
+  const modSig = modules
+    .map((m) => `${m.id}:${m.type}`)
+    .sort()
+    .join('|');
+  const connSig = connections
+    .map((c) => `${c.fromId}.${c.fromPort}>${c.toId}.${c.toPort}:${c.type}`)
+    .sort()
+    .join('|');
+  return `${modSig}__${connSig}`;
+}
+
 // ============================================================================
 // useRack — rack-level operations and state
 // ============================================================================
@@ -43,9 +69,14 @@ import type {
  * rack.addModule('oscillator', 'osc1', { waveform: 'saw' });
  * rack.connect('osc1', 'audio_out', 'mixer1', 'input_1');
  */
-export function useRack(): UseRackResult {
+export function useRack(options?: UseRackOptions): UseRackResult {
   const [modules, setModules] = useState<ModuleState[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const lastTopologyRef = useRef<string>('__init__');
+  const lastUpdateAtRef = useRef<number>(0);
+
+  const topologyOnly = options?.topologyOnly ?? false;
+  const minIntervalMs = options?.maxFps ? Math.max(0, Math.floor(1000 / options.maxFps)) : 0;
 
   const addModuleRpc = useLoveRPC('audio:addModule');
   const removeModuleRpc = useLoveRPC('audio:removeModule');
@@ -53,6 +84,23 @@ export function useRack(): UseRackResult {
   const disconnectRpc = useLoveRPC('audio:disconnect');
 
   useLoveEvent('audio:state', (state: RackState) => {
+    const now = Date.now();
+    if (minIntervalMs > 0 && now - lastUpdateAtRef.current < minIntervalMs) {
+      return;
+    }
+
+    const topo = topologySignature(state.modules, state.connections);
+
+    // Idle engine emits empty state at ~30fps; avoid pointless rerenders.
+    if (!topologyOnly && topo === '' && lastTopologyRef.current === '') {
+      return;
+    }
+    if (topologyOnly && topo === lastTopologyRef.current) {
+      return;
+    }
+
+    lastTopologyRef.current = topo;
+    lastUpdateAtRef.current = now;
     setModules(state.modules);
     setConnections(state.connections);
   });

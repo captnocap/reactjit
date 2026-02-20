@@ -33,6 +33,7 @@ local state = {
   treePanel  = false,     -- sidebar visible?
   hoveredNode = nil,       -- node under cursor (deep hit test)
   selectedNode = nil,      -- clicked/locked node for detail panel
+  playgroundLink = nil,    -- hover link from TextEditor (line + token)
   mouseX     = 0,
   mouseY     = 0,
   -- Performance
@@ -355,10 +356,38 @@ function Inspector.disable()
   state.enabled = false
   state.hoveredNode = nil
   state.selectedNode = nil
+  state.playgroundLink = nil
   state.editState = nil
   state.treePanel = false
   state.treeRegion = nil
   state.detailRegion = nil
+end
+
+--- Set cross-link highlight data from playground TextEditor hover.
+--- link: nil | { line: number, token?: string, level?: string }
+function Inspector.setPlaygroundLink(link)
+  if not link then
+    state.playgroundLink = nil
+    return
+  end
+
+  local level = link.level
+  local line = tonumber(link.line)
+  if level == "clean" or not line or line < 1 then
+    state.playgroundLink = nil
+    return
+  end
+
+  local token = nil
+  if type(link.token) == "string" and link.token ~= "" then
+    token = link.token
+  end
+
+  state.playgroundLink = {
+    line = line,
+    token = token,
+    level = level,
+  }
 end
 
 --- Return performance data (used by console :perf command)
@@ -687,6 +716,112 @@ end
 -- ============================================================================
 -- Drawing: Hover overlay
 -- ============================================================================
+
+local PLAYGROUND_TOKEN_TO_HOST_TYPE = {
+  Box = "View",
+  Text = "Text",
+  Image = "Image",
+  Video = "Video",
+  Pressable = "View",
+  ScrollView = "View",
+  TextInput = "TextInput",
+  TextEditor = "TextEditor",
+}
+
+local function collectPlaygroundNodes(node, line, out)
+  if not node then return end
+  local p = node.props or {}
+  local taggedLine = tonumber(p.__ilrPlaygroundLine)
+  if taggedLine and taggedLine == line and node.computed and node.type ~= "__TEXT__" then
+    out[#out + 1] = node
+  end
+  for _, child in ipairs(node.children or {}) do
+    collectPlaygroundNodes(child, line, out)
+  end
+end
+
+local function isJSXTagPunctuation(token)
+  return token == "<" or token == ">" or token == "</" or token == "/>" or token == "<>" or token == "</>"
+end
+
+local function filterPlaygroundNodesByToken(nodes, token)
+  if not token or token == "" or isJSXTagPunctuation(token) then
+    return nodes
+  end
+
+  local hostType = PLAYGROUND_TOKEN_TO_HOST_TYPE[token]
+  local filtered = {}
+  for _, node in ipairs(nodes) do
+    local p = node.props or {}
+    if p.__ilrPlaygroundTag == token then
+      filtered[#filtered + 1] = node
+    elseif hostType and node.type == hostType then
+      filtered[#filtered + 1] = node
+    end
+  end
+  return filtered
+end
+
+local function pickSmallestNode(nodes)
+  local best = nil
+  local bestArea = nil
+  for _, node in ipairs(nodes) do
+    local c = node.computed
+    if c then
+      local area = math.max(1, c.w * c.h)
+      if not bestArea or area < bestArea then
+        best = node
+        bestArea = area
+      end
+    end
+  end
+  return best
+end
+
+--- Draw inspector-style highlight for the JSX element currently hovered
+--- in playground TextEditor. This runs even when devtools panel is closed.
+function Inspector.drawPlaygroundLinkOverlay(root)
+  local link = state.playgroundLink
+  if not link or not root then return end
+
+  local line = tonumber(link.line)
+  if not line or line < 1 then return end
+
+  local matches = {}
+  collectPlaygroundNodes(root, line, matches)
+  if #matches == 0 then return end
+
+  local tokenMatches = filterPlaygroundNodesByToken(matches, link.token)
+  if #tokenMatches > 0 then
+    matches = tokenMatches
+  elseif link.token and link.token ~= "" and not isJSXTagPunctuation(link.token) then
+    -- Token did not map to a JSX node on this line.
+    return
+  end
+
+  local target = pickSmallestNode(matches)
+  if not target then return end
+
+  local prevHovered = state.hoveredNode
+  local prevSelected = state.selectedNode
+
+  local ok = pcall(function()
+    love.graphics.push("all")
+    love.graphics.origin()
+    love.graphics.setScissor()
+    state.hoveredNode = target
+    state.selectedNode = nil
+    drawHoverOverlay()
+    love.graphics.pop()
+  end)
+
+  state.hoveredNode = prevHovered
+  state.selectedNode = prevSelected
+
+  if not ok then
+    -- Keep this path silent: it's a best-effort teaching aid.
+  end
+end
 
 function drawHoverOverlay()
   local node = state.hoveredNode

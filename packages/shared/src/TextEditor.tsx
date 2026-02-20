@@ -126,6 +126,10 @@ function NativeTextEditor({
   style,
   textStyle,
 }: TextEditorProps) {
+  const anyProps = arguments[0] as any;
+  const playgroundLine = anyProps.__ilrPlaygroundLine;
+  const playgroundTag = anyProps.__ilrPlaygroundTag;
+
   // In native mode, we emit a 'TextEditor' host element.
   // Lua's texteditor.lua handles ALL interaction — cursor, selection,
   // keyboard input, scrolling. No per-keystroke bridge traffic.
@@ -195,6 +199,8 @@ function NativeTextEditor({
     syntaxHighlight: syntaxHighlight ?? false,
     tooltipLevel: tooltipLevel ?? '',
   };
+  if (playgroundLine !== undefined) props.__ilrPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) props.__ilrPlaygroundTag = playgroundTag;
 
   if (changeDelay !== undefined) {
     props.changeDelay = changeDelay;

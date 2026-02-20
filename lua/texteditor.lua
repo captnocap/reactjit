@@ -95,9 +95,11 @@ function TextEditor.initState(node)
     dirty = false,            -- text changed since last change event
     changeTimer = 0,          -- seconds since last edit (for idle detection)
     -- Hover tooltip state
-    hoverWord = nil,          -- currently hovered identifier (string or nil)
+    hoverWord = nil,          -- currently hovered token (string or nil)
     hoverLine = 0,            -- line of hovered word
-    hoverCol = 0,             -- start col of hovered word
+    hoverCol = 0,             -- start col (0-based) of hovered token
+    hoverEndCol = 0,          -- end col (exclusive) of hovered token
+    hoverText = nil,          -- resolved tooltip text for hovered token
     hoverTimer = 0,           -- seconds hovering on current word
     hoverVisible = false,     -- whether tooltip is showing
     lastMouseX = 0,           -- last known mouse X
@@ -301,27 +303,67 @@ end
 -- Hover tooltip helpers
 -- ============================================================================
 
---- Extract the word (identifier) under the given line/col position.
---- Returns word, startCol, endCol or nil if no identifier at that position.
-local function wordAtPos(es, line, col)
+-- Extract the token under the given line/col position.
+-- Returns token info or nil.
+local function tokenAtPos(es, line, col)
   local lineStr = es.lines[line]
   if not lineStr or #lineStr == 0 then return nil end
-  -- col is 0-based character offset; convert to 1-based for string ops
-  local pos = col + 1
-  if pos < 1 or pos > #lineStr then return nil end
-  local ch = lineStr:sub(pos, pos)
-  if not ch:match("[a-zA-Z_$]") then return nil end
-  -- scan left
-  local s = pos
-  while s > 1 and lineStr:sub(s - 1, s - 1):match("[a-zA-Z0-9_$]") do
-    s = s - 1
+
+  local tokens = tokenizeLine(lineStr)
+  if not tokens or #tokens == 0 then return nil end
+
+  local hitIdx = nil
+  local off = 0
+  for i, tok in ipairs(tokens) do
+    local txt = tok.text or ""
+    local len = #txt
+    local s = off
+    local e = off + len
+    -- Inclusive-right hit testing improves hover feel near token edges.
+    if len > 0 and col >= s and col <= e then
+      hitIdx = i
+      break
+    end
+    off = e
   end
-  -- scan right
-  local e = pos
-  while e < #lineStr and lineStr:sub(e + 1, e + 1):match("[a-zA-Z0-9_$]") do
-    e = e + 1
+
+  if not hitIdx then return nil end
+  local hit = tokens[hitIdx]
+  local token = hit.text or ""
+  if token == "" or token:match("^%s+$") then return nil end
+
+  local startCol = 0
+  for i = 1, hitIdx - 1 do
+    startCol = startCol + #((tokens[i] and tokens[i].text) or "")
   end
-  return lineStr:sub(s, e), s - 1, e  -- word, startCol(0-based), endCol(1-based)
+  local endCol = startCol + #token
+
+  local prevToken = nil
+  for i = hitIdx - 1, 1, -1 do
+    local t = (tokens[i] and tokens[i].text) or ""
+    if t ~= "" and not t:match("^%s+$") then
+      prevToken = t
+      break
+    end
+  end
+
+  local nextToken = nil
+  for i = hitIdx + 1, #tokens do
+    local t = (tokens[i] and tokens[i].text) or ""
+    if t ~= "" and not t:match("^%s+$") then
+      nextToken = t
+      break
+    end
+  end
+
+  return {
+    token = token,
+    startCol = startCol,
+    endCol = endCol,
+    prevToken = prevToken,
+    nextToken = nextToken,
+    line = lineStr,
+  }
 end
 
 --- Update hover state based on current mouse position.
@@ -329,9 +371,10 @@ end
 local function updateHover(node, es, dt)
   local props = node.props or {}
   local level = props.tooltipLevel
-  if not level or level == "" then
+  if not level or level == "" or level == "clean" then
     es.hoverVisible = false
     es.hoverWord = nil
+    es.hoverText = nil
     return
   end
 
@@ -342,32 +385,60 @@ local function updateHover(node, es, dt)
   if mx < va.textAreaX or mx > va.textAreaX + va.textAreaW or
      my < va.nodeY or my > va.nodeY + va.nodeH then
     es.hoverWord = nil
+    es.hoverText = nil
     es.hoverTimer = 0
     es.hoverVisible = false
     return
   end
 
   local line, col = screenToPos(node, es, mx, my)
-  local word = wordAtPos(es, line, col)
+  local tokenInfo = tokenAtPos(es, line, col)
+  local resolved = nil
 
-  if word and Tooltips[word] then
-    if word == es.hoverWord then
-      -- Same word — advance timer
+  if tokenInfo then
+    if Tooltips.lookup then
+      resolved = Tooltips.lookup(tokenInfo.token, level, {
+        line = tokenInfo.line,
+        lineNumber = line,
+        col = col,
+        startCol = tokenInfo.startCol,
+        endCol = tokenInfo.endCol,
+        prevToken = tokenInfo.prevToken,
+        nextToken = tokenInfo.nextToken,
+      })
+    else
+      local entry = Tooltips[tokenInfo.token]
+      if entry then
+        resolved = {
+          key = tokenInfo.token,
+          text = entry[level] or entry.guided or entry.clean or entry.beginner,
+        }
+      end
+    end
+  end
+
+  if tokenInfo and resolved and resolved.text and resolved.text ~= "" then
+    if tokenInfo.token == es.hoverWord and line == es.hoverLine and tokenInfo.startCol == es.hoverCol then
+      -- Same token — advance timer
+      es.hoverText = resolved.text
       es.hoverTimer = es.hoverTimer + dt
       if es.hoverTimer >= 0.4 then
         es.hoverVisible = true
       end
     else
-      -- New word — reset timer
-      es.hoverWord = word
+      -- New token — reset timer
+      es.hoverWord = tokenInfo.token
       es.hoverLine = line
-      es.hoverCol = col
+      es.hoverCol = tokenInfo.startCol
+      es.hoverEndCol = tokenInfo.endCol
+      es.hoverText = resolved.text
       es.hoverTimer = 0
       es.hoverVisible = false
     end
   else
-    -- No known word under cursor
+    -- No known token under cursor
     es.hoverWord = nil
+    es.hoverText = nil
     es.hoverTimer = 0
     es.hoverVisible = false
   end
@@ -380,6 +451,23 @@ end
 function TextEditor.getValue(node)
   local es = ensureState(node)
   return linesToText(es.lines)
+end
+
+--- Return active hover context for IDE-style learning links.
+--- Returns nil when hover tooltip is not currently visible.
+function TextEditor.getHoverContext(node)
+  if not node then return nil end
+  local es = ensureState(node)
+  local props = node.props or {}
+  local level = props.tooltipLevel
+  if not level or level == "" or level == "clean" then return nil end
+  if not es.hoverVisible or not es.hoverWord then return nil end
+  return {
+    line = es.hoverLine,
+    token = es.hoverWord,
+    level = level,
+    text = es.hoverText,
+  }
 end
 
 -- ============================================================================
@@ -757,6 +845,7 @@ function TextEditor.draw(node, effectiveOpacity)
   local va = visibleArea(node, es)
   local lh = va.lineHeight
   local useSyntax = (node.props or {}).syntaxHighlight == true
+  local tooltipLevel = (node.props or {}).tooltipLevel
 
   -- Sync controlled value
   TextEditor.syncValue(node)
@@ -852,6 +941,21 @@ function TextEditor.draw(node, effectiveOpacity)
       love.graphics.print(lineStr, textX, textY)
     end
 
+    -- Beginner-only dynamic inline hints (visual aid; does not mutate source text).
+    if tooltipLevel == "beginner" and Tooltips.inlineHint and (i == es.cursorLine or i == es.hoverLine) then
+      local hint = Tooltips.inlineHint(lineStr, tooltipLevel)
+      if hint and hint ~= "" then
+        local commentText = " // " .. hint
+        local lineW = font:getWidth(lineStr)
+        local hintX = textX + lineW + font:getWidth("  ")
+        local maxX = va.textAreaX + va.textAreaW - va.padding
+        if hintX + font:getWidth(commentText) <= maxX then
+          setColorWithOpacity(syntaxColors.comment or colors.gutterText, effectiveOpacity * 0.9)
+          love.graphics.print(commentText, hintX, textY)
+        end
+      end
+    end
+
     -- Restore full-node scissor
     love.graphics.setScissor(c.x, c.y, c.w, c.h)
   end
@@ -899,83 +1003,80 @@ function TextEditor.draw(node, effectiveOpacity)
   love.graphics.setScissor()
 
   -- ── Hover tooltip (drawn OUTSIDE the scissor so it can overflow) ──
-  local tooltipLevel = (node.props or {}).tooltipLevel
-  if tooltipLevel and tooltipLevel ~= "" and es.hoverVisible and es.hoverWord then
-    local entry = Tooltips[es.hoverWord]
-    if entry then
-      local tooltipText = entry[tooltipLevel]
-      if tooltipText and tooltipText ~= "" then
-        -- Use a slightly smaller font for the tooltip
-        local tooltipFontSize = (node.style or {}).fontSize or 14
-        tooltipFontSize = math.max(10, tooltipFontSize - 2)
-        local tooltipFont
-        if Measure then
-          tooltipFontSize = Measure.scaleFontSize(tooltipFontSize, node)
-          tooltipFont = Measure.getFont(tooltipFontSize, nil, nil)
-        else
-          tooltipFont = love.graphics.getFont()
-        end
-
-        local maxW = 300
-        local padX, padY = 10, 8
-        local textW = maxW - padX * 2
-
-        -- Wrap text manually
-        local wrappedLines = {}
-        for _, segment in ipairs({tooltipText}) do
-          local words = {}
-          for w in segment:gmatch("%S+") do words[#words+1] = w end
-          local line = ""
-          for _, w in ipairs(words) do
-            local test = line == "" and w or (line .. " " .. w)
-            if tooltipFont:getWidth(test) > textW then
-              if line ~= "" then wrappedLines[#wrappedLines+1] = line end
-              line = w
-            else
-              line = test
-            end
-          end
-          if line ~= "" then wrappedLines[#wrappedLines+1] = line end
-        end
-
-        local lineH = math.floor(tooltipFont:getHeight() * 1.4)
-        local contentH = #wrappedLines * lineH
-        local boxW = maxW
-        local boxH = contentH + padY * 2
-
-        -- Position: above the hovered word, or below if near top
-        local wordY = va.textAreaY + (es.hoverLine - 1) * lh - es.scrollY
-        local wordX = va.textAreaX + va.padding + font:getWidth(
-          (es.lines[es.hoverLine] or ""):sub(1, es.hoverCol)
-        ) - es.scrollX
-
-        local tooltipX = math.max(c.x + 4, math.min(wordX, c.x + c.w - boxW - 4))
-        local tooltipY = wordY - boxH - 6
-        if tooltipY < c.y then
-          tooltipY = wordY + lh + 4  -- below the word if no room above
-        end
-
-        -- Draw tooltip background
-        love.graphics.setFont(tooltipFont)
-        setColorWithOpacity(colors.tooltipBg, effectiveOpacity)
-        love.graphics.rectangle("fill", tooltipX, tooltipY, boxW, boxH, 6, 6)
-
-        -- Border
-        setColorWithOpacity(colors.tooltipBorder, effectiveOpacity)
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", tooltipX, tooltipY, boxW, boxH, 6, 6)
-
-        -- Text
-        setColorWithOpacity(colors.tooltipText, effectiveOpacity)
-        for li, wline in ipairs(wrappedLines) do
-          love.graphics.print(wline,
-            tooltipX + padX,
-            tooltipY + padY + (li - 1) * lineH)
-        end
-
-        -- Restore original font
-        love.graphics.setFont(font)
+  if tooltipLevel and tooltipLevel ~= "" and tooltipLevel ~= "clean"
+     and es.hoverVisible and es.hoverWord and es.hoverText then
+    local tooltipText = es.hoverText
+    if tooltipText and tooltipText ~= "" then
+      -- Use a slightly smaller font for the tooltip
+      local tooltipFontSize = (node.style or {}).fontSize or 14
+      tooltipFontSize = math.max(10, tooltipFontSize - 2)
+      local tooltipFont
+      if Measure then
+        tooltipFontSize = Measure.scaleFontSize(tooltipFontSize, node)
+        tooltipFont = Measure.getFont(tooltipFontSize, nil, nil)
+      else
+        tooltipFont = love.graphics.getFont()
       end
+
+      local maxW = 300
+      local padX, padY = 10, 8
+      local textW = maxW - padX * 2
+
+      -- Wrap text manually
+      local wrappedLines = {}
+      for _, segment in ipairs({tooltipText}) do
+        local words = {}
+        for w in segment:gmatch("%S+") do words[#words+1] = w end
+        local line = ""
+        for _, w in ipairs(words) do
+          local test = line == "" and w or (line .. " " .. w)
+          if tooltipFont:getWidth(test) > textW then
+            if line ~= "" then wrappedLines[#wrappedLines+1] = line end
+            line = w
+          else
+            line = test
+          end
+        end
+        if line ~= "" then wrappedLines[#wrappedLines+1] = line end
+      end
+
+      local lineH = math.floor(tooltipFont:getHeight() * 1.4)
+      local contentH = #wrappedLines * lineH
+      local boxW = maxW
+      local boxH = contentH + padY * 2
+
+      -- Position: above the hovered word, or below if near top
+      local wordY = va.textAreaY + (es.hoverLine - 1) * lh - es.scrollY
+      local wordX = va.textAreaX + va.padding + font:getWidth(
+        (es.lines[es.hoverLine] or ""):sub(1, es.hoverCol)
+      ) - es.scrollX
+
+      local tooltipX = math.max(c.x + 4, math.min(wordX, c.x + c.w - boxW - 4))
+      local tooltipY = wordY - boxH - 6
+      if tooltipY < c.y then
+        tooltipY = wordY + lh + 4  -- below the word if no room above
+      end
+
+      -- Draw tooltip background
+      love.graphics.setFont(tooltipFont)
+      setColorWithOpacity(colors.tooltipBg, effectiveOpacity)
+      love.graphics.rectangle("fill", tooltipX, tooltipY, boxW, boxH, 6, 6)
+
+      -- Border
+      setColorWithOpacity(colors.tooltipBorder, effectiveOpacity)
+      love.graphics.setLineWidth(1)
+      love.graphics.rectangle("line", tooltipX, tooltipY, boxW, boxH, 6, 6)
+
+      -- Text
+      setColorWithOpacity(colors.tooltipText, effectiveOpacity)
+      for li, wline in ipairs(wrappedLines) do
+        love.graphics.print(wline,
+          tooltipX + padX,
+          tooltipY + padY + (li - 1) * lineH)
+      end
+
+      -- Restore original font
+      love.graphics.setFont(font)
     end
   end
 end

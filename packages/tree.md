@@ -192,6 +192,18 @@
 │   │       └── useTilemap.ts
 │   ├── tree.md
 │   └── tsconfig.json
+├── geo
+│   ├── package.json
+│   └── src
+│       ├── GeoJSON.tsx
+│       ├── hooks.ts
+│       ├── index.ts
+│       ├── Map.tsx
+│       ├── Marker.tsx
+│       ├── Polygon.tsx
+│       ├── Polyline.tsx
+│       ├── TileLayer.tsx
+│       └── types.ts
 ├── grid
 │   ├── package.json
 │   └── src
@@ -218,6 +230,7 @@
 ├── native
 │   ├── package.json
 │   ├── src
+│   │   ├── debugLog.ts
 │   │   ├── errorReporter.ts
 │   │   ├── eventDispatcher.ts
 │   │   ├── hostConfig.ts
@@ -267,6 +280,7 @@
 │   │   ├── BarChart.tsx
 │   │   ├── Breadcrumbs.tsx
 │   │   ├── bridge.ts
+│   │   ├── capabilities.tsx
 │   │   ├── Card.tsx
 │   │   ├── ChartTooltip.tsx
 │   │   ├── ChatInput.tsx
@@ -283,12 +297,15 @@
 │   │   ├── FlexRow.tsx
 │   │   ├── hooks.ts
 │   │   ├── HorizontalBarChart.tsx
+│   │   ├── ImageGallery.tsx
+│   │   ├── ImageViewerModal.tsx
 │   │   ├── index.ts
 │   │   ├── LineChart.tsx
 │   │   ├── LoadingDots.tsx
 │   │   ├── MessageBubble.tsx
 │   │   ├── MessageList.tsx
 │   │   ├── Modal.tsx
+│   │   ├── Native.tsx
 │   │   ├── NavPanel.tsx
 │   │   ├── PieChart.tsx
 │   │   ├── Portal.tsx
@@ -312,6 +329,7 @@
 │   │   ├── TextInput.tsx
 │   │   ├── Toolbar.tsx
 │   │   ├── types.ts
+│   │   ├── useCapabilities.ts
 │   │   ├── useDebug.ts
 │   │   ├── usePixelArt.tsx
 │   │   ├── usePorts.ts
@@ -347,6 +365,7 @@
 │   ├── package.json
 │   └── src
 │       ├── createTheme.ts
+│       ├── defaults.ts
 │       ├── index.ts
 │       ├── ThemeProvider.tsx
 │       ├── themes
@@ -359,6 +378,7 @@
 │       │   ├── rose-pine.ts
 │       │   ├── solarized.ts
 │       │   └── tokyo-night.ts
+│       ├── ThemeSwitcher.tsx
 │       ├── types.ts
 │       └── useTheme.ts
 ├── tree.md
@@ -379,4 +399,4 @@
     │   └── types.ts
     └── tsconfig.json
 
-69 directories, 311 files
+71 directories, 329 files

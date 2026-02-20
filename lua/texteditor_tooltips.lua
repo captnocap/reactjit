@@ -10,7 +10,9 @@
   Used by texteditor.lua to show IDE-like hover tooltips in the playground.
 ]]
 
+local M = {}
 local tooltips = {}
+M.entries = tooltips
 
 -- ============================================================================
 -- Primitives
@@ -592,4 +594,488 @@ tooltips["value"] = {
   clean    = "value — controlled input value",
 }
 
-return tooltips
+-- ============================================================================
+-- Broader JS/React syntax coverage (hooks, loops, operators, punctuation)
+-- ============================================================================
+
+tooltips["useLayoutEffect"] = {
+  beginner = "useLayoutEffect is like useEffect, but it runs earlier: right after React updates the UI tree and before the user sees the frame. Use it when you must measure layout or update something visual without flicker.",
+  guided   = "Synchronous effect hook. Runs after commit, before paint. Use for layout read/write and imperative visual sync; prefer useEffect when this is not required.",
+  clean    = "useLayoutEffect(fn, deps) — pre-paint effect hook",
+}
+
+tooltips["useImperativeHandle"] = {
+  beginner = "useImperativeHandle lets a component decide what a parent gets when using ref. Instead of exposing everything, you expose a small API object with only the methods you want.",
+  guided   = "Customizes ref value exposed by forwardRef. Use with refs for imperative APIs while keeping component internals private.",
+  clean    = "useImperativeHandle(ref, create, deps) — custom ref handle",
+}
+
+tooltips["useTransition"] = {
+  beginner = "useTransition lets you mark some state updates as non-urgent so the UI stays responsive. It returns a pending flag and a function to wrap slower updates.",
+  guided   = "Concurrent React hook for low-priority updates. Returns [isPending, startTransition]. Keeps urgent input responsive during expensive renders.",
+  clean    = "useTransition() — deferred state update priority",
+}
+
+tooltips["useDeferredValue"] = {
+  beginner = "useDeferredValue gives you a delayed version of a value. You can render quick UI from the current value while expensive UI catches up using the deferred one.",
+  guided   = "Defers propagation of a rapidly changing value. Useful when expensive children should lag behind fast input updates.",
+  clean    = "useDeferredValue(value) — lagged value for expensive renders",
+}
+
+tooltips["useId"] = {
+  beginner = "useId creates a stable unique id string for this component instance. Useful for connecting labels and inputs without hardcoding ids.",
+  guided   = "Generates stable unique IDs across server/client and remounts. Common for accessibility attributes.",
+  clean    = "useId() — stable unique id hook",
+}
+
+tooltips["useSyncExternalStore"] = {
+  beginner = "useSyncExternalStore lets React safely read data from stores that live outside React, like custom event emitters or external state libraries.",
+  guided   = "React external-store subscription hook. Ensures consistent snapshots in concurrent rendering.",
+  clean    = "useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot?)",
+}
+
+tooltips["useInsertionEffect"] = {
+  beginner = "useInsertionEffect runs very early in rendering and is mainly for style libraries that must inject styles before layout effects run.",
+  guided   = "Specialized hook for CSS-in-JS style insertion timing. Rare in app code.",
+  clean    = "useInsertionEffect(fn, deps) — style insertion timing hook",
+}
+
+tooltips["useDebugValue"] = {
+  beginner = "useDebugValue adds labels for custom hooks in React DevTools so other developers can understand hook state more easily.",
+  guided   = "Annotates custom hooks in DevTools. Optional developer-only metadata.",
+  clean    = "useDebugValue(value, format?) — DevTools label hook",
+}
+
+tooltips["while"] = {
+  beginner = "while repeats a block as long as a condition is true. Be careful to update the condition inside the loop, or it can run forever.",
+  guided   = "Condition-controlled loop. Re-evaluates condition before each iteration.",
+  clean    = "while (condition) { ... } — conditional loop",
+}
+
+tooltips["do"] = {
+  beginner = "do starts a do...while loop. This loop always runs the block once before checking the condition.",
+  guided   = "do...while loop keyword. Executes body once before condition check.",
+  clean    = "do { ... } while (condition) — post-check loop",
+}
+
+tooltips["switch"] = {
+  beginner = "switch checks one value against many possible cases. It can be easier to read than many if/else branches when you have many exact matches.",
+  guided   = "Multi-branch control flow over a single expression. Pair case labels with break unless intentional fallthrough.",
+  clean    = "switch (expr) { case ... } — multi-branch control",
+}
+
+tooltips["case"] = {
+  beginner = "case is one branch inside a switch. If the switch value matches this case value, this block runs.",
+  guided   = "Switch branch label. Control jumps here when the switch expression matches.",
+  clean    = "case value: — switch branch",
+}
+
+tooltips["default"] = {
+  beginner = "default is the fallback branch in switch. It runs when no other case matches.",
+  guided   = "Fallback switch branch when no case matches.",
+  clean    = "default: — switch fallback branch",
+}
+
+tooltips["break"] = {
+  beginner = "break exits the current loop or switch immediately and continues with the next line after it.",
+  guided   = "Terminates nearest loop or switch branch.",
+  clean    = "break — exit loop/switch",
+}
+
+tooltips["continue"] = {
+  beginner = "continue skips the rest of the current loop iteration and jumps to the next iteration.",
+  guided   = "Skips to next iteration of nearest loop.",
+  clean    = "continue — next loop iteration",
+}
+
+tooltips["try"] = {
+  beginner = "try wraps code that might fail. If an error happens, control moves to catch so your app can handle the failure gracefully.",
+  guided   = "Starts exception handling block. Pair with catch and optional finally.",
+  clean    = "try { ... } catch (...) { ... }",
+}
+
+tooltips["catch"] = {
+  beginner = "catch receives errors thrown inside the matching try block so you can handle them instead of crashing.",
+  guided   = "Exception handler for errors thrown in the paired try block.",
+  clean    = "catch (err) { ... } — exception handler",
+}
+
+tooltips["finally"] = {
+  beginner = "finally runs after try/catch no matter what. Use it for cleanup, like stopping a loading state.",
+  guided   = "Cleanup block that runs after try/catch regardless of success or failure.",
+  clean    = "finally { ... } — guaranteed cleanup",
+}
+
+tooltips["throw"] = {
+  beginner = "throw creates an error and stops normal execution, sending control to the nearest catch block.",
+  guided   = "Raises an exception. Use Error objects for stack and message consistency.",
+  clean    = "throw value — raise exception",
+}
+
+tooltips["in"] = {
+  beginner = "in checks whether a property name exists on an object, or appears in a for...in loop over object keys.",
+  guided   = "Used for property-membership checks and for...in key iteration.",
+  clean    = "in — membership / for...in keyword",
+}
+
+tooltips["of"] = {
+  beginner = "of is used in for...of loops to iterate actual values in arrays or other iterables.",
+  guided   = "for...of value iteration keyword (arrays, strings, iterables).",
+  clean    = "of — for...of iteration keyword",
+}
+
+tooltips["new"] = {
+  beginner = "new creates an instance from a class or constructor function.",
+  guided   = "Invokes constructor and returns a new instance object.",
+  clean    = "new Constructor(...) — instance creation",
+}
+
+tooltips["class"] = {
+  beginner = "class defines a blueprint for objects with shared methods and data. Modern React mostly uses function components, but classes are still part of JavaScript.",
+  guided   = "Class declaration syntax for constructor/prototype-based objects.",
+  clean    = "class Name { ... } — class declaration",
+}
+
+tooltips["extends"] = {
+  beginner = "extends means one class inherits behavior from another class.",
+  guided   = "Class inheritance keyword.",
+  clean    = "extends BaseClass — inherit from class",
+}
+
+tooltips["("] = {
+  beginner = "( starts a parameter list, argument list, or grouped expression. In hooks like useState(0), it opens the arguments passed to the hook call.",
+  guided   = "Open parenthesis: call arguments, function params, or expression grouping.",
+  clean    = "( — open parenthesis",
+}
+
+tooltips[")"] = {
+  beginner = ") closes a parameter list, argument list, or grouped expression.",
+  guided   = "Close parenthesis.",
+  clean    = ") — close parenthesis",
+}
+
+tooltips["["] = {
+  beginner = "[ starts an array literal or array destructuring. In const [count, setCount] = useState(0), it starts unpacking the returned array.",
+  guided   = "Open bracket: array literal/index access/destructuring.",
+  clean    = "[ — open bracket",
+}
+
+tooltips["]"] = {
+  beginner = "] closes an array literal, index access, or destructuring pattern.",
+  guided   = "Close bracket.",
+  clean    = "] — close bracket",
+}
+
+tooltips["{"] = {
+  beginner = "{ starts a block of code or an object literal. In JSX, single braces also mean 'switch into JavaScript expression mode'.",
+  guided   = "Open brace: block/object literal/JSX expression boundary.",
+  clean    = "{ — open brace",
+}
+
+tooltips["}"] = {
+  beginner = "} closes a block, object literal, or JSX expression block.",
+  guided   = "Close brace.",
+  clean    = "} — close brace",
+}
+
+tooltips[","] = {
+  beginner = ", separates items: function arguments, array elements, object properties, or variables in destructuring.",
+  guided   = "Comma separator between list items.",
+  clean    = ", — separator",
+}
+
+tooltips["."] = {
+  beginner = ". accesses a property or method on an object, like user.name or items.map(...).",
+  guided   = "Property/method access operator.",
+  clean    = ". — property access",
+}
+
+tooltips[";"] = {
+  beginner = "; ends a statement. JavaScript can insert semicolons automatically, but writing them makes boundaries explicit.",
+  guided   = "Statement terminator.",
+  clean    = "; — statement terminator",
+}
+
+tooltips[":"] = {
+  beginner = ": is used in object properties (key: value), type annotations, and ternary expressions (condition ? yes : no).",
+  guided   = "Colon in object literals, annotations, and ternaries.",
+  clean    = ": — object/annotation/ternary separator",
+}
+
+tooltips["=>"] = {
+  beginner = "=> creates an arrow function. Left side is parameters, right side is the function body or returned expression.",
+  guided   = "Arrow function operator. Lexically binds this and supports concise function syntax.",
+  clean    = "=> — arrow function operator",
+}
+
+tooltips["="] = {
+  beginner = "= assigns a value to a variable, like const total = price + tax.",
+  guided   = "Assignment operator.",
+  clean    = "= — assignment",
+}
+
+tooltips["=="] = {
+  beginner = "== checks equality with type conversion. Beginners should usually use === instead to avoid surprises.",
+  guided   = "Loose equality with coercion. Prefer === for predictable behavior.",
+  clean    = "== — loose equality",
+}
+
+tooltips["==="] = {
+  beginner = "=== checks strict equality: same value and same type. This is the safest default comparison in JavaScript.",
+  guided   = "Strict equality (no coercion).",
+  clean    = "=== — strict equality",
+}
+
+tooltips["!="] = {
+  beginner = "!= checks inequality with type conversion. Usually prefer !== for strict comparisons.",
+  guided   = "Loose inequality with coercion. Prefer !==.",
+  clean    = "!= — loose inequality",
+}
+
+tooltips["!=="] = {
+  beginner = "!== checks strict inequality: value or type is different.",
+  guided   = "Strict inequality (no coercion).",
+  clean    = "!== — strict inequality",
+}
+
+tooltips["!"] = {
+  beginner = "! flips true/false. Example: !isLoading means 'not loading'.",
+  guided   = "Logical NOT operator.",
+  clean    = "! — logical NOT",
+}
+
+tooltips["&&"] = {
+  beginner = "&& means 'and'. It is true only when both sides are true. In JSX it is often used for conditional rendering.",
+  guided   = "Logical AND with short-circuit behavior.",
+  clean    = "&& — logical AND",
+}
+
+tooltips["||"] = {
+  beginner = "|| means 'or'. It returns the first truthy value, otherwise the second one.",
+  guided   = "Logical OR with short-circuit behavior.",
+  clean    = "|| — logical OR",
+}
+
+tooltips["?"] = {
+  beginner = "? is part of the ternary operator: condition ? valueIfTrue : valueIfFalse.",
+  guided   = "Ternary conditional operator marker.",
+  clean    = "? — ternary operator",
+}
+
+tooltips["..."] = {
+  beginner = "... is spread/rest syntax. It can copy or merge array/object items, or gather remaining function arguments.",
+  guided   = "Spread/rest operator for expansion or collection.",
+  clean    = "... — spread/rest syntax",
+}
+
+tooltips["<"] = {
+  beginner = "< can start JSX tags like <Box> or compare values in JavaScript expressions.",
+  guided   = "Less-than operator or JSX opening delimiter depending on context.",
+  clean    = "< — JSX opener or less-than",
+}
+
+tooltips[">"] = {
+  beginner = "> can close a JSX opening tag or compare values in JavaScript expressions.",
+  guided   = "Greater-than operator or JSX tag closer depending on context.",
+  clean    = "> — JSX closer or greater-than",
+}
+
+tooltips["</"] = {
+  beginner = "</ starts a JSX closing tag, like </Box>.",
+  guided   = "JSX closing tag opener.",
+  clean    = "</ — JSX close tag start",
+}
+
+tooltips["/>"] = {
+  beginner = "/> ends a self-closing JSX element like <Image src='x' />.",
+  guided   = "JSX self-closing element terminator.",
+  clean    = "/> — self-closing JSX terminator",
+}
+
+tooltips["<>"] = {
+  beginner = "<> starts a React fragment, which groups elements without adding an extra wrapper node.",
+  guided   = "React fragment open token.",
+  clean    = "<> — fragment start",
+}
+
+tooltips["</>"] = {
+  beginner = "</> closes a React fragment.",
+  guided   = "React fragment close token.",
+  clean    = "</> — fragment end",
+}
+
+local function pickLevel(entry, level)
+  if not entry then return nil end
+  if level and entry[level] then return entry[level] end
+  return entry.guided or entry.clean or entry.beginner
+end
+
+local function isIdentifier(token)
+  if not token then return false end
+  return token:match("^[a-zA-Z_$][a-zA-Z0-9_$]*$") ~= nil
+end
+
+local function toLabel(name)
+  if not name or name == "" then return "this name" end
+  return "'" .. name .. "'"
+end
+
+local function genericIdentifierTooltip(token, level, context)
+  if not isIdentifier(token) then return nil end
+  local prevToken = context and context.prevToken or nil
+  local nextToken = context and context.nextToken or nil
+
+  if token:match("^use[A-Z]") then
+    if level == "beginner" then
+      return "This name looks like a custom React hook. Hooks are reusable state/effect logic. By convention, custom hooks start with 'use' and are called at the top level of components."
+    elseif level == "guided" then
+      return "Likely a custom hook (useX). Keep calls unconditional and at component top level."
+    else
+      return "Custom hook-style identifier"
+    end
+  end
+
+  if token:match("^set[A-Z]") then
+    if level == "beginner" then
+      return toLabel(token) .. " looks like a state setter (often from useState). Calling it schedules a re-render with updated state."
+    elseif level == "guided" then
+      return "Setter-style identifier; likely from useState tuple."
+    else
+      return "State setter-style identifier"
+    end
+  end
+
+  if prevToken == "const" or prevToken == "let" or prevToken == "var" then
+    if level == "beginner" then
+      return "This is a variable being declared. The name is how you refer to this value later in the component."
+    elseif level == "guided" then
+      return "Variable declaration identifier."
+    else
+      return "Declared variable name"
+    end
+  end
+
+  if prevToken == "function" then
+    if level == "beginner" then
+      return "This is the function name. You can call this name elsewhere to run the function."
+    elseif level == "guided" then
+      return "Function declaration identifier."
+    else
+      return "Function name"
+    end
+  end
+
+  if nextToken == "(" then
+    if level == "beginner" then
+      return "This name is being called like a function. The parentheses after it hold the inputs (arguments)."
+    elseif level == "guided" then
+      return "Function call identifier."
+    else
+      return "Function call target"
+    end
+  end
+
+  if token:match("^[A-Z][A-Za-z0-9_]*$") then
+    if level == "beginner" then
+      return "This PascalCase name is usually a React component. Components are reusable UI functions that return JSX."
+    elseif level == "guided" then
+      return "PascalCase identifier; typically a component or class."
+    else
+      return "PascalCase identifier"
+    end
+  end
+
+  if level == "beginner" then
+    return "This is an identifier (a name for a value, function, or object)."
+  elseif level == "guided" then
+    return "Identifier reference."
+  else
+    return "Identifier"
+  end
+end
+
+function M.lookup(token, level, context)
+  if not token or token == "" then return nil end
+  local entry = tooltips[token]
+  if entry then
+    local text = pickLevel(entry, level)
+    if text and text ~= "" then
+      return {
+        key = token,
+        text = text,
+        entry = entry,
+      }
+    end
+  end
+
+  local fallback = genericIdentifierTooltip(token, level, context)
+  if fallback then
+    return {
+      key = "__generic_identifier",
+      text = fallback,
+      entry = nil,
+    }
+  end
+
+  return nil
+end
+
+function M.inlineHint(line, level)
+  if level ~= "beginner" or not line then return nil end
+  local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
+  if trimmed == "" then return nil end
+  if trimmed:find("//", 1, true) or trimmed:find("/%*", 1, true) then return nil end
+
+  if trimmed:find("const%s+%[[^%]]+%]%s*=%s*useState%s*%(") then
+    return "array destructuring: [state, setState] from useState(...)"
+  end
+  if trimmed:find("useState%s*%(") then
+    return "hook call: local state that survives re-renders"
+  end
+  if trimmed:find("useEffect%s*%(") then
+    return "effect hook: run side effects after render"
+  end
+  if trimmed:find("useMemo%s*%(") then
+    return "memoized value: recompute only when dependencies change"
+  end
+  if trimmed:find("useCallback%s*%(") then
+    return "memoized function reference for stable props"
+  end
+  if trimmed:find("for%s*%(") then
+    return "loop header: init; condition; update"
+  end
+  if trimmed:find("for%s+[%a_$][%w_$]*%s+of%s+") then
+    return "for...of iterates over values"
+  end
+  if trimmed:find("for%s+[%a_$][%w_$]*%s+in%s+") then
+    return "for...in iterates over object keys"
+  end
+  if trimmed:find("while%s*%(") then
+    return "while loop: repeats while condition stays true"
+  end
+  if trimmed:find("^if%s*%(") then
+    return "conditional branch: run this block only when true"
+  end
+  if trimmed:find("^return%s+<") or trimmed:find("^return%s*%(") then
+    return "component render output"
+  end
+  if trimmed:find("%.map%s*%(") then
+    return "map transforms each item; in JSX it renders a list"
+  end
+  if trimmed:find("=>") then
+    return "arrow function: parameters on the left, body on the right"
+  end
+  if trimmed:find("^import%s+") then
+    return "imports code from another module"
+  end
+  if trimmed:find("^export%s+") then
+    return "exports this value for use in other files"
+  end
+  return nil
+end
+
+setmetatable(M, {
+  __index = tooltips,
+})
+
+return M

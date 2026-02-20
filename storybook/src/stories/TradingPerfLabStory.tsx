@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, useLoveRPC } from '../../../packages/shared/src';
+import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, formatUptime, formatMemory } from '../../../packages/shared/src';
 import type { Tab } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 
 type ViewMode = '2d' | '3d';
+type LoadProfile = 'turbo' | 'balanced' | 'lite';
 
 type BookLevel = {
   price: number;
@@ -46,7 +47,6 @@ type Snapshot = {
   p50: number;
   p95: number;
   maxFrameMs: number;
-  selected: SymbolBook | null;
 };
 
 const VIEW_TABS: Tab[] = [
@@ -71,6 +71,23 @@ function percentile(values: number[], q: number) {
   const sorted = values.slice().sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)));
   return sorted[index];
+}
+
+function nextRand(state: { v: number }) {
+  let x = state.v | 0;
+  if (x === 0) x = 0x6d2b79f5;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  state.v = x | 0;
+  return (state.v >>> 0) / 4294967296;
+}
+
+function formatCompact(n: number) {
+  const abs = Math.abs(n);
+  if (abs >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (abs >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return `${Math.round(n)}`;
 }
 
 function makeSymbolBook(index: number, depth: number): SymbolBook {
@@ -124,23 +141,25 @@ function makeEngine(symbolCount: number, depth: number): EngineRefState {
   };
 }
 
-function mutateSymbol(sym: SymbolBook, depth: number) {
-  const drift = (Math.random() - 0.5) * 0.42;
+function mutateSymbol(sym: SymbolBook, depth: number, rngState: { v: number }, intensity: number = 1) {
+  const scale = Math.sqrt(Math.max(1, intensity));
+  const drift = (nextRand(rngState) - 0.5) * 0.42 * scale;
   sym.last = Math.max(1, +(sym.last + drift).toFixed(2));
-  sym.volume += 4 + Math.random() * 110;
+  sym.volume += (4 + nextRand(rngState) * 110) * intensity;
 
-  const target = Math.random() > 0.5 ? sym.bids : sym.asks;
-  const i = Math.floor(Math.random() * depth);
+  const target = nextRand(rngState) > 0.5 ? sym.bids : sym.asks;
+  const i = Math.floor(nextRand(rngState) * depth);
   const level = target[i];
-  const distance = 0.03 + i * 0.018 + Math.random() * 0.03;
+  const distance = 0.03 + i * 0.018 + nextRand(rngState) * 0.03;
   if (target === sym.bids) {
     level.price = +(sym.last - distance).toFixed(2);
   } else {
     level.price = +(sym.last + distance).toFixed(2);
   }
-  level.size = Math.max(1, Math.floor(level.size + (Math.random() - 0.47) * 80));
+  level.size = Math.max(1, Math.floor(level.size + (nextRand(rngState) - 0.47) * 80 * scale));
 
-  if (Math.random() > 0.7) {
+  const pushChance = Math.min(0.92, 0.3 * scale);
+  if (nextRand(rngState) < pushChance) {
     sym.history.push(sym.last);
     if (sym.history.length > 64) sym.history.shift();
   }
@@ -176,7 +195,7 @@ function LabeledSlider({
         maximumValue={max}
         step={step}
         onValueChange={onChange}
-        style={{ width: 290, height: 20 }}
+        style={{ width: '100%', height: 20 }}
         trackColor="#2d3348"
         activeTrackColor="#7dc4ff"
         thumbColor="#dceeff"
@@ -235,7 +254,7 @@ function Feed2D({ history }: { history: number[] }) {
     value: ((v - min) / range) * 100 + 4,
     color: i > 0 && history[i] >= history[i - 1] ? '#22c55e' : '#ef4444',
   }));
-  return <BarChart data={data} height={280} gap={2} showLabels={false} interactive />;
+  return <BarChart data={data} height={280} gap={2} showLabels={false} interactive={false} />;
 }
 
 function Feed3D({ history, spin }: { history: number[]; spin: number }) {
@@ -274,7 +293,7 @@ function Feed3D({ history, spin }: { history: number[]; spin: number }) {
             edgeWidth={0.018}
             position={[x, 0, h / 2]}
             scale={[0.11, 0.1, h]}
-            rotation={[0, 0, spin * 0.02 + i * 0.01]}
+            rotation={[0, 0, i * 0.01]}
             specular={24}
           />
         );
@@ -284,14 +303,16 @@ function Feed3D({ history, spin }: { history: number[]; spin: number }) {
 }
 
 export function TradingPerfLabStory() {
-  const c = useThemeColors();
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
+  const [loadProfile, setLoadProfile] = useState<LoadProfile>('balanced');
   const [live, setLive] = useState(true);
   const [symbolCount, setSymbolCount] = useState(120);
   const [depth, setDepth] = useState(30);
   const [targetEvents, setTargetEvents] = useState(60000);
+  const [simScale, setSimScale] = useState(2);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [spin, setSpin] = useState(0);
+  const [uiTick, setUiTick] = useState(0);
   const [snapshot, setSnapshot] = useState<Snapshot>({
     throughput: 0,
     processedTotal: 0,
@@ -299,11 +320,20 @@ export function TradingPerfLabStory() {
     p50: 0,
     p95: 0,
     maxFrameMs: 0,
-    selected: null,
   });
   const [runtimePerf, setRuntimePerf] = useState<PerfStats>({});
   const getPerf = useLoveRPC<PerfStats>('dev:perf');
+  const sysInfo = useSystemInfo(4000);
   const engineRef = useRef<EngineRefState>(makeEngine(symbolCount, depth));
+  const rngRef = useRef<{ v: number }>({ v: (Date.now() ^ 0x9e3779b9) | 0 });
+  const effectiveTargetEvents = Math.round(targetEvents * simScale);
+  const maxBatchPerTick = Math.max(3500, Math.ceil(effectiveTargetEvents / 50));
+  const maxMutationsPerTick = loadProfile === 'turbo' ? 520 : loadProfile === 'balanced' ? 360 : 220;
+  const uiIntervalLive2D = loadProfile === 'turbo' ? 60 : loadProfile === 'balanced' ? 72 : 90;
+  const uiIntervalLive3D = loadProfile === 'turbo' ? 30 : loadProfile === 'balanced' ? 36 : 45;
+  const watchlistLimit = loadProfile === 'turbo' ? 48 : loadProfile === 'balanced' ? 32 : 20;
+  const tapeLimit = loadProfile === 'turbo' ? 14 : loadProfile === 'balanced' ? 10 : 8;
+  const historyLimit = loadProfile === 'turbo' ? 64 : loadProfile === 'balanced' ? 52 : 40;
 
   useEffect(() => {
     engineRef.current = makeEngine(symbolCount, depth);
@@ -311,18 +341,30 @@ export function TradingPerfLabStory() {
   }, [symbolCount, depth]);
 
   useEffect(() => {
+    if (!live) return;
+    let prevTick = nowMs();
     const id = setInterval(() => {
-      if (!live) return;
-
       const engine = engineRef.current;
       const frameStart = nowMs();
-      engine.carryEvents += targetEvents / 60;
-      const batch = Math.floor(engine.carryEvents);
-      engine.carryEvents -= batch;
+      const dtMs = Math.max(1, frameStart - prevTick);
+      prevTick = frameStart;
 
-      for (let i = 0; i < batch; i += 1) {
-        const idx = Math.floor(Math.random() * engine.symbols.length);
-        mutateSymbol(engine.symbols[idx], depth);
+      engine.carryEvents += (effectiveTargetEvents * dtMs) / 1000;
+      const rawBatch = Math.floor(engine.carryEvents);
+      const batch = Math.min(rawBatch, maxBatchPerTick);
+      engine.carryEvents -= batch;
+      if (rawBatch > batch) {
+        // Guard against backlog spirals on stalls.
+        engine.carryEvents = Math.min(engine.carryEvents, maxBatchPerTick * 2);
+      }
+
+      const mutateOps = Math.min(batch, maxMutationsPerTick);
+      if (mutateOps > 0) {
+        const intensity = batch / mutateOps;
+        for (let i = 0; i < mutateOps; i += 1) {
+          const idx = Math.floor(nextRand(rngRef.current) * engine.symbols.length);
+          mutateSymbol(engine.symbols[idx], depth, rngRef.current, intensity);
+        }
       }
 
       const procMs = nowMs() - frameStart;
@@ -341,28 +383,47 @@ export function TradingPerfLabStory() {
         engine.windowStartMs = now;
         engine.maxFrameMs = 0;
       }
-
-      setSpin((s) => s + 0.02);
     }, 16);
     return () => clearInterval(id);
-  }, [live, targetEvents, depth]);
+  }, [live, effectiveTargetEvents, depth, maxMutationsPerTick, maxBatchPerTick]);
 
   useEffect(() => {
+    const intervalMs = viewMode === '3d' ? (live ? uiIntervalLive3D : 90) : (live ? uiIntervalLive2D : 160);
+    const id = setInterval(() => {
+      setUiTick((t) => (t + 1) % 1000000);
+      if (viewMode === '3d') setSpin((s) => s + 0.02);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [viewMode, live, uiIntervalLive2D, uiIntervalLive3D]);
+
+  useEffect(() => {
+    const intervalMs = live ? 200 : 800;
     const id = setInterval(() => {
       const engine = engineRef.current;
-      const selected = engine.symbols[Math.max(0, Math.min(selectedIndex, engine.symbols.length - 1))] || null;
-      setSnapshot({
+      const next = {
         throughput: engine.throughput,
         processedTotal: engine.processedTotal,
         droppedFrames: engine.droppedFrames,
         p50: percentile(engine.frameProcSamples, 0.5),
         p95: percentile(engine.frameProcSamples, 0.95),
         maxFrameMs: engine.maxFrameMs,
-        selected,
+      };
+      setSnapshot((prev) => {
+        if (
+          prev.throughput === next.throughput &&
+          prev.processedTotal === next.processedTotal &&
+          prev.droppedFrames === next.droppedFrames &&
+          prev.p50 === next.p50 &&
+          prev.p95 === next.p95 &&
+          prev.maxFrameMs === next.maxFrameMs
+        ) {
+          return prev;
+        }
+        return next;
       });
-    }, 250);
+    }, intervalMs);
     return () => clearInterval(id);
-  }, [selectedIndex]);
+  }, [live]);
 
   useEffect(() => {
     let disposed = false;
@@ -370,7 +431,17 @@ export function TradingPerfLabStory() {
       try {
         const next = await getPerf();
         if (!disposed && next && typeof next === 'object') {
-          setRuntimePerf(next);
+          setRuntimePerf((prev) => {
+            if (
+              prev.fps === next.fps &&
+              prev.layoutMs === next.layoutMs &&
+              prev.paintMs === next.paintMs &&
+              prev.nodeCount === next.nodeCount
+            ) {
+              return prev;
+            }
+            return next;
+          });
         }
       } catch (_err) {
         // Optional in non-native paths
@@ -384,7 +455,10 @@ export function TradingPerfLabStory() {
     };
   }, [getPerf]);
 
-  const selected = snapshot.selected;
+  const selected = useMemo(() => {
+    const symbols = engineRef.current.symbols;
+    return symbols[Math.max(0, Math.min(selectedIndex, symbols.length - 1))] || null;
+  }, [selectedIndex, symbolCount, depth, uiTick]);
   const fps = typeof runtimePerf.fps === 'number' ? runtimePerf.fps : 0;
   const layoutMs = typeof runtimePerf.layoutMs === 'number' ? runtimePerf.layoutMs : 0;
   const paintMs = typeof runtimePerf.paintMs === 'number' ? runtimePerf.paintMs : 0;
@@ -392,120 +466,331 @@ export function TradingPerfLabStory() {
   const totalFrameWork = layoutMs + paintMs;
   const fpsVariant = fps >= 55 ? 'success' : fps >= 40 ? 'warning' : 'error';
 
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
-        Trading Performance Lab
-      </Text>
-      <Text style={{ fontSize: 12, color: c.textDim }}>
-        Synthetic market feed + order book workload to demonstrate commercial/enterprise-style runtime behavior
-      </Text>
+  useEffect(() => {
+    if (fps <= 0) return;
+    setLoadProfile((prev) => {
+      if (prev === 'turbo') {
+        return fps < 44 ? 'balanced' : 'turbo';
+      }
+      if (prev === 'balanced') {
+        if (fps < 30) return 'lite';
+        if (fps > 56) return 'turbo';
+        return 'balanced';
+      }
+      return fps > 38 ? 'balanced' : 'lite';
+    });
+  }, [fps]);
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-        <Badge label={`Target ${targetEvents.toLocaleString()}/s`} variant="info" />
-        <Badge label={`Actual ${snapshot.throughput.toLocaleString()}/s`} variant={snapshot.throughput >= targetEvents * 0.8 ? 'success' : 'warning'} />
-        <Badge label={`p50 ${snapshot.p50.toFixed(2)}ms`} variant="default" />
-        <Badge label={`p95 ${snapshot.p95.toFixed(2)}ms`} variant={snapshot.p95 < 8 ? 'success' : snapshot.p95 < 16 ? 'warning' : 'error'} />
-        <Badge label={`FPS ${fps || '--'}`} variant={fpsVariant} />
+  const selectedPrev = selected && selected.history.length > 1 ? selected.history[selected.history.length - 2] : selected?.last || 0;
+  const selectedDelta = selected ? selected.last - selectedPrev : 0;
+  const selectedDeltaPct = selectedPrev ? (selectedDelta / selectedPrev) * 100 : 0;
+  const selectedUp = selectedDelta >= 0;
+  const bestBid = selected ? Math.max(...selected.bids.map((b) => b.price)) : 0;
+  const bestAsk = selected ? Math.min(...selected.asks.map((a) => a.price)) : 0;
+  const spread = selected && bestAsk >= bestBid ? bestAsk - bestBid : 0;
+  const sysCpu = sysInfo.cpu && sysInfo.cpu.length > 48 ? `${sysInfo.cpu.slice(0, 48)}...` : (sysInfo.cpu || '--');
+  const sysHost = sysInfo.loading ? 'loading...' : `${sysInfo.user}@${sysInfo.hostname}`;
+  const sysOs = sysInfo.loading ? '--' : `${sysInfo.os} (${sysInfo.arch})`;
+  const sysMem = sysInfo.loading ? '--' : formatMemory(sysInfo.memory);
+  const sysUp = sysInfo.loading ? '--' : formatUptime(sysInfo.uptime);
+
+  const watchlistRows = useMemo(() => {
+    const symbols = engineRef.current.symbols;
+    const maxRows = Math.min(symbols.length, watchlistLimit);
+    const rows: Array<{ index: number; symbol: string; last: number; deltaPct: number; volume: number }> = [];
+    for (let i = 0; i < maxRows; i += 1) {
+      const sym = symbols[i];
+      const prev = sym.history.length > 1 ? sym.history[sym.history.length - 2] : sym.last;
+      const d = prev ? ((sym.last - prev) / prev) * 100 : 0;
+      rows.push({
+        index: i,
+        symbol: sym.symbol,
+        last: sym.last,
+        deltaPct: d,
+        volume: sym.volume,
+      });
+    }
+    return rows;
+  }, [uiTick, symbolCount, watchlistLimit]);
+
+  const tapeRows = useMemo(() => {
+    if (!selected) return [];
+    const start = Math.max(1, selected.history.length - tapeLimit);
+    const out: Array<{ id: number; side: 'BUY' | 'SELL'; price: number; size: number }> = [];
+    for (let i = start; i < selected.history.length; i += 1) {
+      const price = selected.history[i];
+      const prev = selected.history[i - 1] || price;
+      out.push({
+        id: i,
+        side: price >= prev ? 'BUY' : 'SELL',
+        price,
+        size: 20 + ((i * 37) % 180),
+      });
+    }
+    return out.reverse();
+  }, [selectedIndex, symbolCount, depth, uiTick, selected, tapeLimit]);
+
+  const visibleHistory = useMemo(() => {
+    if (!selected) return [];
+    if (selected.history.length <= historyLimit) return selected.history;
+    return selected.history.slice(selected.history.length - historyLimit);
+  }, [selected, historyLimit]);
+
+  const shellBg = '#050b16';
+  const panelBg = '#0b1322';
+  const panelBorder = '#1d2c45';
+
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 12, gap: 10, backgroundColor: shellBg }}>
+      <Box
+        style={{
+          width: '100%',
+          backgroundColor: panelBg,
+          borderWidth: 1,
+          borderColor: panelBorder,
+          borderRadius: 10,
+          padding: 10,
+          gap: 8,
+        }}
+      >
+        <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 8 }}>
+          <Box style={{ gap: 2 }}>
+            <Text style={{ fontSize: 17, color: '#e8eef8', fontWeight: '700' }}>
+              Trading Workstation
+            </Text>
+            <Text style={{ fontSize: 11, color: '#92a8c4' }}>
+              Synthetic venue feed with depth, tape, and renderer telemetry
+            </Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Box style={{ width: 180 }}>
+              <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
+            </Box>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#244266', backgroundColor: '#0a172c' }}>
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>LIVE</Text>
+              <Switch value={live} onValueChange={setLive} />
+            </Box>
+          </Box>
+        </Box>
+
+        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', width: '100%' }}>
+          <Badge label={selected ? `${selected.symbol} ${selected.last.toFixed(2)}` : 'No symbol'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
+          <Badge label={selected ? `${selectedDelta >= 0 ? '+' : ''}${selectedDelta.toFixed(2)} (${selectedDeltaPct >= 0 ? '+' : ''}${selectedDeltaPct.toFixed(2)}%)` : 'Change --'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
+          <Badge label={selected ? `Spread ${spread.toFixed(2)}` : 'Spread --'} variant="default" />
+          <Badge label={`Target ${effectiveTargetEvents.toLocaleString()}/s`} variant="info" />
+          <Badge label={`Actual ${snapshot.throughput.toLocaleString()}/s`} variant={snapshot.throughput >= effectiveTargetEvents * 0.8 ? 'success' : 'warning'} />
+          <Badge label={`p95 ${snapshot.p95.toFixed(2)}ms`} variant={snapshot.p95 < 8 ? 'success' : snapshot.p95 < 16 ? 'warning' : 'error'} />
+          <Badge label={`FPS ${fps || '--'}`} variant={fpsVariant} />
+          <Badge label={`Nodes ${nodeCount || '--'}`} variant="default" />
+          <Badge label={`x${simScale.toFixed(2).replace(/\.00$/, '')}`} variant="default" />
+          <Badge label={`Profile ${loadProfile.toUpperCase()}`} variant={loadProfile === 'turbo' ? 'success' : loadProfile === 'balanced' ? 'warning' : 'default'} />
+        </Box>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1 }}>
+      <Box style={{ flexDirection: 'row', gap: 10, flexGrow: 1, minHeight: 0, width: '100%' }}>
         <Box
           style={{
-            width: 320,
-            padding: 12,
-            borderRadius: 10,
+            width: 260,
+            backgroundColor: panelBg,
             borderWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.bgElevated,
-            gap: 10,
+            borderColor: panelBorder,
+            borderRadius: 10,
+            padding: 10,
+            gap: 6,
           }}
         >
-          <Box style={{ width: 180 }}>
-            <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
+          <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>WATCHLIST</Text>
+          <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', paddingLeft: 6, paddingRight: 6 }}>
+            <Box style={{ width: 54 }}><Text style={{ fontSize: 9, color: '#587394' }}>SYM</Text></Box>
+            <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>LAST</Text></Box>
+            <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>%</Text></Box>
+            <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>VOL</Text></Box>
           </Box>
+          <ScrollView style={{ flexGrow: 1, width: '100%' }}>
+            <Box style={{ gap: 2, paddingRight: 2 }}>
+              {watchlistRows.map((row) => {
+                const active = row.index === selectedIndex;
+                const up = row.deltaPct >= 0;
+                return (
+                  <Pressable key={row.symbol} onPress={() => setSelectedIndex(row.index)}>
+                    {({ pressed }) => (
+                      <Box
+                        style={{
+                          width: '100%',
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          paddingLeft: 6,
+                          paddingRight: 6,
+                          paddingTop: 4,
+                          paddingBottom: 4,
+                          borderRadius: 4,
+                          borderWidth: active ? 1 : 0,
+                          borderColor: '#2e6aa3',
+                          backgroundColor: active ? '#12233c' : pressed ? '#0f1d33' : '#0a1628',
+                        }}
+                      >
+                        <Box style={{ width: 54 }}><Text style={{ color: '#d8e4f3', fontSize: 10 }}>{row.symbol}</Text></Box>
+                        <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ color: '#c5d6ea', fontSize: 10 }}>{row.last.toFixed(2)}</Text></Box>
+                        <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ color: up ? '#34d399' : '#f87171', fontSize: 10 }}>{`${up ? '+' : ''}${row.deltaPct.toFixed(2)}%`}</Text></Box>
+                        <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ color: '#7f9bc0', fontSize: 10 }}>{formatCompact(row.volume)}</Text></Box>
+                      </Box>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </Box>
+          </ScrollView>
+          <Text style={{ color: '#5f7899', fontSize: 9 }}>
+            {`${watchlistRows.length} rendered • ${symbolCount} simulated symbols • ${historyLimit} bars • x${simScale.toFixed(2).replace(/\.00$/, '')}`}
+          </Text>
+        </Box>
 
-          <LabeledSlider label="Symbols" value={symbolCount} min={20} max={320} step={10} onChange={setSymbolCount} />
-          <LabeledSlider label="Book Depth" value={depth} min={10} max={80} step={2} onChange={setDepth} />
-          <LabeledSlider label="Target Events/sec" value={targetEvents} min={5000} max={200000} step={5000} onChange={setTargetEvents} />
-          <LabeledSlider label="Focus Symbol" value={selectedIndex} min={0} max={Math.max(0, symbolCount - 1)} step={1} onChange={setSelectedIndex} />
-
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Simulation</Text>
-            <Switch value={live} onValueChange={setLive} />
+        <Box style={{ flexGrow: 1, minWidth: 420, gap: 10, minHeight: 0 }}>
+          <Box
+            style={{
+              backgroundColor: panelBg,
+              borderWidth: 1,
+              borderColor: panelBorder,
+              borderRadius: 10,
+              padding: 10,
+              gap: 8,
+            }}
+          >
+            {selected && (
+              <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                <Badge label={selected.symbol} variant="default" />
+                <Badge label={`Last ${selected.last.toFixed(2)}`} variant="info" />
+                <Badge label={`Best Bid ${bestBid.toFixed(2)}`} variant="success" />
+                <Badge label={`Best Ask ${bestAsk.toFixed(2)}`} variant="error" />
+                <Badge label={`Vol ${Math.round(selected.volume).toLocaleString()}`} variant="default" />
+                <Badge label={`Frame max ${snapshot.maxFrameMs.toFixed(2)}ms`} variant="warning" />
+              </Box>
+            )}
           </Box>
 
           <Box
             style={{
-              backgroundColor: c.bg,
-              borderRadius: 8,
+              flexGrow: 1,
+              minHeight: 300,
               borderWidth: 1,
-              borderColor: c.border,
-              padding: 8,
-              gap: 3,
+              borderColor: panelBorder,
+              borderRadius: 10,
+              backgroundColor: '#071223',
+              padding: 10,
+              gap: 8,
             }}
           >
-            <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>
-              Runtime
-            </Text>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
-              {`fps ${fps || '--'} | layout ${layoutMs.toFixed(1)}ms | paint ${paintMs.toFixed(1)}ms`}
-            </Text>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>
-              {`total ${totalFrameWork.toFixed(1)}ms | nodes ${nodeCount || '--'}`}
-            </Text>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>
-              {`processed ${snapshot.processedTotal.toLocaleString()} events | drops ${snapshot.droppedFrames}`}
-            </Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>PRICE FEED</Text>
+            <Box style={{ flexGrow: 1, minHeight: 280 }}>
+              {selected && (viewMode === '2d' ? (
+                <Feed2D history={visibleHistory} />
+              ) : (
+                <Feed3D history={visibleHistory} spin={spin} />
+              ))}
+            </Box>
+          </Box>
+
+          <Box
+            style={{
+              backgroundColor: panelBg,
+              borderWidth: 1,
+              borderColor: panelBorder,
+              borderRadius: 10,
+              padding: 10,
+              gap: 8,
+            }}
+          >
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>EXECUTION / ENGINE CONTROLS</Text>
+            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%' }}>
+              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 240, gap: 8 }}>
+                <LabeledSlider label="Symbols" value={symbolCount} min={20} max={320} step={10} onChange={setSymbolCount} />
+                <LabeledSlider label="Book Depth" value={depth} min={10} max={80} step={2} onChange={setDepth} />
+              </Box>
+              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 240, gap: 8 }}>
+                <LabeledSlider label="Target Events/sec" value={targetEvents} min={5000} max={400000} step={10000} onChange={setTargetEvents} />
+                <LabeledSlider label="Simulation Scale" value={simScale} min={1} max={2} step={0.25} onChange={setSimScale} />
+                <LabeledSlider label="Focus Symbol" value={selectedIndex} min={0} max={Math.max(0, symbolCount - 1)} step={1} onChange={setSelectedIndex} />
+              </Box>
+            </Box>
           </Box>
         </Box>
 
-        <Box
-          style={{
-            flexGrow: 1,
-            borderWidth: 1,
-            borderColor: c.border,
-            borderRadius: 10,
-            backgroundColor: '#0a1020',
-            padding: 12,
-            gap: 10,
-          }}
-        >
-          {selected && (
-            <>
-              <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                <Badge label={selected.symbol} variant="default" />
-                <Badge label={`Last ${selected.last.toFixed(2)}`} variant="info" />
-                <Badge label={`Vol ${Math.round(selected.volume).toLocaleString()}`} variant="default" />
-                <Badge label={`Frame max ${snapshot.maxFrameMs.toFixed(2)}ms`} variant="warning" />
+        <Box style={{ width: 320, gap: 10, minHeight: 0 }}>
+          <Box
+            style={{
+              flexGrow: 1,
+              minHeight: 260,
+              backgroundColor: panelBg,
+              borderWidth: 1,
+              borderColor: panelBorder,
+              borderRadius: 10,
+              padding: 10,
+              gap: 8,
+            }}
+          >
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>ORDER BOOK</Text>
+              <Text style={{ color: '#6f8daf', fontSize: 10 }}>{`Spread ${spread.toFixed(2)}`}</Text>
+            </Box>
+            {selected && (
+              <Box style={{ flexDirection: 'row', gap: 8, flexGrow: 1 }}>
+                <BookPanel title="Bids" levels={selected.bids} color="#22c55e" descending />
+                <BookPanel title="Asks" levels={selected.asks} color="#ef4444" descending={false} />
               </Box>
+            )}
+          </Box>
 
-              <Box style={{ flexDirection: 'row', gap: 10, flexGrow: 1, minHeight: 320 }}>
-                <Box style={{ flexGrow: 1, minHeight: 300 }}>
-                  {viewMode === '2d' ? (
-                    <Feed2D history={selected.history} />
-                  ) : (
-                    <Feed3D history={selected.history} spin={spin} />
-                  )}
-                </Box>
-
-                <Box
-                  style={{
-                    width: 260,
-                    backgroundColor: '#0f1629',
-                    borderWidth: 1,
-                    borderColor: '#233150',
-                    borderRadius: 8,
-                    padding: 8,
-                    gap: 8,
-                  }}
-                >
-                  <BookPanel title="Bids" levels={selected.bids} color="#22c55e" descending />
-                  <BookPanel title="Asks" levels={selected.asks} color="#ef4444" descending={false} />
-                </Box>
+          <Box
+            style={{
+              backgroundColor: panelBg,
+              borderWidth: 1,
+              borderColor: panelBorder,
+              borderRadius: 10,
+              padding: 10,
+              gap: 6,
+              height: 180,
+            }}
+          >
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>TIME & SALES</Text>
+            <ScrollView style={{ width: '100%', flexGrow: 1 }}>
+              <Box style={{ gap: 3 }}>
+                {tapeRows.map((row) => (
+                  <Box key={`tape-${row.id}`} style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#0a1628', borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3 }}>
+                    <Text style={{ fontSize: 10, color: row.side === 'BUY' ? '#34d399' : '#f87171' }}>{row.side}</Text>
+                    <Text style={{ fontSize: 10, color: '#c7d8ec' }}>{row.price.toFixed(2)}</Text>
+                    <Text style={{ fontSize: 10, color: '#7f9bc0' }}>{row.size}</Text>
+                  </Box>
+                ))}
               </Box>
-            </>
-          )}
+            </ScrollView>
+          </Box>
+
+          <Box
+            style={{
+              backgroundColor: panelBg,
+              borderWidth: 1,
+              borderColor: panelBorder,
+              borderRadius: 10,
+              padding: 10,
+              gap: 4,
+            }}
+          >
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>ENGINE HEALTH</Text>
+            <Text style={{ color: '#c7d8ec', fontSize: 10 }}>
+              {`fps ${fps || '--'} | layout ${layoutMs.toFixed(1)}ms | paint ${paintMs.toFixed(1)}ms`}
+            </Text>
+            <Text style={{ color: totalFrameWork <= 8 ? '#34d399' : totalFrameWork <= 16 ? '#facc15' : '#f87171', fontSize: 10 }}>
+              {`frame work ${totalFrameWork.toFixed(1)}ms | p50 ${snapshot.p50.toFixed(2)}ms | p95 ${snapshot.p95.toFixed(2)}ms`}
+            </Text>
+            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>
+              {`processed ${snapshot.processedTotal.toLocaleString()} | dropped ${snapshot.droppedFrames} | nodes ${nodeCount || '--'}`}
+            </Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700', marginTop: 2 }}>TARGET SYSTEM</Text>
+            <Text style={{ color: '#c7d8ec', fontSize: 10 }}>{sysHost}</Text>
+            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysOs}</Text>
+            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysCpu}</Text>
+            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{`${sysMem} | up ${sysUp}`}</Text>
+          </Box>
         </Box>
       </Box>
     </Box>

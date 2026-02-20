@@ -323,6 +323,9 @@ function resolveImageStyle(props: ImageProps): Style | undefined {
 // ── Primitives ─────────────────────────────────────────
 
 export function Box(props: BoxProps) {
+  const anyProps = props as any;
+  const playgroundLine = anyProps.__ilrPlaygroundLine;
+  const playgroundTag = anyProps.__ilrPlaygroundTag;
   const {
     backgroundVideo, backgroundVideoFit, hoverVideo, hoverVideoFit,
     hoverStyle, activeStyle, focusStyle,
@@ -432,48 +435,52 @@ export function Box(props: BoxProps) {
   }
 
   // Native mode: host element for react-reconciler
+  const hostProps: any = {
+    style: scaledStyle,
+    backgroundVideo,
+    backgroundVideoFit,
+    hoverVideo,
+    hoverVideoFit,
+    hoverStyle: scaledHoverStyle,
+    activeStyle: scaledActiveStyle,
+    focusStyle: scaledFocusStyle,
+    focusable,
+    focusGroup,
+    focusGroupController,
+    focusGroupRingColor,
+    onClick,
+    onRelease,
+    onPointerEnter,
+    onPointerLeave,
+    onKeyDown,
+    onKeyUp,
+    onTextInput,
+    onWheel,
+    onTouchStart,
+    onTouchEnd,
+    onTouchMove,
+    onGamepadPress,
+    onGamepadRelease,
+    onGamepadAxis,
+    onMidiNote,
+    onMidiCC,
+    onDragStart,
+    onDrag,
+    onDragEnd,
+    onFileDrop,
+    onDirectoryDrop,
+    onFileDragEnter,
+    onFileDragLeave,
+    onFocus,
+    onBlur,
+    onLayout,
+  };
+  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+
   return React.createElement(
     'View',
-    {
-      style: scaledStyle,
-      backgroundVideo,
-      backgroundVideoFit,
-      hoverVideo,
-      hoverVideoFit,
-      hoverStyle: scaledHoverStyle,
-      activeStyle: scaledActiveStyle,
-      focusStyle: scaledFocusStyle,
-      focusable,
-      focusGroup,
-      focusGroupController,
-      focusGroupRingColor,
-      onClick,
-      onRelease,
-      onPointerEnter,
-      onPointerLeave,
-      onKeyDown,
-      onKeyUp,
-      onTextInput,
-      onWheel,
-      onTouchStart,
-      onTouchEnd,
-      onTouchMove,
-      onGamepadPress,
-      onGamepadRelease,
-      onGamepadAxis,
-      onMidiNote,
-      onMidiCC,
-      onDragStart,
-      onDrag,
-      onDragEnd,
-      onFileDrop,
-      onDirectoryDrop,
-      onFileDragEnter,
-      onFileDragLeave,
-      onFocus,
-      onBlur,
-      onLayout,
-    },
+    hostProps,
     children
   );
 }
@@ -489,6 +496,9 @@ export function Col(props: BoxProps) {
 }
 
 export function Text(props: TextProps) {
+  const anyProps = props as any;
+  const playgroundLine = anyProps.__ilrPlaygroundLine;
+  const playgroundTag = anyProps.__ilrPlaygroundTag;
   const { lines, numberOfLines, onKeyDown, onKeyUp, onTextInput, children } = props;
   const resolvedStyle = resolveTextStyle(props);
   const tokens = useThemeColorsOptional();
@@ -525,10 +535,16 @@ export function Text(props: TextProps) {
     );
   }
 
-  return React.createElement('Text', { style: scaledStyle, numberOfLines: resolvedLines, onKeyDown, onKeyUp, onTextInput }, children);
+  const hostProps: any = { style: scaledStyle, numberOfLines: resolvedLines, onKeyDown, onKeyUp, onTextInput };
+  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+  return React.createElement('Text', hostProps, children);
 }
 
 export function Image(props: ImageProps) {
+  const anyProps = props as any;
+  const playgroundLine = anyProps.__ilrPlaygroundLine;
+  const playgroundTag = anyProps.__ilrPlaygroundTag;
   const { src, onClick, onWheel } = props;
   const resolvedStyle = resolveImageStyle(props);
   const scaledStyle = useScaledStyle(resolvedStyle);
@@ -549,7 +565,10 @@ export function Image(props: ImageProps) {
     );
   }
 
-  return React.createElement('Image', { src, style: scaledStyle, onClick, onWheel });
+  const hostProps: any = { src, style: scaledStyle, onClick, onWheel };
+  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+  return React.createElement('Image', hostProps);
 }
 
 // ── FocusGroup ────────────────────────────────────────

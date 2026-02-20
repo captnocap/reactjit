@@ -10,7 +10,7 @@
  *   npx tsx scripts/docs/build.ts validate # Validate only
  */
 
-import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { parseContentDirectory } from './parser';
 import { validateContent } from './validate';
@@ -26,6 +26,8 @@ import type { ParsedDirectory } from './types';
 const ROOT = join(process.cwd());
 const CONTENT_DIR = join(ROOT, 'content');
 const DIST_DIR = join(ROOT, 'dist', 'llms');
+const STORYBOOK_DATA_DIR = join(ROOT, 'storybook', 'data');
+const STORYBOOK_LOVE_DATA_DIR = join(ROOT, 'storybook', 'love', 'data');
 
 function main() {
   const command = process.argv[2] || 'build';
@@ -102,6 +104,17 @@ function main() {
 
   console.log('');
   console.log(`  Generated ${Object.keys(endpoints).length} endpoint files in dist/llms/`);
+
+  // Step 3b: Keep Storybook stress-test fixture in sync
+  const llmsText = endpoints['llms.txt'];
+  if (typeof llmsText === 'string') {
+    mkdirSync(STORYBOOK_DATA_DIR, { recursive: true });
+    mkdirSync(STORYBOOK_LOVE_DATA_DIR, { recursive: true });
+    writeFileSync(join(STORYBOOK_DATA_DIR, 'llms.txt'), llmsText, 'utf-8');
+    writeFileSync(join(STORYBOOK_LOVE_DATA_DIR, 'llms.txt'), llmsText, 'utf-8');
+    const llmsSizeKB = (Buffer.byteLength(llmsText, 'utf-8') / 1024).toFixed(1);
+    console.log(`  Synced storybook/data/llms.txt and storybook/love/data/llms.txt (${llmsSizeKB} KB)`);
+  }
 
   // Step 4: Generate content.json for React docs viewer
   console.log('  Generating content.json for React viewer...');

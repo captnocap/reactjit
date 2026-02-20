@@ -160,6 +160,10 @@ const NativeScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
     },
     ref
   ) {
+    const anyProps = arguments[0] as any;
+    const playgroundLine = anyProps.__ilrPlaygroundLine;
+    const playgroundTag = anyProps.__ilrPlaygroundTag;
+
     // In native mode, scroll position is managed by the Lua layout engine.
     // We store a local scroll target for the imperative scrollTo() API
     // and pass it via style.scrollX / style.scrollY so the Lua layout
@@ -193,17 +197,17 @@ const NativeScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
       mergedStyle.scrollY = scrollStateRef.current.y;
     }
 
-    return React.createElement(
-      'View',
-      {
-        style: mergedStyle,
-        showScrollIndicator,
-        onScroll,
-        onScrollBegin,
-        onScrollEnd,
-      },
-      children
-    );
+    const hostProps: Record<string, any> = {
+      style: mergedStyle,
+      showScrollIndicator,
+      onScroll,
+      onScrollBegin,
+      onScrollEnd,
+    };
+    if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
+    if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+
+    return React.createElement('View', hostProps, children);
   }
 );
 

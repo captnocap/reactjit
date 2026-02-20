@@ -75,6 +75,10 @@ export function Pressable({
   hitSlop,
   accessibilityRole,
 }: PressableProps) {
+  const anyProps = arguments[0] as any;
+  const playgroundLine = anyProps.__ilrPlaygroundLine;
+  const playgroundTag = anyProps.__ilrPlaygroundTag;
+
   const mode = useRendererMode();
   const isStyleFunction = typeof style === 'function';
   const isChildrenFunction = typeof children === 'function';
@@ -240,6 +244,8 @@ export function Pressable({
 
     if (hitSlop) boxProps.hitSlop = hitSlop;
     if (accessibilityRole) boxProps.accessibilityRole = accessibilityRole;
+    if (playgroundLine !== undefined) boxProps.__ilrPlaygroundLine = playgroundLine;
+    if (playgroundTag !== undefined) boxProps.__ilrPlaygroundTag = playgroundTag;
 
     return <Box {...boxProps}>{resolvedChildren}</Box>;
   }

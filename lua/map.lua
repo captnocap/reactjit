@@ -229,16 +229,16 @@ local function syncMap(node)
         m.centerLng = lng
       end
     end
-    if props.zoom and not m.zoomAnimating then
+    if props.zoom ~= nil and not m.zoomAnimating then
       m.zoom = props.zoom
     end
-    if props.bearing then m.bearing = props.bearing end
-    if props.pitch then m.pitch = props.pitch end
+    if props.bearing ~= nil then m.bearing = props.bearing end
+    if props.pitch ~= nil then m.pitch = props.pitch end
   end
 
-  if props.projection then m.projection = props.projection end
-  if props.minZoom then m.minZoom = props.minZoom end
-  if props.maxZoom then m.maxZoom = props.maxZoom end
+  if props.projection ~= nil then m.projection = props.projection end
+  if props.minZoom ~= nil then m.minZoom = props.minZoom end
+  if props.maxZoom ~= nil then m.maxZoom = props.maxZoom end
 
   -- Update screen position
   m.screenX = c.x or 0
@@ -845,6 +845,8 @@ local function buildExtrusionModel(features, m)
 end
 
 local renderExtrudedBuildings3D  -- forward declaration (defined below)
+local projectToWorld3D
+local worldToScreen3D
 
 --- Render GeoJSON features in 3D mode with building extrusion.
 local function renderGeoJSON3D(m, effectiveOpacity)
@@ -992,7 +994,7 @@ end
 
 --- Project lat/lng to 3D world coordinates.
 --- Uses Y-north convention: +X=east, +Y=north, Z=up.
-local function projectToWorld3D(m, lat, lng)
+projectToWorld3D = function(m, lat, lng)
   local intZoom = math.floor(m.zoom)
   local fracScale = math.pow(2, m.zoom - intZoom)
   local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
@@ -1004,7 +1006,7 @@ end
 
 --- Project a 3D world point to canvas pixel coordinates using the current camera.
 --- Returns nil, nil if the point is behind the camera.
-local function worldToScreen3D(m, wx, wy, wz)
+worldToScreen3D = function(m, wx, wy, wz)
   wz = wz or 0
 
   -- Apply view matrix
@@ -1531,8 +1533,8 @@ function Map.handleRPC(method, args)
         m.zoomDuration = (args.duration or 2000) / 1000
         m.zoomAnimating = true
       end
-      if args.bearing then m.bearing = args.bearing end
-      if args.pitch then m.pitch = args.pitch end
+      if args.bearing ~= nil then m.bearing = args.bearing end
+      if args.pitch ~= nil then m.pitch = args.pitch end
       m.viewDirty = true
     end
     return { ok = true }

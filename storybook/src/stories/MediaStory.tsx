@@ -1,8 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text, Pressable, ScrollView } from '../../../packages/shared/src';
+import React, { useMemo, useState } from 'react';
+import { Box, Text, Pressable, ScrollView, ImageGallery, useRendererMode } from '../../../packages/shared/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
 import type { MediaType } from '../../../packages/media/src';
 import { useThemeColors } from '../../../packages/theme/src';
+
+const WEB_PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">' +
+  '<rect width="960" height="640" fill="#0f172a"/>' +
+  '<text x="480" y="330" text-anchor="middle" fill="#cbd5e1" font-family="sans-serif" font-size="56">media placeholder</text>' +
+  '</svg>'
+);
+const NATIVE_PLACEHOLDER_SRC = 'lib/placeholder.png';
 
 // ── Classifier Demo ────────────────────────────────────
 
@@ -87,7 +95,7 @@ function ArchiveFormats() {
     { ext: '7z', desc: 'LZMA/LZMA2 compressed archives', color: c.success },
     { ext: 'TAR', desc: 'Tape archives (plain, gz, bz2, xz, zst)', color: c.warning },
     { ext: 'ISO', desc: 'Disc images (ISO 9660)', color: c.accent },
-    { ext: 'CAB', desc: 'Windows cabinet archives', color: '#14b8a6' },
+    { ext: 'CAB', desc: 'Windows cabinet archives', color: c.primaryHover },
   ];
 
   return (
@@ -103,7 +111,7 @@ function ArchiveFormats() {
               paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
               width: 40, alignItems: 'center',
             }}>
-              <Text style={{ fontSize: 9, color: '#000', fontWeight: '700' }}>{f.ext}</Text>
+              <Text style={{ fontSize: 9, color: c.bg, fontWeight: '700' }}>{f.ext}</Text>
             </Box>
             <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
           </Box>
@@ -203,8 +211,8 @@ function FeatureList() {
     { label: 'Deep Index', desc: 'Archive-aware indexing — looks inside compressed files', color: c.info },
     { label: 'Type Detection', desc: '40+ extensions: video, audio, image, subtitle, document, archive', color: c.warning },
     { label: 'Search', desc: 'Pattern-based search inside archives', color: c.accent },
-    { label: 'Stats', desc: 'Quick directory stats: counts by type, total size, largest file', color: '#14b8a6' },
-    { label: 'Format Size', desc: 'Human-readable byte formatting (B/KB/MB/GB/TB)', color: '#ec4899' },
+    { label: 'Stats', desc: 'Quick directory stats: counts by type, total size, largest file', color: c.primaryHover },
+    { label: 'Format Size', desc: 'Human-readable byte formatting (B/KB/MB/GB/TB)', color: c.primaryPressed },
     { label: 'Graceful', desc: 'Archive features degrade gracefully if libarchive not installed', color: c.textDim },
   ];
 
@@ -221,15 +229,43 @@ function FeatureList() {
   );
 }
 
+// ── Gallery Demo ────────────────────────────────────────
+
+function GalleryDemo() {
+  const c = useThemeColors();
+  const mode = useRendererMode();
+  const placeholderSrc = mode === 'native' ? NATIVE_PLACEHOLDER_SRC : WEB_PLACEHOLDER_SRC;
+  const images = useMemo(() => {
+    return Array.from({ length: 6 }, (_, idx) => ({
+      id: idx,
+      src: placeholderSrc,
+      title: `Gallery ${idx + 1}`,
+      subtitle: `Placeholder media tile`,
+      description: `Click to open a non-invasive modal viewer.`,
+    }));
+  }, [placeholderSrc]);
+
+  return (
+    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
+      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Modal Image Gallery</Text>
+      <Text style={{ fontSize: 9, color: c.textDim }}>
+        Opens images in an overlay so page layout stays intact.
+      </Text>
+      <ImageGallery images={images} columns={3} gap={8} thumbnailHeight={88} />
+    </Box>
+  );
+}
+
 // ── Main Story ─────────────────────────────────────────
 
 export function MediaStory() {
   const c = useThemeColors();
-  const [tab, setTab] = useState<'classify' | 'formats' | 'code' | 'features'>('classify');
+  const [tab, setTab] = useState<'classify' | 'formats' | 'gallery' | 'code' | 'features'>('classify');
 
   const tabs = [
     { key: 'classify' as const, label: 'Classify' },
     { key: 'formats' as const, label: 'Archives' },
+    { key: 'gallery' as const, label: 'Gallery' },
     { key: 'code' as const, label: 'Usage' },
     { key: 'features' as const, label: 'All' },
   ];
@@ -249,7 +285,7 @@ export function MediaStory() {
               paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
               borderRadius: 4,
             }}>
-              <Text style={{ fontSize: 10, color: tab === t.key ? '#000' : c.textSecondary, fontWeight: '700' }}>
+              <Text style={{ fontSize: 10, color: tab === t.key ? c.bg : c.textSecondary, fontWeight: '700' }}>
                 {t.label}
               </Text>
             </Box>
@@ -266,6 +302,7 @@ export function MediaStory() {
             </>
           )}
           {tab === 'formats' && <ArchiveFormats />}
+          {tab === 'gallery' && <GalleryDemo />}
           {tab === 'code' && <UsageExamples />}
           {tab === 'features' && <FeatureList />}
         </Box>

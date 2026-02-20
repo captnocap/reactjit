@@ -72,6 +72,7 @@ end
 
 local NES_W = 256
 local NES_H = 240
+local NES_FRAME_TIME = 1 / 60.0988  -- NTSC NES frame period (~16.64ms)
 
 local Emulator = {}
 local instances = {}     -- nodeId -> { agnes, canvas, imageData, image, src, playing, input1, input2, bounds }
@@ -168,6 +169,8 @@ function Emulator.syncWithTree(nodes)
           src = src or nil,
           playing = playing,
           bounds = nil,
+          timeAccum = 0,    -- accumulates dt; agnes ticks when >= NES_FRAME_TIME
+          dirty = false,    -- true when a new NES frame was produced (needs re-render)
         }
         instances[id].canvas:setFilter("nearest", "nearest")
         if not focusedNodeId then focusedNodeId = id end
@@ -213,6 +216,7 @@ function Emulator.syncWithTree(nodes)
 end
 
 --- Called per-frame: advance emulation for each playing instance.
+--- Uses a time accumulator so the NES runs at ~60.0988 Hz regardless of app framerate.
 function Emulator.updateAll(dt, pushEvent)
   local agnes = loadAgnes()
   if not agnes then return end
@@ -223,18 +227,28 @@ function Emulator.updateAll(dt, pushEvent)
   for id, entry in pairs(instances) do
     if entry.playing and entry.agnes ~= nil then
       agnes.agnes_set_input(entry.agnes, input1, input2)
-      agnes.agnes_next_frame(entry.agnes)
+
+      -- Accumulate real time; tick NES only when enough has passed
+      entry.timeAccum = entry.timeAccum + dt
+      while entry.timeAccum >= NES_FRAME_TIME do
+        agnes.agnes_next_frame(entry.agnes)
+        entry.timeAccum = entry.timeAccum - NES_FRAME_TIME
+        entry.dirty = true
+      end
     end
   end
 end
 
 --- Called per-frame: render each emulator's framebuffer to its canvas.
+--- Only re-uploads pixels when a new NES frame was produced (dirty flag).
 function Emulator.renderAll()
   local agnes = loadAgnes()
   if not agnes then return end
 
   for id, entry in pairs(instances) do
-    if entry.agnes ~= nil and entry.canvas then
+    if entry.agnes ~= nil and entry.canvas and entry.dirty then
+      entry.dirty = false
+
       -- Bulk read framebuffer into RGBA buffer
       agnes.agnes_get_screen_buffer(entry.agnes, rgbaBuf)
 

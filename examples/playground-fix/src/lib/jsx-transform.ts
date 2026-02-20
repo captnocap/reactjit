@@ -7,6 +7,17 @@ export interface TransformError { line: number; col: number; message: string; }
 
 let src: string, pos: number, lineNum: number, colNum: number, errors: TransformError[];
 
+const PLAYGROUND_TRACKED_TAGS = new Set([
+  'Box',
+  'Text',
+  'Image',
+  'Video',
+  'Pressable',
+  'ScrollView',
+  'TextInput',
+  'TextEditor',
+]);
+
 function peek(): string { return src[pos] || ''; }
 function peekAt(n: number): string { return src[pos + n] || ''; }
 function advance(): string { const ch = src[pos] || ''; if (ch === '\n') { lineNum++; colNum = 1; } else colNum++; pos++; return ch; }
@@ -53,11 +64,12 @@ function readTmpl(): string {
 function isJSXStart(): boolean { return peek() === '<' && (peekAt(1) === '>' || /[a-zA-Z_$]/.test(peekAt(1))); }
 
 function parseJSX(): string {
+  const jsxLine = lineNum;
   advance(); // <
   if (peek() === '>') { advance(); const ch = parseChildren(''); if (eat('</')) eat('>'); return ch.length ? `React.createElement(React.Fragment, null, ${ch.join(', ')})` : 'React.createElement(React.Fragment, null)'; }
   const tag = readIdent();
   if (!tag) { addError('Expected tag name'); return '"<error>"'; }
-  const props = parseProps();
+  const props = parseProps(tag, jsxLine);
   if (eat('/>')) return `React.createElement(${tag}, ${props})`;
   if (!eat('>')) { addError(`Expected > after <${tag}`); return '"<error>"'; }
   const ch = parseChildren(tag);
@@ -65,7 +77,7 @@ function parseJSX(): string {
   return ch.length ? `React.createElement(${tag}, ${props}, ${ch.join(', ')})` : `React.createElement(${tag}, ${props})`;
 }
 
-function parseProps(): string {
+function parseProps(tag: string, jsxLine: number): string {
   const ps: string[] = [];
   while (pos < src.length) {
     skipWS();
@@ -79,9 +91,20 @@ function parseProps(): string {
     if (peek() === '{') { advance(); ps.push(`${name}: ${readBraced()}`); continue; }
     addError(`Expected value after ${name}=`);
   }
-  if (!ps.length) return 'null';
-  if (ps.some(p => p.startsWith('...'))) { return `Object.assign({}, ${ps.map(p => p.startsWith('...') ? p.slice(3) : `{${p}}`).join(', ')})`; }
-  return `{${ps.join(', ')}}`;
+
+  const outProps = [...ps];
+  if (PLAYGROUND_TRACKED_TAGS.has(tag)) {
+    outProps.unshift(
+      `__ilrPlaygroundTag: ${JSON.stringify(tag)}`,
+      `__ilrPlaygroundLine: ${jsxLine}`,
+    );
+  }
+
+  if (!outProps.length) return 'null';
+  if (outProps.some(p => p.startsWith('...'))) {
+    return `Object.assign({}, ${outProps.map(p => p.startsWith('...') ? p.slice(3) : `{${p}}`).join(', ')})`;
+  }
+  return `{${outProps.join(', ')}}`;
 }
 
 function parseChildren(parent: string): string[] {
