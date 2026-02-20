@@ -293,6 +293,87 @@ if inputDevCount > 0 then
   EventBus.emit("input", inputDevCount .. " input device(s) detected")
 end
 
+-- ── Boot screen (trust gate) ──────────────────────────────────────────────────
+
+local BootScreen = require("bootscreen")
+BootScreen.init({
+  GL          = GL,
+  Font        = Font,
+  rect        = rect,
+  roundedRect = roundedRect,
+  text        = text,
+  centeredText = centeredText,
+  W           = W,
+  H           = H,
+})
+BootScreen.loadManifest("/app/manifest.json")
+
+-- Console commands for manifest inspection
+Commands.register("manifest", {
+  desc = "Show loaded cartridge manifest",
+  usage = "manifest",
+  exec = function()
+    local m = BootScreen.getManifest()
+    if not m then
+      return { type = "error", data = "no manifest loaded" }
+    end
+    local lines = {}
+    table.insert(lines, { text = "  name:    " .. (m.name or "?"), color = {0.8, 0.8, 1.0} })
+    table.insert(lines, { text = "  version: " .. (m.version or "?"), color = {0.8, 0.8, 1.0} })
+    if m.build then
+      if m.build.commit then
+        table.insert(lines, { text = "  commit:  " .. m.build.commit, color = {0.6, 0.7, 0.8} })
+      end
+      if m.build.toolchain then
+        table.insert(lines, { text = "  toolchain: " .. m.build.toolchain, color = {0.6, 0.7, 0.8} })
+      end
+    end
+    if m.signature then
+      table.insert(lines, { text = "  signature: present", color = {1.0, 0.8, 0.2} })
+    else
+      table.insert(lines, { text = "  signature: none", color = {0.4, 0.4, 0.5} })
+    end
+    return { type = "lines", data = lines }
+  end,
+})
+
+Commands.register("permit", {
+  desc = "Show capability permits",
+  usage = "permit",
+  exec = function()
+    local m = BootScreen.getManifest()
+    if not m or not m.capabilities then
+      return { type = "error", data = "no manifest loaded" }
+    end
+    local lines = {}
+    local order = {"gpu","storage","network","filesystem","clipboard","process","browse","ipc","sysmon"}
+    for _, cap in ipairs(order) do
+      local val = m.capabilities[cap]
+      local status, color
+      if not val or val == false then
+        status = "denied"
+        color = {0.4, 0.4, 0.5}
+      elseif val == true then
+        status = "granted"
+        color = {0.3, 0.85, 0.4}
+      elseif type(val) == "table" then
+        local parts = {}
+        for k, v in pairs(val) do
+          parts[#parts + 1] = type(k) == "number" and tostring(v) or (k .. "=" .. tostring(v))
+        end
+        status = "scoped: " .. table.concat(parts, ", ")
+        color = {1.0, 0.8, 0.2}
+      else
+        status = tostring(val)
+        color = {0.6, 0.6, 0.6}
+      end
+      local pad = string.rep(" ", 14 - #cap)
+      table.insert(lines, { text = "  " .. cap .. pad .. status, color = color })
+    end
+    return { type = "lines", data = lines }
+  end,
+})
+
 -- ── Run loop ──────────────────────────────────────────────────────────────────
 
 local event    = ffi.new("SDL2_Event")
@@ -302,6 +383,7 @@ local lastTick = t0
 local cursorStyle = "arrow"
 local appError = nil  -- set if paintFrame pcall fails
 local textInputActive = false
+local appPhase = "boot"  -- "boot" | "running" | "denied"
 
 -- ── Cursor rendering ────────────────────────────────────────────────────────
 
@@ -492,7 +574,6 @@ while running do
       mouseY = math.max(0, math.min(H, mouseY + m.yrel))
 
     elseif etype == SDL_TEXTINPUT_EVENT then
-      -- Text input — only goes to console
       if Console.isOpen() then
         local ti = ffi.cast("SDL_TextInputEvent*", event)
         Console.handleTextInput(ffi.string(ti.text))
@@ -502,7 +583,7 @@ while running do
       local ptr = ffi.cast("uint32_t*", event)
       local scancode = ptr[4]
 
-      -- Backtick (scancode 53) — ALWAYS toggles console regardless of state
+      -- Backtick (scancode 53) — ALWAYS toggles console regardless of phase
       if scancode == 53 then
         local action = Console.toggle()
         if action == "open" then
@@ -521,9 +602,19 @@ while running do
           textInputActive = false
         end
 
+      elseif appPhase == "boot" then
+        -- Boot screen gets keys when console is closed
+        BootScreen.handleKeyDown(scancode)
+        if BootScreen.getState() == "confirmed" then
+          appPhase = "running"
+          EventBus.emit("os", "cartridge approved — launching")
+        elseif BootScreen.getState() == "denied" then
+          appPhase = "denied"
+          EventBus.emit("os", "cartridge DENIED by user")
+        end
+
       else
-        -- Normal app key handling
-        -- F2 toggles cursor style
+        -- Normal app key handling (running phase)
         if scancode == 59 then
           cursorStyle = (cursorStyle == "arrow") and "scimitar" or "arrow"
         end
@@ -533,33 +624,46 @@ while running do
 
   -- ── Update ──────────────────────────────────────────────────────────────────
   Console.update(dt)
+  if appPhase == "boot" then
+    BootScreen.update(dt)
+  end
 
   -- ── Render ──────────────────────────────────────────────────────────────────
-  -- pcall around paintFrame: if app errors, console survives
-  local ok, err = pcall(paintFrame, frameStart)
-  if not ok then
-    -- Clear to dark and show error — but keep going
-    GL.glClearColor(0.08, 0.02, 0.02, 1)
+  if appPhase == "boot" then
+    BootScreen.draw()
+
+  elseif appPhase == "running" then
+    local ok, err = pcall(paintFrame, frameStart)
+    if not ok then
+      GL.glClearColor(0.08, 0.02, 0.02, 1)
+      GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
+      GL.glLoadIdentity()
+
+      if not appError then
+        appError = tostring(err)
+        EventBus.emit("os", "app crash: " .. appError)
+      end
+
+      text("APP ERROR", 60, 60, 24, 1, 0.3, 0.3, 1)
+      text(appError, 60, 100, 14, 0.8, 0.4, 0.4, 1)
+      text("console is still alive  --  press ` to open", 60, 140, 14, 0.5, 0.5, 0.6, 1)
+    end
+
+  elseif appPhase == "denied" then
+    GL.glClearColor(0.06, 0.02, 0.02, 1)
     GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
     GL.glLoadIdentity()
 
-    if not appError then
-      appError = tostring(err)
-      EventBus.emit("os", "app crash: " .. appError)
-    end
-
-    text("APP ERROR", 60, 60, 24, 1, 0.3, 0.3, 1)
-    text(appError, 60, 100, 14, 0.8, 0.4, 0.4, 1)
-    text("console is still alive  --  press ` to open", 60, 140, 14, 0.5, 0.5, 0.6, 1)
+    centeredText("Cartridge Denied", W / 2, H / 2 - 40, 32, 0.8, 0.3, 0.3, 1)
+    centeredText("The cartridge was not approved for launch.", W / 2, H / 2 + 10, 16, 0.5, 0.4, 0.4, 1)
+    centeredText("Press ` to open console, or close the window.", W / 2, H / 2 + 40, 14, 0.4, 0.4, 0.5, 1)
   end
 
-  -- Console always draws on top
+  -- Console always draws on top (all phases)
   Console.draw()
   drawCursor(mouseX, mouseY)
 
   sdl.SDL_GL_SwapWindow(window)
-
-  -- Yield a minimal amount to avoid busy-spinning (1ms)
   sdl.SDL_Delay(1)
 end
 
