@@ -108,20 +108,19 @@ CART_BOOT = {
       fn, err = real_loadstring(code)
     end
     if not fn then return false, err end
-    local results = {real_pcall(fn)}
-    local ok = results[1]
-    if not ok then
-      return false, results[2]
+    -- Use a wrapper to capture return count via select('#', ...)
+    -- because # on tables with nil holes is undefined in LuaJIT.
+    local function capture(ok, ...)
+      if not ok then return false, (...) end
+      local n = select('#', ...)
+      if n == 0 then return true, nil end
+      local parts = {}
+      for i = 1, n do
+        parts[i] = real_tostring(select(i, ...))
+      end
+      return true, real_table.concat(parts, "\t")
     end
-    -- Format all return values (e.g. io.open returns nil, "error msg")
-    local parts = {}
-    for i = 2, #results do
-      parts[#parts + 1] = real_tostring(results[i])
-    end
-    if #parts == 0 then
-      return true, nil
-    end
-    return true, real_table.concat(parts, "\t")
+    return capture(real_pcall(fn))
   end,
 }
 
