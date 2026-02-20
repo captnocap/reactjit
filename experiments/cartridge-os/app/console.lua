@@ -40,6 +40,41 @@ local mode          = "console"  -- "console" or "lua"
 local lastTabTime   = 0          -- for double-tab detection
 local TAB_DOUBLE_MS = 0.35       -- seconds between taps for double-tab
 
+-- ── Backdrop layer ───────────────────────────────────────────────────────
+-- Faint decoration in the bottom-right corner, rendered behind all text.
+-- Default: ASCII art watermark. Replace with an image callback later.
+
+local backdrop = {
+  alpha = 0.07,      -- very faint so it doesn't fight text
+  color = {0.5, 0.4, 1.0},
+  fontSize = 13,
+  lines = {
+    "   ____           __       _     __",
+    "  / ___|__ _ _ __| |_ _ __(_) __| | __ _  ___",
+    " | |   / _` | '__| __| '__| |/ _` |/ _` |/ _ \\",
+    " | |__| (_| | |  | |_| |  | | (_| | (_| |  __/",
+    "  \\____\\__,_|_|   \\__|_|  |_|\\__,_|\\__, |\\___|",
+    "    ___  ____                       |___/",
+    "   / _ \\/ ___|",
+    "  | | | \\___ \\",
+    "  | |_| |___) |",
+    "   \\___/|____/",
+  },
+}
+
+--- Set a custom backdrop. Pass nil to clear.
+--- Fields: lines (table of strings), alpha, color {r,g,b}, fontSize
+function Console.setBackdrop(cfg)
+  if cfg == nil then
+    backdrop.lines = {}
+    return
+  end
+  if cfg.lines    then backdrop.lines    = cfg.lines    end
+  if cfg.alpha    then backdrop.alpha    = cfg.alpha    end
+  if cfg.color    then backdrop.color    = cfg.color    end
+  if cfg.fontSize then backdrop.fontSize = cfg.fontSize end
+end
+
 -- ── Layout constants ───────────────────────────────────────────────────────
 
 local FONT_SIZE     = 14
@@ -60,27 +95,8 @@ function Console.init(deps)
   H    = deps.H
   targetHeight = math.floor(H * 0.4)
 
-  -- Welcome banner
-  local banner = {
-    { text = "",                                                color = {0.3, 0.2, 0.7} },
-    { text = "   ____           __       _     __           ",  color = {0.4, 0.3, 1.0} },
-    { text = "  / ___|__ _ _ __| |_ _ __(_) __| | __ _  ___",  color = {0.4, 0.3, 1.0} },
-    { text = " | |   / _` | '__| __| '__| |/ _` |/ _` |/ _ \\", color = {0.5, 0.4, 1.0} },
-    { text = " | |__| (_| | |  | |_| |  | | (_| | (_| |  __/", color = {0.5, 0.4, 1.0} },
-    { text = "  \\____\\__,_|_|   \\__|_|  |_|\\__,_|\\__, |\\___|", color = {0.6, 0.5, 1.0} },
-    { text = "    ___  ____                       |___/      ", color = {0.6, 0.5, 1.0} },
-    { text = "   / _ \\/ ___|                                 ", color = {0.5, 0.4, 0.9} },
-    { text = "  | | | \\___ \\                                 ", color = {0.5, 0.4, 0.9} },
-    { text = "  | |_| |___) |                                ", color = {0.4, 0.3, 0.8} },
-    { text = "   \\___/|____/                                 ", color = {0.4, 0.3, 0.8} },
-    { text = "",                                                color = {0.3, 0.2, 0.7} },
-    { text = "  iLoveReact — no X11, no Wayland, no display server", color = {0.5, 0.5, 0.7} },
-    { text = "  Type 'help' for commands. Double-tab for Lua mode.", color = {0.4, 0.4, 0.6} },
-    { text = "",                                                color = {0.3, 0.2, 0.7} },
-  }
-  for _, line in ipairs(banner) do
-    Console.addOutput(line.text, line.color)
-  end
+  -- Welcome hint (single line, not a wall of ASCII)
+  Console.addOutput("  Type 'help' for commands. Double-tab for Lua mode.", {0.4, 0.4, 0.6})
 
   -- Subscribe to all events to populate the feed
   EventBus.subscribe("*", function(evt)
@@ -419,6 +435,24 @@ function Console.draw()
 
   -- Left accent bar
   rect(0, 0, 3, h, 0.4, 0.3, 1.0, 0.8)
+
+  -- ── Backdrop decoration (behind all text) ────────────────────────────
+  if backdrop.lines and #backdrop.lines > 0 and backdrop.alpha > 0 then
+    local bfs = backdrop.fontSize
+    local blh = math.floor(bfs * 1.4)
+    local totalH = #backdrop.lines * blh
+    -- Anchor to bottom-right of the output area, above the input bar
+    local bx = w - PADDING - 20
+    local by = h - STATUS_HEIGHT - INPUT_HEIGHT - 16 - totalH
+
+    local r, g, b = backdrop.color[1], backdrop.color[2], backdrop.color[3]
+    local a = backdrop.alpha
+
+    for i, line in ipairs(backdrop.lines) do
+      local lw = Font.measureWidth(line, bfs)
+      Font.draw(line, bx - lw, by + (i - 1) * blh, bfs, r, g, b, a)
+    end
+  end
 
   -- Status bar at bottom of console
   local statusY = h - STATUS_HEIGHT
