@@ -307,12 +307,34 @@ local real_rawset       = rawset
 local real_rawget       = rawget
 local real_getmetatable = getmetatable
 
--- Tables that cart code must not modify or inspect
+-- Tables that cart code must not modify or inspect.
+-- Anything that enforces policy belongs here.
 local protected_tables = {}
 protected_tables[sandboxed_ffi] = true
+protected_tables[_G.io]        = true   -- io.open wrapper = policy enforcement
+protected_tables[_G.os]        = true   -- os.execute wrapper = policy enforcement
+protected_tables[CART_BOOT]    = true   -- boot attestation data = trust chain
 -- string metatable is already hidden via __metatable = false
 
-_G.rawget = real_rawget  -- rawget on non-protected tables is safe (read-only)
+-- Hide metatables of protected tables so getmetatable() returns false.
+-- Uses Lua's built-in __metatable privacy mechanism (same pattern as strings).
+for tbl, _ in real_pairs(protected_tables) do
+  local mt = real_getmetatable(tbl)
+  if mt then
+    -- Table already has a metatable (e.g. sandboxed_ffi) — add __metatable
+    real_rawset(mt, "__metatable", false)
+  else
+    -- No metatable yet — set one with just __metatable
+    real_setmetatable(tbl, { __metatable = false })
+  end
+end
+
+_G.rawget = function(t, k)
+  if protected_tables[t] then
+    real_error("[sandbox] rawget blocked on protected table", 2)
+  end
+  return real_rawget(t, k)
+end
 
 _G.rawset = function(t, k, v)
   if protected_tables[t] then
@@ -337,6 +359,40 @@ end
 -- ── Block collectgarbage (DoS vector) ───────────────────────────────────────
 
 _G.collectgarbage = nil
+
+-- ── Lock _G against policy mutations ──────────────────────────────────────────
+-- Two layers:
+--
+-- 1. _G is a protected table → rawset(_G, "io", ...) is blocked.
+--
+-- 2. __newindex on _G → blocks re-introduction of nil'd globals (loadstring,
+--    debug, package, etc.). In Lua 5.1/LuaJIT, __newindex only fires for keys
+--    that don't exist in the raw table, so this catches nil'd keys but NOT
+--    overwrites of existing keys (io, os, etc.). That's OK: our enforcement
+--    functions use real_* upvalues, not _G lookups. Replacing _G.io only hurts
+--    the cart's own code — they lose our wrapper and can't get real_io back.
+--
+-- Net effect: cart cannot rawset policy tables, cannot re-introduce blocked
+-- globals, and replacing wrapper tables is self-defeating.
+
+protected_tables[_G] = true
+
+local blocked_globals = {
+  loadstring = true, loadfile = true, load = true, debug = true,
+  dofile = true, package = true,
+  getfenv = true, setfenv = true, newproxy = true, module = true,
+  collectgarbage = true,
+}
+
+real_setmetatable(_G, {
+  __newindex = function(t, k, v)
+    if blocked_globals[k] then
+      real_error("[sandbox] cannot set _G." .. real_tostring(k), 2)
+    end
+    real_rawset(t, k, v)
+  end,
+  __metatable = false,  -- hide _G's metatable too
+})
 
 -- ── Log sandbox activation ───────────────────────────────────────────────────
 
