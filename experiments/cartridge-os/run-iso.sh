@@ -39,6 +39,7 @@ qemu-system-x86_64 \
     -m 2048M \
     -cdrom "$ISO" \
     -boot d \
+    -vga none \
     -device virtio-vga-gl \
     -display sdl,gl=on \
     -serial file:"$LOG" \

@@ -289,11 +289,31 @@ if [ -n "$KVER" ]; then
         echo "        kernel modules: $(echo $ALL_MODS | wc -w) files"
     fi
 
-    # Input modules (not in virtio-gpu's dep chain, but needed for mouse/keyboard)
+    # Input + USB + HID modules (not in virtio-gpu's dep chain, needed for input)
     INPUT_MODS=(
+        # evdev (userspace input device nodes)
         "kernel/drivers/input/evdev.ko.gz"
-        "kernel/drivers/input/mouse/psmouse.ko.gz"
         "kernel/drivers/input/mousedev.ko.gz"
+        # PS/2 fallback
+        "kernel/drivers/input/mouse/psmouse.ko.gz"
+        # USB host controllers
+        "kernel/drivers/usb/common/usb-common.ko.gz"
+        "kernel/drivers/usb/core/usbcore.ko.gz"
+        "kernel/drivers/usb/host/xhci-hcd.ko.gz"
+        "kernel/drivers/usb/host/xhci-pci.ko.gz"
+        "kernel/drivers/usb/host/ehci-hcd.ko.gz"
+        "kernel/drivers/usb/host/ehci-pci.ko.gz"
+        "kernel/drivers/usb/host/ohci-hcd.ko.gz"
+        "kernel/drivers/usb/host/ohci-pci.ko.gz"
+        "kernel/drivers/usb/host/uhci-hcd.ko.gz"
+        # HID (USB keyboard/mouse class drivers)
+        "kernel/drivers/hid/hid.ko.gz"
+        "kernel/drivers/hid/hid-generic.ko.gz"
+        "kernel/drivers/hid/usbhid/usbhid.ko.gz"
+        "kernel/drivers/hid/usbhid/usbkbd.ko.gz"
+        "kernel/drivers/hid/usbhid/usbmouse.ko.gz"
+        # virtio-input (VMs)
+        "kernel/drivers/virtio/virtio_input.ko.gz"
     )
     for mod in "${INPUT_MODS[@]}"; do
         if [ -f "$SRCMOD/$mod" ]; then

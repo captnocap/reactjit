@@ -39,5 +39,6 @@ qemu-system-x86_64 \
   -append "rdinit=/init console=ttyS0 loglevel=7" \
   -device virtio-vga-gl \
   -display sdl,gl=on \
+  -usb -device usb-tablet \
   -serial file:"$LOG" \
   -no-reboot
