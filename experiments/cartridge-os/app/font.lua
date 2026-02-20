@@ -22,9 +22,8 @@ ffi.cdef[[
   int  ft_measure_text_utf8(const char *text, int byte_len);
 ]]
 
--- ft_helper.so lives in the same directory as this script
-local script_dir = debug.getinfo(1, "S").source:match("@(.*/)") or "./"
-local ft = ffi.load(script_dir .. "ft_helper.so")
+-- ft_helper.so lives in /app/ (sandbox blocks debug.getinfo)
+local ft = ffi.load("/app/ft_helper.so")
 
 local Font = {}
 local cache       = {}
