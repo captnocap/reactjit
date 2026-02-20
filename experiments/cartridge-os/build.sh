@@ -340,6 +340,7 @@ cp "$DIST_DIR/init" "$STAGING/init"
 
 # ── App files ──
 cp "$REPO_ROOT/zig-out/lib/libft_helper.so" "$STAGING/app/ft_helper.so"
+cp "$SCRIPT_DIR/app/sandbox.lua"    "$STAGING/app/"
 cp "$SCRIPT_DIR/app/main.lua"       "$STAGING/app/"
 cp "$SCRIPT_DIR/app/gl.lua"         "$STAGING/app/"
 cp "$SCRIPT_DIR/app/font.lua"       "$STAGING/app/"

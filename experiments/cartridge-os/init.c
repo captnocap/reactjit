@@ -577,6 +577,56 @@ int main(void) {
         close(verdict_pipe[1]);
     }
 
+    /* ── Load input modules (gated on manifest capabilities) ────────────── */
+    /* Read /app/manifest.json and check for keyboard/mouse/usb caps.
+     * Uses simple string search — cartridge-pack.py produces canonical JSON. */
+    {
+        int has_keyboard = 0, has_mouse = 0, has_usb = 0;
+        FILE *mf = fopen("/app/manifest.json", "r");
+        if (mf) {
+            char mbuf[4096];
+            size_t mlen = fread(mbuf, 1, sizeof(mbuf) - 1, mf);
+            fclose(mf);
+            mbuf[mlen] = '\0';
+            if (strstr(mbuf, "\"keyboard\":true") || strstr(mbuf, "\"keyboard\": true"))
+                has_keyboard = 1;
+            if (strstr(mbuf, "\"mouse\":true") || strstr(mbuf, "\"mouse\": true"))
+                has_mouse = 1;
+            if (strstr(mbuf, "\"usb\":true") || strstr(mbuf, "\"usb\": true"))
+                has_usb = 1;
+        }
+
+        if (has_keyboard || has_mouse) {
+            puts("  Loading input modules (keyboard/mouse)...");
+            char *input_mods[] = {
+                "hid", "hid-generic", "evdev", "mousedev", "psmouse",
+                "virtio_input", NULL
+            };
+            for (int i = 0; input_mods[i]; i++) {
+                char *args[] = { "/bin/busybox", "modprobe", input_mods[i], NULL };
+                run_wait(args);
+            }
+        }
+
+        if (has_usb) {
+            puts("  Loading USB host controller modules...");
+            char *usb_mods[] = {
+                "usb-common", "usbcore", "xhci-hcd", "xhci-pci",
+                "ehci-hcd", "ehci-pci", "uhci-hcd", "ohci-hcd", "ohci-pci",
+                "usbhid", NULL
+            };
+            for (int i = 0; usb_mods[i]; i++) {
+                char *args[] = { "/bin/busybox", "modprobe", usb_mods[i], NULL };
+                run_wait(args);
+            }
+        }
+
+        if (has_keyboard || has_mouse || has_usb) {
+            usleep(300000); /* let kernel enumerate devices */
+        }
+        fflush(stdout);
+    }
+
     /* ── Launch luajit ───────────────────────────────────────────────────── */
     /* Only launch if verified OR dev mode unsigned */
     if (verdict != CART_VERDICT_VERIFIED && verdict != CART_VERDICT_UNSIGNED) {
@@ -597,7 +647,7 @@ int main(void) {
             if (verdict_pipe[0] != 3)
                 close(verdict_pipe[0]);
         }
-        char *argv[] = { "/usr/bin/luajit", "/app/main.lua", NULL };
+        char *argv[] = { "/usr/bin/luajit", "/app/sandbox.lua", NULL };
         execv("/usr/bin/luajit", argv);
         fprintf(stderr, "[init] execv luajit: %s\n", strerror(errno));
         _exit(1);

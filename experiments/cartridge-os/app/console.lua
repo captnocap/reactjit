@@ -377,6 +377,12 @@ function executeInput()
 end
 
 function evalLua(code)
+  -- Sandbox blocks loadstring — show a clean error instead of crashing
+  if not loadstring then
+    Console.addOutput("  Lua eval disabled (sandbox: loadstring blocked)", {1.0, 0.6, 0.2})
+    return
+  end
+
   -- Try as expression first (return value)
   local fn, err = loadstring("return " .. code)
   if not fn then

@@ -5,9 +5,6 @@
   Just: kernel → SDL2 (kmsdrm) → OpenGL → LuaJIT → this.
 ]]
 
--- /app/ contains gl.lua, font.lua, ft_helper.so
-package.path = "/app/?.lua;" .. package.path
-
 local ffi = require("ffi")
 local bit = require("bit")
 
@@ -126,35 +123,7 @@ local mouseX, mouseY = 0, 0
 
 -- ── Init ──────────────────────────────────────────────────────────────────────
 
--- Load input modules: USB stack + HID + PS/2 fallback + evdev
-io.write("[cartridge] loading input modules...\n"); io.flush()
-local input_mods = {
-  -- USB host controllers (xHCI for USB 3.x, EHCI for 2.0, UHCI/OHCI for 1.x)
-  "usb-common", "usbcore", "xhci-hcd", "xhci-pci", "ehci-hcd", "ehci-pci",
-  "uhci-hcd", "ohci-hcd", "ohci-pci",
-  -- HID (keyboard/mouse class drivers)
-  "hid", "hid-generic", "usbhid",
-  -- virtio-input (for VMs)
-  "virtio_input",
-  -- PS/2 fallback
-  "psmouse",
-  -- userspace device nodes
-  "evdev", "mousedev",
-}
-for _, mod in ipairs(input_mods) do
-  os.execute("modprobe " .. mod .. " 2>/dev/null")
-end
--- Give the kernel a moment to enumerate input devices
-local function usleep(ms) local t=os.clock()+ms/1000 while os.clock()<t do end end
-usleep(300)
-
-local pi = io.popen("ls /dev/input/ 2>&1")
-if pi then
-  io.write("[cartridge] /dev/input/: ")
-  for line in pi:lines() do io.write(line .. " ") end
-  io.write("\n"); pi:close()
-end
-io.flush()
+-- Input modules are loaded by init.c (gated on manifest capabilities).
 
 io.write("[cartridge] SDL_Init...\n"); io.flush()
 local initErr = sdl.SDL_Init(SDL_INIT_VIDEO)
@@ -291,17 +260,21 @@ local function readFile(path)
   return s
 end
 
-local kernel    = readFile("/proc/version"):match("Linux version (%S+)") or "unknown"
-local uptime    = readFile("/proc/uptime"):match("^(%S+)") or "0"
-local uptimeSec = math.floor(tonumber(uptime) or 0)
+-- These /proc reads may be blocked by sandbox (requires sysmon).
+-- Boot facts from CART_BOOT provide kernel/uptime info as fallback.
+local kernelStr = readFile("/proc/version")
+local kernel    = kernelStr and kernelStr:match("Linux version (%S+)") or
+                  (CART_BOOT and CART_BOOT.facts and CART_BOOT.facts.kernel) or "unknown"
+local uptimeStr = readFile("/proc/uptime")
+local uptimeSec = math.floor(tonumber(uptimeStr and uptimeStr:match("^(%S+)") or "0") or 0)
 
 local dri_devs = {}
-local p = io.popen("ls /dev/dri/ 2>/dev/null")
+local p = io.popen and io.popen("ls /dev/dri/ 2>/dev/null")
 if p then
   for line in p:lines() do table.insert(dri_devs, line) end
   p:close()
 end
-local dri_str = #dri_devs > 0 and table.concat(dri_devs, "  ") or "none"
+local dri_str = #dri_devs > 0 and table.concat(dri_devs, "  ") or "unknown"
 
 -- ── Console ───────────────────────────────────────────────────────────────────
 
@@ -317,76 +290,35 @@ Console.init({
   H    = H,
 })
 
--- ── Read boot facts + verdict pipe from init.c ──────────────────────────────
+-- ── Boot info from sandbox ───────────────────────────────────────────────────
 
--- Boot facts: /run/boot-facts (key=value, written by init.c, read-only)
-local bootFacts = {}
-do
-  local f = io.open("/run/boot-facts", "r")
-  if f then
-    for line in f:lines() do
-      local k, v = line:match("^([^=]+)=(.*)$")
-      if k then bootFacts[k] = v end
-    end
-    f:close()
-  end
-end
-
--- Verdict pipe: FD 3 (17-byte binary struct from init.c)
--- struct cart_verdict { uint8_t code; uint8_t key_id[8]; uint64_t boot_time; }
-local verdictCode = nil
-local verdictKeyId = nil
-do
-  local f = io.open("/proc/self/fd/3", "rb")
-  if f then
-    local data = f:read("*a")
-    f:close()
-    if data and #data >= 17 then
-      verdictCode = data:byte(1)
-      verdictKeyId = ""
-      for i = 2, 9 do
-        verdictKeyId = verdictKeyId .. string.format("%02x", data:byte(i))
-      end
-    end
-  end
-end
-
--- Close FD 3 if it exists (we've read it)
-pcall(function()
-  local fd3 = io.open("/proc/self/fd/3", "r")
-  if fd3 then fd3:close() end
-end)
-
--- Verdict code names (must match cart.h CART_VERDICT_*)
-local VERDICT_NAMES = {
-  [0] = "unsigned", [1] = "verified", [2] = "bad_sig",
-  [3] = "bad_hash", [4] = "bad_format", [5] = "no_cart",
-}
-
-local verdictName = VERDICT_NAMES[verdictCode] or bootFacts.verdict or "unknown"
+-- CART_BOOT is set by sandbox.lua before running main.lua.
+-- Contains: facts, verdict, verdictCode, verdictKeyId, manifest, caps, has()
+local boot = CART_BOOT or {}
+local bootFacts    = boot.facts or {}
+local verdictCode  = boot.verdictCode
+local verdictKeyId = boot.verdictKeyId
+local verdictName  = boot.verdict or bootFacts.verdict or "unknown"
 
 -- Emit startup events
 EventBus.emit("os", "CartridgeOS v0.1.0 booted")
 if verdictCode then
   EventBus.emit("os", "cart verdict: " .. verdictName .. " (code " .. verdictCode .. ")")
 end
-if bootFacts.verdict then
-  EventBus.emit("os", "boot-facts verdict: " .. bootFacts.verdict)
-end
 EventBus.emit("os", "kernel " .. kernel .. " (uptime " .. uptimeSec .. "s)")
 EventBus.emit("gpu", "kmsdrm initialized, DRI: " .. dri_str)
 EventBus.emit("gpu", "OpenGL context " .. W .. "x" .. H)
-EventBus.emit("input", "USB + HID + evdev loaded")
 
--- Count input devices
-local inputDevCount = 0
-local id = io.popen("ls /dev/input/ 2>/dev/null")
-if id then
-  for _ in id:lines() do inputDevCount = inputDevCount + 1 end
-  id:close()
+-- Sandbox info
+local granted = {}
+for k, v in pairs(boot.caps or {}) do
+  if v and v ~= false then granted[#granted + 1] = k end
 end
-if inputDevCount > 0 then
-  EventBus.emit("input", inputDevCount .. " input device(s) detected")
+table.sort(granted)
+if #granted > 0 then
+  EventBus.emit("os", "sandbox: " .. #granted .. " caps granted: " .. table.concat(granted, ", "))
+else
+  EventBus.emit("os", "sandbox: no capabilities granted")
 end
 
 -- ── Boot screen (trust gate) ──────────────────────────────────────────────────

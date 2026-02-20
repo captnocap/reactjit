@@ -158,9 +158,16 @@ Commands.register("files", {
       return { type = "error", data = "invalid path" }
     end
 
+    -- /app is always allowed; everything else requires filesystem capability
+    local boot = CART_BOOT or {}
+    if not path:match("^/app") and not (boot.has and boot.has("filesystem")) then
+      return { type = "error", data = "blocked (requires filesystem): " .. path }
+    end
+
+    -- Use io.popen if available (requires process cap), otherwise error for non-/app
     local p = io.popen('ls -1p "' .. path .. '" 2>&1')
     if not p then
-      return { type = "error", data = "cannot list: " .. path }
+      return { type = "error", data = "cannot list (requires process capability): " .. path }
     end
 
     local lines = {}
@@ -182,14 +189,13 @@ Commands.register("files", {
     return { type = "lines", data = lines }
   end,
   complete = function(partial)
-    local dir = partial:match("^(.*/)")  or "/app/"
-    local prefix = partial:match("([^/]*)$") or ""
-    local p = io.popen('ls -1 "' .. dir:gsub('"', '') .. '" 2>/dev/null')
+    local p = io.popen and io.popen('ls -1 "/app/" 2>/dev/null')
     if not p then return {} end
+    local prefix = partial:match("([^/]*)$") or ""
     local matches = {}
     for entry in p:lines() do
       if entry:sub(1, #prefix) == prefix then
-        table.insert(matches, "files " .. dir .. entry)
+        table.insert(matches, "files /app/" .. entry)
       end
     end
     p:close()
@@ -201,6 +207,11 @@ Commands.register("status", {
   desc = "System status (kernel, uptime, GPU, memory)",
   usage = "status",
   exec = function()
+    local boot = CART_BOOT or {}
+    if not (boot.has and boot.has("sysmon")) then
+      return { type = "error", data = "blocked (requires sysmon capability)" }
+    end
+
     local lines = {}
 
     -- Kernel
@@ -244,17 +255,18 @@ Commands.register("status", {
       end
     end
 
-    -- GPU
-    local gp = io.popen("ls /dev/dri/ 2>/dev/null")
-    if gp then
-      local devs = {}
-      for d in gp:lines() do table.insert(devs, d) end
-      gp:close()
-      table.insert(lines, {
-        text = "  gpu      kmsdrm  DRI: " .. (#devs > 0 and table.concat(devs, " ") or "none"),
-        color = {0.7, 0.8, 1.0},
-      })
+    -- GPU (read /sys/class/drm to avoid needing process capability)
+    local dri_str = "unknown"
+    local df = io.open("/sys/class/drm/version", "r")
+    if df then
+      local ver = df:read("*l") or "?"
+      df:close()
+      dri_str = ver
     end
+    table.insert(lines, {
+      text = "  gpu      kmsdrm",
+      color = {0.7, 0.8, 1.0},
+    })
 
     return { type = "lines", data = lines }
   end,
@@ -369,6 +381,54 @@ Commands.register("theme", {
         { text = "  themes are coming soon", color = {0.4, 0.4, 0.5} },
       },
     }
+  end,
+})
+
+Commands.register("sandbox", {
+  desc = "Show sandbox state and granted capabilities",
+  usage = "sandbox",
+  exec = function()
+    local boot = CART_BOOT or {}
+    local caps = boot.caps or {}
+    local lines = {}
+
+    table.insert(lines, { text = "  Sandbox: active", color = {0.3, 0.85, 0.4} })
+    table.insert(lines, { text = "  Verdict: " .. (boot.verdict or "unknown"), color = {0.6, 0.7, 0.8} })
+    if boot.verdictKeyId and boot.verdictKeyId ~= "" then
+      table.insert(lines, { text = "  Key ID:  " .. boot.verdictKeyId, color = {0.5, 0.5, 0.6} })
+    end
+    table.insert(lines, { text = "", color = {0,0,0} })
+
+    -- List all capabilities with grant status
+    local order = {"gpu","keyboard","mouse","usb","storage","network","filesystem","clipboard","process","browse","ipc","sysmon"}
+    for _, cap in ipairs(order) do
+      local val = caps[cap]
+      local status, color
+      if val and val ~= false then
+        status = "granted"
+        color = {0.3, 0.85, 0.4}
+      else
+        status = "denied"
+        color = {0.5, 0.3, 0.3}
+      end
+      local pad = string.rep(" ", 14 - #cap)
+      table.insert(lines, { text = "  " .. cap .. pad .. status, color = color })
+    end
+
+    table.insert(lines, { text = "", color = {0,0,0} })
+
+    -- Show what's blocked
+    local blocked = {}
+    if not loadstring then blocked[#blocked+1] = "loadstring" end
+    if not loadfile  then blocked[#blocked+1] = "loadfile" end
+    if not load      then blocked[#blocked+1] = "load" end
+    if not debug     then blocked[#blocked+1] = "debug" end
+    if not dofile    then blocked[#blocked+1] = "dofile" end
+    if #blocked > 0 then
+      table.insert(lines, { text = "  Blocked globals: " .. table.concat(blocked, ", "), color = {0.6, 0.4, 0.4} })
+    end
+
+    return { type = "lines", data = lines }
   end,
 })
 
