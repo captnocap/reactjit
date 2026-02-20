@@ -60,6 +60,28 @@ function Console.init(deps)
   H    = deps.H
   targetHeight = math.floor(H * 0.4)
 
+  -- Welcome banner
+  local banner = {
+    { text = "",                                                color = {0.3, 0.2, 0.7} },
+    { text = "   ____           __       _     __           ",  color = {0.4, 0.3, 1.0} },
+    { text = "  / ___|__ _ _ __| |_ _ __(_) __| | __ _  ___",  color = {0.4, 0.3, 1.0} },
+    { text = " | |   / _` | '__| __| '__| |/ _` |/ _` |/ _ \\", color = {0.5, 0.4, 1.0} },
+    { text = " | |__| (_| | |  | |_| |  | | (_| | (_| |  __/", color = {0.5, 0.4, 1.0} },
+    { text = "  \\____\\__,_|_|   \\__|_|  |_|\\__,_|\\__, |\\___|", color = {0.6, 0.5, 1.0} },
+    { text = "    ___  ____                       |___/      ", color = {0.6, 0.5, 1.0} },
+    { text = "   / _ \\/ ___|                                 ", color = {0.5, 0.4, 0.9} },
+    { text = "  | | | \\___ \\                                 ", color = {0.5, 0.4, 0.9} },
+    { text = "  | |_| |___) |                                ", color = {0.4, 0.3, 0.8} },
+    { text = "   \\___/|____/                                 ", color = {0.4, 0.3, 0.8} },
+    { text = "",                                                color = {0.3, 0.2, 0.7} },
+    { text = "  iLoveReact — no X11, no Wayland, no display server", color = {0.5, 0.5, 0.7} },
+    { text = "  Type 'help' for commands. Double-tab for Lua mode.", color = {0.4, 0.4, 0.6} },
+    { text = "",                                                color = {0.3, 0.2, 0.7} },
+  }
+  for _, line in ipairs(banner) do
+    Console.addOutput(line.text, line.color)
+  end
+
   -- Subscribe to all events to populate the feed
   EventBus.subscribe("*", function(evt)
     if EventBus.isVisible(evt.channel) then
@@ -454,7 +476,7 @@ function Console.draw()
 
   -- Enable scissor for output area
   GL.glEnable(GL.SCISSOR_TEST)
-  GL.glScissor(0, H - h + (H - outputAreaBottom), w, outputAreaH)
+  GL.glScissor(0, H - outputAreaBottom, w, outputAreaH)
 
   local startIdx = math.max(1, #outputLines - visibleLines - scrollOffset + 1)
   local endIdx   = math.max(1, #outputLines - scrollOffset)
