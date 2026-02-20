@@ -387,24 +387,15 @@ function executeInput()
 end
 
 function evalLua(code)
-  -- Sandbox blocks loadstring — show a clean error instead of crashing
-  if not loadstring then
-    Console.addOutput("  Lua eval disabled (sandbox: loadstring blocked)", {1.0, 0.6, 0.2})
+  -- Use CART_BOOT.eval — sandboxed loadstring provided by the OS jailer.
+  -- The function runs with _G (sandboxed) as its environment.
+  local boot = CART_BOOT
+  if not boot or not boot.eval then
+    Console.addOutput("  Lua eval not available", {1.0, 0.6, 0.2})
     return
   end
 
-  -- Try as expression first (return value)
-  local fn, err = loadstring("return " .. code)
-  if not fn then
-    -- Try as statement
-    fn, err = loadstring(code)
-  end
-  if not fn then
-    Console.addOutput("  error: " .. tostring(err), {1, 0.3, 0.3})
-    return
-  end
-
-  local ok, result = pcall(fn)
+  local ok, result = boot.eval(code)
   if ok then
     if result ~= nil then
       Console.addOutput("  " .. tostring(result), {0.5, 1, 0.5})

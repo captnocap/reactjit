@@ -97,6 +97,18 @@ CART_BOOT = {
   manifest  = manifest,
   caps      = caps,
   has       = has,
+
+  -- Sandboxed eval for the console REPL. Uses real_loadstring but the
+  -- returned function's environment is _G (already sandboxed), so it runs
+  -- under all sandbox rules. Cart code cannot access loadstring directly.
+  eval = function(code)
+    local fn, err = real_loadstring("return " .. code)
+    if not fn then
+      fn, err = real_loadstring(code)
+    end
+    if not fn then return false, err end
+    return real_pcall(fn)
+  end,
 }
 
 -- ── FFI sandbox ──────────────────────────────────────────────────────────────
