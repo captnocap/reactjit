@@ -118,7 +118,7 @@ CART_BOOT = {
       for i = 1, n do
         parts[i] = real_tostring(select(i, ...))
       end
-      return true, real_table.concat(parts, "\t")
+      return true, real_table.concat(parts, ", ")
     end
     return capture(real_pcall(fn))
   end,
