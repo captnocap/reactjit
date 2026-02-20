@@ -1,4 +1,4 @@
-import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useBridgeOptional, ThemeColorsContext } from '@ilovereact/core';
 import { themes, defaultThemeId } from './themes';
 import type { ThemeContextValue, ThemeColors } from './types';
@@ -57,32 +57,66 @@ export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({
   theme: initialTheme,
+  persist = true,
   children,
 }: {
   theme?: string;
+  persist?: boolean;
   children: React.ReactNode;
 }) {
   const bridge = useBridgeOptional();
   const [themeId, setThemeIdState] = useState(initialTheme ?? defaultThemeId);
   const [overridesByTheme, setOverridesByTheme] = useState<Record<string, ThemeColorOverrides>>({});
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
+  // Persist theme selection to local store
+  const persistTheme = useCallback(
+    (id: string) => {
+      if (!persistRef.current || !bridge) return;
+      bridge.rpc('localstore:set', { namespace: 'theme', key: 'selected', value: id }).catch(() => {});
+    },
+    [bridge],
+  );
 
   const setTheme = useCallback(
     (id: string) => {
       if (!themes[id]) return;
       setThemeIdState(id);
+      persistTheme(id);
       if (bridge) {
         bridge.send('theme:set', { name: id });
         bridge.flush();
       }
     },
-    [bridge],
+    [bridge, persistTheme],
   );
 
-  // Send initial theme to Lua on mount
+  // Load persisted theme on mount, then send initial theme to Lua
   useEffect(() => {
-    if (bridge) {
-      bridge.send('theme:set', { name: themeId });
+    if (!bridge) return;
+
+    const applyTheme = (id: string) => {
+      setThemeIdState(id);
+      bridge.send('theme:set', { name: id });
       bridge.flush();
+    };
+
+    if (persist) {
+      bridge
+        .rpc<string | null>('localstore:get', { namespace: 'theme', key: 'selected' })
+        .then((stored) => {
+          if (stored && themes[stored]) {
+            applyTheme(stored);
+          } else {
+            applyTheme(themeId);
+          }
+        })
+        .catch(() => {
+          applyTheme(themeId);
+        });
+    } else {
+      applyTheme(themeId);
     }
   }, [bridge]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -94,6 +128,7 @@ export function ThemeProvider({
       const name = payload?.name;
       if (name && themes[name]) {
         setThemeIdState(name);
+        persistTheme(name);
         if (payload && Object.prototype.hasOwnProperty.call(payload, 'overrides')) {
           const nextOverrides = sanitizeLuaOverrides(payload.overrides);
           setOverridesByTheme((prev) => {
@@ -106,7 +141,7 @@ export function ThemeProvider({
       }
     });
     return unsub;
-  }, [bridge]);
+  }, [bridge, persistTheme]);
 
   const resolved = themes[themeId] ?? themes[defaultThemeId];
   const resolvedColors = useMemo(

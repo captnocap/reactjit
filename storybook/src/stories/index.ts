@@ -9,9 +9,7 @@ export interface StoryDef {
 }
 
 import { BoxBasicStory } from './BoxBasic';
-import { BoxNestedStory } from './BoxNested';
 import { TextStylesStory } from './TextStyles';
-import { TextTruncationStory } from './TextTruncation';
 import { ImageBasicStory } from './ImageBasic';
 import { ImageGalleryStory } from './ImageGalleryStory';
 import { FlexRowStory } from './FlexRow';
@@ -98,13 +96,12 @@ import SettingsMenuStory from './SettingsMenuStory';
 import { CapabilitiesStory } from './CapabilitiesStory';
 import { MapBasicStory } from './MapBasicStory';
 import { CartridgeInspectorStory } from './CartridgeInspectorStory';
+import { LocalStoreStory } from './LocalStoreStory';
 
 export const stories: StoryDef[] = [
   // Primitives
   { id: 'box-basic', title: 'Box', category: 'Primitives', component: BoxBasicStory },
-  { id: 'box-nested', title: 'Nested Boxes', category: 'Primitives', component: BoxNestedStory },
   { id: 'text-styles', title: 'Text', category: 'Primitives', component: TextStylesStory },
-  { id: 'text-truncation', title: 'Text Truncation', category: 'Primitives', component: TextTruncationStory },
   { id: 'image-basic', title: 'Image', category: 'Primitives', component: ImageBasicStory },
   { id: 'image-gallery', title: 'Image Gallery', category: 'Primitives', component: ImageGalleryStory },
   { id: 'video', title: 'Video', category: 'Primitives', component: VideoStory },
@@ -238,6 +235,9 @@ export const stories: StoryDef[] = [
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },
   { id: 'block-test', title: 'Block Test', category: 'Dev Tools', component: BlockTestStory },
+
+  // Storage
+  { id: 'local-store', title: 'Local Store', category: 'Storage', component: LocalStoreStory },
 
   // CartridgeOS
   { id: 'cartridge-inspector', title: 'Cartridge Inspector', category: 'CartridgeOS', component: CartridgeInspectorStory },

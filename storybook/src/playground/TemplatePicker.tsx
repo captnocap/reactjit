@@ -5,8 +5,8 @@
  * clipped inside the card. Click to load into the editor.
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { Box, Text, Pressable, useLoveRPC } from '../../../packages/shared/src';
+import React, { useMemo } from 'react';
+import { Box, Text, Pressable, useLocalStore } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
 import { transformJSX } from './lib/jsx-transform';
@@ -118,32 +118,16 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
 
 export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }) {
   const c = useThemeColors();
-  const storageGet = useLoveRPC('storage:get');
-  const [lastSession, setLastSession] = useState<{ code: string; timestamp: number } | null>(null);
-
-  useEffect(() => {
-    // Check global cache first (set by PlaygroundPanel on mount)
-    const cached = (globalThis as any).__playgroundLastSession;
-    if (cached?.code) {
-      setLastSession(cached);
-      return;
-    }
-    // Otherwise load from storage
-    storageGet({ collection: 'playground', id: 'last-session' })
-      .then((data: any) => {
-        if (data?.code) setLastSession(data);
-      })
-      .catch(() => {});
-  }, [storageGet]);
+  const [lastSessionCode] = useLocalStore('code', '', { namespace: 'playground' });
 
   const handleLastSessionSelect = () => {
-    if (!lastSession) return;
+    if (!lastSessionCode) return;
     onSelect({
       id: '__last-session',
       name: 'Last Session',
       description: 'Continue where you left off',
       category: 'Recent',
-      code: lastSession.code,
+      code: lastSessionCode,
     });
   };
 
@@ -162,14 +146,14 @@ export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }
       {/* Grid */}
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-around', width: '100%' }}>
         {/* Last session card (if available) */}
-        {lastSession && (
+        {lastSessionCode && (
           <TemplateCard
             template={{
               id: '__last-session',
               name: 'Last Session',
               description: 'Continue where you left off',
               category: 'Recent',
-              code: lastSession.code,
+              code: lastSessionCode,
             }}
             onSelect={handleLastSessionSelect}
           />

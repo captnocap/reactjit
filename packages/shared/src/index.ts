@@ -58,6 +58,9 @@ export {
   type Overlay,
 } from './hooks';
 
+// Local store (persistent useState backed by SQLite)
+export { useLocalStore, type UseLocalStoreOptions } from './useLocalStore';
+
 // Primitives
 export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from './primitives';
 

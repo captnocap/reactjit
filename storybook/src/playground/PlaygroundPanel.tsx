@@ -6,8 +6,8 @@
  * to go back to the picker.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, TextEditor, Pressable, useLoveRPC } from '../../../packages/shared/src';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Box, Text, TextEditor, Pressable, useLocalStore } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Preview } from './Preview';
 import { StatusBar } from './StatusBar';
@@ -31,21 +31,11 @@ export function PlaygroundPanel() {
   const [jumpToLine, setJumpToLine] = useState<number | undefined>(undefined);
   const [tooltipLevel, setTooltipLevel] = useState<'beginner' | 'guided' | 'clean'>('beginner');
 
-  const storageSet = useLoveRPC('storage:set');
-  const storageGet = useLoveRPC('storage:get');
-  const sessionLoaded = useRef(false);
+  // Persistent code storage via SQLite local store
+  const [, setSavedCode] = useLocalStore('code', '', { namespace: 'playground' });
 
   // Expose for HMR state sync
   (globalThis as any).__currentPlaygroundCode = code;
-
-  // Persist code to storage on every successful processCode
-  const persistCode = useCallback((src: string) => {
-    storageSet({
-      collection: 'playground',
-      id: 'last-session',
-      data: { code: src, timestamp: Date.now() },
-    }).catch(() => {}); // silent fail
-  }, [storageSet]);
 
   const processCode = useCallback((src: string) => {
     const msgs = lint(src);
@@ -58,24 +48,11 @@ export function PlaygroundPanel() {
     if (evalResult.error) { setErrors([evalResult.error]); return; }
     setErrors([]);
     setUserComponent(() => evalResult.component);
-    persistCode(src);
-  }, [persistCode]);
+    setSavedCode(src);
+  }, [setSavedCode]);
 
   // Process code on mount if we have HMR code
   useEffect(() => { if (code) processCode(code); }, []);
-
-  // Load last session from storage on mount (for TemplatePicker)
-  useEffect(() => {
-    if (sessionLoaded.current) return;
-    sessionLoaded.current = true;
-    storageGet({ collection: 'playground', id: 'last-session' })
-      .then((data: any) => {
-        if (data?.code) {
-          (globalThis as any).__playgroundLastSession = data;
-        }
-      })
-      .catch(() => {});
-  }, [storageGet]);
 
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);

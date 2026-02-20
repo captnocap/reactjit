@@ -746,6 +746,17 @@ function ReactLove.init(config)
     end
   end
 
+  -- Register local store RPC handlers (SQLite-backed key-value persistence)
+  if sqlite and sqlite.available then
+    local lsOk, localstore = pcall(require, "lua.localstore")
+    if lsOk then
+      localstore.init()
+      for method, handler in pairs(localstore.getHandlers()) do
+        rpcHandlers[method] = gated("storage", handler)
+      end
+    end
+  end
+
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
