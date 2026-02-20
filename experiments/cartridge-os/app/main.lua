@@ -275,8 +275,62 @@ Console.init({
   H    = H,
 })
 
+-- ── Read boot facts + verdict pipe from init.c ──────────────────────────────
+
+-- Boot facts: /run/boot-facts (key=value, written by init.c, read-only)
+local bootFacts = {}
+do
+  local f = io.open("/run/boot-facts", "r")
+  if f then
+    for line in f:lines() do
+      local k, v = line:match("^([^=]+)=(.*)$")
+      if k then bootFacts[k] = v end
+    end
+    f:close()
+  end
+end
+
+-- Verdict pipe: FD 3 (17-byte binary struct from init.c)
+-- struct cart_verdict { uint8_t code; uint8_t key_id[8]; uint64_t boot_time; }
+local verdictCode = nil
+local verdictKeyId = nil
+do
+  local f = io.open("/proc/self/fd/3", "rb")
+  if f then
+    local data = f:read("*a")
+    f:close()
+    if data and #data >= 17 then
+      verdictCode = data:byte(1)
+      verdictKeyId = ""
+      for i = 2, 9 do
+        verdictKeyId = verdictKeyId .. string.format("%02x", data:byte(i))
+      end
+    end
+  end
+end
+
+-- Close FD 3 if it exists (we've read it)
+pcall(function()
+  local fd3 = io.open("/proc/self/fd/3", "r")
+  if fd3 then fd3:close() end
+end)
+
+-- Verdict code names (must match cart.h CART_VERDICT_*)
+local VERDICT_NAMES = {
+  [0] = "unsigned", [1] = "verified", [2] = "bad_sig",
+  [3] = "bad_hash", [4] = "bad_format", [5] = "no_cart",
+}
+
+local verdictName = VERDICT_NAMES[verdictCode] or bootFacts.verdict or "unknown"
+
 -- Emit startup events
 EventBus.emit("os", "CartridgeOS v0.1.0 booted")
+if verdictCode then
+  EventBus.emit("os", "cart verdict: " .. verdictName .. " (code " .. verdictCode .. ")")
+end
+if bootFacts.verdict then
+  EventBus.emit("os", "boot-facts verdict: " .. bootFacts.verdict)
+end
 EventBus.emit("os", "kernel " .. kernel .. " (uptime " .. uptimeSec .. "s)")
 EventBus.emit("gpu", "kmsdrm initialized, DRI: " .. dri_str)
 EventBus.emit("gpu", "OpenGL context " .. W .. "x" .. H)
@@ -307,6 +361,7 @@ BootScreen.init({
   H           = H,
 })
 BootScreen.loadManifest("/app/manifest.json")
+BootScreen.setVerdict(verdictName)
 
 -- Console commands for manifest inspection
 Commands.register("manifest", {
@@ -332,6 +387,33 @@ Commands.register("manifest", {
       table.insert(lines, { text = "  signature: present", color = {1.0, 0.8, 0.2} })
     else
       table.insert(lines, { text = "  signature: none", color = {0.4, 0.4, 0.5} })
+    end
+    return { type = "lines", data = lines }
+  end,
+})
+
+Commands.register("verify", {
+  desc = "Show cart verification status",
+  usage = "verify",
+  exec = function()
+    local lines = {}
+    table.insert(lines, {
+      text = "  verdict:  " .. verdictName,
+      color = verdictName == "verified" and {0.3, 0.85, 0.4} or
+              verdictName == "unsigned" and {1.0, 0.8, 0.2} or {1.0, 0.3, 0.3},
+    })
+    if verdictCode then
+      table.insert(lines, { text = "  code:     " .. verdictCode, color = {0.6, 0.6, 0.7} })
+    end
+    if verdictKeyId then
+      table.insert(lines, { text = "  key_id:   " .. verdictKeyId, color = {0.6, 0.6, 0.7} })
+    end
+    for _, key in ipairs({"manifest_hash", "payload_hash", "pubkey", "boot_time", "cart_path"}) do
+      if bootFacts[key] then
+        local val = bootFacts[key]
+        if #val > 32 then val = val:sub(1, 32) .. "..." end
+        table.insert(lines, { text = "  " .. key .. ": " .. val, color = {0.5, 0.5, 0.6} })
+      end
     end
     return { type = "lines", data = lines }
   end,

@@ -28,6 +28,7 @@ local errors   = nil
 local fadeIn   = 0          -- 0→1 fade animation
 local pulse    = 0          -- button pulse timer
 local selectedButton = 1   -- 1 = Launch, 2 = Deny
+local initVerdict = nil     -- "verified" | "unsigned" | "bad_sig" etc (from init.c)
 
 -- ── Capability metadata ────────────────────────────────────────────────────
 
@@ -149,6 +150,10 @@ end
 
 function BootScreen.getState()   return state    end
 function BootScreen.getManifest() return manifest end
+
+function BootScreen.setVerdict(verdict)
+  initVerdict = verdict
+end
 
 function BootScreen.handleKeyDown(scancode)
   if state ~= "ready" then return false end
@@ -325,14 +330,30 @@ function BootScreen.draw()
          cardX + 160, y, 13, bc[1] * 0.8, bc[2] * 0.8, bc[3] * 0.8, a * 0.7)
     y = y + 22
 
-    -- Signature
-    local sigC = {0.35, 0.35, 0.4}
-    local sigD = "not signed (Phase 3)"
-    if manifest.signature and manifest.signature ~= "" then
+    -- Signature / init.c verdict
+    local sigC, sigD, sigFilled
+    if initVerdict == "verified" then
+      sigC = {0.3, 0.85, 0.4}
+      sigD = "Ed25519 VERIFIED by PID 1"
+      sigFilled = true
+    elseif initVerdict == "unsigned" then
+      sigC = {1.0, 0.8, 0.2}
+      sigD = "UNSIGNED (dev mode)"
+      sigFilled = false
+    elseif initVerdict == "bad_sig" or initVerdict == "bad_hash" then
+      sigC = {1.0, 0.3, 0.3}
+      sigD = "FAILED: " .. (initVerdict or "unknown")
+      sigFilled = false
+    elseif manifest.signature and manifest.signature ~= "" then
       sigC = {1.0, 0.8, 0.2}
       sigD = "signature present (unverified)"
+      sigFilled = false
+    else
+      sigC = {0.35, 0.35, 0.4}
+      sigD = "not signed"
+      sigFilled = false
     end
-    bullet(cardX + 24, y + 4, false, sigC, a)
+    bullet(cardX + 24, y + 4, sigFilled, sigC, a)
     text("signature", cardX + 40, y, 14, sigC[1], sigC[2], sigC[3], a)
     text(sigD, cardX + 160, y, 13, sigC[1] * 0.8, sigC[2] * 0.8, sigC[3] * 0.8, a * 0.7)
     y = y + 22

@@ -340,11 +340,33 @@ cp "$DIST_DIR/init" "$STAGING/init"
 
 # ── App files ──
 cp "$REPO_ROOT/zig-out/lib/libft_helper.so" "$STAGING/app/ft_helper.so"
-cp "$SCRIPT_DIR/app/main.lua"   "$STAGING/app/"
-cp "$SCRIPT_DIR/app/gl.lua"     "$STAGING/app/"
-cp "$SCRIPT_DIR/app/font.lua"   "$STAGING/app/"
-cp "$SCRIPT_DIR/app/probe.lua"  "$STAGING/app/" 2>/dev/null || true
+cp "$SCRIPT_DIR/app/main.lua"       "$STAGING/app/"
+cp "$SCRIPT_DIR/app/gl.lua"         "$STAGING/app/"
+cp "$SCRIPT_DIR/app/font.lua"       "$STAGING/app/"
+cp "$SCRIPT_DIR/app/console.lua"    "$STAGING/app/"
+cp "$SCRIPT_DIR/app/commands.lua"   "$STAGING/app/"
+cp "$SCRIPT_DIR/app/eventbus.lua"   "$STAGING/app/"
+cp "$SCRIPT_DIR/app/bootscreen.lua" "$STAGING/app/"
+cp "$SCRIPT_DIR/app/json.lua"       "$STAGING/app/"
+cp "$SCRIPT_DIR/app/manifest.json"  "$STAGING/app/"
+cp "$SCRIPT_DIR/app/probe.lua"      "$STAGING/app/" 2>/dev/null || true
 cp "$SCRIPT_DIR/app/gbm_format_shim.so" "$STAGING/app/" 2>/dev/null || true
+
+# ── Pack .cart (if signing key exists) ──
+# The signed .cart goes to /boot/app.cart in the initrd.
+# init.c will verify and extract it to /app/ on boot.
+if [ -f "$SCRIPT_DIR/dev-key.secret" ]; then
+    echo "        packing signed .cart..."
+    mkdir -p "$STAGING/boot"
+    python3 "$SCRIPT_DIR/cartridge-pack.py" \
+        --manifest "$SCRIPT_DIR/app/manifest.json" \
+        --payload "$STAGING/app/" \
+        --key "$SCRIPT_DIR/dev-key.secret" \
+        --out "$STAGING/boot/app.cart" 2>&1 | sed 's/^/        /'
+else
+    echo "        no signing key (dev-key.secret) — skipping .cart packing"
+    echo "        (boot with cart_dev=1 for unsigned mode)"
+fi
 
 # ── Binary-patch SDL2: ARGB8888 → XRGB8888 ──
 # SDL2's KMSDRM backend hardcodes GBM_FORMAT_ARGB8888 (fourcc 'AR24') for scanout
