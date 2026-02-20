@@ -1,12 +1,14 @@
 --[[
   sandbox.lua — CartridgeOS capability sandbox
+  Lives at /os/sandbox.lua in the OS rootfs, NOT in the cart.
   Loaded by init.c as the LuaJIT entry point, BEFORE main.lua.
+
+  The cart cannot replace or modify this file. init.c runs:
+    execv("/usr/bin/luajit", "/os/sandbox.lua")
+  NOT /app/sandbox.lua. The jailer is part of the OS, not the payload.
 
   Saves references to real APIs, reads manifest + boot facts + verdict pipe,
   replaces globals with capability-gated wrappers, then runs main.lua.
-
-  This file is packed into the .cart and verified by Ed25519 signature.
-  Tamper with it → payload hash breaks → init.c rejects the cart.
 ]]
 
 -- ── Save real APIs before sandboxing ─────────────────────────────────────────
@@ -98,6 +100,14 @@ CART_BOOT = {
 }
 
 -- ── FFI sandbox ──────────────────────────────────────────────────────────────
+-- TRUST MODEL: FFI is available because carts are Ed25519-signed by a trusted
+-- key. The sandbox gates capabilities (gpu, filesystem, etc.) as a UX layer,
+-- but FFI + /app/*.so means a signed cart has full native access if it wants.
+-- For untrusted carts: remove FFI entirely (_G.ffi = nil) and provide narrow
+-- OS APIs instead. That's Phase 2 Layer 3 (kernel cage + seccomp).
+--
+-- Current hardening: block ffi.C, block integer-to-pointer casts, whitelist
+-- ffi.load to SDL2/GL + cart's own .so files.
 
 local ffi_lib_whitelist = {
   SDL2 = true, GL = true, ["libGL.so.1"] = true,
@@ -168,8 +178,9 @@ local function path_allowed(path, mode)
 
   -- Always allow: boot attestation
   if path == "/run/boot-facts" then return true end
-  -- Always allow: verdict pipe
-  if path:match("^/proc/self/fd/") then return true end
+  -- Allow only FD 3 (verdict pipe) — not the full /proc/self/fd/ namespace.
+  -- Other FDs could leak device nodes, sockets, or privileged handles.
+  if path == "/proc/self/fd/3" then return true end
   -- Always allow: cart's own files
   if path:match("^/app/") then return true end
   -- Always allow: font files (read-only)
@@ -247,6 +258,11 @@ _G.require = function(name)
   real_error("[sandbox] require blocked: " .. real_tostring(name), 2)
 end
 
+-- Remove package from globals. Cart code cannot mutate package.path,
+-- package.loaded, package.preload, or package.searchers. Our custom
+-- require above is the only module entry point.
+_G.package = nil
+
 -- ── Block code eval + debug ──────────────────────────────────────────────────
 
 _G.loadstring = nil
@@ -279,6 +295,43 @@ if string_mt then
       real_error("[sandbox] cannot modify string metatable", 2)
     end,
   })
+end
+
+-- ── Restricted metatable / raw access ────────────────────────────────────────
+-- Full rawset/rawget/setmetatable/getmetatable let cart code bypass our frozen
+-- metatables. We provide restricted versions that block access to protected
+-- tables but allow normal Lua patterns (e.g. json.lua needs rawget, gl.lua
+-- needs setmetatable for lazy dispatch).
+
+local real_rawset       = rawset
+local real_rawget       = rawget
+local real_getmetatable = getmetatable
+
+-- Tables that cart code must not modify or inspect
+local protected_tables = {}
+protected_tables[sandboxed_ffi] = true
+-- string metatable is already hidden via __metatable = false
+
+_G.rawget = real_rawget  -- rawget on non-protected tables is safe (read-only)
+
+_G.rawset = function(t, k, v)
+  if protected_tables[t] then
+    real_error("[sandbox] rawset blocked on protected table", 2)
+  end
+  return real_rawset(t, k, v)
+end
+
+_G.setmetatable = function(t, mt)
+  if protected_tables[t] then
+    real_error("[sandbox] setmetatable blocked on protected table", 2)
+  end
+  return real_setmetatable(t, mt)
+end
+
+_G.getmetatable = function(obj)
+  -- getmetatable respects __metatable field, so protected objects that set
+  -- __metatable = false will return false. This is safe.
+  return real_getmetatable(obj)
 end
 
 -- ── Block collectgarbage (DoS vector) ───────────────────────────────────────

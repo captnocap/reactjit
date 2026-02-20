@@ -101,7 +101,7 @@ echo "        kernel: $(du -sh "$DIST_DIR/vmlinuz" | cut -f1)"
 # Every file is explicitly listed. If it's not here, it's not in the image.
 echo "  [5/7] Building surgical staging tree..."
 rm -rf "$STAGING"
-mkdir -p "$STAGING"/{dev,proc,sys,tmp,app}
+mkdir -p "$STAGING"/{dev,proc,sys,tmp,app,os}
 mkdir -p "$STAGING"/{bin,lib,usr/bin,usr/lib/dri}
 
 # ── Binaries ──
@@ -340,7 +340,9 @@ cp "$DIST_DIR/init" "$STAGING/init"
 
 # ── App files ──
 cp "$REPO_ROOT/zig-out/lib/libft_helper.so" "$STAGING/app/ft_helper.so"
-cp "$SCRIPT_DIR/app/sandbox.lua"    "$STAGING/app/"
+# sandbox.lua lives in the OS rootfs, NOT in the cart.
+# The cart cannot replace or modify the jailer.
+cp "$SCRIPT_DIR/app/sandbox.lua"    "$STAGING/os/"
 cp "$SCRIPT_DIR/app/main.lua"       "$STAGING/app/"
 cp "$SCRIPT_DIR/app/gl.lua"         "$STAGING/app/"
 cp "$SCRIPT_DIR/app/font.lua"       "$STAGING/app/"

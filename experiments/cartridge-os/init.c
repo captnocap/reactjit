@@ -647,7 +647,9 @@ int main(void) {
             if (verdict_pipe[0] != 3)
                 close(verdict_pipe[0]);
         }
-        char *argv[] = { "/usr/bin/luajit", "/app/sandbox.lua", NULL };
+        /* sandbox.lua lives in the OS rootfs, NOT in the cart.
+         * The cart cannot replace or modify the jailer. */
+        char *argv[] = { "/usr/bin/luajit", "/os/sandbox.lua", NULL };
         execv("/usr/bin/luajit", argv);
         fprintf(stderr, "[init] execv luajit: %s\n", strerror(errno));
         _exit(1);
