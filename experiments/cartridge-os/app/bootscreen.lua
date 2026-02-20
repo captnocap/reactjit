@@ -33,12 +33,16 @@ local initVerdict = nil     -- "verified" | "unsigned" | "bad_sig" etc (from ini
 -- ── Capability metadata ────────────────────────────────────────────────────
 
 local CAP_ORDER = {
-  "gpu", "storage", "network", "filesystem",
+  "gpu", "keyboard", "mouse", "usb",
+  "storage", "network", "filesystem",
   "clipboard", "process", "browse", "ipc", "sysmon",
 }
 
 local CAP_LABELS = {
   gpu        = "GPU acceleration",
+  keyboard   = "Keyboard input",
+  mouse      = "Mouse / pointer",
+  usb        = "USB devices",
   storage    = "Local storage",
   network    = "Network access",
   filesystem = "File system",
@@ -60,6 +64,9 @@ local function classifyRisk(cap, value)
   end
 
   if cap == "gpu" then return "safe" end
+  if cap == "keyboard" then return "safe" end
+  if cap == "mouse" then return "safe" end
+  if cap == "usb" then return "caution" end
   if cap == "storage" then return "safe" end
   if cap == "browse" then return "danger" end
   if cap == "sysmon" then return "danger" end
@@ -155,12 +162,33 @@ function BootScreen.setVerdict(verdict)
   initVerdict = verdict
 end
 
+-- Button geometry (computed per-frame in draw, cached for hit testing)
+local btnLayout = { launchX = 0, launchY = 0, denyX = 0, denyY = 0, btnW = 180, btnH = 36 }
+
 function BootScreen.handleKeyDown(scancode)
   if state ~= "ready" then return false end
   if scancode == 40 then state = "confirmed"; return true end  -- Enter
   if scancode == 41 then state = "denied";    return true end  -- Escape
   if scancode == 80 or scancode == 79 or scancode == 43 then   -- L/R/Tab
     selectedButton = selectedButton == 1 and 2 or 1
+    return true
+  end
+  return false
+end
+
+function BootScreen.handleClick(mx, my)
+  if state ~= "ready" then return false end
+  local b = btnLayout
+  -- Launch button
+  if mx >= b.launchX and mx <= b.launchX + b.btnW
+     and my >= b.launchY and my <= b.launchY + b.btnH then
+    state = "confirmed"
+    return true
+  end
+  -- Deny button
+  if mx >= b.denyX and mx <= b.denyX + b.btnW
+     and my >= b.denyY and my <= b.denyY + b.btnH then
+    state = "denied"
     return true
   end
   return false
@@ -267,7 +295,7 @@ function BootScreen.draw()
     local c = RISK_COLORS[risk]
 
     bullet(cardX + 24, y + 4, risk ~= "denied", c, a)
-    text(cap, cardX + 40, y, 14, c[1], c[2], c[3], a)
+    text(CAP_LABELS[cap] or cap, cardX + 40, y, 14, c[1], c[2], c[3], a)
 
     -- Value description
     local desc
@@ -285,7 +313,7 @@ function BootScreen.draw()
     else
       desc = tostring(value)
     end
-    text(desc, cardX + 160, y, 13, c[1] * 0.8, c[2] * 0.8, c[3] * 0.8, a * 0.7)
+    text(desc, cardX + 200, y, 13, c[1] * 0.8, c[2] * 0.8, c[3] * 0.8, a * 0.7)
 
     if risk ~= "denied" then
       local bw = Font.measureWidth(risk, 10)
@@ -372,6 +400,14 @@ function BootScreen.draw()
   local btnH = 36
   local gap = 40
   local bx = math.floor((W - btnW * 2 - gap) / 2)
+
+  -- Cache for hit testing
+  btnLayout.launchX = bx
+  btnLayout.launchY = y
+  btnLayout.denyX   = bx + btnW + gap
+  btnLayout.denyY   = y
+  btnLayout.btnW    = btnW
+  btnLayout.btnH    = btnH
 
   -- Launch
   local lS = selectedButton == 1

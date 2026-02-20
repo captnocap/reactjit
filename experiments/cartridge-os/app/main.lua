@@ -42,6 +42,19 @@ ffi.cdef[[
     uint32_t type;
     uint32_t timestamp;
     uint32_t windowID;
+    uint32_t which;
+    uint8_t  button;
+    uint8_t  state;
+    uint8_t  clicks;
+    uint8_t  padding1;
+    int32_t  x;
+    int32_t  y;
+  } SDL_MouseButtonEvent;
+
+  typedef struct {
+    uint32_t type;
+    uint32_t timestamp;
+    uint32_t windowID;
     char     text[32];
   } SDL_TextInputEvent;
 
@@ -669,6 +682,21 @@ while running do
       -- fullscreen means window coords == drawable coords.
       mouseX = math.max(0, math.min(W, m.x))
       mouseY = math.max(0, math.min(H, m.y))
+
+    elseif etype == SDL_MOUSEBUTTONDOWN then
+      local mb = ffi.cast("SDL_MouseButtonEvent*", event)
+      if mb.button == 1 then  -- left click
+        if not Console.isOpen() and appPhase == "boot" then
+          BootScreen.handleClick(mb.x, mb.y)
+          if BootScreen.getState() == "confirmed" then
+            appPhase = "running"
+            EventBus.emit("os", "cartridge approved — launching")
+          elseif BootScreen.getState() == "denied" then
+            appPhase = "denied"
+            EventBus.emit("os", "cartridge DENIED by user")
+          end
+        end
+      end
 
     elseif etype == SDL_MOUSEWHEEL_EVENT then
       if Console.isOpen() then

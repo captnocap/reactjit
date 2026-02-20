@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "capabilities": {
     "gpu": true,
+    "keyboard": true,
+    "mouse": true,
+    "usb": false,
     "storage": false,
     "network": false,
     "filesystem": false,
