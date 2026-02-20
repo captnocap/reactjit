@@ -253,28 +253,11 @@ end
 
 -- ── System info ───────────────────────────────────────────────────────────────
 
-local function readFile(path)
-  local f = io.open(path, "r")
-  if not f then return nil end
-  local s = f:read("*l"); f:close()
-  return s
-end
-
--- These /proc reads may be blocked by sandbox (requires sysmon).
--- Boot facts from CART_BOOT provide kernel/uptime info as fallback.
-local kernelStr = readFile("/proc/version")
-local kernel    = kernelStr and kernelStr:match("Linux version (%S+)") or
-                  (CART_BOOT and CART_BOOT.facts and CART_BOOT.facts.kernel) or "unknown"
-local uptimeStr = readFile("/proc/uptime")
-local uptimeSec = math.floor(tonumber(uptimeStr and uptimeStr:match("^(%S+)") or "0") or 0)
-
-local dri_devs = {}
-local p = io.popen and io.popen("ls /dev/dri/ 2>/dev/null")
-if p then
-  for line in p:lines() do table.insert(dri_devs, line) end
-  p:close()
-end
-local dri_str = #dri_devs > 0 and table.concat(dri_devs, "  ") or "unknown"
+-- System facts are pre-read by sandbox.lua (before /proc is gated).
+local facts     = CART_BOOT and CART_BOOT.facts or {}
+local kernel    = facts.kernel or "unknown"
+local uptimeSec = math.floor(tonumber(facts.uptime or "0") or 0)
+local dri_str   = facts.dri or "unknown"
 
 -- ── Console ───────────────────────────────────────────────────────────────────
 

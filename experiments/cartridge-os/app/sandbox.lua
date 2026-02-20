@@ -65,6 +65,36 @@ if bf then
   bf:close()
 end
 
+-- ── Pre-read system facts (before sandboxing blocks /proc) ──────────────────
+-- The cart can't read /proc without sysmon, so we grab essentials here.
+
+local function readLine(path)
+  local f = real_io.open(path, "r")
+  if not f then return nil end
+  local s = f:read("*l"); f:close()
+  return s
+end
+
+if not bootFacts.kernel then
+  local ver = readLine("/proc/version")
+  if ver then bootFacts.kernel = ver:match("Linux version (%S+)") end
+end
+
+if not bootFacts.uptime then
+  local up = readLine("/proc/uptime")
+  if up then bootFacts.uptime = up:match("^(%S+)") end
+end
+
+if not bootFacts.dri then
+  local dri = {}
+  local p = real_io.popen("ls /dev/dri/ 2>/dev/null")
+  if p then
+    for line in p:lines() do dri[#dri + 1] = line end
+    p:close()
+  end
+  if #dri > 0 then bootFacts.dri = real_table.concat(dri, "  ") end
+end
+
 -- ── Read verdict pipe (FD 3) ─────────────────────────────────────────────────
 
 local verdictCode, verdictKeyId, verdictName = 0, "", "unknown"
