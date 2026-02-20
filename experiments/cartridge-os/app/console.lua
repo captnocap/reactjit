@@ -35,6 +35,7 @@ local cmdHistory    = {}
 local historyIndex  = 0        -- 0 = not navigating
 
 local scrollOffset  = 0        -- lines scrolled up from bottom
+local lastVisibleLines = 1     -- updated each draw, used by scroll clamping
 
 local ignoreNextTextInput = false  -- eat the backtick that opened the console
 
@@ -124,8 +125,9 @@ function Console.handleScroll(y)
   if not open then return end
   -- y > 0 = scroll up (show older), y < 0 = scroll down (show newer)
   local SCROLL_SPEED = 3
+  local maxScroll = math.max(0, #outputLines - lastVisibleLines)
   if y > 0 then
-    scrollOffset = math.min(scrollOffset + SCROLL_SPEED, math.max(0, #outputLines - 3))
+    scrollOffset = math.min(scrollOffset + SCROLL_SPEED, maxScroll)
   elseif y < 0 then
     scrollOffset = math.max(0, scrollOffset - SCROLL_SPEED)
   end
@@ -321,7 +323,8 @@ function Console.handleKeyDown(scancode, keycode)
 
   -- Page Up (scancode 75)
   if scancode == 75 then
-    scrollOffset = math.min(scrollOffset + 5, math.max(0, #outputLines - 3))
+    local maxScroll = math.max(0, #outputLines - lastVisibleLines)
+    scrollOffset = math.min(scrollOffset + 5, maxScroll)
     return true
   end
 
@@ -526,21 +529,29 @@ function Console.draw()
   -- Divider above input
   rect(PADDING, inputY - 4, w - PADDING * 2, 1, 0.15, 0.15, 0.3, 0.6)
 
-  -- Output area (scrollable)
+  -- Output area (scrollable, bottom-aligned like a real terminal)
   local outputAreaTop = PADDING
   local outputAreaBottom = inputY - 8
   local outputAreaH = math.max(0, outputAreaBottom - outputAreaTop)
   local visibleLines = math.floor(outputAreaH / LINE_HEIGHT)
+  lastVisibleLines = visibleLines  -- cache for scroll clamping
 
   if outputAreaH > 0 then
     -- Enable scissor for output area — let GL clip partial lines
     GL.glEnable(GL.SCISSOR_TEST)
     GL.glScissor(0, H - (outputAreaTop + outputAreaH), math.max(0, w), math.max(0, outputAreaH))
 
-    local startIdx = math.max(1, #outputLines - visibleLines - scrollOffset)
-    local endIdx   = math.max(1, #outputLines - scrollOffset)
+    -- Clamp scroll to actual content
+    local maxScroll = math.max(0, #outputLines - visibleLines)
+    if scrollOffset > maxScroll then scrollOffset = maxScroll end
 
-    local drawY = outputAreaTop
+    local endIdx   = math.max(1, #outputLines - scrollOffset)
+    local startIdx = math.max(1, endIdx - visibleLines + 1)
+    local numLines = endIdx - startIdx + 1
+
+    -- Bottom-align: newest line sits just above the input divider.
+    -- Blank space (if any) is at the top, not between output and input.
+    local drawY = outputAreaBottom - numLines * LINE_HEIGHT
     for i = startIdx, endIdx do
       local line = outputLines[i]
       if line then
