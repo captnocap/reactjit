@@ -663,22 +663,103 @@ local scimCursor, scimPixels = makeHWCursor(32, 10, 0, function(px, sz)
   end
 end)
 
--- Activate arrow cursor by default
+-- Try hardware cursor; detect if it actually works by checking
+-- if KMSDRM has a cursor plane. Fall back to GL software cursor.
+local useHWCursor = false
 if arrowCursor ~= nil then
   sdl.SDL_SetCursor(arrowCursor)
   sdl.SDL_ShowCursor(1)
-  io.write("[cursor] hardware arrow cursor active\n"); io.flush()
+  -- KMSDRM may accept the call but silently not display anything.
+  -- We'll detect this: if /sys/class/drm/card0/cursor* doesn't exist,
+  -- assume no hardware cursor plane.
+  local cp = io.open("/sys/class/drm/card0-cursor", "r")
+  if cp then
+    cp:close()
+    useHWCursor = true
+    io.write("[cursor] hardware cursor plane detected\n"); io.flush()
+  else
+    -- No cursor plane — hide SDL cursor, we'll draw in GL
+    sdl.SDL_ShowCursor(0)
+    io.write("[cursor] no cursor plane — using software cursor\n"); io.flush()
+  end
 else
-  io.write("[cursor] hardware cursor failed, using default\n"); io.flush()
-  sdl.SDL_ShowCursor(1)
+  sdl.SDL_ShowCursor(0)
+  io.write("[cursor] hardware cursor creation failed — using software cursor\n"); io.flush()
+end
+
+-- GL software cursor fallback (arrow)
+local function drawArrowCursor(x, y, scale)
+  scale = scale or 1.4
+  -- Clamp so cursor never draws off-screen
+  x = math.max(0, math.min(W - 14 * scale, x))
+  y = math.max(0, math.min(H - 22 * scale, y))
+
+  GL.glColor4f(0, 0, 0, 1)
+  GL.glLineWidth(2)
+  GL.glBegin(GL.LINE_STRIP)
+    GL.glVertex2f(x,              y)
+    GL.glVertex2f(x,              y + 22*scale)
+    GL.glVertex2f(x + 4*scale,    y + 18*scale)
+    GL.glVertex2f(x + 9*scale,    y + 22*scale)
+    GL.glVertex2f(x + 13*scale,   y + 19*scale)
+    GL.glVertex2f(x + 8*scale,    y + 14*scale)
+    GL.glVertex2f(x,              y)
+  GL.glEnd()
+  GL.glLineWidth(1)
+
+  GL.glColor4f(1, 1, 1, 1)
+  GL.glBegin(GL.TRIANGLES)
+    GL.glVertex2f(x,              y)
+    GL.glVertex2f(x + 4*scale,    y + 18*scale)
+    GL.glVertex2f(x + 8*scale,    y + 14*scale)
+    GL.glVertex2f(x,              y)
+    GL.glVertex2f(x + 4*scale,    y + 18*scale)
+    GL.glVertex2f(x,              y + 22*scale)
+  GL.glEnd()
+  GL.glBegin(GL.QUADS)
+    GL.glVertex2f(x + 3*scale,  y + 16*scale)
+    GL.glVertex2f(x + 7*scale,  y + 13*scale)
+    GL.glVertex2f(x + 13*scale, y + 19*scale)
+    GL.glVertex2f(x + 9*scale,  y + 22*scale)
+  GL.glEnd()
+end
+
+-- GL software cursor fallback (scimitar)
+local function drawScimitarCursor(x, y, scale)
+  scale = scale or 2.0
+  x = math.max(0, math.min(W - 28, x))
+  y = math.max(0, math.min(H - 28, y))
+  local px = scale
+  for _, p in ipairs(scimPixelDef) do
+    local row, col, r, g, b = p[1], p[2], p[3], p[4], p[5]
+    rect(x + col*px, y + row*px, px, px, r, g, b, 1)
+  end
+  for _, p in ipairs(scimPixelDef) do
+    local row, col = p[1], p[2]
+    local bx, by = x + col*px, y + row*px
+    rect(bx - 1, by, 1, px, 0, 0, 0, 0.5)
+    rect(bx + px, by, 1, px, 0, 0, 0, 0.5)
+    rect(bx, by - 1, px, 1, 0, 0, 0, 0.5)
+    rect(bx, by + px, px, 1, 0, 0, 0, 0.5)
+  end
+end
+
+local function drawCursor(x, y)
+  if cursorStyle == "scimitar" then
+    drawScimitarCursor(x, y, 2.0)
+  else
+    drawArrowCursor(x, y, 1.4)
+  end
 end
 
 local function setCursorStyle(style)
   cursorStyle = style
-  if style == "scimitar" and scimCursor ~= nil then
-    sdl.SDL_SetCursor(scimCursor)
-  elseif arrowCursor ~= nil then
-    sdl.SDL_SetCursor(arrowCursor)
+  if useHWCursor then
+    if style == "scimitar" and scimCursor ~= nil then
+      sdl.SDL_SetCursor(scimCursor)
+    elseif arrowCursor ~= nil then
+      sdl.SDL_SetCursor(arrowCursor)
+    end
   end
 end
 
@@ -895,6 +976,11 @@ while running do
 
   -- Console always draws on top (all phases)
   Console.draw()
+
+  -- Software cursor fallback (only when no hardware cursor plane)
+  if not useHWCursor then
+    drawCursor(mouseX, mouseY)
+  end
 
   sdl.SDL_GL_SwapWindow(window)
   sdl.SDL_Delay(1)
