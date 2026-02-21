@@ -8,29 +8,32 @@ import {
 import { useThemeColors } from '../../../packages/theme/src';
 
 const effects = [
-  { name: 'Spirograph', Component: Spirograph },
-  { name: 'Rings', Component: Rings },
-  { name: 'FlowParticles', Component: FlowParticles },
-  { name: 'Mirror', Component: Mirror },
-  { name: 'Mandala', Component: Mandala },
-  { name: 'Cymatics', Component: Cymatics },
-  { name: 'Constellation', Component: Constellation },
-  { name: 'Mycelium', Component: Mycelium },
-  { name: 'Pipes', Component: Pipes },
-  { name: 'StainedGlass', Component: StainedGlass },
-  { name: 'Voronoi', Component: Voronoi },
-  { name: 'Contours', Component: Contours },
-  { name: 'Feedback', Component: Feedback },
-  { name: 'PixelSort', Component: PixelSort },
-  { name: 'Terrain', Component: Terrain },
-  { name: 'Automata', Component: Automata },
-  { name: 'Combustion', Component: Combustion },
-  { name: 'ReactionDiffusion', Component: ReactionDiffusion },
-  { name: 'EdgeGravity', Component: EdgeGravity },
-  { name: 'Orbits', Component: Orbits },
-  { name: 'Plotter', Component: Plotter },
-  { name: 'LSystem', Component: LSystem },
+  { name: 'Spirograph', Component: Spirograph, cat: 'Classic' },
+  { name: 'Rings', Component: Rings, cat: 'Classic' },
+  { name: 'FlowParticles', Component: FlowParticles, cat: 'Classic' },
+  { name: 'Mirror', Component: Mirror, cat: 'Classic' },
+  { name: 'Mandala', Component: Mandala, cat: 'Classic' },
+  { name: 'Cymatics', Component: Cymatics, cat: 'Classic' },
+  { name: 'Constellation', Component: Constellation, cat: 'Nature' },
+  { name: 'Mycelium', Component: Mycelium, cat: 'Nature' },
+  { name: 'LSystem', Component: LSystem, cat: 'Nature' },
+  { name: 'Terrain', Component: Terrain, cat: 'Nature' },
+  { name: 'Pipes', Component: Pipes, cat: 'Generative' },
+  { name: 'StainedGlass', Component: StainedGlass, cat: 'Generative' },
+  { name: 'Voronoi', Component: Voronoi, cat: 'Generative' },
+  { name: 'Contours', Component: Contours, cat: 'Generative' },
+  { name: 'Plotter', Component: Plotter, cat: 'Generative' },
+  { name: 'Automata', Component: Automata, cat: 'Simulation' },
+  { name: 'Combustion', Component: Combustion, cat: 'Simulation' },
+  { name: 'ReactionDiffusion', Component: ReactionDiffusion, cat: 'Simulation' },
+  { name: 'Orbits', Component: Orbits, cat: 'Physics' },
+  { name: 'EdgeGravity', Component: EdgeGravity, cat: 'Physics' },
+  { name: 'Feedback', Component: Feedback, cat: 'Glitch' },
+  { name: 'PixelSort', Component: PixelSort, cat: 'Glitch' },
 ] as const;
+
+const categories = ['All', 'Classic', 'Nature', 'Generative', 'Simulation', 'Physics', 'Glitch'] as const;
+type Category = typeof categories[number];
 
 type Mode = 'normal' | 'infinite' | 'reactive';
 const modes: { label: string; value: Mode }[] = [
@@ -43,8 +46,28 @@ export function EffectsStory() {
   const c = useThemeColors();
   const [selected, setSelected] = useState(0);
   const [mode, setMode] = useState<Mode>('normal');
+  const [category, setCategory] = useState<Category>('All');
   const SelectedEffect = effects[selected].Component;
   const nextIndex = (selected + 1) % effects.length;
+  const prevIndex = (selected - 1 + effects.length) % effects.length;
+
+  const filteredEffects = category === 'All'
+    ? effects.map((e, i) => ({ ...e, originalIndex: i }))
+    : effects.map((e, i) => ({ ...e, originalIndex: i })).filter(e => e.cat === category);
+
+  const currentFilterIdx = filteredEffects.findIndex(e => e.originalIndex === selected);
+
+  const goNext = () => {
+    if (filteredEffects.length === 0) return;
+    const nextFilterIdx = (currentFilterIdx + 1) % filteredEffects.length;
+    setSelected(filteredEffects[nextFilterIdx].originalIndex);
+  };
+
+  const goPrev = () => {
+    if (filteredEffects.length === 0) return;
+    const prevFilterIdx = (currentFilterIdx - 1 + filteredEffects.length) % filteredEffects.length;
+    setSelected(filteredEffects[prevFilterIdx].originalIndex);
+  };
 
   const modeProps = {
     normal: {},
@@ -53,18 +76,54 @@ export function EffectsStory() {
   }[mode];
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 12, gap: 10 }}>
-      {/* Header + mode toggle */}
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-        <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>Generative Effects</Text>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
+    <Box style={{ width: '100%', height: '100%', padding: 12, gap: 8 }}>
+      {/* Row 1: Title + category tabs + mode toggle */}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', width: '100%', gap: 10 }}>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>Effects</Text>
+
+        {/* Category tabs */}
+        <Box style={{ flexDirection: 'row', gap: 2, flexGrow: 1 }}>
+          {categories.map((cat) => {
+            const isActive = category === cat;
+            const count = cat === 'All' ? effects.length : effects.filter(e => e.cat === cat).length;
+            return (
+              <Pressable
+                key={cat}
+                onPress={() => {
+                  setCategory(cat);
+                  // Select first effect in new category if current isn't in it
+                  const inCat = cat === 'All' || effects[selected].cat === cat;
+                  if (!inCat) {
+                    const first = effects.findIndex(e => e.cat === cat);
+                    if (first >= 0) setSelected(first);
+                  }
+                }}
+                style={{
+                  paddingHorizontal: 6,
+                  paddingVertical: 3,
+                  borderRadius: 4,
+                  backgroundColor: isActive ? 'rgba(108,92,231,0.2)' : 'transparent',
+                }}
+              >
+                <Text style={{
+                  fontSize: 9,
+                  color: isActive ? '#a29bfe' : c.textSecondary,
+                  fontWeight: isActive ? 'bold' : 'normal',
+                }}>{cat} {count}</Text>
+              </Pressable>
+            );
+          })}
+        </Box>
+
+        {/* Mode toggle */}
+        <Box style={{ flexDirection: 'row', gap: 3 }}>
           {modes.map((m) => (
             <Pressable
               key={m.value}
               onPress={() => setMode(m.value)}
               style={{
-                paddingHorizontal: 8,
-                paddingVertical: 4,
+                paddingHorizontal: 7,
+                paddingVertical: 3,
                 borderRadius: 4,
                 backgroundColor: mode === m.value ? '#6c5ce7' : c.surface,
                 borderWidth: 1,
@@ -72,7 +131,7 @@ export function EffectsStory() {
               }}
             >
               <Text style={{
-                fontSize: 10,
+                fontSize: 9,
                 color: mode === m.value ? '#fff' : c.textSecondary,
               }}>{m.label}</Text>
             </Pressable>
@@ -80,34 +139,74 @@ export function EffectsStory() {
         </Box>
       </Box>
 
-      {/* Effect selector */}
-      <Box style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
-        {effects.map((eff, i) => (
-          <Pressable
-            key={eff.name}
-            onPress={() => setSelected(i)}
-            style={{
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 5,
-              backgroundColor: i === selected ? c.primary : c.surface,
-              borderWidth: 1,
-              borderColor: i === selected ? c.primary : c.border,
-            }}
-          >
-            <Text style={{
-              fontSize: 10,
-              color: i === selected ? '#fff' : c.textSecondary,
-            }}>{eff.name}</Text>
-          </Pressable>
-        ))}
+      {/* Row 2: Prev/Next navigator + effect name */}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', width: '100%', gap: 6 }}>
+        <Pressable
+          onPress={goPrev}
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 4,
+            backgroundColor: c.surface,
+            borderWidth: 1,
+            borderColor: c.border,
+          }}
+        >
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>&lt;</Text>
+        </Pressable>
+
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold', minWidth: 140 }}>
+          {effects[selected].name}
+        </Text>
+
+        <Pressable
+          onPress={goNext}
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 4,
+            backgroundColor: c.surface,
+            borderWidth: 1,
+            borderColor: c.border,
+          }}
+        >
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>&gt;</Text>
+        </Pressable>
+
+        <Text style={{ color: c.textSecondary, fontSize: 9 }}>
+          {currentFilterIdx + 1}/{filteredEffects.length}
+        </Text>
+
+        {/* Quick-pick dots for filtered set */}
+        <Box style={{ flexDirection: 'row', gap: 3, flexGrow: 1, flexWrap: 'wrap' }}>
+          {filteredEffects.map((eff, i) => {
+            const isActive = eff.originalIndex === selected;
+            return (
+              <Pressable
+                key={eff.name}
+                onPress={() => setSelected(eff.originalIndex)}
+                style={{
+                  width: isActive ? undefined : 6,
+                  height: 6,
+                  borderRadius: 3,
+                  paddingHorizontal: isActive ? 5 : 0,
+                  backgroundColor: isActive ? '#6c5ce7' : 'rgba(255,255,255,0.15)',
+                }}
+              >
+                {isActive && (
+                  <Text style={{ fontSize: 7, color: '#fff', lineHeight: 6 }}>{eff.name}</Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </Box>
       </Box>
 
       {/* Main content: standalone + background demo side by side */}
       <Box style={{ flexDirection: 'row', gap: 10, flexGrow: 1 }}>
         {/* Standalone effect */}
-        <Box style={{ flexGrow: 1, gap: 6 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+        <Box style={{ flexGrow: 1, gap: 4 }}>
+          <Text style={{ color: c.textSecondary, fontSize: 9 }}>
             {mode === 'normal' ? 'Standalone' : mode === 'infinite' ? 'Infinite Canvas' : 'Move your mouse'}
           </Text>
           <Box style={{
@@ -123,8 +222,8 @@ export function EffectsStory() {
         </Box>
 
         {/* Background texture demo */}
-        <Box style={{ width: 220, gap: 6 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+        <Box style={{ width: 220, gap: 4 }}>
+          <Text style={{ color: c.textSecondary, fontSize: 9 }}>
             {mode === 'reactive' ? 'Reactive Background' : 'As Background'}
           </Text>
           <Box style={{
@@ -211,7 +310,7 @@ export function EffectsStory() {
                   width: 144,
                   height: 144,
                   borderRadius: 72,
-                    borderWidth: 1,
+                  borderWidth: 1,
                   borderColor: 'rgba(255,255,255,0.08)',
                 }} />
               </Box>
@@ -226,7 +325,7 @@ export function EffectsStory() {
               }}>
                 <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'bold' }}>Nova Echo</Text>
                 <Pressable
-                  onPress={() => setSelected(nextIndex)}
+                  onPress={goNext}
                   style={{
                     paddingHorizontal: 12,
                     paddingVertical: 5,
@@ -237,7 +336,7 @@ export function EffectsStory() {
                   }}
                 >
                   <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
-                    {effects[selected].name} Next
+                    Next: {effects[nextIndex].name}
                   </Text>
                 </Pressable>
               </Box>
