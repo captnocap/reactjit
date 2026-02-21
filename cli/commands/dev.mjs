@@ -6,7 +6,7 @@ import { getEsbuildAliases } from '../lib/aliases.mjs';
 
 export async function devCommand(args) {
   const cwd = process.cwd();
-  const targetName = args.filter(a => !a.startsWith('--'))[0] || 'love';
+  const targetName = args.filter(a => !a.startsWith('--'))[0] || 'sdl2';
 
   if (!TARGETS[targetName]) {
     console.error(`Unknown target: ${targetName}`);
@@ -43,22 +43,34 @@ export async function devCommand(args) {
   ${hint}
 `);
 
-  let loveProcess = null;
+  let runtimeProcess = null;
   let isShuttingDown = false;
-  let loveHasLaunched = false;
+  let runtimeHasLaunched = false;
 
   // Determine Love2D directory (some projects use love/ subdirectory)
   const loveDir = existsSync(join(cwd, 'love', 'main.lua')) ? 'love' : '.';
 
-  const launchLove = () => {
-    if (loveHasLaunched || isShuttingDown) return;
-    loveHasLaunched = true;
-    console.log('[ilr] Launching Love2D...');
-    loveProcess = spawn('love', [loveDir], { cwd, stdio: 'inherit' });
-    loveProcess.on('exit', (code) => {
-      loveProcess = null;
+  // Determine SDL2 entry point
+  const sdl2Main = existsSync(join(cwd, 'sdl2', 'main.lua')) ? join('sdl2', 'main.lua') : null;
+
+  const launchRuntime = () => {
+    if (runtimeHasLaunched || isShuttingDown) return;
+    runtimeHasLaunched = true;
+
+    if (targetName === 'love') {
+      console.log('[rjit] Launching Love2D...');
+      runtimeProcess = spawn('love', [loveDir], { cwd, stdio: 'inherit' });
+    } else if (targetName === 'sdl2' && sdl2Main) {
+      console.log('[rjit] Launching SDL2 (luajit)...');
+      runtimeProcess = spawn('luajit', [sdl2Main], { cwd, stdio: 'inherit' });
+    } else {
+      return;
+    }
+
+    runtimeProcess.on('exit', (code) => {
+      runtimeProcess = null;
       if (!isShuttingDown && code !== null && code !== 0) {
-        console.error(`\nLove2D exited with code ${code}`);
+        console.error(`\nRuntime exited with code ${code}`);
       }
     });
   };
@@ -66,10 +78,10 @@ export async function devCommand(args) {
   // Detect build completion from esbuild output (watch messages go to stderr)
   const onEsbuildOutput = (data) => {
     const output = data.toString();
-    if (targetName === 'love' && output.includes('build finished')) {
-      console.log('[ilr] Build complete.');
-      // Launch Love2D only on the first build — Lua HMR handles subsequent reloads
-      launchLove();
+    if ((targetName === 'love' || targetName === 'sdl2') && output.includes('build finished')) {
+      console.log('[rjit] Build complete.');
+      // Launch runtime only on the first build — Lua HMR handles subsequent reloads
+      launchRuntime();
     }
   };
 
@@ -98,9 +110,9 @@ export async function devCommand(args) {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
-    if (loveProcess) {
-      loveProcess.kill();
-      loveProcess = null;
+    if (runtimeProcess) {
+      runtimeProcess.kill();
+      runtimeProcess = null;
     }
 
     esbuild.kill();
