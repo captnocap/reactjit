@@ -4,9 +4,8 @@
   "description": "Write it in React, render it with a hand-rolled SDL2 + OpenGL renderer on LuaJIT",
   "private": true,
   "workspaces": [
-    "packages/shared",
+    "packages/core",
     "packages/native",
-    "packages/components",
     "packages/router",
     "packages/storage",
     "packages/audio",

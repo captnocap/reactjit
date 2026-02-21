@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from '../../../packages/shared/src';
+import { Box, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 interface PreviewProps { UserComponent: React.ComponentType | null; errors: string[]; }

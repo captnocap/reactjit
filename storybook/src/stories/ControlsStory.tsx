@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from '../../../packages/shared/src';
+import { Box, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   Knob,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '../../../packages/shared/src';
+import { Box } from '../../../packages/core/src';
 import { TextStylesStory } from './TextStyles';
 import { TextEffectsStory } from './TextEffectsStory';
 

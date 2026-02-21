@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '../../../packages/shared/src';
+import { Box, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { CardStory } from '../../../packages/components/src/Card/Card.story';
 import { BadgeStory } from '../../../packages/components/src/Badge/Badge.story';

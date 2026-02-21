@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Slider } from '../../../packages/shared/src';
+import { Box, Text, Slider } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import type { LoveEvent } from '../../../packages/shared/src';
+import type { LoveEvent } from '../../../packages/core/src';
 import { Scene, Camera, Mesh, DirectionalLight, AmbientLight } from '../../../packages/3d/src';
 import type { Vec3 } from '../../../packages/3d/src';
 

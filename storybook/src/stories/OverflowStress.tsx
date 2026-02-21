@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ScrollView } from '../../../packages/shared/src';
+import { Box, Text, ScrollView } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // RGBA test colors — decorative, kept hardcoded

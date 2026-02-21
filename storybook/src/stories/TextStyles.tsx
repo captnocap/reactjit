@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ChartTooltip, useScale } from '../../../packages/shared/src';
+import { Box, Text, ChartTooltip, useScale } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 /** Show the actual rendered size: original × scale */

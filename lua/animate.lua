@@ -48,7 +48,7 @@ function Animate.init(config)
 end
 
 -- ============================================================================
--- Easing functions (ported from packages/shared/src/animation.ts)
+-- Easing functions (ported from packages/core/src/animation.ts)
 -- ============================================================================
 
 local easing = {}

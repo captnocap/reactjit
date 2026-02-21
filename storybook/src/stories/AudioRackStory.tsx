@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Text, Pressable, Slider } from '../../../packages/shared/src';
+import { Box, Text, Pressable, Slider } from '../../../packages/core/src';
 import {
   useAudioInit,
   useRack,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CartridgeInspector } from '../../../packages/shared/src';
+import { CartridgeInspector } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 export function CartridgeInspectorStory() {

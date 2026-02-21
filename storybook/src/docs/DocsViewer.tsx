@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { DocsSidebar } from './DocsSidebar';
 import { DocPage } from './DocPage';

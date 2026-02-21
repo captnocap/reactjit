@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Pressable, ScrollView, Text, TextInput } from '../../../packages/shared/src';
+import { Box, Pressable, ScrollView, Text, TextInput } from '../../../packages/core/src';
 import {
   usePolyPizzaModelWithAttribution,
   usePolyPizzaSearch,

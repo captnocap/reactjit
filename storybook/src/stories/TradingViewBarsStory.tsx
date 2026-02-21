@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, Tabs, Switch, Badge, BarChart } from '../../../packages/shared/src';
-import type { Tab } from '../../../packages/shared/src';
+import { Box, Text, Tabs, Switch, Badge, BarChart } from '../../../packages/core/src';
+import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 

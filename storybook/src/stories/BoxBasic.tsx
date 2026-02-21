@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ChartTooltip } from '../../../packages/shared/src';
+import { Box, Text, ChartTooltip } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 export function BoxBasicStory() {

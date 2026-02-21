@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView } from '../../../packages/shared/src';
-import type { TableColumn } from '../../../packages/shared/src';
+import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView } from '../../../packages/core/src';
+import type { TableColumn } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 /* ── Helpers ──────────────────────────────────────────────── */

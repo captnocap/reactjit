@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene3DBasicStory } from './Scene3DBasic';
 import { Scene3DPlanetStory } from './Scene3DPlanet';

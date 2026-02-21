@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { FlexRowStory as CoreFlexRowStory } from '../../../packages/components/src/FlexRow/FlexRow.story';
 import { FlexColumnStory as CoreFlexColumnStory } from '../../../packages/components/src/FlexColumn/FlexColumn.story';

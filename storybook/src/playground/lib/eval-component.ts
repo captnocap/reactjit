@@ -23,7 +23,7 @@ import {
   AnimatedValue, useAnimation, useSpring,
   // Utility hooks
   useWindowDimensions, useFetch, useWebSocket,
-} from '../../../../packages/shared/src';
+} from '../../../../packages/core/src';
 import {
   Knob, Fader, Meter, LEDIndicator, PadButton, StepSequencer, TransportBar,
 } from '../../../../packages/controls/src';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider } from '../../../packages/shared/src';
+import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import type { NavSection, Tab, BreadcrumbItem, ToolbarEntry } from '../../../packages/shared/src';
+import type { NavSection, Tab, BreadcrumbItem, ToolbarEntry } from '../../../packages/core/src';
 
 /* ── Data ─────────────────────────────────────────────────── */
 

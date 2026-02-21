@@ -9,7 +9,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Pressable, Window } from '../../../packages/shared/src';
+import { Box, Text, Pressable, Window } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 function SectionCard({

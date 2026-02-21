@@ -16,8 +16,8 @@ import {
   useHotkey,
   useClipboard,
   useBridge,
-} from '../../../packages/shared/src';
-import type { LoveEvent } from '../../../packages/shared/src/types';
+} from '../../../packages/core/src';
+import type { LoveEvent } from '../../../packages/core/src/types';
 import { useThemeColors } from '../../../packages/theme/src';
 
 interface SpellError {

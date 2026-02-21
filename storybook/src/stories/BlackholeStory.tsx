@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text, useBridge } from '../../../packages/shared/src';
+import { Box, Text, useBridge } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Game } from '../../../packages/game/src';
 

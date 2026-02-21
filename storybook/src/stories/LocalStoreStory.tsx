@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Box, Text, Pressable, TextInput, useLocalStore, useLoveRPC } from '../../../packages/shared/src';
+import { Box, Text, Pressable, TextInput, useLocalStore, useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable, ScrollView } from '../../../packages/shared/src';
+import { Box, Text, Pressable, ScrollView } from '../../../packages/core/src';
 import { ThemeSwitcher, useTheme, useThemeColors, themeNames, themes } from '../../../packages/theme/src';
 
 function ColorSwatch({ color, label }: { color: string; label: string }) {

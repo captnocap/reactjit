@@ -8,7 +8,7 @@ import {
   usePeerServer,
   useLoveRPC,
   useLoveEvent,
-} from '../../../packages/shared/src';
+} from '../../../packages/core/src';
 import { useCoinPrice } from '../../../packages/apis/src';
 import { useRSSFeed } from '../../../packages/rss/src';
 import { hmacSHA256 } from '../../../packages/webhooks/src';

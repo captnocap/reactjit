@@ -13,8 +13,8 @@ import {
   AreaChart,
   PieChart,
   RadarChart,
-} from '../../../packages/shared/src';
-import type { TableColumn } from '../../../packages/shared/src';
+} from '../../../packages/core/src';
+import type { TableColumn } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 type DataView =

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, Emulator } from '../../../packages/shared/src';
+import { Box, Text, Pressable, Emulator } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 /**

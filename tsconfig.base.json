@@ -11,9 +11,8 @@
     "declarationMap": true,
     "sourceMap": true,
     "paths": {
-      "@reactjit/core": ["./packages/shared/src"],
+      "@reactjit/core": ["./packages/core/src"],
       "@reactjit/native": ["./packages/native/src"],
-      "@reactjit/components": ["./packages/components/src"],
       "@reactjit/router": ["./packages/router/src"],
       "@reactjit/storage": ["./packages/storage/src"],
       "@reactjit/audio": ["./packages/audio/src"],

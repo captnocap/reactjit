@@ -21,12 +21,6 @@ const yellow = color('33');
 const OPTIONAL_PACKAGES = [
   // ── UI & Layout ──────────────────────────────────────────
   {
-    name: '@reactjit/components',
-    dir: 'components',
-    alias: '@reactjit/components',
-    flag: '--components',
-    description: 'Pre-built UI widgets (Card, Badge, Divider, FlexRow)',
-    importExample: "import { Card, Badge } from '@reactjit/components';",
     default: true,
   },
   {
@@ -291,7 +285,7 @@ function parseFlags(args) {
 
 function generateTsconfig(selectedPackages) {
   const paths = {
-    '@reactjit/core': ['./reactjit/shared/src'],
+    '@reactjit/core': ['./reactjit/core/src'],
     '@reactjit/native': ['./reactjit/native/src'],
   };
 
@@ -319,7 +313,7 @@ function generateTsconfig(selectedPackages) {
 export async function initCommand(args) {
   const name = args.filter(a => !a.startsWith('--'))[0];
   if (!name) {
-    console.error('Usage: reactjit init <project-name> [--all | --minimal | --router --storage --components --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
+    console.error('Usage: reactjit init <project-name> [--all | --minimal | --router --storage --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
     process.exit(1);
   }
 
@@ -381,7 +375,7 @@ export async function initCommand(args) {
     const destPkgs = join(dest, 'reactjit');
     mkdirSync(destPkgs, { recursive: true });
 
-    for (const dir of ['shared', 'native']) {
+    for (const dir of ['core', 'native']) {
       const src = join(runtimePkgs, dir);
       if (existsSync(src)) {
         cpSync(src, join(destPkgs, dir), { recursive: true });

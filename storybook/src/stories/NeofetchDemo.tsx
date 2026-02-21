@@ -4,8 +4,8 @@ import {
   useSystemInfo, useSystemMonitor, usePorts,
   formatUptime, formatMemory, formatRate, formatTotalBytes,
   useWindowDimensions,
-} from '../../../packages/shared/src';
-import type { CoreInfo, ProcessInfo, NetworkInterface, DiskDevice, GpuInfo, PortInfo } from '../../../packages/shared/src';
+} from '../../../packages/core/src';
+import type { CoreInfo, ProcessInfo, NetworkInterface, DiskDevice, GpuInfo, PortInfo } from '../../../packages/core/src';
 
 /* ── heart pixel grid (13 wide x 10 tall) ──────────────────── */
 

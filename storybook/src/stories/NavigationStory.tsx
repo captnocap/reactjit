@@ -8,8 +8,8 @@ import {
   Toolbar,
   ScrollView,
   type BreadcrumbItem,
-} from '../../../packages/shared/src';
-import type { NavSection, Tab, ToolbarEntry } from '../../../packages/shared/src';
+} from '../../../packages/core/src';
+import type { NavSection, Tab, ToolbarEntry } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const NAV_SECTIONS: NavSection[] = [

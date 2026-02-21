@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Text, Pressable, ScrollView, ImageGallery, useRendererMode } from '../../../packages/shared/src';
+import { Box, Text, Pressable, ScrollView, ImageGallery, useRendererMode } from '../../../packages/core/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
 import type { MediaType } from '../../../packages/media/src';
 import { useThemeColors } from '../../../packages/theme/src';

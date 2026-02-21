@@ -6,7 +6,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Box, Text, Pressable, useLocalStore } from '../../../packages/shared/src';
+import { Box, Text, Pressable, useLocalStore } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
 import { transformJSX } from './lib/jsx-transform';

@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, TextEditor, Pressable, useLocalStore } from '../../../packages/shared/src';
+import { Box, Text, TextEditor, Pressable, useLocalStore } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Preview } from './Preview';
 import { StatusBar } from './StatusBar';

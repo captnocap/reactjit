@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Slider, Pressable, Timer, useCapabilities } from '../../../packages/shared/src';
+import { Box, Text, Slider, Pressable, Timer, useCapabilities } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 function LectureCard({

@@ -423,11 +423,10 @@ cli-setup: setup
 	else \
 		echo "  Warning: tor not found — .onion hosting won't be bundled"; \
 	fi
-	cp -r packages/shared cli/runtime/reactjit/shared
+	cp -r packages/core cli/runtime/reactjit/core
 	cp -r packages/native cli/runtime/reactjit/native
 	cp -r packages/router cli/runtime/reactjit/router
 	cp -r packages/storage cli/runtime/reactjit/storage
-	cp -r packages/components cli/runtime/reactjit/components
 	cp -r packages/audio cli/runtime/reactjit/audio
 	cp -r packages/server cli/runtime/reactjit/server
 	cp -r packages/ai cli/runtime/reactjit/ai

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Text, Divider, Spacer,
   BarChart, Sparkline,
-} from '../../../packages/shared/src';
+} from '../../../packages/core/src';
 
 /* ── sun pixel grid (11 wide x 11 tall) ──────────────── */
 

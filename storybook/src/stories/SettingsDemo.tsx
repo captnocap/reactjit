@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, TextInput, Slider, Switch } from '../../../packages/shared/src';
+import { Box, Text, Pressable, TextInput, Slider, Switch } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Checkbox } from '../../../packages/shared/src/Checkbox';
-import { Radio, RadioGroup } from '../../../packages/shared/src/Radio';
-import { Select } from '../../../packages/shared/src/Select';
+import { Checkbox } from '../../../packages/core/src/Checkbox';
+import { Radio, RadioGroup } from '../../../packages/core/src/Radio';
+import { Select } from '../../../packages/core/src/Select';
 
 // ── Helpers ──────────────────────────────────────────────
 

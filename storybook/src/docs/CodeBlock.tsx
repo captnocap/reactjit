@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodeBlock as CodeBlockPrimitive } from '../../../packages/shared/src';
+import { CodeBlock as CodeBlockPrimitive } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useDocsFontScale } from './DocsFontScale';
 

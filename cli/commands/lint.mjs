@@ -1534,9 +1534,9 @@ export function runBundleChecks(bundlePath, options = {}) {
   const diagnostics = [];
 
   // Count createContext("web") / createContext('web') occurrences.
-  // A healthy bundle has exactly one (from packages/shared/src/context.ts).
+  // A healthy bundle has exactly one (from packages/core/src/context.ts).
   // Two or more means esbuild bundled separate copies of the shared package
-  // (e.g. @reactjit/core resolved to a stale copy instead of packages/shared/src).
+  // (e.g. @reactjit/core resolved to a stale copy instead of packages/core/src).
   // esbuild emits `(0, import_react.createContext)("web")` — match both forms.
   const contextPattern = /createContext\)\(["']web["']\)|createContext\(["']web["']\)/g;
   const matches = [];
@@ -1555,7 +1555,7 @@ export function runBundleChecks(bundlePath, options = {}) {
     diagnostics.push({
       rule: 'no-duplicate-context',
       severity: 'error',
-      message: `Bundle contains ${matches.length} createContext("web") calls (lines: ${locations.join(', ')}) — this means the shared package was bundled multiple times from different import paths. All imports must resolve to the same physical file. Check for @reactjit/core imports that should be relative paths to packages/shared/src.`,
+      message: `Bundle contains ${matches.length} createContext("web") calls (lines: ${locations.join(', ')}) — this means the shared package was bundled multiple times from different import paths. All imports must resolve to the same physical file. Check for @reactjit/core imports that should be relative paths to packages/core/src.`,
       file: bundlePath,
       line: locations[0],
       col: 1,

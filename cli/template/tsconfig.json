@@ -12,7 +12,6 @@
       "@reactjit/native": ["./reactjit/native/src"],
       "@reactjit/router": ["./reactjit/router/src"],
       "@reactjit/storage": ["./reactjit/storage/src"],
-      "@reactjit/components": ["./reactjit/components/src"]
     }
   },
   "include": ["src"]

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Box, Text, ScrollView, Pressable } from '../../../packages/shared/src';
+import { Box, Text, ScrollView, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const CHUNK_SIZE = 50; // lines per Text node

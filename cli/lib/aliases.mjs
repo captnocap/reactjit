@@ -14,11 +14,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const ALIAS_MAP = {
-  shared: '@reactjit/core',
+  core: '@reactjit/core',
   native: '@reactjit/native',
   router: '@reactjit/router',
   storage: '@reactjit/storage',
-  components: '@reactjit/components',
   audio: '@reactjit/audio',
   server: '@reactjit/server',
   ai: '@reactjit/ai',
@@ -34,7 +33,7 @@ export function getEsbuildAliases(cwd) {
   for (const [dir, alias] of Object.entries(ALIAS_MAP)) {
     // In a monorepo, prefer the source-of-truth packages/ over local copies.
     // This prevents duplicate module instances when source files also use
-    // relative imports to packages/ (e.g. ../../packages/shared/src).
+    // relative imports to packages/ (e.g. ../../packages/core/src).
     const monorepoSrc = join(cwd, '..', 'packages', dir, 'src');
     if (existsSync(monorepoSrc)) {
       flags.push(`--alias:${alias}=../packages/${dir}/src`);

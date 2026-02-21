@@ -6,7 +6,7 @@
  * (Slider, Switch, etc.) use local React state instead of bridge state.
  */
 
-import type { IBridge, Listener, Unsubscribe } from '../../packages/shared/src/bridge';
+import type { IBridge, Listener, Unsubscribe } from '../../packages/core/src/bridge';
 
 export class StoryBridge implements IBridge {
   private listeners = new Map<string, Set<Listener>>();

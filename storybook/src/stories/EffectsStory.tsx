@@ -4,8 +4,8 @@ import {
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
   Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
   Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
-} from '../../../packages/shared/src';
-import type { Tab } from '../../../packages/shared/src';
+} from '../../../packages/core/src';
+import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const effects = [

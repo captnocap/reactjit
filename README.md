@@ -46,9 +46,9 @@ Your React app renders in a native SDL2 + OpenGL window. No browser, no Electron
 
 | Package | Import | What it does |
 |---------|--------|-------------|
-| `packages/shared` | `@reactjit/core` | Primitives (`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, `Slider`, `Switch`, `Checkbox`, `Radio`, `Select`, `FlatList`), hooks, animation, types |
+| `packages/core` | `@reactjit/core` | Primitives (`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, `Slider`, `Switch`, `Checkbox`, `Radio`, `Select`, `FlatList`), hooks, animation, types |
 | `packages/native` | `@reactjit/native` | react-reconciler host config, QuickJS FFI bridge, instance tree, event dispatch |
-| `packages/components` | `@reactjit/components` | Layout helpers — `Card`, `Badge`, `FlexRow`, `FlexColumn`, `Spacer`, `Divider` |
+
 
 ### UI & Interaction
 
@@ -186,10 +186,10 @@ Values cross the bridge via direct QuickJS C API traversal — no JSON serializa
 | Source of truth | Copied to projects by `reactjit init/update` |
 |---|---|
 | `lua/` | `<project>/lua/` |
-| `packages/shared/` | `<project>/reactjit/shared/` |
+| `packages/core/` | `<project>/reactjit/shared/` |
 | `packages/native/` | `<project>/reactjit/native/` |
 
-**Never edit copies.** Always edit `lua/`, `packages/shared/`, `packages/native/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
+**Never edit copies.** Always edit `lua/`, `packages/core/`, `packages/native/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
 
 ### Project Structure
 
@@ -199,7 +199,6 @@ reactjit/
   packages/
     shared/            @reactjit/core — primitives, components, hooks, animation, types
     native/            @reactjit/native — reconciler, QuickJS bridge, event dispatch
-    components/        @reactjit/components — layout helpers (Card, Badge, FlexRow...)
     controls/          @reactjit/controls — hardware UI (Knob, Fader, Meter...)
     theme/             @reactjit/theme — theme system
     router/            @reactjit/router — navigation

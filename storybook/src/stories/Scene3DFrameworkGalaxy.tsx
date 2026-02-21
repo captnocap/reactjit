@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, Slider, Switch, Badge, useLoveRPC } from '../../../packages/shared/src';
+import { Box, Text, Slider, Switch, Badge, useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 

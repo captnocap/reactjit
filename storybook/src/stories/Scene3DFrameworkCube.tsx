@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Text, Badge, ProgressBar, Sparkline, Switch } from '../../../packages/shared/src';
+import { Box, Text, Badge, ProgressBar, Sparkline, Switch } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 

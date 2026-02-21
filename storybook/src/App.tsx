@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
-import { ScaleProvider } from '../../packages/shared/src/ScaleContext';
+import { BridgeProvider, RendererProvider } from '../../packages/core/src/context';
+import { ScaleProvider } from '../../packages/core/src/ScaleContext';
 import { stories, type StoryDef, type StorySection } from './stories';
 import { StoryBridge } from './StoryBridge';
 import { DocsViewer } from './docs/DocsViewer';

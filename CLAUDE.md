@@ -84,12 +84,12 @@ These live at the **monorepo root** and get copied into projects via the CLI:
 | Source of truth | Copied to by `make cli-setup` | Copied to projects by `reactjit init/update` |
 |---|---|---|
 | `lua/*.lua` | `cli/runtime/lua/` | `<project>/lua/` |
-| `packages/shared/` | `cli/runtime/reactjit/shared/` | `<project>/reactjit/shared/` |
+| `packages/core/` | `cli/runtime/reactjit/shared/` | `<project>/reactjit/shared/` |
 | `packages/native/` | `cli/runtime/reactjit/native/` | `<project>/reactjit/native/` |
 | `quickjs/libquickjs.so` | `cli/runtime/lib/` | `<project>/lib/` |
 
 **Rules:**
-- **ALWAYS edit the source-of-truth files** (`lua/`, `packages/shared/`, `packages/native/`). NEVER edit `cli/runtime/` or `<project>/lua/` or `<project>/reactjit/` directly — those are disposable copies.
+- **ALWAYS edit the source-of-truth files** (`lua/`, `packages/core/`, `packages/native/`). NEVER edit `cli/runtime/` or `<project>/lua/` or `<project>/reactjit/` directly — those are disposable copies.
 - After editing any source-of-truth file, run the full sync pipeline:
   ```bash
   make cli-setup              # source → cli/runtime/
@@ -127,7 +127,7 @@ These are unique to each project and are NOT managed by the CLI:
 ### Adding a new Lua-side feature (checklist)
 
 1. Edit/create files in `lua/` (the source of truth)
-2. Edit/create files in `packages/shared/src/` and `packages/native/src/` as needed
+2. Edit/create files in `packages/core/src/` and `packages/native/src/` as needed
 3. The storybook picks up both changes automatically (Lua via symlink, TS via esbuild). Rebuild the storybook bundle: `make build-storybook-native`
 4. `make cli-setup` — propagates to `cli/runtime/` for consumer projects
 5. For each example project that needs the feature:
@@ -155,9 +155,8 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 
 | Package | Import | Role |
 |---------|--------|------|
-| `packages/shared` | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
+| `packages/core` | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
 | `packages/native` | `@reactjit/native` | react-reconciler host config, instance tree, event dispatch |
-| `packages/components` | `@reactjit/components` | Re-exports layout helpers (Card, Badge, FlexRow, etc.) |
 
 **Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12).
 
@@ -264,9 +263,9 @@ Use `flexGrow: 1` on the element that should absorb whatever space is left after
 
 ## Adding Event Handlers to Primitives (IMPORTANT)
 
-The `Box` component in `packages/shared/src/primitives.tsx` uses an **explicit whitelist** for event handlers. It destructures each `on*` prop by name and passes them individually to `React.createElement('View', { ... })`. If you add a new event type (e.g. `onFileDrop`), you must:
+The `Box` component in `packages/core/src/primitives.tsx` uses an **explicit whitelist** for event handlers. It destructures each `on*` prop by name and passes them individually to `React.createElement('View', { ... })`. If you add a new event type (e.g. `onFileDrop`), you must:
 
-1. Add the handler type to `BoxProps` in `packages/shared/src/types.ts`
+1. Add the handler type to `BoxProps` in `packages/core/src/types.ts`
 2. Add it to the destructure list in `Box()` in `primitives.tsx`
 3. Add it to the `createElement` props object in the native mode branch of `Box()`
 4. Subscribe to the bridge event in `packages/native/src/eventDispatcher.ts`
