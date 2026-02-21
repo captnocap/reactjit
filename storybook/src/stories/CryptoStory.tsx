@@ -69,20 +69,23 @@ function HashDemo() {
 function TokenDemo() {
   const c = useThemeColors();
   const [tokens, setTokens] = useState<{ hex: string; id: string }>({ hex: '', id: '' });
-
-  useEffect(() => {
-    setTokens({
-      hex: randomToken(16),
-      id: randomId(24),
-    });
-  }, []);
+  const [error, setError] = useState<string | null>(null);
 
   const regenerate = () => {
-    setTokens({
-      hex: randomToken(16),
-      id: randomId(24),
-    });
+    try {
+      setTokens({
+        hex: randomToken(16),
+        id: randomId(24),
+      });
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
+
+  useEffect(() => {
+    regenerate();
+  }, []);
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
@@ -95,6 +98,12 @@ function TokenDemo() {
         </Pressable>
       </Box>
       <Text style={{ fontSize: 9, color: c.textDim }}>Cryptographically random via @noble/hashes randomBytes</Text>
+
+      {error && (
+        <Text style={{ fontSize: 10, color: c.error }}>
+          {`Token generation failed: ${error}`}
+        </Text>
+      )}
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>randomToken(16) — hex:</Text>
@@ -122,22 +131,35 @@ function SignDemo() {
     signature: string;
     valid: boolean;
   } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const keys = generateSigningKeys();
-    const signed = sign(keys.privateKey, 'iLoveReact is awesome');
-    const valid = verify(signed);
-    setResult({
-      pubKey: keys.publicKey,
-      signature: signed.signature,
-      valid,
-    });
+    try {
+      const keys = generateSigningKeys();
+      const signed = sign(keys.privateKey, 'iLoveReact is awesome');
+      const valid = verify(signed);
+      setResult({
+        pubKey: keys.publicKey,
+        signature: signed.signature,
+        valid,
+      });
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setResult(null);
+    }
   }, []);
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
       <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Ed25519 Signing</Text>
       <Text style={{ fontSize: 9, color: c.textDim }}>@noble/curves — generate keys, sign messages, verify signatures</Text>
+
+      {error && (
+        <Text style={{ fontSize: 10, color: c.error }}>
+          {`Signing failed: ${error}`}
+        </Text>
+      )}
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: c.textSecondary }}>Message:</Text>
@@ -179,6 +201,8 @@ function SignDemo() {
 
 // ── Encryption Demo ────────────────────────────────────
 
+const DEMO_SCRYPT_PARAMS = { N: 2 ** 14, r: 8, p: 1 } as const;
+
 function EncryptDemo() {
   const c = useThemeColors();
   const plaintext = 'Top secret message!';
@@ -187,19 +211,35 @@ function EncryptDemo() {
   const [encrypted, setEncrypted] = useState<string>('');
   const [decrypted, setDecrypted] = useState<string>('');
   const [algo, setAlgo] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const enc = encrypt(plaintext, password);
-    const dec = decrypt(enc, password);
-    setEncrypted(enc.ciphertext.slice(0, 44) + '...');
-    setDecrypted(dec);
-    setAlgo(enc.algorithm);
+    try {
+      // Keep demo scrypt params under the native runtime's 64MB JS heap cap.
+      const enc = encrypt(plaintext, password, { kdfParams: DEMO_SCRYPT_PARAMS });
+      const dec = decrypt(enc, password);
+      setEncrypted(enc.ciphertext.slice(0, 44) + '...');
+      setDecrypted(dec);
+      setAlgo(enc.algorithm);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setEncrypted('');
+      setDecrypted('');
+      setAlgo('');
+    }
   }, []);
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
       <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Password Encryption</Text>
       <Text style={{ fontSize: 9, color: c.textDim }}>AES-256-GCM + scrypt KDF via @noble/ciphers + @noble/hashes</Text>
+
+      {error && (
+        <Text style={{ fontSize: 10, color: c.error }}>
+          {`Encryption failed: ${error}`}
+        </Text>
+      )}
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: c.success, fontWeight: '700' }}>Plaintext:</Text>
