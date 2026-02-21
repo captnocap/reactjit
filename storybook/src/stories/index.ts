@@ -20,10 +20,7 @@ import { AnimationSpringStory } from './AnimationSpring';
 import { DemoStory } from './DemoStory';
 import { ErrorTestStory } from './ErrorTest';
 import { DataStory } from './DataStory';
-import { NavPanelStory } from './NavPanelStory';
-import { TabsStory } from './TabsStory';
-import { BreadcrumbsStory } from './BreadcrumbsStory';
-import { ToolbarStory } from './ToolbarStory';
+import { NavigationStory } from './NavigationStory';
 import { TradingPerfLabStory } from './TradingPerfLabStory';
 import { OverflowStressStory } from './OverflowStress';
 import { NetworkingStory } from './NetworkingStory';
@@ -37,9 +34,7 @@ import { MCPDemoStory } from './MCPDemo';
 import { CryptoStory } from './CryptoStory';
 import { MediaStory } from './MediaStory';
 import EmulatorStory from './EmulatorStory';
-import { Scene3DBasicStory } from './Scene3DBasic';
-import { Scene3DPlanetStory } from './Scene3DPlanet';
-import { Scene3DFrameworkCubeStory } from './Scene3DFrameworkCube';
+import { Scene3DShowcaseStory } from './Scene3DShowcaseStory';
 import { Scene3DFrameworkGalaxyStory } from './Scene3DFrameworkGalaxy';
 import { GamePlatformerStory } from './GamePlatformerStory';
 import { GameRogueliteStory } from './GameRogueliteStory';
@@ -55,8 +50,9 @@ import { MapBasicStory } from './MapBasicStory';
 import { CartridgeInspectorStory } from './CartridgeInspectorStory';
 import { LocalStoreStory } from './LocalStoreStory';
 import { EffectsStory } from './EffectsStory';
+import { TextEffectsStory } from './TextEffectsStory';
 import { PolyPizzaStory } from './PolyPizzaStory';
-import { AICortexStory } from './AICortexStory';
+
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -82,10 +78,7 @@ export const stories: StoryDef[] = [
   { id: 'animation-spring', title: 'Spring Position', category: 'Animation', component: AnimationSpringStory },
 
   // Navigation
-  { id: 'nav-panel', title: 'NavPanel', category: 'Navigation', component: NavPanelStory },
-  { id: 'tabs', title: 'Tabs', category: 'Navigation', component: TabsStory },
-  { id: 'breadcrumbs', title: 'Breadcrumbs', category: 'Navigation', component: BreadcrumbsStory },
-  { id: 'toolbar', title: 'Toolbar', category: 'Navigation', component: ToolbarStory },
+  { id: 'navigation', title: 'Navigation', category: 'Navigation', component: NavigationStory },
 
   // Data
   { id: 'data', title: 'Data', category: 'Data', component: DataStory },
@@ -101,7 +94,6 @@ export const stories: StoryDef[] = [
   { id: 'llms-txt-reader', title: 'llms.txt Reader', category: 'Stress Test', component: LlmsTxtReader },
 
   // AI
-  { id: 'ai-cortex', title: 'AI Cortex', category: 'AI', component: AICortexStory },
   { id: 'ai-chat', title: 'AI Chat', category: 'AI', component: AIChatDemoStory },
   { id: 'ai-canvas', title: 'AI Canvas', category: 'AI', component: AICanvasStory },
   { id: 'mcp', title: 'MCP Server', category: 'AI', component: MCPDemoStory },
@@ -119,9 +111,7 @@ export const stories: StoryDef[] = [
   { id: 'emulator', title: 'NES Emulator', category: 'Emulation', component: EmulatorStory },
 
   // 3D
-  { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
-  { id: 'scene-3d-planet', title: 'Planet', category: '3D', component: Scene3DPlanetStory },
-  { id: 'scene-3d-framework-cube', title: 'Framework Cube', category: '3D', component: Scene3DFrameworkCubeStory },
+  { id: 'scene-3d-showcase', title: '3D Showcase', category: '3D', component: Scene3DShowcaseStory },
 
   // Geo / Maps
   { id: 'map-basic', title: 'Map', category: 'Geo', component: MapBasicStory },
@@ -157,6 +147,7 @@ export const stories: StoryDef[] = [
 
   // Generative Effects
   { id: 'effects', title: 'Effects', category: 'Generative', component: EffectsStory },
+  { id: 'text-effects', title: 'Text Effects', category: 'Generative', component: TextEffectsStory },
 
   // Addon components (from @ilovereact/components)
   ...addonStories,
