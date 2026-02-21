@@ -1,4 +1,4 @@
-# iLoveReact
+# ReactJIT
 
 Write it in React, render it anywhere there's a surface.
 
@@ -24,15 +24,15 @@ A reconciler, a layout engine, and a small painter per target. That's it.
 
 # For Consumers
 
-Use iLoveReact to build UIs once, deploy them anywhere. Write React components, compile with the CLI, run on your target.
+Use ReactJIT to build UIs once, deploy them anywhere. Write React components, compile with the CLI, run on your target.
 
 ## Targets
 
 | Target | What it is | Status |
 |--------|-----------|--------|
-| **SDL2 / OpenGL** | Custom renderer — no game engine | LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI |
+| **SDL2 / OpenGL** | Hand-rolled renderer — LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI | Primary target, fully owned |
 | **Love2D** | Game engine UI (QuickJS in-process) | Full flexbox, images, video, inspector, binary dist |
-| **Web** | Browser DOM | Shared components via dual-mode primitives |
+| **Web (WASM)** | SDL2 compiled to WASM + WebGL via Emscripten | Planned — `<canvas>`, not DOM |
 | **Terminal** | 24-bit truecolor ANSI | Cell buffer with diff-based updates |
 | **ComputerCraft** | Minecraft computers (WebSocket) | 16-color palette, 51x19 character grid |
 | **Neovim** | Floating windows in Neovim (stdio) | 24-bit highlights, buffer rendering |
@@ -41,10 +41,20 @@ Use iLoveReact to build UIs once, deploy them anywhere. Write React components, 
 
 ## Quick Start
 
+### SDL2 (primary — native desktop)
+
+```bash
+reactjit init my-app
+cd my-app
+reactjit dev sdl2
+```
+
+Your React app renders in a native SDL2 + OpenGL window. No game engine required.
+
 ### Terminal (pure JS, zero dependencies)
 
 ```tsx
-import { createTerminalApp } from '@ilovereact/terminal';
+import { createTerminalApp } from '@reactjit/terminal';
 
 const app = createTerminalApp();
 app.render(<App />);
@@ -52,11 +62,11 @@ app.render(<App />);
 
 Run `node dist/main.js` and your React app renders in the terminal.
 
-### Love2D (native game UI)
+### Love2D (game UI)
 
 ```tsx
-import { NativeBridge, createRoot } from '@ilovereact/native';
-import { BridgeProvider, RendererProvider } from '@ilovereact/core';
+import { NativeBridge, createRoot } from '@reactjit/native';
+import { BridgeProvider, RendererProvider } from '@reactjit/core';
 
 const bridge = new NativeBridge();
 const root = createRoot();
@@ -72,7 +82,7 @@ root.render(
 ### ComputerCraft (Minecraft)
 
 ```tsx
-import { createCCServer } from '@ilovereact/cc';
+import { createCCServer } from '@reactjit/cc';
 
 const server = createCCServer({ port: 8080 });
 server.render(<App />);
@@ -83,18 +93,18 @@ Run the server, drop `startup.lua` on a CC computer, and your React app renders 
 ### Neovim
 
 ```tsx
-import { createNvimServer } from '@ilovereact/nvim';
+import { createNvimServer } from '@reactjit/nvim';
 
 const server = createNvimServer({ cols: 60, rows: 20 });
 server.render(<App />);
 ```
 
-In Neovim: `:lua require("ilovereact").setup({ entry = "dist/main.js" })` — a floating window appears with your React UI.
+In Neovim: `:lua require("reactjit").setup({ entry = "dist/main.js" })` — a floating window appears with your React UI.
 
 ### Hammerspoon (macOS desktop)
 
 ```tsx
-import { createHammerspoonServer } from '@ilovereact/hs';
+import { createHammerspoonServer } from '@reactjit/hs';
 
 const server = createHammerspoonServer({ port: 8081, width: 400, height: 300 });
 server.render(<App />);
@@ -103,7 +113,7 @@ server.render(<App />);
 ### AwesomeWM (Linux desktop)
 
 ```tsx
-import { createAwesomeServer } from '@ilovereact/awesome';
+import { createAwesomeServer } from '@reactjit/awesome';
 
 const server = createAwesomeServer({ width: 400, height: 30 });
 server.render(<App />);
@@ -112,21 +122,20 @@ server.render(<App />);
 ## Packages
 
 ```
-@ilovereact/core          Shared components, hooks, animation, types
-@ilovereact/native        Love2D renderer (QuickJS FFI bridge, react-reconciler)
-@ilovereact/web           Web renderer (DOM overlays on Love2D WASM canvas)
-@ilovereact/grid          Shared layout engine + render server for grid targets
-@ilovereact/terminal      Pure-JS terminal renderer (ANSI truecolor)
-@ilovereact/cc            ComputerCraft target (WebSocket + 16-color palette)
-@ilovereact/nvim          Neovim target (stdio + floating windows)
-@ilovereact/hs            Hammerspoon target (WebSocket + hs.canvas)
-@ilovereact/awesome       AwesomeWM target (stdio + Cairo)
+@reactjit/core          Shared components, hooks, animation, types
+@reactjit/native        SDL2 + Love2D renderer (QuickJS FFI bridge, react-reconciler)
+@reactjit/grid          Shared layout engine + render server for grid targets
+@reactjit/terminal      Pure-JS terminal renderer (ANSI truecolor)
+@reactjit/cc            ComputerCraft target (WebSocket + 16-color palette)
+@reactjit/nvim          Neovim target (stdio + floating windows)
+@reactjit/hs            Hammerspoon target (WebSocket + hs.canvas)
+@reactjit/awesome       AwesomeWM target (stdio + Cairo)
 ```
 
 ## Features
 
 - **Flexbox layout engine** — `flexDirection`, `justifyContent`, `alignItems`, `flexGrow`/`flexShrink`, `flexWrap`, `gap`, `padding`, `margin`, `%`/`vw`/`vh` units, absolute positioning
-- **Hot module reload** — edit components, see changes without restarting the game/app
+- **Hot module reload** — edit components, see changes without restarting
 - **Error reporting** — source-mapped errors with visual overlay
 - **Binary distribution** — ship as a single executable
 - **Prop diffing** — only changed properties cross the bridge. Style objects are deep-diffed. Multiple updates per node coalesce into one command
@@ -140,7 +149,7 @@ All components work across every target that supports them.
 ### Primitives
 
 ```tsx
-import { Box, Text, Image } from '@ilovereact/core';
+import { Box, Text, Image } from '@reactjit/core';
 
 <Box style={{ flexDirection: 'row', gap: 8, padding: 16 }}>
   <Image src="avatar.png" style={{ width: 48, height: 48, borderRadius: 24 }} />
@@ -164,7 +173,7 @@ import { Box, Text, Image } from '@ilovereact/core';
 ### Animation
 
 ```tsx
-import { useAnimation, useSpring, Easing, parallel } from '@ilovereact/core';
+import { useAnimation, useSpring, Easing, parallel } from '@reactjit/core';
 
 const opacity = useAnimation({ from: 0, to: 1, duration: 300, easing: Easing.easeOut });
 const scale = useSpring({ from: 0.8, to: 1, stiffness: 200, damping: 15 });
@@ -217,47 +226,48 @@ Use auto-sizing for cards, badges, buttons, labels. Use explicit sizing for root
 4. **No `flexGrow` without sibling sizing context** — needs a parent with known dimensions
 5. **Pre-compute grid dimensions** — don't rely on child content to infer container size
 6. **Keep flex trees shallow** — prefer direct layout over deep wrapper hierarchies
-7. **Fill the viewport** — native targets (Love2D, SDL2) are fixed canvases. No reflow, no scroll, no default height. What you don't size is zero.
+7. **Fill the viewport** — native targets are fixed canvases. No reflow, no scroll, no default height. What you don't size is zero.
 8. **Use `█` (U+2588) as a grid blueprint only, never in `<Text>`** — convert it to a boolean grid with colored `<Box>` elements instead. The linter enforces this via `no-block-char-in-text`
 
 The static linter catches violations as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
 
 ## Using the CLI
 
-Always use the `ilovereact` CLI instead of running esbuild directly. The CLI encodes correct build flags, enforces lint gates, handles runtime file placement, and produces correct distribution packages.
+Always use the `reactjit` CLI instead of running esbuild directly. The CLI encodes correct build flags, enforces lint gates, handles runtime file placement, and produces correct distribution packages.
 
 ### Project Setup & Development
 
 ```bash
-ilovereact init <name>            # Create a new Love2D project
-ilovereact dev [target]           # Watch mode (default: love). Do NOT run esbuild manually.
-ilovereact build [target]         # Lint + bundle for dev
+reactjit init <name>            # Create a new project
+reactjit dev [target]           # Watch mode (default: sdl2). Do NOT run esbuild manually.
+reactjit build [target]         # Lint + bundle for dev
 ```
 
 ### Building & Distribution
 
 ```bash
-ilovereact build dist:<target>    # Production build (love, terminal, cc, nvim, hs, awesome, web)
+reactjit build dist:<target>    # Production build (sdl2, love, terminal, cc, nvim, hs, awesome, web)
 ```
 
 **Dist formats:**
+- `dist:sdl2` — Native binary (SDL2 + OpenGL + LuaJIT)
 - `dist:love` — Self-extracting Linux binary (Love2D + bundled glibc)
 - `dist:terminal` / `dist:cc` / `dist:nvim` / `dist:hs` / `dist:awesome` — Single-file Node.js executable (shebang + CJS)
-- `dist:web` — Production ESM bundle
+- `dist:web` — WASM + WebGL bundle (planned)
 
 ### Component Development
 
 ```bash
-ilovereact lint                   # Static layout linter
-ilovereact screenshot [--output]  # Headless screenshot capture
+reactjit lint                   # Static layout linter
+reactjit screenshot [--output]  # Headless screenshot capture
 ```
 
-**After writing or modifying any component:** run `ilovereact lint`, then `ilovereact screenshot --output /tmp/preview.png` and inspect the result.
+**After writing or modifying any component:** run `reactjit lint`, then `reactjit screenshot --output /tmp/preview.png` and inspect the result.
 
 ### Runtime Management
 
 ```bash
-ilovereact update                 # Sync runtime files from CLI into current project
+reactjit update                 # Sync runtime files from CLI into current project
 ```
 
 ### Poly Pizza One-Liner (OBJ + Attribution)
@@ -272,7 +282,7 @@ This downloads OBJ/MTL/textures into `assets/models/<model>/` and upserts attrib
 
 # For Developers
 
-Contributing to iLoveReact? Read this section. Here's how the framework is organized, where files live, what's safe to edit, and how to make changes that propagate correctly.
+Contributing to ReactJIT? Read this section. Here's how the framework is organized, where files live, what's safe to edit, and how to make changes that propagate correctly.
 
 ## Source of Truth Architecture (CRITICAL)
 
@@ -282,22 +292,22 @@ There are two categories of files: **globally distributed** (framework internals
 
 These get copied into projects via the CLI. **ALWAYS edit these, never the copies.**
 
-| Source of truth | Role | Copied to projects by `ilovereact init/update` |
+| Source of truth | Role | Copied to projects by `reactjit init/update` |
 |---|---|---|
 | `lua/` | Lua runtime — layout, painter, events, bridges, error overlay, inspector | `<project>/lua/` |
-| `packages/shared/` | React primitives, components, hooks, animation, types | `<project>/ilovereact/shared/` |
-| `packages/native/` | Love2D reconciler, host config, event dispatcher | `<project>/ilovereact/native/` |
+| `packages/shared/` | React primitives, components, hooks, animation, types | `<project>/reactjit/shared/` |
+| `packages/native/` | Native reconciler, host config, event dispatcher | `<project>/reactjit/native/` |
 
-**DO NOT edit files inside `cli/runtime/`, `<project>/lua/`, or `<project>/ilovereact/` directly.** These are disposable copies that `make cli-setup` and `ilovereact update` will overwrite.
+**DO NOT edit files inside `cli/runtime/`, `<project>/lua/`, or `<project>/reactjit/` directly.** These are disposable copies that `make cli-setup` and `reactjit update` will overwrite.
 
 ### Project files (application code)
 
-These are unique to each project and safe to edit directly. `ilovereact init` creates starter versions; `ilovereact update` never touches them.
+These are unique to each project and safe to edit directly. `reactjit init` creates starter versions; `reactjit update` never touches them.
 
 | Location | Role |
 |---|---|
 | `<project>/src/` | Application code (App.tsx, components, stories) |
-| `<project>/main.lua`, `conf.lua` | Love2D entry points |
+| `<project>/main.lua`, `conf.lua` | Love2D entry points (if using Love2D target) |
 | `<project>/package.json` | Project dependencies |
 | `<project>/packaging/` | Build customizations |
 
@@ -305,14 +315,14 @@ These are unique to each project and safe to edit directly. `ilovereact init` cr
 
 ```
 lua/  ──────────────────┐
-packages/shared/  ──────┤  make cli-setup     ilovereact init
+packages/shared/  ──────┤  make cli-setup     reactjit init
 packages/native/  ──────┼────────────────►  cli/runtime/  ──────────────►  <project>/
-quickjs/libquickjs.so ─┘                                  ilovereact update
+quickjs/libquickjs.so ─┘                                  reactjit update
 ```
 
 1. **`make cli-setup`** copies source-of-truth files into `cli/runtime/`
-2. **`ilovereact init <name>`** creates a new project from `cli/runtime/` (one-time)
-3. **`ilovereact update`** re-syncs `cli/runtime/` into an existing project (repeatable)
+2. **`reactjit init <name>`** creates a new project from `cli/runtime/` (one-time)
+3. **`reactjit update`** re-syncs `cli/runtime/` into an existing project (repeatable)
 
 ## Making Framework Changes (Checklist)
 
@@ -321,26 +331,25 @@ When you modify any framework file (`lua/`, `packages/shared/`, `packages/native
 1. Edit/create files in `lua/` or `packages/shared/src/` or `packages/native/src/` (the source of truth)
 2. `make cli-setup` — propagates to `cli/runtime/`
 3. For each example project that needs the change:
-   - `cd examples/<project> && ilovereact update` — syncs runtime files (`lua/`, `lib/`, `ilovereact/`)
-   - `ilovereact build dist:love` — rebuilds
-4. For new projects: `ilovereact init <name>` — gets everything automatically
+   - `cd examples/<project> && reactjit update` — syncs runtime files (`lua/`, `lib/`, `reactjit/`)
+   - `reactjit build dist:sdl2` — rebuilds
+4. For new projects: `reactjit init <name>` — gets everything automatically
 
-`ilovereact update` replaces `lua/`, `lib/`, and `ilovereact/` wholesale. It never touches `src/`, `main.lua`, `conf.lua`, or `package.json`.
+`reactjit update` replaces `lua/`, `lib/`, and `reactjit/` wholesale. It never touches `src/`, `main.lua`, `conf.lua`, or `package.json`.
 
 ## Project Structure
 
 ```
-ilovereact/
+reactjit/
   packages/
-    shared/          @ilovereact/core — components, hooks, animation, types
-    native/          @ilovereact/native — Love2D renderer (QuickJS FFI)
-    web/             @ilovereact/web — DOM overlay renderer
-    grid/            @ilovereact/grid — shared layout + render server
-    terminal/        @ilovereact/terminal — ANSI terminal renderer
-    cc/              @ilovereact/cc — ComputerCraft target
-    nvim/            @ilovereact/nvim — Neovim target
-    hs/              @ilovereact/hs — Hammerspoon target
-    awesome/         @ilovereact/awesome — AwesomeWM target
+    shared/          @reactjit/core — components, hooks, animation, types
+    native/          @reactjit/native — SDL2 + Love2D renderer (QuickJS FFI)
+    grid/            @reactjit/grid — shared layout + render server
+    terminal/        @reactjit/terminal — ANSI terminal renderer
+    cc/              @reactjit/cc — ComputerCraft target
+    nvim/            @reactjit/nvim — Neovim target
+    hs/              @reactjit/hs — Hammerspoon target
+    awesome/         @reactjit/awesome — AwesomeWM target
   targets/
     computercraft/   CC client (startup.lua)
     neovim/          Neovim plugin (Lua)
@@ -348,14 +357,13 @@ ilovereact/
     awesome/         AwesomeWM widget (Lua + Cairo)
   lua/               Lua modules (tree, layout, painter, events, bridges)
   examples/
-    native-hud/      Love2D + QuickJS demo
-    storybook/       Component catalog (web + native)
+    native-hud/      SDL2 + QuickJS demo
     terminal-demo/   Terminal dashboard
     cc-demo/         ComputerCraft dashboard
     nvim-demo/       Neovim floating window
     hs-demo/         Hammerspoon desktop widget
     awesome-demo/    AwesomeWM status bar
-  cli/               ilovereact CLI and runtime
+  cli/               reactjit CLI and runtime
 ```
 
 ## Architecture
@@ -373,15 +381,15 @@ Adding a target means writing a painter (~50-100 lines) and choosing a transport
 
 ### Grid Targets (CC, Neovim, Terminal, Hammerspoon, AwesomeWM)
 
-These use `@ilovereact/grid` — a simplified JS flexbox engine that outputs flat `DrawCommand[]` arrays. Each target provides a thin client that receives commands and draws.
+These use `@reactjit/grid` — a simplified JS flexbox engine that outputs flat `DrawCommand[]` arrays. Each target provides a thin client that receives commands and draws.
 
-### Native Targets (Love2D + SDL2)
+### Native Targets (SDL2 + Love2D)
 
 Both native targets share the same pipeline: QuickJS bridge, retained tree, layout engine, event system. The target interface (`lua/target_*.lua`) is the only thing that changes.
 
-**SDL2 / OpenGL** (`lua/target_sdl2.lua`): The forward target. LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI — no game engine required. Runs anywhere LuaJIT does. Entry point: `luajit sdl2_init.lua`. Same React pipeline, same layout engine, same QuickJS bridge, different painter.
+**SDL2 / OpenGL** (`lua/target_sdl2.lua`): The primary target. LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI — no game engine required. Runs anywhere LuaJIT does. Entry point: `luajit sdl2_init.lua`. Same React pipeline, same layout engine, same QuickJS bridge, different painter.
 
-**Love2D** (`lua/target_love2d.lua`): The original proving ground. React runs inside Love2D via QuickJS. Full painter with gradients, shadows, transforms, clipping. Images, video (libmpv), audio, bidirectional event handling, visual inspector (F12). Ships as a self-extracting binary.
+**Love2D** (`lua/target_love2d.lua`): The original proving ground. React runs inside Love2D via QuickJS. Full painter with gradients, shadows, transforms, clipping. Images, video (libmpv), audio, bidirectional event handling, visual inspector (F12). Ships as a self-extracting binary. Available for game developers who want Love2D's ecosystem.
 
 ### Bridge Protocol (Lua ↔ JS)
 
@@ -398,10 +406,10 @@ A target needs two things:
 1. **Transport** — how draw commands reach the target (WebSocket, stdio, direct write)
 2. **Client** — target-specific code that receives commands and draws
 
-For grid-based targets, use `@ilovereact/grid`:
+For grid-based targets, use `@reactjit/grid`:
 
 ```typescript
-import { createRenderServer, createWebSocketTransport } from '@ilovereact/grid';
+import { createRenderServer, createWebSocketTransport } from '@reactjit/grid';
 
 const transport = createWebSocketTransport(8080);
 const server = createRenderServer({
