@@ -231,6 +231,7 @@ export type { NativeProps, AudioProps, TimerProps, CapabilitySchema } from './ty
 // Generative canvas effects
 export {
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
+  Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
   type EffectProps, type SpirographProps, type MirrorProps, type CymaticsProps,
 } from './effects';
 

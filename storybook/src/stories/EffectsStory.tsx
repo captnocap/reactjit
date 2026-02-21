@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics } from '../../../packages/shared/src';
+import {
+  Box, Text, Pressable,
+  Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
+  Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
+} from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const effects = [
@@ -9,6 +13,14 @@ const effects = [
   { name: 'Mirror', Component: Mirror },
   { name: 'Mandala', Component: Mandala },
   { name: 'Cymatics', Component: Cymatics },
+  { name: 'Constellation', Component: Constellation },
+  { name: 'Mycelium', Component: Mycelium },
+  { name: 'Pipes', Component: Pipes },
+  { name: 'StainedGlass', Component: StainedGlass },
+  { name: 'Voronoi', Component: Voronoi },
+  { name: 'Contours', Component: Contours },
+  { name: 'Feedback', Component: Feedback },
+  { name: 'PixelSort', Component: PixelSort },
 ] as const;
 
 type Mode = 'normal' | 'infinite' | 'reactive';
@@ -34,34 +46,9 @@ export function EffectsStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 12, gap: 10 }}>
-      {/* Header */}
-      <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>Generative Effects</Text>
-
-      {/* Effect selector + mode selector */}
-      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', flexGrow: 1 }}>
-          {effects.map((eff, i) => (
-            <Pressable
-              key={eff.name}
-              onPress={() => setSelected(i)}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: 6,
-                backgroundColor: i === selected ? c.primary : c.surface,
-                borderWidth: 1,
-                borderColor: i === selected ? c.primary : c.border,
-              }}
-            >
-              <Text style={{
-                fontSize: 11,
-                color: i === selected ? '#fff' : c.textSecondary,
-              }}>{eff.name}</Text>
-            </Pressable>
-          ))}
-        </Box>
-
-        {/* Mode toggle */}
+      {/* Header + mode toggle */}
+      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>Generative Effects</Text>
         <Box style={{ flexDirection: 'row', gap: 4 }}>
           {modes.map((m) => (
             <Pressable
@@ -83,6 +70,29 @@ export function EffectsStory() {
             </Pressable>
           ))}
         </Box>
+      </Box>
+
+      {/* Effect selector */}
+      <Box style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+        {effects.map((eff, i) => (
+          <Pressable
+            key={eff.name}
+            onPress={() => setSelected(i)}
+            style={{
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 5,
+              backgroundColor: i === selected ? c.primary : c.surface,
+              borderWidth: 1,
+              borderColor: i === selected ? c.primary : c.border,
+            }}
+          >
+            <Text style={{
+              fontSize: 10,
+              color: i === selected ? '#fff' : c.textSecondary,
+            }}>{eff.name}</Text>
+          </Pressable>
+        ))}
       </Box>
 
       {/* Main content: standalone + background demo side by side */}

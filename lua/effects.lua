@@ -105,18 +105,29 @@ function Effects.syncWithTree(nodes)
       else
         -- Existing: update props reference
         local inst = instances[id]
-        inst.props = props
-        inst.background = isBackground
-        -- Update parent mapping if needed
-        local parentId = node.parent and node.parent.id or nil
-        if isBackground and parentId then
-          if inst.parentId ~= parentId then
-            -- Parent changed: clean up old mapping
-            if inst.parentId then backgroundByParent[inst.parentId] = nil end
-            backgroundByParent[parentId] = id
-            inst.parentId = parentId
+        if inst.type ~= node.type then
+          local oldMod = registry[inst.type]
+          if oldMod and oldMod.destroy then
+            oldMod.destroy(inst.state)
           end
+          inst.type = node.type
+          inst.state = nil
+          inst.needsInit = true
         end
+        inst.props = props
+        local parentId = node.parent and node.parent.id or nil
+        -- Update background parent mapping. Re-assert mapping each sync so a
+        -- transient removal cannot leave backgroundByParent stale or nil.
+        if isBackground and parentId then
+          if inst.parentId and inst.parentId ~= parentId and backgroundByParent[inst.parentId] == id then
+            backgroundByParent[inst.parentId] = nil
+          end
+          backgroundByParent[parentId] = id
+        elseif inst.parentId and backgroundByParent[inst.parentId] == id then
+          backgroundByParent[inst.parentId] = nil
+        end
+        inst.background = isBackground
+        inst.parentId = parentId
       end
 
       -- Resolve target dimensions: parent's for background, own for standalone
@@ -131,6 +142,10 @@ function Effects.syncWithTree(nodes)
         local w = math.floor(c.w or 0)
         local h = math.floor(c.h or 0)
         local inst = instances[id]
+
+        -- Store screen-space origin for mouse hit-testing
+        inst.screenX = c.x or 0
+        inst.screenY = c.y or 0
 
         if w > 0 and h > 0 and (inst.width ~= w or inst.height ~= h) then
           -- Canvas size changed: recreate
@@ -148,7 +163,7 @@ function Effects.syncWithTree(nodes)
   for id, inst in pairs(instances) do
     if not seen[id] then
       if inst.canvas then inst.canvas:release() end
-      if inst.background and inst.parentId then
+      if inst.background and inst.parentId and backgroundByParent[inst.parentId] == id then
         backgroundByParent[inst.parentId] = nil
       end
       local mod = registry[inst.type]
@@ -160,8 +175,62 @@ function Effects.syncWithTree(nodes)
   end
 end
 
+-- ============================================================================
+-- Mouse tracking (polled once per frame, resolved per-instance)
+-- ============================================================================
+
+local lastMx, lastMy = 0, 0
+local mouseDx, mouseDy = 0, 0
+local mouseSpeed = 0
+local mouseIdleTime = 0
+
+--- Poll global mouse state once per frame.
+local function pollMouse(dt)
+  local mx, my = love.mouse.getPosition()
+  mouseDx = mx - lastMx
+  mouseDy = my - lastMy
+  mouseSpeed = math.sqrt(mouseDx * mouseDx + mouseDy * mouseDy) / math.max(dt, 0.001)
+  if math.abs(mouseDx) > 0.5 or math.abs(mouseDy) > 0.5 then
+    mouseIdleTime = 0
+  else
+    mouseIdleTime = mouseIdleTime + dt
+  end
+  lastMx, lastMy = mx, my
+end
+
+--- Build per-instance mouse table (local coords, inside check).
+--- @param inst table  The effect instance
+--- @return table  { x, y, dx, dy, speed, inside, idle }
+local function instanceMouse(inst)
+  -- Resolve bounding box from the node's computed layout
+  -- For background mode, the bounds are the parent's; for standalone, the effect's own.
+  local x, y, w, h = 0, 0, inst.width, inst.height
+  -- We need the screen-space origin. The canvas is drawn at (c.x, c.y) by painter.
+  -- We store it during syncWithTree from the computed layout.
+  if inst.screenX then
+    x = inst.screenX
+    y = inst.screenY
+  end
+
+  local localX = lastMx - x
+  local localY = lastMy - y
+  local inside = localX >= 0 and localX <= w and localY >= 0 and localY <= h
+
+  return {
+    x = localX,
+    y = localY,
+    dx = mouseDx,
+    dy = mouseDy,
+    speed = mouseSpeed,
+    inside = inside,
+    idle = mouseIdleTime,
+  }
+end
+
 --- Update all effect instances.
 function Effects.updateAll(dt)
+  pollMouse(dt)
+
   for id, inst in pairs(instances) do
     local mod = registry[inst.type]
     if mod and inst.canvas and inst.width > 0 and inst.height > 0 then
@@ -169,7 +238,8 @@ function Effects.updateAll(dt)
         inst.state = mod.create(inst.width, inst.height, inst.props)
         inst.needsInit = false
       end
-      mod.update(inst.state, dt, inst.props, inst.width, inst.height)
+      local mouse = instanceMouse(inst)
+      mod.update(inst.state, dt, inst.props, inst.width, inst.height, mouse)
     end
   end
 end
@@ -222,6 +292,14 @@ function Effects.loadAll()
     "mirror",
     "mandala",
     "cymatics",
+    "constellation",
+    "mycelium",
+    "pipes",
+    "stainedglass",
+    "voronoi",
+    "contours",
+    "feedback",
+    "pixelsort",
   }
   for _, name in ipairs(effectFiles) do
     local ok, err = pcall(require, "lua.effects." .. name)
