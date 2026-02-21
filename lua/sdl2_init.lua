@@ -5,6 +5,10 @@
   Loads the QuickJS bridge, wires up the React reconciler, translates SDL2
   input events into framework events, and paints each frame with the GL painter.
 
+  Supports multiple windows: the main window renders the full React tree,
+  child windows render subtrees attached to <Window> capability nodes.
+  All windows share one QuickJS bridge, one tree, one event queue.
+
   Usage (project main.lua):
     require("lua.sdl2_init").run({
       bundle = "sdl2/bundle.js",   -- compiled JS bundle
@@ -95,7 +99,10 @@ local SDL_MOUSEBTNDOWN = 0x401
 local SDL_MOUSEBTNUP   = 0x402
 local SDL_MOUSEWHEEL   = 0x403
 
-local SDL_WINDOWEVENT_RESIZED = 5
+local SDL_WINDOWEVENT_RESIZED      = 5
+local SDL_WINDOWEVENT_FOCUS_GAINED = 12
+local SDL_WINDOWEVENT_FOCUS_LOST   = 13
+local SDL_WINDOWEVENT_CLOSE        = 14
 
 -- SDL_GLattr
 local GL_RED_SIZE              = 0
@@ -146,6 +153,21 @@ end
 -- ============================================================================
 
 local SDL2Init = {}
+
+--- Get the root node for a given window.
+--- For the main window, returns the full tree root.
+--- For child windows, returns the Window capability node (whose children
+--- are the content to render in that window).
+local function getWindowRoot(win, tree)
+  if win.isMain then
+    return tree.getTree()
+  end
+  if win.rootNodeId then
+    local nodes = tree.getNodes()
+    return nodes[win.rootNodeId]
+  end
+  return nil
+end
 
 function SDL2Init.run(config)
   config = config or {}
@@ -234,6 +256,13 @@ function SDL2Init.run(config)
   layout.init({ measure = Measure })
 
   -- ------------------------------------------------------------------
+  -- 3a. Window manager (multi-window support)
+  -- ------------------------------------------------------------------
+  local WM = require("lua.window_manager")
+  WM.init(sdl)
+  local mainWin = WM.registerMain(window, ctx, W, H)
+
+  -- ------------------------------------------------------------------
   -- 3b. Love2D compatibility shim (for inspector/devtools/console)
   -- ------------------------------------------------------------------
   local Shim = require("lua.sdl2_love_shim")
@@ -265,10 +294,15 @@ function SDL2Init.run(config)
   console.init({ bridge = bridge, tree = tree, inspector = inspector })
   devtools.init({ inspector = inspector, console = console, tree = tree, bridge = bridge, pushEvent = pushEvent })
 
+  -- ------------------------------------------------------------------
+  -- 3d. Capabilities (audio, timer, window, etc.)
+  -- ------------------------------------------------------------------
+  local capabilities = require("lua.capabilities")
+  capabilities.loadAll()
+
   -- Push initial viewport
   bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
 
-  local needsLayout = true
   local root
 
   -- ------------------------------------------------------------------
@@ -277,7 +311,6 @@ function SDL2Init.run(config)
   local event   = ffi.new("SDL2_Event")
   local running = true
   local TARGET_MS = math.floor(1000/60)
-  local mx, my  = 0, 0
 
   io.write("[sdl2_init] entering run loop\n"); io.flush()
 
@@ -292,90 +325,173 @@ function SDL2Init.run(config)
         running = false
 
       elseif t == SDL_WINDOWEVENT then
-        if event.window.event == SDL_WINDOWEVENT_RESIZED then
-          -- Recalculate drawable vs window sizes for HiDPI
-          sdl.SDL_GL_GetDrawableSize(window, dw, dh)
-          sdl.SDL_GetWindowSize(window, ww, wh)
-          W, H = dw[0], dh[0]
-          scaleX = W / ww[0]
-          scaleY = H / wh[0]
-          GL.glViewport(0, 0, W, H)
-          GL.glMatrixMode(GL.PROJECTION)
-          GL.glLoadIdentity()
-          GL.glOrtho(0, W, H, 0, -1, 1)
-          GL.glMatrixMode(GL.MODELVIEW)
-          Painter.setDimensions(W, H)
-          Shim.setDimensions(W, H)
-          bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
-          needsLayout = true
+        local wid = event.window.wid
+        local evtWin = WM.getBySDLId(wid) or mainWin
+        local we = event.window.event
+
+        if we == SDL_WINDOWEVENT_RESIZED then
+          WM.handleResize(evtWin)
+          if evtWin.isMain then
+            -- Update main window locals + subsystems
+            W, H = evtWin.width, evtWin.height
+            scaleX, scaleY = evtWin.scaleX, evtWin.scaleY
+            -- GL state update for main context (already current)
+            GL.glViewport(0, 0, W, H)
+            GL.glMatrixMode(GL.PROJECTION)
+            GL.glLoadIdentity()
+            GL.glOrtho(0, W, H, 0, -1, 1)
+            GL.glMatrixMode(GL.MODELVIEW)
+            Painter.setDimensions(W, H)
+            Shim.setDimensions(W, H)
+            bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
+          else
+            -- Child window resized — push resize event to capability
+            if evtWin.rootNodeId then
+              bridge:pushEvent({
+                type = "capability",
+                payload = {
+                  targetId = evtWin.rootNodeId,
+                  handler = "onResize",
+                  width = evtWin.width,
+                  height = evtWin.height,
+                },
+              })
+            end
+          end
+
+        elseif we == SDL_WINDOWEVENT_CLOSE then
+          if evtWin.isMain then
+            running = false
+          elseif evtWin.rootNodeId then
+            -- Push close event to React — let the user handle it
+            bridge:pushEvent({
+              type = "capability",
+              payload = {
+                targetId = evtWin.rootNodeId,
+                handler = "onClose",
+              },
+            })
+          end
+
+        elseif we == SDL_WINDOWEVENT_FOCUS_GAINED then
+          if not evtWin.isMain and evtWin.rootNodeId then
+            bridge:pushEvent({
+              type = "capability",
+              payload = {
+                targetId = evtWin.rootNodeId,
+                handler = "onFocus",
+              },
+            })
+          end
+
+        elseif we == SDL_WINDOWEVENT_FOCUS_LOST then
+          if not evtWin.isMain and evtWin.rootNodeId then
+            bridge:pushEvent({
+              type = "capability",
+              payload = {
+                targetId = evtWin.rootNodeId,
+                handler = "onBlur",
+              },
+            })
+          end
         end
 
       elseif t == SDL_MOUSEMOTION then
-        mx = event.motion.x * scaleX
-        my = event.motion.y * scaleY
-        Shim.setMousePosition(mx, my)
-        devtools.mousemoved(mx, my)
-        if root then
-          events.updateHover(root, mx, my)
+        local wid = event.motion.wid
+        local evtWin = WM.getBySDLId(wid) or mainWin
+        local mx = event.motion.x * evtWin.scaleX
+        local my = event.motion.y * evtWin.scaleY
+        evtWin.mx, evtWin.my = mx, my
+
+        if evtWin.isMain then
+          Shim.setMousePosition(mx, my)
+          devtools.mousemoved(mx, my)
+        end
+
+        events.setActiveWindow(evtWin)
+        local winRoot = getWindowRoot(evtWin, tree)
+        if winRoot then
+          events.updateHover(winRoot, mx, my)
         end
 
       elseif t == SDL_MOUSEBTNDOWN or t == SDL_MOUSEBTNUP then
-        local btn    = event.button.button  -- 1=left, 2=middle, 3=right
-        mx = event.button.x * scaleX
-        my = event.button.y * scaleY
-        Shim.setMousePosition(mx, my)
+        local wid = event.button.wid
+        local evtWin = WM.getBySDLId(wid) or mainWin
+        local btn = event.button.button  -- 1=left, 2=middle, 3=right
+        local mx = event.button.x * evtWin.scaleX
+        local my = event.button.y * evtWin.scaleY
+        evtWin.mx, evtWin.my = mx, my
 
-        -- Route to devtools first
-        local devConsumed = false
-        if t == SDL_MOUSEBTNDOWN then
-          devConsumed = devtools.mousepressed(mx, my, btn)
-        else
-          devConsumed = devtools.mousereleased(mx, my, btn)
+        events.setActiveWindow(evtWin)
+
+        if evtWin.isMain then
+          Shim.setMousePosition(mx, my)
         end
 
-        if not devConsumed and root then
-          local hit = events.hitTest(root, mx, my)
-          if hit then
-            if t == SDL_MOUSEBTNDOWN then
-              events.setPressedNode(hit)
-              local path = events.buildBubblePath(hit)
-              bridge:pushEvent(
-                events.createEvent("click", hit.id, mx, my, btn, path))
-            else
+        -- Route to devtools first (main window only)
+        local devConsumed = false
+        if evtWin.isMain then
+          if t == SDL_MOUSEBTNDOWN then
+            devConsumed = devtools.mousepressed(mx, my, btn)
+          else
+            devConsumed = devtools.mousereleased(mx, my, btn)
+          end
+        end
+
+        if not devConsumed then
+          local winRoot = getWindowRoot(evtWin, tree)
+          if winRoot then
+            local hit = events.hitTest(winRoot, mx, my)
+            if hit then
+              if t == SDL_MOUSEBTNDOWN then
+                events.setPressedNode(hit)
+                local path = events.buildBubblePath(hit)
+                bridge:pushEvent(
+                  events.createEvent("click", hit.id, mx, my, btn, path))
+              else
+                events.clearPressedNode()
+                local path = events.buildBubblePath(hit)
+                bridge:pushEvent(
+                  events.createEvent("release", hit.id, mx, my, btn, path))
+              end
+            elseif t == SDL_MOUSEBTNUP then
               events.clearPressedNode()
-              local path = events.buildBubblePath(hit)
-              bridge:pushEvent(
-                events.createEvent("release", hit.id, mx, my, btn, path))
             end
-          elseif t == SDL_MOUSEBTNUP then
-            events.clearPressedNode()
           end
         end
 
       elseif t == SDL_MOUSEWHEEL then
+        local wid = event.wheel.wid
+        local evtWin = WM.getBySDLId(wid) or mainWin
         local dx = event.wheel.x
         local dy = event.wheel.y
+        local mx, my = evtWin.mx, evtWin.my
 
-        -- Route to devtools first
-        if devtools.wheelmoved(dx, dy) then
-          -- consumed by devtools panel
-        elseif root then
-          local hit = events.hitTest(root, mx, my)
-          if hit then
-            -- Update Lua-side scroll state for immediate visual response
-            local scrollContainer = events.findScrollableContainer(hit, dx, -dy)
-            if scrollContainer and scrollContainer.scrollState then
-              local ss = scrollContainer.scrollState
-              local scrollSpeed = 40
-              local newScrollX = (ss.scrollX or 0) - dx * scrollSpeed
-              local newScrollY = (ss.scrollY or 0) - dy * scrollSpeed
-              tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
-              needsLayout = true
+        events.setActiveWindow(evtWin)
+
+        -- Route to devtools first (main window only)
+        local devConsumed = evtWin.isMain and devtools.wheelmoved(dx, dy)
+
+        if not devConsumed then
+          local winRoot = getWindowRoot(evtWin, tree)
+          if winRoot then
+            local hit = events.hitTest(winRoot, mx, my)
+            if hit then
+              -- Update Lua-side scroll state for immediate visual response
+              local scrollContainer = events.findScrollableContainer(hit, dx, -dy)
+              if scrollContainer and scrollContainer.scrollState then
+                local ss = scrollContainer.scrollState
+                local scrollSpeed = 40
+                local newScrollX = (ss.scrollX or 0) - dx * scrollSpeed
+                local newScrollY = (ss.scrollY or 0) - dy * scrollSpeed
+                tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
+                evtWin.needsLayout = true
+              end
+              -- Send wheel event to JS
+              local path = events.buildBubblePath(hit)
+              bridge:pushEvent(
+                events.createWheelEvent(hit.id, mx, my, dx, -dy, path))
             end
-            -- Send wheel event to JS
-            local path = events.buildBubblePath(hit)
-            bridge:pushEvent(
-              events.createWheelEvent(hit.id, mx, my, dx, -dy, path))
           end
         end
 
@@ -401,7 +517,7 @@ function SDL2Init.run(config)
           -- Devtools gets first shot at keys (F12, backtick, Escape, etc.)
           if devtools.keypressed(keyname) then
             consumed = true
-            needsLayout = true
+            mainWin.needsLayout = true
 
           -- Escape: quit (only if devtools didn't consume it)
           elseif keyname == "escape" then
@@ -413,17 +529,17 @@ function SDL2Init.run(config)
             if keyname == "=" or keyname == "kp+" then
               Measure.setTextScale(Measure.getTextScale() + 0.1)
               if tree then tree.markDirty() end
-              needsLayout = true
+              mainWin.needsLayout = true
               consumed = true
             elseif keyname == "-" or keyname == "kp-" then
               Measure.setTextScale(Measure.getTextScale() - 0.1)
               if tree then tree.markDirty() end
-              needsLayout = true
+              mainWin.needsLayout = true
               consumed = true
             elseif keyname == "0" or keyname == "kp0" then
               Measure.setTextScale(1.0)
               if tree then tree.markDirty() end
-              needsLayout = true
+              mainWin.needsLayout = true
               consumed = true
             end
           end
@@ -453,33 +569,69 @@ function SDL2Init.run(config)
     local commands = bridge:drainCommands()
     if #commands > 0 then
       tree.applyCommands(commands)
-      needsLayout = true
-    end
-
-    -- ---- Layout ----
-    root = tree.getTree()
-    if root and needsLayout then
-      local vh = devtools.getViewportHeight()
-      layout.layout(root, 0, 0, W, vh)
-      needsLayout = false
-    end
-
-    -- ---- Paint ----
-    GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
-    GL.glLoadIdentity()
-
-    if root then
-      local ok, err = pcall(Painter.paint, root)
-      if not ok then
-        io.write("[sdl2_init] paint error: " .. tostring(err) .. "\n")
-        io.flush()
+      -- Mark all windows as needing layout when tree changes
+      for _, win in ipairs(WM.getAll()) do
+        win.needsLayout = true
       end
     end
 
-    -- ---- Devtools overlay ----
-    devtools.draw(root)
+    -- ---- Capabilities sync ----
+    local dt = TARGET_MS / 1000
+    capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
 
-    sdl.SDL_GL_SwapWindow(window)
+    -- ---- Per-window layout + paint ----
+    local allWindows = WM.getAll()
+
+    for _, win in ipairs(allWindows) do
+      local winRoot = getWindowRoot(win, tree)
+      if winRoot and win.needsLayout then
+        if win.isMain then
+          local vh = devtools.getViewportHeight()
+          layout.layout(winRoot, 0, 0, win.width, vh)
+        else
+          -- Mark node as window root so layout doesn't skip it via isNonVisual
+          winRoot._isWindowRoot = true
+          layout.layout(winRoot, 0, 0, win.width, win.height)
+          winRoot._isWindowRoot = nil
+        end
+        win.needsLayout = false
+      end
+    end
+
+    for _, win in ipairs(allWindows) do
+      -- Switch GL context to this window
+      sdl.SDL_GL_MakeCurrent(win.sdlWindow, win.glContext)
+      GL.glViewport(0, 0, win.width, win.height)
+      GL.glMatrixMode(GL.PROJECTION)
+      GL.glLoadIdentity()
+      GL.glOrtho(0, win.width, win.height, 0, -1, 1)
+      GL.glMatrixMode(GL.MODELVIEW)
+      GL.glLoadIdentity()
+
+      GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
+
+      Painter.setDimensions(win.width, win.height)
+
+      local winRoot = getWindowRoot(win, tree)
+      if winRoot then
+        -- Mark as window root so painter doesn't skip it via rendersInOwnSurface
+        if not win.isMain then winRoot._isWindowRoot = true end
+        local ok, err = pcall(Painter.paint, winRoot)
+        if not win.isMain then winRoot._isWindowRoot = nil end
+        if not ok then
+          io.write("[sdl2_init] paint error (window #" .. win.id .. "): " .. tostring(err) .. "\n")
+          io.flush()
+        end
+      end
+
+      -- Devtools overlay (main window only)
+      if win.isMain then
+        root = winRoot  -- keep for cleanup compatibility
+        devtools.draw(winRoot)
+      end
+
+      sdl.SDL_GL_SwapWindow(win.sdlWindow)
+    end
 
     -- ---- Frame cap ----
     local elapsed = sdl.SDL_GetTicks() - frameStart
@@ -489,6 +641,13 @@ function SDL2Init.run(config)
   -- ------------------------------------------------------------------
   -- 5. Cleanup
   -- ------------------------------------------------------------------
+  -- Destroy child windows first
+  for _, win in ipairs(WM.getAll()) do
+    if not win.isMain then
+      WM.destroy(win.id)
+    end
+  end
+
   bridge:destroy()
   Font.done()
   sdl.SDL_GL_DeleteContext(ctx)

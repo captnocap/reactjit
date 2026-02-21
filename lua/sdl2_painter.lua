@@ -270,10 +270,31 @@ end
 -- Node painter
 -- ============================================================================
 
+-- Lazy-loaded capabilities module for checking rendersInOwnSurface
+local CapabilitiesModule = nil
+
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
   inheritedOpacity = inheritedOpacity or 1
   stencilDepth     = stencilDepth or 0
+
+  -- Skip non-visual capability nodes and nodes that render in their own surface
+  -- (e.g. Window). The _isWindowRoot flag exempts Window nodes when they ARE
+  -- the root of their own window's paint pass.
+  if not CapabilitiesModule then
+    local ok, mod = pcall(require, "lua.capabilities")
+    if ok then CapabilitiesModule = mod end
+  end
+  if CapabilitiesModule then
+    if CapabilitiesModule.isNonVisual(node.type)
+       and not CapabilitiesModule.rendersInOwnSurface(node.type) then
+      return
+    end
+    if CapabilitiesModule.rendersInOwnSurface(node.type)
+       and not node._isWindowRoot then
+      return
+    end
+  end
 
   local c = node.computed
   local s = node.style or {}

@@ -35,6 +35,7 @@ import { PolyPizzaStory } from './PolyPizzaStory';
 import { GamesStory } from './GamesStory';
 import { StressTestStory } from './StressTestStory';
 import { CompositionStory } from './CompositionStory';
+import { MultiWindowStory } from './MultiWindowStory';
 
 
 export const stories: StoryDef[] = [
@@ -71,6 +72,7 @@ export const stories: StoryDef[] = [
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },
 
   // Dev
+  { id: 'multi-window', title: 'Multi-Window', section: 'Dev', component: MultiWindowStory },
   { id: 'cartridge-inspector', title: 'Cartridge Inspector', section: 'Dev', component: CartridgeInspectorStory },
   { id: 'error-test', title: 'Error Test', section: 'Dev', component: ErrorTestStory },
 ];

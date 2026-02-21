@@ -18,7 +18,7 @@
 
 import React from 'react';
 import { Native } from './Native';
-import type { AudioProps, TimerProps, LLMAgentProps } from './types';
+import type { AudioProps, TimerProps, LLMAgentProps, WindowProps } from './types';
 
 /**
  * Declarative audio playback.
@@ -51,4 +51,21 @@ export function Timer(props: TimerProps) {
  */
 export function LLMAgent(props: LLMAgentProps) {
   return <Native type="LLMAgent" {...props} />;
+}
+
+/**
+ * Render children in a separate OS window (SDL2 target only).
+ * All windows share the same React tree — state flows via props/context.
+ *
+ * @example
+ * <Window title="Inspector" width={400} height={600}>
+ *   <InspectorPanel data={appState} />
+ * </Window>
+ *
+ * <Window title="Feeds" width={800} height={600} onClose={() => setShow(false)}>
+ *   <CameraGrid />
+ * </Window>
+ */
+export function Window(props: WindowProps) {
+  return <Native type="Window" {...props} />;
 }

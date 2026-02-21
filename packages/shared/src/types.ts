@@ -652,6 +652,25 @@ export interface LLMAgentProps {
 }
 
 /**
+ * Props for the <Window> component — renders children in a separate OS window.
+ * All windows share the same React tree; state flows naturally via props/context.
+ * SDL2 target only.
+ */
+export interface WindowProps {
+  title?: string;
+  width?: number;
+  height?: number;
+  x?: number;
+  y?: number;
+  onClose?: (event: LoveEvent) => void;
+  onResize?: (event: LoveEvent) => void;
+  onFocus?: (event: LoveEvent) => void;
+  onBlur?: (event: LoveEvent) => void;
+  children?: React.ReactNode;
+  key?: string | number;
+}
+
+/**
  * Schema returned by capabilities:list RPC for AI discovery.
  */
 export interface CapabilitySchema {

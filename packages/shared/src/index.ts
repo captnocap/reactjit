@@ -224,9 +224,9 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent } from './capabilities';
+export { Audio, Timer, LLMAgent, Window } from './capabilities';
 export { useCapabilities } from './useCapabilities';
-export type { NativeProps, AudioProps, TimerProps, LLMAgentProps, CapabilitySchema } from './types';
+export type { NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps, CapabilitySchema } from './types';
 
 // Generative canvas effects
 export {

@@ -66,6 +66,16 @@ function Capabilities.isNonVisual(typeName)
   return cap ~= nil and not cap.visual
 end
 
+--- Check if a capability renders in its own surface (e.g. Window).
+--- These nodes should be skipped by the parent window's paint/layout,
+--- but their children are rendered in a separate window.
+--- @param typeName string
+--- @return boolean
+function Capabilities.rendersInOwnSurface(typeName)
+  local cap = registry[typeName]
+  return cap ~= nil and cap.rendersInOwnSurface == true
+end
+
 -- ============================================================================
 -- Tree sync (called per-frame from init.lua)
 -- ============================================================================
@@ -203,6 +213,7 @@ function Capabilities.loadAll()
     "audio",
     "timer",
     "llm_agent",
+    "window",
   }
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)

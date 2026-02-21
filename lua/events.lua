@@ -25,20 +25,29 @@ end
 -- State
 -- ============================================================================
 
-local hoveredNode = nil
-local pressedNode = nil
-
-local dragState = {
-  active = false,
-  targetId = nil,     -- the node where drag started
-  startX = 0,
-  startY = 0,
-  lastX = 0,
-  lastY = 0,
-  thresholdCrossed = false,  -- whether we've moved enough to start dragging
+-- Default state (used when no active window is set, e.g. Love2D target)
+local defaultState = {
+  hoveredNode = nil,
+  pressedNode = nil,
+  dragState = {
+    active = false,
+    targetId = nil,
+    startX = 0, startY = 0,
+    lastX = 0, lastY = 0,
+    thresholdCrossed = false,
+  },
 }
 
+-- Active window entry (set per-event-pass for multi-window SDL2 target).
+-- When set, pointer state is read/written from this entry instead of defaultState.
+local activeWindow = nil
+
 local DRAG_THRESHOLD = 5  -- pixels of movement needed to trigger drag
+
+-- Get the current pointer state table (active window or default)
+local function getState()
+  return activeWindow or defaultState
+end
 
 -- ============================================================================
 -- Hit testing
@@ -529,20 +538,27 @@ end
 -- Pointer enter / leave tracking
 -- ============================================================================
 
+--- Set the active window for per-window pointer state (SDL2 multi-window).
+--- Pass nil to revert to default state (Love2D compatibility).
+function Events.setActiveWindow(winEntry)
+  activeWindow = winEntry
+end
+
 --- Update hover tracking. Call from love.mousemoved.
 --- Returns a list of events to dispatch (may be empty, or contain
 --- a pointerLeave and/or pointerEnter event).
 function Events.updateHover(tree, mx, my)
   local hit = Events.hitTest(tree, mx, my)
   local eventsOut = {}
+  local st = getState()
 
-  if hit ~= hoveredNode then
+  if hit ~= st.hoveredNode then
     Log.log("events", "hover change: %s -> %s at (%d,%d)",
-      hoveredNode and tostring(hoveredNode.id) or "nil",
+      st.hoveredNode and tostring(st.hoveredNode.id) or "nil",
       hit and tostring(hit.id) or "nil", mx, my)
-    if hoveredNode then
+    if st.hoveredNode then
       eventsOut[#eventsOut + 1] = Events.createEvent(
-        "pointerLeave", hoveredNode.id, mx, my, nil
+        "pointerLeave", st.hoveredNode.id, mx, my, nil
       )
     end
     if hit then
@@ -550,7 +566,7 @@ function Events.updateHover(tree, mx, my)
         "pointerEnter", hit.id, mx, my, nil
       )
     end
-    hoveredNode = hit
+    st.hoveredNode = hit
   end
 
   return eventsOut
@@ -558,12 +574,12 @@ end
 
 --- Return the currently hovered node (or nil).
 function Events.getHoveredNode()
-  return hoveredNode
+  return getState().hoveredNode
 end
 
 --- Reset hover state (e.g. on tree rebuild).
 function Events.clearHover()
-  hoveredNode = nil
+  getState().hoveredNode = nil
 end
 
 -- ============================================================================
@@ -573,18 +589,18 @@ end
 --- Set the currently pressed node.
 --- Called from mousepressed when a node is hit.
 function Events.setPressedNode(node)
-  pressedNode = node
+  getState().pressedNode = node
 end
 
 --- Return the currently pressed node (or nil).
 function Events.getPressedNode()
-  return pressedNode
+  return getState().pressedNode
 end
 
 --- Clear pressed node state.
 --- Called from mousereleased.
 function Events.clearPressedNode()
-  pressedNode = nil
+  getState().pressedNode = nil
 end
 
 -- ============================================================================
@@ -594,76 +610,78 @@ end
 --- Start tracking a potential drag operation.
 --- Called from mousepressed when a node is hit.
 function Events.startDrag(targetId, x, y)
-  dragState.active = true
-  dragState.targetId = targetId
-  dragState.startX = x
-  dragState.startY = y
-  dragState.lastX = x
-  dragState.lastY = y
-  dragState.thresholdCrossed = false
+  local ds = getState().dragState
+  ds.active = true
+  ds.targetId = targetId
+  ds.startX = x
+  ds.startY = y
+  ds.lastX = x
+  ds.lastY = y
+  ds.thresholdCrossed = false
 end
 
 --- Update drag tracking during mouse movement.
 --- Returns a drag event if the threshold has been crossed, nil otherwise.
 --- Also returns a dragstart event on the first movement past threshold.
 function Events.updateDrag(x, y)
-  if not dragState.active then return nil end
+  local ds = getState().dragState
+  if not ds.active then return nil end
 
-  local dx = x - dragState.lastX
-  local dy = y - dragState.lastY
+  local dx = x - ds.lastX
+  local dy = y - ds.lastY
   local eventsOut = {}
 
   -- Check if we've crossed the drag threshold
-  if not dragState.thresholdCrossed then
-    local totalDx = x - dragState.startX
-    local totalDy = y - dragState.startY
+  if not ds.thresholdCrossed then
+    local totalDx = x - ds.startX
+    local totalDy = y - ds.startY
     local distance = math.sqrt(totalDx * totalDx + totalDy * totalDy)
 
     if distance >= DRAG_THRESHOLD then
-      dragState.thresholdCrossed = true
+      ds.thresholdCrossed = true
 
       -- Fire dragstart event
       eventsOut[#eventsOut + 1] = Events.createDragEvent(
         "dragstart",
-        dragState.targetId,
+        ds.targetId,
         x,
         y,
         dx,
         dy,
-        dragState.startX,
-        dragState.startY
+        ds.startX,
+        ds.startY
       )
 
       -- Immediately fire drag event with current position
       eventsOut[#eventsOut + 1] = Events.createDragEvent(
         "drag",
-        dragState.targetId,
+        ds.targetId,
         x,
         y,
         dx,
         dy,
-        dragState.startX,
-        dragState.startY
+        ds.startX,
+        ds.startY
       )
 
-      dragState.lastX = x
-      dragState.lastY = y
+      ds.lastX = x
+      ds.lastY = y
     end
   else
     -- Threshold already crossed, continue firing drag events
     eventsOut[#eventsOut + 1] = Events.createDragEvent(
       "drag",
-      dragState.targetId,
+      ds.targetId,
       x,
       y,
       dx,
       dy,
-      dragState.startX,
-      dragState.startY
+      ds.startX,
+      ds.startY
     )
 
-    dragState.lastX = x
-    dragState.lastY = y
+    ds.lastX = x
+    ds.lastY = y
   end
 
   return eventsOut
@@ -672,29 +690,30 @@ end
 --- End drag tracking.
 --- Returns a dragend event if the threshold was crossed, nil otherwise.
 function Events.endDrag(x, y)
-  if not dragState.active then return nil end
+  local ds = getState().dragState
+  if not ds.active then return nil end
 
   local event = nil
-  if dragState.thresholdCrossed then
-    local dx = x - dragState.lastX
-    local dy = y - dragState.lastY
+  if ds.thresholdCrossed then
+    local dx = x - ds.lastX
+    local dy = y - ds.lastY
 
     event = Events.createDragEvent(
       "dragend",
-      dragState.targetId,
+      ds.targetId,
       x,
       y,
       dx,
       dy,
-      dragState.startX,
-      dragState.startY
+      ds.startX,
+      ds.startY
     )
   end
 
   -- Reset drag state
-  dragState.active = false
-  dragState.targetId = nil
-  dragState.thresholdCrossed = false
+  ds.active = false
+  ds.targetId = nil
+  ds.thresholdCrossed = false
 
   return event
 end
@@ -702,19 +721,20 @@ end
 --- Cancel an active drag without emitting any events.
 --- Used when text selection takes over from a normal drag.
 function Events.cancelDrag()
-  dragState.active = false
-  dragState.targetId = nil
-  dragState.thresholdCrossed = false
+  local ds = getState().dragState
+  ds.active = false
+  ds.targetId = nil
+  ds.thresholdCrossed = false
 end
 
 --- Check if a drag is currently active.
 function Events.isDragging()
-  return dragState.active
+  return getState().dragState.active
 end
 
 --- Check if the drag threshold has been crossed.
 function Events.isDragThresholdCrossed()
-  return dragState.thresholdCrossed
+  return getState().dragState.thresholdCrossed
 end
 
 return Events

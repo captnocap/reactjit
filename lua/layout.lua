@@ -95,9 +95,9 @@ function Layout.resolveUnit(value, parentSize)
   if unit == "%" then
     return (num / 100) * (parentSize or 0)
   elseif unit == "vw" then
-    return (num / 100) * love.graphics.getWidth()
+    return (num / 100) * (Layout._viewportW or (love and love.graphics and love.graphics.getWidth() or 1280))
   elseif unit == "vh" then
-    return (num / 100) * love.graphics.getHeight()
+    return (num / 100) * (Layout._viewportH or (love and love.graphics and love.graphics.getHeight() or 720))
   end
 
   -- bare number or unknown unit -- treat as pixels
@@ -449,13 +449,25 @@ function Layout.layoutNode(node, px, py, pw, ph)
   end
 
   -- Non-visual capability nodes (Audio, Timer, etc.) have no layout.
+  -- Capabilities that render in their own surface (Window) also skip layout
+  -- when they appear as children in a parent's layout pass — but NOT when
+  -- they are the root of their own window's layout pass (px==0 and py==0
+  -- and pw > 0 indicates a root-level call from the window manager).
   if not Layout._capabilities then
     local ok, mod = pcall(require, "lua.capabilities")
     if ok then Layout._capabilities = mod end
   end
-  if Layout._capabilities and Layout._capabilities.isNonVisual(node.type) then
-    node.computed = { x = px, y = py, w = 0, h = 0 }
-    return
+  if Layout._capabilities then
+    if Layout._capabilities.isNonVisual(node.type)
+       and not Layout._capabilities.rendersInOwnSurface(node.type) then
+      node.computed = { x = px, y = py, w = 0, h = 0 }
+      return
+    end
+    if Layout._capabilities.rendersInOwnSurface(node.type)
+       and not node._isWindowRoot then
+      node.computed = { x = px, y = py, w = 0, h = 0 }
+      return
+    end
   end
 
   -- Background-mode effects (e.g. <Spirograph background />) skip layout entirely.
