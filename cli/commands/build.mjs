@@ -105,9 +105,9 @@ export async function buildCommand(args) {
   const isDist = rawTarget && rawTarget.startsWith('dist:');
   const targetName = isDist ? rawTarget.slice(5) : rawTarget;
 
-  // No target → Love2D dev build (backwards compat)
+  // No target → SDL2 dev build (primary target)
   if (!rawTarget) {
-    await buildDevTarget(cwd, projectName, 'love');
+    await buildDevTarget(cwd, projectName, 'sdl2');
     return;
   }
 
@@ -119,7 +119,7 @@ export async function buildCommand(args) {
     console.error(`    ${TARGET_NAMES.join(', ')}`);
     console.error('');
     console.error('  Usage:');
-    console.error('    reactjit build                   Bundle JS for dev (Love2D, default)');
+    console.error('    reactjit build                   Bundle JS for dev (SDL2, default)');
     console.error('    reactjit build <target>          Dev build for any target');
     console.error('    reactjit build dist:<target>     Production executable');
     console.error('');
