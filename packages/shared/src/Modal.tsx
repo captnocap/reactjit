@@ -244,10 +244,10 @@ export function Modal({
           <Box style={{ width: '100%', height: '100%' }} />
         </Pressable>
 
-        {/* Content — in-flow, centered by parent, zIndex above backdrop */}
+        {/* Content — fills viewport, centers children, consumes clicks */}
         <Pressable
           onPress={() => {/* consume clicks so they don't reach the backdrop */}}
-          style={{ zIndex: 1, ...style }}
+          style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', zIndex: 1, ...style }}
         >
           {children}
         </Pressable>
