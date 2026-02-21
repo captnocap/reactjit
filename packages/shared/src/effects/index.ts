@@ -13,4 +13,13 @@ export { Mandala } from './Mandala';
 export { Cymatics } from './Cymatics';
 export type { CymaticsProps } from './Cymatics';
 
+export { Constellation } from './Constellation';
+export { Mycelium } from './Mycelium';
+export { Pipes } from './Pipes';
+export { StainedGlass } from './StainedGlass';
+export { Voronoi } from './Voronoi';
+export { Contours } from './Contours';
+export { Feedback } from './Feedback';
+export { PixelSort } from './PixelSort';
+
 export type { EffectProps } from './types';
