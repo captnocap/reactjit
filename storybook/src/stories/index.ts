@@ -13,27 +13,8 @@ import { TextStylesStory } from './TextStyles';
 import { ImageBasicStory } from './ImageBasic';
 import { ImageGalleryStory } from './ImageGalleryStory';
 import { FlexRowStory } from './FlexRow';
-import { FlexColumnStory } from './FlexColumn';
-import { FlexWrapStory } from './FlexWrap';
-import { PaddingMarginStory } from './PaddingMargin';
-import { PressableStory } from './PressableStory';
-import { SliderStory } from './SliderStory';
-import { SwitchStory } from './SwitchStory';
-import { ScrollViewStory } from './ScrollViewStory';
-import { ModalStory } from './ModalStory';
+import { InputStory } from './InputStory';
 import { GradientStory } from './Gradient';
-import { ShadowStory } from './Shadow';
-import { TransformStory } from './Transform';
-import { OpacityStory } from './Opacity';
-import { ZIndexStory } from './ZIndex';
-import { BorderRadiusStory } from './BorderRadius';
-import { FlexShrinkStory } from './FlexShrink';
-import { AspectRatioStory } from './AspectRatio';
-import { TextDecorationStory } from './TextDecoration';
-import { PerSideBorderStory } from './PerSideBorder';
-import { CheckboxStory } from './CheckboxStory';
-import { RadioStory } from './RadioStory';
-import { SelectStory } from './SelectStory';
 import { AnimationTimingStory } from './AnimationTiming';
 import { AnimationSpringStory } from './AnimationSpring';
 import { SettingsDemoStory } from './SettingsDemo';
@@ -41,7 +22,6 @@ import { NeofetchDemoStory } from './NeofetchDemo';
 import { WeatherDemoStory } from './WeatherDemo';
 import { ErrorTestStory } from './ErrorTest';
 import { BlockTestStory } from './BlockTestStory';
-import { TextEditorStory } from './TextEditorStory';
 import { TableStory } from './TableStory';
 import { BarChartStory } from './BarChartStory';
 import { ProgressBarStory } from './ProgressBarStory';
@@ -54,7 +34,6 @@ import { ToolbarStory } from './ToolbarStory';
 import { AppShellDemoStory } from './AppShellDemo';
 import { TradingViewBarsStory } from './TradingViewBarsStory';
 import { TradingPerfLabStory } from './TradingPerfLabStory';
-import { AutoSizeBasic } from './AutoSizeBasic';
 import { OverflowStressStory } from './OverflowStress';
 import { FetchStory } from './FetchStory';
 import { WebSocketStory } from './WebSocketStory';
@@ -62,8 +41,6 @@ import { TorIRCStory } from './TorIRCStory';
 import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
 import { FontShowcaseStory } from './FontShowcase';
-import { SpellCheckStory } from './SpellCheckStory';
-import { KeyboardHooksStory } from './KeyboardHooksStory';
 import { LlmsTxtReader } from './LlmsTxtReader';
 import { AIChatDemoStory } from './AIChatDemo';
 import { AICanvasStory } from './AICanvasDemo';
@@ -97,6 +74,7 @@ import { CapabilitiesStory } from './CapabilitiesStory';
 import { MapBasicStory } from './MapBasicStory';
 import { CartridgeInspectorStory } from './CartridgeInspectorStory';
 import { LocalStoreStory } from './LocalStoreStory';
+import { EffectsStory } from './EffectsStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -109,42 +87,13 @@ export const stories: StoryDef[] = [
   { id: 'font-showcase', title: 'Font Packs', category: 'Primitives', component: FontShowcaseStory },
 
   // Layout
-  { id: 'auto-size-basic', title: 'Auto-Sizing', category: 'Layout', component: AutoSizeBasic },
-  { id: 'flex-row', title: 'Flex Row', category: 'Layout', component: FlexRowStory },
-  { id: 'flex-column', title: 'Flex Column', category: 'Layout', component: FlexColumnStory },
-  { id: 'flex-wrap', title: 'Flex Wrap', category: 'Layout', component: FlexWrapStory },
-  { id: 'padding-margin', title: 'Padding & Margin', category: 'Layout', component: PaddingMarginStory },
-
-  // Components
-  { id: 'pressable', title: 'Pressable', category: 'Components', component: PressableStory },
-  { id: 'slider', title: 'Slider', category: 'Components', component: SliderStory },
-  { id: 'switch', title: 'Switch', category: 'Components', component: SwitchStory },
-  { id: 'scrollview', title: 'ScrollView', category: 'Components', component: ScrollViewStory },
-  { id: 'modal', title: 'Modal', category: 'Components', component: ModalStory },
+  { id: 'layout', title: 'Layout', category: 'Layout', component: FlexRowStory },
 
   // Visual
-  { id: 'gradient', title: 'Gradients', category: 'Visual', component: GradientStory },
-  { id: 'shadow', title: 'Box Shadow', category: 'Visual', component: ShadowStory },
-  { id: 'transform', title: 'Transforms', category: 'Visual', component: TransformStory },
-  { id: 'opacity', title: 'Opacity', category: 'Visual', component: OpacityStory },
-  { id: 'zindex', title: 'Z-Index', category: 'Visual', component: ZIndexStory },
-  { id: 'border-radius', title: 'Border Radius', category: 'Visual', component: BorderRadiusStory },
-
-  // CSS Features
-  { id: 'flex-shrink', title: 'Flex Shrink', category: 'CSS Features', component: FlexShrinkStory },
-  { id: 'aspect-ratio', title: 'Aspect Ratio', category: 'CSS Features', component: AspectRatioStory },
-  { id: 'text-decoration', title: 'Text Decoration', category: 'CSS Features', component: TextDecorationStory },
-  { id: 'per-side-border', title: 'Per-Side Borders', category: 'CSS Features', component: PerSideBorderStory },
+  { id: 'style', title: 'Style', category: 'Visual', component: GradientStory },
 
   // Input
-  { id: 'text-editor', title: 'TextEditor', category: 'Input', component: TextEditorStory },
-  { id: 'spell-check', title: 'Spell Check', category: 'Input', component: SpellCheckStory },
-  { id: 'keyboard-hooks', title: 'Keyboard Hooks', category: 'Input', component: KeyboardHooksStory },
-
-  // Forms
-  { id: 'checkbox', title: 'Checkbox', category: 'Forms', component: CheckboxStory },
-  { id: 'radio', title: 'Radio', category: 'Forms', component: RadioStory },
-  { id: 'select', title: 'Select', category: 'Forms', component: SelectStory },
+  { id: 'input', title: 'Input', category: 'Input', component: InputStory },
 
   // Animation
   { id: 'animation-timing', title: 'Spring Width', category: 'Animation', component: AnimationTimingStory },
@@ -241,6 +190,9 @@ export const stories: StoryDef[] = [
 
   // CartridgeOS
   { id: 'cartridge-inspector', title: 'Cartridge Inspector', category: 'CartridgeOS', component: CartridgeInspectorStory },
+
+  // Generative Effects
+  { id: 'effects', title: 'Effects', category: 'Generative', component: EffectsStory },
 
   // Addon components (from @ilovereact/components)
   ...addonStories,

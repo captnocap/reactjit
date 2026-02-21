@@ -31,8 +31,8 @@ const PRESETS: MapPreset[] = [
     label: 'San Francisco',
     center: [37.7749, -122.4194],
     zoom: 12.2,
-    pitch: 38,
-    bearing: 22,
+    pitch: 0,
+    bearing: 0,
     route: [
       [37.7938, -122.3965],
       [37.7842, -122.4072],
@@ -52,8 +52,8 @@ const PRESETS: MapPreset[] = [
     label: 'Tokyo',
     center: [35.6895, 139.6917],
     zoom: 11.8,
-    pitch: 34,
-    bearing: 48,
+    pitch: 0,
+    bearing: 0,
     route: [
       [35.7098, 139.7745],
       [35.7007, 139.7589],
@@ -73,8 +73,8 @@ const PRESETS: MapPreset[] = [
     label: 'London',
     center: [51.5072, -0.1276],
     zoom: 11.7,
-    pitch: 32,
-    bearing: 12,
+    pitch: 0,
+    bearing: 0,
     route: [
       [51.5182, -0.0786],
       [51.5121, -0.0995],
@@ -247,15 +247,15 @@ function Section({
 function ToggleButton({
   label,
   active,
-  onClick,
+  onPress,
 }: {
   label: string;
   active: boolean;
-  onClick: () => void;
+  onPress: () => void;
 }) {
   return (
     <Pressable
-      onClick={onClick}
+      onPress={onPress}
       style={{
         backgroundColor: active ? '#1d4ed8' : '#1a2649',
         borderRadius: 6,
@@ -452,7 +452,7 @@ export function MapBasicStory() {
                   key={p.id}
                   label={p.label}
                   active={preset.id === p.id}
-                  onClick={() => jumpToPreset(p.id)}
+                  onPress={() => jumpToPreset(p.id)}
                 />
               ))}
             </Box>
@@ -460,41 +460,41 @@ export function MapBasicStory() {
 
           <Section title="Layers" subtitle="Compose overlays and base map">
             <Box style={{ flexDirection: 'row', gap: 6 }}>
-              <ToggleButton label="OSM" active={tileSource === 'osm'} onClick={() => setTileSource('osm')} />
+              <ToggleButton label="OSM" active={tileSource === 'osm'} onPress={() => setTileSource('osm')} />
               <ToggleButton
                 label="Cycle"
                 active={tileSource === 'osm-cycle'}
-                onClick={() => setTileSource('osm-cycle')}
+                onPress={() => setTileSource('osm-cycle')}
               />
             </Box>
             <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              <ToggleButton label="Route" active={showRoute} onClick={() => setShowRoute((v) => !v)} />
-              <ToggleButton label="Fleet" active={showFleet} onClick={() => setShowFleet((v) => !v)} />
-              <ToggleButton label="Stops" active={showStops} onClick={() => setShowStops((v) => !v)} />
-              <ToggleButton label="Zone" active={showZone} onClick={() => setShowZone((v) => !v)} />
-              <ToggleButton label="Buildings" active={showBuildings} onClick={() => setShowBuildings((v) => !v)} />
-              <ToggleButton label="Loop" active={loopRoute} onClick={() => setLoopRoute((v) => !v)} />
+              <ToggleButton label="Route" active={showRoute} onPress={() => setShowRoute((v) => !v)} />
+              <ToggleButton label="Fleet" active={showFleet} onPress={() => setShowFleet((v) => !v)} />
+              <ToggleButton label="Stops" active={showStops} onPress={() => setShowStops((v) => !v)} />
+              <ToggleButton label="Zone" active={showZone} onPress={() => setShowZone((v) => !v)} />
+              <ToggleButton label="Buildings" active={showBuildings} onPress={() => setShowBuildings((v) => !v)} />
+              <ToggleButton label="Loop" active={loopRoute} onPress={() => setLoopRoute((v) => !v)} />
             </Box>
           </Section>
 
           <Section title="Camera" subtitle="Direct control without leaving the map">
             <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              <ToggleButton label="Zoom +" active={false} onClick={() => adjustZoom(0.6)} />
-              <ToggleButton label="Zoom -" active={false} onClick={() => adjustZoom(-0.6)} />
-              <ToggleButton label="Pitch +" active={false} onClick={() => adjustPitch(8)} />
-              <ToggleButton label="Pitch -" active={false} onClick={() => adjustPitch(-8)} />
-              <ToggleButton label="Rotate L" active={false} onClick={() => rotate(-15)} />
-              <ToggleButton label="Rotate R" active={false} onClick={() => rotate(15)} />
-              <ToggleButton label="North Up" active={false} onClick={() => setView((prev) => ({ ...prev, bearing: 0 }))} />
-              <ToggleButton label="Fit Route" active={false} onClick={fitRoute} />
+              <ToggleButton label="Zoom +" active={false} onPress={() => adjustZoom(0.6)} />
+              <ToggleButton label="Zoom -" active={false} onPress={() => adjustZoom(-0.6)} />
+              <ToggleButton label="Pitch +" active={false} onPress={() => adjustPitch(8)} />
+              <ToggleButton label="Pitch -" active={false} onPress={() => adjustPitch(-8)} />
+              <ToggleButton label="Rotate L" active={false} onPress={() => rotate(-15)} />
+              <ToggleButton label="Rotate R" active={false} onPress={() => rotate(15)} />
+              <ToggleButton label="North Up" active={false} onPress={() => setView((prev) => ({ ...prev, bearing: 0 }))} />
+              <ToggleButton label="Fit Route" active={false} onPress={fitRoute} />
             </Box>
           </Section>
 
           <Section title="Route Builder" subtitle="Seed and refine route geometry quickly">
             <Box style={{ flexDirection: 'row', gap: 6 }}>
-              <ToggleButton label="Add Center" active={false} onClick={addStopAtCenter} />
-              <ToggleButton label="Remove Last" active={false} onClick={trimRoute} />
-              <ToggleButton label="Reset" active={false} onClick={resetRoute} />
+              <ToggleButton label="Add Center" active={false} onPress={addStopAtCenter} />
+              <ToggleButton label="Remove Last" active={false} onPress={trimRoute} />
+              <ToggleButton label="Reset" active={false} onPress={resetRoute} />
             </Box>
             <Box style={{ gap: 4 }}>
               {waypoints.slice(0, 4).map((stop, i) => (
@@ -509,16 +509,16 @@ export function MapBasicStory() {
                     gap: 4,
                   }}
                 >
-                  <Pressable onClick={() => setSelectedStop(i)}>
+                  <Pressable onPress={() => setSelectedStop(i)}>
                     <Text fontSize={10} style={{ color: '#cddafd' }}>
                       {`Stop ${i + 1}  ${stop[0].toFixed(4)}, ${stop[1].toFixed(4)}`}
                     </Text>
                   </Pressable>
                   <Box style={{ flexDirection: 'row', gap: 4 }}>
-                    <ToggleButton label="N" active={false} onClick={() => nudgeStop(i, 0.002, 0)} />
-                    <ToggleButton label="S" active={false} onClick={() => nudgeStop(i, -0.002, 0)} />
-                    <ToggleButton label="E" active={false} onClick={() => nudgeStop(i, 0, 0.002)} />
-                    <ToggleButton label="W" active={false} onClick={() => nudgeStop(i, 0, -0.002)} />
+                    <ToggleButton label="N" active={false} onPress={() => nudgeStop(i, 0.002, 0)} />
+                    <ToggleButton label="S" active={false} onPress={() => nudgeStop(i, -0.002, 0)} />
+                    <ToggleButton label="E" active={false} onPress={() => nudgeStop(i, 0, 0.002)} />
+                    <ToggleButton label="W" active={false} onPress={() => nudgeStop(i, 0, -0.002)} />
                   </Box>
                 </Box>
               ))}

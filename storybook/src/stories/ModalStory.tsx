@@ -182,13 +182,13 @@ function ConfirmDialog({
 
 function InfoPanel({ onClose }: { onClose: () => void }) {
   const items = [
-    'PortalHost wraps the root — portals teleport content to the top of the tree.',
-    'The backdrop is a Pressable covering 100% of the viewport.',
-    'Content sits above the backdrop via zIndex: 1.',
-    'Clicks inside the content are consumed by a no-op Pressable wrapper.',
-    'Escape fires via onKeyDown broadcast to all nodes.',
-    'In native mode animations are skipped (setInterval is unreliable in QuickJS).',
-    'Web mode uses CSS transitions for fade and slide.',
+    'PortalHost wraps the root -- portals teleport content to the top of the tree',
+    'The backdrop is a Pressable covering 100% of the viewport',
+    'Content sits above the backdrop via zIndex: 1',
+    'Clicks inside the content are consumed by a no-op Pressable wrapper',
+    'Escape fires via onKeyDown broadcast to all nodes',
+    'In native mode animations are skipped (setInterval is unreliable in QuickJS)',
+    'Web mode uses CSS transitions for fade and slide',
   ];
 
   return (
@@ -197,7 +197,7 @@ function InfoPanel({ onClose }: { onClose: () => void }) {
         {items.map((item, i) => (
           <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
             <Text style={{ color: C.mauve, fontSize: 12, fontWeight: 'bold' }}>
-              {String(i + 1)}.
+              {`${i + 1}.`}
             </Text>
             <Text style={{ color: C.subtext, fontSize: 12 }}>
               {item}
