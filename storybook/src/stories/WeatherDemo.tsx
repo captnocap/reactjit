@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Text, Divider, Spacer,
-  BarChart, Sparkline, useSpring,
+  BarChart, Sparkline,
 } from '../../../packages/shared/src';
 
 /* ── sun pixel grid (11 wide x 11 tall) ──────────────── */
@@ -144,7 +144,6 @@ export function WeatherDemoStory() {
     return () => clearInterval(interval);
   }, []);
 
-  const animTemp = useSpring(w.temp, { stiffness: 80, damping: 18 });
   const secondsAgo = tick * 3;
   const timeLabel = secondsAgo === 0 ? 'just now' : `${secondsAgo}s ago`;
 
@@ -169,7 +168,7 @@ export function WeatherDemoStory() {
 
         <Box style={{ gap: 3 }}>
           <Text style={{ color: ACCENT, fontSize: 16, fontWeight: '700' }}>
-            {`${Math.round(animTemp)}F@sanfrancisco`}
+            {`${Math.round(w.temp)}F@sanfrancisco`}
           </Text>
           <Divider color={DIM} />
           <Box style={{ flexDirection: 'row', gap: 8 }}>

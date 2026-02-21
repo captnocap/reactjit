@@ -1,0 +1,64 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@ilovereact/core": [
+        "./ilovereact/shared/src"
+      ],
+      "@ilovereact/native": [
+        "./ilovereact/native/src"
+      ],
+      "@ilovereact/components": [
+        "./ilovereact/components/src"
+      ],
+      "@ilovereact/theme": [
+        "./ilovereact/theme/src"
+      ],
+      "@ilovereact/controls": [
+        "./ilovereact/controls/src"
+      ],
+      "@ilovereact/router": [
+        "./ilovereact/router/src"
+      ],
+      "@ilovereact/storage": [
+        "./ilovereact/storage/src"
+      ],
+      "@ilovereact/3d": [
+        "./ilovereact/3d/src"
+      ],
+      "@ilovereact/audio": [
+        "./ilovereact/audio/src"
+      ],
+      "@ilovereact/media": [
+        "./ilovereact/media/src"
+      ],
+      "@ilovereact/apis": [
+        "./ilovereact/apis/src"
+      ],
+      "@ilovereact/server": [
+        "./ilovereact/server/src"
+      ],
+      "@ilovereact/rss": [
+        "./ilovereact/rss/src"
+      ],
+      "@ilovereact/webhooks": [
+        "./ilovereact/webhooks/src"
+      ],
+      "@ilovereact/crypto": [
+        "./ilovereact/crypto/src"
+      ],
+      "@ilovereact/ai": [
+        "./ilovereact/ai/src"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

@@ -96,31 +96,32 @@ local PANEL_W_RATIO   = 0.82
 local PANEL_H_RATIO   = 0.84
 local MIN_PANEL_W     = 820
 local MIN_PANEL_H     = 520
-local TITLE_BAR_H     = 34
-local STATUS_BAR_H    = 24
+local TITLE_BAR_H     = 36
+local STATUS_BAR_H    = 26
 local CORNER_R        = 6
-local BODY_PAD        = 8
+local BODY_PAD        = 10
 local SECTION_PAD     = 6
 local SCROLL_SPEED    = 32
 
 local LIST_RATIO      = 0.43
-local LIST_HEADER_H   = 22
-local CARD_H          = 56
-local CARD_PAD        = 6
-local CARD_INNER_PAD  = 8
-local SWATCH_SIZE     = 13
+local LIST_HEADER_H   = 24
+local CARD_H          = 74
+local CARD_PAD        = 7
+local CARD_INNER_PAD  = 10
+local SWATCH_SIZE     = 12
 local SWATCH_GAP      = 3
 local SWATCH_RADIUS   = 2
 
 local SHOWCASE_RATIO  = 0.52
-local INPUT_H         = 24
-local BUTTON_H        = 22
+local INPUT_H         = 26
+local BUTTON_H        = 24
 
 local SWATCH_KEYS = {
   "bg", "bgAlt", "bgElevated", "primary", "accent",
   "text", "textSecondary", "surface", "border",
   "error", "warning", "success", "info",
 }
+local MAX_CARD_SWATCHES = 20
 
 local EDIT_KEYS = {
   "bg", "bgAlt", "bgElevated",
@@ -168,6 +169,12 @@ local function drawCenteredText(text, x, y, w, font, color)
   love.graphics.setFont(font)
   setColor(color)
   love.graphics.printf(text, x, y, w, "center")
+end
+
+local function drawRightText(text, rightX, y, font, color)
+  love.graphics.setFont(font)
+  setColor(color)
+  love.graphics.print(text, rightX - font:getWidth(text), y)
 end
 
 local function inRect(mx, my, r)
@@ -252,6 +259,50 @@ local function colorFromTokens(colors, key, fallbackA, fallbackB, fallbackC)
     end
   end
   return nil
+end
+
+local function collectCardSwatches(colors)
+  if type(colors) ~= "table" then return {} end
+  local out = {}
+  local seen = {}
+
+  for _, key in ipairs(SWATCH_KEYS) do
+    local rgba = hexToRGBA(colors[key])
+    if rgba then
+      out[#out + 1] = rgba
+      seen[key] = true
+    end
+  end
+
+  if #out < MAX_CARD_SWATCHES then
+    local extras = {}
+    for key, value in pairs(colors) do
+      if not seen[key] and type(value) == "string" then
+        local rgba = hexToRGBA(value)
+        if rgba then extras[#extras + 1] = { key = key, rgba = rgba } end
+      end
+    end
+    table.sort(extras, function(a, b) return a.key < b.key end)
+    for i = 1, math.min(#extras, MAX_CARD_SWATCHES - #out) do
+      out[#out + 1] = extras[i].rgba
+    end
+  end
+
+  return out
+end
+
+local function titleCaseWord(word)
+  if type(word) ~= "string" or word == "" then return "" end
+  return word:sub(1, 1):upper() .. word:sub(2)
+end
+
+local function formatThemeLabel(name)
+  if type(name) ~= "string" or name == "" then return "Unknown Theme" end
+  local words = {}
+  for part in name:gmatch("[^-]+") do
+    words[#words + 1] = titleCaseWord(part)
+  end
+  return table.concat(words, " ")
 end
 
 -- ============================================================================
@@ -397,16 +448,16 @@ local function buildUiColors(colors)
   end
 
   return {
-    backdrop      = withAlpha(bg, 0.74),
+    backdrop      = withAlpha(bg, 0.68),
     panelBg       = withAlpha(bgAlt, 0.98),
     titleBg       = withAlpha(bgElevated, 0.98),
     titleText     = text,
     border        = withAlpha(border, 0.90),
-    sectionBg     = withAlpha(surface, 0.93),
+    sectionBg     = withAlpha(surface, 0.95),
 
-    cardBg        = withAlpha(surface, 0.95),
-    cardHover     = withAlpha(surfaceHover or bgElevated, 0.97),
-    cardActive    = withAlpha(bgElevated, 0.99),
+    cardBg        = withAlpha(surface, 0.96),
+    cardHover     = withAlpha(surfaceHover or bgElevated, 0.99),
+    cardActive    = withAlpha(bgElevated, 1),
     cardBorder    = withAlpha(border, 0.55),
     activeBorder  = withAlpha(borderFocus or primary, 0.95),
     themeName     = textSecondary or text,
@@ -709,6 +760,8 @@ local function drawThemeList(layout, ui, fontName, fontStatus)
   drawRoundedRect("line", list.x, list.y, list.w, list.h, 4)
 
   drawText("Themes", list.x + 8, list.y + 4, fontName, ui.titleText)
+  drawText("Click a card to apply", list.x + 74, list.y + 5, fontStatus, ui.mutedText)
+  drawRightText(tostring(#state.themeNames), list.x + list.w - 8, list.y + 4, fontName, ui.mutedText)
 
   love.graphics.setScissor(content.x, content.y, content.w, content.h)
 
@@ -719,6 +772,7 @@ local function drawThemeList(layout, ui, fontName, fontStatus)
   for i, name in ipairs(state.themeNames) do
     local resolvedTheme = getResolvedThemeInternal(name)
     local colors = resolvedTheme and resolvedTheme.colors
+    local themeLabel = formatThemeLabel(name)
     local cardX = content.x
     local cardW = content.w
 
@@ -752,33 +806,57 @@ local function drawThemeList(layout, ui, fontName, fontStatus)
       love.graphics.setLineWidth(1)
 
       local nameColor = isActive and ui.themeNameActive or ui.themeName
-      local title = name
-      if isActive then title = title .. "  (active)" end
-      drawText(title, cardX + CARD_INNER_PAD, curY + 4, fontName, nameColor)
+      local titleY = curY + 5
+      drawText(themeLabel, cardX + CARD_INNER_PAD, titleY, fontName, nameColor)
+      drawText(name, cardX + CARD_INNER_PAD, titleY + 14, fontStatus, ui.mutedText)
+
+      if isActive then
+        local badgeText = "ACTIVE"
+        local badgeW = fontStatus:getWidth(badgeText) + 10
+        local badgeH = 14
+        local badgeX = cardX + cardW - CARD_INNER_PAD - badgeW
+        local badgeY = titleY
+        setColor(withAlpha(ui.activeBorder, 0.20))
+        drawRoundedRect("fill", badgeX, badgeY, badgeW, badgeH, 7)
+        setColor(ui.activeBorder)
+        drawRoundedRect("line", badgeX, badgeY, badgeW, badgeH, 7)
+        drawCenteredText(badgeText, badgeX, badgeY + 2, badgeW, fontStatus, ui.themeNameActive)
+      end
 
       if overridesCount > 0 then
-        drawText(
+        drawRightText(
           "+" .. tostring(overridesCount) .. " custom",
-          cardX + cardW - 86,
-          curY + 4,
+          cardX + cardW - CARD_INNER_PAD,
+          titleY + 15,
           fontStatus,
           ui.themeNameActive
         )
       end
 
-      local swatchY = curY + 24
-      local swatchX = cardX + CARD_INNER_PAD
       if colors then
-        for _, key in ipairs(SWATCH_KEYS) do
-          if swatchX + SWATCH_SIZE > cardX + cardW - 4 then break end
-          local rgba = hexToRGBA(colors[key])
-          if rgba then
+        local swatches = collectCardSwatches(colors)
+        if #swatches > 0 then
+          local rows = 2
+          local cols = math.ceil(#swatches / rows)
+          local swatchGapX = 4
+          local swatchGapY = 3
+          local gridW = cardW - CARD_INNER_PAD * 2
+          local swatchW = math.floor((gridW - swatchGapX * (cols - 1)) / cols)
+          local swatchH = 9
+          local swatchGridH = rows * swatchH + (rows - 1) * swatchGapY
+          local swatchY = curY + CARD_H - swatchGridH - 8
+          local swatchX = cardX + CARD_INNER_PAD
+
+          for idx, rgba in ipairs(swatches) do
+            local row = (idx - 1) % rows
+            local col = math.floor((idx - 1) / rows)
+            local x = swatchX + col * (swatchW + swatchGapX)
+            local y = swatchY + row * (swatchH + swatchGapY)
             setColor(rgba)
-            drawRoundedRect("fill", swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE, SWATCH_RADIUS)
+            drawRoundedRect("fill", x, y, swatchW, swatchH, SWATCH_RADIUS)
             setColor(ui.swatchBorder)
-            drawRoundedRect("line", swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE, SWATCH_RADIUS)
+            drawRoundedRect("line", x, y, swatchW, swatchH, SWATCH_RADIUS)
           end
-          swatchX = swatchX + SWATCH_SIZE + SWATCH_GAP
         end
       end
     end
@@ -849,7 +927,7 @@ local function drawPrimitiveShowcase(layout, ui, fontName, fontStatus)
   setColor(withAlpha(border, 0.95))
   drawRoundedRect("line", contentX, contentY, contentW, contentH, 4)
 
-  drawText("Text / Box / Pressable / Input / Status", contentX + 8, contentY + 6, fontStatus, textSecondary or text)
+  drawText("Text, Box, Pressable, Input, Status", contentX + 8, contentY + 6, fontStatus, textSecondary or text)
 
   local rowW = contentW - 16
   local rowX = contentX + 8
@@ -964,17 +1042,30 @@ local function drawTokenEditor(layout, ui, fontName, fontStatus)
   drawRoundedRect("line", pane.x, pane.y, pane.w, pane.h, 4)
 
   local themeName = currentEditableThemeName() or "none"
+  local resolvedTheme = getResolvedThemeInternal(themeName)
+  local activeKey = EDIT_KEYS[state.editKeyIdx] or "none"
+  local activeValue = (resolvedTheme and resolvedTheme.colors and resolvedTheme.colors[activeKey]) or "--"
+
   drawText("Theme Color Tuning", pane.x + 8, pane.y + 4, fontName, ui.titleText)
-  drawText(themeName, pane.x + pane.w - 170, pane.y + 4, fontStatus, ui.mutedText)
+  drawRightText(formatThemeLabel(themeName), pane.x + pane.w - 8, pane.y + 4, fontStatus, ui.mutedText)
 
   local innerX = pane.x + 8
   local innerY = pane.y + 22
   local innerW = pane.w - 16
   local innerH = pane.h - 30
 
+  drawText("Selected token: " .. activeKey, innerX, innerY, fontStatus, ui.themeNameActive)
+  drawRightText(activeValue, innerX + innerW, innerY, fontStatus, ui.mutedText)
+
+  local gridTopY = innerY + 14
+  local reservedFooter = INPUT_H + BUTTON_H + 26
+
   local cols = 3
+  if innerW >= 760 then cols = 4 end
+  if innerW <= 390 then cols = 2 end
   local rows = math.ceil(#EDIT_KEYS / cols)
-  local rowH = 20
+  local gridH = math.max(80, innerH - (gridTopY - innerY) - reservedFooter)
+  local rowH = math.max(16, math.min(24, math.floor(gridH / rows)))
   local colGap = 6
   local colW = math.floor((innerW - colGap * (cols - 1)) / cols)
 
@@ -984,7 +1075,7 @@ local function drawTokenEditor(layout, ui, fontName, fontStatus)
     local col = (idx - 1) % cols
     local row = math.floor((idx - 1) / cols)
     local x = innerX + col * (colW + colGap)
-    local y = innerY + row * rowH
+    local y = gridTopY + row * rowH
     local rect = { x = x, y = y, w = colW, h = rowH - 2 }
     state.editorTokenRects[idx] = rect
 
@@ -1002,22 +1093,33 @@ local function drawTokenEditor(layout, ui, fontName, fontStatus)
     setColor(borderColor)
     drawRoundedRect("line", rect.x, rect.y, rect.w, rect.h, 3)
 
-    local resolvedTheme = getResolvedThemeInternal(themeName)
     local swatch = resolvedTheme and resolvedTheme.colors and hexToRGBA(resolvedTheme.colors[key]) or nil
     if swatch then
+      local swatchSize = math.min(10, rect.h - 8)
       setColor(swatch)
-      drawRoundedRect("fill", rect.x + 4, rect.y + 4, 10, 10, 2)
+      drawRoundedRect("fill", rect.x + 4, rect.y + 4, swatchSize, swatchSize, 2)
       setColor(ui.swatchBorder)
-      drawRoundedRect("line", rect.x + 4, rect.y + 4, 10, 10, 2)
+      drawRoundedRect("line", rect.x + 4, rect.y + 4, swatchSize, swatchSize, 2)
     end
 
-    drawText(key, rect.x + 18, rect.y + 4, fontStatus, isActive and ui.themeNameActive or ui.themeName)
+    drawText(
+      key,
+      rect.x + 18,
+      rect.y + math.floor((rect.h - fontStatus:getHeight()) / 2),
+      fontStatus,
+      isActive and ui.themeNameActive or ui.themeName
+    )
   end
 
-  local tokenGridBottomY = innerY + rows * rowH
+  local tokenGridBottomY = gridTopY + rows * rowH
   local inputY = tokenGridBottomY + 8
+  local maxInputY = innerY + innerH - (INPUT_H + BUTTON_H + 16)
+  if inputY > maxInputY then inputY = maxInputY end
+
   local inputW = innerW
   state.inputRect = { x = innerX, y = inputY, w = inputW, h = INPUT_H }
+
+  drawText("Hex value", innerX, inputY - 11, fontStatus, ui.mutedText)
 
   setColor(ui.inputBg)
   drawRoundedRect("fill", innerX, inputY, inputW, INPUT_H, 4)
@@ -1048,19 +1150,19 @@ local function drawTokenEditor(layout, ui, fontName, fontStatus)
     drawRoundedRect("fill", rect.x, rect.y, rect.w, rect.h, 4)
     setColor(hovered and ui.inputFocus or ui.border)
     drawRoundedRect("line", rect.x, rect.y, rect.w, rect.h, 4)
-    drawCenteredText(text, rect.x, rect.y + 5, rect.w, fontStatus, textColor)
+    drawCenteredText(text, rect.x, rect.y + 6, rect.w, fontStatus, textColor)
   end
 
   local onApply = pickTextColor(ui.buttonApply, ui.titleText, ui.inputBg)
   local onReset = pickTextColor(ui.buttonReset, ui.titleText, ui.inputBg)
   local onDanger = pickTextColor(ui.buttonDanger, ui.titleText, ui.inputBg)
 
-  drawButton(state.applyRect, ui.buttonApply, "Apply", onApply, state.hoverApply)
+  drawButton(state.applyRect, ui.buttonApply, "Apply Color", onApply, state.hoverApply)
   drawButton(state.resetTokenRect, ui.buttonReset, "Reset Token", onReset, state.hoverResetToken)
   drawButton(state.resetThemeRect, ui.buttonDanger, "Reset Theme", onDanger, state.hoverResetTheme)
 
   drawText(
-    "Tip: click token, type color, Enter/Apply",
+    "Tip: Tab cycles tokens. Enter applies typed value.",
     innerX,
     buttonY + BUTTON_H + 4,
     fontStatus,
@@ -1085,7 +1187,7 @@ function ThemeMenu.draw()
   if not ui then return end
 
   local fontTitle = getFont(14)
-  local fontName = getFont(11)
+  local fontName = getFont(12)
   local fontStatus = getFont(10)
 
   -- Backdrop
@@ -1102,14 +1204,17 @@ function ThemeMenu.draw()
   setColor(ui.titleBg)
   drawRoundedRect("fill", p.x, p.y, p.w, TITLE_BAR_H, CORNER_R)
   love.graphics.rectangle("fill", p.x, p.y + TITLE_BAR_H - CORNER_R, p.w, CORNER_R)
-  drawText("Theme Studio", p.x + 12, p.y + 9, fontTitle, ui.titleText)
+  drawText("Theme Studio", p.x + 12, p.y + 7, fontTitle, ui.titleText)
+  drawText("F9 toggles panel", p.x + 112, p.y + 10, fontStatus, ui.mutedText)
 
-  local closeX = p.x + p.w - 28
+  local closeX = p.x + p.w - 34
   local closeY = p.y + 6
-  state.closeRect = { x = closeX, y = closeY, w = 20, h = 20 }
+  state.closeRect = { x = closeX, y = closeY, w = 24, h = 24 }
+  setColor(withAlpha(ui.cardBg, 0.85))
+  drawRoundedRect("fill", closeX, closeY, 24, 24, 4)
   setColor(state.hoverClose and ui.closeHover or ui.closeNormal)
-  love.graphics.setFont(getFont(14))
-  love.graphics.print("x", closeX + 5, closeY + 2)
+  drawRoundedRect("line", closeX, closeY, 24, 24, 4)
+  drawCenteredText("X", closeX, closeY + 5, 24, fontStatus, state.hoverClose and ui.closeHover or ui.closeNormal)
 
   setColor(ui.border)
   love.graphics.line(p.x, p.y + TITLE_BAR_H, p.x + p.w, p.y + TITLE_BAR_H)
@@ -1130,8 +1235,8 @@ function ThemeMenu.draw()
   love.graphics.line(p.x, statusY, p.x + p.w, statusY)
 
   local statusMsg = string.format(
-    "Current: %s | %d themes | F9 close",
-    state.currentName or "none",
+    "Current: %s | %d themes | Enter apply | Esc close",
+    formatThemeLabel(state.currentName or "none"),
     #state.themeNames
   )
   local statusColor = ui.statusText
@@ -1149,7 +1254,7 @@ function ThemeMenu.draw()
     end
   end
 
-  drawText(statusMsg, p.x + 10, statusY + 5, fontStatus, statusColor)
+  drawText(statusMsg, p.x + 10, statusY + 6, fontStatus, statusColor)
 end
 
 -- ============================================================================

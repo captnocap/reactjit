@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable, useSpring } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@ilovereact/core';
 import { useDVD } from '../dvd/context';
 import { MENU_BG_VIDEO } from '../data';
 import { rgba } from '../hex';
@@ -8,10 +8,8 @@ import { rgba } from '../hex';
 
 function MenuButton({ label, onPress }: { label: string; onPress: () => void }) {
   const [hovered, setHovered] = React.useState(false);
-  const glow = useSpring(hovered ? 1 : 0, { stiffness: 200, damping: 20 });
-
-  const bgAlpha = 0.3 + glow * 0.25;
-  const borderAlpha = 0.2 + glow * 0.6;
+  const bgAlpha = hovered ? 0.55 : 0.3;
+  const borderAlpha = hovered ? 0.8 : 0.2;
 
   return (
     <Pressable
@@ -28,6 +26,10 @@ function MenuButton({ label, onPress }: { label: string; onPress: () => void }) 
         borderWidth: 1,
         borderColor: rgba(212, 168, 67, borderAlpha),
         borderRadius: 4,
+        transition: {
+          backgroundColor: { duration: 220, easing: 'spring' },
+          borderColor: { duration: 220, easing: 'spring' },
+        },
       }}
     >
       <Text style={{

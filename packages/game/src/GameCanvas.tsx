@@ -4,8 +4,12 @@ import { useBridge, useRendererMode } from '@ilovereact/core';
 export interface GameProps {
   /** Name of the Lua game module to load (e.g. "blackhole" → lua/game/blackhole.lua) */
   module: string;
+  /** Optional stable key for multiple instances of the same module. */
+  instanceKey?: string;
   /** Draw mode: "react" = game only (React handles UI), "original" = game + love.graphics UI */
   mode?: 'react' | 'original';
+  /** Declarative config pushed to Lua (modules can handle command="configure"). */
+  config?: Record<string, any>;
   /** Event handlers keyed by event name. Fired when the Lua module marks state dirty. */
   on?: Record<string, (data: any) => void>;
   /** Style for the container Box */
@@ -28,9 +32,11 @@ export interface GameProps {
  *     <HUD hp={gameState.hp} />
  *   </Game>
  */
-export function Game({ module, mode = 'react', on, style, children }: GameProps) {
+export function Game({ module, instanceKey, mode = 'react', config, on, style, children }: GameProps) {
   const bridge = useBridge();
   const rendererMode = useRendererMode();
+  const autoInstanceKeyRef = useRef(`game:${module}:${Math.random().toString(36).slice(2, 10)}`);
+  const resolvedInstanceKey = instanceKey ?? autoInstanceKeyRef.current;
 
   // Stable ref for handlers so the subscription effect doesn't recreate
   const onRef = useRef(on);
@@ -40,19 +46,27 @@ export function Game({ module, mode = 'react', on, style, children }: GameProps)
   useEffect(() => {
     const unsub = bridge.subscribe('game:event', (e: any) => {
       if (!e) return;
+      if (e.module && e.module !== module) return;
+      if (e.instanceKey && e.instanceKey !== resolvedInstanceKey) return;
       const handler = onRef.current?.[e.name];
       if (handler) handler(e.data);
     });
     return () => unsub();
-  }, [bridge]);
+  }, [bridge, module, resolvedInstanceKey]);
 
   // Stable command sender for sending UI decisions back to Lua
   const send = useCallback(
     (command: string, args?: any) => {
-      bridge.rpc('game:command', { command, args });
+      bridge.rpc('game:command', { module, instanceKey: resolvedInstanceKey, command, args });
     },
-    [bridge],
+    [bridge, module, resolvedInstanceKey],
   );
+
+  // Declarative config push to Lua.
+  useEffect(() => {
+    if (!config) return;
+    send('configure', { config });
+  }, [config, send]);
 
   if (rendererMode === 'web') {
     return React.createElement(
@@ -79,6 +93,7 @@ export function Game({ module, mode = 'react', on, style, children }: GameProps)
     {
       style: { position: 'relative', ...style },
       module,
+      instanceKey: resolvedInstanceKey,
       mode,
     },
     children,

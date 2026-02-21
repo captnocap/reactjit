@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable, useSpring } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@ilovereact/core';
 import { useDVD } from '../dvd/context';
 import { rgba } from '../hex';
 import type { Extra } from '../data';
@@ -9,10 +9,8 @@ import type { Extra } from '../data';
 function ExtraItem({ extra, index }: { extra: Extra; index: number }) {
   const { playExtra } = useDVD();
   const [hovered, setHovered] = React.useState(false);
-  const glow = useSpring(hovered ? 1 : 0, { stiffness: 200, damping: 20 });
-
-  const bgAlpha = glow * 0.08;
-  const borderAlpha = 0.1 + glow * 0.5;
+  const bgAlpha = hovered ? 0.08 : 0;
+  const borderAlpha = hovered ? 0.6 : 0.1;
 
   return (
     <Pressable
@@ -30,6 +28,10 @@ function ExtraItem({ extra, index }: { extra: Extra; index: number }) {
         backgroundColor: rgba(212, 168, 67, bgAlpha),
         borderBottomWidth: 1,
         borderColor: rgba(255, 255, 255, borderAlpha),
+        transition: {
+          backgroundColor: { duration: 220, easing: 'spring' },
+          borderColor: { duration: 220, easing: 'spring' },
+        },
         gap: 20,
       }}
     >

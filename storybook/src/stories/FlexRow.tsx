@@ -1,6 +1,8 @@
-import React from 'react';
-import { Box, Text } from '../../../packages/shared/src';
+import React, { useState } from 'react';
+import { Box, Text, Pressable } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { FlexRowStory as CoreFlexRowStory } from '../../../packages/components/src/FlexRow/FlexRow.story';
+import { FlexColumnStory as CoreFlexColumnStory } from '../../../packages/components/src/FlexColumn/FlexColumn.story';
 
 const ROW_COLORS = ['#ef4444', '#f97316', '#eab308'];
 const WRAP_COLORS = [
@@ -41,6 +43,9 @@ function Bar({ label, width, color }: { label: string; width: number; color: str
 
 export function FlexRowStory() {
   const c = useThemeColors();
+  const [expanded, setExpanded] = useState(false);
+  const [toggled, setToggled] = useState(false);
+
   return (
     <Box style={{ width: '100%', padding: 16, alignItems: 'center' }}>
       <Box style={{ width: '100%', maxWidth: 760, gap: 14 }}>
@@ -325,6 +330,99 @@ export function FlexRowStory() {
               <Box style={{ height: 34, aspectRatio: 1, backgroundColor: '#a855f7', borderRadius: 5 }} />
               <Box style={{ height: 34, aspectRatio: 2, backgroundColor: '#d946ef', borderRadius: 5 }} />
               <Box style={{ height: 34, aspectRatio: 3, backgroundColor: '#ec4899', borderRadius: 5 }} />
+            </Box>
+          </Box>
+        </Box>
+
+        <Text style={{ color: c.text, fontSize: 12 }}>7. Core Layout Components (`FlexRow` / `FlexColumn`)</Text>
+        <Box style={{
+          width: '100%',
+          backgroundColor: c.bgElevated,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 12,
+          gap: 12,
+        }}>
+          <Box style={{ gap: 4 }}>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Core `FlexRow` component</Text>
+            <Box style={{ backgroundColor: c.surface, borderRadius: 6 }}>
+              <CoreFlexRowStory />
+            </Box>
+          </Box>
+          <Box style={{ gap: 4 }}>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Core `FlexColumn` component</Text>
+            <Box style={{ backgroundColor: c.surface, borderRadius: 6 }}>
+              <CoreFlexColumnStory />
+            </Box>
+          </Box>
+        </Box>
+
+        <Text style={{ color: c.text, fontSize: 12 }}>8. Spring Layout Animation</Text>
+        <Box style={{
+          width: '100%',
+          backgroundColor: c.bgElevated,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 12,
+          gap: 12,
+          alignItems: 'center',
+        }}>
+          <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
+            <Box style={{ width: 320, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 10, alignItems: 'center' }}>
+              <Text style={{ color: c.textSecondary, fontSize: 10 }}>Width spring</Text>
+              <Pressable
+                onPress={() => setExpanded(v => !v)}
+                style={{ backgroundColor: c.primary, padding: 10, borderRadius: 6, alignItems: 'center', width: 120 }}
+              >
+                <Text style={{ color: '#fff', fontSize: 12 }}>{expanded ? 'Collapse' : 'Expand'}</Text>
+              </Pressable>
+              <Box style={{
+                width: expanded ? 260 : 80,
+                height: 50,
+                backgroundColor: c.accent,
+                borderRadius: 6,
+                justifyContent: 'center',
+                alignItems: 'center',
+                overflow: 'hidden',
+                transition: {
+                  width: { duration: 320, easing: 'spring' },
+                },
+              }}>
+                <Text style={{ color: '#fff', fontSize: 12 }}>{expanded ? '260px' : '80px'}</Text>
+              </Box>
+            </Box>
+
+            <Box style={{ width: 320, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 10, alignItems: 'center' }}>
+              <Text style={{ color: c.textSecondary, fontSize: 10 }}>Position spring</Text>
+              <Pressable
+                onPress={() => setToggled(v => !v)}
+                style={{ backgroundColor: c.success, padding: 10, borderRadius: 6, alignItems: 'center', width: 120 }}
+              >
+                <Text style={{ color: '#fff', fontSize: 12 }}>Toggle</Text>
+              </Pressable>
+              <Box style={{
+                width: 60, height: 60,
+                backgroundColor: '#ef4444',
+                borderRadius: 30,
+                transform: {
+                  translateX: toggled ? 160 : 0,
+                  scaleX: toggled ? 1.2 : 1,
+                  scaleY: toggled ? 1.2 : 1,
+                },
+                justifyContent: 'center',
+                alignItems: 'center',
+                transition: {
+                  transform: { duration: 320, easing: 'spring' },
+                },
+              }}>
+                <Text style={{ color: '#fff', fontSize: 10 }}>{toggled ? '160' : '0'}</Text>
+              </Box>
+              <Box style={{ padding: 8, backgroundColor: c.bgElevated, borderRadius: 4, gap: 2 }}>
+                <Text style={{ color: c.textDim, fontSize: 10 }}>{`translateX: ${toggled ? 160 : 0}px`}</Text>
+                <Text style={{ color: c.textDim, fontSize: 10 }}>{`scale: ${toggled ? '1.20' : '1.00'}`}</Text>
+              </Box>
             </Box>
           </Box>
         </Box>

@@ -260,6 +260,14 @@ ilovereact screenshot [--output]  # Headless screenshot capture
 ilovereact update                 # Sync runtime files from CLI into current project
 ```
 
+### Poly Pizza One-Liner (OBJ + Attribution)
+
+```bash
+POLY_PIZZA_API_KEY=... npm run poly:fetch -- --model <model-id-or-url> --out assets/models
+```
+
+This downloads OBJ/MTL/textures into `assets/models/<model>/` and upserts attribution into `assets/models/ATTRIBUTIONS.md`.
+
 ---
 
 # For Developers

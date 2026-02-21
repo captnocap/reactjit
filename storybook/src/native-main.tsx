@@ -15,7 +15,7 @@ import { setCryptoBridge } from '../../packages/crypto/src/rpc';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost } from '../../packages/shared/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
-import { stories, type StoryDef } from './stories';
+import { stories, type StoryDef, type StorySection } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
 import { PlaygroundPanel } from './playground/PlaygroundPanel';
 import contentData from './generated/content.json';
@@ -34,11 +34,15 @@ let currentMode: 'stories' | 'docs' | 'playground' = 'stories';
 
 // ── Story browser (sidebar + viewer) ─────────────────────
 
-function groupByCategory(list: StoryDef[]): Map<string, StoryDef[]> {
-  const map = new Map<string, StoryDef[]>();
+const SECTION_ORDER: StorySection[] = ['Core', 'Packages', 'Demos', 'Stress Test', 'Dev'];
+
+function groupBySection(list: StoryDef[]): Map<StorySection, StoryDef[]> {
+  const map = new Map<StorySection, StoryDef[]>();
+  for (const section of SECTION_ORDER) map.set(section, []);
   for (const s of list) {
-    if (!map.has(s.category)) map.set(s.category, []);
-    map.get(s.category)!.push(s);
+    const section = (s.section ?? 'Packages') as StorySection;
+    if (!map.has(section)) map.set(section, []);
+    map.get(section)!.push(s);
   }
   return map;
 }
@@ -47,7 +51,7 @@ function StorybookPanel() {
   const initialIdx = (globalThis as any).__devState?.activeIdx ?? 0;
   const [activeIdx, setActiveIdx] = useState(initialIdx);
   currentActiveIdx = activeIdx; // sync for __getDevState
-  const groups = groupByCategory(stories);
+  const groups = groupBySection(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;
   const c = useThemeColors();
@@ -79,10 +83,10 @@ function StorybookPanel() {
         <Box style={{ height: 1, backgroundColor: c.border }} />
 
         {/* Story list */}
-        {Array.from(groups.entries()).map(([category, list]) => (
-          <Box key={category}>
+        {Array.from(groups.entries()).map(([section, list]) => (
+          <Box key={section}>
             <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-              <Text style={{ color: c.textDim, fontSize: 9 }}>{category.toUpperCase()}</Text>
+              <Text style={{ color: c.textDim, fontSize: 9 }}>{String(section || '').toUpperCase()}</Text>
             </Box>
             {list.map(s => {
               const idx = stories.indexOf(s);
@@ -127,7 +131,7 @@ function StorybookPanel() {
             {active?.title}
           </Text>
           <Text style={{ color: c.textDim, fontSize: 9 }}>
-            {active?.category}
+            {active?.section}
           </Text>
         </Box>
 

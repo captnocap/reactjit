@@ -183,7 +183,7 @@ dist-storybook: build-storybook-native setup
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
 	# Bundle goes into love/ subdir — matches bundlePath = "love/bundle.js" in main.lua.
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -191,6 +191,7 @@ dist-storybook: build-storybook-native setup
 	cp lua/audio/*.lua $(STAGING_DIR)/lua/audio/
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
+	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
 	# ── Assemble payload directory ──
 	# Don't fuse — ld-linux invocation breaks /proc/self/exe detection.
@@ -294,7 +295,7 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -302,6 +303,7 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	cp lua/audio/*.lua $(STAGING_DIR)/lua/audio/
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
+	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
 	rm -rf $(STAGING_DIR)
 	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll + mpv-2.dll ──
@@ -364,6 +366,8 @@ cli-setup: setup
 	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/
 	mkdir -p cli/runtime/lua/capabilities
 	cp lua/capabilities/*.lua cli/runtime/lua/capabilities/
+	mkdir -p cli/runtime/lua/effects
+	cp lua/effects/*.lua cli/runtime/lua/effects/
 	cp $(QUICKJS_DIR)/libquickjs.so cli/runtime/lib/
 	@echo "  Compiling ft_helper.so (FreeType bridge for SDL2 target)..."
 	@zig build ft-helper \
@@ -433,6 +437,9 @@ cli-setup: setup
 	cp -r packages/crypto cli/runtime/ilovereact/crypto
 	cp -r packages/media cli/runtime/ilovereact/media
 	cp -r packages/game cli/runtime/ilovereact/game
+	cp -r packages/3d cli/runtime/ilovereact/3d
+	cp -r packages/controls cli/runtime/ilovereact/controls
+	cp -r packages/geo cli/runtime/ilovereact/geo
 	cp -r packages/theme cli/runtime/ilovereact/theme
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/

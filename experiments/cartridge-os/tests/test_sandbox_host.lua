@@ -41,13 +41,27 @@ f:write("manifest_hash=abc123\n")
 f:write("namespaces=net,mnt,pid\n")
 f:close()
 
--- Mock verdict pipe: code=1 (verified) + 8 bytes key_id + 8 bytes padding
+-- Mock verdict pipe: open verdict data on FD 3 so sandbox.lua can read it
+-- via real_ffi.C.read(3, ...) just like in the real boot.
 f = real_io.open(TEST_DIR .. "/verdict", "wb")
 f:write(string.char(1))                          -- verdict code 1 = verified
 f:write(string.char(0xDE, 0xAD, 0xBE, 0xEF,     -- key_id bytes
                      0xCA, 0xFE, 0xBA, 0xBE))
 f:write(string.rep(string.char(0), 8))            -- padding
 f:close()
+
+-- Place the verdict data on FD 3 so the FFI-based read works
+local ffi_setup = require("ffi")
+ffi_setup.cdef[[
+  int open(const char *path, int flags);
+  int dup2(int oldfd, int newfd);
+  int close(int fd);
+]]
+local vfd = ffi_setup.C.open(TEST_DIR .. "/verdict", 0)  -- O_RDONLY = 0
+if vfd >= 0 then
+  ffi_setup.C.dup2(vfd, 3)
+  if vfd ~= 3 then ffi_setup.C.close(vfd) end
+end
 
 -- ── Load and patch sandbox.lua ─────────────────────────────────────────────
 
@@ -78,10 +92,8 @@ src = src:gsub(
   'real_io%.open%("/run/boot%-facts", "r"%)',
   'real_io.open("' .. TEST_DIR .. '/run/boot-facts", "r")')
 
--- Verdict pipe
-src = src:gsub(
-  'real_io%.open%("/proc/self/fd/3", "rb"%)',
-  'real_io.open("' .. TEST_DIR .. '/verdict", "rb")')
+-- Verdict pipe: no longer needs patching — sandbox reads FD 3 directly via FFI,
+-- and we placed the mock data on FD 3 above.
 
 -- package.path setup (both occurrences)
 src = src:gsub(

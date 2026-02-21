@@ -88,33 +88,34 @@ function Val({ text, color }: { text: string; color?: string }) {
 /* ── CPU bars ────────────────────────────────────────────────── */
 
 function CpuPanel({ cores, total, loadAvg }: { cores: CoreInfo[]; total: number; loadAvg: [number, number, number] }) {
-  const chipBarW = 46;
+  const chipBarW = 30;
   return (
     <Section title="CPU">
       <Box style={{ flexDirection: 'row', gap: 4 }}>
         <Label text={`${total.toFixed(0)}%`} color={total > 80 ? ACCENT : total > 50 ? YELLOW : GREEN} />
         <Label text={`load ${loadAvg[0].toFixed(2)} ${loadAvg[1].toFixed(2)} ${loadAvg[2].toFixed(2)}`} />
       </Box>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, width: '100%', justifyContent: 'center' }}>
         {cores.map((c) => (
           <Box key={c.id} style={{
-            flexBasis: 62,
-            flexGrow: 1,
-            minWidth: 58,
-            maxWidth: 78,
+            width: 58,
             backgroundColor: '#1a1a2a',
             borderRadius: 4,
-            paddingLeft: 4,
-            paddingRight: 4,
-            paddingTop: 3,
-            paddingBottom: 3,
-            gap: 2,
+            paddingLeft: 6,
+            paddingRight: 6,
+            paddingTop: 4,
+            paddingBottom: 4,
+            gap: 3,
           }}>
             <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
               <Label text={`c${c.id}`} />
-              <Label text={`${c.usage.toFixed(0)}%`} color={BRIGHT} />
+              <Box style={{ width: 26 }}>
+                <Label text={`${c.usage.toFixed(0)}%`} color={BRIGHT} />
+              </Box>
             </Box>
-            <Bar value={c.usage} max={100} width={chipBarW} color={c.usage > 80 ? ACCENT : c.usage > 50 ? YELLOW : GREEN} height={4} />
+            <Box style={{ alignItems: 'center', width: '100%' }}>
+              <Bar value={c.usage} max={100} width={chipBarW} color={c.usage > 80 ? ACCENT : c.usage > 50 ? YELLOW : GREEN} height={4} />
+            </Box>
           </Box>
         ))}
       </Box>
@@ -124,20 +125,22 @@ function CpuPanel({ cores, total, loadAvg }: { cores: CoreInfo[]; total: number;
 
 /* ── Memory panel ────────────────────────────────────────────── */
 
+const STAT_LABEL_W = 34;
+const STAT_BAR_W   = 160;
+
 function MemoryPanel({ mem }: { mem: { total: number; used: number; buffers: number; cached: number; swap: { total: number; used: number }; unit: string } }) {
-  const barW = 180;
   const pctUsed = mem.total > 0 ? (mem.used / mem.total * 100) : 0;
   const pctSwap = mem.swap.total > 0 ? (mem.swap.used / mem.swap.total * 100) : 0;
   return (
     <Section title="MEMORY">
       <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-        <Label text="RAM" />
-        <Bar value={mem.used} max={mem.total} width={barW} color={pctUsed > 80 ? ACCENT : pctUsed > 60 ? YELLOW : BLUE} height={8} />
+        <Box style={{ width: STAT_LABEL_W }}><Label text="RAM" /></Box>
+        <Bar value={mem.used} max={mem.total} width={STAT_BAR_W} color={pctUsed > 80 ? ACCENT : pctUsed > 60 ? YELLOW : BLUE} height={8} />
         <Val text={`${mem.used.toFixed(1)}/${mem.total.toFixed(1)} ${mem.unit}`} />
       </Box>
       <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-        <Label text="SWP" />
-        <Bar value={mem.swap.used} max={mem.swap.total || 1} width={barW} color={pctSwap > 50 ? ACCENT : PURPLE} height={8} />
+        <Box style={{ width: STAT_LABEL_W }}><Label text="SWP" /></Box>
+        <Bar value={mem.swap.used} max={mem.swap.total || 1} width={STAT_BAR_W} color={pctSwap > 50 ? ACCENT : PURPLE} height={8} />
         <Val text={`${mem.swap.used.toFixed(1)}/${mem.swap.total.toFixed(1)} ${mem.unit}`} />
       </Box>
       <Box style={{ flexDirection: 'row', gap: 12 }}>
@@ -175,20 +178,19 @@ function ProcessTable({ procs }: { procs: ProcessInfo[] }) {
 /* ── GPU panel ───────────────────────────────────────────────── */
 
 function GpuPanel({ gpus }: { gpus: GpuInfo[] }) {
-  const barW = 140;
   return (
     <Section title="GPU">
       {gpus.map((g, i) => (
         <Box key={i} style={{ gap: 4 }}>
           <Label text={g.name} color={BRIGHT} />
           <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            <Label text="util" />
-            <Bar value={g.utilization} max={100} width={barW} color={g.utilization > 80 ? ACCENT : GREEN} />
+            <Box style={{ width: STAT_LABEL_W }}><Label text="util" /></Box>
+            <Bar value={g.utilization} max={100} width={STAT_BAR_W} color={g.utilization > 80 ? ACCENT : GREEN} height={8} />
             <Val text={`${g.utilization}%`} />
           </Box>
           <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            <Label text="vram" />
-            <Bar value={g.memUsed} max={g.memTotal} width={barW} color={PURPLE} />
+            <Box style={{ width: STAT_LABEL_W }}><Label text="vram" /></Box>
+            <Bar value={g.memUsed} max={g.memTotal} width={STAT_BAR_W} color={PURPLE} height={8} />
             <Val text={`${g.memUsed}/${g.memTotal} ${g.memUnit}`} />
           </Box>
           <Box style={{ flexDirection: 'row', gap: 12 }}>
@@ -207,11 +209,11 @@ function NetworkPanel({ interfaces }: { interfaces: NetworkInterface[] }) {
   return (
     <Section title="NETWORK">
       {interfaces.map((iface) => (
-        <Box key={iface.name} style={{ flexDirection: 'row', gap: 8 }}>
-          <Box style={{ width: 60 }}><Label text={iface.name} color={CYAN} /></Box>
-          <Label text={`rx ${formatRate(iface.rxRate)}`} color={GREEN} />
-          <Label text={`tx ${formatRate(iface.txRate)}`} color={YELLOW} />
-          <Label text={formatTotalBytes(iface.rxBytes)} />
+        <Box key={iface.name} style={{ flexDirection: 'row', gap: 0 }}>
+          <Box style={{ width: 68 }}><Label text={iface.name} color={CYAN} /></Box>
+          <Box style={{ width: 90 }}><Label text={`rx ${formatRate(iface.rxRate)}`} color={GREEN} /></Box>
+          <Box style={{ width: 90 }}><Label text={`tx ${formatRate(iface.txRate)}`} color={YELLOW} /></Box>
+          <Box style={{ width: 76 }}><Label text={formatTotalBytes(iface.rxBytes)} /></Box>
         </Box>
       ))}
     </Section>
@@ -224,10 +226,10 @@ function DiskPanel({ devices }: { devices: DiskDevice[] }) {
   return (
     <Section title="DISK">
       {devices.map((dev) => (
-        <Box key={dev.name} style={{ flexDirection: 'row', gap: 8 }}>
-          <Box style={{ width: 60 }}><Label text={dev.name} color={PURPLE} /></Box>
-          <Label text={`R ${formatRate(dev.readRate)}`} color={GREEN} />
-          <Label text={`W ${formatRate(dev.writeRate)}`} color={YELLOW} />
+        <Box key={dev.name} style={{ flexDirection: 'row', gap: 0 }}>
+          <Box style={{ width: 68 }}><Label text={dev.name} color={PURPLE} /></Box>
+          <Box style={{ width: 128 }}><Label text={`R ${formatRate(dev.readRate)}`} color={GREEN} /></Box>
+          <Box style={{ width: 128 }}><Label text={`W ${formatRate(dev.writeRate)}`} color={YELLOW} /></Box>
         </Box>
       ))}
     </Section>
@@ -358,43 +360,38 @@ export function NeofetchDemoStory() {
           <Box style={{ gap: 14, width: '100%' }}>
             {!sys.loading && <TaskSummary tasks={sys.tasks} />}
 
-            {/* CPU + Memory side by side */}
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, width: '100%' }}>
+            {/* Single row: CPU | GPU+Memory | Network+Disk */}
+            <Box style={{ flexDirection: 'row', gap: 16, width: '100%', justifyContent: 'space-around', alignItems: 'flex-start' }}>
+              {/* CPU with wrapping cores */}
               <Box style={{
-                flexBasis: 300,
-                flexGrow: 1,
-                minWidth: 280,
+                width: 280,
                 backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
                 borderWidth: 1, borderColor: BORDER,
               }}>
                 {!sys.loading && <CpuPanel cores={sys.cpu.cores} total={sys.cpu.total} loadAvg={sys.cpu.loadAvg as [number, number, number]} />}
               </Box>
-              <Box style={{
-                flexBasis: 320,
-                flexGrow: 1,
-                minWidth: 300,
-                backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
-                borderWidth: 1, borderColor: BORDER, gap: 10,
-              }}>
-                {!sys.loading && <MemoryPanel mem={sys.memory} />}
-                {sys.gpu && <GpuPanel gpus={sys.gpu} />}
-              </Box>
-            </Box>
 
-            {/* Network + Disk side by side */}
-            <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
+              {/* GPU + Memory stacked */}
               <Box style={{
-                width: 320,
+                flex: 1,
+                minWidth: 240,
                 backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
                 borderWidth: 1, borderColor: BORDER,
+                gap: 12,
+              }}>
+                {sys.gpu && <GpuPanel gpus={sys.gpu} />}
+                {!sys.loading && <MemoryPanel mem={sys.memory} />}
+              </Box>
+
+              {/* Network + Disk stacked */}
+              <Box style={{
+                flex: 1,
+                minWidth: 200,
+                backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
+                borderWidth: 1, borderColor: BORDER,
+                gap: 12,
               }}>
                 {!sys.loading && <NetworkPanel interfaces={sys.network} />}
-              </Box>
-              <Box style={{
-                width: 240,
-                backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
-                borderWidth: 1, borderColor: BORDER,
-              }}>
                 {!sys.loading && <DiskPanel devices={sys.disk} />}
               </Box>
             </Box>

@@ -43,7 +43,8 @@
     "build:neofetch-awesome": "esbuild --bundle --platform=node --format=esm --target=es2020 --jsx=automatic --outfile=examples/neofetch/dist/main-awesome.js examples/neofetch/src/main-awesome.tsx",
     "build:neofetch-cc": "esbuild --bundle --platform=node --format=esm --target=es2020 --jsx=automatic --outfile=examples/neofetch/dist/main-cc.js --external:ws examples/neofetch/src/main-cc.tsx",
     "build:docs": "npx tsx scripts/docs/build.ts",
-    "validate:docs": "npx tsx scripts/docs/build.ts validate"
+    "validate:docs": "npx tsx scripts/docs/build.ts validate",
+    "poly:fetch": "node scripts/poly-pizza-fetch.mjs"
   },
   "dependencies": {
     "@noble/ciphers": "^2.1.1",

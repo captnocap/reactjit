@@ -24,25 +24,65 @@ local Mandala = {}
 
 local MAX_SLICES = 500
 
+local function spawnRing(state, amp, sliceCount, thickness, forceAlpha)
+  local startRadius = state.currentRadius
+  local endRadius = startRadius + thickness
+  local segAngle = pi * 2 / sliceCount
+  local fillRatio = 0.72 + random() * 0.22
+
+  for i = 0, sliceCount - 1 do
+    local sliceAngle = i * segAngle + state.rotationOffset
+    local sliceWidth = segAngle * fillRatio
+    local sliceHue = (state.hue + i / sliceCount * 0.28 + random() * 0.05) % 1
+    local sliceSat = 0.55 + amp * 0.35
+    local sliceLit = 0.36 + amp * 0.24
+
+    table.insert(state.slices, {
+      startAngle = sliceAngle,
+      endAngle = sliceAngle + sliceWidth,
+      innerRadius = startRadius,
+      outerRadius = endRadius,
+      hue = sliceHue,
+      sat = sliceSat,
+      lit = sliceLit,
+      alpha = forceAlpha or 0.78,
+      age = 0,
+      maxAge = 4.2 + random() * 3.2,
+      spin = (random() - 0.5) * 0.2,
+      radialDrift = (random() - 0.5) * 0.5,
+    })
+  end
+
+  state.currentRadius = endRadius + 0.8
+  if state.currentRadius > state.maxRadius then
+    state.currentRadius = 8 + random() * 6
+  end
+end
+
 function Mandala.create(w, h, props)
-  return {
+  local state = {
     time = 0,
     slices = {},
-    currentRadius = 10,
+    currentRadius = 8,
     rotationOffset = random() * pi * 2,
     hue = random(),
     cleared = false,
-    spawnAccum = 0,
+    spawnAccum = 1.2,
     cx = w / 2,
     cy = h / 2,
     maxRadius = math.min(w, h) * 0.48,
     reactiveIntensity = 0,
+    decay = Util.clamp(Util.prop(props, "decay", 0.07), 0.03, 0.26),
   }
+  for _ = 1, 3 do
+    spawnRing(state, 0.42 + random() * 0.2, 6 + floor(random() * 5), 4 + random() * 5, 0.7)
+  end
+  return state
 end
 
 function Mandala.update(state, dt, props, w, h, mouse)
   local speed = Util.prop(props, "speed", 1.0)
-  local decay = Util.prop(props, "decay", 0.005)
+  local decay = Util.prop(props, "decay", 0.07)
   local amplitude = Util.prop(props, "amplitude", nil)
   local beat = Util.boolProp(props, "beat", false)
   local infinite = Util.boolProp(props, "infinite", false)
@@ -78,9 +118,9 @@ function Mandala.update(state, dt, props, w, h, mouse)
   end
 
   if reactive then
-    state.decay = Util.lerp(0.06, decay, state.reactiveIntensity)
+    state.decay = Util.lerp(0.12, Util.clamp(decay, 0.03, 0.26), state.reactiveIntensity)
   else
-    state.decay = decay
+    state.decay = Util.clamp(decay, 0.03, 0.26)
   end
 
   local amp = amplitude or ((sin(t * 0.6) + 1) * 0.3 + 0.2)
@@ -102,53 +142,32 @@ function Mandala.update(state, dt, props, w, h, mouse)
     isBeat = sin(t * pi * 0.7) > 0.92
   end
 
-  local spawnRate = (0.3 + amp * 1.5) * speed
+  local spawnRate = (2.4 + amp * 4.6) * speed
   if reactive then
     if mouse and mouse.inside then
-      spawnRate = spawnRate + mouse.speed * 0.005 * state.reactiveIntensity
+      spawnRate = spawnRate + mouse.speed * 0.01 * state.reactiveIntensity
     end
     spawnRate = spawnRate * state.reactiveIntensity
   end
 
   state.spawnAccum = state.spawnAccum + dt * spawnRate
-  local shouldSpawnAmbient = state.spawnAccum >= 1
-  if shouldSpawnAmbient then
+  local spawnedAmbient = 0
+  while state.spawnAccum >= 1 and #state.slices < MAX_SLICES do
     state.spawnAccum = state.spawnAccum - 1
+    local sliceCount = 5 + floor(random() * 5 + amp * 6)
+    local thickness = 2 + amp * 8 + random() * 4
+    spawnRing(state, amp, sliceCount, thickness, 0.58 + amp * 0.26)
+    spawnedAmbient = spawnedAmbient + 1
+    if spawnedAmbient >= 2 then break end
   end
 
-  if (isBeat or shouldSpawnAmbient) and #state.slices < MAX_SLICES and reactMul > 0.05 then
-    local sliceCount = isBeat and (8 + floor(random() * 8)) or (4 + floor(random() * 4))
-    local thickness = isBeat and (5 + amp * 15 + random() * 5) or (3 + amp * 8)
-    local startRadius = state.currentRadius
-    local endRadius = startRadius + thickness
-
-    local segAngle = pi * 2 / sliceCount
-    local fillRatio = 0.75 + random() * 0.2
-
-    for i = 0, sliceCount - 1 do
-      local sliceAngle = i * segAngle + state.rotationOffset
-      local sliceWidth = segAngle * fillRatio
-      local sliceHue = (state.hue + i / sliceCount * 0.3 + random() * 0.05) % 1
-      local sliceSat = 0.55 + amp * 0.35
-      local sliceLit = 0.35 + amp * 0.25
-
-      table.insert(state.slices, {
-        startAngle = sliceAngle,
-        endAngle = sliceAngle + sliceWidth,
-        innerRadius = startRadius,
-        outerRadius = endRadius,
-        hue = sliceHue,
-        sat = sliceSat,
-        lit = sliceLit,
-        alpha = 0.8 * reactMul,
-        age = 0,
-        maxAge = 12 + random() * 8,
-      })
-    end
-
-    state.currentRadius = endRadius + 1
-    if state.currentRadius > state.maxRadius then
-      state.currentRadius = 10
+  if isBeat and #state.slices < MAX_SLICES and reactMul > 0.05 then
+    local burstLayers = 1 + floor(amp * 2.8)
+    for _ = 1, burstLayers do
+      if #state.slices >= MAX_SLICES then break end
+      local sliceCount = 8 + floor(random() * 8 + amp * 6)
+      local thickness = 4 + amp * 12 + random() * 4
+      spawnRing(state, amp, sliceCount, thickness, 0.74 + amp * 0.22)
     end
   end
 
@@ -156,10 +175,14 @@ function Mandala.update(state, dt, props, w, h, mouse)
   local alive = {}
   for _, slice in ipairs(state.slices) do
     slice.age = slice.age + dt
+    slice.startAngle = slice.startAngle + slice.spin * dt
+    slice.endAngle = slice.endAngle + slice.spin * dt
+    slice.innerRadius = max(2, slice.innerRadius + slice.radialDrift * dt * 10)
+    slice.outerRadius = max(slice.innerRadius + 1, slice.outerRadius + slice.radialDrift * dt * 10)
+
     if slice.age < slice.maxAge then
-      if slice.age > slice.maxAge - 2 then
-        slice.alpha = slice.alpha * (1 - dt * 0.5)
-      end
+      local life = 1 - slice.age / slice.maxAge
+      slice.alpha = max(0, min(1, slice.alpha * (1 - dt * 0.35) * (0.8 + life * 0.25)))
       table.insert(alive, slice)
     end
   end
@@ -174,7 +197,7 @@ function Mandala.draw(state, w, h)
     love.graphics.rectangle("fill", 0, 0, w, h)
     state.cleared = true
   else
-    love.graphics.setColor(0.04, 0.04, 0.04, state.decay or 0.005)
+    love.graphics.setColor(0.04, 0.04, 0.04, state.decay or 0.07)
     love.graphics.rectangle("fill", 0, 0, w, h)
   end
 

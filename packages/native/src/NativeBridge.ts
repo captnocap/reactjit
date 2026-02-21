@@ -146,7 +146,7 @@ export class NativeBridge implements IBridge {
         if (payload && payload.error) {
           reject(new Error(payload.error));
         } else {
-          resolve((payload && 'result' in payload ? payload.result : payload) as T);
+          resolve((payload && 'result' in payload ? payload.result : null) as T);
         }
       });
 

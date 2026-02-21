@@ -505,12 +505,18 @@ static void bind_mount(const char *src, const char *dst, int read_only) {
  * The cart can only see: /app, /os, /usr/lib, /usr/bin, /usr/share/fonts,
  * /lib, /dev/dri, /dev/console, /tmp, and optionally /proc. */
 static void setup_restricted_mounts(int mount_proc) {
+    fprintf(stderr, "[ns] setting up restricted mount tree\n");
+
     /* Make all existing mounts private so changes don't leak to parent */
-    mount("", "/", "", MS_REC | MS_PRIVATE, NULL);
+    if (mount("", "/", "", MS_REC | MS_PRIVATE, NULL) != 0)
+        fprintf(stderr, "[ns] MS_PRIVATE on /: %s\n", strerror(errno));
 
     /* Create tmpfs as the new root at /mnt */
     mkdir("/mnt", 0755);
-    mount("tmpfs", "/mnt", "tmpfs", 0, "size=128m,mode=0755");
+    if (mount("tmpfs", "/mnt", "tmpfs", 0, "size=128m,mode=0755") != 0) {
+        fprintf(stderr, "[ns] mount tmpfs /mnt failed: %s\n", strerror(errno));
+        return;
+    }
 
     /* Create directory structure inside new root */
     mkdir("/mnt/app", 0755);
@@ -523,6 +529,7 @@ static void setup_restricted_mounts(int mount_proc) {
     mkdir("/mnt/lib", 0755);
     mkdir("/mnt/dev", 0755);
     mkdir("/mnt/dev/dri", 0755);
+    mkdir("/mnt/dev/input", 0755);
     mkdir("/mnt/tmp", 01777);
     mkdir("/mnt/run", 0755);
 
@@ -535,7 +542,17 @@ static void setup_restricted_mounts(int mount_proc) {
     bind_mount("/lib",              "/mnt/lib",              1);  /* musl dynamic linker (RO) */
     bind_mount("/dev/dri",          "/mnt/dev/dri",          0);  /* GPU device nodes (RW) */
     bind_mount("/dev/console",      "/mnt/dev/console",      0);  /* stdout/stderr */
+    bind_mount("/dev/null",         "/mnt/dev/null",         0);  /* /dev/null */
+    bind_mount("/dev/zero",         "/mnt/dev/zero",         0);  /* /dev/zero */
+    bind_mount("/dev/urandom",      "/mnt/dev/urandom",      0);  /* /dev/urandom */
+    bind_mount("/dev/input",        "/mnt/dev/input",        0);  /* evdev input devices */
     bind_mount("/run/boot-facts",   "/mnt/run/boot-facts",   1);  /* attestation (RO) */
+
+    /* /sys is needed for Mesa's GPU device enumeration (reads /sys/dev/char/,
+     * /sys/class/drm/, /sys/bus/pci/). Without it, Mesa can't load the DRI driver.
+     * This is read-only and exposes hardware topology but not process info. */
+    mkdir("/mnt/sys", 0555);
+    mount("sysfs", "/mnt/sys", "sysfs", MS_RDONLY, NULL);
 
     /* /proc only if sysmon capability is granted */
     if (mount_proc) {
@@ -546,17 +563,20 @@ static void setup_restricted_mounts(int mount_proc) {
     /* /tmp as fresh tmpfs for scratch space */
     mount("tmpfs", "/mnt/tmp", "tmpfs", 0, "size=32m,mode=1777");
 
+    fprintf(stderr, "[ns] bind mounts done, attempting pivot_root\n");
+
     /* pivot_root: swap /mnt → / and move old root to /mnt/oldroot */
     mkdir("/mnt/oldroot", 0755);
     if (pivot_root("/mnt", "/mnt/oldroot") != 0) {
         /* Fallback to chroot if pivot_root fails (e.g. initramfs) */
-        fprintf(stderr, "[init] pivot_root failed (%s), falling back to chroot\n",
+        fprintf(stderr, "[ns] pivot_root failed (%s), falling back to chroot\n",
                 strerror(errno));
         if (chroot("/mnt") != 0) {
-            fprintf(stderr, "[init] chroot also failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ns] chroot also failed: %s\n", strerror(errno));
             return;
         }
         chdir("/");
+        fprintf(stderr, "[ns] chroot to /mnt OK\n");
         return;
     }
 
@@ -564,6 +584,7 @@ static void setup_restricted_mounts(int mount_proc) {
     umount2("/oldroot", MNT_DETACH);
     rmdir("/oldroot");
     chdir("/");
+    fprintf(stderr, "[ns] pivot_root OK\n");
 }
 
 #define CHILD_STACK_SIZE (1024 * 1024)  /* 1 MB */
@@ -579,14 +600,19 @@ static int child_fn(void *arg) {
     }
 
     /* Mount namespace setup (if CLONE_NEWNS was used) */
-    if (ca->do_mount_ns)
+    if (ca->do_mount_ns) {
+        fprintf(stderr, "[child] setting up mount namespace\n");
         setup_restricted_mounts(ca->do_proc);
+        fprintf(stderr, "[child] mount namespace ready\n");
+    }
+
+    fprintf(stderr, "[child] execv /usr/bin/luajit /os/sandbox.lua\n");
 
     /* sandbox.lua lives in the OS rootfs, NOT in the cart.
      * The cart cannot replace or modify the jailer. */
     char *argv[] = { "/usr/bin/luajit", "/os/sandbox.lua", NULL };
     execv("/usr/bin/luajit", argv);
-    fprintf(stderr, "[init] execv luajit: %s\n", strerror(errno));
+    fprintf(stderr, "[child] execv luajit failed: %s\n", strerror(errno));
     _exit(1);
 }
 

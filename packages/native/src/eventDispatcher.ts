@@ -21,6 +21,32 @@ interface Subscribable {
   subscribe(type: string, fn: (payload: any) => void): () => void;
 }
 
+type ListLike<T> = T[] | Record<string, T> | null | undefined;
+
+function normalizeList<T>(value: ListLike<T>): T[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+
+  const keys = Object.keys(value);
+  if (keys.length === 0) return [];
+
+  const sortedKeys = keys
+    .slice()
+    .sort((a, b) => {
+      const ai = Number(a);
+      const bi = Number(b);
+      const aIsInt = Number.isInteger(ai) && String(ai) === a;
+      const bIsInt = Number.isInteger(bi) && String(bi) === b;
+      if (aIsInt && bIsInt) return ai - bi;
+      if (aIsInt) return -1;
+      if (bIsInt) return 1;
+      return a.localeCompare(b);
+    });
+
+  const record = value as Record<string, T>;
+  return sortedKeys.map((key) => record[key]);
+}
+
 /**
  * Initialize event dispatching for a bridge.
  * Call this once when the bridge is created.
@@ -347,18 +373,18 @@ export function initEventDispatching(bridge: Subscribable): void {
  */
 function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
   if (!event.targetId) return;
-  debugLog.log('dispatch', `bubble ${handlerName} target=${event.targetId} path=[${(event.bubblePath || []).join(',')}]`);
+  const bubblePath = normalizeList<number>((event as any).bubblePath);
+  debugLog.log('dispatch', `bubble ${handlerName} target=${event.targetId} path=[${bubblePath.join(',')}]`);
 
   let stopped = false;
   const enrichedEvent: LoveEvent = {
     ...event,
     stopPropagation: () => { stopped = true; },
     currentTarget: event.targetId,
+    bubblePath,
   };
 
-  const bubblePath = event.bubblePath;
-
-  if (bubblePath && bubblePath.length > 0) {
+  if (bubblePath.length > 0) {
     for (const nodeId of bubblePath) {
       if (stopped) break;
 

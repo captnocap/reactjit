@@ -1,20 +1,7 @@
 /**
- * ThemeSwitcher -- a click-to-cycle theme picker.
+ * ThemeSwitcher -- compact click-to-cycle theme picker.
  *
- * Displays the current theme name alongside 3 color swatches (bg, primary, accent).
- * Each click cycles to the next theme in the registry.
- *
- * NOTE: A dropdown variant would require top-level overlay support in the
- * layout engine (parent bounds clip both painting and hit testing for
- * absolutely-positioned children). Until then, cycle-on-click is the
- * reliable approach.
- *
- * Props:
- *   style? -- optional styling applied to the outer Pressable.
- *
- * Usage:
- *   <ThemeSwitcher />
- *   <ThemeSwitcher style={{ marginLeft: 8 }} />
+ * Displays the active theme with a small token preview strip.
  */
 
 import React, { useCallback } from 'react';
@@ -27,7 +14,6 @@ export interface ThemeSwitcherProps {
   style?: any;
 }
 
-/** Small color swatch — a rounded box filled with the given color. */
 function MiniSwatch({ color, size = 8 }: { color: string; size?: number }) {
   return (
     <Box
@@ -35,12 +21,17 @@ function MiniSwatch({ color, size = 8 }: { color: string; size?: number }) {
         width: size,
         height: size,
         backgroundColor: color,
-        borderRadius: 2,
+        borderRadius: 3,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.15)',
+        borderColor: 'rgba(255,255,255,0.2)',
       }}
     />
   );
+}
+
+function truncateLabel(text: string, max = 20) {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 2)}..`;
 }
 
 export function ThemeSwitcher({ style }: ThemeSwitcherProps) {
@@ -56,11 +47,8 @@ export function ThemeSwitcher({ style }: ThemeSwitcherProps) {
   const currentTheme = themes[themeId];
   const currentColors = currentTheme?.colors ?? c;
 
-  // Truncate theme name to fit the button
-  const label =
-    (currentTheme?.displayName ?? themeId).length > 16
-      ? (currentTheme?.displayName ?? themeId).slice(0, 14) + '..'
-      : (currentTheme?.displayName ?? themeId);
+  const displayName = truncateLabel(currentTheme?.displayName ?? themeId);
+  const family = themeId.includes('-') ? themeId.split('-')[0] : themeId;
 
   return (
     <Pressable
@@ -68,21 +56,52 @@ export function ThemeSwitcher({ style }: ThemeSwitcherProps) {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 5,
-        paddingLeft: 8,
-        paddingRight: 8,
-        paddingTop: 4,
-        paddingBottom: 4,
-        borderRadius: 4,
+        gap: 7,
+        paddingLeft: 9,
+        paddingRight: 9,
+        paddingTop: 5,
+        paddingBottom: 5,
+        borderRadius: 7,
         borderWidth: 1,
-        borderColor: c.primary,
+        borderColor: c.border,
+        backgroundColor: c.bgElevated,
         ...style,
       }}
     >
-      <MiniSwatch color={currentColors.bg} />
-      <MiniSwatch color={currentColors.primary} />
-      <MiniSwatch color={currentColors.accent} />
-      <Text style={{ color: c.primary, fontSize: 9 }}>{label}</Text>
+      <Box style={{
+        flexDirection: 'row',
+        gap: 4,
+        paddingLeft: 4,
+        paddingRight: 4,
+        paddingTop: 3,
+        paddingBottom: 3,
+        borderRadius: 5,
+        borderWidth: 1,
+        borderColor: c.border,
+        backgroundColor: c.surface,
+      }}>
+        <MiniSwatch color={currentColors.bg} />
+        <MiniSwatch color={currentColors.primary} />
+        <MiniSwatch color={currentColors.accent} />
+      </Box>
+
+      <Box style={{ gap: 1 }}>
+        <Text style={{ color: c.textDim, fontSize: 7 }}>{family}</Text>
+        <Text style={{ color: c.primary, fontSize: 9, fontWeight: 'bold' }}>{displayName}</Text>
+      </Box>
+
+      <Box style={{
+        paddingLeft: 4,
+        paddingRight: 4,
+        paddingTop: 1,
+        paddingBottom: 1,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: c.border,
+        backgroundColor: c.surface,
+      }}>
+        <Text style={{ color: c.textDim, fontSize: 7 }}>F9</Text>
+      </Box>
     </Pressable>
   );
 }

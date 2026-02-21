@@ -9,6 +9,7 @@ export type { ServiceDefinition, ServiceField, ServiceCategory } from './registr
 export {
   spotify, tmdb, github, weather, homeassistant, lastfm, plex, jellyfin,
   trakt, notion, todoist, ynab, google, hue, nasa, coingecko, steam, telegram,
+  polypizza,
   openai, anthropic,
 } from './registry';
 
@@ -55,6 +56,26 @@ export type {
   TMDBMovieDetails,
   TMDBSeriesDetails,
 } from './tmdb';
+
+// ── Poly Pizza ─────────────────────────────────────────
+export {
+  usePolyPizzaModel,
+  usePolyPizzaSearch,
+  usePolyPizzaModelWithAttribution,
+  polyPizzaAttributionFields,
+  polyPizzaAttributionLine,
+} from './polypizza';
+export type {
+  PolyPizzaAuthor,
+  PolyPizzaLicense,
+  PolyPizzaModel,
+  PolyPizzaSearchResponse,
+  PolyPizzaAttribution,
+  PolyPizzaRequestOptions,
+  PolyPizzaModelOptions,
+  PolyPizzaSearchOptions,
+  PolyPizzaModelWithAttributionResult,
+} from './polypizza';
 
 // ── GitHub ─────────────────────────────────────────────
 export {

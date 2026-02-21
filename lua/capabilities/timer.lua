@@ -67,10 +67,7 @@ Capabilities.register("Timer", {
 
       pushEvent({
         type = "capability",
-        targetId = nodeId,
-        handler = "onTick",
-        count = state.count,
-        elapsed = state.count * intervalSec,
+        payload = { targetId = nodeId, handler = "onTick", count = state.count, elapsed = state.count * intervalSec },
       })
 
       if props["repeat"] == false then

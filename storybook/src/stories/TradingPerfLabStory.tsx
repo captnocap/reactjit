@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, formatUptime, formatMemory } from '../../../packages/shared/src';
+import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useRendererMode, formatUptime, formatMemory } from '../../../packages/shared/src';
 import type { Tab } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -303,6 +303,7 @@ function Feed3D({ history, spin }: { history: number[]; spin: number }) {
 }
 
 export function TradingPerfLabStory() {
+  const mode = useRendererMode();
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [loadProfile, setLoadProfile] = useState<LoadProfile>('balanced');
   const [live, setLive] = useState(true);
@@ -539,9 +540,19 @@ export function TradingPerfLabStory() {
   const shellBg = '#050b16';
   const panelBg = '#0b1322';
   const panelBorder = '#1d2c45';
+  const compact = mode === 'native';
+  const outerPad = compact ? 10 : 12;
+  const frameGap = compact ? 8 : 10;
+  const panelPad = compact ? 8 : 10;
+  const leftPaneBasis = compact ? 215 : 260;
+  const rightPaneBasis = compact ? 265 : 320;
+  const chartMinHeight = compact ? 240 : 300;
+  const chartBodyMinHeight = compact ? 210 : 280;
+  const tapeHeight = compact ? 156 : 180;
+  const controlsMinWidth = compact ? 180 : 240;
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 12, gap: 10, backgroundColor: shellBg }}>
+    <Box style={{ width: '100%', height: '100%', padding: outerPad, gap: frameGap, backgroundColor: shellBg }}>
       <Box
         style={{
           width: '100%',
@@ -549,8 +560,8 @@ export function TradingPerfLabStory() {
           borderWidth: 1,
           borderColor: panelBorder,
           borderRadius: 10,
-          padding: 10,
-          gap: 8,
+          padding: panelPad,
+          gap: compact ? 6 : 8,
         }}
       >
         <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 8 }}>
@@ -587,15 +598,17 @@ export function TradingPerfLabStory() {
         </Box>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 10, flexGrow: 1, minHeight: 0, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: frameGap, flexGrow: 1, minHeight: 0, minWidth: 0, width: '100%', flexWrap: 'nowrap' }}>
         <Box
           style={{
-            width: 260,
+            flexBasis: leftPaneBasis,
+            flexGrow: 0.95,
+            minWidth: 0,
             backgroundColor: panelBg,
             borderWidth: 1,
             borderColor: panelBorder,
             borderRadius: 10,
-            padding: 10,
+            padding: panelPad,
             gap: 6,
           }}
         >
@@ -645,15 +658,15 @@ export function TradingPerfLabStory() {
           </Text>
         </Box>
 
-        <Box style={{ flexGrow: 1, minWidth: 420, gap: 10, minHeight: 0 }}>
+        <Box style={{ flexGrow: 1.5, minWidth: 0, gap: frameGap, minHeight: 0 }}>
           <Box
             style={{
               backgroundColor: panelBg,
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
-              padding: 10,
-              gap: 8,
+              padding: panelPad,
+              gap: compact ? 6 : 8,
             }}
           >
             {selected && (
@@ -671,17 +684,17 @@ export function TradingPerfLabStory() {
           <Box
             style={{
               flexGrow: 1,
-              minHeight: 300,
+              minHeight: chartMinHeight,
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
               backgroundColor: '#071223',
-              padding: 10,
-              gap: 8,
+              padding: panelPad,
+              gap: compact ? 6 : 8,
             }}
           >
             <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>PRICE FEED</Text>
-            <Box style={{ flexGrow: 1, minHeight: 280 }}>
+            <Box style={{ flexGrow: 1, minHeight: chartBodyMinHeight }}>
               {selected && (viewMode === '2d' ? (
                 <Feed2D history={visibleHistory} />
               ) : (
@@ -696,17 +709,17 @@ export function TradingPerfLabStory() {
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
-              padding: 10,
-              gap: 8,
+              padding: panelPad,
+              gap: compact ? 6 : 8,
             }}
           >
             <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>EXECUTION / ENGINE CONTROLS</Text>
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%' }}>
-              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 240, gap: 8 }}>
+            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: frameGap, width: '100%' }}>
+              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
                 <LabeledSlider label="Symbols" value={symbolCount} min={20} max={320} step={10} onChange={setSymbolCount} />
                 <LabeledSlider label="Book Depth" value={depth} min={10} max={80} step={2} onChange={setDepth} />
               </Box>
-              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 240, gap: 8 }}>
+              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
                 <LabeledSlider label="Target Events/sec" value={targetEvents} min={5000} max={400000} step={10000} onChange={setTargetEvents} />
                 <LabeledSlider label="Simulation Scale" value={simScale} min={1} max={2} step={0.25} onChange={setSimScale} />
                 <LabeledSlider label="Focus Symbol" value={selectedIndex} min={0} max={Math.max(0, symbolCount - 1)} step={1} onChange={setSelectedIndex} />
@@ -715,7 +728,7 @@ export function TradingPerfLabStory() {
           </Box>
         </Box>
 
-        <Box style={{ width: 320, gap: 10, minHeight: 0 }}>
+        <Box style={{ flexBasis: rightPaneBasis, flexGrow: 1.05, minWidth: 0, gap: frameGap, minHeight: 0 }}>
           <Box
             style={{
               flexGrow: 1,
@@ -724,8 +737,8 @@ export function TradingPerfLabStory() {
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
-              padding: 10,
-              gap: 8,
+              padding: panelPad,
+              gap: compact ? 6 : 8,
             }}
           >
             <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
@@ -746,9 +759,9 @@ export function TradingPerfLabStory() {
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
-              padding: 10,
+              padding: panelPad,
               gap: 6,
-              height: 180,
+              height: tapeHeight,
             }}
           >
             <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>TIME & SALES</Text>
@@ -771,7 +784,7 @@ export function TradingPerfLabStory() {
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
-              padding: 10,
+              padding: panelPad,
               gap: 4,
             }}
           >

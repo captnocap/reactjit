@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView, useSpring } from '../../../packages/shared/src';
+import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView } from '../../../packages/shared/src';
 import type { TableColumn } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -16,22 +16,6 @@ function drift(base: number, range: number) {
 function formatNum(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(Math.round(n));
-}
-
-/* ── Animated KPI value ──────────────────────────────────── */
-
-function AnimatedValue({ value, prefix = '', suffix = '', color, fontSize = 16 }: {
-  value: number; prefix?: string; suffix?: string; color: string; fontSize?: number;
-}) {
-  const animated = useSpring(value, { stiffness: 80, damping: 18 });
-  const display = animated >= 1000
-    ? `${(animated / 1000).toFixed(1)}k`
-    : String(Math.round(animated));
-  return ( // ilr-ignore-next-line
-    <Text style={{ color, fontSize, fontWeight: 'bold' }}>
-      {`${prefix}${display}${suffix}`}
-    </Text>
-  );
 }
 
 /* ── Data seed ────────────────────────────────────────────── */
@@ -214,13 +198,9 @@ export function DataDashboardDemoStory() {
             <Text style={{ color: DIM, fontSize: 10 }}>{kpi.label}</Text>
             <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box style={{ gap: 2, width: 80, height: 30 }}>
-                <AnimatedValue
-                  value={kpi.raw}
-                  prefix={kpi.prefix}
-                  suffix={kpi.suffix || ''}
-                  color={BRIGHT}
-                  fontSize={16}
-                />
+                <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>
+                  {`${kpi.prefix}${formatNum(kpi.raw)}${kpi.suffix || ''}`}
+                </Text>
                 <Text style={{ color: kpi.change >= 0 ? kpi.color : kpi.color, fontSize: 10, fontWeight: 'bold' }}>
                   {`${kpi.change >= 0 ? '+' : ''}${kpi.change}%`}
                 </Text>

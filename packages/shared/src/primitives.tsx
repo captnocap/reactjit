@@ -223,6 +223,7 @@ function styleToCSS(style?: Style): React.CSSProperties {
         easeIn: 'ease-in',
         easeOut: 'ease-out',
         easeInOut: 'ease-in-out',
+        spring: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
       };
       const cssEasing = easingMap[config.easing || 'easeInOut'] || 'ease-in-out';
       const delay = ((config.delay || 0) / 1000);

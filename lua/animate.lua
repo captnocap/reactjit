@@ -64,6 +64,14 @@ easing.easeInOut = function(t)
   return -1 + (4 - 2 * t) * t
 end
 
+-- Lightweight spring-like easing with overshoot.
+easing.spring = function(t)
+  if t <= 0 then return 0 end
+  if t >= 1 then return 1 end
+  local p = 0.3
+  return math.pow(2, -10 * t) * math.sin((t - p / 4) * (2 * math.pi) / p) + 1
+end
+
 -- Cubic bezier helpers
 local function cubicBezier(t, p1, p2)
   local mt = 1 - t

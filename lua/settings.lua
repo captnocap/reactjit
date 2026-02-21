@@ -174,6 +174,9 @@ local BUILTIN_SERVICES = {
   { id = "lastfm",    name = "Last.fm",   category = "media", auth = { type = "query", fields = {
     { key = "apiKey", label = "API Key", placeholder = "Last.fm API key" },
   }}},
+  { id = "polypizza", name = "Poly Pizza", category = "media", auth = { type = "header", fields = {
+    { key = "apiKey", label = "API Key", placeholder = "Poly Pizza API key" },
+  }}},
   -- Dev
   { id = "github",    name = "GitHub",    category = "dev", auth = { type = "bearer", fields = {
     { key = "token", label = "Personal Access Token", placeholder = "ghp_..." },

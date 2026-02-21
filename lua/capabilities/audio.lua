@@ -141,9 +141,7 @@ Capabilities.register("Audio", {
     if state._loadError then
       pushEvent({
         type = "capability",
-        targetId = nodeId,
-        handler = "onError",
-        message = state._loadError,
+        payload = { targetId = nodeId, handler = "onError", message = state._loadError },
       })
       state._loadError = nil
     end
@@ -159,10 +157,7 @@ Capabilities.register("Audio", {
       if ok and ok2 then
         pushEvent({
           type = "capability",
-          targetId = nodeId,
-          handler = "onProgress",
-          position = pos,
-          duration = dur,
+          payload = { targetId = nodeId, handler = "onProgress", position = pos, duration = dur },
         })
       end
     end
@@ -175,8 +170,7 @@ Capabilities.register("Audio", {
         state.ended = true
         pushEvent({
           type = "capability",
-          targetId = nodeId,
-          handler = "onEnded",
+          payload = { targetId = nodeId, handler = "onEnded" },
         })
       end
     end

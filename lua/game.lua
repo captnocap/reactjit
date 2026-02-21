@@ -22,7 +22,7 @@
 
 local Game = {}
 local loadedModules = {}  -- moduleName -> module instance (singleton)
-local canvases = {}       -- nodeId -> { moduleName, mode, canvas, width, height, bounds }
+local canvases = {}       -- nodeId -> { moduleName, instanceKey, mode, canvas, width, height, bounds }
 local focusedNodeId = nil -- which GameCanvas receives keyboard input
 
 function Game.init() end
@@ -50,17 +50,19 @@ function Game.syncWithTree(nodes)
     if node.type == "GameCanvas" then
       seen[id] = true
       local moduleName = node.props and node.props.module
+      local instanceKey = node.props and node.props.instanceKey
       local mode = node.props and node.props.mode or "react"
       if moduleName and not canvases[id] then
         local mod = ensureModule(moduleName)
         if mod then
-          canvases[id] = { moduleName = moduleName, mode = mode, canvas = nil, width = 0, height = 0, bounds = nil }
+          canvases[id] = { moduleName = moduleName, instanceKey = instanceKey, mode = mode, canvas = nil, width = 0, height = 0, bounds = nil }
           -- Auto-focus first GameCanvas
           if not focusedNodeId then focusedNodeId = id end
         end
       end
       local entry = canvases[id]
       if entry then
+        entry.instanceKey = instanceKey
         entry.mode = mode
         local c = node.computed
         local w = math.floor(c and c.w or 0)
@@ -117,7 +119,13 @@ function Game.updateAll(dt, pushEvent)
         if entry.moduleName == name then
           pushEvent({
             type = "game:event",
-            payload = { nodeId = nodeId, name = "state", data = state }
+            payload = {
+              nodeId = nodeId,
+              module = name,
+              instanceKey = entry.instanceKey,
+              name = "state",
+              data = state
+            }
           })
         end
       end
@@ -237,14 +245,29 @@ end
 --- Tries nodeId first, falls back to module name.
 --- @param args table { nodeId?, module?, command, args }
 function Game.handleCommand(args)
+  if not args or not args.command then return nil end
+
   -- Try routing by nodeId
-  local entry = canvases[args.nodeId]
+  local entry = args.nodeId and canvases[args.nodeId] or nil
   if entry then
     local mod = loadedModules[entry.moduleName]
     if mod and mod.onCommand then
       return mod.onCommand(args.command, args.args)
     end
   end
+
+  -- Fallback: route by module + instanceKey
+  if args.module and args.instanceKey then
+    for _, e in pairs(canvases) do
+      if e.moduleName == args.module and e.instanceKey == args.instanceKey then
+        local mod = loadedModules[e.moduleName]
+        if mod and mod.onCommand then
+          return mod.onCommand(args.command, args.args)
+        end
+      end
+    end
+  end
+
   -- Fallback: route by module name
   if args.module then
     local mod = loadedModules[args.module]

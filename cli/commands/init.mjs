@@ -19,6 +19,36 @@ const yellow = color('33');
 // ── Package registry ─────────────────────────────────────
 
 const OPTIONAL_PACKAGES = [
+  // ── UI & Layout ──────────────────────────────────────────
+  {
+    name: '@ilovereact/components',
+    dir: 'components',
+    alias: '@ilovereact/components',
+    flag: '--components',
+    description: 'Pre-built UI widgets (Card, Badge, Divider, FlexRow)',
+    importExample: "import { Card, Badge } from '@ilovereact/components';",
+    default: true,
+  },
+  {
+    name: '@ilovereact/theme',
+    dir: 'theme',
+    alias: '@ilovereact/theme',
+    flag: '--theme',
+    description: 'Design tokens, theme switcher, dark/light support',
+    importExample: "import { ThemeProvider, useTheme } from '@ilovereact/theme';",
+    default: true,
+  },
+  {
+    name: '@ilovereact/controls',
+    dir: 'controls',
+    alias: '@ilovereact/controls',
+    flag: '--controls',
+    description: 'Hardware controls: knobs, faders, meters, pads, LEDs',
+    importExample: "import { Knob, Fader, Meter } from '@ilovereact/controls';",
+    default: false,
+  },
+
+  // ── Navigation & State ───────────────────────────────────
   {
     name: '@ilovereact/router',
     dir: 'router',
@@ -37,14 +67,54 @@ const OPTIONAL_PACKAGES = [
     importExample: "import { useCRUD, createCRUD, z } from '@ilovereact/storage';",
     default: true,
   },
+
+  // ── Media & 3D ───────────────────────────────────────────
   {
-    name: '@ilovereact/components',
-    dir: 'components',
-    alias: '@ilovereact/components',
-    flag: '--components',
-    description: 'Pre-built UI widgets',
-    importExample: "import { Card, Badge } from '@ilovereact/components';",
-    default: true,
+    name: '@ilovereact/3d',
+    dir: '3d',
+    alias: '@ilovereact/3d',
+    flag: '--3d',
+    description: 'Declarative 3D scenes in JSX (Scene, Camera, Mesh)',
+    importExample: "import { Scene, Camera, Mesh } from '@ilovereact/3d';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/audio',
+    dir: 'audio',
+    alias: '@ilovereact/audio',
+    flag: '--audio',
+    description: 'Audio engine: rack, MIDI, sampler, sequencer, recording',
+    importExample: "import { useAudioRack, useMIDI } from '@ilovereact/audio';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/media',
+    dir: 'media',
+    alias: '@ilovereact/media',
+    flag: '--media',
+    description: 'File browser, archive (zip/tar), media library',
+    importExample: "import { useMediaLibrary, useArchive } from '@ilovereact/media';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/game',
+    dir: 'game',
+    alias: '@ilovereact/game',
+    flag: '--game',
+    description: 'Game logic: entities, physics, input, genre templates',
+    importExample: "import { useEntitySystem, useGameLoop } from '@ilovereact/game';",
+    default: false,
+  },
+
+  // ── Data & Networking ─────────────────────────────────────
+  {
+    name: '@ilovereact/apis',
+    dir: 'apis',
+    alias: '@ilovereact/apis',
+    flag: '--apis',
+    description: 'HTTP API hooks, service registry, bearer auth',
+    importExample: "import { useAPI, useAPIMutation } from '@ilovereact/apis';",
+    default: false,
   },
   {
     name: '@ilovereact/server',
@@ -53,6 +123,44 @@ const OPTIONAL_PACKAGES = [
     flag: '--server',
     description: 'HTTP server (static files, API routes)',
     importExample: "import { useServer, useStaticServer } from '@ilovereact/server';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/rss',
+    dir: 'rss',
+    alias: '@ilovereact/rss',
+    flag: '--rss',
+    description: 'RSS/Atom feed fetching and parsing',
+    importExample: "import { useFeed } from '@ilovereact/rss';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/webhooks',
+    dir: 'webhooks',
+    alias: '@ilovereact/webhooks',
+    flag: '--webhooks',
+    description: 'Outbound webhook posting and retry logic',
+    importExample: "import { useWebhook } from '@ilovereact/webhooks';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/geo',
+    dir: 'geo',
+    alias: '@ilovereact/geo',
+    flag: '--geo',
+    description: 'Declarative maps: tiles, markers, offline support',
+    importExample: "import { Map, TileLayer, Marker } from '@ilovereact/geo';",
+    default: false,
+  },
+
+  // ── Security & AI ────────────────────────────────────────
+  {
+    name: '@ilovereact/crypto',
+    dir: 'crypto',
+    alias: '@ilovereact/crypto',
+    flag: '--crypto',
+    description: 'Encryption, signing, key generation (libsodium + BLAKE3)',
+    importExample: "import { useEncrypt, useSign, useKeyPair } from '@ilovereact/crypto';",
     default: false,
   },
   {
@@ -211,7 +319,7 @@ function generateTsconfig(selectedPackages) {
 export async function initCommand(args) {
   const name = args.filter(a => !a.startsWith('--'))[0];
   if (!name) {
-    console.error('Usage: ilovereact init <project-name> [--all | --minimal | --router --storage --components]');
+    console.error('Usage: ilovereact init <project-name> [--all | --minimal | --router --storage --components --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
     process.exit(1);
   }
 

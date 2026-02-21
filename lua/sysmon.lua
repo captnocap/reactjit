@@ -258,16 +258,17 @@ end
 -- ── GPU (NVIDIA via nvidia-smi, AMD via sysfs) ─────────────
 
 function sysmon.gpu()
-  -- Try NVIDIA first
+  local allGpus = {}
+
+  -- Collect NVIDIA GPUs via nvidia-smi
   local nv = exec("nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,name --format=csv,noheader,nounits")
   if nv and nv ~= "" then
-    local gpus = {}
     for line in nv:gmatch("[^\n]+") do
       line = trim(line)
       if line ~= "" then
         local parts = split(line, ",")
         if #parts >= 6 then
-          gpus[#gpus + 1] = {
+          allGpus[#allGpus + 1] = {
             name        = trim(parts[6]),
             vendor      = "nvidia",
             utilization = tonumber(trim(parts[1])) or 0,
@@ -280,36 +281,69 @@ function sysmon.gpu()
         end
       end
     end
-    if #gpus > 0 then return gpus end
   end
 
-  -- Try AMD via sysfs
-  local amdGpus = {}
+  -- Scan sysfs for AMD and Intel GPUs
   for i = 0, 7 do
     local base = "/sys/class/drm/card" .. i .. "/device"
-    local busy = readFile(base .. "/gpu_busy_percent")
-    if busy then
-      local name = readFile(base .. "/product_name") or readFile(base .. "/pp_features") or "AMD GPU"
-      name = trim(name)
-      local temp = readFile(base .. "/hwmon/hwmon0/temp1_input")
-      local tempC = temp and (tonumber(trim(temp)) or 0) / 1000 or 0
-      local memUsed = readFile(base .. "/mem_info_vram_used")
-      local memTotal = readFile(base .. "/mem_info_vram_total")
-      amdGpus[#amdGpus + 1] = {
-        name        = name,
-        vendor      = "amd",
-        utilization = tonumber(trim(busy)) or 0,
-        memUsed     = memUsed and math.floor((tonumber(trim(memUsed)) or 0) / (1024 * 1024)) or 0,
-        memTotal    = memTotal and math.floor((tonumber(trim(memTotal)) or 0) / (1024 * 1024)) or 0,
-        memUnit     = "MiB",
-        temperature = math.floor(tempC * 10 + 0.5) / 10,
-        power       = 0,
-      }
+    local vendor = readFile(base .. "/vendor")
+    if vendor then
+      vendor = trim(vendor)
+      if vendor == "0x1002" then
+        -- AMD
+        local busy = readFile(base .. "/gpu_busy_percent")
+        if busy then
+          local name = readFile(base .. "/product_name") or "AMD GPU"
+          local temp = readFile(base .. "/hwmon/hwmon0/temp1_input")
+          local tempC = temp and (tonumber(trim(temp)) or 0) / 1000 or 0
+          local memUsed = readFile(base .. "/mem_info_vram_used")
+          local memTotal = readFile(base .. "/mem_info_vram_total")
+          allGpus[#allGpus + 1] = {
+            name        = trim(name),
+            vendor      = "amd",
+            utilization = tonumber(trim(busy)) or 0,
+            memUsed     = memUsed and math.floor((tonumber(trim(memUsed)) or 0) / (1024*1024)) or 0,
+            memTotal    = memTotal and math.floor((tonumber(trim(memTotal)) or 0) / (1024*1024)) or 0,
+            memUnit     = "MiB",
+            temperature = math.floor(tempC * 10 + 0.5) / 10,
+            power       = 0,
+          }
+        end
+      elseif vendor == "0x8086" then
+        -- Intel integrated
+        local name = readFile(base .. "/product_name") or "Intel Graphics"
+        -- find hwmon for temp
+        local tempC = 0
+        for h = 0, 4 do
+          local t = readFile(base .. "/hwmon/hwmon" .. h .. "/temp1_input")
+          if t then tempC = (tonumber(trim(t)) or 0) / 1000; break end
+        end
+        -- utilization via gt_act_freq_mhz / gt_max_freq_mhz as a rough proxy
+        local actFreq  = readFile(base .. "/drm/card" .. i .. "/gt_act_freq_mhz") or
+                         readFile("/sys/class/drm/card" .. i .. "/gt_act_freq_mhz")
+        local maxFreq  = readFile(base .. "/drm/card" .. i .. "/gt_max_freq_mhz") or
+                         readFile("/sys/class/drm/card" .. i .. "/gt_max_freq_mhz")
+        local util = 0
+        if actFreq and maxFreq then
+          local a = tonumber(trim(actFreq)) or 0
+          local m = tonumber(trim(maxFreq)) or 1
+          util = m > 0 and math.floor(a / m * 100) or 0
+        end
+        allGpus[#allGpus + 1] = {
+          name        = trim(name),
+          vendor      = "intel",
+          utilization = util,
+          memUsed     = 0,
+          memTotal    = 0,
+          memUnit     = "MiB",
+          temperature = math.floor(tempC * 10 + 0.5) / 10,
+          power       = 0,
+        }
+      end
     end
   end
-  if #amdGpus > 0 then return amdGpus end
 
-  return nil
+  return #allGpus > 0 and allGpus or nil
 end
 
 -- ── Network I/O (delta-based rates) ─────────────────────────

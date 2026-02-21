@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Box, Text } from './primitives';
 import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
-import { useSpring } from './animation';
 
 export interface ProgressBarProps {
   value: number;
@@ -33,9 +32,7 @@ export function ProgressBar({
 }: ProgressBarProps) {
   const [hovered, setHovered] = useState(false);
   const clamped = clamp01(value);
-  const fillWidth = animated
-    ? useSpring(clamped * 100, { stiffness: 120, damping: 20 })
-    : clamped * 100;
+  const fillWidth = clamped * 100;
 
   const pct = Math.round(clamped * 100);
   const labelText = label ?? `${pct}%`;
@@ -59,6 +56,9 @@ export function ProgressBar({
         height,
         backgroundColor: color,
         borderRadius: height / 2,
+        transition: animated
+          ? { width: { duration: 320, easing: 'spring' } }
+          : undefined,
       }} />
       {showText && (
         <Box style={{

@@ -44,6 +44,32 @@ interface UseRackOptions {
   maxFps?: number;
 }
 
+type ListLike<T> = T[] | Record<string, T> | null | undefined;
+
+function normalizeList<T>(value: ListLike<T>): T[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+
+  const keys = Object.keys(value);
+  if (keys.length === 0) return [];
+
+  const sortedKeys = keys
+    .slice()
+    .sort((a, b) => {
+      const ai = Number(a);
+      const bi = Number(b);
+      const aIsInt = Number.isInteger(ai) && String(ai) === a;
+      const bIsInt = Number.isInteger(bi) && String(bi) === b;
+      if (aIsInt && bIsInt) return ai - bi;
+      if (aIsInt) return -1;
+      if (bIsInt) return 1;
+      return a.localeCompare(b);
+    });
+
+  const record = value as Record<string, T>;
+  return sortedKeys.map((key) => record[key]);
+}
+
 function topologySignature(modules: ModuleState[], connections: Connection[]): string {
   if (modules.length === 0 && connections.length === 0) return '';
   const modSig = modules
@@ -84,12 +110,14 @@ export function useRack(options?: UseRackOptions): UseRackResult {
   const disconnectRpc = useLoveRPC('audio:disconnect');
 
   useLoveEvent('audio:state', (state: RackState) => {
+    const modules = normalizeList<ModuleState>((state as any)?.modules);
+    const connections = normalizeList<Connection>((state as any)?.connections);
     const now = Date.now();
     if (minIntervalMs > 0 && now - lastUpdateAtRef.current < minIntervalMs) {
       return;
     }
 
-    const topo = topologySignature(state.modules, state.connections);
+    const topo = topologySignature(modules, connections);
 
     // Idle engine emits empty state at ~30fps; avoid pointless rerenders.
     if (!topologyOnly && topo === '' && lastTopologyRef.current === '') {
@@ -101,8 +129,8 @@ export function useRack(options?: UseRackOptions): UseRackResult {
 
     lastTopologyRef.current = topo;
     lastUpdateAtRef.current = now;
-    setModules(state.modules);
-    setConnections(state.connections);
+    setModules(modules);
+    setConnections(connections);
   });
 
   const addModule = useCallback(
@@ -154,7 +182,8 @@ export function useModule(moduleId: string): UseModuleResult {
   const setParamRpc = useLoveRPC('audio:setParam');
 
   useLoveEvent('audio:state', (rackState: RackState) => {
-    const mod = rackState.modules.find((m) => m.id === moduleId);
+    const mod = normalizeList<ModuleState>((rackState as any)?.modules)
+      .find((m) => m.id === moduleId);
     if (mod) {
       setState(mod);
     }
@@ -195,7 +224,8 @@ export function useParam(
   const setParamRpc = useLoveRPC('audio:setParam');
 
   useLoveEvent('audio:state', (rackState: RackState) => {
-    const mod = rackState.modules.find((m) => m.id === moduleId);
+    const mod = normalizeList<ModuleState>((rackState as any)?.modules)
+      .find((m) => m.id === moduleId);
     if (mod && mod.params[paramName] !== undefined) {
       setValue(mod.params[paramName]);
     }
@@ -235,11 +265,12 @@ export function useMIDI(): UseMIDIResult {
   const unmapRpc = useLoveRPC('audio:midiUnmap');
 
   useLoveEvent('audio:state', (rackState: RackState) => {
-    if (rackState.midi) {
-      setAvailable(rackState.midi.available);
-      setDevices(rackState.midi.devices);
-      setMappings(rackState.midi.mappings);
-      setLearning(rackState.midi.learning);
+    const midi = (rackState as any)?.midi;
+    if (midi) {
+      setAvailable(Boolean(midi.available));
+      setDevices(normalizeList<MIDIDevice>(midi.devices));
+      setMappings(normalizeList<MIDIMapping>(midi.mappings));
+      setLearning(midi.learning ?? null);
     }
   });
 
@@ -355,7 +386,8 @@ export function useClock(moduleId: string): UseClockResult {
   const setParamRpc = useLoveRPC('audio:setParam');
 
   useLoveEvent('audio:state', (rackState: RackState) => {
-    const mod = rackState.modules.find((m) => m.id === moduleId);
+    const mod = normalizeList<ModuleState>((rackState as any)?.modules)
+      .find((m) => m.id === moduleId);
     if (mod) {
       if (mod.clock) {
         setPosition(mod.clock);
@@ -447,11 +479,11 @@ export function useSampler(moduleId: string): UseSamplerResult {
   const noteOnRpc = useLoveRPC('audio:noteOn');
 
   useLoveEvent('audio:state', (rackState: RackState) => {
-    const mod = rackState.modules.find((m) => m.id === moduleId);
+    const mod = normalizeList<ModuleState>((rackState as any)?.modules)
+      .find((m) => m.id === moduleId);
     if (mod?.sampler) {
       setSlots(mod.sampler.slots || {});
-      // Lua empty tables serialize as {} not [] — ensure array
-      setVoices(Array.isArray(mod.sampler.voices) ? mod.sampler.voices : []);
+      setVoices(normalizeList<SamplerVoice>(mod.sampler.voices as ListLike<SamplerVoice>));
     }
   });
 
@@ -510,8 +542,8 @@ export function useRecorder(): UseRecorderResult {
   const listDevices = useCallback(
     async () => {
       const result = await listDevicesRpc({});
-      if (result?.devices) {
-        setDevices(result.devices);
+      if (result && typeof result === 'object' && 'devices' in result) {
+        setDevices(normalizeList<AudioRecordingDevice>((result as any).devices));
       }
       return result;
     },
@@ -555,7 +587,8 @@ export function useSequencer(moduleId: string): UseSequencerResult {
   const clearPatternRpc = useLoveRPC('audio:clearPattern');
 
   useLoveEvent('audio:state', (rackState: RackState) => {
-    const mod = rackState.modules.find((m) => m.id === moduleId);
+    const mod = normalizeList<ModuleState>((rackState as any)?.modules)
+      .find((m) => m.id === moduleId);
     if (mod?.sequencer) {
       setPattern(mod.sequencer.pattern || {});
       setCurrentStep(mod.sequencer.currentStep || 0);

@@ -216,7 +216,15 @@ cd "$BUILD_DIR/fribidi-build"
 
 echo "=== fribidi: build (-j$J) ==="
 make -j"$J"
-make install
+# `make install` may fail on the docs step if c2man is not installed.
+# Fall back to manual installation of the library and headers.
+if ! make install 2>/dev/null; then
+    echo "=== fribidi: make install failed (likely docs/c2man), installing manually ==="
+    mkdir -p "$FRIBIDI_INSTALL/lib/pkgconfig" "$FRIBIDI_INSTALL/include/fribidi"
+    cp "$BUILD_DIR/fribidi-build/lib/.libs/libfribidi.a" "$FRIBIDI_INSTALL/lib/"
+    cp "$FRIBIDI_SRC/lib/fribidi"*.h "$FRIBIDI_INSTALL/include/fribidi/"
+    cp "$BUILD_DIR/fribidi-build/lib/fribidi-config.h" "$FRIBIDI_INSTALL/include/fribidi/"
+fi
 
 # ── libass ─────────────────────────────────────────────────────────────────────
 # Subtitle rendering library. Required by mpv. Uses our cross-compiled

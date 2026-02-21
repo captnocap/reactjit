@@ -134,6 +134,20 @@ export const lastfm: ServiceDefinition = {
   baseUrl: 'https://ws.audioscrobbler.com/2.0/',
 };
 
+export const polypizza: ServiceDefinition = {
+  id: 'polypizza',
+  name: 'Poly Pizza',
+  category: 'media',
+  auth: {
+    type: 'header',
+    fields: [
+      { key: 'apiKey', label: 'API Key', placeholder: 'Poly Pizza API key' },
+    ],
+  },
+  docsUrl: 'https://support.poly.pizza/en/articles/9799638-poly-pizza-api',
+  baseUrl: 'https://poly.pizza/api/v1.1',
+};
+
 // Dev
 
 export const github: ServiceDefinition = {
@@ -357,6 +371,7 @@ export const builtinServices: ServiceDefinition[] = [
   jellyfin,
   trakt,
   lastfm,
+  polypizza,
   // Dev
   github,
   steam,

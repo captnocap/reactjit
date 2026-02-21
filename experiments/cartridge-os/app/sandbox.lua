@@ -96,17 +96,24 @@ if not bootFacts.dri then
 end
 
 -- ── Read verdict pipe (FD 3) ─────────────────────────────────────────────────
+-- /proc may not be mounted (sysmon: false + mount namespace), so we can't use
+-- /proc/self/fd/3. Read the raw fd directly via FFI.
 
 local verdictCode, verdictKeyId, verdictName = 0, "", "unknown"
-local vf = real_io.open("/proc/self/fd/3", "rb")
-if vf then
-  local data = vf:read(17)
-  vf:close()
-  if data and #data >= 17 then
-    verdictCode = data:byte(1)
+do
+  real_ffi.cdef[[
+    typedef long ssize_t;
+    ssize_t read(int fd, void *buf, size_t count);
+    int close(int fd);
+  ]]
+  local buf = real_ffi.new("uint8_t[17]")
+  local n = real_ffi.C.read(3, buf, 17)
+  real_ffi.C.close(3)
+  if n >= 17 then
+    verdictCode = buf[0]
     verdictKeyId = ""
-    for i = 2, 9 do
-      verdictKeyId = verdictKeyId .. string.format("%02x", data:byte(i))
+    for i = 1, 8 do
+      verdictKeyId = verdictKeyId .. string.format("%02x", buf[i])
     end
   end
 end

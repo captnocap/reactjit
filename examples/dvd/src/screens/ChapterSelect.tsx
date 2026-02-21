@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable, useSpring } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@ilovereact/core';
 import { useDVD } from '../dvd/context';
 import { rgba } from '../hex';
 import type { Chapter } from '../data';
@@ -9,9 +9,7 @@ import type { Chapter } from '../data';
 function ChapterCard({ chapter }: { chapter: Chapter }) {
   const { playChapter } = useDVD();
   const [hovered, setHovered] = React.useState(false);
-  const glow = useSpring(hovered ? 1 : 0, { stiffness: 200, damping: 20 });
-
-  const borderAlpha = 0.1 + glow * 0.7;
+  const borderAlpha = hovered ? 0.8 : 0.1;
 
   return (
     <Pressable
@@ -31,6 +29,7 @@ function ChapterCard({ chapter }: { chapter: Chapter }) {
           borderRadius: 6,
           borderWidth: 1,
           borderColor: rgba(212, 168, 67, borderAlpha),
+          transition: { borderColor: { duration: 220, easing: 'spring' } },
           overflow: 'hidden',
           justifyContent: 'flex-end',
         }}
@@ -53,6 +52,7 @@ function ChapterCard({ chapter }: { chapter: Chapter }) {
             height: 28,
             borderRadius: 14,
             backgroundColor: hovered ? '#d4a843' : '#333333',
+            transition: { backgroundColor: { duration: 220, easing: 'spring' } },
             justifyContent: 'center',
             alignItems: 'center',
           }}>

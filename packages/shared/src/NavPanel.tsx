@@ -19,6 +19,7 @@ export interface NavPanelProps {
   onSelect?: (id: string) => void;
   header?: React.ReactNode;
   width?: number;
+  contentAlign?: 'start' | 'center';
   style?: Style;
 }
 
@@ -28,8 +29,11 @@ export function NavPanel({
   onSelect,
   header,
   width = 180,
+  contentAlign = 'start',
   style,
 }: NavPanelProps) {
+  const centered = contentAlign === 'center';
+
   return (
     <Box style={{
       width,
@@ -52,8 +56,16 @@ export function NavPanel({
       {/* Sections */}
       {sections.map((section) => (
         <Box key={section.title}>
-          <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-            <Text style={{ color: '#334155', fontSize: 9 }}>
+          <Box
+            style={{
+              paddingLeft: centered ? 8 : 12,
+              paddingRight: 8,
+              paddingTop: 8,
+              paddingBottom: 2,
+              alignItems: centered ? 'center' : 'start',
+            }}
+          >
+            <Text style={{ color: '#334155', fontSize: 9, textAlign: centered ? 'center' : 'left' }}>
               {section.title.toUpperCase()}
             </Text>
           </Box>
@@ -64,10 +76,11 @@ export function NavPanel({
                 key={item.id}
                 onPress={() => onSelect?.(item.id)}
                 style={(state) => ({
-                  paddingLeft: 16,
+                  paddingLeft: centered ? 10 : 16,
                   paddingRight: 8,
                   paddingTop: 4,
                   paddingBottom: 4,
+                  alignItems: centered ? 'center' : 'start',
                   backgroundColor: isActive
                     ? '#1e293b'
                     : state.hovered
@@ -78,6 +91,7 @@ export function NavPanel({
                 <Text style={{
                   color: isActive ? '#e2e8f0' : '#64748b',
                   fontSize: 11,
+                  textAlign: centered ? 'center' : 'left',
                 }}>
                   {item.label}
                 </Text>

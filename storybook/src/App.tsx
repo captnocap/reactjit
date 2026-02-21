@@ -1,17 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
 import { ScaleProvider } from '../../packages/shared/src/ScaleContext';
-import { stories, type StoryDef } from './stories';
+import { stories, type StoryDef, type StorySection } from './stories';
 import { StoryBridge } from './StoryBridge';
 import { DocsViewer } from './docs/DocsViewer';
 import { useSettingsRegistry } from '../../packages/apis/src';
 import contentData from './generated/content.json';
 
-function groupByCategory(list: StoryDef[]): Map<string, StoryDef[]> {
-  const map = new Map<string, StoryDef[]>();
+const SECTION_ORDER: StorySection[] = ['Core', 'Packages', 'Demos', 'Stress Test', 'Dev'];
+
+function groupBySection(list: StoryDef[]): Map<StorySection, StoryDef[]> {
+  const map = new Map<StorySection, StoryDef[]>();
+  for (const section of SECTION_ORDER) map.set(section, []);
   for (const s of list) {
-    if (!map.has(s.category)) map.set(s.category, []);
-    map.get(s.category)!.push(s);
+    const section = (s.section ?? 'Packages') as StorySection;
+    if (!map.has(section)) map.set(section, []);
+    map.get(section)!.push(s);
   }
   return map;
 }
@@ -35,7 +39,7 @@ export function App() {
 
   const [mode, setMode] = useState<'stories' | 'docs'>(getInitialMode);
   const [activeId, setActiveId] = useState(getInitialStory);
-  const groups = useMemo(() => groupByCategory(stories), []);
+  const groups = useMemo(() => groupBySection(stories), []);
   const activeStory = stories.find(s => s.id === activeId);
   const StoryComponent = activeStory?.component;
 
@@ -119,13 +123,13 @@ export function App() {
             </div>
 
             <div style={{ flex: 1, paddingTop: 8 }}>
-              {Array.from(groups.entries()).map(([category, list]) => (
-                <div key={category} style={{ marginBottom: 8 }}>
+              {Array.from(groups.entries()).map(([section, list]) => (
+                <div key={section} style={{ marginBottom: 8 }}>
                   <div style={{
                     padding: '8px 16px 4px', fontSize: 9, fontWeight: 600,
                     letterSpacing: '0.1em', color: '#334155', textTransform: 'uppercase',
                   }}>
-                    {category}
+                    {section}
                   </div>
                   {list.map(s => (
                     <div
@@ -166,7 +170,7 @@ export function App() {
                 {activeStory?.title}
               </span>
               <span style={{ fontSize: 10, color: '#334155' }}>
-                {activeStory?.category}
+                {activeStory?.section}
               </span>
             </header>
 

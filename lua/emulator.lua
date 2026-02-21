@@ -42,8 +42,11 @@ ffi.cdef[[
 -- ffi.load uses dlopen which resolves relative to process CWD, not Love2D's
 -- game directory. Resolve to absolute path using love.filesystem.getSource().
 local agnesLib = nil
+local agnesLoadAttempted = false
 local function loadAgnes()
   if agnesLib then return agnesLib end
+  if agnesLoadAttempted then return nil end
+  agnesLoadAttempted = true
 
   local libpath = "lua/emulator/libagnes.so"
 
