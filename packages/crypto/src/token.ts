@@ -1,40 +1,33 @@
 /**
- * Secure token/password generation — @noble/hashes randomBytes.
+ * Secure token/password generation — routed to Lua/C via RPC.
+ * Uses libsodium's randombytes_buf().
  */
 
-import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
-import { toBase64 } from './encoding';
+import { rpc } from './rpc';
 
 /**
  * Generate a cryptographically random hex token.
  *
  * @example
- * const token = randomToken(32); // 64 hex chars
+ * const token = await randomToken(32); // 64 hex chars
  */
-export function randomToken(bytes: number = 32): string {
-  return bytesToHex(randomBytes(bytes));
+export function randomToken(bytes: number = 32): Promise<string> {
+  return rpc<{ token: string }>('crypto:randomToken', { bytes })
+    .then(r => r.token);
 }
 
 /**
  * Generate a cryptographically random base64 token.
- *
- * @example
- * const token = randomBase64(32); // ~43 base64 chars
  */
-export function randomBase64(bytes: number = 32): string {
-  return toBase64(randomBytes(bytes));
+export function randomBase64(bytes: number = 32): Promise<string> {
+  return rpc<{ token: string }>('crypto:randomBase64', { bytes })
+    .then(r => r.token);
 }
 
 /**
  * Generate a URL-safe random string (alphanumeric).
- *
- * @example
- * const id = randomId(16); // 16 alphanumeric chars
  */
-export function randomId(length: number = 16): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = randomBytes(length);
-  let result = '';
-  for (let i = 0; i < length; i++) result += chars[bytes[i] % chars.length];
-  return result;
+export function randomId(length: number = 16): Promise<string> {
+  return rpc<{ id: string }>('crypto:randomId', { length })
+    .then(r => r.id);
 }

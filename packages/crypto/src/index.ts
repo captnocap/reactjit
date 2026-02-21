@@ -5,9 +5,19 @@ export type {
   SignedMessage,
   HashResult,
   EncryptOptions,
+  ScryptParams,
+  Argon2idParams,
+  Pbkdf2Params,
 } from './types';
 
-// ── Hashing (@noble/hashes) ────────────────────────────
+// ── Bridge setup ──────────────────────────────────────
+export { setCryptoBridge } from './rpc';
+
+// ── React hook ────────────────────────────────────────
+export { useCrypto } from './hooks';
+export type { CryptoAPI } from './hooks';
+
+// ── Hashing (libsodium + libcrypto + libblake3) ──────
 export {
   sha256,
   sha512,
@@ -19,7 +29,7 @@ export {
   timingSafeEqual,
 } from './hash';
 
-// ── Symmetric Encryption (@noble/ciphers) ──────────────
+// ── Symmetric Encryption (libsodium) ─────────────────
 export {
   encrypt,
   decrypt,
@@ -28,7 +38,7 @@ export {
   randomBytes,
 } from './encrypt';
 
-// ── Signing & Key Exchange (@noble/curves) ─────────────
+// ── Signing & Key Exchange (libsodium) ───────────────
 export {
   generateSigningKeys,
   sign,
@@ -38,8 +48,8 @@ export {
   diffieHellman,
 } from './sign';
 
-// ── Token Generation ───────────────────────────────────
+// ── Token Generation (libsodium) ─────────────────────
 export { randomToken, randomBase64, randomId } from './token';
 
-// ── Encoding ───────────────────────────────────────────
+// ── Encoding (pure JS, no bridge needed) ─────────────
 export { toHex, fromHex, toBase64, fromBase64 } from './encoding';

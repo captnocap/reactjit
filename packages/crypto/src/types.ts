@@ -8,10 +8,28 @@ export interface EncryptedData {
   nonce: string;
   /** Base64-encoded salt (for password-derived keys) */
   salt: string;
+  /** KDF used */
+  kdf: 'scrypt' | 'pbkdf2' | 'argon2id';
   /** KDF parameters */
-  kdf: 'scrypt' | 'pbkdf2';
-  /** KDF iteration count / cost factor */
-  kdfParams: { N?: number; r?: number; p?: number; iterations?: number };
+  kdfParams: ScryptParams | Argon2idParams | Pbkdf2Params;
+}
+
+/** scrypt KDF parameters */
+export interface ScryptParams {
+  N?: number;
+  r?: number;
+  p?: number;
+}
+
+/** Argon2id KDF parameters */
+export interface Argon2idParams {
+  opslimit?: number;
+  memlimit?: number;
+}
+
+/** PBKDF2 KDF parameters */
+export interface Pbkdf2Params {
+  iterations?: number;
 }
 
 /** Key pair for asymmetric operations */
@@ -21,7 +39,7 @@ export interface KeyPair {
   /** Hex-encoded private key */
   privateKey: string;
   /** Curve used */
-  curve: 'ed25519' | 'x25519' | 'secp256k1';
+  curve: 'ed25519' | 'x25519';
 }
 
 /** Signed message */
@@ -42,20 +60,14 @@ export interface HashResult {
   hex: string;
   /** Base64-encoded hash */
   base64: string;
-  /** Raw bytes */
-  bytes: Uint8Array;
 }
 
 /** Options for password-based encryption */
 export interface EncryptOptions {
-  /** Encryption algorithm. Default: 'aes-256-gcm' */
+  /** Encryption algorithm. Default: 'xchacha20-poly1305' */
   algorithm?: 'aes-256-gcm' | 'chacha20-poly1305' | 'xchacha20-poly1305';
-}
-
-/** Options for useEncrypt/useDecrypt hooks */
-export interface CryptoHookResult<T> {
-  execute: (...args: any[]) => Promise<T>;
-  loading: boolean;
-  error: Error | null;
-  result: T | null;
+  /** KDF to use. Default: 'argon2id' */
+  kdf?: 'scrypt' | 'pbkdf2' | 'argon2id';
+  /** KDF tuning params. */
+  kdfParams?: ScryptParams | Argon2idParams | Pbkdf2Params;
 }

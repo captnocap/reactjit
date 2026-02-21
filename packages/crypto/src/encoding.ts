@@ -1,12 +1,32 @@
 /**
  * Encoding utilities — hex, base64.
- * Hex re-exports from @noble/hashes. Base64 is a pure format conversion (not crypto).
+ * Pure format conversions, no crypto, no bridge dependency.
  */
 
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+// ── Hex ───────────────────────────────────────────────
 
-// Re-export noble's hex utils
-export { bytesToHex as toHex, hexToBytes as fromHex };
+const HEX = '0123456789abcdef';
+
+export function toHex(bytes: Uint8Array): string {
+  let result = '';
+  for (let i = 0; i < bytes.length; i++) {
+    result += HEX[bytes[i] >> 4];
+    result += HEX[bytes[i] & 0xf];
+  }
+  return result;
+}
+
+export function fromHex(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) throw new Error('Invalid hex string length');
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    const hi = parseInt(hex[i], 16);
+    const lo = parseInt(hex[i + 1], 16);
+    if (isNaN(hi) || isNaN(lo)) throw new Error('Invalid hex character');
+    bytes[i / 2] = (hi << 4) | lo;
+  }
+  return bytes;
+}
 
 // ── Base64 (format conversion, not cryptography) ────────
 

@@ -1,90 +1,70 @@
 /**
- * Hash functions — thin wrappers over @noble/hashes.
- * Audited, battle-tested implementations.
+ * Hash functions — routed to Lua/C via RPC.
+ *
+ * libsodium: SHA-256, SHA-512, BLAKE2b
+ * OpenSSL:   BLAKE2s
+ * libblake3: BLAKE3
  */
 
-import { sha256 as _sha256, sha512 as _sha512 } from '@noble/hashes/sha2.js';
-import { blake2b } from '@noble/hashes/blake2.js';
-import { blake2s } from '@noble/hashes/blake2.js';
-import { blake3 } from '@noble/hashes/blake3.js';
-import { hmac as _hmac } from '@noble/hashes/hmac.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
-import { toBase64 } from './encoding';
+import { rpc } from './rpc';
 import type { HashResult } from './types';
-
-function toHashResult(bytes: Uint8Array): HashResult {
-  return { hex: bytesToHex(bytes), base64: toBase64(bytes), bytes };
-}
-
-function toBytes(input: string | Uint8Array): Uint8Array {
-  return typeof input === 'string' ? new TextEncoder().encode(input) : input;
-}
 
 /**
  * SHA-256.
  * @example
- * sha256('hello').hex // 'b94d27b9...'
+ * const h = await sha256('hello');
+ * h.hex // 'b94d27b9...'
  */
-export function sha256(input: string | Uint8Array): HashResult {
-  return toHashResult(_sha256(toBytes(input)));
+export function sha256(input: string): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hash', { algorithm: 'sha256', input });
 }
 
 /**
  * SHA-512.
- * @example
- * sha512('hello').hex
  */
-export function sha512(input: string | Uint8Array): HashResult {
-  return toHashResult(_sha512(toBytes(input)));
+export function sha512(input: string): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hash', { algorithm: 'sha512', input });
 }
 
 /**
- * BLAKE2b (32-byte default).
- * @example
- * hash_blake2b('hello').hex
+ * BLAKE2b (default 32-byte output).
  */
-export function hash_blake2b(input: string | Uint8Array, bytes: number = 32): HashResult {
-  return toHashResult(blake2b(toBytes(input), { dkLen: bytes }));
+export function hash_blake2b(input: string, outputBytes?: number): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hash', { algorithm: 'blake2b', input, outputBytes });
 }
 
 /**
- * BLAKE2s (32-byte).
+ * BLAKE2s (32-byte output, via OpenSSL).
  */
-export function hash_blake2s(input: string | Uint8Array): HashResult {
-  return toHashResult(blake2s(toBytes(input)));
+export function hash_blake2s(input: string): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hash', { algorithm: 'blake2s', input });
 }
 
 /**
- * BLAKE3 (32-byte default).
+ * BLAKE3 (default 32-byte output).
  */
-export function hash_blake3(input: string | Uint8Array, bytes: number = 32): HashResult {
-  return toHashResult(blake3(toBytes(input), { dkLen: bytes }));
+export function hash_blake3(input: string, outputBytes?: number): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hash', { algorithm: 'blake3', input, outputBytes });
 }
 
 /**
  * HMAC-SHA256.
- * @example
- * hmacSHA256('secret', 'message').hex
  */
-export function hmacSHA256(key: string | Uint8Array, message: string | Uint8Array): HashResult {
-  return toHashResult(_hmac(_sha256, toBytes(key), toBytes(message)));
+export function hmacSHA256(key: string, message: string): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hmac', { algorithm: 'sha256', key, message });
 }
 
 /**
  * HMAC-SHA512.
  */
-export function hmacSHA512(key: string | Uint8Array, message: string | Uint8Array): HashResult {
-  return toHashResult(_hmac(_sha512, toBytes(key), toBytes(message)));
+export function hmacSHA512(key: string, message: string): Promise<HashResult> {
+  return rpc<HashResult>('crypto:hmac', { algorithm: 'sha512', key, message });
 }
 
 /**
- * Timing-safe comparison.
+ * Timing-safe comparison (constant-time).
  */
-export function timingSafeEqual(a: string | Uint8Array, b: string | Uint8Array): boolean {
-  const ab = toBytes(a);
-  const bb = toBytes(b);
-  if (ab.length !== bb.length) return false;
-  let result = 0;
-  for (let i = 0; i < ab.length; i++) result |= ab[i] ^ bb[i];
-  return result === 0;
+export function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  return rpc<{ equal: boolean }>('crypto:timingSafeEqual', { a, b })
+    .then(r => r.equal);
 }

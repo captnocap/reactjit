@@ -9,7 +9,7 @@ STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 STORYBOOK_SDL2 = storybook/sdl2
 STORYBOOK_SDL2_LIB = $(STORYBOOK_SDL2)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows cli-setup
+.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows cli-setup build-blake3
 
 all: setup build
 
@@ -25,7 +25,7 @@ node_modules:
 # build.zig references native/quickjs-shim/qjs_ffi_shim.c directly —
 # no manual copy into the quickjs/ source tree needed.
 
-setup: $(LIB_DIR)/libquickjs.so
+setup: $(LIB_DIR)/libquickjs.so lib/libblake3.so
 
 $(QUICKJS_DIR):
 	git clone https://github.com/quickjs-ng/quickjs.git $(QUICKJS_DIR)
@@ -36,6 +36,30 @@ $(LIB_DIR):
 $(LIB_DIR)/libquickjs.so: $(QUICKJS_DIR) $(LIB_DIR)
 	zig build libquickjs
 	cp zig-out/lib/libquickjs.so $(LIB_DIR)/
+
+# ── BLAKE3 (crypto) ────────────────────────────────────
+# Built from vendored C reference implementation in third_party/blake3/.
+# Uses x86-64 assembly for SSE2/SSE4.1/AVX2/AVX512 + portable C fallback.
+
+BLAKE3_SRC = third_party/blake3
+BLAKE3_OBJS = /tmp/blake3.o /tmp/blake3_dispatch.o /tmp/blake3_portable.o \
+              /tmp/blake3_sse2_asm.o /tmp/blake3_sse41_asm.o \
+              /tmp/blake3_avx2_asm.o /tmp/blake3_avx512_asm.o
+
+lib/libblake3.so: $(BLAKE3_SRC)/blake3.c
+	mkdir -p lib
+	cc -c -fPIC -O3 -o /tmp/blake3.o $(BLAKE3_SRC)/blake3.c
+	cc -c -fPIC -O3 -o /tmp/blake3_dispatch.o $(BLAKE3_SRC)/blake3_dispatch.c
+	cc -c -fPIC -O3 -o /tmp/blake3_portable.o $(BLAKE3_SRC)/blake3_portable.c
+	cc -c -fPIC -O3 -o /tmp/blake3_sse2_asm.o $(BLAKE3_SRC)/blake3_sse2_x86-64_unix.S
+	cc -c -fPIC -O3 -o /tmp/blake3_sse41_asm.o $(BLAKE3_SRC)/blake3_sse41_x86-64_unix.S
+	cc -c -fPIC -O3 -o /tmp/blake3_avx2_asm.o $(BLAKE3_SRC)/blake3_avx2_x86-64_unix.S
+	cc -c -fPIC -O3 -o /tmp/blake3_avx512_asm.o $(BLAKE3_SRC)/blake3_avx512_x86-64_unix.S
+	cc -shared -o $@ $(BLAKE3_OBJS)
+	rm -f $(BLAKE3_OBJS)
+	@echo "  Built libblake3.so"
+
+build-blake3: lib/libblake3.so
 
 # Copy libquickjs to storybook
 $(STORYBOOK_LIB)/libquickjs.so: $(LIB_DIR)/libquickjs.so
@@ -366,6 +390,26 @@ cli-setup: setup
 		echo "  Bundled libarchive.so.13"; \
 	else \
 		echo "  Warning: libarchive.so.13 not found — archive features won't be bundled"; \
+	fi
+	@LIBSODIUM=$$(ldconfig -p | grep 'libsodium.so' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBSODIUM" ]; then \
+		cp "$$LIBSODIUM" cli/runtime/lib/libsodium.so; \
+		echo "  Bundled libsodium.so"; \
+	else \
+		echo "  Warning: libsodium.so not found — crypto features won't be bundled"; \
+	fi
+	@LIBCRYPTO=$$(ldconfig -p | grep 'libcrypto.so ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBCRYPTO" ]; then \
+		cp "$$LIBCRYPTO" cli/runtime/lib/libcrypto.so; \
+		echo "  Bundled libcrypto.so"; \
+	else \
+		echo "  Warning: libcrypto.so not found — BLAKE2s/PBKDF2 won't be bundled"; \
+	fi
+	@if [ -f lib/libblake3.so ]; then \
+		cp lib/libblake3.so cli/runtime/lib/libblake3.so; \
+		echo "  Bundled libblake3.so"; \
+	else \
+		echo "  Warning: lib/libblake3.so not found — run 'make build-blake3' first"; \
 	fi
 	@TOR=$$(which tor 2>/dev/null); \
 	if [ -n "$$TOR" ]; then \

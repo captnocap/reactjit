@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { NativeBridge } from './NativeBridge';
 import { createRoot } from './NativeRenderer';
 import { BridgeProvider, RendererProvider } from '../../shared/src/context';
+import { setCryptoBridge } from '../../crypto/src/rpc';
 
 export interface Love2DAppHandle {
   render(element: ReactNode): void;
@@ -26,6 +27,7 @@ export interface Love2DAppHandle {
 
 export function createLove2DApp(): Love2DAppHandle {
   const bridge = new NativeBridge();
+  setCryptoBridge(bridge);
   const root = createRoot();
 
   function doRender(element: ReactNode) {
