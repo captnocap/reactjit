@@ -9,6 +9,7 @@
 //!   zig build libquickjs               → QuickJS shared library only
 //!   zig build ft-helper                → FreeType bridge (FreeType compiled from source)
 //!   zig build blake3                   → BLAKE3 hash library
+//!   zig build sdl2                     → SDL2 shared library (from vendored source)
 //!   zig build cartridge                → CartridgeOS PID 1 (x86_64-linux-musl, static)
 //!   zig build all                      → all of the above
 //!
@@ -23,12 +24,18 @@
 //! The Makefile cli-setup target copies from zig-out/lib/ into cli/runtime/lib/.
 
 const std = @import("std");
+const sdl2_build = @import("build_sdl2.zig");
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
     const all_step = b.step("all", "Build all native artifacts");
+
+    // ── libSDL2 ──────────────────────────────────────────────────────────
+    // SDL2 compiled from vendored source (allyourcodebase/SDL 2.32.10) as a
+    // shared library for LuaJIT FFI. Cross-compilable to all desktop targets.
+    sdl2_build.addStep(b, target, optimize, all_step);
 
     // ── libquickjs ────────────────────────────────────────────────────────
     // QuickJS JS engine + FFI shim. Loaded by LuaJIT via ffi.load() in
