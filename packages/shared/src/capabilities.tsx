@@ -18,7 +18,7 @@
 
 import React from 'react';
 import { Native } from './Native';
-import type { AudioProps, TimerProps } from './types';
+import type { AudioProps, TimerProps, LLMAgentProps } from './types';
 
 /**
  * Declarative audio playback.
@@ -41,4 +41,14 @@ export function Audio(props: AudioProps) {
  */
 export function Timer(props: TimerProps) {
   return <Native type="Timer" {...props} />;
+}
+
+/**
+ * Local LLM agent with coroutine-based non-blocking inference.
+ *
+ * @example
+ * <LLMAgent chatModel="model.gguf" onToken={(e) => setStream(e.fullText)} onDone={(e) => done(e.response)} />
+ */
+export function LLMAgent(props: LLMAgentProps) {
+  return <Native type="LLMAgent" {...props} />;
 }

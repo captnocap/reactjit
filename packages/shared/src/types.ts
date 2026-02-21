@@ -625,6 +625,33 @@ export interface TimerProps {
 }
 
 /**
+ * Declarative local LLM agent with coroutine-based non-blocking inference.
+ *
+ * @example
+ * <LLMAgent
+ *   chatModel="path/to/model.gguf"
+ *   onToken={(e) => setStream(e.fullText)}
+ *   onDone={(e) => addMessage(e.response)}
+ * />
+ */
+export interface LLMAgentProps {
+  chatModel?: string;
+  embedModel?: string;
+  personality?: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  memoryTopK?: number;
+  onToken?: (event: LoveEvent) => void;
+  onThink?: (event: LoveEvent) => void;
+  onStateChange?: (event: LoveEvent) => void;
+  onDone?: (event: LoveEvent) => void;
+  onError?: (event: LoveEvent) => void;
+  onReady?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
  * Schema returned by capabilities:list RPC for AI discovery.
  */
 export interface CapabilitySchema {
