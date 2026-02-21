@@ -223,6 +223,11 @@ ffi.cdef[[
   float  *llama_get_embeddings_ith(llama_context *ctx, int32_t i);
   float  *llama_get_embeddings_seq(llama_context *ctx, llama_seq_id seq_id);
 
+  // ── Memory (KV cache) ──
+  typedef struct llama_memory llama_memory;
+  llama_memory *llama_get_memory(llama_context *ctx);
+  void          llama_memory_clear(llama_memory *mem, bool data);
+
   // ── Perf ──
   void llama_perf_context_print(const llama_context *ctx);
 
@@ -592,12 +597,23 @@ function Model:generate(prompt, callback, opts)
     lib.llama_sampler_chain_add(smpl, lib.llama_sampler_init_dist(0xFFFFFFFF))
   end
 
-  -- Process prompt
-  local batch = lib.llama_batch_get_one(tokens, n_tokens)
-  local rc = lib.llama_decode(self._ctx, batch)
-  if rc ~= 0 then
-    lib.llama_sampler_free(smpl)
-    error("[llm] failed to decode prompt, rc=" .. rc)
+  -- Clear KV cache before each generation (stateless per call)
+  local mem = lib.llama_get_memory(self._ctx)
+  if mem ~= nil then lib.llama_memory_clear(mem, true) end
+
+  -- Process prompt in chunks of n_batch
+  local n_batch = 512
+  local pos = 0
+  while pos < n_tokens do
+    local chunk_size = math.min(n_batch, n_tokens - pos)
+    local chunk_tokens = tokens + pos  -- pointer arithmetic
+    local batch = lib.llama_batch_get_one(chunk_tokens, chunk_size)
+    local rc = lib.llama_decode(self._ctx, batch)
+    if rc ~= 0 then
+      lib.llama_sampler_free(smpl)
+      error("[llm] failed to decode prompt chunk, rc=" .. rc)
+    end
+    pos = pos + chunk_size
   end
 
   -- Generate tokens
@@ -652,9 +668,9 @@ end
 -- ============================================================================
 
 function Model:clear_context()
-  local mem = ffi.C.llama_get_memory(self._ctx)
+  local mem = lib.llama_get_memory(self._ctx)
   if mem ~= nil then
-    ffi.C.llama_memory_clear(mem, true)
+    lib.llama_memory_clear(mem, true)
   end
 end
 

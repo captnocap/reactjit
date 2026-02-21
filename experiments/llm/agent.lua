@@ -85,56 +85,126 @@ local function json_encode(val)
   return '"' .. tostring(val) .. '"'
 end
 
--- Simple JSON decoder (handles the subset we need for tool calls)
-local function json_decode(str)
-  if not str or str == "" then return nil end
-  str = str:match("^%s*(.-)%s*$") -- trim
+-- Recursive descent JSON decoder for tool call parsing.
+-- Handles: strings, numbers, booleans, null, objects, arrays.
+local json_decode
+do
+  local function skip_ws(s, pos)
+    return s:match("^%s*()", pos)
+  end
 
-  -- null
-  if str == "null" then return nil end
-  -- boolean
-  if str == "true" then return true end
-  if str == "false" then return false end
-  -- number
-  local num = tonumber(str)
-  if num then return num end
-  -- string
-  if str:sub(1, 1) == '"' and str:sub(-1) == '"' then
-    return str:sub(2, -2):gsub('\\n', '\n'):gsub('\\r', '\r'):gsub('\\t', '\t'):gsub('\\"', '"'):gsub('\\\\', '\\')
+  local function decode_string(s, pos)
+    assert(s:sub(pos, pos) == '"', "expected '\"' at " .. pos)
+    local i = pos + 1
+    local parts = {}
+    while i <= #s do
+      local c = s:sub(i, i)
+      if c == '"' then
+        return table.concat(parts), i + 1
+      elseif c == '\\' then
+        local nc = s:sub(i + 1, i + 1)
+        if nc == 'n' then parts[#parts + 1] = '\n'
+        elseif nc == 'r' then parts[#parts + 1] = '\r'
+        elseif nc == 't' then parts[#parts + 1] = '\t'
+        elseif nc == '"' then parts[#parts + 1] = '"'
+        elseif nc == '\\' then parts[#parts + 1] = '\\'
+        elseif nc == '/' then parts[#parts + 1] = '/'
+        elseif nc == 'u' then
+          -- \uXXXX — decode to byte (ASCII range only for now)
+          local hex = s:sub(i + 2, i + 5)
+          local cp = tonumber(hex, 16) or 0
+          if cp < 128 then
+            parts[#parts + 1] = string.char(cp)
+          else
+            parts[#parts + 1] = "?" -- non-ASCII placeholder
+          end
+          i = i + 6
+          goto continue
+        else
+          parts[#parts + 1] = nc
+        end
+        i = i + 2
+      else
+        parts[#parts + 1] = c
+        i = i + 1
+      end
+      ::continue::
+    end
+    error("unterminated string at " .. pos)
   end
-  -- array
-  if str:sub(1, 1) == '[' then
-    -- Use Lua's load for arrays (safe enough for our controlled inputs)
-    local fn = load("return " .. str:gsub('%[', '{'):gsub('%]', '}'):gsub('"([^"]-)"', '"%1"'))
-    if fn then
-      local ok, result = pcall(fn)
-      if ok then return result end
+
+  local function decode_value(s, pos)
+    pos = skip_ws(s, pos)
+    local c = s:sub(pos, pos)
+
+    -- string
+    if c == '"' then
+      return decode_string(s, pos)
     end
-    return {}
+
+    -- object
+    if c == '{' then
+      local obj = {}
+      pos = skip_ws(s, pos + 1)
+      if s:sub(pos, pos) == '}' then return obj, pos + 1 end
+      while true do
+        pos = skip_ws(s, pos)
+        local key
+        key, pos = decode_string(s, pos)
+        pos = skip_ws(s, pos)
+        assert(s:sub(pos, pos) == ':', "expected ':' at " .. pos)
+        pos = pos + 1
+        local val
+        val, pos = decode_value(s, pos)
+        obj[key] = val
+        pos = skip_ws(s, pos)
+        local sep = s:sub(pos, pos)
+        if sep == '}' then return obj, pos + 1 end
+        assert(sep == ',', "expected ',' or '}' at " .. pos)
+        pos = pos + 1
+      end
+    end
+
+    -- array
+    if c == '[' then
+      local arr = {}
+      pos = skip_ws(s, pos + 1)
+      if s:sub(pos, pos) == ']' then return arr, pos + 1 end
+      while true do
+        local val
+        val, pos = decode_value(s, pos)
+        arr[#arr + 1] = val
+        pos = skip_ws(s, pos)
+        local sep = s:sub(pos, pos)
+        if sep == ']' then return arr, pos + 1 end
+        assert(sep == ',', "expected ',' or ']' at " .. pos)
+        pos = pos + 1
+      end
+    end
+
+    -- null
+    if s:sub(pos, pos + 3) == "null" then return nil, pos + 4 end
+
+    -- true
+    if s:sub(pos, pos + 3) == "true" then return true, pos + 4 end
+
+    -- false
+    if s:sub(pos, pos + 4) == "false" then return false, pos + 5 end
+
+    -- number
+    local num_str = s:match("^%-?%d+%.?%d*[eE]?[%+%-]?%d*", pos)
+    if num_str then
+      return tonumber(num_str), pos + #num_str
+    end
+
+    error("unexpected character at " .. pos .. ": " .. c)
   end
-  -- object — parse key:value pairs
-  if str:sub(1, 1) == '{' then
-    local inner = str:sub(2, -2)
-    local obj = {}
-    -- Match "key": value patterns
-    for key, val in inner:gmatch('"([^"]+)"%s*:%s*(".-"[%s,}]*)') do
-      obj[key] = json_decode(val:match("^(.-)%s*[,}]?$"))
-    end
-    for key, val in inner:gmatch('"([^"]+)"%s*:%s*([%d%.%-]+)') do
-      obj[key] = tonumber(val)
-    end
-    for key, val in inner:gmatch('"([^"]+)"%s*:%s*(true)') do
-      obj[key] = true
-    end
-    for key, val in inner:gmatch('"([^"]+)"%s*:%s*(false)') do
-      obj[key] = false
-    end
-    for key, val in inner:gmatch('"([^"]+)"%s*:%s*(null)') do
-      obj[key] = nil
-    end
-    return obj
+
+  json_decode = function(str)
+    if not str or str == "" then return nil end
+    local val, _ = decode_value(str, 1)
+    return val
   end
-  return str
 end
 
 -- ============================================================================
@@ -316,17 +386,26 @@ end
 -- Tool call parsing and execution
 -- ============================================================================
 
+--- Strip <think>...</think> blocks from model output.
+local function strip_think_tags(text)
+  -- Remove closed <think>...</think> blocks
+  text = text:gsub("<think>.-</think>", "")
+  -- Remove unclosed <think> block at end of text
+  text = text:gsub("<think>.*$", "")
+  return text:match("^%s*(.-)%s*$") or ""
+end
+
 --- Parse tool calls from model output.
---- Returns the cleaned text (without tool_call blocks) and an array of calls.
+--- Returns the cleaned text (without tool_call/think blocks) and an array of calls.
 local function parse_tool_calls(text)
   local calls = {}
   local clean = text
 
-  -- Find all <tool_call>...</tool_call> blocks
+  -- Find all <tool_call>...</tool_call> blocks (properly closed)
   for block in text:gmatch("<tool_call>(.-)</tool_call>") do
     local trimmed = block:match("^%s*(.-)%s*$")
-    local call = json_decode(trimmed)
-    if call and call.name then
+    local ok, call = pcall(json_decode, trimmed)
+    if ok and call and call.name then
       calls[#calls + 1] = {
         id = new_id("tc_"),
         name = call.name,
@@ -335,9 +414,28 @@ local function parse_tool_calls(text)
     end
   end
 
+  -- Handle unclosed <tool_call> at end of output (common with smaller models)
+  if #calls == 0 then
+    local unclosed = text:match("<tool_call>(.-)$")
+    if unclosed then
+      local trimmed = unclosed:match("^%s*(.-)%s*$")
+      local ok, call = pcall(json_decode, trimmed)
+      if ok and call and call.name then
+        calls[#calls + 1] = {
+          id = new_id("tc_"),
+          name = call.name,
+          args = call.args or {},
+        }
+      end
+    end
+  end
+
   -- Remove tool_call blocks from output
   clean = clean:gsub("<tool_call>.-</tool_call>", "")
-  clean = clean:match("^%s*(.-)%s*$") or ""
+  clean = clean:gsub("<tool_call>.*$", "") -- unclosed
+
+  -- Strip thinking blocks
+  clean = strip_think_tags(clean)
 
   return clean, calls
 end
@@ -691,5 +789,6 @@ end
 Agent.json_encode = json_encode
 Agent.json_decode = json_decode
 Agent.parse_tool_calls = parse_tool_calls
+Agent.strip_think_tags = strip_think_tags
 
 return Agent
