@@ -40,7 +40,6 @@ LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. No game engine dependency. We own
 
 **Also supported:**
 - **Love2D** — The original proving ground. Still available for game developers who want Love2D's ecosystem (images, video, audio, binary dist). Entry point: `love .`
-- **Grid / JS targets** — Terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM
 - **Web (planned)** — WASM build from SDL2/OpenGL via Emscripten. Renders to `<canvas>`, not DOM.
 
 The target interface is formalized in `lua/target_sdl2.lua` (primary) and `lua/target_love2d.lua` (legacy). A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
@@ -61,12 +60,11 @@ reactjit lint                   # Static layout linter — run after ANY compone
 reactjit screenshot [--output]  # Headless capture — verify layouts visually
 ```
 
-**Targets:** `sdl2`, `love`, `terminal`, `cc`, `nvim`, `hs`, `awesome`, `web`
+**Targets:** `sdl2`, `love`
 
 **Dist formats:**
 - `dist:sdl2` — Native binary (SDL2 + OpenGL + LuaJIT)
 - `dist:love` — Self-extracting Linux binary (Love2D + bundled glibc)
-- `dist:terminal` / `dist:cc` / `dist:nvim` / `dist:hs` / `dist:awesome` — Single-file Node.js executable (shebang + CJS)
 - `dist:web` — WASM + WebGL bundle (planned — Emscripten compilation of SDL2 renderer)
 
 **After writing or modifying any component:** run `reactjit lint`, then
@@ -159,13 +157,6 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 |---------|--------|------|
 | `packages/shared` | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
 | `packages/native` | `@reactjit/native` | react-reconciler host config, instance tree, event dispatch |
-| `packages/web` | `@reactjit/web` | DOM overlay renderer (legacy — will be replaced by WASM target) |
-| `packages/grid` | `@reactjit/grid` | Shared layout engine for character-grid targets |
-| `packages/terminal` | `@reactjit/terminal` | Pure JS terminal renderer (ANSI truecolor) |
-| `packages/cc` | `@reactjit/cc` | ComputerCraft target (WebSocket, 16-color) |
-| `packages/nvim` | `@reactjit/nvim` | Neovim target (stdio, floating windows) |
-| `packages/hs` | `@reactjit/hs` | Hammerspoon target (WebSocket, pixel canvas) |
-| `packages/awesome` | `@reactjit/awesome` | AwesomeWM target (stdio, Cairo) |
 | `packages/components` | `@reactjit/components` | Re-exports layout helpers (Card, Badge, FlexRow, etc.) |
 
 **Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12).
@@ -174,17 +165,13 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 
 **Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
 
-**Examples** (`examples/`): `native-hud/`, `terminal-demo/`, `cc-demo/`, `nvim-demo/`, `hs-demo/`, `awesome-demo/`, `neofetch/`, `playground/`, `web-overlay/`.
+**Examples** (`examples/`): `native-hud/`, `neofetch/`, `playground/`.
 
 ## esbuild Formats by Target
 
 These are encoded in `cli/targets.mjs` — you should never need to specify them manually:
 
 - **SDL2 / Love2D**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). SDL2: launched via `luajit sdl2_init.lua`. Love2D: launched via `love .`. Same bundle format, different run loop.
-- **Grid targets** (terminal, nvim, cc, hs, awesome): `--platform=node --format=esm`
-- **Web**: `--format=esm` (current), WASM (planned)
-- WebSocket targets (cc, hs) additionally need `--external:ws`
-- **Dist builds** (grid): `--format=cjs --platform=node --external:ws` + shebang
 
 ## Critical Layout Rules
 
@@ -286,11 +273,9 @@ The `Box` component in `packages/shared/src/primitives.tsx` uses an **explicit w
 
 If you skip steps 2-3, the handler silently disappears — `extractHandlers` in hostConfig never sees it, `hasHandlers` is false on the Lua node, and hit testing skips it. The symptom is events being pushed correctly from Lua but never reaching React.
 
-## Primitives by Target
+## Primitives
 
-**SDL2 / Love2D:** Import from `@reactjit/core` — `Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, etc.
-
-**Grid targets:** Use lowercase JSX intrinsics (`<view>`, `<text>`) and define local `Box`/`Text` wrappers.
+Import from `@reactjit/core` — `Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, etc.
 
 ## The Storybook IS the Framework (CRITICAL)
 
