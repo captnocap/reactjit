@@ -6,6 +6,7 @@ import { runLint, runBundleChecks } from './lint.mjs';
 import { updateCommand } from './update.mjs';
 import { TARGETS, TARGET_NAMES, esbuildArgs, esbuildDistArgs } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
+import { transpile } from '../lib/tsl.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = join(__dirname, '..');
@@ -88,6 +89,61 @@ function convertVideos(dirs) {
   return { converted, skipped, noFFmpeg: false };
 }
 
+/**
+ * Find and transpile all .tsl files in the project.
+ * TSL files are transpiled to .lua and placed in the lua/ directory.
+ *
+ * Convention: src/tsl/foo.tsl → lua/tsl/foo.lua
+ *             (any .tsl file under src/ maps to lua/ with the same relative path)
+ *
+ * @param {string} cwd - project root
+ * @returns {{ transpiled: number, errors: number }}
+ */
+function transpileTslFiles(cwd) {
+  const srcDir = join(cwd, 'src');
+  if (!existsSync(srcDir)) return { transpiled: 0, errors: 0 };
+
+  const tslFiles = [];
+  const skip = new Set(['node_modules', 'dist', '.git', 'build', 'out']);
+
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.tsl')) tslFiles.push(full);
+    }
+  }
+  walk(srcDir);
+
+  if (tslFiles.length === 0) return { transpiled: 0, errors: 0 };
+
+  let transpiled = 0;
+  let errors = 0;
+
+  for (const tslPath of tslFiles) {
+    // src/tsl/particles.tsl → tsl/particles (relative path without ext)
+    const relFromSrc = tslPath.slice(srcDir.length + 1);
+    const luaRelPath = relFromSrc.replace(/\.tsl$/, '.lua');
+    const outPath = join(cwd, 'lua', luaRelPath);
+
+    try {
+      const source = readFileSync(tslPath, 'utf-8');
+      const lua = transpile(source, tslPath);
+
+      const outDir = dirname(outPath);
+      if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+      writeFileSync(outPath, lua);
+      transpiled++;
+    } catch (err) {
+      console.error(`  TSL error in ${relFromSrc}: ${err.message}`);
+      errors++;
+    }
+  }
+
+  return { transpiled, errors };
+}
+
 export async function buildCommand(args) {
   const cwd = process.cwd();
   const projectName = basename(cwd);
@@ -99,6 +155,18 @@ export async function buildCommand(args) {
   const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2'].includes(rawTarget);
   if (!skipUpdate && isLuaTarget) {
     await updateCommand([]);
+  }
+
+  // Transpile .tsl files → .lua (before lint + bundle, so lint can see generated files)
+  if (isLuaTarget) {
+    const tsl = transpileTslFiles(cwd);
+    if (tsl.errors > 0) {
+      console.error(`\n  Build blocked: ${tsl.errors} TSL transpilation error(s).\n`);
+      process.exit(1);
+    }
+    if (tsl.transpiled > 0) {
+      console.log(`  TSL: ${tsl.transpiled} file(s) transpiled to lua/\n`);
+    }
   }
 
   // Parse dist:<target> vs plain <target>

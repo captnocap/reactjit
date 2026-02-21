@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, watch } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { TARGETS, TARGET_NAMES, esbuildArgs } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
+import { transpile } from '../lib/tsl.mjs';
 
 export async function devCommand(args) {
   const cwd = process.cwd();
@@ -36,6 +37,20 @@ export async function devCommand(args) {
     sdl2: 'Bundle → sdl2/bundle.js. Run: luajit sdl2/main.lua (or luajit storybook/sdl2/main.lua from repo root).',
   };
   const hint = hints[targetName] || `Output: ${target.output}`;
+
+  // Transpile .tsl files before first build
+  if (targetName === 'love' || targetName === 'sdl2') {
+    const tslResult = transpileTslInSrc(cwd);
+    if (tslResult.errors > 0) {
+      console.error(`  ${tslResult.errors} TSL error(s) — fix before continuing.\n`);
+      process.exit(1);
+    }
+    if (tslResult.transpiled > 0) {
+      console.log(`  TSL: ${tslResult.transpiled} file(s) transpiled to lua/`);
+    }
+    // Watch src/ for .tsl changes and re-transpile
+    watchTslFiles(cwd);
+  }
 
   console.log(`
   ReactJIT dev mode [${targetName}]
@@ -126,4 +141,67 @@ export async function devCommand(args) {
   await new Promise((resolve) => {
     esbuild.on('exit', resolve);
   });
+}
+
+// ── TSL helpers ───────────────────────────────────────────
+
+function findTslFiles(dir) {
+  const files = [];
+  const skip = new Set(['node_modules', 'dist', '.git', 'build', 'out']);
+  function walk(d) {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.tsl')) files.push(full);
+    }
+  }
+  walk(dir);
+  return files;
+}
+
+function transpileTslInSrc(cwd) {
+  const srcDir = join(cwd, 'src');
+  if (!existsSync(srcDir)) return { transpiled: 0, errors: 0 };
+  const files = findTslFiles(srcDir);
+  let transpiled = 0, errors = 0;
+  for (const f of files) {
+    const rel = f.slice(srcDir.length + 1);
+    const outPath = join(cwd, 'lua', rel.replace(/\.tsl$/, '.lua'));
+    try {
+      const lua = transpile(readFileSync(f, 'utf-8'), f);
+      const outDir = dirname(outPath);
+      if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+      writeFileSync(outPath, lua);
+      transpiled++;
+    } catch (err) {
+      console.error(`  TSL error in ${rel}: ${err.message}`);
+      errors++;
+    }
+  }
+  return { transpiled, errors };
+}
+
+function watchTslFiles(cwd) {
+  const srcDir = join(cwd, 'src');
+  if (!existsSync(srcDir)) return;
+  try {
+    watch(srcDir, { recursive: true }, (eventType, filename) => {
+      if (!filename || !filename.endsWith('.tsl')) return;
+      const fullPath = join(srcDir, filename);
+      if (!existsSync(fullPath)) return;
+      const outPath = join(cwd, 'lua', filename.replace(/\.tsl$/, '.lua'));
+      try {
+        const lua = transpile(readFileSync(fullPath, 'utf-8'), fullPath);
+        const outDir = dirname(outPath);
+        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+        writeFileSync(outPath, lua);
+        console.log(`[rjit] TSL: ${filename} → lua/${filename.replace(/\.tsl$/, '.lua')}`);
+      } catch (err) {
+        console.error(`[rjit] TSL error in ${filename}: ${err.message}`);
+      }
+    });
+  } catch {
+    // fs.watch recursive not supported on all platforms — fall back to initial transpile only
+  }
 }
