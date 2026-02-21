@@ -821,12 +821,15 @@ end
 
 local function drawEditorIllustration(state, props, w, h)
   local t = state.time
-  local panelPad = 12
+  local panelPad = max(8, floor(min(w, h) * 0.08))
   local panelW = w - panelPad * 2
   local panelH = h - panelPad * 2
   local panelX = panelPad
   local panelY = panelPad
-  local gutterW = 34
+  local headerH = max(18, min(26, floor(panelH * 0.24)))
+  local gutterW = max(22, min(34, floor(panelW * 0.13)))
+  local rightRailW = max(0, min(86, floor(panelW * 0.26)))
+  local contentW = max(70, panelW - gutterW - rightRailW - 16)
 
   love.graphics.setColor(0.04, 0.05, 0.08, 1)
   love.graphics.rectangle("fill", 0, 0, w, h)
@@ -834,25 +837,38 @@ local function drawEditorIllustration(state, props, w, h)
   love.graphics.setColor(0.08, 0.1, 0.14, 1)
   love.graphics.rectangle("fill", panelX, panelY, panelW, panelH, 10, 10)
   love.graphics.setColor(0.12, 0.14, 0.2, 1)
-  love.graphics.rectangle("fill", panelX, panelY, panelW, 26, 10, 10)
+  love.graphics.rectangle("fill", panelX, panelY, panelW, headerH, 10, 10)
   love.graphics.setColor(0.08, 0.09, 0.13, 1)
-  love.graphics.rectangle("fill", panelX, panelY + 26, gutterW, panelH - 26)
-  love.graphics.setColor(0.1, 0.12, 0.18, 1)
-  love.graphics.rectangle("fill", panelX + panelW - 110, panelY + 26, 110, panelH - 26)
+  love.graphics.rectangle("fill", panelX, panelY + headerH, gutterW, panelH - headerH)
+  if rightRailW > 0 then
+    love.graphics.setColor(0.1, 0.12, 0.18, 1)
+    love.graphics.rectangle("fill", panelX + panelW - rightRailW, panelY + headerH, rightRailW, panelH - headerH)
+  end
 
-  local codeFont = getFont(max(10, floor(h * 0.115)))
+  local contentH = max(40, panelH - headerH - 8)
+  local lineCount = 4
+  local lineGap = max(2, floor(contentH * 0.05))
+  local fitByHeight = floor((contentH - lineGap * (lineCount - 1)) / lineCount)
+  local fitByWidth = floor(contentW / 15)
+  local codeFont = getFont(max(8, min(max(10, floor(h * 0.115)), fitByHeight, fitByWidth)))
   love.graphics.setFont(codeFont)
 
-  local lineH = codeFont:getHeight() + 5
-  local baseY = panelY + 34
+  local lineH = codeFont:getHeight() + lineGap
+  local baseY = panelY + headerH + 4
   local txtX = panelX + gutterW + 10
 
   local typed = takeChars(toChars(tostring(props.text or "LUA TYPE FX")), state.typeProgress)
   local typedText = charsToString(typed)
 
+  local typedLine = "\"" .. typedText .. "\";"
+  local maxTypedWidth = contentW - 8
+  while #typedLine > 6 and codeFont:getWidth(typedLine) > maxTypedWidth do
+    typedLine = typedLine:sub(1, #typedLine - 2) .. "…"
+  end
+
   local lines = {
     "const headline =",
-    "\"" .. typedText .. "\";",
+    typedLine,
     "render(<TextEffect",
     "  type=\"gradient-typing\" />)",
   }
@@ -861,7 +877,7 @@ local function drawEditorIllustration(state, props, w, h)
     local yy = baseY + (i - 1) * lineH
     if i == 2 then
       love.graphics.setColor(0.2, 0.24, 0.34, 0.4)
-      love.graphics.rectangle("fill", panelX + gutterW + 6, yy - 1, panelW - gutterW - 122, lineH, 4, 4)
+      love.graphics.rectangle("fill", panelX + gutterW + 6, yy - 1, contentW - 4, lineH, 4, 4)
     end
     love.graphics.setColor(0.45, 0.5, 0.62, 0.86)
     love.graphics.print(tostring(i), panelX + 9, yy)
@@ -876,13 +892,16 @@ local function drawEditorIllustration(state, props, w, h)
     love.graphics.print(line, txtX, yy)
   end
 
-  for i = 1, 3 do
-    local bx = panelX + panelW - 100
-    local by = baseY + (i - 1) * (lineH + 6)
-    love.graphics.setColor(0.14, 0.18, 0.26, 0.9)
-    love.graphics.rectangle("fill", bx, by, 84, lineH, 4, 4)
-    love.graphics.setColor(0.62, 0.84, 1.0, 0.5)
-    love.graphics.rectangle("fill", bx + 8, by + 5, 48 + sin(t * 2 + i) * 18, 2)
+  if rightRailW >= 56 then
+    for i = 1, 3 do
+      local bx = panelX + panelW - rightRailW + 6
+      local by = baseY + (i - 1) * (lineH + 4)
+      local chipW = rightRailW - 12
+      love.graphics.setColor(0.14, 0.18, 0.26, 0.9)
+      love.graphics.rectangle("fill", bx, by, chipW, lineH, 4, 4)
+      love.graphics.setColor(0.62, 0.84, 1.0, 0.5)
+      love.graphics.rectangle("fill", bx + 6, by + 5, max(10, chipW * 0.6 + sin(t * 2 + i) * 8), 2)
+    end
   end
 
   if floor(t * 2) % 2 == 0 then

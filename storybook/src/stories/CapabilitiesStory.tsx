@@ -9,6 +9,24 @@ import React, { useState } from 'react';
 import { Box, Text, Slider, Pressable, Timer, useCapabilities } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
+function LectureCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ backgroundColor: c.surface1, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 8 }}>
+      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>{title}</Text>
+      <Box style={{ gap: 6 }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
 function TimerDemo() {
   const c = useThemeColors();
   const [count, setCount] = useState(0);
@@ -168,22 +186,60 @@ function OneLinerShowcase() {
 }
 
 export function CapabilitiesStory() {
+  const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, gap: 16 }}>
-      <Text style={{ fontSize: 16, color: '#cdd6f4', fontWeight: 'bold' }}>
-        {'Declarative Native Capabilities'}
-      </Text>
-      <Text style={{ fontSize: 11, color: '#a6adc8' }}>
-        {'One component per capability. No bridge calls. AI-discoverable.'}
-      </Text>
+    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
+      <Box style={{ width: '100%', maxWidth: 920, gap: 12 }}>
+        <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold' }}>
+          {'Declarative Native Capabilities'}
+        </Text>
+        <Text style={{ fontSize: 11, color: c.textDim }}>
+          {'One component per capability. React sets intent; Lua owns execution and runtime lifecycle.'}
+        </Text>
 
-      <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
-        <Box style={{ flexGrow: 1, gap: 16 }}>
-          <TimerDemo />
-          <OneLinerShowcase />
-        </Box>
-        <Box style={{ flexGrow: 1 }}>
-          <CapabilityDiscovery />
+        <LectureCard title="Lecture: Mental Model">
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+            {'1) React declares targets and props. It does not drive per-frame effects.'}
+          </Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+            {'2) Lua capability modules own polling, ticking, and native API interop.'}
+          </Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+            {'3) Events flow back as declarative callbacks (onTick, onReady, onStatus).'}
+          </Text>
+        </LectureCard>
+
+        <LectureCard title="Lecture: AI Workflow">
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+            {'Step A: call useCapabilities() once and inspect schema + events.'}
+          </Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+            {'Step B: render one-liner components with valid props from discovered schema.'}
+          </Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+            {'Step C: react to emitted events and adjust props; no bridge-specific code needed.'}
+          </Text>
+        </LectureCard>
+
+        <Box style={{ flexDirection: 'row', gap: 16, width: '100%', alignItems: 'flex-start' }}>
+          <Box style={{ flexGrow: 1, gap: 16 }}>
+            <TimerDemo />
+            <OneLinerShowcase />
+          </Box>
+          <Box style={{ flexGrow: 1, gap: 16 }}>
+            <CapabilityDiscovery />
+            <LectureCard title="Lecture: Capability Contract">
+              <Text style={{ fontSize: 10, color: c.textSecondary }}>
+                {'Schema is the contract. Keep props typed, bounded, and defaulted.'}
+              </Text>
+              <Text style={{ fontSize: 10, color: c.textSecondary }}>
+                {'Effects should be idempotent per frame and emit minimal, meaningful events.'}
+              </Text>
+              <Text style={{ fontSize: 10, color: c.textSecondary }}>
+                {'Treat capability state as runtime-owned: React mutates intent, Lua reconciles execution.'}
+              </Text>
+            </LectureCard>
+          </Box>
         </Box>
       </Box>
     </Box>

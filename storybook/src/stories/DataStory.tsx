@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Text,
-  Pressable,
   Table,
   Badge,
   BarChart,
@@ -125,43 +124,7 @@ const VIEW_OPTIONS: Array<{ id: DataView; label: string; subtitle: string }> = [
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{title}</Text>
-      <Box
-        style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 10,
-          alignItems: 'center',
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
-  );
-}
-
-function DemoSurface({ children }: { children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box
-      style={{
-        width: '100%',
-        maxWidth: 620,
-        backgroundColor: c.surface,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 10,
-        alignItems: 'center',
-      }}
-    >
-      {children}
-    </Box>
+    <Text style={{ color: c.text, fontSize: 12 }}>{title}</Text>
   );
 }
 
@@ -186,35 +149,41 @@ function DataViewBody({ view }: { view: DataView }) {
 
   if (view === 'table') {
     return (
-      <DemoSurface>
-        <Table columns={tableColumns} data={EMPLOYEES} rowKey="name" striped />
-      </DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
+        <Table
+          columns={tableColumns}
+          data={EMPLOYEES}
+          rowKey="name"
+          striped
+          style={{ alignSelf: 'center' }}
+        />
+      </Box>
     );
   }
 
   if (view === 'bar') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <BarChart data={BAR_DATA} height={170} showValues interactive />
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'progress') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <Box style={{ width: '100%', maxWidth: 420, gap: 8, alignItems: 'center' }}>
-          <ProgressBar value={0.28} showLabel label="Build Queue" />
-          <ProgressBar value={0.63} showLabel label="Data Sync" color={c.warning} />
-          <ProgressBar value={0.91} showLabel label="Deploy" color={c.success} />
+          <ProgressBar value={0.28} showLabel label="Build Queue" style={{ width: 320 }} />
+          <ProgressBar value={0.63} showLabel label="Data Sync" color={c.warning} style={{ width: 320 }} />
+          <ProgressBar value={0.91} showLabel label="Deploy" color={c.success} style={{ width: 320 }} />
         </Box>
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'sparkline') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <Box style={{ gap: 10, alignItems: 'center' }}>
           <Box style={{ gap: 4, alignItems: 'center' }}>
             <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>Revenue trend</Text>
@@ -225,45 +194,45 @@ function DataViewBody({ view }: { view: DataView }) {
             <Sparkline data={SPARK_DATA.map((v) => 14 - (v / 2))} width={360} height={52} interactive color="#ef4444" />
           </Box>
         </Box>
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'horizontal') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <HorizontalBarChart data={HBAR_DATA} showValues interactive />
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'stacked') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <StackedBarChart labels={STACKED_LABELS} series={STACKED_SERIES} interactive />
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'line') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <LineChart data={LINE_DATA} showArea interactive color="#3b82f6" />
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'area') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <AreaChart data={AREA_DATA} interactive color="#22c55e" showDots />
-      </DemoSurface>
+      </Box>
     );
   }
 
   if (view === 'pie') {
     return (
-      <DemoSurface>
+      <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
         <Box style={{ gap: 10, alignItems: 'center' }}>
           <PieChart data={PIE_DATA} size={190} innerRadius={44} interactive />
           <Box style={{ width: '100%', flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -275,64 +244,46 @@ function DataViewBody({ view }: { view: DataView }) {
             ))}
           </Box>
         </Box>
-      </DemoSurface>
+      </Box>
     );
   }
 
   return (
-    <DemoSurface>
+    <Box style={{ width: '100%', maxWidth: 620, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 10, alignItems: 'center' }}>
       <RadarChart axes={RADAR_AXES} data={RADAR_DATA} size={180} interactive color="#8b5cf6" />
-    </DemoSurface>
+    </Box>
   );
 }
 
 export function DataStory() {
   const c = useThemeColors();
-  const [selected, setSelected] = useState<DataView>('table');
-  const current = VIEW_OPTIONS.find((opt) => opt.id === selected) || VIEW_OPTIONS[0];
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
       <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
-        <Section title="1. Data Menu">
-          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-            Select a data primitive to preview.
+        <Section title="1. Data Primitives">
+          <Text style={{ color: c.textDim, fontSize: 10 }}>
+            One page with all chart/table primitives in section order.
           </Text>
-          <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-            {VIEW_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.id}
-                onPress={() => setSelected(opt.id)}
-                style={({ pressed, hovered }) => ({
-                  backgroundColor: selected === opt.id
-                    ? c.primary
-                    : pressed
-                      ? c.surfaceHover
-                      : hovered
-                        ? c.surfaceHover
-                        : c.surface,
-                  borderRadius: 6,
-                  borderWidth: 1,
-                  borderColor: selected === opt.id ? c.primary : c.border,
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 6,
-                  paddingBottom: 6,
-                })}
-              >
-                <Text style={{ color: selected === opt.id ? '#fff' : c.text, fontSize: 10 }}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
-          </Box>
         </Section>
 
-        <Section title="2. Active Preview">
-          <Text style={{ color: c.text, fontSize: 11, textAlign: 'center' }}>{current.label}</Text>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>{current.subtitle}</Text>
-          <DataViewBody view={selected} />
-        </Section>
+        {VIEW_OPTIONS.map((opt, idx) => (
+          <Section key={opt.id} title={`${idx + 2}. ${opt.label}`}>
+            <Box style={{
+              width: '100%',
+              backgroundColor: c.bgElevated,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: c.border,
+              padding: 12,
+              gap: 10,
+              alignItems: 'center',
+            }}>
+              <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>{opt.subtitle}</Text>
+            <DataViewBody view={opt.id} />
+            </Box>
+          </Section>
+        ))}
       </Box>
     </Box>
   );

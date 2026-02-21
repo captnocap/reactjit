@@ -35,6 +35,8 @@ export interface TextEffectProps extends EffectProps {
   typingSpeed?: number;
   /** Erase speed for looping typewriter variants. */
   eraseSpeed?: number;
+  /** Intrinsic text-like sizing and transparent background behavior. Default true. */
+  inline?: boolean;
 }
 
 /**
@@ -54,7 +56,7 @@ export function TextEffect({
     <Native
       type="TextEffect"
       effectType={type}
-      style={{ width: '100%', height: 120, ...(style || {}) }}
+      style={style}
       {...props}
     />
   );
