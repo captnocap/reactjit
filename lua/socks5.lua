@@ -1,5 +1,5 @@
 --[[
-  socks5.lua — SOCKS5 proxy client for iLoveReact
+  socks5.lua — SOCKS5 proxy client for ReactJIT
 
   Establishes a TCP tunnel through a SOCKS5 proxy.
   Supports no-auth and username/password auth (RFC 1928 + RFC 1929).

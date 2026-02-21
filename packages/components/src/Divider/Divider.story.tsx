@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Divider } from '@ilovereact/core';
+import { Box, Text, Divider } from '@reactjit/core';
 
 export function DividerStory() {
   return (

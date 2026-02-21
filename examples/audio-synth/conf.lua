@@ -1,6 +1,6 @@
 function love.conf(t)
-  t.identity = "ilovereact-synth"
-  t.window.title = "iLoveReact Synth"
+  t.identity = "reactjit-synth"
+  t.window.title = "ReactJIT Synth"
   t.window.width = 756
   t.window.height = 430
   t.window.vsync = 1

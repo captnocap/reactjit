@@ -21,7 +21,7 @@ export async function devCommand(args) {
   if (!entry) {
     const names = target.entries.map(e => `src/${e}`).join(', ');
     console.error(`No entry point found. Looked for: ${names}`);
-    console.error('Are you in an iLoveReact project directory?');
+    console.error('Are you in an ReactJIT project directory?');
     process.exit(1);
   }
 
@@ -38,7 +38,7 @@ export async function devCommand(args) {
   const hint = hints[targetName] || `Output: ${target.output}`;
 
   console.log(`
-  iLoveReact dev mode [${targetName}]
+  ReactJIT dev mode [${targetName}]
   Watching for changes...
   ${hint}
 `);

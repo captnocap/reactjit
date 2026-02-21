@@ -1,6 +1,6 @@
 /**
  * Webhook React hooks — receive and send webhooks.
- * Receiving builds on @ilovereact/server's useServer.
+ * Receiving builds on @reactjit/server's useServer.
  * Sending is a standalone fetch wrapper with retries and HMAC signing.
  */
 
@@ -20,7 +20,7 @@ import type {
 
 /**
  * Start an HTTP server that receives webhooks at a given path.
- * Builds on @ilovereact/server (requires Lua HTTP server running).
+ * Builds on @reactjit/server (requires Lua HTTP server running).
  *
  * @example
  * // GitHub webhook receiver
@@ -44,7 +44,7 @@ export function useWebhook(
   optsRef.current = options;
 
   // We need to import useServer dynamically to avoid a hard dependency
-  // on @ilovereact/server (it may not be in the bundle).
+  // on @reactjit/server (it may not be in the bundle).
   // Instead, we use the low-level bridge RPC directly.
   const bridgeRef = useRef<any>(null);
   const serverIdRef = useRef<string | null>(null);

@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { createCCServer } from '@ilovereact/cc';
+import { createCCServer } from '@reactjit/cc';
 import App from './App';
 
 const server = createCCServer({

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { useBridge, useRendererMode } from '@ilovereact/core';
+import { useBridge, useRendererMode } from '@reactjit/core';
 
 export interface GameProps {
   /** Name of the Lua game module to load (e.g. "blackhole" → lua/game/blackhole.lua) */

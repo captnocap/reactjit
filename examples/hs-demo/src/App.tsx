@@ -42,7 +42,7 @@ export default function App() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f0f23', flexDirection: 'column' }}>
       <Box style={{ backgroundColor: '#16213e', padding: 12 }}>
-        <Text style={{ color: '#ffffff', fontSize: 14 }}>iLoveReact Desktop Widget</Text>
+        <Text style={{ color: '#ffffff', fontSize: 14 }}>ReactJIT Desktop Widget</Text>
       </Box>
       <Clock />
       <Box style={{ flexDirection: 'row', gap: 4 }}>

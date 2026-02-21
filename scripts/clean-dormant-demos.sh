@@ -3,7 +3,7 @@
 # Removes regenerable runtime deps from example projects whose src/
 # hasn't been touched in the last 24 hours (configurable via --hours).
 #
-# What gets removed:  lua/ ilovereact/ lib/ bin/ data/ fonts/ dist/ bundle.js
+# What gets removed:  lua/ reactjit/ lib/ bin/ data/ fonts/ dist/ bundle.js
 #                     love/bundle.js love/lib/ love/fonts/ love/data/
 # What stays:         src/ main.lua conf.lua package.json packaging/ assets/
 #                     love/main.lua love/conf.lua tsconfig.json
@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Directories and files that are regenerable (removed during cleanup)
-CLEAN_TARGETS=(lua ilovereact lib bin data fonts dist bundle.js)
+CLEAN_TARGETS=(lua reactjit lib bin data fonts dist bundle.js)
 LOVE_CLEAN_TARGETS=(bundle.js lib fonts data)
 
 cleaned=0
@@ -110,6 +110,6 @@ if [[ "$DRY_RUN" == true ]]; then
 else
   echo "Done: $cleaned cleaned, $skipped skipped"
   if [[ $cleaned -gt 0 ]]; then
-    echo "Run 'cd examples/<name> && ilovereact update && ilovereact build' to restore."
+    echo "Run 'cd examples/<name> && reactjit update && reactjit build' to restore."
   fi
 fi

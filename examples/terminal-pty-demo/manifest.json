@@ -16,7 +16,7 @@
   "build": {
     "commit": null,
     "timestamp": null,
-    "toolchain": "ilovereact"
+    "toolchain": "reactjit"
   },
   "signature": null
 }

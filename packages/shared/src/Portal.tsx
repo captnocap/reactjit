@@ -1,5 +1,5 @@
 /**
- * Portal component system for react-love
+ * Portal component system for reactjit
  *
  * Renders children at the top level of the render tree, useful for modals,
  * tooltips, dropdowns, and overlays.

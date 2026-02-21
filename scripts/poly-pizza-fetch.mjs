@@ -5,7 +5,7 @@ import { join, basename, extname, dirname } from 'node:path';
 import { cwd, env, exit } from 'node:process';
 
 const TOOL_NAME = 'poly-pizza-fetch';
-const USER_AGENT = 'ilovereact/poly-pizza-fetch';
+const USER_AGENT = 'reactjit/poly-pizza-fetch';
 const DEFAULT_OUT_DIR = 'assets/models';
 const DEFAULT_ATTRIBUTIONS = 'ATTRIBUTIONS.md';
 const DEFAULT_BASES = [

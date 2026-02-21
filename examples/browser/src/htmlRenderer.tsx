@@ -1,8 +1,8 @@
-// Maps a parsed HTML node tree to iLoveReact primitives.
+// Maps a parsed HTML node tree to ReactJIT primitives.
 // Everything is Box/Text/Pressable — rendered as native Love2D geometry.
 
 import React from 'react';
-import { Box, Text, Pressable, Image } from '@ilovereact/core';
+import { Box, Text, Pressable, Image } from '@reactjit/core';
 import type { HtmlNode } from './htmlParser';
 
 interface RenderContext {

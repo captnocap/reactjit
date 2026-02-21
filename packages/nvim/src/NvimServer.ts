@@ -11,7 +11,7 @@ import {
   createRenderServer,
   createStdioTransport,
   type RenderServerHandle,
-} from '@ilovereact/grid';
+} from '@reactjit/grid';
 
 export interface NvimServerOptions {
   cols?: number;    // default 60

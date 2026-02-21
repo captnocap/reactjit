@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 
 // ── Layout rule reminder ─────────────────────────────────────
-// Each rule below maps to a lint guard in `ilovereact lint`.
+// Each rule below maps to a lint guard in `reactjit lint`.
 // The ✦ comments mark where rules are applied in the JSX.
 
 function RuleCard({ title, body }: { title: string; body: string }) {
@@ -45,7 +45,7 @@ export function App() {
       {/* ── Hero ────────────────────────────────── */}
       <Box style={{ alignItems: 'center', gap: 8 }}>
         <Text style={{ color: '#e2e8f0', fontSize: 28, fontWeight: '700' }}>
-          iLoveReact
+          ReactJIT
         </Text>
         <Text style={{ color: '#64748b', fontSize: 14 }}>
           Edit src/App.tsx and save to reload
@@ -83,7 +83,7 @@ export function App() {
             LAYOUT RULES
           </Text>
           <Text style={{ color: '#334155', fontSize: 10 }}>
-            enforced by ilovereact lint
+            enforced by reactjit lint
           </Text>
         </Box>
 

@@ -76,7 +76,7 @@ export default function App() {
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#0a0a0a', flexDirection: 'column' }}>
       {/* Header */}
       <Box style={{ backgroundColor: '#16213e', padding: 1 }}>
-        <Text style={{ color: '#e94560', fontSize: 13 }}>iLoveReact Terminal</Text>
+        <Text style={{ color: '#e94560', fontSize: 13 }}>ReactJIT Terminal</Text>
       </Box>
 
       {/* Clock */}

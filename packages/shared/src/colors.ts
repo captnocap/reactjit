@@ -1,8 +1,8 @@
 /**
- * Catppuccin Mocha color palette — the default theme used across iLoveReact examples.
+ * Catppuccin Mocha color palette — the default theme used across ReactJIT examples.
  *
  * Usage:
- *   import { colors } from '@ilovereact/core';
+ *   import { colors } from '@reactjit/core';
  *   <Box style={{ backgroundColor: colors.base }}>
  *     <Text style={{ color: colors.text, fontSize: 14 }}>Hello</Text>
  *   </Box>

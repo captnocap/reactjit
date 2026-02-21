@@ -15,7 +15,7 @@
   share the same React tree, so state flows naturally via props and context.
 
   Props:
-    title    string   Window title (default: "iLoveReact")
+    title    string   Window title (default: "ReactJIT")
     width    number   Window width in pixels (default: 640)
     height   number   Window height in pixels (default: 480)
     x        number   Window x position (default: centered)
@@ -38,7 +38,7 @@ Capabilities.register("Window", {
   rendersInOwnSurface = true,
 
   schema = {
-    title  = { type = "string", default = "iLoveReact", desc = "Window title" },
+    title  = { type = "string", default = "ReactJIT", desc = "Window title" },
     width  = { type = "number", default = 640, desc = "Window width in pixels" },
     height = { type = "number", default = 480, desc = "Window height in pixels" },
     x      = { type = "number", desc = "Window x position (centered if omitted)" },
@@ -49,7 +49,7 @@ Capabilities.register("Window", {
 
   create = function(nodeId, props)
     local win = WM.create({
-      title      = props.title or "iLoveReact",
+      title      = props.title or "ReactJIT",
       width      = props.width or 640,
       height     = props.height or 480,
       x          = props.x,

@@ -1,5 +1,5 @@
 --[[
-  emulator.lua — NES emulation via Agnes for iLoveReact
+  emulator.lua — NES emulation via Agnes for ReactJIT
 
   Manages NES emulator instances that render into off-screen canvases.
   The painter composites these canvases at layout positions.

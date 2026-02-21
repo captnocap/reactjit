@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { createTerminalApp } from '@ilovereact/terminal';
+import { createTerminalApp } from '@reactjit/terminal';
 import App from './App';
 
 const app = createTerminalApp({

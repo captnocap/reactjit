@@ -1,5 +1,5 @@
 /**
- * Modal component for react-love
+ * Modal component for reactjit
  *
  * Displays content in a full-screen overlay with backdrop. Works in both web
  * and native mode via the Portal / PortalHost system.

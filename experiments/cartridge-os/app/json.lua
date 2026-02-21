@@ -1,5 +1,5 @@
 --[[
-  json.lua -- Minimal JSON encoder/decoder for the react-love bridge.
+  json.lua -- Minimal JSON encoder/decoder for the reactjit bridge.
 
   Used by bridge_quickjs.lua to decode mutation commands sent as JSON strings
   from the JS reconciler, avoiding QuickJS GC race conditions during FFI

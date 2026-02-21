@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput,
   useLoveRPC, useLoveEvent, usePeerServer, useClipboard,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

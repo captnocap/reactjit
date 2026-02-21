@@ -1,5 +1,5 @@
 /**
- * Shared types for react-love primitives and style system.
+ * Shared types for reactjit primitives and style system.
  *
  * Colors can be CSS strings ("#ff0000", "rgba(...)") or
  * Love2D-style number arrays [r, g, b, a] where each is 0-1.

@@ -168,7 +168,7 @@ export function renderFullDoc(dir: ParsedDirectory): string {
   const parts: string[] = [];
 
   parts.push(SEPARATOR);
-  parts.push('iLoveReact Documentation');
+  parts.push('ReactJIT Documentation');
   parts.push(SEPARATOR);
   parts.push('');
   parts.push(`Generated: ${new Date().toISOString().split('T')[0]}`);
@@ -234,7 +234,7 @@ export function renderEndpoint(
   const parts: string[] = [];
 
   parts.push(SEPARATOR);
-  parts.push(`iLoveReact ${title}`);
+  parts.push(`ReactJIT ${title}`);
   parts.push(SEPARATOR);
   parts.push('');
   parts.push(`Generated: ${new Date().toISOString().split('T')[0]}`);
@@ -265,7 +265,7 @@ export function renderCheatsheet(dir: ParsedDirectory): string {
   const parts: string[] = [];
 
   parts.push(SEPARATOR);
-  parts.push('iLoveReact Quick Reference');
+  parts.push('ReactJIT Quick Reference');
   parts.push(SEPARATOR);
   parts.push('');
 
@@ -312,7 +312,7 @@ export function renderCheatsheet(dir: ParsedDirectory): string {
     parts.push(SUB_SEPARATOR);
     for (const [key, content] of Object.entries(cli)) {
       if (key === 'index') continue;
-      parts.push(`ilovereact ${key} — ${content.metadata.description}`);
+      parts.push(`reactjit ${key} — ${content.metadata.description}`);
     }
     parts.push('');
   }
@@ -339,7 +339,7 @@ export function renderExamplesEndpoint(dir: ParsedDirectory): string {
   const parts: string[] = [];
 
   parts.push(SEPARATOR);
-  parts.push('iLoveReact Code Examples');
+  parts.push('ReactJIT Code Examples');
   parts.push(SEPARATOR);
   parts.push('');
 

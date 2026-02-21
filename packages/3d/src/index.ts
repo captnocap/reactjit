@@ -1,4 +1,4 @@
-// @ilovereact/3d — Declarative 3D scenes in JSX via Love2D + g3d
+// @reactjit/3d — Declarative 3D scenes in JSX via Love2D + g3d
 
 export { Scene } from './Scene';
 export { Camera } from './Camera';

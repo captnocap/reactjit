@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Box, Text } from '../../ilovereact/shared/src';
+import { Box, Text } from '../../reactjit/shared/src';
 
 export interface EvalResult { component: React.ComponentType | null; error: string | null; }
 

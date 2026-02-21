@@ -1,4 +1,4 @@
-import type { Style, LoveEvent } from '@ilovereact/core';
+import type { Style, LoveEvent } from '@reactjit/core';
 
 /** 3D vector as [x, y, z] */
 export type Vec3 = [number, number, number];

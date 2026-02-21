@@ -47,7 +47,7 @@ export default function App() {
     <Box style={{ width: '100%', height: '100%', backgroundColor: 'black', flexDirection: 'column', gap: 1 }}>
       {/* Header */}
       <Box style={{ backgroundColor: '#7F664C', padding: 1 }}>
-        <Text style={{ color: 'white', fontSize: 12 }}>iLoveReact CC Demo</Text>
+        <Text style={{ color: 'white', fontSize: 12 }}>ReactJIT CC Demo</Text>
       </Box>
 
       {/* Clock */}

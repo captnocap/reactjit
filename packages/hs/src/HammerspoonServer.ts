@@ -10,7 +10,7 @@ import {
   createRenderServer,
   createWebSocketTransport,
   type RenderServerHandle,
-} from '@ilovereact/grid';
+} from '@reactjit/grid';
 
 export interface HammerspoonServerOptions {
   port?: number;    // default 8080

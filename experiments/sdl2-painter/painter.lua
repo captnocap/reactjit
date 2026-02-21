@@ -1,7 +1,7 @@
 --[[
   painter.lua -- SDL2/OpenGL painter (mirrors lua/painter.lua interface)
 
-  Walks the same node tree that the iLoveReact reconciler produces and
+  Walks the same node tree that the ReactJIT reconciler produces and
   issues OpenGL draw calls instead of love.graphics calls. This is the
   proof-of-concept for dropping Love2D as a dependency.
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
-import { useBridge, type IBridge } from '@ilovereact/core';
+import { useBridge, type IBridge } from '@reactjit/core';
 import { generateMnemonic, isValidMnemonic, mnemonicToSeed, deriveAccount } from '../crypto/keys';
 import { encryptKeystore, decryptKeystore, type EncryptedKeystore } from '../crypto/keystore';
 import { signTransaction, type Transaction } from '../crypto/signing';

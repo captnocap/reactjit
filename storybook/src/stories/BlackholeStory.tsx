@@ -170,7 +170,7 @@ export function BlackholeStory() {
       {/* RIGHT: Same game, React UI overlay */}
       <Box style={{ flexGrow: 1, gap: 0 }}>
         <Box style={{ padding: 4, paddingLeft: 8, backgroundColor: '#1a1a2e' }}>
-          <Text style={{ fontSize: 9, color: '#555' }}>After (iLoveReact)</Text>
+          <Text style={{ fontSize: 9, color: '#555' }}>After (ReactJIT)</Text>
         </Box>
         <Game
           module="blackhole"

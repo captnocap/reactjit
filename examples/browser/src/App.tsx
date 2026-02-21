@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Pressable, ScrollView, TextInput } from '@ilovereact/core';
+import { Box, Text, Pressable, ScrollView, TextInput } from '@reactjit/core';
 import { parseHtml, extractBody } from './htmlParser';
 import { RenderHtml } from './htmlRenderer';
 import type { HtmlNode } from './htmlParser';
@@ -182,7 +182,7 @@ export function App() {
         borderColor: '#1e293b',
       }}>
         <Text style={{ fontSize: 11, color: '#64748b' }}>
-          {page ? page.title : 'iLoveReact Browser'}
+          {page ? page.title : 'ReactJIT Browser'}
         </Text>
       </Box>
 
@@ -292,7 +292,7 @@ export function App() {
             gap: 12,
           }}>
             <Text style={{ fontSize: 22, color: '#e2e8f0', fontWeight: '700' }}>
-              iLoveReact Browser
+              ReactJIT Browser
             </Text>
             <Text style={{ fontSize: 13, color: '#64748b' }}>
               {USE_PROXY

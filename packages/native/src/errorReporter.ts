@@ -36,7 +36,7 @@ export function reportError(error: any, context: string): void {
 
   // Also log to console (which goes to terminal via __hostLog)
   try {
-    console.log('[react-love] ' + context + ': ' + name + ': ' + msg);
+    console.log('[reactjit] ' + context + ': ' + name + ': ' + msg);
   } catch (_) {
     // console.log itself might not be available in edge cases
   }

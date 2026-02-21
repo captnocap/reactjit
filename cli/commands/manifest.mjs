@@ -77,7 +77,7 @@ function scanSources(dir, basedir) {
 // ── Command ──────────────────────────────────────────────
 
 /**
- * ilovereact manifest — Generate or update manifest.json
+ * reactjit manifest — Generate or update manifest.json
  *
  * If manifest.json exists, preserves the capabilities block and updates
  * sources + build metadata.  If it doesn't exist, creates a new one
@@ -88,7 +88,7 @@ export async function manifestCommand(args) {
   const manifestPath = join(cwd, 'manifest.json');
   const hasExisting = existsSync(manifestPath);
 
-  console.log(bold('\n  ilovereact manifest\n'));
+  console.log(bold('\n  reactjit manifest\n'));
 
   // Load existing manifest or start fresh
   let manifest = {};
@@ -155,7 +155,7 @@ export async function manifestCommand(args) {
   manifest.build = {
     commit: commit || null,
     timestamp: new Date().toISOString(),
-    toolchain: 'ilovereact',
+    toolchain: 'reactjit',
   };
 
   // Bundle hash (if bundle.js exists)
@@ -196,7 +196,7 @@ export async function manifestCommand(args) {
   if (!hasExisting) {
     console.log(yellow('  Next steps:'));
     console.log(dim('    1. Edit manifest.json to declare the capabilities your cart needs'));
-    console.log(dim('    2. Run `ilovereact build` — manifest will be embedded automatically'));
+    console.log(dim('    2. Run `reactjit build` — manifest will be embedded automatically'));
     console.log();
   }
 }

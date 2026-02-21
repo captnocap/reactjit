@@ -363,7 +363,7 @@ Commands.register("version", {
       type = "lines",
       data = {
         { text = "  CartridgeOS v0.1.0", color = {0.4, 0.3, 1.0} },
-        { text = "  iLoveReact — no X11, no Wayland, no display server", color = {0.5, 0.5, 0.7} },
+        { text = "  ReactJIT — no X11, no Wayland, no display server", color = {0.5, 0.5, 0.7} },
         { text = "  kernel -> kmsdrm -> SDL2 -> OpenGL -> LuaJIT", color = {0.4, 0.4, 0.6} },
       },
     }

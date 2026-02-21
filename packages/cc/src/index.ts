@@ -5,5 +5,5 @@ export { createCCServer, type CCServerOptions, type CCServerHandle } from './CCS
 export { nearestCCColor, CC_PALETTE, CC_DEFAULT_FG, CC_DEFAULT_BG, type CCColor } from './palette';
 
 // Re-export layout and flatten from grid (for consumers that imported from cc)
-export { computeLayout, type LayoutNode } from '@ilovereact/grid';
-export { flatten, type DrawCommand } from '@ilovereact/grid';
+export { computeLayout, type LayoutNode } from '@reactjit/grid';
+export { flatten, type DrawCommand } from '@reactjit/grid';

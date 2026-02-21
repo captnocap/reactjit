@@ -1,5 +1,5 @@
 --[[
-  inspector.lua -- Visual debug overlay for react-love
+  inspector.lua -- Visual debug overlay for reactjit
 
   Self-contained module using raw Love2D drawing calls (like errors.lua).
   Does not touch the React tree/layout/painter pipeline. Zero impact when

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef } from 'react';
-import { Box, VideoPlayer, useHotkey } from '@ilovereact/core';
+import { Box, VideoPlayer, useHotkey } from '@reactjit/core';
 import { useDVD } from '../dvd/context';
 
 export function PlayerScreen() {

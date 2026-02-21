@@ -16,53 +16,53 @@
       ],
       "format": "cjs"
     },
-    "ilovereact/native/src/errorReporter.ts": {
+    "reactjit/native/src/errorReporter.ts": {
       "bytes": 1356,
       "imports": [],
       "format": "esm"
     },
-    "ilovereact/native/src/hostConfig.ts": {
+    "reactjit/native/src/hostConfig.ts": {
       "bytes": 16548,
       "imports": [
         {
-          "path": "ilovereact/native/src/errorReporter.ts",
+          "path": "reactjit/native/src/errorReporter.ts",
           "kind": "import-statement",
           "original": "./errorReporter"
         }
       ],
       "format": "esm"
     },
-    "ilovereact/native/src/eventDispatcher.ts": {
+    "reactjit/native/src/eventDispatcher.ts": {
       "bytes": 6246,
       "imports": [
         {
-          "path": "ilovereact/native/src/hostConfig.ts",
+          "path": "reactjit/native/src/hostConfig.ts",
           "kind": "import-statement",
           "original": "./hostConfig"
         },
         {
-          "path": "ilovereact/native/src/errorReporter.ts",
+          "path": "reactjit/native/src/errorReporter.ts",
           "kind": "import-statement",
           "original": "./errorReporter"
         }
       ],
       "format": "esm"
     },
-    "ilovereact/native/src/NativeBridge.ts": {
+    "reactjit/native/src/NativeBridge.ts": {
       "bytes": 4175,
       "imports": [
         {
-          "path": "ilovereact/native/src/eventDispatcher.ts",
+          "path": "reactjit/native/src/eventDispatcher.ts",
           "kind": "import-statement",
           "original": "./eventDispatcher"
         },
         {
-          "path": "ilovereact/native/src/errorReporter.ts",
+          "path": "reactjit/native/src/errorReporter.ts",
           "kind": "import-statement",
           "original": "./errorReporter"
         },
         {
-          "path": "ilovereact/native/src/hostConfig.ts",
+          "path": "reactjit/native/src/hostConfig.ts",
           "kind": "import-statement",
           "original": "./hostConfig"
         },
@@ -117,7 +117,7 @@
       ],
       "format": "cjs"
     },
-    "ilovereact/native/src/NativeRenderer.ts": {
+    "reactjit/native/src/NativeRenderer.ts": {
       "bytes": 2379,
       "imports": [
         {
@@ -126,19 +126,19 @@
           "original": "react-reconciler"
         },
         {
-          "path": "ilovereact/native/src/hostConfig.ts",
+          "path": "reactjit/native/src/hostConfig.ts",
           "kind": "import-statement",
           "original": "./hostConfig"
         },
         {
-          "path": "ilovereact/native/src/errorReporter.ts",
+          "path": "reactjit/native/src/errorReporter.ts",
           "kind": "import-statement",
           "original": "./errorReporter"
         }
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/context.ts": {
+    "reactjit/shared/src/context.ts": {
       "bytes": 1187,
       "imports": [
         {
@@ -154,7 +154,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/native/src/Love2DApp.ts": {
+    "reactjit/native/src/Love2DApp.ts": {
       "bytes": 1706,
       "imports": [
         {
@@ -163,24 +163,24 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/native/src/NativeBridge.ts",
+          "path": "reactjit/native/src/NativeBridge.ts",
           "kind": "import-statement",
           "original": "./NativeBridge"
         },
         {
-          "path": "ilovereact/native/src/NativeRenderer.ts",
+          "path": "reactjit/native/src/NativeRenderer.ts",
           "kind": "import-statement",
           "original": "./NativeRenderer"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "../../shared/src/context"
         }
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/hooks.ts": {
+    "reactjit/shared/src/hooks.ts": {
       "bytes": 4271,
       "imports": [
         {
@@ -189,7 +189,7 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         }
@@ -218,7 +218,7 @@
       ],
       "format": "cjs"
     },
-    "ilovereact/shared/src/primitives.tsx": {
+    "reactjit/shared/src/primitives.tsx": {
       "bytes": 9316,
       "imports": [
         {
@@ -227,7 +227,7 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -239,7 +239,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/ScrollView.tsx": {
+    "reactjit/shared/src/ScrollView.tsx": {
       "bytes": 6798,
       "imports": [
         {
@@ -248,12 +248,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -324,7 +324,7 @@
       ],
       "format": "cjs"
     },
-    "ilovereact/shared/src/Portal.tsx": {
+    "reactjit/shared/src/Portal.tsx": {
       "bytes": 4168,
       "imports": [
         {
@@ -333,12 +333,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -355,7 +355,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Pressable.tsx": {
+    "reactjit/shared/src/Pressable.tsx": {
       "bytes": 8199,
       "imports": [
         {
@@ -364,12 +364,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -381,7 +381,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Modal.tsx": {
+    "reactjit/shared/src/Modal.tsx": {
       "bytes": 7042,
       "imports": [
         {
@@ -390,22 +390,22 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/Portal.tsx",
+          "path": "reactjit/shared/src/Portal.tsx",
           "kind": "import-statement",
           "original": "./Portal"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/Pressable.tsx",
+          "path": "reactjit/shared/src/Pressable.tsx",
           "kind": "import-statement",
           "original": "./Pressable"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -417,7 +417,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/TextInput.tsx": {
+    "reactjit/shared/src/TextInput.tsx": {
       "bytes": 14313,
       "imports": [
         {
@@ -426,12 +426,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -443,7 +443,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/TextEditor.tsx": {
+    "reactjit/shared/src/TextEditor.tsx": {
       "bytes": 5878,
       "imports": [
         {
@@ -452,12 +452,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -469,7 +469,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/FlatList.tsx": {
+    "reactjit/shared/src/FlatList.tsx": {
       "bytes": 12154,
       "imports": [
         {
@@ -478,12 +478,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/ScrollView.tsx",
+          "path": "reactjit/shared/src/ScrollView.tsx",
           "kind": "import-statement",
           "original": "./ScrollView"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -495,7 +495,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Slider.tsx": {
+    "reactjit/shared/src/Slider.tsx": {
       "bytes": 10098,
       "imports": [
         {
@@ -504,12 +504,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -521,7 +521,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Switch.tsx": {
+    "reactjit/shared/src/Switch.tsx": {
       "bytes": 3794,
       "imports": [
         {
@@ -530,12 +530,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -547,7 +547,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Checkbox.tsx": {
+    "reactjit/shared/src/Checkbox.tsx": {
       "bytes": 3899,
       "imports": [
         {
@@ -556,12 +556,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -573,7 +573,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Radio.tsx": {
+    "reactjit/shared/src/Radio.tsx": {
       "bytes": 5511,
       "imports": [
         {
@@ -582,12 +582,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -599,7 +599,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Select.tsx": {
+    "reactjit/shared/src/Select.tsx": {
       "bytes": 4938,
       "imports": [
         {
@@ -608,12 +608,12 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
@@ -625,7 +625,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/FlexRow.tsx": {
+    "reactjit/shared/src/FlexRow.tsx": {
       "bytes": 712,
       "imports": [
         {
@@ -634,7 +634,7 @@
           "external": true
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -646,7 +646,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/FlexColumn.tsx": {
+    "reactjit/shared/src/FlexColumn.tsx": {
       "bytes": 654,
       "imports": [
         {
@@ -655,7 +655,7 @@
           "external": true
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -667,7 +667,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Spacer.tsx": {
+    "reactjit/shared/src/Spacer.tsx": {
       "bytes": 283,
       "imports": [
         {
@@ -676,7 +676,7 @@
           "external": true
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -688,7 +688,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Card.tsx": {
+    "reactjit/shared/src/Card.tsx": {
       "bytes": 1201,
       "imports": [
         {
@@ -697,7 +697,7 @@
           "external": true
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -709,7 +709,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Badge.tsx": {
+    "reactjit/shared/src/Badge.tsx": {
       "bytes": 1090,
       "imports": [
         {
@@ -718,7 +718,7 @@
           "external": true
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -730,7 +730,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/Divider.tsx": {
+    "reactjit/shared/src/Divider.tsx": {
       "bytes": 607,
       "imports": [
         {
@@ -739,7 +739,7 @@
           "external": true
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
@@ -751,7 +751,7 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/animation.ts": {
+    "reactjit/shared/src/animation.ts": {
       "bytes": 21317,
       "imports": [
         {
@@ -767,116 +767,116 @@
       ],
       "format": "esm"
     },
-    "ilovereact/shared/src/index.ts": {
+    "reactjit/shared/src/index.ts": {
       "bytes": 2367,
       "imports": [
         {
-          "path": "ilovereact/shared/src/context.ts",
+          "path": "reactjit/shared/src/context.ts",
           "kind": "import-statement",
           "original": "./context"
         },
         {
-          "path": "ilovereact/shared/src/hooks.ts",
+          "path": "reactjit/shared/src/hooks.ts",
           "kind": "import-statement",
           "original": "./hooks"
         },
         {
-          "path": "ilovereact/shared/src/primitives.tsx",
+          "path": "reactjit/shared/src/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
         },
         {
-          "path": "ilovereact/shared/src/ScrollView.tsx",
+          "path": "reactjit/shared/src/ScrollView.tsx",
           "kind": "import-statement",
           "original": "./ScrollView"
         },
         {
-          "path": "ilovereact/shared/src/Portal.tsx",
+          "path": "reactjit/shared/src/Portal.tsx",
           "kind": "import-statement",
           "original": "./Portal"
         },
         {
-          "path": "ilovereact/shared/src/Pressable.tsx",
+          "path": "reactjit/shared/src/Pressable.tsx",
           "kind": "import-statement",
           "original": "./Pressable"
         },
         {
-          "path": "ilovereact/shared/src/Modal.tsx",
+          "path": "reactjit/shared/src/Modal.tsx",
           "kind": "import-statement",
           "original": "./Modal"
         },
         {
-          "path": "ilovereact/shared/src/TextInput.tsx",
+          "path": "reactjit/shared/src/TextInput.tsx",
           "kind": "import-statement",
           "original": "./TextInput"
         },
         {
-          "path": "ilovereact/shared/src/TextEditor.tsx",
+          "path": "reactjit/shared/src/TextEditor.tsx",
           "kind": "import-statement",
           "original": "./TextEditor"
         },
         {
-          "path": "ilovereact/shared/src/FlatList.tsx",
+          "path": "reactjit/shared/src/FlatList.tsx",
           "kind": "import-statement",
           "original": "./FlatList"
         },
         {
-          "path": "ilovereact/shared/src/Slider.tsx",
+          "path": "reactjit/shared/src/Slider.tsx",
           "kind": "import-statement",
           "original": "./Slider"
         },
         {
-          "path": "ilovereact/shared/src/Switch.tsx",
+          "path": "reactjit/shared/src/Switch.tsx",
           "kind": "import-statement",
           "original": "./Switch"
         },
         {
-          "path": "ilovereact/shared/src/Checkbox.tsx",
+          "path": "reactjit/shared/src/Checkbox.tsx",
           "kind": "import-statement",
           "original": "./Checkbox"
         },
         {
-          "path": "ilovereact/shared/src/Radio.tsx",
+          "path": "reactjit/shared/src/Radio.tsx",
           "kind": "import-statement",
           "original": "./Radio"
         },
         {
-          "path": "ilovereact/shared/src/Select.tsx",
+          "path": "reactjit/shared/src/Select.tsx",
           "kind": "import-statement",
           "original": "./Select"
         },
         {
-          "path": "ilovereact/shared/src/FlexRow.tsx",
+          "path": "reactjit/shared/src/FlexRow.tsx",
           "kind": "import-statement",
           "original": "./FlexRow"
         },
         {
-          "path": "ilovereact/shared/src/FlexColumn.tsx",
+          "path": "reactjit/shared/src/FlexColumn.tsx",
           "kind": "import-statement",
           "original": "./FlexColumn"
         },
         {
-          "path": "ilovereact/shared/src/Spacer.tsx",
+          "path": "reactjit/shared/src/Spacer.tsx",
           "kind": "import-statement",
           "original": "./Spacer"
         },
         {
-          "path": "ilovereact/shared/src/Card.tsx",
+          "path": "reactjit/shared/src/Card.tsx",
           "kind": "import-statement",
           "original": "./Card"
         },
         {
-          "path": "ilovereact/shared/src/Badge.tsx",
+          "path": "reactjit/shared/src/Badge.tsx",
           "kind": "import-statement",
           "original": "./Badge"
         },
         {
-          "path": "ilovereact/shared/src/Divider.tsx",
+          "path": "reactjit/shared/src/Divider.tsx",
           "kind": "import-statement",
           "original": "./Divider"
         },
         {
-          "path": "ilovereact/shared/src/animation.ts",
+          "path": "reactjit/shared/src/animation.ts",
           "kind": "import-statement",
           "original": "./animation"
         }
@@ -892,9 +892,9 @@
           "original": "react"
         },
         {
-          "path": "ilovereact/shared/src/index.ts",
+          "path": "reactjit/shared/src/index.ts",
           "kind": "import-statement",
-          "original": "../ilovereact/shared/src"
+          "original": "../reactjit/shared/src"
         },
         {
           "path": "node_modules/react/jsx-runtime.js",
@@ -913,9 +913,9 @@
           "external": true
         },
         {
-          "path": "ilovereact/native/src/Love2DApp.ts",
+          "path": "reactjit/native/src/Love2DApp.ts",
           "kind": "import-statement",
-          "original": "../ilovereact/native/src/Love2DApp"
+          "original": "../reactjit/native/src/Love2DApp"
         },
         {
           "path": "src/App.tsx",
@@ -961,94 +961,94 @@
         "node_modules/react/jsx-runtime.js": {
           "bytesInOutput": 271
         },
-        "ilovereact/native/src/Love2DApp.ts": {
+        "reactjit/native/src/Love2DApp.ts": {
           "bytesInOutput": 666
         },
-        "ilovereact/native/src/errorReporter.ts": {
+        "reactjit/native/src/errorReporter.ts": {
           "bytesInOutput": 464
         },
-        "ilovereact/native/src/hostConfig.ts": {
+        "reactjit/native/src/hostConfig.ts": {
           "bytesInOutput": 10364
         },
-        "ilovereact/native/src/eventDispatcher.ts": {
+        "reactjit/native/src/eventDispatcher.ts": {
           "bytesInOutput": 3711
         },
-        "ilovereact/native/src/NativeBridge.ts": {
+        "reactjit/native/src/NativeBridge.ts": {
           "bytesInOutput": 2931
         },
-        "ilovereact/native/src/NativeRenderer.ts": {
+        "reactjit/native/src/NativeRenderer.ts": {
           "bytesInOutput": 1075
         },
-        "ilovereact/shared/src/context.ts": {
+        "reactjit/shared/src/context.ts": {
           "bytesInOutput": 643
         },
         "src/App.tsx": {
           "bytesInOutput": 6279
         },
-        "ilovereact/shared/src/index.ts": {
+        "reactjit/shared/src/index.ts": {
           "bytesInOutput": 0
         },
-        "ilovereact/shared/src/hooks.ts": {
+        "reactjit/shared/src/hooks.ts": {
           "bytesInOutput": 48
         },
-        "ilovereact/shared/src/primitives.tsx": {
+        "reactjit/shared/src/primitives.tsx": {
           "bytesInOutput": 7622
         },
-        "ilovereact/shared/src/ScrollView.tsx": {
+        "reactjit/shared/src/ScrollView.tsx": {
           "bytesInOutput": 4275
         },
-        "ilovereact/shared/src/Portal.tsx": {
+        "reactjit/shared/src/Portal.tsx": {
           "bytesInOutput": 170
         },
-        "ilovereact/shared/src/Pressable.tsx": {
+        "reactjit/shared/src/Pressable.tsx": {
           "bytesInOutput": 6207
         },
-        "ilovereact/shared/src/Modal.tsx": {
+        "reactjit/shared/src/Modal.tsx": {
           "bytesInOutput": 108
         },
-        "ilovereact/shared/src/TextInput.tsx": {
+        "reactjit/shared/src/TextInput.tsx": {
           "bytesInOutput": 109
         },
-        "ilovereact/shared/src/TextEditor.tsx": {
+        "reactjit/shared/src/TextEditor.tsx": {
           "bytesInOutput": 109
         },
-        "ilovereact/shared/src/FlatList.tsx": {
+        "reactjit/shared/src/FlatList.tsx": {
           "bytesInOutput": 8829
         },
-        "ilovereact/shared/src/Slider.tsx": {
+        "reactjit/shared/src/Slider.tsx": {
           "bytesInOutput": 109
         },
-        "ilovereact/shared/src/Switch.tsx": {
+        "reactjit/shared/src/Switch.tsx": {
           "bytesInOutput": 110
         },
-        "ilovereact/shared/src/Checkbox.tsx": {
+        "reactjit/shared/src/Checkbox.tsx": {
           "bytesInOutput": 110
         },
-        "ilovereact/shared/src/Radio.tsx": {
+        "reactjit/shared/src/Radio.tsx": {
           "bytesInOutput": 177
         },
-        "ilovereact/shared/src/Select.tsx": {
+        "reactjit/shared/src/Select.tsx": {
           "bytesInOutput": 110
         },
-        "ilovereact/shared/src/FlexRow.tsx": {
+        "reactjit/shared/src/FlexRow.tsx": {
           "bytesInOutput": 61
         },
-        "ilovereact/shared/src/FlexColumn.tsx": {
+        "reactjit/shared/src/FlexColumn.tsx": {
           "bytesInOutput": 61
         },
-        "ilovereact/shared/src/Spacer.tsx": {
+        "reactjit/shared/src/Spacer.tsx": {
           "bytesInOutput": 61
         },
-        "ilovereact/shared/src/Card.tsx": {
+        "reactjit/shared/src/Card.tsx": {
           "bytesInOutput": 61
         },
-        "ilovereact/shared/src/Badge.tsx": {
+        "reactjit/shared/src/Badge.tsx": {
           "bytesInOutput": 61
         },
-        "ilovereact/shared/src/Divider.tsx": {
+        "reactjit/shared/src/Divider.tsx": {
           "bytesInOutput": 61
         },
-        "ilovereact/shared/src/animation.ts": {
+        "reactjit/shared/src/animation.ts": {
           "bytesInOutput": 49
         },
         "src/main.tsx": {

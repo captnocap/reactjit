@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
-import { useLoveRPC } from '@ilovereact/core';
-import { useAudioInit, useRack, useModule } from '@ilovereact/audio';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useLoveRPC } from '@reactjit/core';
+import { useAudioInit, useRack, useModule } from '@reactjit/audio';
 
 // ── Key layout ─────────────────────────────────────────────────
 
@@ -296,7 +296,7 @@ export function App() {
       {/* ── Header ──────────────────────────────── */}
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box style={{ gap: 1 }}>
-          <Text style={{ fontSize: 18, color: P.textHi, fontWeight: '700' }}>iLoveReact Synth</Text>
+          <Text style={{ fontSize: 18, color: P.textHi, fontWeight: '700' }}>ReactJIT Synth</Text>
           <Text style={{ fontSize: 11, color: P.textLo }}>Type to play. Click keys or drag sliders.</Text>
         </Box>
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>

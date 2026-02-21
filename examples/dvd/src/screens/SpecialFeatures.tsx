@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 import { useDVD } from '../dvd/context';
 import { rgba } from '../hex';
 import type { Extra } from '../data';

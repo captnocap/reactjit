@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Card, Badge, Divider } from '@ilovereact/core';
+import { Box, Text, Card, Badge, Divider } from '@reactjit/core';
 
 export function CardStory() {
   return (

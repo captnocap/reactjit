@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, ScrollView, ConversationCard, Pressable, TextInput, type Style } from '@ilovereact/core';
+import { Box, Text, ScrollView, ConversationCard, Pressable, TextInput, type Style } from '@reactjit/core';
 
 export interface Conversation {
   id: string;

@@ -5,7 +5,7 @@
  * Useful for debugging layout issues without opening the full inspector.
  *
  * @example
- *   import { DebugOverlay } from '@ilovereact/core';
+ *   import { DebugOverlay } from '@reactjit/core';
  *
  *   // Wrap a section to see its layout
  *   <DebugOverlay>

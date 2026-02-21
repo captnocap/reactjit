@@ -2,11 +2,11 @@
  * Hammerspoon Demo entry point.
  *
  * Starts a WebSocket server. Connect from Hammerspoon
- * with the ilovereact.lua client to see the rendered widget.
+ * with the reactjit.lua client to see the rendered widget.
  */
 
 import React from 'react';
-import { createHammerspoonServer } from '@ilovereact/hs';
+import { createHammerspoonServer } from '@reactjit/hs';
 import App from './App';
 
 const server = createHammerspoonServer({

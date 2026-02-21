@@ -1,5 +1,5 @@
 --[[
-  sysmon.lua — System monitoring module for iLoveReact.
+  sysmon.lua — System monitoring module for ReactJIT.
 
   Gathers real-time system data from /proc, /sys, and standard tools.
   Maintains state between calls for delta-based metrics (CPU %, network rates, disk rates).

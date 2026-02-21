@@ -16,7 +16,7 @@ import {
   MessageBubble, MessageList, ChatInput, ActionBar, LoadingDots,
   AnimatedValue, useAnimation, useSpring,
   useWindowDimensions,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 
 export interface EvalResult {
   component: React.ComponentType | null;

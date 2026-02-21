@@ -1,8 +1,8 @@
 import React from 'react';
-import { createLove2DApp } from '@ilovereact/native';
-import { CartridgeInspector } from '@ilovereact/core';
-import { ThemeProvider, useThemeColors } from '@ilovereact/theme';
-import { PortalHost } from '@ilovereact/core';
+import { createLove2DApp } from '@reactjit/native';
+import { CartridgeInspector } from '@reactjit/core';
+import { ThemeProvider, useThemeColors } from '@reactjit/theme';
+import { PortalHost } from '@reactjit/core';
 
 function InspectorApp() {
   const c = useThemeColors();

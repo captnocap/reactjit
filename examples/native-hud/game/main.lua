@@ -3,16 +3,16 @@
 
   The React components (HealthBar, Score, Inventory) are written in JSX,
   bundled into bundle.js, and rendered as Love2D draw calls via the
-  react-love native pipeline.
+  reactjit native pipeline.
 
-  This file just wires up the Love2D lifecycle to ReactLove and
+  This file just wires up the Love2D lifecycle to ReactJIT and
   simulates some game state for the HUD to display.
 ]]
 
 -- Add the project root to the require path so lua.* modules resolve
 package.path = package.path .. ";../../?.lua;../../?/init.lua"
 
-local ReactLove = require("lua.init")
+local ReactJIT = require("lua.init")
 
 local gameTime = 0
 local playerHealth = 100
@@ -21,7 +21,7 @@ local score = 0
 local fps = 0
 
 function love.load()
-  ReactLove.init({
+  ReactJIT.init({
     mode = "native",
     bundlePath = "love/bundle.js",
   })
@@ -37,7 +37,7 @@ function love.update(dt)
   score = math.floor(gameTime * 10)
 
   -- Push state to React via the bridge
-  local bridge = ReactLove.getBridge()
+  local bridge = ReactJIT.getBridge()
   if bridge then
     bridge:pushEvent({ type = "state:player.health", payload = math.floor(playerHealth) })
     bridge:pushEvent({ type = "state:player.mana", payload = math.floor(playerMana) })
@@ -46,7 +46,7 @@ function love.update(dt)
   end
 
   -- Tick the React pipeline
-  ReactLove.update(dt)
+  ReactJIT.update(dt)
 end
 
 function love.draw()
@@ -73,37 +73,37 @@ function love.draw()
   love.graphics.circle("fill", w / 2, h / 2, 48)
 
   -- Draw the React UI on top
-  ReactLove.draw()
+  ReactJIT.draw()
 
   love.graphics.setColor(1, 1, 1, 1)
 end
 
 function love.mousepressed(x, y, button)
-  ReactLove.mousepressed(x, y, button)
+  ReactJIT.mousepressed(x, y, button)
 end
 
 function love.mousereleased(x, y, button)
-  ReactLove.mousereleased(x, y, button)
+  ReactJIT.mousereleased(x, y, button)
 end
 
 function love.mousemoved(x, y, dx, dy)
-  ReactLove.mousemoved(x, y)
+  ReactJIT.mousemoved(x, y)
 end
 
 function love.resize(w, h)
-  ReactLove.resize(w, h)
+  ReactJIT.resize(w, h)
 end
 
 function love.filedropped(file)
-  ReactLove.filedropped(file)
+  ReactJIT.filedropped(file)
 end
 
 function love.directorydropped(dir)
-  ReactLove.directorydropped(dir)
+  ReactJIT.directorydropped(dir)
 end
 
 function love.quit()
-  ReactLove.quit()
+  ReactJIT.quit()
 end
 
 function love.keypressed(key)

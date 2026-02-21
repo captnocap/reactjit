@@ -119,14 +119,14 @@ export async function buildCommand(args) {
     console.error(`    ${TARGET_NAMES.join(', ')}`);
     console.error('');
     console.error('  Usage:');
-    console.error('    ilovereact build                   Bundle JS for dev (Love2D, default)');
-    console.error('    ilovereact build <target>          Dev build for any target');
-    console.error('    ilovereact build dist:<target>     Production executable');
+    console.error('    reactjit build                   Bundle JS for dev (Love2D, default)');
+    console.error('    reactjit build <target>          Dev build for any target');
+    console.error('    reactjit build dist:<target>     Production executable');
     console.error('');
     console.error('  Examples:');
-    console.error('    ilovereact build terminal          Dev build → dist/main.js');
-    console.error('    ilovereact build dist:love         Self-extracting Love2D binary');
-    console.error('    ilovereact build dist:terminal     Single-file Node.js executable');
+    console.error('    reactjit build terminal          Dev build → dist/main.js');
+    console.error('    reactjit build dist:love         Self-extracting Love2D binary');
+    console.error('    reactjit build dist:terminal     Single-file Node.js executable');
     process.exit(1);
   }
 
@@ -290,7 +290,7 @@ function findTorBinary(cwd) {
   return null; // optional — .onion hosting won't be available
 }
 
-// ── ilovereact build [target] (dev build) ─────────────────
+// ── reactjit build [target] (dev build) ─────────────────
 
 async function buildDevTarget(cwd, projectName, targetName) {
   const target = TARGETS[targetName];
@@ -328,7 +328,7 @@ async function buildDevTarget(cwd, projectName, targetName) {
   console.log(`\n  Done! ${target.output} written.\n${hint}\n`);
 }
 
-// ── ilovereact build dist:<grid-target> ───────────────────
+// ── reactjit build dist:<grid-target> ───────────────────
 //
 // Produces a single executable Node.js script with a shebang.
 // Works for terminal, cc, nvim, hs, awesome.
@@ -384,7 +384,7 @@ async function buildDistGrid(cwd, projectName, targetName) {
   console.log(`  Run:  ./dist/${projectName}-${targetName}\n`);
 }
 
-// ── ilovereact build dist:love ────────────────────────────
+// ── reactjit build dist:love ────────────────────────────
 //
 // Produces a single self-extracting binary that runs on any x86_64
 // Linux with zero dependencies. Bundles Love2D, all shared libraries
@@ -399,8 +399,8 @@ async function buildDistLove(cwd, projectName, opts = {}) {
 
   const distDir = join(cwd, 'dist');
   const outFile = join(distDir, projectName);
-  const stagingDir = join('/tmp', `ilovereact-dist-${projectName}`);
-  const payloadDir = join('/tmp', `ilovereact-payload-${projectName}`);
+  const stagingDir = join('/tmp', `reactjit-dist-${projectName}`);
+  const payloadDir = join('/tmp', `reactjit-payload-${projectName}`);
   const loveArchive = join('/tmp', `${projectName}.love`);
 
   console.log(`\n  Building dist:love for ${projectName}...\n`);
@@ -490,7 +490,7 @@ async function buildDistLove(cwd, projectName, opts = {}) {
 
   // Inspector is now enabled by default in dist builds
   // (Previously disabled unless --debug was passed, but this was annoying for dev)
-  // To disable: add `inspector = false` to ReactLove.init() in your main.lua
+  // To disable: add `inspector = false` to ReactJIT.init() in your main.lua
 
   // 2b. Pre-convert video assets to Theora (.ogv) for Love2D
   const videoDirs = [join(cwd, 'assets'), join(cwd, 'src'), cwd];
@@ -643,7 +643,7 @@ async function buildDistLove(cwd, projectName, opts = {}) {
   const header =
     '#!/bin/sh\n' +
     'set -e\n' +
-    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/ilovereact-${projectName}\n` +
+    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/reactjit-${projectName}\n` +
     'SIG=$(md5sum "$0" 2>/dev/null | cut -c1-8 || cksum "$0" | cut -d" " -f1)\n' +
     'CACHE="$APP_DIR/$SIG"\n' +
     'if [ ! -f "$CACHE/.ready" ]; then\n' +
@@ -672,7 +672,7 @@ async function buildDistLove(cwd, projectName, opts = {}) {
   console.log(`  Run:  ./dist/${projectName}\n`);
 }
 
-// ── ilovereact build dist:sdl2 ────────────────────────────
+// ── reactjit build dist:sdl2 ────────────────────────────
 //
 // Self-extracting binary: LuaJIT + SDL2 + FreeType + ft_helper.so +
 // libquickjs.so + lua runtime + JS bundle.
@@ -688,8 +688,8 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
 
   const distDir    = join(cwd, 'dist');
   const outFile    = join(distDir, `${projectName}-sdl2`);
-  const stagingDir = join('/tmp', `ilovereact-sdl2-${projectName}`);
-  const payloadDir = join('/tmp', `ilovereact-sdl2-payload-${projectName}`);
+  const stagingDir = join('/tmp', `reactjit-sdl2-${projectName}`);
+  const payloadDir = join('/tmp', `reactjit-sdl2-payload-${projectName}`);
 
   console.log(`\n  Building dist:sdl2 for ${projectName}...\n`);
 
@@ -844,7 +844,7 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   const header =
     '#!/bin/sh\n' +
     'set -e\n' +
-    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/ilovereact-${projectName}-sdl2\n` +
+    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/reactjit-${projectName}-sdl2\n` +
     'SIG=$(md5sum "$0" 2>/dev/null | cut -c1-8 || cksum "$0" | cut -d" " -f1)\n' +
     'CACHE="$APP_DIR/$SIG"\n' +
     'if [ ! -f "$CACHE/.ready" ]; then\n' +

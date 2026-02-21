@@ -1,13 +1,13 @@
 --[[
-  Neofetch — system info widget rendered via iLoveReact.
+  Neofetch — system info widget rendered via ReactJIT.
 
   Lua gathers real system info and pushes it through the bridge.
-  React renders the display using @ilovereact/core components.
+  React renders the display using @reactjit/core components.
 ]]
 
 package.path = package.path .. ";../../../?.lua;../../../?/init.lua"
 
-local ReactLove = require("lua.init")
+local ReactJIT = require("lua.init")
 
 -- ── System info gathering (runs in Lua, not QuickJS) ──────
 
@@ -109,7 +109,7 @@ local sysInfo = {}
 local refreshTimer = 0
 
 function love.load()
-  ReactLove.init({
+  ReactJIT.init({
     mode = "native",
     bundlePath = "bundle.js",
   })
@@ -118,7 +118,7 @@ end
 
 function love.update(dt)
   -- Push system info to React
-  local bridge = ReactLove.getBridge()
+  local bridge = ReactJIT.getBridge()
   if bridge then
     for k, v in pairs(sysInfo) do
       bridge:pushEvent({ type = "state:sys." .. k, payload = v })
@@ -133,7 +133,7 @@ function love.update(dt)
     sysInfo = gatherInfo()
   end
 
-  ReactLove.update(dt)
+  ReactJIT.update(dt)
 end
 
 function love.draw()
@@ -141,17 +141,17 @@ function love.draw()
   love.graphics.setColor(0.04, 0.04, 0.06)
   love.graphics.rectangle("fill", 0, 0, w, h)
 
-  ReactLove.draw()
+  ReactJIT.draw()
   love.graphics.setColor(1, 1, 1, 1)
 end
 
 function love.resize(w, h)
-  ReactLove.resize(w, h)
+  ReactJIT.resize(w, h)
 end
 
 function love.keypressed(key)
 end
 
 function love.quit()
-  ReactLove.quit()
+  ReactJIT.quit()
 end

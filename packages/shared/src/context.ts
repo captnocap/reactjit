@@ -47,7 +47,7 @@ export function useRendererMode(): RendererMode {
   return useContext(RendererContext);
 }
 
-// ── Theme color tokens context (populated by @ilovereact/theme) ───
+// ── Theme color tokens context (populated by @reactjit/theme) ───
 //
 // This context holds a flat Record<string, string> of semantic color tokens
 // (e.g. { primary: "#cba6f7", bg: "#1e1e2e", ... }). It lives in core so

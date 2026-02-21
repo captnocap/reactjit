@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text } from "../ilovereact/shared/src";
+import { Box, Text } from "../reactjit/shared/src";
 
 const LINES = [
   '                  ###     ###                  ',

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Box, Text, Pressable, TextEditor } from '@ilovereact/core';
+import { Box, Text, Pressable, TextEditor } from '@reactjit/core';
 import { evalComponent } from './lib/eval-component';
 
 // LAYOUT RULE: Section A is ALWAYS the chat canvas (user ↔ AI conversation).

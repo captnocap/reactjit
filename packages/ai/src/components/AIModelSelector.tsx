@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Select, type Style } from '@ilovereact/core';
+import { Box, Text, Select, type Style } from '@reactjit/core';
 import { useModels } from '../hooks';
 import type { AIConfig } from '../types';
 

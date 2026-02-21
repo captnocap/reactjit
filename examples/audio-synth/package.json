@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ilovereact dev",
-    "build": "ilovereact build"
+    "dev": "reactjit dev",
+    "build": "reactjit build"
   },
   "dependencies": {
     "react": "^18.3.0",

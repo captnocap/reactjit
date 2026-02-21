@@ -78,7 +78,7 @@ function StorybookPanel() {
       }}>
         {/* Header */}
         <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
-          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>iLoveReact</Text>
+          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>ReactJIT</Text>
         </Box>
         <Box style={{ height: 1, backgroundColor: c.border }} />
 
@@ -232,7 +232,7 @@ const root = createRoot();
       </ThemeProvider>
     </BridgeProvider>
   );
-  console.log('[react-love] Native storybook mounted (' + stories.length + ' stories)');
+  console.log('[reactjit] Native storybook mounted (' + stories.length + ' stories)');
 };
 
 if (!(globalThis as any).__deferMount) {

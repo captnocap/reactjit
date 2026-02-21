@@ -11,7 +11,7 @@ import {
   createRenderServer,
   createStdioTransport,
   type RenderServerHandle,
-} from '@ilovereact/grid';
+} from '@reactjit/grid';
 
 export interface AwesomeServerOptions {
   width?: number;   // default 400 (pixels)

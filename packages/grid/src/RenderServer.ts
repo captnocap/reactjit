@@ -13,7 +13,7 @@ import {
   createRoot,
   RendererProvider,
   type Instance,
-} from '@ilovereact/native';
+} from '@reactjit/native';
 import { computeLayout, type LayoutOptions } from './layout';
 import { flatten, type FlattenOptions } from './flatten';
 import type { Transport } from './transports/types';

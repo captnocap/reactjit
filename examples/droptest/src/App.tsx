@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text, VideoPlayer } from '@ilovereact/core';
-import type { LoveEvent } from '@ilovereact/core';
+import { Box, Text, VideoPlayer } from '@reactjit/core';
+import type { LoveEvent } from '@reactjit/core';
 
 export function App() {
   const [bgVideo, setBgVideo] = useState<string | null>(null);

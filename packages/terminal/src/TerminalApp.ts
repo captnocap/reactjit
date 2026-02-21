@@ -1,5 +1,5 @@
 /**
- * TerminalApp — Pure JS terminal renderer for iLoveReact.
+ * TerminalApp — Pure JS terminal renderer for ReactJIT.
  *
  * Renders React UIs directly to the terminal using ANSI escape codes.
  * No Lua, no WebSocket, no external client — runs entirely in Node.js.
@@ -13,8 +13,8 @@ import {
   createRoot,
   RendererProvider,
   type Instance,
-} from '@ilovereact/native';
-import { computeLayout, flatten } from '@ilovereact/grid';
+} from '@reactjit/native';
+import { computeLayout, flatten } from '@reactjit/grid';
 import {
   ANSI,
   createScreenBuffer,

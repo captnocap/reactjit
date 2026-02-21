@@ -367,7 +367,7 @@ local function generateFrameworkCanvasTexture(seed)
   love.graphics.setColor(0.35, 0.72, 0.96, 1)
   love.graphics.rectangle("fill", 20, 20, tw - 40, 4, 2, 2)
   love.graphics.setColor(0.92, 0.96, 1, 1)
-  love.graphics.print("iLoveReact 2D Canvas", 36, 40)
+  love.graphics.print("ReactJIT 2D Canvas", 36, 40)
   love.graphics.setColor(0.62, 0.72, 0.84, 1)
   love.graphics.print("Box  Text  Badge  ProgressBar  Sparkline", 36, 63)
 

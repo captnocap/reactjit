@@ -1,12 +1,12 @@
 /**
- * React hooks for the @ilovereact/server HTTP server module.
+ * React hooks for the @reactjit/server HTTP server module.
  *
  * Lua-side: lua/httpserver.lua (non-blocking TCP server, static file serving)
  * React-side: hooks for server lifecycle, dynamic route handling
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC, useLoveEvent } from '@ilovereact/core';
+import { useLoveRPC, useLoveEvent } from '@reactjit/core';
 import type {
   HttpRequest,
   HttpResponse,

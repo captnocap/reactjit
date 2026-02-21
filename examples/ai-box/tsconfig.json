@@ -8,53 +8,53 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "@ilovereact/core": [
-        "./ilovereact/shared/src"
+      "@reactjit/core": [
+        "./reactjit/shared/src"
       ],
-      "@ilovereact/native": [
-        "./ilovereact/native/src"
+      "@reactjit/native": [
+        "./reactjit/native/src"
       ],
-      "@ilovereact/components": [
-        "./ilovereact/components/src"
+      "@reactjit/components": [
+        "./reactjit/components/src"
       ],
-      "@ilovereact/theme": [
-        "./ilovereact/theme/src"
+      "@reactjit/theme": [
+        "./reactjit/theme/src"
       ],
-      "@ilovereact/controls": [
-        "./ilovereact/controls/src"
+      "@reactjit/controls": [
+        "./reactjit/controls/src"
       ],
-      "@ilovereact/router": [
-        "./ilovereact/router/src"
+      "@reactjit/router": [
+        "./reactjit/router/src"
       ],
-      "@ilovereact/storage": [
-        "./ilovereact/storage/src"
+      "@reactjit/storage": [
+        "./reactjit/storage/src"
       ],
-      "@ilovereact/3d": [
-        "./ilovereact/3d/src"
+      "@reactjit/3d": [
+        "./reactjit/3d/src"
       ],
-      "@ilovereact/audio": [
-        "./ilovereact/audio/src"
+      "@reactjit/audio": [
+        "./reactjit/audio/src"
       ],
-      "@ilovereact/media": [
-        "./ilovereact/media/src"
+      "@reactjit/media": [
+        "./reactjit/media/src"
       ],
-      "@ilovereact/apis": [
-        "./ilovereact/apis/src"
+      "@reactjit/apis": [
+        "./reactjit/apis/src"
       ],
-      "@ilovereact/server": [
-        "./ilovereact/server/src"
+      "@reactjit/server": [
+        "./reactjit/server/src"
       ],
-      "@ilovereact/rss": [
-        "./ilovereact/rss/src"
+      "@reactjit/rss": [
+        "./reactjit/rss/src"
       ],
-      "@ilovereact/webhooks": [
-        "./ilovereact/webhooks/src"
+      "@reactjit/webhooks": [
+        "./reactjit/webhooks/src"
       ],
-      "@ilovereact/crypto": [
-        "./ilovereact/crypto/src"
+      "@reactjit/crypto": [
+        "./reactjit/crypto/src"
       ],
-      "@ilovereact/ai": [
-        "./ilovereact/ai/src"
+      "@reactjit/ai": [
+        "./reactjit/ai/src"
       ]
     }
   },

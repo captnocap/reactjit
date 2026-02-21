@@ -1,4 +1,4 @@
-// @ilovereact/geo — Type definitions for the mapping system
+// @reactjit/geo — Type definitions for the mapping system
 
 export type LatLng = [number, number]; // [latitude, longitude]
 

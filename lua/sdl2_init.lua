@@ -1,5 +1,5 @@
 --[[
-  sdl2_init.lua -- SDL2 entry point for the iLoveReact SDL2 target
+  sdl2_init.lua -- SDL2 entry point for the ReactJIT SDL2 target
 
   Replaces Love2D's load/update/draw callbacks with a direct SDL2 run loop.
   Loads the QuickJS bridge, wires up the React reconciler, translates SDL2
@@ -173,7 +173,7 @@ function SDL2Init.run(config)
   config = config or {}
   local W     = config.width  or 1280
   local H     = config.height or 720
-  local title = config.title  or "iLoveReact"
+  local title = config.title  or "ReactJIT"
   local bundle = config.bundle or "sdl2/bundle.js"
 
   -- ------------------------------------------------------------------

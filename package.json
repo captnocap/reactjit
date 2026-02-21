@@ -1,5 +1,5 @@
 {
-  "name": "ilovereact",
+  "name": "reactjit",
   "version": "0.1.0",
   "description": "Write it in React, render it anywhere there's a surface — custom OpenGL renderer, Love2D, terminal, web, and more",
   "private": true,
@@ -25,13 +25,13 @@
     "packages/geo"
   ],
   "scripts": {
-    "build:native": "esbuild --bundle --format=iife --global-name=ReactLove --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js examples/native-hud/src/main.tsx",
-    "watch:native": "esbuild --bundle --format=iife --global-name=ReactLove --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js --watch examples/native-hud/src/main.tsx",
+    "build:native": "esbuild --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js examples/native-hud/src/main.tsx",
+    "watch:native": "esbuild --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js --watch examples/native-hud/src/main.tsx",
     "build:web": "esbuild --bundle --format=esm --target=es2020 --jsx=automatic --outfile=examples/web-overlay/dist/app.js examples/web-overlay/src/main.tsx",
     "build:storybook": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=esm --target=es2020 --jsx=automatic --outfile=storybook/dist/storybook.js storybook/src/main.tsx",
-    "build:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactLoveStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js storybook/src/native-main.tsx",
+    "build:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js storybook/src/native-main.tsx",
     "watch:storybook": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=esm --target=es2020 --jsx=automatic --outfile=storybook/dist/storybook.js --watch storybook/src/main.tsx",
-    "watch:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactLoveStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js --watch storybook/src/native-main.tsx",
+    "watch:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js --watch storybook/src/native-main.tsx",
     "build:cc-demo": "esbuild --bundle --platform=node --format=esm --target=es2020 --jsx=automatic --outfile=examples/cc-demo/dist/main.js --external:ws examples/cc-demo/src/main.tsx",
     "build:nvim-demo": "esbuild --bundle --platform=node --format=esm --target=es2020 --jsx=automatic --outfile=examples/nvim-demo/dist/main.js examples/nvim-demo/src/main.tsx",
     "build:hs-demo": "esbuild --bundle --platform=node --format=esm --target=es2020 --jsx=automatic --outfile=examples/hs-demo/dist/main.js --external:ws examples/hs-demo/src/main.tsx",

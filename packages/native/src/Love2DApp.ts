@@ -6,7 +6,7 @@
  * same { render, stop } API shape used by all other targets.
  *
  * Usage:
- *   import { createLove2DApp } from '@ilovereact/native';
+ *   import { createLove2DApp } from '@reactjit/native';
  *   const app = createLove2DApp();
  *   app.render(<App />);
  */

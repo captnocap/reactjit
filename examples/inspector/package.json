@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ilovereact dev",
-    "build": "ilovereact build",
-    "dist": "ilovereact build dist:love"
+    "dev": "reactjit dev",
+    "build": "reactjit build",
+    "dist": "reactjit build dist:love"
   },
   "dependencies": {
     "react": "^18.3.0",

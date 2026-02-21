@@ -1,5 +1,5 @@
 /**
- * @ilovereact/ai — Type definitions
+ * @reactjit/ai — Type definitions
  *
  * Provider-agnostic types for LLM integration.
  * Supports OpenAI-compatible and Anthropic APIs.

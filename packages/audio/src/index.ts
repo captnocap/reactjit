@@ -1,4 +1,4 @@
-// @ilovereact/audio — Modular audio framework for iLoveReact
+// @reactjit/audio — Modular audio framework for ReactJIT
 //
 // Lua-side: lua/audio/ (engine, graph, modules, MIDI)
 // React-side: hooks for rack management, module control, MIDI,

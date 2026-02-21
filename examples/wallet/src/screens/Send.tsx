@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, TextInput } from '@ilovereact/core';
+import { Box, Text, Pressable, TextInput } from '@reactjit/core';
 import { useWallet } from '../wallet/context';
 import { formatEther } from '../network/rpc';
 import { chains } from '../network/chains';

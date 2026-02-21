@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import type { InventoryState } from '../systems/useInventory';
 
 export interface InventoryGridProps {

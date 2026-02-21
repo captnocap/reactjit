@@ -1,5 +1,5 @@
 /**
- * Browse integration for @ilovereact/ai.
+ * Browse integration for @reactjit/ai.
  *
  * Provides React hooks and pre-built tool definitions for controlling
  * a stealth browse session (anti-fingerprint Firefox) from React components
@@ -104,7 +104,7 @@ async function sendBrowseCommand(
  *
  *   const handleSearch = async () => {
  *     const page = await browser.navigate('https://duckduckgo.com');
- *     await browser.typeText('input[name="q"]', 'iLoveReact framework');
+ *     await browser.typeText('input[name="q"]', 'ReactJIT framework');
  *     const results = await browser.click('button[type="submit"]');
  *     console.log(results.text);
  *   };

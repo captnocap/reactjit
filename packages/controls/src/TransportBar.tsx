@@ -1,8 +1,8 @@
 import React from 'react';
-import type { Style, Color } from '@ilovereact/core';
-import { Box, Text, Pressable } from '@ilovereact/core';
-import { useRendererMode } from '@ilovereact/core';
-import { useScaledStyle, useScale } from '@ilovereact/core';
+import type { Style, Color } from '@reactjit/core';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useRendererMode } from '@reactjit/core';
+import { useScaledStyle, useScale } from '@reactjit/core';
 import { LEDIndicator } from './LEDIndicator';
 
 export interface TransportBarProps {

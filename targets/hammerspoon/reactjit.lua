@@ -1,11 +1,11 @@
 --[[
-  ilovereact.lua — Hammerspoon client for iLoveReact
+  reactjit.lua — Hammerspoon client for ReactJIT
 
   Renders React UIs as macOS desktop overlays using hs.canvas.
   Connects to a WebSocket server and receives JSON draw command frames.
 
   Usage in ~/.hammerspoon/init.lua:
-    local ilr = require("ilovereact")
+    local ilr = require("reactjit")
     ilr.start({
       url = "ws://localhost:8080",
       width = 400,
@@ -97,7 +97,7 @@ local function render(canvas, frame, width, height)
   end
 end
 
---- Start the iLoveReact Hammerspoon client.
+--- Start the ReactJIT Hammerspoon client.
 --- @param opts table Options: url (string), width (number), height (number), x (number), y (number)
 --- @return table Handle with stop() method
 function M.start(opts)

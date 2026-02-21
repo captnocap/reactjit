@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, TextEditor } from '../ilovereact/shared/src';
+import { Box, Text, TextEditor } from '../reactjit/shared/src';
 import { Preview } from './Preview';
 import { StatusBar } from './StatusBar';
 import { lint } from './lib/linter';
@@ -81,7 +81,7 @@ export function App() {
       <Box style={{ width: '50%', height: '100%', borderRightWidth: 1, borderColor: '#1e293b' }}>
         <Box style={{ height: 32, paddingLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#181825', borderBottomWidth: 1, borderColor: '#1e293b' }}>
           <Text style={{ color: '#cdd6f4', fontSize: 12, fontWeight: 'bold' }}>Editor</Text>
-          <Text style={{ color: '#585b70', fontSize: 10 }}>iLoveReact Playground</Text>
+          <Text style={{ color: '#585b70', fontSize: 10 }}>ReactJIT Playground</Text>
         </Box>
         <TextEditor
           initialValue={initialCode}

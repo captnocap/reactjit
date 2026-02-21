@@ -113,7 +113,7 @@ end
 --- config: { title, width, height, x, y, rootNodeId }
 function WindowManager.create(config)
   config = config or {}
-  local title  = config.title  or "iLoveReact"
+  local title  = config.title  or "ReactJIT"
   local w      = config.width  or 640
   local h      = config.height or 480
   local x      = config.x      or SDL_WINDOWPOS_CENTERED

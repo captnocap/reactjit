@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 import { useWallet } from '../wallet/context';
 import { chains } from '../network/chains';
 

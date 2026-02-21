@@ -9,7 +9,7 @@
  * padding, gap, and pass-through of style props (backgroundColor, color).
  */
 
-import type { Instance } from '@ilovereact/native';
+import type { Instance } from '@reactjit/native';
 
 export interface LayoutNode {
   id: number;

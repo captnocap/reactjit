@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Pressable, type Style, type Color } from '@ilovereact/core';
+import { Box, Text, Pressable, type Style, type Color } from '@reactjit/core';
 import { useChat } from '../hooks';
 import type { ChatOptions, Message, AIConfig } from '../types';
 import { AIMessageList } from '../components/AIMessageList';

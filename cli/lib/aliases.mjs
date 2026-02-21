@@ -1,7 +1,7 @@
 /**
- * aliases.mjs — Shared esbuild alias resolution for @ilovereact/* imports
+ * aliases.mjs — Shared esbuild alias resolution for @reactjit/* imports
  *
- * Auto-detects which packages exist in ilovereact/ and generates --alias flags.
+ * Auto-detects which packages exist in reactjit/ and generates --alias flags.
  * Used by both build.mjs and dev.mjs to keep alias logic DRY.
  *
  * Monorepo awareness: When building inside the monorepo (e.g. storybook/),
@@ -14,20 +14,20 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const ALIAS_MAP = {
-  shared: '@ilovereact/core',
-  native: '@ilovereact/native',
-  router: '@ilovereact/router',
-  storage: '@ilovereact/storage',
-  components: '@ilovereact/components',
-  audio: '@ilovereact/audio',
-  server: '@ilovereact/server',
-  ai: '@ilovereact/ai',
+  shared: '@reactjit/core',
+  native: '@reactjit/native',
+  router: '@reactjit/router',
+  storage: '@reactjit/storage',
+  components: '@reactjit/components',
+  audio: '@reactjit/audio',
+  server: '@reactjit/server',
+  ai: '@reactjit/ai',
 };
 
 /**
- * Generate esbuild --alias flags for packages that exist in ilovereact/
+ * Generate esbuild --alias flags for packages that exist in reactjit/
  * @param {string} cwd - Project root directory
- * @returns {string[]} Array of --alias:@ilovereact/pkg=<path>/src flags
+ * @returns {string[]} Array of --alias:@reactjit/pkg=<path>/src flags
  */
 export function getEsbuildAliases(cwd) {
   const flags = [];
@@ -41,10 +41,10 @@ export function getEsbuildAliases(cwd) {
       continue;
     }
 
-    // Standalone project: use the local copy synced by `ilovereact update`
-    const pkg = join(cwd, 'ilovereact', dir, 'src');
+    // Standalone project: use the local copy synced by `reactjit update`
+    const pkg = join(cwd, 'reactjit', dir, 'src');
     if (existsSync(pkg)) {
-      flags.push(`--alias:${alias}=./ilovereact/${dir}/src`);
+      flags.push(`--alias:${alias}=./reactjit/${dir}/src`);
     }
   }
   return flags;

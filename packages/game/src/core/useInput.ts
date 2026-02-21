@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useBridge } from '@ilovereact/core';
+import { useBridge } from '@reactjit/core';
 import type { InputConfig, InputState, ActionState } from '../types';
 
 interface RawActionState {

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { Style, Color } from '@ilovereact/core';
-import { useRendererMode } from '@ilovereact/core';
-import { useScaledStyle, useScale } from '@ilovereact/core';
+import type { Style, Color } from '@reactjit/core';
+import { useRendererMode } from '@reactjit/core';
+import { useScaledStyle, useScale } from '@reactjit/core';
 
 export interface KnobProps {
   value?: number;

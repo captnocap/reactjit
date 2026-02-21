@@ -1,5 +1,5 @@
 --[[
-  screenshot.lua -- Headless screenshot capture for react-love
+  screenshot.lua -- Headless screenshot capture for reactjit
 
   Triggered via environment variable ILOVEREACT_SCREENSHOT=1.
   Waits a few frames for layout to settle, captures a screenshot

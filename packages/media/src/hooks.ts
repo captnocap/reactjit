@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC } from '@ilovereact/core';
+import { useLoveRPC } from '@reactjit/core';
 import type {
   MediaFile,
   MediaType,

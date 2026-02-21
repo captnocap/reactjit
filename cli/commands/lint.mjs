@@ -1,5 +1,5 @@
 /**
- * lint.mjs — Static linter for iLoveReact layout patterns
+ * lint.mjs — Static linter for ReactJIT layout patterns
  *
  * Uses TypeScript's ts.createSourceFile() for fast AST parsing (no type checker).
  * Catches layout mistakes before they reach the renderer.
@@ -274,7 +274,7 @@ function buildContexts(sourceFile, filePath, ts) {
         _attrs: null,
       };
 
-      // Extract JSX attributes for all iLoveReact primitives (needed for shorthand prop checks)
+      // Extract JSX attributes for all ReactJIT primitives (needed for shorthand prop checks)
       if (CONTAINER_TAGS.has(tagName) || TEXT_TAGS.has(tagName) || ROUTER_TAGS.has(tagName) || IMAGE_TAGS.has(tagName) || INTERACTIVE_TAGS.has(tagName)) {
         ctx._attrs = extractJsxAttrs(opening, ts);
       }
@@ -378,7 +378,7 @@ function buildContexts(sourceFile, filePath, ts) {
         _attrs: null,
       };
 
-      // Extract JSX attributes for all iLoveReact primitives (needed for shorthand prop checks)
+      // Extract JSX attributes for all ReactJIT primitives (needed for shorthand prop checks)
       if (CONTAINER_TAGS.has(tagName) || TEXT_TAGS.has(tagName) || ROUTER_TAGS.has(tagName) || IMAGE_TAGS.has(tagName) || INTERACTIVE_TAGS.has(tagName)) {
         ctx._attrs = extractJsxAttrs(node, ts);
       }
@@ -465,12 +465,12 @@ const callRules = [
 // ── API usage detection ───────────────────────────────────────
 
 const API_IMPORT_SOURCES = new Set([
-  '@ilovereact/apis',
-  '@ilovereact/ai',
+  '@reactjit/apis',
+  '@reactjit/ai',
 ]);
 
 /**
- * Scan a source file for imports from @ilovereact/apis or @ilovereact/ai,
+ * Scan a source file for imports from @reactjit/apis or @reactjit/ai,
  * and for useSettingsRegistry() calls. Mutates the apiUsage accumulator.
  */
 function detectAPIUsage(sourceFile, filePath, ts, apiUsage) {
@@ -480,7 +480,7 @@ function detectAPIUsage(sourceFile, filePath, ts, apiUsage) {
       const spec = node.moduleSpecifier;
       if (ts.isStringLiteral(spec)) {
         const mod = spec.text;
-        if (API_IMPORT_SOURCES.has(mod) || mod.startsWith('@ilovereact/apis/')) {
+        if (API_IMPORT_SOURCES.has(mod) || mod.startsWith('@reactjit/apis/')) {
           const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
           apiUsage.imports.push({
             module: mod,
@@ -905,7 +905,7 @@ async function discoverStdio(info, timeout) {
       params: {
         protocolVersion: '2025-11-05',
         capabilities: {},
-        clientInfo: { name: 'ilovereact-lint', version: '1.0.0' },
+        clientInfo: { name: 'reactjit-lint', version: '1.0.0' },
       },
     }) + '\n';
     proc.stdin.write(initReq);
@@ -926,7 +926,7 @@ async function discoverHttp(info, timeout) {
         params: {
           protocolVersion: '2025-11-05',
           capabilities: {},
-          clientInfo: { name: 'ilovereact-lint', version: '1.0.0' },
+          clientInfo: { name: 'reactjit-lint', version: '1.0.0' },
         },
       }),
       signal: controller.signal,
@@ -1179,15 +1179,15 @@ const rules = [
     },
   },
 
-  // Invalid style properties that don't exist in iLoveReact
-  // Only checks iLoveReact primitives (Box, Text, Image, view, text) — not HTML elements
+  // Invalid style properties that don't exist in ReactJIT
+  // Only checks ReactJIT primitives (Box, Text, Image, view, text) — not HTML elements
   {
     name: 'no-invalid-style-props',
     severity: 'error',
     check(ctx) {
       if (!ctx.style || !ctx.style.analyzable) return null;
 
-      // Only lint iLoveReact primitives, not HTML elements like div/span/nav
+      // Only lint ReactJIT primitives, not HTML elements like div/span/nav
       const ILOVE_TAGS = new Set([...CONTAINER_TAGS, ...TEXT_TAGS, 'Image', 'image', 'Pressable', 'ScrollView', 'TextInput']);
       if (!ILOVE_TAGS.has(ctx.tagName)) return null;
 
@@ -1237,7 +1237,7 @@ const rules = [
       }
 
       if (invalid.length > 0) {
-        return `Invalid style propert${invalid.length > 1 ? 'ies' : 'y'}: ${invalid.join(', ')} — not recognized by iLoveReact's style system`;
+        return `Invalid style propert${invalid.length > 1 ? 'ies' : 'y'}: ${invalid.join(', ')} — not recognized by ReactJIT's style system`;
       }
       return null;
     },
@@ -1441,7 +1441,7 @@ export async function runLint(cwd, options = {}) {
     const mcpCalls = findMCPServerCalls(sourceFile, filePath, ts);
     allMCPCalls.push(...mcpCalls);
 
-    // API usage detection — find imports from @ilovereact/apis or @ilovereact/ai
+    // API usage detection — find imports from @reactjit/apis or @reactjit/ai
     detectAPIUsage(sourceFile, filePath, ts, apiUsage);
   }
 
@@ -1536,7 +1536,7 @@ export function runBundleChecks(bundlePath, options = {}) {
   // Count createContext("web") / createContext('web') occurrences.
   // A healthy bundle has exactly one (from packages/shared/src/context.ts).
   // Two or more means esbuild bundled separate copies of the shared package
-  // (e.g. @ilovereact/core resolved to a stale copy instead of packages/shared/src).
+  // (e.g. @reactjit/core resolved to a stale copy instead of packages/shared/src).
   // esbuild emits `(0, import_react.createContext)("web")` — match both forms.
   const contextPattern = /createContext\)\(["']web["']\)|createContext\(["']web["']\)/g;
   const matches = [];
@@ -1555,7 +1555,7 @@ export function runBundleChecks(bundlePath, options = {}) {
     diagnostics.push({
       rule: 'no-duplicate-context',
       severity: 'error',
-      message: `Bundle contains ${matches.length} createContext("web") calls (lines: ${locations.join(', ')}) — this means the shared package was bundled multiple times from different import paths. All imports must resolve to the same physical file. Check for @ilovereact/core imports that should be relative paths to packages/shared/src.`,
+      message: `Bundle contains ${matches.length} createContext("web") calls (lines: ${locations.join(', ')}) — this means the shared package was bundled multiple times from different import paths. All imports must resolve to the same physical file. Check for @reactjit/core imports that should be relative paths to packages/shared/src.`,
       file: bundlePath,
       line: locations[0],
       col: 1,
@@ -1580,11 +1580,11 @@ export function runBundleChecks(bundlePath, options = {}) {
 }
 
 /**
- * CLI entry point for `ilovereact lint`.
+ * CLI entry point for `reactjit lint`.
  */
 export async function lintCommand(args) {
   const cwd = process.cwd();
-  console.log('\n  iLoveReact lint\n');
+  console.log('\n  ReactJIT lint\n');
   const { errors } = await runLint(cwd);
   if (errors > 0) process.exit(1);
 }

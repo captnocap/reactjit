@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
-import { useBridge } from '@ilovereact/core';
+import { useBridge } from '@reactjit/core';
 import type {
   LatLng,
   MapViewState,

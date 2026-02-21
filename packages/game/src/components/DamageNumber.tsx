@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 
 export interface DamageNumberProps {
   amount: number;

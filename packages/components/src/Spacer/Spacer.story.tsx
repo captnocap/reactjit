@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Spacer } from '@ilovereact/core';
+import { Box, Text, Spacer } from '@reactjit/core';
 
 export function SpacerStory() {
   return (

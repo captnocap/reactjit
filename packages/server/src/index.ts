@@ -1,4 +1,4 @@
-// @ilovereact/server — HTTP server primitive for iLoveReact
+// @reactjit/server — HTTP server primitive for ReactJIT
 //
 // Lua-side: lua/httpserver.lua (non-blocking TCP, static file serving, MIME detection, library indexing)
 // React-side: hooks for server lifecycle, dynamic route handling, and media library indexing

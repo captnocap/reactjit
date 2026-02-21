@@ -12,7 +12,7 @@ import { manifestCommand } from '../commands/manifest.mjs';
 const [,, command, ...args] = argv;
 
 const HELP = `
-  ilovereact (ilr) - CLI for iLoveReact
+  reactjit (ilr) - CLI for ReactJIT
 
   Usage:
     ilr init <name>              Create a new project (interactive)
@@ -21,7 +21,7 @@ const HELP = `
     ilr dev [target]             Watch mode (default: love)
     ilr build [target]           Dev build (default: love)
     ilr build dist:<target>      Production build
-    ilr update                   Sync runtime files (lua/, lib/, ilovereact/)
+    ilr update                   Sync runtime files (lua/, lib/, reactjit/)
     ilr lint                     Check src/ for layout mistakes
     ilr screenshot [--output]    Lint + build + headless screenshot
     ilr manifest                 Generate or update manifest.json

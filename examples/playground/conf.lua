@@ -1,6 +1,6 @@
 function love.conf(t)
-  t.identity = "ilovereact-playground"
-  t.window.title = "iLoveReact Playground"
+  t.identity = "reactjit-playground"
+  t.window.title = "ReactJIT Playground"
   t.window.width = 1200
   t.window.height = 700
   t.window.vsync = 1

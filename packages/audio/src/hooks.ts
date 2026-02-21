@@ -1,12 +1,12 @@
 /**
- * React hooks for the @ilovereact/audio module system.
+ * React hooks for the @reactjit/audio module system.
  *
  * These hooks communicate with the Lua audio engine via the bridge
  * (useLoveRPC for commands, useLoveEvent for state updates).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC, useLoveEvent } from '@ilovereact/core';
+import { useLoveRPC, useLoveEvent } from '@reactjit/core';
 import type {
   RackState,
   ModuleState,

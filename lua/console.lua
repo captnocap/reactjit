@@ -1,5 +1,5 @@
 --[[
-  console.lua -- Interactive eval console for react-love
+  console.lua -- Interactive eval console for reactjit
 
   Self-contained module using raw Love2D drawing calls (like errors.lua).
   Does not touch the React tree/layout/painter pipeline.
@@ -590,7 +590,7 @@ function builtins.env()
   pushOutput("Runtime environment:", COLORS.accent)
   pushOutput(string.format("  Bridge: %s", bridge and (bridge.evalReturn and "QuickJS (native)" or "FS (canvas/web)") or "none"), COLORS.info)
   local mode = "unknown"
-  -- Try to detect mode from the ReactLove module if accessible
+  -- Try to detect mode from the ReactJIT module if accessible
   local rok, rl = pcall(require, "lua.init")
   if rok and rl and rl.getMode then mode = rl.getMode() or "unknown" end
   pushOutput(string.format("  Mode: %s", mode), COLORS.info)

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createTerminalApp } from '@ilovereact/terminal';
+import { createTerminalApp } from '@reactjit/terminal';
 import { getSystemInfo } from './sysinfo';
 import App from './App';
 

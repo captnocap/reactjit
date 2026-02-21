@@ -181,7 +181,7 @@ function Browse.poll()
   if worker and not worker:isRunning() then
     local err = worker:getError()
     if err then
-      print("[react-love] Browse worker crashed: " .. tostring(err))
+      print("[reactjit] Browse worker crashed: " .. tostring(err))
     end
     local newThread = love.thread.newThread(WORKER_CODE)
     newThread:start()

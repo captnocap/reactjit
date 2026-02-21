@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@ilovereact/core';
+import { Box } from '@reactjit/core';
 
 export interface StatusBarProps {
   value: number;

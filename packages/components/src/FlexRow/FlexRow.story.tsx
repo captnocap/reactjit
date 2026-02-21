@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, FlexRow } from '@ilovereact/core';
+import { Box, Text, FlexRow } from '@reactjit/core';
 
 function Chip({ label, color }: { label: string; color: string }) {
   return (

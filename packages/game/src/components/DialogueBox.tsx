@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import type { DialogueState } from '../systems/useDialogue';
 
 export interface DialogueBoxProps {

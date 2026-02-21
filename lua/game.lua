@@ -1,5 +1,5 @@
 --[[
-  game.lua — Game module system for iLoveReact
+  game.lua — Game module system for ReactJIT
 
   Manages Lua game modules that render into off-screen canvases.
   The painter composites these canvases at layout positions, and

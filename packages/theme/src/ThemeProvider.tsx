@@ -1,5 +1,5 @@
 import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useBridgeOptional, ThemeColorsContext } from '@ilovereact/core';
+import { useBridgeOptional, ThemeColorsContext } from '@reactjit/core';
 import { themes, defaultThemeId } from './themes';
 import type { ThemeContextValue, ThemeColors } from './types';
 
