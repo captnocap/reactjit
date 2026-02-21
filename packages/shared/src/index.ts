@@ -224,15 +224,16 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer } from './capabilities';
+export { Audio, Timer, LLMAgent } from './capabilities';
 export { useCapabilities } from './useCapabilities';
-export type { NativeProps, AudioProps, TimerProps, CapabilitySchema } from './types';
+export type { NativeProps, AudioProps, TimerProps, LLMAgentProps, CapabilitySchema } from './types';
 
 // Generative canvas effects
 export {
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
-  Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
-  type EffectProps, type SpirographProps, type MirrorProps, type CymaticsProps,
+  Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort, TextEffect,
+  Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
+  type EffectProps, type SpirographProps, type MirrorProps, type CymaticsProps, type TextEffectProps, type TextEffectType,
 } from './effects';
 
 // Cartridge Inspector

@@ -21,5 +21,16 @@ export { Voronoi } from './Voronoi';
 export { Contours } from './Contours';
 export { Feedback } from './Feedback';
 export { PixelSort } from './PixelSort';
+export { TextEffect } from './TextEffect';
+export type { TextEffectProps, TextEffectType } from './TextEffect';
+
+export { Terrain } from './Terrain';
+export { Automata } from './Automata';
+export { Combustion } from './Combustion';
+export { ReactionDiffusion } from './ReactionDiffusion';
+export { EdgeGravity } from './EdgeGravity';
+export { Orbits } from './Orbits';
+export { Plotter } from './Plotter';
+export { LSystem } from './LSystem';
 
 export type { EffectProps } from './types';

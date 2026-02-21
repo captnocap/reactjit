@@ -300,6 +300,15 @@ function Effects.loadAll()
     "contours",
     "feedback",
     "pixelsort",
+    "texteffect",
+    "terrain",
+    "automata",
+    "combustion",
+    "reactiondiffusion",
+    "edgegravity",
+    "orbits",
+    "plotter",
+    "lsystem",
   }
   for _, name in ipairs(effectFiles) do
     local ok, err = pcall(require, "lua.effects." .. name)
