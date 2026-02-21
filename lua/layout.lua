@@ -54,10 +54,17 @@ local SURFACE_TYPES = {
 --- Check if a node is a visual surface (eligible for proportional fallback).
 --- Excludes scroll containers (they intentionally need explicit height).
 local function isSurface(node)
-  if not SURFACE_TYPES[node.type] then return false end
-  local s = node.style or {}
-  if s.overflow == "scroll" then return false end
-  return true
+  if SURFACE_TYPES[node.type] then
+    local s = node.style or {}
+    if s.overflow == "scroll" then return false end
+    return true
+  end
+  -- Standalone effects (not background mode) are visual surfaces too.
+  if Layout._effects and Layout._effects.isEffect(node.type) then
+    local props = node.props or {}
+    if not props.background then return true end
+  end
+  return false
 end
 
 
@@ -650,6 +657,13 @@ function Layout.layoutNode(node, px, py, pw, ph)
       local grow   = cs.flexGrow or 0
       local shrink = cs.flexShrink
 
+      -- Save explicit dimensions before intrinsic estimation may set them
+      -- to 0 for empty nodes. aspectRatio needs the originals because Lua
+      -- treats 0 as truthy — "ch and not cw" fails when cw is 0 from
+      -- estimateIntrinsicMain, even though no width was actually specified.
+      local explicitChildW = cw
+      local explicitChildH = ch
+
       -- Resolve child min/max constraints
       local cMinW = ru(cs.minWidth, innerW)
       local cMaxW = ru(cs.maxWidth, innerW)
@@ -706,6 +720,28 @@ function Layout.layoutNode(node, px, py, pw, ph)
         end
       end
 
+      -- aspectRatio: compute missing dimension from the other.
+      -- Uses the original explicit dimensions (pre-estimation) because
+      -- estimateIntrinsicMain returns 0 for empty boxes, and Lua treats
+      -- 0 as truthy — which prevents "ch and not cw" from firing.
+      -- Runs before min/max clamping so derived dimensions get clamped too.
+      local car = cs.aspectRatio
+      if car and car > 0 then
+        if explicitChildW and not explicitChildH then
+          ch = explicitChildW / car
+        elseif explicitChildH and not explicitChildW then
+          cw = explicitChildH * car
+        elseif not explicitChildW and not explicitChildH then
+          -- Neither explicit: derive from estimated values (check > 0
+          -- since Lua treats 0 as truthy)
+          if (cw or 0) > 0 and (ch or 0) <= 0 then
+            ch = cw / car
+          elseif (ch or 0) > 0 and (cw or 0) <= 0 then
+            cw = ch * car
+          end
+        end
+      end
+
       -- Apply min/max width clamping to child.
       -- If clamping width changes a text node's width, re-measure height.
       if cw then
@@ -752,16 +788,6 @@ function Layout.layoutNode(node, px, py, pw, ph)
       else
         -- "auto" or not set: fall back to width/height
         basis = isRow and (cw or 0) or (ch or 0)
-      end
-
-      -- aspectRatio: compute missing dimension from the other
-      local ar = cs.aspectRatio
-      if ar and ar > 0 then
-        if cw and not ch then
-          ch = cw / ar
-        elseif ch and not cw then
-          cw = ch * ar
-        end
       end
 
       childInfos[i] = {
@@ -1067,6 +1093,14 @@ function Layout.layoutNode(node, px, py, pw, ph)
         local explicitChildW = ru(cs.width, innerW)
         if explicitChildW and cw_final ~= explicitChildW then
           child._flexW = cw_final
+        elseif not explicitChildW and cs.aspectRatio and cs.aspectRatio > 0 then
+          -- aspectRatio children without explicit width: signal flex-adjusted
+          -- width so layoutNode respects flex distribution (e.g. flex-shrink)
+          -- instead of self-computing w = h * ar which ignores the constraint.
+          local arW = (ci.h or 0) * cs.aspectRatio
+          if arW > 0 and math.abs(cw_final - arW) > 0.5 then
+            child._flexW = cw_final
+          end
         end
       else
         local explicitChildH = ru(cs.height, innerH)
