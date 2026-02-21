@@ -8,14 +8,14 @@ related: Video, Image, Box
 difficulty: intermediate
 
 === OVERVIEW ===
-VideoPlayer wraps the Video primitive and adds interactive playback controls rendered entirely in Lua. On Love2D it displays play/pause buttons, a draggable seek bar, volume slider, time display, loop toggle, and fullscreen mode. Controls auto-hide after 3 seconds of inactivity and reappear on mouse movement or interaction. On web it falls back to a native HTML5 video element with browser controls. Uses libmpv for hardware-accelerated video decoding and supports local files (.ogv instant, others via FFmpeg transcoding) and HTTP streams including M3U8/HLS.
+VideoPlayer wraps the Video primitive and adds interactive playback controls rendered entirely in Lua. On Love2D it displays play/pause buttons, a draggable seek bar, volume slider, time display, loop toggle, and fullscreen mode. Controls auto-hide after 3 seconds of inactivity and reappear on mouse movement or interaction. On web it falls back to a native HTML5 video element with browser controls. Uses libmpv for hardware-accelerated video decoding and supports local files and HTTP streams, including M3U8/HLS URLs.
 
 === API / SYNTAX ===
 ```tsx
 import { VideoPlayer } from '@ilovereact/core';
 
 <VideoPlayer
-  src="video.ogv"
+  src="video.mp4"
   w={640}
   h={360}
   controls={true}
@@ -35,7 +35,7 @@ import { VideoPlayer } from '@ilovereact/core';
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `src` | `string` | **required** | Video file path (local or URL). `.ogv` plays instantly; other formats trigger FFmpeg transcoding. Supports M3U8/HLS streams. |
+| `src` | `string` | **required** | Video file path (local or URL). Love2D uses libmpv and loads supported formats directly (MP4/MKV/WebM/OGV/etc.). Supports M3U8/HLS streams. |
 | `controls` | `boolean` | `true` | Show/hide controls overlay. On Love2D: Lua-rendered play/pause, seek bar, volume, time display, loop toggle, fullscreen. On web: native browser controls. |
 | `paused` | `boolean` | `false` | Control playback state externally. Can be overridden by user clicking play/pause in controls. |
 | `loop` | `boolean` | `false` | Loop video when it reaches the end. |
@@ -63,7 +63,7 @@ export function App() {
   return (
     <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
       <VideoPlayer
-        src="sample.ogv"
+        src="sample.mp4"
         w={640}
         h={360}
         radius={8}
@@ -88,7 +88,7 @@ export function App() {
   return (
     <Box style={{ width: '100%', height: '100%', padding: 20, gap: 12 }}>
       <VideoPlayer
-        src="movie.ogv"
+        src="movie.mp4"
         w={480}
         h={270}
         radius={6}
@@ -164,7 +164,7 @@ export function App() {
   return (
     <Box style={{ width: '100%', height: '100%' }}>
       <VideoPlayer
-        src="background.ogv"
+        src="background.mp4"
         w="100%"
         h="100%"
         controls={false}
@@ -192,9 +192,8 @@ Love2D:
   - Seek bar shows elapsed fill and a draggable knob
   - Time display shows "current / duration" format (e.g., "1:23 / 5:47")
   - Uses libmpv backend for hardware-accelerated video decoding
-  - .ogv (Ogg Theora) files play instantly without transcoding
-  - Other formats (mp4, mkv, avi, etc.) trigger FFmpeg transcoding to Theora in a background process
-  - M3U8/HLS streams are downloaded and transcoded on the fly by FFmpeg
+  - MP4, MKV, WebM, OGV, and other mpv-supported formats load directly (no Theora transcode step)
+  - M3U8/HLS URLs stream directly through mpv
   - Video state stored in node._vp (survives re-renders)
   - Interacts with videos.lua module for playback control
   - Uses measure.lua for font rendering in time display
@@ -209,10 +208,10 @@ Web:
 
 === CRITICAL RULES ===
 - **Always specify explicit width and height** — VideoPlayer has no intrinsic dimensions. Use `w` and `h` props or `style={{ width, height }}`.
-- **Use .ogv for instant playback on Love2D** — Other formats work but require FFmpeg transcoding, which adds startup delay. Keep transcoded cache warm by preloading videos.
+- **Any mpv-supported format works directly on Love2D** — Use whichever source format matches your pipeline (mp4/webm/mkv/ogv, etc.).
 - **Don't nest VideoPlayer in auto-sized containers** — It needs explicit dimensions. Put it in a Box with `width: '100%'` or fixed dimensions.
 - **onTimeUpdate fires frequently** — Throttle expensive operations in the handler (e.g., setState only when seconds change, not on every frame).
-- **M3U8 streams require network and FFmpeg** — They download and transcode in real time. Expect latency. Always handle onError for failed streams.
+- **M3U8 streams require network availability** — They are streamed by mpv at runtime. Always handle onError for failed streams.
 - **Controls are Lua-owned on Love2D** — Don't try to implement custom controls using React components overlaid with position:absolute — that fights the layout engine. Use controls={false} and implement your own Lua-side controls module if needed, or use the bare Video primitive.
 - **Fullscreen mode is Lua-managed** — When fullscreen, VideoPlayer ignores layout-computed dimensions and fills the entire window. Pressing Esc or clicking the fullscreen button exits.
 - **Loop and muted state can diverge from props** — User interactions (clicking loop button, mute button) update local state. If you need strict control, hide the controls overlay with controls={false}.

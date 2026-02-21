@@ -9,7 +9,7 @@
  *
  * Usage:
  *   <VideoPlayer src="movie.mp4" w={640} h={360} />
- *   <VideoPlayer src="movie.ogv" controls={false} />
+ *   <VideoPlayer src="movie.webm" controls={false} />
  */
 
 import React from 'react';

@@ -1,24 +1,24 @@
-import React, { useState, useRef } from 'react';
-import { Box, Text, TextEditor } from '../../../packages/shared/src';
+import React, { useState } from 'react';
+import { Box, Text, TextInput, Video, VideoPlayer } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Video } from '../../../packages/shared/src/Video';
-import { VideoPlayer } from '../../../packages/shared/src/VideoPlayer';
 
-function Card({ children, label }: { children: React.ReactNode; label: string }) {
+const DEMO_VIDEO_SRC = 'docs/experiments/test.mp4';
+const DEMO_VIDEO_FITS: Array<'contain' | 'cover' | 'fill'> = ['contain', 'cover', 'fill'];
+
+function SectionCard({ children }: { children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>{label}</Text>
-      <Box style={{
-        backgroundColor: '#0f1219',
-        borderRadius: 8,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: [1, 1, 1, 0.06],
-        alignItems: 'center',
-      }}>
-        {children}
-      </Box>
+    <Box style={{
+      width: '100%',
+      backgroundColor: c.bgElevated,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 12,
+      gap: 10,
+      alignItems: 'center',
+    }}>
+      {children}
     </Box>
   );
 }
@@ -28,17 +28,115 @@ function StatusPill({ label, value }: { label: string; value: string }) {
   return (
     <Box style={{
       flexDirection: 'row',
-      gap: 6,
       alignItems: 'center',
-      backgroundColor: [1, 1, 1, 0.05],
-      borderRadius: 4,
+      gap: 6,
       paddingLeft: 8,
       paddingRight: 8,
       paddingTop: 4,
       paddingBottom: 4,
+      borderRadius: 6,
+      backgroundColor: c.surface,
     }}>
       <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
       <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>{value}</Text>
+    </Box>
+  );
+}
+
+function FitPreview({ fit }: { fit: 'contain' | 'cover' | 'fill' }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: 156, gap: 4, alignItems: 'center' }}>
+      <Text style={{ color: c.textSecondary, fontSize: 9, textAlign: 'center' }}>{fit}</Text>
+      <Box
+        style={{
+          width: 150,
+          height: 84,
+          borderRadius: 6,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.surface,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Video
+          src={DEMO_VIDEO_SRC}
+          w={150}
+          h={84}
+          paused
+          style={{ objectFit: fit }}
+        />
+      </Box>
+    </Box>
+  );
+}
+
+function StreamLoader() {
+  const c = useThemeColors();
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<string>('Paste an HLS URL and submit');
+
+  return (
+    <Box style={{ gap: 8, width: '100%', maxWidth: 520, alignItems: 'center' }}>
+      <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+        mpv streams HTTP/HTTPS URLs directly. Paste an `.m3u8` URL and press Ctrl+Enter.
+      </Text>
+      <TextInput
+        onSubmit={(text) => {
+          const next = text.trim();
+          if (!next) return;
+          setLoadedUrl(next);
+          setStreamStatus('Loading...');
+        }}
+        placeholder="https://example.com/stream.m3u8"
+        keyboardType="url"
+        style={{
+          width: '100%',
+          height: 34,
+          backgroundColor: c.bg,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: c.border,
+          paddingLeft: 10,
+          paddingRight: 10,
+        }}
+        textStyle={{ fontSize: 10, color: c.text }}
+      />
+
+      {loadedUrl ? (
+        <Box style={{ gap: 8, width: '100%', alignItems: 'center' }}>
+          <VideoPlayer
+            src={loadedUrl}
+            w="100%"
+            h={260}
+            radius={6}
+            onReady={() => setStreamStatus('Ready')}
+            onPlay={() => setStreamStatus('Playing')}
+            onPause={() => setStreamStatus('Paused')}
+            onError={() => setStreamStatus('Error')}
+          />
+          <StatusPill label="Stream" value={streamStatus} />
+        </Box>
+      ) : (
+        <Box style={{
+          width: '100%',
+          height: 120,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.surface,
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <Text style={{ color: c.textDim, fontSize: 22 }}>&#9655;</Text>
+          <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            No stream loaded yet
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -49,192 +147,89 @@ export function VideoStory() {
   const [time, setTime] = useState('0:00');
 
   return (
-    <Box style={{ width: '100%', gap: 20, padding: 20 }}>
-      {/* Header */}
-      <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Video</Text>
-        <Text style={{ color: c.textDim, fontSize: 11 }}>
-          Any format in, Theora out. Local files and M3U8/HLS streams via FFmpeg.
-        </Text>
-      </Box>
-
-      {/* Two-column layout */}
-      <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
-        {/* Left column */}
-        <Box style={{ gap: 16, flexGrow: 1, width: 280 }}>
-          {/* Bare primitive */}
-          <Card label="VIDEO PRIMITIVE">
-            <Box style={{ gap: 10, alignItems: 'center' }}>
-              <Video
-                src="sample.ogv"
-                w={248}
-                h={140}
-                style={{ borderRadius: 6 }}
-                loop
-                onReady={() => setStatus('Ready')}
-                onPlay={() => setStatus('Playing')}
-                onPause={() => setStatus('Paused')}
-                onEnded={() => setStatus('Ended')}
-                onError={() => setStatus('No file')}
-                onTimeUpdate={(e) => {
-                  const m = Math.floor(e.currentTime / 60);
-                  const s = Math.floor(e.currentTime % 60);
-                  setTime(`${m}:${s < 10 ? '0' : ''}${s}`);
-                }}
-              />
-              <Box style={{ flexDirection: 'row', gap: 6, width: 248, justifyContent: 'center' }}>
-                <StatusPill label="Status" value={status} />
-                <StatusPill label="Time" value={time} />
-              </Box>
+    <Box style={{ width: '100%', padding: 16, alignItems: 'center' }}>
+      <Box style={{ width: '100%', maxWidth: 760, gap: 14 }}>
+        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>1. Video primitive (`Video`)</Text>
+        <SectionCard>
+          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+            The Love2D runtime renders through libmpv. Formats like MP4, WebM, MKV, and OGV
+            are loaded directly without a Theora conversion pass.
+          </Text>
+          <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
+            <Video
+              src={DEMO_VIDEO_SRC}
+              style={{
+                width: '100%',
+                aspectRatio: 16 / 9,
+                borderRadius: 6,
+                objectFit: 'contain',
+                backgroundColor: c.surface,
+              }}
+              loop
+              onReady={() => setStatus('Ready')}
+              onPlay={() => setStatus('Playing')}
+              onPause={() => setStatus('Paused')}
+              onEnded={() => setStatus('Ended')}
+              onError={() => setStatus('Error')}
+              onTimeUpdate={(e) => {
+                const m = Math.floor(e.currentTime / 60);
+                const s = Math.floor(e.currentTime % 60);
+                setTime(`${m}:${s < 10 ? '0' : ''}${s}`);
+              }}
+            />
+            <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+              <StatusPill label="Status" value={status} />
+              <StatusPill label="Time" value={time} />
             </Box>
-          </Card>
+          </Box>
+        </SectionCard>
 
-          {/* Compact variants */}
-          <Card label="SIZES">
-            <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'end', width: 248 }}>
-              <Box style={{ gap: 4, alignItems: 'center', width: 90 }}>
-                <Video src="sample.ogv" w={90} h={50} style={{ borderRadius: 4 }} />
-                <Text style={{ color: c.textDim, fontSize: 8 }}>90x50</Text>
-              </Box>
-              <Box style={{ gap: 4, alignItems: 'center', width: 60 }}>
-                <Video src="sample.ogv" w={60} h={60} style={{ borderRadius: 30 }} />
-                <Text style={{ color: c.textDim, fontSize: 8 }}>Round</Text>
-              </Box>
-              <Box style={{ gap: 4, alignItems: 'center', width: 50 }}>
-                <Video src="sample.ogv" w={50} h={70} style={{ borderRadius: 4 }} />
-                <Text style={{ color: c.textDim, fontSize: 8 }}>Portrait</Text>
-              </Box>
+        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>2. Player controls (`VideoPlayer`)</Text>
+        <SectionCard>
+          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+            `VideoPlayer` is Lua-owned UI over the same mpv backend: play/pause, seek, volume,
+            loop, and fullscreen.
+          </Text>
+          <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
+            <VideoPlayer src={DEMO_VIDEO_SRC} w="100%" h={292} radius={6} />
+            <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+              objectFit preview (contain / cover / fill)
+            </Text>
+            <Box
+              style={{
+                width: '100%',
+                flexDirection: 'row',
+                gap: 8,
+                justifyContent: 'center',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              {DEMO_VIDEO_FITS.map((fit) => (
+                <FitPreview key={fit} fit={fit} />
+              ))}
             </Box>
-          </Card>
-        </Box>
+          </Box>
+        </SectionCard>
 
-        {/* Right column */}
-        <Box style={{ gap: 16, flexGrow: 1, width: 280 }}>
-          {/* VideoPlayer */}
-          <Card label="VIDEO PLAYER">
-            <Box style={{ gap: 6, alignItems: 'center' }}>
-              <VideoPlayer
-                src="sample.ogv"
-                w={248}
-                h={140}
-                radius={6}
-              />
-              <Text style={{ color: c.textDim, fontSize: 9 }}>
-                Built-in play/pause, seek bar, and time display
-              </Text>
-            </Box>
-          </Card>
+        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>3. M3U8 / HLS stream URL</Text>
+        <SectionCard>
+          <StreamLoader />
+        </SectionCard>
 
-          {/* Transcoding demo */}
-          <Card label="FFMPEG TRANSCODING">
-            <Box style={{ gap: 6, alignItems: 'center' }}>
-              <Video
-                src="sample.mp4"
-                w={248}
-                h={100}
-                style={{ borderRadius: 6 }}
-              />
-              <Text style={{ color: c.textDim, fontSize: 9 }}>
-                Non-.ogv sources trigger async FFmpeg conversion
-              </Text>
-            </Box>
-          </Card>
-        </Box>
-      </Box>
-
-      {/* M3U8 / HLS Stream loader */}
-      <StreamLoader />
-
-      {/* Usage block */}
-      <Box style={{
-        backgroundColor: [1, 1, 1, 0.03],
-        borderRadius: 6,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: [1, 1, 1, 0.04],
-      }}>
-        <Text style={{ color: c.textDim, fontSize: 9 }}>
-          Supports local files (.ogv instant, others via FFmpeg) and HTTP URLs including M3U8/HLS
-          streams. VOD streams are transcoded to Theora on the fly.
-        </Text>
+        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>4. Runtime notes</Text>
+        <SectionCard>
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Love2D: mpv renders into a private OpenGL framebuffer, then blits into a Canvas each frame.
+          </Text>
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Web: falls back to native HTML5 video behavior.
+          </Text>
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Grid targets (terminal/cc/nvim/awesome): video is not rendered.
+          </Text>
+        </SectionCard>
       </Box>
     </Box>
-  );
-}
-
-function StreamLoader() {
-  const c = useThemeColors();
-  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
-  const [streamStatus, setStreamStatus] = useState<string>('Paste a URL');
-  const lastSubmit = useRef('');
-
-  const handleSubmit = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    lastSubmit.current = trimmed;
-    setLoadedUrl(trimmed);
-    setStreamStatus('Loading...');
-  };
-
-  return (
-    <Card label="M3U8 / HLS STREAM">
-      <Box style={{ gap: 10, width: '100%' }}>
-        {/* URL input */}
-        <Box style={{ gap: 4 }}>
-          <TextEditor
-            onSubmit={handleSubmit}
-            placeholder="Paste an M3U8 URL, then Ctrl+Enter to load"
-            lineNumbers={false}
-            style={{
-              backgroundColor: '#1a1f2e',
-              borderRadius: 6,
-              width: '100%',
-              height: 32,
-            }}
-            textStyle={{ fontSize: 10, color: c.text }}
-          />
-          <Text style={{ color: c.textDim, fontSize: 8 }}>
-            Ctrl+V to paste, Ctrl+Enter to load
-          </Text>
-        </Box>
-
-        {/* Video player or placeholder */}
-        {loadedUrl ? (
-          <Box style={{ gap: 6, alignItems: 'center' }}>
-            <VideoPlayer
-              src={loadedUrl}
-              w={560}
-              h={240}
-              radius={6}
-              onReady={() => setStreamStatus('Ready')}
-              onPlay={() => setStreamStatus('Playing')}
-              onPause={() => setStreamStatus('Paused')}
-              onError={() => setStreamStatus('Error')}
-            />
-            <StatusPill label="Stream" value={streamStatus} />
-          </Box>
-        ) : (
-          <Box style={{
-            width: '100%',
-            height: 120,
-            backgroundColor: '#0a0e17',
-            borderRadius: 6,
-            borderWidth: 1,
-            borderColor: [1, 1, 1, 0.06],
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 6,
-          }}>
-            <Text style={{ color: c.textDim, fontSize: 24 }}>&#9655;</Text>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>
-              Paste an M3U8 URL above and hit Load
-            </Text>
-            <Text style={{ color: c.textDim, fontSize: 8 }}>
-              FFmpeg downloads + transcodes the stream to Theora
-            </Text>
-          </Box>
-        )}
-      </Box>
-    </Card>
   );
 }
