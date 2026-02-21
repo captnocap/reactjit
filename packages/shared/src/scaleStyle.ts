@@ -14,7 +14,7 @@ import type { Style } from './types';
 // Properties where numeric values represent pixel dimensions and should scale.
 const SCALE_NUMERIC: Set<string> = new Set([
   // Sizing
-  'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
+  'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'flexBasis',
   // Spacing
   'gap', 'padding', 'paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom',
   'margin', 'marginLeft', 'marginRight', 'marginTop', 'marginBottom',
