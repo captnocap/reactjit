@@ -373,7 +373,7 @@ Both native targets share the same pipeline: QuickJS bridge, retained tree, layo
 
 **SDL2 / OpenGL** (`lua/target_sdl2.lua`): The forward target. LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI — no game engine required. Runs anywhere LuaJIT does. Entry point: `luajit sdl2_init.lua`. Same React pipeline, same layout engine, same QuickJS bridge, different painter.
 
-**Love2D** (`lua/target_love2d.lua`): The original proving ground. React runs inside Love2D via QuickJS. Full painter with gradients, shadows, transforms, clipping. Images, video (FFmpeg), audio, bidirectional event handling, visual inspector (F12). Ships as a self-extracting binary.
+**Love2D** (`lua/target_love2d.lua`): The original proving ground. React runs inside Love2D via QuickJS. Full painter with gradients, shadows, transforms, clipping. Images, video (libmpv), audio, bidirectional event handling, visual inspector (F12). Ships as a self-extracting binary.
 
 ### Bridge Protocol (Lua ↔ JS)
 
