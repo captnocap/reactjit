@@ -236,9 +236,11 @@ local videoCache = {}
 local videoStatus = {}      -- src -> "loading" | "ready" | "error"
 local videoErrors = {}      -- src -> error message string
 local videoDurations = {}   -- src -> duration in seconds
+local lastLoadAttempt = {}  -- src -> love.timer.getTime()
+local REMOTE_RETRY_INTERVAL = 2.0
 
 -- Playback tracking for event emission
-local trackedNodes = {}     -- nodeId -> { src, wasPlaying, lastTime, readyEmitted }
+local trackedNodes = {}     -- nodeId -> { src, wasPlaying, lastTime, readyEmitted, errorEmitted }
 local TIME_UPDATE_INTERVAL = 0.25
 local lastTimeUpdateEmit = {} -- nodeId -> last emitted time
 
@@ -275,10 +277,14 @@ mpvRenderParams[2].data = nil
 -- Helpers
 -- ============================================================================
 
+local function isRemoteUrl(src)
+  return type(src) == "string" and src:match("^https?://") ~= nil
+end
+
 --- Resolve a video path to an absolute OS path for mpv.
 local function resolveVideoPath(src)
   -- URLs pass through directly
-  if src:match("^https?://") then return src end
+  if isRemoteUrl(src) then return src end
 
   -- Absolute path — check existence
   if src:sub(1, 1) == "/" then
@@ -380,6 +386,17 @@ local function destroyVideoEntry(entry)
     entry.canvas:release()
     entry.canvas = nil
   end
+end
+
+--- Clear all cached state for a source key.
+local function clearSource(src)
+  local entry = videoCache[src]
+  if entry then destroyVideoEntry(entry) end
+  videoCache[src] = nil
+  videoStatus[src] = nil
+  videoErrors[src] = nil
+  videoDurations[src] = nil
+  lastLoadAttempt[src] = nil
 end
 
 -- ============================================================================
@@ -543,6 +560,17 @@ end
 --- Create a per-source mpv handle + render context + load the file.
 --- Each video source gets its own independent mpv pipeline.
 local function loadVideo(src)
+  lastLoadAttempt[src] = love.timer.getTime()
+
+  -- If we're retrying the same src, clear stale render resources first.
+  local existing = videoCache[src]
+  if existing then
+    destroyVideoEntry(existing)
+    videoCache[src] = nil
+  end
+  videoDurations[src] = nil
+  videoErrors[src] = nil
+
   if not backendReady then
     videoStatus[src] = "error"
     videoErrors[src] = "mpv backend not initialized"
@@ -672,17 +700,31 @@ function Videos.syncWithTree(nodes)
     end
   end
 
-  -- Load any new srcs not yet initialized
+  -- Load any new srcs not yet initialized.
+  -- For remote URLs, retry errored loads after a short interval.
+  local now = love.timer.getTime()
   for src in pairs(activeSrcs) do
-    if not videoStatus[src] then
+    local status = videoStatus[src]
+    if not status then
       loadVideo(src)
+    elseif status == "error" and backendReady and isRemoteUrl(src) then
+      local lastTry = lastLoadAttempt[src] or 0
+      if now - lastTry >= REMOTE_RETRY_INTERVAL then
+        loadVideo(src)
+      end
     end
   end
 
   -- Sync node tracking
   for nodeId, src in pairs(activeNodes) do
     if not trackedNodes[nodeId] then
-      trackedNodes[nodeId] = { src = src, wasPlaying = false, lastTime = 0, readyEmitted = false }
+      trackedNodes[nodeId] = {
+        src = src,
+        wasPlaying = false,
+        lastTime = 0,
+        readyEmitted = false,
+        errorEmitted = false,
+      }
       lastTimeUpdateEmit[nodeId] = 0
     elseif trackedNodes[nodeId].src ~= src then
       -- src changed on this node
@@ -690,6 +732,7 @@ function Videos.syncWithTree(nodes)
       trackedNodes[nodeId].wasPlaying = false
       trackedNodes[nodeId].lastTime = 0
       trackedNodes[nodeId].readyEmitted = false
+      trackedNodes[nodeId].errorEmitted = false
       lastTimeUpdateEmit[nodeId] = 0
     end
   end
@@ -702,16 +745,17 @@ function Videos.syncWithTree(nodes)
     end
   end
 
-  -- Unload srcs no longer in the tree
+  -- Unload srcs no longer in the tree.
+  -- Covers both cached entries and early-error srcs that never made it into videoCache.
+  local staleSrcs = {}
+  for src in pairs(videoStatus) do
+    if not activeSrcs[src] then staleSrcs[src] = true end
+  end
   for src in pairs(videoCache) do
-    if not activeSrcs[src] then
-      local entry = videoCache[src]
-      if entry then destroyVideoEntry(entry) end
-      videoCache[src] = nil
-      videoStatus[src] = nil
-      videoErrors[src] = nil
-      videoDurations[src] = nil
-    end
+    if not activeSrcs[src] then staleSrcs[src] = true end
+  end
+  for src in pairs(staleSrcs) do
+    clearSource(src)
   end
 end
 
@@ -882,6 +926,26 @@ function Videos.poll()
       end
     end
   end
+
+  -- Emit one error event per tracked node for errored srcs.
+  -- This covers early failures where videoCache[src] was never created.
+  for nodeId, info in pairs(trackedNodes) do
+    local status = videoStatus[info.src]
+    if status == "error" then
+      if not info.errorEmitted then
+        events[#events + 1] = {
+          src = info.src,
+          status = "error",
+          message = videoErrors[info.src] or "Video playback error",
+          nodeId = nodeId,
+        }
+        info.errorEmitted = true
+      end
+    else
+      info.errorEmitted = false
+    end
+  end
+
   return events
 end
 
@@ -958,6 +1022,7 @@ function Videos.clearCache()
   videoStatus = {}
   videoErrors = {}
   videoDurations = {}
+  lastLoadAttempt = {}
   trackedNodes = {}
   lastTimeUpdateEmit = {}
 end
