@@ -1,7 +1,7 @@
 --[[
   tree.lua -- Retained element tree + command interpreter
 
-  This is the "DOM equivalent" for react-love. The React reconciler on the JS
+  This is the "DOM equivalent" for reactjit. The React reconciler on the JS
   side sends mutation commands (CREATE, APPEND, UPDATE, REMOVE, etc.) and this
   module applies them to build and maintain an in-memory tree of UI nodes.
 

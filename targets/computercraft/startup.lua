@@ -1,5 +1,5 @@
 --[[
-  startup.lua — ComputerCraft client for iLoveReact
+  startup.lua — ComputerCraft client for ReactJIT
 
   Place this file as "startup.lua" on a ComputerCraft computer.
   Edit the HOST and PORT below to match your server.

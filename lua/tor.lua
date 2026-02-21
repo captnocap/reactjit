@@ -1,8 +1,8 @@
 --[[
-  tor.lua — Tor subprocess manager for iLoveReact
+  tor.lua — Tor subprocess manager for ReactJIT
 
   Manages a Tor hidden service as a background subprocess.
-  Developers opt-in via config.tor in ReactLove.init().
+  Developers opt-in via config.tor in ReactJIT.init().
 
   Automatically finds an open SOCKS port if the default (9050) is in use,
   so it coexists with any existing Tor instance on the system.
@@ -106,7 +106,7 @@ function Tor.start(opts)
   -- If that dir is already owned by a live process (another running instance),
   -- fall back to a port-suffixed dir so each instance gets its own .onion.
   local appIdentity = (opts.identity or "default"):gsub("[^%w%-]", "_")
-  local baseDir = os.getenv("HOME") .. "/.cache/ilovereact-tor/" .. appIdentity
+  local baseDir = os.getenv("HOME") .. "/.cache/reactjit-tor/" .. appIdentity
 
   local function isProcessAlive(pid)
     local result = os.execute("kill -0 " .. tostring(pid) .. " 2>/dev/null")

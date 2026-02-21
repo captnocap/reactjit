@@ -14,12 +14,12 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI_BIN = join(__dirname, '..', 'bin', 'ilovereact.mjs');
+const CLI_BIN = join(__dirname, '..', 'bin', 'reactjit.mjs');
 const CLI_ROOT = join(__dirname, '..');
 const REPO_ROOT = join(__dirname, '..', '..');
 
 // Temp directory for test projects
-const TEST_DIR = join(tmpdir(), `ilovereact-test-${process.pid}`);
+const TEST_DIR = join(tmpdir(), `reactjit-test-${process.pid}`);
 
 // Helper: run the CLI and capture output
 function cli(args, opts = {}) {
@@ -55,11 +55,11 @@ after(() => {
 
 // ── Help ────────────────────────────────────────────────────
 
-describe('ilovereact help', () => {
+describe('reactjit help', () => {
   it('prints help text and exits 0', () => {
     const { stdout, exitCode } = cli(['help']);
     assert.equal(exitCode, 0);
-    assert.ok(stdout.includes('ilovereact'), 'Should contain "ilovereact"');
+    assert.ok(stdout.includes('reactjit'), 'Should contain "reactjit"');
     assert.ok(stdout.includes('Usage'), 'Should contain "Usage"');
   });
 
@@ -104,7 +104,7 @@ describe('unknown command', () => {
 
 // ── Init ────────────────────────────────────────────────────
 
-describe('ilovereact init', () => {
+describe('reactjit init', () => {
   it('fails without project name', () => {
     const { exitCode } = cli(['init'], { cwd: TEST_DIR });
     assert.equal(exitCode, 1);
@@ -136,31 +136,31 @@ describe('ilovereact init', () => {
     assert.ok(existsSync(join(dest, 'src', 'main.tsx')), 'src/main.tsx should exist');
 
     // Core packages always included
-    assert.ok(existsSync(join(dest, 'ilovereact', 'shared')), 'shared package should exist');
-    assert.ok(existsSync(join(dest, 'ilovereact', 'native')), 'native package should exist');
+    assert.ok(existsSync(join(dest, 'reactjit', 'shared')), 'shared package should exist');
+    assert.ok(existsSync(join(dest, 'reactjit', 'native')), 'native package should exist');
 
     // Optional packages NOT included in minimal mode
-    assert.ok(!existsSync(join(dest, 'ilovereact', 'router')), 'router should NOT exist in minimal');
-    assert.ok(!existsSync(join(dest, 'ilovereact', 'storage')), 'storage should NOT exist in minimal');
-    assert.ok(!existsSync(join(dest, 'ilovereact', 'components')), 'components should NOT exist in minimal');
+    assert.ok(!existsSync(join(dest, 'reactjit', 'router')), 'router should NOT exist in minimal');
+    assert.ok(!existsSync(join(dest, 'reactjit', 'storage')), 'storage should NOT exist in minimal');
+    assert.ok(!existsSync(join(dest, 'reactjit', 'components')), 'components should NOT exist in minimal');
 
     // tsconfig has only core paths
     const tsconfig = JSON.parse(readFileSync(join(dest, 'tsconfig.json'), 'utf-8'));
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/core'], 'tsconfig should have core path');
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/native'], 'tsconfig should have native path');
-    assert.ok(!tsconfig.compilerOptions.paths['@ilovereact/router'], 'tsconfig should NOT have router path in minimal');
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/core'], 'tsconfig should have core path');
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/native'], 'tsconfig should have native path');
+    assert.ok(!tsconfig.compilerOptions.paths['@reactjit/router'], 'tsconfig should NOT have router path in minimal');
 
     // package.json has correct name
     const pkg = JSON.parse(readFileSync(join(dest, 'package.json'), 'utf-8'));
     assert.equal(pkg.name, name);
 
-    // Template uses @ilovereact/* imports (not relative paths)
+    // Template uses @reactjit/* imports (not relative paths)
     const appTsx = readFileSync(join(dest, 'src', 'App.tsx'), 'utf-8');
-    assert.ok(appTsx.includes("from '@ilovereact/core'"), 'App.tsx should use @ilovereact/core import');
-    assert.ok(!appTsx.includes('../ilovereact/'), 'App.tsx should NOT have relative ilovereact imports');
+    assert.ok(appTsx.includes("from '@reactjit/core'"), 'App.tsx should use @reactjit/core import');
+    assert.ok(!appTsx.includes('../reactjit/'), 'App.tsx should NOT have relative reactjit imports');
 
     const mainTsx = readFileSync(join(dest, 'src', 'main.tsx'), 'utf-8');
-    assert.ok(mainTsx.includes("from '@ilovereact/native'"), 'main.tsx should use @ilovereact/native import');
+    assert.ok(mainTsx.includes("from '@reactjit/native'"), 'main.tsx should use @reactjit/native import');
 
     rmSync(dest, { recursive: true, force: true });
   });
@@ -176,16 +176,16 @@ describe('ilovereact init', () => {
     assert.equal(exitCode, 0);
 
     // Core packages always present
-    assert.ok(existsSync(join(dest, 'ilovereact', 'shared')));
-    assert.ok(existsSync(join(dest, 'ilovereact', 'native')));
+    assert.ok(existsSync(join(dest, 'reactjit', 'shared')));
+    assert.ok(existsSync(join(dest, 'reactjit', 'native')));
 
     // tsconfig has all paths (even if runtime dirs weren't available to copy)
     const tsconfig = JSON.parse(readFileSync(join(dest, 'tsconfig.json'), 'utf-8'));
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/core']);
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/native']);
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/router']);
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/storage']);
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/components']);
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/core']);
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/native']);
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/router']);
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/storage']);
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/components']);
 
     rmSync(dest, { recursive: true, force: true });
   });
@@ -202,9 +202,9 @@ describe('ilovereact init', () => {
 
     // tsconfig should have router but not storage/components
     const tsconfig = JSON.parse(readFileSync(join(dest, 'tsconfig.json'), 'utf-8'));
-    assert.ok(tsconfig.compilerOptions.paths['@ilovereact/router'], 'should have router');
-    assert.ok(!tsconfig.compilerOptions.paths['@ilovereact/storage'], 'should NOT have storage');
-    assert.ok(!tsconfig.compilerOptions.paths['@ilovereact/components'], 'should NOT have components');
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/router'], 'should have router');
+    assert.ok(!tsconfig.compilerOptions.paths['@reactjit/storage'], 'should NOT have storage');
+    assert.ok(!tsconfig.compilerOptions.paths['@reactjit/components'], 'should NOT have components');
 
     rmSync(dest, { recursive: true, force: true });
   });
@@ -212,7 +212,7 @@ describe('ilovereact init', () => {
 
 // ── Lint ─────────────────────────────────────────────────────
 
-describe('ilovereact lint', () => {
+describe('reactjit lint', () => {
   let projectDir;
 
   before(() => {
@@ -240,7 +240,7 @@ describe('ilovereact lint', () => {
 
 // ── Build ───────────────────────────────────────────────────
 
-describe('ilovereact build', () => {
+describe('reactjit build', () => {
   let projectDir;
 
   before(() => {
@@ -271,7 +271,7 @@ describe('ilovereact build', () => {
 
 // ── Update ──────────────────────────────────────────────────
 
-describe('ilovereact update', () => {
+describe('reactjit update', () => {
   it('fails when not in a project directory', () => {
     const emptyDir = join(TEST_DIR, 'empty-dir');
     mkdirSync(emptyDir, { recursive: true });
@@ -300,7 +300,7 @@ describe('ilovereact update', () => {
 
 // ── Screenshot ──────────────────────────────────────────────
 
-describe('ilovereact screenshot', () => {
+describe('reactjit screenshot', () => {
   it('fails gracefully when not in a project', () => {
     // screenshot needs src/main.tsx — running in TEST_DIR should fail
     // but it should not crash with an unhandled exception
@@ -360,7 +360,7 @@ describe('lint rules', () => {
     const testFile = join(projectDir, 'src', 'Bad.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Text } from '@ilovereact/core';
+import { Text } from '@reactjit/core';
 export function Bad() {
   return <Text style={{ color: 'red' }}>hello</Text>;
 }
@@ -376,7 +376,7 @@ export function Bad() {
     const testFile = join(projectDir, 'src', 'BadRow.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 export function BadRow() {
   return (
     <Box style={{ width: '100%', height: '100%' }}>
@@ -400,7 +400,7 @@ export function BadRow() {
     const testFile = join(projectDir, 'src', 'BlockChar.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Text } from '@ilovereact/core';
+import { Text } from '@reactjit/core';
 export function BlockChar() {
   return <Text style={{ fontSize: 14 }}>{'\u2588\u2588\u2588'}</Text>;
 }
@@ -416,7 +416,7 @@ export function BlockChar() {
     const testFile = join(projectDir, 'src', 'Ignored.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Text } from '@ilovereact/core';
+import { Text } from '@reactjit/core';
 export function Ignored() {
   return (
     // ilr-ignore-next-line
@@ -434,7 +434,7 @@ export function Ignored() {
     const testFile = join(projectDir, 'src', 'MixedText.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Text } from '@ilovereact/core';
+import { Text } from '@reactjit/core';
 export function MixedText({ count }: { count: number }) {
   return <Text style={{ fontSize: 14 }}>Count: {count}</Text>;
 }
@@ -450,7 +450,7 @@ export function MixedText({ count }: { count: number }) {
     const testFile = join(projectDir, 'src', 'NoSrc.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Image } from '@ilovereact/core';
+import { Image } from '@reactjit/core';
 export function NoSrc() {
   return <Image style={{ width: 100, height: 100 }} />;
 }
@@ -466,7 +466,7 @@ export function NoSrc() {
     const testFile = join(projectDir, 'src', 'NoOnPress.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Pressable, Text } from '@ilovereact/core';
+import { Pressable, Text } from '@reactjit/core';
 export function NoOnPress() {
   return (
     <Pressable style={{ width: 100, height: 50 }}>
@@ -487,7 +487,7 @@ export function NoOnPress() {
     const testFile = join(projectDir, 'src', 'GoodImage.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Image } from '@ilovereact/core';
+import { Image } from '@reactjit/core';
 export function GoodImage() {
   return <Image src="logo.png" style={{ width: 100, height: 100 }} />;
 }
@@ -502,7 +502,7 @@ export function GoodImage() {
     const testFile = join(projectDir, 'src', 'GoodPressable.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Pressable, Text } from '@ilovereact/core';
+import { Pressable, Text } from '@reactjit/core';
 export function GoodPressable() {
   return (
     <Pressable style={{ width: 100, height: 50 }} onPress={() => console.log('clicked')}>
@@ -521,7 +521,7 @@ export function GoodPressable() {
     const testFile = join(projectDir, 'src', 'SizeShorthand.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Text } from '@ilovereact/core';
+import { Text } from '@reactjit/core';
 export function SizeShorthand() {
   return <Text size={16}>Hello</Text>;
 }
@@ -537,7 +537,7 @@ export function SizeShorthand() {
     const testFile = join(projectDir, 'src', 'BoxShorthands.tsx');
     writeFileSync(testFile, `
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 export function BoxShorthands() {
   return (
     <Box fill>

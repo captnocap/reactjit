@@ -9,7 +9,7 @@ import React from 'react';
 import {
   Box, Text, MessageList, MessageBubble, LoadingDots, CodeBlock,
   type Style,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 import type { Message } from '../types';
 
 export interface AIMessageListProps {

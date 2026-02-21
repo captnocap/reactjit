@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Pressable } from '../ilovereact/shared/src';
+import { Box, Text, Pressable } from '../reactjit/shared/src';
 import type { LintMessage } from './lib/linter';
 
 interface StatusBarProps { messages: LintMessage[]; onJumpToLine?: (line: number) => void; }

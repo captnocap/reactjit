@@ -3,7 +3,7 @@ websocket client pure lua implement for love2d
 by flaribbit — https://github.com/flaribbit/love2d-lua-websocket
 MIT License
 
-vendored into iLoveReact for the networking layer.
+vendored into ReactJIT for the networking layer.
 
 usage:
     local client = require("websocket").new("127.0.0.1", 5000)

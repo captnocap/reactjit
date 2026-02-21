@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { createNvimServer } from '@ilovereact/nvim';
+import { createNvimServer } from '@reactjit/nvim';
 import App from './App';
 
 const server = createNvimServer({
@@ -15,6 +15,6 @@ const server = createNvimServer({
 });
 
 // Diagnostic output goes to stderr (Neovim shows via on_stderr)
-console.error('iLoveReact Neovim demo started (60x20)');
+console.error('ReactJIT Neovim demo started (60x20)');
 
 server.render(<App />);

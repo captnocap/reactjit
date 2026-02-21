@@ -72,7 +72,7 @@ end
 function Errors._printToTerminal(entry)
   local ok, _ = pcall(function()
     io.write("\n")
-    io.write("[react-love ERROR] " .. entry.timestamp .. " | " .. entry.context .. "\n")
+    io.write("[reactjit ERROR] " .. entry.timestamp .. " | " .. entry.context .. "\n")
     io.write("  " .. entry.source .. ": " .. entry.message .. "\n")
     if entry.stack and entry.stack ~= "" then
       io.write("  Stack:\n")
@@ -257,7 +257,7 @@ function Errors.draw()
   if not ok then
     -- Last resort: try to print that the error overlay itself failed
     pcall(function()
-      io.write("[react-love] Error overlay draw failed: " .. tostring(drawErr) .. "\n")
+      io.write("[reactjit] Error overlay draw failed: " .. tostring(drawErr) .. "\n")
       io.flush()
     end)
   end

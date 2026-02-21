@@ -1,5 +1,5 @@
 --[[
-  network.lua — WebSocket network manager for iLoveReact
+  network.lua — WebSocket network manager for ReactJIT
 
   Manages multiple WebSocket connections with auto-reconnect.
   Each connection is identified by an integer ID assigned at creation.

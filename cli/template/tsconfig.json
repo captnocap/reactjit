@@ -8,11 +8,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "@ilovereact/core": ["./ilovereact/shared/src"],
-      "@ilovereact/native": ["./ilovereact/native/src"],
-      "@ilovereact/router": ["./ilovereact/router/src"],
-      "@ilovereact/storage": ["./ilovereact/storage/src"],
-      "@ilovereact/components": ["./ilovereact/components/src"]
+      "@reactjit/core": ["./reactjit/shared/src"],
+      "@reactjit/native": ["./reactjit/native/src"],
+      "@reactjit/router": ["./reactjit/router/src"],
+      "@reactjit/storage": ["./reactjit/storage/src"],
+      "@reactjit/components": ["./reactjit/components/src"]
     }
   },
   "include": ["src"]

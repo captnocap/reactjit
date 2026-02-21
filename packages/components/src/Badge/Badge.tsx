@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, type Style } from '@ilovereact/core';
+import { Box, Text, type Style } from '@reactjit/core';
 
 export type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info';
 

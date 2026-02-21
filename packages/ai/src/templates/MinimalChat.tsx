@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Box, type Style } from '@ilovereact/core';
+import { Box, type Style } from '@reactjit/core';
 import { useChat } from '../hooks';
 import type { ChatOptions } from '../types';
 import { AIMessageList } from '../components/AIMessageList';

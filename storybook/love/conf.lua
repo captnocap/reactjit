@@ -1,6 +1,6 @@
 function love.conf(t)
-  t.identity = "react-love-storybook"
-  t.window.title = "react-love storybook"
+  t.identity = "reactjit-storybook"
+  t.window.title = "reactjit storybook"
   t.window.width = 800
   t.window.height = 600
   t.window.vsync = 1

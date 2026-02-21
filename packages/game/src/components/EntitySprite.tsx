@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@ilovereact/core';
+import { Box } from '@reactjit/core';
 import type { EntityState } from '../types';
 
 export interface EntitySpriteProps {

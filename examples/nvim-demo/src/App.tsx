@@ -39,7 +39,7 @@ export default function App() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#111111', flexDirection: 'column', gap: 1 }}>
       <Box style={{ backgroundColor: '#4C4C4C', padding: 1 }}>
-        <Text style={{ color: '#FFFFFF', fontSize: 12 }}>iLoveReact Neovim</Text>
+        <Text style={{ color: '#FFFFFF', fontSize: 12 }}>ReactJIT Neovim</Text>
       </Box>
       <Clock />
       <Box style={{ flexDirection: 'row', gap: 1 }}>

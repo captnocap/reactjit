@@ -5,7 +5,7 @@
  * overlay so it knows what fields to display. Call it once at app startup.
  *
  * @example
- * import { useSettingsRegistry, builtinServices } from '@ilovereact/apis';
+ * import { useSettingsRegistry, builtinServices } from '@reactjit/apis';
  *
  * function App() {
  *   useSettingsRegistry(); // uses builtinServices by default

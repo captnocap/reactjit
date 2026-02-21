@@ -23,7 +23,7 @@ local ffi = require("ffi")
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
 if not ok_json then ok_json, json = pcall(require, "lua.json") end
-if not ok_json then error("[react-love] JSON library required but not found (tried 'json', 'lib.json', 'lua.json')") end
+if not ok_json then error("[reactjit] JSON library required but not found (tried 'json', 'lib.json', 'lua.json')") end
 local Measure = require("lua.measure")
 
 -- ============================================================================
@@ -152,7 +152,7 @@ local _int32_buf  = ffi.new("int32_t[1]")
 local function jsValueToLua(ctx, qjs, val, depth)
   depth = depth or 0
   if depth > 32 then
-    print("[react-love] jsValueToLua: max depth exceeded")
+    print("[reactjit] jsValueToLua: max depth exceeded")
     return nil
   end
 
@@ -252,7 +252,7 @@ local function jsValueToLua(ctx, qjs, val, depth)
 
   else
     -- Unknown tag
-    print(string.format("[react-love] jsValueToLua: unknown tag %d", tag))
+    print(string.format("[reactjit] jsValueToLua: unknown tag %d", tag))
     return nil
   end
 end
@@ -268,7 +268,7 @@ end
 local function luaToJSValue(ctx, qjs, val, depth)
   depth = depth or 0
   if depth > 32 then
-    print("[react-love] luaToJSValue: max depth exceeded")
+    print("[reactjit] luaToJSValue: max depth exceeded")
     return ffi.new("JSValue", {0, TAG_NULL})
   end
 
@@ -351,7 +351,7 @@ local function validateTags(ctx, qjs)
   -- Update constants if they differ from expected
   if strTag ~= TAG_STRING or intTag ~= TAG_INT or boolTag ~= TAG_BOOL
      or nullTag ~= TAG_NULL or floatTag ~= TAG_FLOAT64 or objTag ~= TAG_OBJECT then
-    print("[react-love] JSValue tags differ from defaults, updating...")
+    print("[reactjit] JSValue tags differ from defaults, updating...")
     TAG_STRING = strTag
     TAG_INT = intTag
     TAG_BOOL = boolTag
@@ -550,7 +550,7 @@ function Bridge.new(libpath)
     //
     // ---- fetchStream() polyfill ----
     // Same transport but streams response chunks via callbacks instead of
-    // buffering the full body. Used by @ilovereact/ai for SSE streaming.
+    // buffering the full body. Used by @reactjit/ai for SSE streaming.
     (function() {
       var _fetchId = 0;
       var _fetchCallbacks = {};   // id -> { resolve, reject }
@@ -902,11 +902,11 @@ function Bridge:_setupHostFunctions()
           selfRef.commandBuffer[#selfRef.commandBuffer + 1] = cmd
         end
       else
-        print("[react-love] __hostFlush JSON decode failed: " .. tostring(commands))
-        print("[react-love] Raw JSON string (first 200 chars): " .. jsonStr:sub(1, 200))
+        print("[reactjit] __hostFlush JSON decode failed: " .. tostring(commands))
+        print("[reactjit] Raw JSON string (first 200 chars): " .. jsonStr:sub(1, 200))
       end
     else
-      print("[react-love] __hostFlush: JS_ToCString returned nil")
+      print("[reactjit] __hostFlush: JS_ToCString returned nil")
     end
     -- ret already points to JS_UNDEFINED (set by C trampoline)
   end)
@@ -922,7 +922,7 @@ function Bridge:_setupHostFunctions()
     if ok then
       ret[0] = jsArr
     else
-      print("[react-love] __hostGetEvents FFI construction failed: " .. tostring(jsArr))
+      print("[reactjit] __hostGetEvents FFI construction failed: " .. tostring(jsArr))
     end
   end)
   self._callbacks[#self._callbacks + 1] = eventsCb
@@ -958,7 +958,7 @@ function Bridge:_setupHostFunctions()
     -- Direct FFI: argv[0] is a raw JS object
     local pok, params = pcall(jsValueToLua, ctx, qjs, argv[0])
     if not pok or type(params) ~= "table" then
-      print("[react-love] __hostMeasureText FFI traversal failed: " .. tostring(params))
+      print("[reactjit] __hostMeasureText FFI traversal failed: " .. tostring(params))
       ret[0] = luaToJSValue(ctx, qjs, zeroResult)
       return
     end
@@ -974,7 +974,7 @@ function Bridge:_setupHostFunctions()
     if rok then
       ret[0] = jsResult
     else
-      print("[react-love] __hostMeasureText FFI construction failed: " .. tostring(jsResult))
+      print("[reactjit] __hostMeasureText FFI construction failed: " .. tostring(jsResult))
       ret[0] = luaToJSValue(ctx, qjs, zeroResult)
     end
   end)
@@ -1026,7 +1026,7 @@ function Bridge:_setupHostFunctions()
 
     local f = io.open("/dev/urandom", "rb")
     if not f then
-      print("[react-love] __hostRandomBytes: cannot open /dev/urandom")
+      print("[reactjit] __hostRandomBytes: cannot open /dev/urandom")
       ret[0] = qjs.JS_NewArray(ctx)
       return
     end

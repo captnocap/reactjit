@@ -4,7 +4,7 @@
   Maps known identifiers (components, hooks, props, keywords) to descriptions
   at three verbosity levels:
     beginner — full explanation, assumes no React/flexbox knowledge
-    guided   — assumes React knowledge, focuses on iLoveReact specifics
+    guided   — assumes React knowledge, focuses on ReactJIT specifics
     clean    — minimal: just name + signature or one-liner
 
   Used by texteditor.lua to show IDE-like hover tooltips in the playground.
@@ -442,7 +442,7 @@ tooltips["borderColor"] = {
 
 tooltips["const"] = {
   beginner = "const declares a variable that can't be reassigned. Use it for values that shouldn't change, like component definitions or configuration. This is the most common way to declare variables in React.",
-  guided   = "Block-scoped constant binding. Standard JS — no iLoveReact-specific behavior.",
+  guided   = "Block-scoped constant binding. Standard JS — no ReactJIT-specific behavior.",
   clean    = "const — constant declaration",
 }
 
@@ -472,7 +472,7 @@ tooltips["return"] = {
 
 tooltips["import"] = {
   beginner = "import brings in code from another file or package. Use it to pull in React, components, hooks, or utilities. The curly braces { } syntax imports specific named exports.",
-  guided   = "ES module import. Named: import { X }, default: import X. iLoveReact uses @ilovereact/core for primitives.",
+  guided   = "ES module import. Named: import { X }, default: import X. ReactJIT uses @reactjit/core for primitives.",
   clean    = "import — ES module import",
 }
 
@@ -554,7 +554,7 @@ tooltips["for"] = {
 
 tooltips["React"] = {
   beginner = "React is the library that lets you build user interfaces with components. Components are functions that describe what to show. React figures out how to efficiently update the screen when data changes.",
-  guided   = "React library. iLoveReact uses React 18.3+ with react-reconciler. Same component model as web React but rendering targets Love2D/terminal/etc.",
+  guided   = "React library. ReactJIT uses React 18.3+ with react-reconciler. Same component model as web React but rendering targets Love2D/terminal/etc.",
   clean    = "React — UI component library",
 }
 

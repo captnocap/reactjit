@@ -6,8 +6,8 @@ import {
   Text,
   useLoveRPC,
   useWindowDimensions,
-} from '@ilovereact/core';
-import type { LoveEvent } from '@ilovereact/core';
+} from '@reactjit/core';
+import type { LoveEvent } from '@reactjit/core';
 
 const MAX_SCROLLBACK_LINES = 1200;
 const READ_BURST_BYTES = 65536;

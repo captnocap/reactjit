@@ -45,7 +45,7 @@ export const templates: Template[] = [
           fontSize: 20,
           fontWeight: 'bold',
         }}>
-          iLoveReact Playground
+          ReactJIT Playground
         </Text>
         <Text style={{
           color: '#6c7086',

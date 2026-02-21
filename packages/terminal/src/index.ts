@@ -2,4 +2,4 @@ export { createTerminalApp, type TerminalAppOptions, type TerminalAppHandle } fr
 export { enableRawInput, type KeyEvent } from './input';
 
 // Re-export grid types for consumers
-export { type DrawCommand, type LayoutNode } from '@ilovereact/grid';
+export { type DrawCommand, type LayoutNode } from '@reactjit/grid';

@@ -6,7 +6,7 @@
  * and alternate screen buffer management.
  */
 
-import type { DrawCommand } from '@ilovereact/grid';
+import type { DrawCommand } from '@reactjit/grid';
 
 // ── Types ────────────────────────────────────────────────
 

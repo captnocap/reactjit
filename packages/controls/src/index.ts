@@ -1,4 +1,4 @@
-// @ilovereact/controls — Hardware-style UI controls
+// @reactjit/controls — Hardware-style UI controls
 //
 // Knobs, faders, meters, LEDs, pads, step sequencers, transport bars.
 // Decoupled from audio — use anywhere you need tactile-feeling controls.

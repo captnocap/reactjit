@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Slider, TextInput, type Style } from '@ilovereact/core';
+import { Box, Text, Slider, TextInput, type Style } from '@reactjit/core';
 import { AIModelSelector } from './AIModelSelector';
 import type { AIConfig } from '../types';
 

@@ -6,8 +6,8 @@
  * love.filesystem at save/settings/api_keys.json.
  *
  * @example
- * import { useServiceKey } from '@ilovereact/apis';
- * import { useSpotifyNowPlaying } from '@ilovereact/apis';
+ * import { useServiceKey } from '@reactjit/apis';
+ * import { useSpotifyNowPlaying } from '@reactjit/apis';
  *
  * function NowPlaying() {
  *   const { key } = useServiceKey('spotify', 'token');

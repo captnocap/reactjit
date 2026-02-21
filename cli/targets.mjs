@@ -14,7 +14,7 @@
 export const TARGETS = {
   love: {
     format: 'iife',
-    globalName: 'ReactLove',
+    globalName: 'ReactJIT',
     external: ['react-dom', 'child_process'],
     entries: ['main-love.tsx', 'native-main.tsx', 'main.tsx'],
     output: 'love/bundle.js',
@@ -68,7 +68,7 @@ export const TARGETS = {
   },
   sdl2: {
     format: 'iife',
-    globalName: 'ReactLove',
+    globalName: 'ReactJIT',
     external: ['react-dom', 'child_process'],
     entries: ['main-sdl2.tsx', 'main-love.tsx', 'native-main.tsx', 'main.tsx'],
     output: 'sdl2/bundle.js',

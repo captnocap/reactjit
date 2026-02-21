@@ -10,7 +10,7 @@
 export const MCP_PROTOCOL_VERSION = '2025-11-05';
 
 export const MCP_CLIENT_INFO = {
-  name: 'ilovereact',
+  name: 'reactjit',
   version: '1.0.0',
 } as const;
 

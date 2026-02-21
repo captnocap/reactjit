@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import { HealthBar } from '../components/HealthBar';
 import { Game } from '../GameCanvas';
 

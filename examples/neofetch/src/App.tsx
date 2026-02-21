@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import type { SystemInfo } from './sysinfo';
 
 /* ── heart pixel grid (13 wide × 10 tall) ──────────────────── */

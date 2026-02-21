@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { ChatInput, type Style, type Color } from '@ilovereact/core';
+import { ChatInput, type Style, type Color } from '@reactjit/core';
 
 export interface AIChatInputProps {
   /** send() from useChat() */

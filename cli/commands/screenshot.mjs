@@ -22,7 +22,7 @@ export async function screenshotCommand(args) {
     }
   }
 
-  console.log(`\n  ilovereact screenshot\n`);
+  console.log(`\n  reactjit screenshot\n`);
 
   // 1. Lint check
   console.log('  [1/3] Linting...');
@@ -39,7 +39,7 @@ export async function screenshotCommand(args) {
     'npx', 'esbuild',
     '--bundle',
     '--format=iife',
-    '--global-name=ReactLove',
+    '--global-name=ReactJIT',
     '--target=es2020',
     '--jsx=automatic',
     '--outfile=bundle.js',

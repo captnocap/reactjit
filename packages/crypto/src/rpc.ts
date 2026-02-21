@@ -25,7 +25,7 @@ export function setCryptoBridge(bridge: CryptoBridge): void {
 export function getBridge(): CryptoBridge {
   if (!_bridge) {
     throw new Error(
-      '@ilovereact/crypto: bridge not initialized. ' +
+      '@reactjit/crypto: bridge not initialized. ' +
       'Call setCryptoBridge(bridge) before using crypto functions, ' +
       'or use useCrypto() inside a BridgeProvider.'
     );

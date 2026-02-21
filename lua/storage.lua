@@ -1,5 +1,5 @@
 --[[
-  storage.lua — File-based CRUD storage for iLoveReact
+  storage.lua — File-based CRUD storage for ReactJIT
 
   Provides RPC handlers for get/set/delete/list operations on
   Love2D's save directory. Supports JSON, Markdown (frontmatter + body),

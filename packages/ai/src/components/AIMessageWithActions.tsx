@@ -3,7 +3,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { Box, MessageBubble, ActionBar, type Style, type ActionBarItem } from '@ilovereact/core';
+import { Box, MessageBubble, ActionBar, type Style, type ActionBarItem } from '@reactjit/core';
 import type { Message } from '../types';
 
 export interface AIMessageWithActionsProps {

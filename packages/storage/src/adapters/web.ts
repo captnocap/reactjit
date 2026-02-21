@@ -86,7 +86,7 @@ export class IndexedDBAdapter implements StorageAdapter {
   private collections: Set<string>;
 
   constructor(options?: { dbName?: string; collections?: string[] }) {
-    this.dbName = options?.dbName ?? 'ilovereact-storage';
+    this.dbName = options?.dbName ?? 'reactjit-storage';
     this.collections = new Set(options?.collections ?? []);
     this.dbVersion = 1;
   }

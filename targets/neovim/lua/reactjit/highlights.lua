@@ -1,5 +1,5 @@
 --[[
-  highlights.lua — Dynamic highlight group cache for iLoveReact Neovim target.
+  highlights.lua — Dynamic highlight group cache for ReactJIT Neovim target.
 
   Creates and caches Neovim highlight groups on demand.
   Each unique fg/bg combination gets a named highlight group ILR_<fg>_<bg>.
@@ -12,7 +12,7 @@ local cache = {}
 local ns_id = nil
 
 function M.init()
-  ns_id = vim.api.nvim_create_namespace("ilovereact")
+  ns_id = vim.api.nvim_create_namespace("reactjit")
   cache = {}
   return ns_id
 end

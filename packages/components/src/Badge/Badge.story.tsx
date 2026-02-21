@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Badge } from '@ilovereact/core';
+import { Box, Text, Badge } from '@reactjit/core';
 
 export function BadgeStory() {
   return (

@@ -6,7 +6,7 @@
  * without any React dependency.
  *
  * Usage:
- *   import { createCRUD, z, MemoryAdapter } from '@ilovereact/storage';
+ *   import { createCRUD, z, MemoryAdapter } from '@reactjit/storage';
  *
  *   const Notes = createCRUD('notes', z.object({
  *     id: z.string(),

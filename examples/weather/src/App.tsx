@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../ilovereact/shared/src';
+import { Box, Text, Pressable } from '../reactjit/shared/src';
 
 const MOCK_CITIES = [
   {

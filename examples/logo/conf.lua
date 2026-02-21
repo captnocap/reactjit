@@ -1,6 +1,6 @@
 function love.conf(t)
-  t.identity = "ilovereact-logo"
-  t.window.title = "iLoveReact"
+  t.identity = "reactjit-logo"
+  t.window.title = "ReactJIT"
   t.window.width = 800
   t.window.height = 600
   t.window.vsync = 1

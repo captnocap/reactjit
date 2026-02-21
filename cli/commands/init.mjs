@@ -21,155 +21,155 @@ const yellow = color('33');
 const OPTIONAL_PACKAGES = [
   // ── UI & Layout ──────────────────────────────────────────
   {
-    name: '@ilovereact/components',
+    name: '@reactjit/components',
     dir: 'components',
-    alias: '@ilovereact/components',
+    alias: '@reactjit/components',
     flag: '--components',
     description: 'Pre-built UI widgets (Card, Badge, Divider, FlexRow)',
-    importExample: "import { Card, Badge } from '@ilovereact/components';",
+    importExample: "import { Card, Badge } from '@reactjit/components';",
     default: true,
   },
   {
-    name: '@ilovereact/theme',
+    name: '@reactjit/theme',
     dir: 'theme',
-    alias: '@ilovereact/theme',
+    alias: '@reactjit/theme',
     flag: '--theme',
     description: 'Design tokens, theme switcher, dark/light support',
-    importExample: "import { ThemeProvider, useTheme } from '@ilovereact/theme';",
+    importExample: "import { ThemeProvider, useTheme } from '@reactjit/theme';",
     default: true,
   },
   {
-    name: '@ilovereact/controls',
+    name: '@reactjit/controls',
     dir: 'controls',
-    alias: '@ilovereact/controls',
+    alias: '@reactjit/controls',
     flag: '--controls',
     description: 'Hardware controls: knobs, faders, meters, pads, LEDs',
-    importExample: "import { Knob, Fader, Meter } from '@ilovereact/controls';",
+    importExample: "import { Knob, Fader, Meter } from '@reactjit/controls';",
     default: false,
   },
 
   // ── Navigation & State ───────────────────────────────────
   {
-    name: '@ilovereact/router',
+    name: '@reactjit/router',
     dir: 'router',
-    alias: '@ilovereact/router',
+    alias: '@reactjit/router',
     flag: '--router',
     description: 'Navigation and URL routing',
-    importExample: "import { RouterProvider, Route, Link } from '@ilovereact/router';",
+    importExample: "import { RouterProvider, Route, Link } from '@reactjit/router';",
     default: true,
   },
   {
-    name: '@ilovereact/storage',
+    name: '@reactjit/storage',
     dir: 'storage',
-    alias: '@ilovereact/storage',
+    alias: '@reactjit/storage',
     flag: '--storage',
     description: 'CRUD, schemas, data persistence',
-    importExample: "import { useCRUD, createCRUD, z } from '@ilovereact/storage';",
+    importExample: "import { useCRUD, createCRUD, z } from '@reactjit/storage';",
     default: true,
   },
 
   // ── Media & 3D ───────────────────────────────────────────
   {
-    name: '@ilovereact/3d',
+    name: '@reactjit/3d',
     dir: '3d',
-    alias: '@ilovereact/3d',
+    alias: '@reactjit/3d',
     flag: '--3d',
     description: 'Declarative 3D scenes in JSX (Scene, Camera, Mesh)',
-    importExample: "import { Scene, Camera, Mesh } from '@ilovereact/3d';",
+    importExample: "import { Scene, Camera, Mesh } from '@reactjit/3d';",
     default: false,
   },
   {
-    name: '@ilovereact/audio',
+    name: '@reactjit/audio',
     dir: 'audio',
-    alias: '@ilovereact/audio',
+    alias: '@reactjit/audio',
     flag: '--audio',
     description: 'Audio engine: rack, MIDI, sampler, sequencer, recording',
-    importExample: "import { useAudioRack, useMIDI } from '@ilovereact/audio';",
+    importExample: "import { useAudioRack, useMIDI } from '@reactjit/audio';",
     default: false,
   },
   {
-    name: '@ilovereact/media',
+    name: '@reactjit/media',
     dir: 'media',
-    alias: '@ilovereact/media',
+    alias: '@reactjit/media',
     flag: '--media',
     description: 'File browser, archive (zip/tar), media library',
-    importExample: "import { useMediaLibrary, useArchive } from '@ilovereact/media';",
+    importExample: "import { useMediaLibrary, useArchive } from '@reactjit/media';",
     default: false,
   },
   {
-    name: '@ilovereact/game',
+    name: '@reactjit/game',
     dir: 'game',
-    alias: '@ilovereact/game',
+    alias: '@reactjit/game',
     flag: '--game',
     description: 'Game logic: entities, physics, input, genre templates',
-    importExample: "import { useEntitySystem, useGameLoop } from '@ilovereact/game';",
+    importExample: "import { useEntitySystem, useGameLoop } from '@reactjit/game';",
     default: false,
   },
 
   // ── Data & Networking ─────────────────────────────────────
   {
-    name: '@ilovereact/apis',
+    name: '@reactjit/apis',
     dir: 'apis',
-    alias: '@ilovereact/apis',
+    alias: '@reactjit/apis',
     flag: '--apis',
     description: 'HTTP API hooks, service registry, bearer auth',
-    importExample: "import { useAPI, useAPIMutation } from '@ilovereact/apis';",
+    importExample: "import { useAPI, useAPIMutation } from '@reactjit/apis';",
     default: false,
   },
   {
-    name: '@ilovereact/server',
+    name: '@reactjit/server',
     dir: 'server',
-    alias: '@ilovereact/server',
+    alias: '@reactjit/server',
     flag: '--server',
     description: 'HTTP server (static files, API routes)',
-    importExample: "import { useServer, useStaticServer } from '@ilovereact/server';",
+    importExample: "import { useServer, useStaticServer } from '@reactjit/server';",
     default: false,
   },
   {
-    name: '@ilovereact/rss',
+    name: '@reactjit/rss',
     dir: 'rss',
-    alias: '@ilovereact/rss',
+    alias: '@reactjit/rss',
     flag: '--rss',
     description: 'RSS/Atom feed fetching and parsing',
-    importExample: "import { useFeed } from '@ilovereact/rss';",
+    importExample: "import { useFeed } from '@reactjit/rss';",
     default: false,
   },
   {
-    name: '@ilovereact/webhooks',
+    name: '@reactjit/webhooks',
     dir: 'webhooks',
-    alias: '@ilovereact/webhooks',
+    alias: '@reactjit/webhooks',
     flag: '--webhooks',
     description: 'Outbound webhook posting and retry logic',
-    importExample: "import { useWebhook } from '@ilovereact/webhooks';",
+    importExample: "import { useWebhook } from '@reactjit/webhooks';",
     default: false,
   },
   {
-    name: '@ilovereact/geo',
+    name: '@reactjit/geo',
     dir: 'geo',
-    alias: '@ilovereact/geo',
+    alias: '@reactjit/geo',
     flag: '--geo',
     description: 'Declarative maps: tiles, markers, offline support',
-    importExample: "import { Map, TileLayer, Marker } from '@ilovereact/geo';",
+    importExample: "import { Map, TileLayer, Marker } from '@reactjit/geo';",
     default: false,
   },
 
   // ── Security & AI ────────────────────────────────────────
   {
-    name: '@ilovereact/crypto',
+    name: '@reactjit/crypto',
     dir: 'crypto',
-    alias: '@ilovereact/crypto',
+    alias: '@reactjit/crypto',
     flag: '--crypto',
     description: 'Encryption, signing, key generation (libsodium + BLAKE3)',
-    importExample: "import { useEncrypt, useSign, useKeyPair } from '@ilovereact/crypto';",
+    importExample: "import { useEncrypt, useSign, useKeyPair } from '@reactjit/crypto';",
     default: false,
   },
   {
-    name: '@ilovereact/ai',
+    name: '@reactjit/ai',
     dir: 'ai',
-    alias: '@ilovereact/ai',
+    alias: '@reactjit/ai',
     flag: '--ai',
     description: 'LLM hooks (streaming chat, tool calling, key storage)',
-    importExample: "import { useChat, useCompletion, AIProvider } from '@ilovereact/ai';",
+    importExample: "import { useChat, useCompletion, AIProvider } from '@reactjit/ai';",
     default: false,
   },
 ];
@@ -291,12 +291,12 @@ function parseFlags(args) {
 
 function generateTsconfig(selectedPackages) {
   const paths = {
-    '@ilovereact/core': ['./ilovereact/shared/src'],
-    '@ilovereact/native': ['./ilovereact/native/src'],
+    '@reactjit/core': ['./reactjit/shared/src'],
+    '@reactjit/native': ['./reactjit/native/src'],
   };
 
   for (const pkg of selectedPackages) {
-    paths[pkg.alias] = [`./ilovereact/${pkg.dir}/src`];
+    paths[pkg.alias] = [`./reactjit/${pkg.dir}/src`];
   }
 
   return {
@@ -319,7 +319,7 @@ function generateTsconfig(selectedPackages) {
 export async function initCommand(args) {
   const name = args.filter(a => !a.startsWith('--'))[0];
   if (!name) {
-    console.error('Usage: ilovereact init <project-name> [--all | --minimal | --router --storage --components --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
+    console.error('Usage: reactjit init <project-name> [--all | --minimal | --router --storage --components --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
     process.exit(1);
   }
 
@@ -329,7 +329,7 @@ export async function initCommand(args) {
     process.exit(1);
   }
 
-  console.log(`\n  ${bold('Creating iLoveReact project:')} ${cyan(name)}`);
+  console.log(`\n  ${bold('Creating ReactJIT project:')} ${cyan(name)}`);
 
   // Determine which optional packages to include
   let selections = parseFlags(args);
@@ -375,10 +375,10 @@ export async function initCommand(args) {
   }
 
   // Copy framework source (shared + native — always included)
-  const runtimePkgs = join(CLI_ROOT, 'runtime', 'ilovereact');
+  const runtimePkgs = join(CLI_ROOT, 'runtime', 'reactjit');
   if (existsSync(runtimePkgs)) {
     // Copy core packages (always included)
-    const destPkgs = join(dest, 'ilovereact');
+    const destPkgs = join(dest, 'reactjit');
     mkdirSync(destPkgs, { recursive: true });
 
     for (const dir of ['shared', 'native']) {
@@ -396,7 +396,7 @@ export async function initCommand(args) {
       }
     }
   } else {
-    console.warn('  Warning: ilovereact/ packages not found in CLI. Run `make cli-setup` first.');
+    console.warn('  Warning: reactjit/ packages not found in CLI. Run `make cli-setup` first.');
   }
 
   // Generate tsconfig.json with selected path aliases (overwrite template)
@@ -409,8 +409,8 @@ export async function initCommand(args) {
     version: '0.1.0',
     private: true,
     scripts: {
-      dev: 'ilovereact dev',
-      build: 'ilovereact build',
+      dev: 'reactjit dev',
+      build: 'reactjit build',
     },
     dependencies: {
       'react': '^18.3.0',
@@ -433,17 +433,17 @@ export async function initCommand(args) {
   }
 
   // Show results
-  console.log(`\n  ${green('Done!')} Your iLoveReact project is ready.\n`);
+  console.log(`\n  ${green('Done!')} Your ReactJIT project is ready.\n`);
 
   console.log(`  ${bold('Included packages:')}`);
-  console.log(`    ${dim("import { Box, Text, Pressable } from '@ilovereact/core';")}`);
+  console.log(`    ${dim("import { Box, Text, Pressable } from '@reactjit/core';")}`);
   for (const pkg of selectedPackages) {
     console.log(`    ${dim(pkg.importExample)}`);
   }
 
   console.log(`\n  ${bold('Next steps:')}`);
   console.log(`    ${cyan('cd ' + name)}`);
-  console.log(`    ${cyan('ilovereact dev')}          ${dim('# Start esbuild watch (HMR)')}`);
+  console.log(`    ${cyan('reactjit dev')}          ${dim('# Start esbuild watch (HMR)')}`);
   console.log(`    ${cyan('love .')}                  ${dim('# Run Love2D (in another terminal)')}`);
   console.log(`\n  Edit src/App.tsx and watch it reload live!\n`);
 }

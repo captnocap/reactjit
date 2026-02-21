@@ -33,7 +33,7 @@ function main() {
   const command = process.argv[2] || 'build';
 
   console.log('');
-  console.log('  iLoveReact Documentation Builder');
+  console.log('  ReactJIT Documentation Builder');
   console.log('  ================================');
   console.log('');
 

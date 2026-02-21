@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, Box, Text } from '@ilovereact/core';
+import { render, Box, Text } from '@reactjit/core';
 
 function App() {
   // Create 50 navigation items to force scrolling

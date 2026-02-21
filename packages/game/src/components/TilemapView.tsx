@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@ilovereact/core';
+import { Box } from '@reactjit/core';
 import type { TilemapState } from '../world/useTilemap';
 import type { FogOfWarState } from '../world/useFogOfWar';
 

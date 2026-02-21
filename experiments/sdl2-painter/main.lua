@@ -83,7 +83,7 @@ sdl.SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2)
 sdl.SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1)
 
 local window = sdl.SDL_CreateWindow(
-  "iLoveReact SDL2 Painter",
+  "ReactJIT SDL2 Painter",
   SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
   W, H,
   bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_RESIZABLE)

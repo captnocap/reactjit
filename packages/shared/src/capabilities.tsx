@@ -7,7 +7,7 @@
  * Nobody talks to a bridge.
  *
  * @example
- * import { Audio, Timer } from '@ilovereact/core';
+ * import { Audio, Timer } from '@reactjit/core';
  *
  * // Play audio
  * <Audio src="music/track.mp3" playing loop volume={0.8} />

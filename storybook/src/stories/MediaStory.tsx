@@ -141,7 +141,7 @@ function UsageExamples() {
       <MediaCodeBlock
         label="// List archive contents"
         code={[
-          "import { useArchive } from '@ilovereact/media';",
+          "import { useArchive } from '@reactjit/media';",
           "",
           "const { entries, loading } = useArchive('/path/to/file.rar');",
           "// entries: [{ path, size, type, mtime, encrypted }]",
@@ -159,7 +159,7 @@ function UsageExamples() {
       <MediaCodeBlock
         label="// Scan a directory for media files"
         code={[
-          "import { useMediaLibrary } from '@ilovereact/media';",
+          "import { useMediaLibrary } from '@reactjit/media';",
           "",
           "const { files, stats } = useMediaLibrary('/home/user/Movies');",
           "// stats.byType: { video: 42, subtitle: 38, image: 5 }",
@@ -169,7 +169,7 @@ function UsageExamples() {
       <MediaCodeBlock
         label="// Deep index — looks inside archives"
         code={[
-          "import { useMediaIndex } from '@ilovereact/media';",
+          "import { useMediaIndex } from '@reactjit/media';",
           "",
           "const { index } = useMediaIndex('/home/user/Downloads', {",
           "  indexArchives: true,",
@@ -190,7 +190,7 @@ function UsageExamples() {
       <MediaCodeBlock
         label="// Classify + format — no RPC needed"
         code={[
-          "import { classifyFile, formatSize } from '@ilovereact/media';",
+          "import { classifyFile, formatSize } from '@reactjit/media';",
           "",
           "classifyFile('movie.mkv')    // 'video'",
           "classifyFile('song.flac')    // 'audio'",
@@ -273,7 +273,7 @@ export function MediaStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>@ilovereact/media</Text>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>@reactjit/media</Text>
         <Text style={{ fontSize: 11, color: c.textDim }}>Media library scanner, archive walker, and file indexer.</Text>
       </Box>
 

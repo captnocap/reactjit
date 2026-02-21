@@ -1,7 +1,7 @@
 --[[
   sdl2_font.lua -- FreeType glyph rasterizer + per-glyph GL texture cache
   Framework version of experiments/sdl2-painter/font.lua.
-  Loads ft_helper.so from lib/ (placed there by ilovereact update / make cli-setup).
+  Loads ft_helper.so from lib/ (placed there by reactjit update / make cli-setup).
 ]]
 local ffi = require("ffi")
 local GL  = require("lua.sdl2_gl")

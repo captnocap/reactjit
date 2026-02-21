@@ -1,4 +1,4 @@
-// @ilovereact/game — Game Logic Hooks, Systems, and Genre Templates
+// @reactjit/game — Game Logic Hooks, Systems, and Genre Templates
 
 // ── Types ──
 export type {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useRendererMode } from '@ilovereact/core';
+import { useRendererMode } from '@reactjit/core';
 import type { PolygonProps } from './types';
 
 /**

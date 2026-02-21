@@ -1,5 +1,5 @@
 /**
- * Viewport-proportional scaling for iLoveReact.
+ * Viewport-proportional scaling for ReactJIT.
  *
  * Wrap a subtree in <ScaleProvider reference={{ width: 800, height: 600 }}>
  * and all primitives inside automatically scale their numeric style values

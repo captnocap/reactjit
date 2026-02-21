@@ -1,5 +1,5 @@
 /**
- * API key management built on @ilovereact/storage.
+ * API key management built on @reactjit/storage.
  *
  * Stores API keys in the 'ai_keys' collection with the active storage adapter.
  * Keys persist across sessions via Love2D filesystem, SQLite, or localStorage.
@@ -13,7 +13,7 @@ import type { AIProviderType, APIKeyRecord, APIKeysResult } from './types';
 const AI_KEYS_COLLECTION = 'ai_keys';
 
 /**
- * Manage stored API keys. Requires a <StorageProvider> ancestor from @ilovereact/storage.
+ * Manage stored API keys. Requires a <StorageProvider> ancestor from @reactjit/storage.
  *
  * @example
  * const { keys, setKey, deleteKey, getKey } = useAPIKeys();
@@ -27,7 +27,7 @@ export function useAPIKeys(): APIKeysResult {
   keysRef.current = keys;
 
   // Try to use storage via dynamic import pattern
-  // Works when @ilovereact/storage is in the bundle
+  // Works when @reactjit/storage is in the bundle
   const storageRef = useRef<any>(null);
 
   useEffect(() => {

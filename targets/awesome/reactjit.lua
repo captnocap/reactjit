@@ -1,12 +1,12 @@
 --[[
-  ilovereact.lua — AwesomeWM widget for iLoveReact
+  reactjit.lua — AwesomeWM widget for ReactJIT
 
   Renders React UIs as AwesomeWM widgets using Cairo.
   Spawns a Node.js process and reads newline-delimited JSON draw commands
   from stdout. Renders to a Cairo surface and updates a wibox.widget.imagebox.
 
   Usage in rc.lua:
-    local ilr = require("ilovereact")
+    local ilr = require("reactjit")
     local widget = ilr.widget({
       entry = "path/to/dist/main.js",
       width = 400,
@@ -63,7 +63,7 @@ local function parseColor(hex)
   return 0, 0, 0, 1
 end
 
---- Create an iLoveReact widget for AwesomeWM.
+--- Create an ReactJIT widget for AwesomeWM.
 --- @param opts table Options: entry (string), width (number), height (number), font_size (number)
 --- @return table wibox.widget.imagebox
 function M.widget(opts)
@@ -130,7 +130,7 @@ function M.widget(opts)
     stderr = function(line)
       if line and line ~= "" then
         require("naughty").notify({
-          title = "iLoveReact",
+          title = "ReactJIT",
           text = line,
           preset = require("naughty").config.presets.warning,
         })

@@ -41,7 +41,7 @@ export default function App() {
       <Tag name="2" />
       <Tag name="3" />
       <Box style={{ backgroundColor: '#333333', padding: 4, flexGrow: 1 }}>
-        <Text style={{ color: '#cccccc', fontSize: 12 }}>iLoveReact</Text>
+        <Text style={{ color: '#cccccc', fontSize: 12 }}>ReactJIT</Text>
       </Box>
       <Clock />
       <Box style={{ backgroundColor: '#333333', padding: 4 }}>

@@ -54,7 +54,7 @@ g3d.vectors = require(g3d.path .. ".vectors")
 g3d.camera.updateProjectionMatrix()
 g3d.camera.updateViewMatrix()
 
--- NOTE: setDepthMode("lequal", true) removed for iLoveReact integration.
+-- NOTE: setDepthMode("lequal", true) removed for ReactJIT integration.
 -- Depth mode is managed per-canvas by scene3d.lua to avoid conflicts with the 2D UI pipeline.
 
 -- get rid of g3d from the global namespace and return it instead

@@ -1,12 +1,12 @@
 /**
- * Void Station — react-love demo entry point.
+ * Void Station — reactjit demo entry point.
  *
  * Wires together:
  * - MockBridge (simulates Love2D game state)
  * - Canvas renderer (draws the space scene)
  * - React HUD overlay (shared primitives via BridgeProvider)
  *
- * This demonstrates the react-love pattern: a game engine renders
+ * This demonstrates the reactjit pattern: a game engine renders
  * the scene, React renders the UI, and a bridge connects them.
  * In production, the canvas would be a Love2D WASM instance.
  */

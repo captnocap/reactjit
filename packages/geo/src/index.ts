@@ -1,4 +1,4 @@
-// @ilovereact/geo — Declarative mapping system with offline tiles and 3D views
+// @reactjit/geo — Declarative mapping system with offline tiles and 3D views
 
 export { Map } from './Map';
 export { TileLayer } from './TileLayer';

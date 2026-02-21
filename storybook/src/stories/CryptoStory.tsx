@@ -157,7 +157,7 @@ function SignDemo() {
     (async () => {
       try {
         const keys = await crypto.generateSigningKeys();
-        const signed = await crypto.sign(keys.privateKey, 'iLoveReact is awesome');
+        const signed = await crypto.sign(keys.privateKey, 'ReactJIT is awesome');
         const valid = await crypto.verify(signed);
         setResult({
           pubKey: keys.publicKey,
@@ -179,7 +179,7 @@ function SignDemo() {
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: c.textSecondary }}>Message:</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.info }}>{'"iLoveReact is awesome"'}</Text>
+          <Text style={{ fontSize: 10, color: c.info }}>{'"ReactJIT is awesome"'}</Text>
         </Box>
       </Box>
 
@@ -346,7 +346,7 @@ function UsageExamples() {
       <CodeBlock
         label="// Hashing -- async, runs in C via Lua FFI"
         code={[
-          "import { useCrypto } from '@ilovereact/crypto';",
+          "import { useCrypto } from '@reactjit/crypto';",
           "",
           "const crypto = useCrypto();",
           "const h = await crypto.sha256('hello');",
@@ -402,7 +402,7 @@ export function CryptoStory() {
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
       <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
-        <Section title="1. @ilovereact/crypto">
+        <Section title="1. @reactjit/crypto">
           <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
             libsodium + OpenSSL + BLAKE3 -- all crypto runs in C via Lua FFI. Zero JS overhead.
           </Text>

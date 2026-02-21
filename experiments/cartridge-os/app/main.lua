@@ -1,6 +1,6 @@
 --[[
   CartridgeOS — main.lua
-  Boots directly into iLoveReact on KMS/DRM.
+  Boots directly into ReactJIT on KMS/DRM.
   No X11. No Wayland. No display server.
   Just: kernel → SDL2 (kmsdrm) → OpenGL → LuaJIT → this.
 ]]
@@ -703,7 +703,7 @@ local function paintFrame(t)
   GL.glDisable(GL.SCISSOR_TEST)
 
   centeredText("CartridgeOS", W/2, cardY + 30, 56, 1, 1, 1, 1)
-  centeredText("iLoveReact  --  no X11, no Wayland, no display server",
+  centeredText("ReactJIT  --  no X11, no Wayland, no display server",
                W/2, cardY + 110, 18, 0.6, 0.6, 0.8, 1)
   centeredText("just kernel -> kmsdrm -> SDL2 -> OpenGL -> LuaJIT -> React",
                W/2, cardY + 140, 16, 0.4, 0.4, 0.6, 1)
@@ -750,7 +750,7 @@ local function paintFrame(t)
   local footerY = H - 44
   rect(0, footerY, W, 44, 0.06, 0.06, 0.10, 1)
   rect(0, footerY, W, 1,  0.15, 0.15, 0.25, 1)
-  text("iLoveReact", cardX, footerY + 14, 14, 0.4, 0.3, 0.9, 1)
+  text("ReactJIT", cardX, footerY + 14, 14, 0.4, 0.3, 0.9, 1)
   local hint = Console.isOpen() and "`:close console" or "`:open console"
   centeredText(hint, W/2, footerY + 14, 13, 0.3, 0.3, 0.4, 1)
 

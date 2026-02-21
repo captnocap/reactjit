@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
-import { Map, TileLayer, Marker, Polyline, Polygon, GeoJSON, useProjection, type LatLng } from '@ilovereact/geo';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { Map, TileLayer, Marker, Polyline, Polygon, GeoJSON, useProjection, type LatLng } from '@reactjit/geo';
 
 type MapPreset = {
   id: string;

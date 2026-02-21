@@ -8,11 +8,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "@ilovereact/core": [
-        "./ilovereact/shared/src"
+      "@reactjit/core": [
+        "./reactjit/shared/src"
       ],
-      "@ilovereact/native": [
-        "./ilovereact/native/src"
+      "@reactjit/native": [
+        "./reactjit/native/src"
       ]
     }
   },

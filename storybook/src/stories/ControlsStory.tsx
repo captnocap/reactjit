@@ -237,7 +237,7 @@ export function ControlsStory() {
       <Box style={{ gap: 2 }}>
         <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>Controls</Text>
         <Text style={{ color: c.textDim, fontSize: 10 }}>
-          Hardware-style controls from @ilovereact/controls
+          Hardware-style controls from @reactjit/controls
         </Text>
       </Box>
 

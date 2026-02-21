@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 import { useTheme, useThemeColors, themeNames } from './useTheme';
 import { themes } from './themes';
 

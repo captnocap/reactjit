@@ -1,7 +1,7 @@
 /**
  * CCServer — WebSocket server that bridges React rendering to ComputerCraft.
  *
- * Thin wrapper around @ilovereact/grid's render server with CC-specific defaults:
+ * Thin wrapper around @reactjit/grid's render server with CC-specific defaults:
  * 51x19 character grid, 1-based coordinates, 16-color palette quantization.
  */
 
@@ -10,7 +10,7 @@ import {
   createRenderServer,
   createWebSocketTransport,
   type RenderServerHandle,
-} from '@ilovereact/grid';
+} from '@reactjit/grid';
 import { nearestCCColor, CC_DEFAULT_FG } from './palette';
 
 export interface CCServerOptions {

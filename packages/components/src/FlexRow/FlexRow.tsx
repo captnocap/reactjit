@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, type Style } from '@ilovereact/core';
+import { Box, type Style } from '@reactjit/core';
 
 export interface FlexRowProps {
   gap?: number;

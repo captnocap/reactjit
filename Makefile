@@ -1,4 +1,4 @@
-# react-love Makefile
+# reactjit Makefile
 # Builds: QuickJS shared library + bundled React apps for both targets
 
 QUICKJS_DIR = quickjs
@@ -74,7 +74,7 @@ build-native: node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
-		--global-name=ReactLove \
+		--global-name=ReactJIT \
 		--target=es2020 \
 		--jsx=automatic \
 		--outfile=$(NATIVE_GAME)/bundle.js \
@@ -102,7 +102,7 @@ build-storybook-native: node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
-		--global-name=ReactLoveStorybook \
+		--global-name=ReactJITStorybook \
 		--target=es2020 \
 		--jsx=automatic \
 		--external:child_process \
@@ -114,7 +114,7 @@ build-storybook-sdl2: node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
-		--global-name=ReactLoveStorybook \
+		--global-name=ReactJITStorybook \
 		--target=es2020 \
 		--jsx=automatic \
 		--external:child_process \
@@ -154,7 +154,7 @@ storybook-web: build-storybook
 # with zero dependencies. Bundles Love2D, all shared libraries (including
 # glibc and ld-linux), libquickjs, and the .love game archive.
 #
-# The binary extracts to ~/.cache/ilovereact-demo/<hash>/ on first run
+# The binary extracts to ~/.cache/reactjit-demo/<hash>/ on first run
 # and launches via the bundled dynamic linker (ld-linux), bypassing the
 # host's glibc entirely. Same technique as Steam Runtime / AppImage.
 #
@@ -163,9 +163,9 @@ storybook-web: build-storybook
 # expects Love2D + deps installed on the dev machine.
 
 DIST_DIR = dist
-DIST_BINARY = $(DIST_DIR)/ilovereact-demo
-STAGING_DIR = /tmp/ilovereact-demo-staging
-PAYLOAD_DIR = /tmp/ilovereact-demo-payload
+DIST_BINARY = $(DIST_DIR)/reactjit-demo
+STAGING_DIR = /tmp/reactjit-demo-staging
+PAYLOAD_DIR = /tmp/reactjit-demo-payload
 
 # Only linux-vdso is kernel-injected and cannot be bundled.
 VDSO_EXCLUDE = linux-vdso
@@ -174,7 +174,7 @@ VDSO_EXCLUDE = linux-vdso
 LOVE_WIN_VERSION = 11.5
 LOVE_WIN_ZIP     = vendor/love-$(LOVE_WIN_VERSION)-win64.zip
 LOVE_WIN_DIR     = vendor/love-$(LOVE_WIN_VERSION)-win64
-WIN_STAGING      = /tmp/ilovereact-demo-win
+WIN_STAGING      = /tmp/reactjit-demo-win
 
 dist-storybook: build-storybook-native setup
 	@echo "=== Packaging single-file binary ==="
@@ -192,13 +192,13 @@ dist-storybook: build-storybook-native setup
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
-	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
+	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	# ── Assemble payload directory ──
 	# Don't fuse — ld-linux invocation breaks /proc/self/exe detection.
 	# Instead, keep love binary and .love zip separate; pass .love as arg.
 	mkdir -p $(PAYLOAD_DIR)/lib
 	cp $$(readlink -f $$(which love)) $(PAYLOAD_DIR)/love.bin
-	cp /tmp/ilovereact-demo.love $(PAYLOAD_DIR)/game.love
+	cp /tmp/reactjit-demo.love $(PAYLOAD_DIR)/game.love
 	cp $(QUICKJS_DIR)/libquickjs.so $(PAYLOAD_DIR)/lib/
 	@LIBMPV=$$(ldconfig -p | grep 'libmpv.so.2 ' | head -1 | sed 's/.*=> //'); \
 	if [ -n "$$LIBMPV" ]; then \
@@ -250,12 +250,12 @@ dist-storybook: build-storybook-native setup
 	printf '#!/bin/sh\nDIR="$$(cd "$$(dirname "$$0")" && pwd)"\nexec "$$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache --library-path "$$DIR/lib" "$$DIR/love.bin" "$$DIR/game.love" "$$@"\n' > $(PAYLOAD_DIR)/run
 	chmod +x $(PAYLOAD_DIR)/run
 	# ── Pack into single self-extracting binary ──
-	cd $(PAYLOAD_DIR) && tar czf /tmp/ilovereact-demo.tar.gz .
-	printf '#!/bin/sh\nset -e\nAPP_DIR=$${XDG_CACHE_HOME:-$$HOME/.cache}/ilovereact-demo\nSIG=$$(md5sum "$$0" 2>/dev/null | cut -c1-8 || cksum "$$0" | cut -d" " -f1)\nCACHE="$$APP_DIR/$$SIG"\nif [ ! -f "$$CACHE/.ready" ]; then\n  rm -rf "$$APP_DIR"\n  mkdir -p "$$CACHE"\n  SKIP=$$(awk '"'"'/^__ARCHIVE__$$/{print NR + 1; exit}'"'"' "$$0")\n  tail -n+"$$SKIP" "$$0" | tar xz -C "$$CACHE"\n  touch "$$CACHE/.ready"\nfi\nexec "$$CACHE/run" "$$@"\n__ARCHIVE__\n' > $(DIST_BINARY)
-	cat /tmp/ilovereact-demo.tar.gz >> $(DIST_BINARY)
+	cd $(PAYLOAD_DIR) && tar czf /tmp/reactjit-demo.tar.gz .
+	printf '#!/bin/sh\nset -e\nAPP_DIR=$${XDG_CACHE_HOME:-$$HOME/.cache}/reactjit-demo\nSIG=$$(md5sum "$$0" 2>/dev/null | cut -c1-8 || cksum "$$0" | cut -d" " -f1)\nCACHE="$$APP_DIR/$$SIG"\nif [ ! -f "$$CACHE/.ready" ]; then\n  rm -rf "$$APP_DIR"\n  mkdir -p "$$CACHE"\n  SKIP=$$(awk '"'"'/^__ARCHIVE__$$/{print NR + 1; exit}'"'"' "$$0")\n  tail -n+"$$SKIP" "$$0" | tar xz -C "$$CACHE"\n  touch "$$CACHE/.ready"\nfi\nexec "$$CACHE/run" "$$@"\n__ARCHIVE__\n' > $(DIST_BINARY)
+	cat /tmp/reactjit-demo.tar.gz >> $(DIST_BINARY)
 	chmod +x $(DIST_BINARY)
 	# ── Cleanup ──
-	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR) /tmp/ilovereact-demo.love /tmp/ilovereact-demo.tar.gz
+	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR) /tmp/reactjit-demo.love /tmp/reactjit-demo.tar.gz
 	@echo "=== Done: $(DIST_BINARY) ==="
 	@echo "  Size: $$(du -h $(DIST_BINARY) | cut -f1)"
 	@echo "  Run:  ./$(DIST_BINARY)"
@@ -304,24 +304,24 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
-	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
+	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	rm -rf $(STAGING_DIR)
 	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll + mpv-2.dll ──
 	mkdir -p $(WIN_STAGING)/lib
-	cat $(LOVE_WIN_DIR)/love.exe /tmp/ilovereact-demo.love > $(WIN_STAGING)/ilovereact-demo.exe
+	cat $(LOVE_WIN_DIR)/love.exe /tmp/reactjit-demo.love > $(WIN_STAGING)/reactjit-demo.exe
 	cp $(LOVE_WIN_DIR)/*.dll $(WIN_STAGING)/
 	cp zig-out-win/bin/quickjs.dll $(WIN_STAGING)/lib/libquickjs.dll
 	cp vendor/mpv-win64/mpv-2.dll $(WIN_STAGING)/
-	cd $(WIN_STAGING) && zip -9 -r /tmp/ilovereact-payload.zip .
-	rm -rf $(WIN_STAGING) /tmp/ilovereact-demo.love
+	cd $(WIN_STAGING) && zip -9 -r /tmp/reactjit-payload.zip .
+	rm -rf $(WIN_STAGING) /tmp/reactjit-demo.love
 	# ── Concatenate: launcher.exe + payload.zip + 8-byte offset footer ──
-	rm -f $(DIST_DIR)/ilovereact-demo.exe
-	cat zig-out/bin/ilr-launcher.exe /tmp/ilovereact-payload.zip > $(DIST_DIR)/ilovereact-demo.exe
-	python3 -c "import sys,struct; sys.stdout.buffer.write(struct.pack('<Q', $$(wc -c < zig-out/bin/ilr-launcher.exe)))" >> $(DIST_DIR)/ilovereact-demo.exe
-	rm -f /tmp/ilovereact-payload.zip
-	@echo "=== Done: $(DIST_DIR)/ilovereact-demo.exe ==="
-	@echo "  Size: $$(du -h $(DIST_DIR)/ilovereact-demo.exe | cut -f1)"
-	@echo "  Single file — send ilovereact-demo.exe, double-click to run"
+	rm -f $(DIST_DIR)/reactjit-demo.exe
+	cat zig-out/bin/ilr-launcher.exe /tmp/reactjit-payload.zip > $(DIST_DIR)/reactjit-demo.exe
+	python3 -c "import sys,struct; sys.stdout.buffer.write(struct.pack('<Q', $$(wc -c < zig-out/bin/ilr-launcher.exe)))" >> $(DIST_DIR)/reactjit-demo.exe
+	rm -f /tmp/reactjit-payload.zip
+	@echo "=== Done: $(DIST_DIR)/reactjit-demo.exe ==="
+	@echo "  Size: $$(du -h $(DIST_DIR)/reactjit-demo.exe | cut -f1)"
+	@echo "  Single file — send reactjit-demo.exe, double-click to run"
 
 # ── Run ─────────────────────────────────────────────────
 
@@ -334,7 +334,7 @@ dev:
 	npx esbuild \
 		--bundle \
 		--format=iife \
-		--global-name=ReactLove \
+		--global-name=ReactJIT \
 		--target=es2020 \
 		--jsx=automatic \
 		--outfile=$(NATIVE_GAME)/bundle.js \
@@ -345,7 +345,7 @@ dev-storybook: setup $(STORYBOOK_LIB)/libquickjs.so node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
-		--global-name=ReactLoveStorybook \
+		--global-name=ReactJITStorybook \
 		--target=es2020 \
 		--jsx=automatic \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
@@ -357,7 +357,7 @@ dev-storybook: setup $(STORYBOOK_LIB)/libquickjs.so node_modules
 cli-setup: setup
 	@echo "=== Populating CLI runtime ==="
 	rm -rf cli/runtime
-	mkdir -p cli/runtime/lua cli/runtime/lib cli/runtime/bin cli/runtime/ilovereact
+	mkdir -p cli/runtime/lua cli/runtime/lib cli/runtime/bin cli/runtime/reactjit
 	cp lua/*.lua cli/runtime/lua/
 	mkdir -p cli/runtime/lua/g3d
 	cp lua/g3d/* cli/runtime/lua/g3d/
@@ -423,24 +423,24 @@ cli-setup: setup
 	else \
 		echo "  Warning: tor not found — .onion hosting won't be bundled"; \
 	fi
-	cp -r packages/shared cli/runtime/ilovereact/shared
-	cp -r packages/native cli/runtime/ilovereact/native
-	cp -r packages/router cli/runtime/ilovereact/router
-	cp -r packages/storage cli/runtime/ilovereact/storage
-	cp -r packages/components cli/runtime/ilovereact/components
-	cp -r packages/audio cli/runtime/ilovereact/audio
-	cp -r packages/server cli/runtime/ilovereact/server
-	cp -r packages/ai cli/runtime/ilovereact/ai
-	cp -r packages/apis cli/runtime/ilovereact/apis
-	cp -r packages/rss cli/runtime/ilovereact/rss
-	cp -r packages/webhooks cli/runtime/ilovereact/webhooks
-	cp -r packages/crypto cli/runtime/ilovereact/crypto
-	cp -r packages/media cli/runtime/ilovereact/media
-	cp -r packages/game cli/runtime/ilovereact/game
-	cp -r packages/3d cli/runtime/ilovereact/3d
-	cp -r packages/controls cli/runtime/ilovereact/controls
-	cp -r packages/geo cli/runtime/ilovereact/geo
-	cp -r packages/theme cli/runtime/ilovereact/theme
+	cp -r packages/shared cli/runtime/reactjit/shared
+	cp -r packages/native cli/runtime/reactjit/native
+	cp -r packages/router cli/runtime/reactjit/router
+	cp -r packages/storage cli/runtime/reactjit/storage
+	cp -r packages/components cli/runtime/reactjit/components
+	cp -r packages/audio cli/runtime/reactjit/audio
+	cp -r packages/server cli/runtime/reactjit/server
+	cp -r packages/ai cli/runtime/reactjit/ai
+	cp -r packages/apis cli/runtime/reactjit/apis
+	cp -r packages/rss cli/runtime/reactjit/rss
+	cp -r packages/webhooks cli/runtime/reactjit/webhooks
+	cp -r packages/crypto cli/runtime/reactjit/crypto
+	cp -r packages/media cli/runtime/reactjit/media
+	cp -r packages/game cli/runtime/reactjit/game
+	cp -r packages/3d cli/runtime/reactjit/3d
+	cp -r packages/controls cli/runtime/reactjit/controls
+	cp -r packages/geo cli/runtime/reactjit/geo
+	cp -r packages/theme cli/runtime/reactjit/theme
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts ]; then \
@@ -462,7 +462,7 @@ clean-demos:
 
 dist-clean:
 	rm -rf $(DIST_DIR)
-	rm -rf $${XDG_CACHE_HOME:-$$HOME/.cache}/ilovereact-demo
+	rm -rf $${XDG_CACHE_HOME:-$$HOME/.cache}/reactjit-demo
 
 clean: dist-clean
 	rm -f $(NATIVE_GAME)/bundle.js

@@ -119,7 +119,7 @@ export function App() {
               padding: '16px 16px 12px', fontSize: 11, fontWeight: 700,
               letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #1e293b',
             }}>
-              iLoveReact
+              ReactJIT
             </div>
 
             <div style={{ flex: 1, paddingTop: 8 }}>

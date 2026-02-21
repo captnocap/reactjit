@@ -1,7 +1,7 @@
 /**
  * eval-component.ts — Safe eval wrapper for user JSX code.
  *
- * Injects the full iLoveReact component library into scope so playground
+ * Injects the full ReactJIT component library into scope so playground
  * users can prototype with any framework primitive.
  */
 

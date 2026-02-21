@@ -1,6 +1,6 @@
 function love.conf(t)
-  t.identity = "ilovereact-neofetch"
-  t.window.title = "iLoveReact — neofetch"
+  t.identity = "reactjit-neofetch"
+  t.window.title = "ReactJIT — neofetch"
   t.window.width = 800
   t.window.height = 500
   t.window.vsync = 1

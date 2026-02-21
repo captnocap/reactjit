@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Box, Text, useBridge } from '@ilovereact/core';
+import { Box, Text, useBridge } from '@reactjit/core';
 import { HealthBar } from '../components/HealthBar';
 import { StatusBar } from '../components/StatusBar';
 import { Game } from '../GameCanvas';

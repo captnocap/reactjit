@@ -420,7 +420,7 @@ function Http.poll()
     if thread and not thread:isRunning() then
       local err = thread:getError()
       if err then
-        print("[react-love] HTTP worker " .. i .. " crashed: " .. tostring(err))
+        print("[reactjit] HTTP worker " .. i .. " crashed: " .. tostring(err))
       end
       -- Restart
       local newThread = love.thread.newThread(WORKER_CODE)

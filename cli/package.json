@@ -1,14 +1,14 @@
 {
-  "name": "ilovereact",
+  "name": "reactjit",
   "version": "0.1.0",
-  "description": "CLI for iLoveReact — write React UIs for Love2D games",
+  "description": "CLI for ReactJIT — React rendered through LuaJIT + SDL2 + OpenGL",
   "type": "module",
   "scripts": {
     "test": "node --test test/cli.test.mjs"
   },
   "bin": {
-    "ilovereact": "./bin/ilovereact.mjs",
-    "ilr": "./bin/ilovereact.mjs"
+    "reactjit": "./bin/reactjit.mjs",
+    "rjit": "./bin/reactjit.mjs"
   },
   "files": [
     "bin/",

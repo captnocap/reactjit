@@ -1,11 +1,11 @@
 --[[
-  renderer.lua — Frame-to-buffer renderer for iLoveReact Neovim target.
+  renderer.lua — Frame-to-buffer renderer for ReactJIT Neovim target.
 
   Receives a JSON draw command array and renders it into a Neovim buffer
   using buffer lines and extmark highlights.
 ]]
 
-local highlights = require("ilovereact.highlights")
+local highlights = require("reactjit.highlights")
 
 local M = {}
 

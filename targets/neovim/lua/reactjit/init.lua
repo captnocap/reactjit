@@ -1,20 +1,20 @@
 --[[
-  ilovereact — Neovim plugin for iLoveReact
+  reactjit — Neovim plugin for ReactJIT
 
   Renders React UIs in Neovim floating windows.
   Spawns a Node.js process that outputs newline-delimited JSON draw commands
   to stdout, then renders them into a buffer with highlight groups.
 
   Usage:
-    require("ilovereact").setup({
+    require("reactjit").setup({
       entry = "path/to/dist/main.js",
       width = 60,
       height = 20,
     })
 ]]
 
-local renderer = require("ilovereact.renderer")
-local highlights = require("ilovereact.highlights")
+local renderer = require("reactjit.renderer")
+local highlights = require("reactjit.highlights")
 
 local M = {}
 
@@ -24,7 +24,7 @@ local state = {
   job = nil,
 }
 
---- Start the iLoveReact render server and display a floating window.
+--- Start the ReactJIT render server and display a floating window.
 --- @param opts table Options: entry (string, path to JS entry), width (number), height (number), row (number), col (number)
 function M.setup(opts)
   opts = opts or {}
@@ -84,7 +84,7 @@ function M.setup(opts)
       for _, line in ipairs(data) do
         if line ~= "" then
           vim.schedule(function()
-            vim.notify("[ilovereact] " .. line, vim.log.levels.WARN)
+            vim.notify("[reactjit] " .. line, vim.log.levels.WARN)
           end)
         end
       end
@@ -98,7 +98,7 @@ function M.setup(opts)
         state.win = nil
         state.job = nil
         if code ~= 0 then
-          vim.notify("[ilovereact] Process exited with code " .. code, vim.log.levels.ERROR)
+          vim.notify("[reactjit] Process exited with code " .. code, vim.log.levels.ERROR)
         end
       end)
     end,
@@ -107,7 +107,7 @@ function M.setup(opts)
   })
 
   if job <= 0 then
-    vim.notify("[ilovereact] Failed to start process: node " .. entry, vim.log.levels.ERROR)
+    vim.notify("[reactjit] Failed to start process: node " .. entry, vim.log.levels.ERROR)
     vim.api.nvim_win_close(win, true)
     vim.api.nvim_buf_delete(buf, { force = true })
     return nil
@@ -122,7 +122,7 @@ function M.setup(opts)
   }
 end
 
---- Close the iLoveReact window and stop the render server.
+--- Close the ReactJIT window and stop the render server.
 function M.close()
   if state.job then
     vim.fn.jobstop(state.job)

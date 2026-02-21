@@ -1,5 +1,5 @@
 --[[
-  test_scene.lua -- Fake iLoveReact node tree to exercise the SDL2 painter.
+  test_scene.lua -- Fake ReactJIT node tree to exercise the SDL2 painter.
 
   This mirrors what the reconciler + layout engine would normally produce.
   Structured identically to real tree.lua output so the painter doesn't
@@ -27,7 +27,7 @@ end
   │ Dark background #0c0c14                 │
   │                                         │
   │  ┌─────────── Card (600×440) ────────┐  │
-  │  │  iLoveReact SDL2          [badge] │  │
+  │  │  ReactJIT SDL2          [badge] │  │
   │  │  Painter proof-of-concept         │  │
   │  │                                   │  │
   │  │  [Red] [Green] [Blue]             │  │
@@ -102,7 +102,7 @@ function TestScene.build()
     -- Heading
     node("Text", { x=cardX+pad, y=cardY+pad, w=cardW-pad*2, h=40 }, {
       fontSize = 32, color = "#e8e8ff",
-    }, {}, {}, "iLoveReact SDL2"),
+    }, {}, {}, "ReactJIT SDL2"),
 
     -- Subtitle
     node("Text", { x=cardX+pad, y=cardY+pad+46, w=cardW-pad*2, h=20 }, {

@@ -27,4 +27,4 @@ root.render(
   </BridgeProvider>
 );
 
-console.log('[react-love] Native HUD mounted');
+console.log('[reactjit] Native HUD mounted');

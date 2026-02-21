@@ -159,7 +159,7 @@ local function tryInit()
   end
   seq = seqPtr[0]
 
-  alsaLib.snd_seq_set_client_name(seq, "iLoveReact Audio")
+  alsaLib.snd_seq_set_client_name(seq, "ReactJIT Audio")
 
   -- Create an input port
   local caps = 0x02 + 0x40  -- WRITE + SUBS_WRITE (we receive MIDI)

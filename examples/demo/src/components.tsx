@@ -1,7 +1,7 @@
 /**
  * Void Station HUD — React overlay components.
  *
- * Built entirely with react-love shared primitives (Box, Text).
+ * Built entirely with reactjit shared primitives (Box, Text).
  * These same components would render as Love2D draw calls in native mode.
  */
 

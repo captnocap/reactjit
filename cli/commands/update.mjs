@@ -29,24 +29,24 @@ function syncDir(src, dest, label) {
 export async function updateCommand(args) {
   const cwd = process.cwd();
 
-  // Sanity check: are we inside an iLoveReact project?
+  // Sanity check: are we inside an ReactJIT project?
   const hasMain = existsSync(join(cwd, 'main.lua')) || existsSync(join(cwd, 'src'));
   if (!hasMain) {
-    console.error('  This does not look like an iLoveReact project.');
-    console.error('  Run this command from inside a project created with `ilovereact init`.');
+    console.error('  This does not look like an ReactJIT project.');
+    console.error('  Run this command from inside a project created with `reactjit init`.');
     process.exit(1);
   }
 
   const runtimeLua = join(CLI_ROOT, 'runtime', 'lua');
   const runtimeLib = join(CLI_ROOT, 'runtime', 'lib');
-  const runtimePkgs = join(CLI_ROOT, 'runtime', 'ilovereact');
+  const runtimePkgs = join(CLI_ROOT, 'runtime', 'reactjit');
 
   if (!existsSync(runtimeLua) || !existsSync(runtimePkgs)) {
     console.error('  CLI runtime not found. Run `make cli-setup` first.');
     process.exit(1);
   }
 
-  console.log('\n  Updating iLoveReact runtime...\n');
+  console.log('\n  Updating ReactJIT runtime...\n');
 
   // Update lua/
   syncDir(runtimeLua, join(cwd, 'lua'), 'lua/');
@@ -62,9 +62,9 @@ export async function updateCommand(args) {
     syncDir(runtimeBin, join(cwd, 'bin'), 'bin/');
   }
 
-  // Update ilovereact/ (shared + native packages)
+  // Update reactjit/ (shared + native packages)
   if (existsSync(runtimePkgs)) {
-    syncDir(runtimePkgs, join(cwd, 'ilovereact'), 'ilovereact/');
+    syncDir(runtimePkgs, join(cwd, 'reactjit'), 'reactjit/');
   }
 
   // Update fonts/ (font packs)

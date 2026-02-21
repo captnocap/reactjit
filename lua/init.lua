@@ -1,16 +1,16 @@
 --[[
-  init.lua -- Main integration module for react-love
+  init.lua -- Main integration module for reactjit
 
   This is the entry point that a Love2D game requires:
 
-    local ReactLove = require("lua")
+    local ReactJIT = require("lua")
 
   It auto-detects whether we are running in the browser (love.js / WASM with
   Module.FS transport) or natively (embedded QuickJS), and wires up the
   appropriate bridge, tree, layout, painter, and events modules.
 ]]
 
-local ReactLove = {}
+local ReactJIT = {}
 
 -- ============================================================================
 -- Submodule references (populated in init)
@@ -91,7 +91,7 @@ local controllerToast = {
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
 if not ok_json then ok_json, json = pcall(require, "lua.json") end
-if not ok_json then error("[react-love] JSON library required but not found") end
+if not ok_json then error("[reactjit] JSON library required but not found") end
 
 local rpcHandlers = {}  -- RPC method -> handler function
 
@@ -376,13 +376,13 @@ local function luaTableToJSLiteral(val)
   return "null"
 end
 
---- Initialize react-love.
+--- Initialize reactjit.
 --- config fields:
 ---   mode       : "auto" | "web" | "native" | "canvas"  (default "auto")
 ---   bundlePath : path to the JS bundle       (default "bundle.js")
 ---   namespace  : bridge namespace string     (default "default")
 ---   libpath    : path to libquickjs shared library (default "lib/libquickjs")
-function ReactLove.init(config)
+function ReactJIT.init(config)
   config = config or {}
   basePath = resolveBasePath()
 
@@ -461,7 +461,7 @@ function ReactLove.init(config)
     -- In web mode the DOM/browser handles rendering; Lua only bridges data.
     bridge = require("lua.bridge_fs")
     bridge.init(ns)
-    print("[react-love] Initialized in WEB mode (Module.FS bridge)")
+    print("[reactjit] Initialized in WEB mode (Module.FS bridge)")
 
   elseif mode == "canvas" then
     -- Canvas mode: FS bridge + native rendering pipeline.
@@ -569,7 +569,7 @@ function ReactLove.init(config)
       end
     end
 
-    print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
+    print("[reactjit] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
     -- Push initial viewport dimensions for canvas mode
     pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
 
@@ -690,9 +690,9 @@ function ReactLove.init(config)
           identity = love.filesystem.getIdentity() or "default",
         })
         if ok then
-          io.write("[react-love] Tor hidden service starting...\n"); io.flush()
+          io.write("[reactjit] Tor hidden service starting...\n"); io.flush()
         else
-          io.write("[react-love] Tor failed to start: " .. tostring(err) .. "\n"); io.flush()
+          io.write("[reactjit] Tor failed to start: " .. tostring(err) .. "\n"); io.flush()
         end
       end
     end
@@ -707,20 +707,20 @@ function ReactLove.init(config)
     -- Load the bundled React app into QuickJS
     local bundleJS = love.filesystem.read(initConfig.bundlePath)
     if not bundleJS then
-      error("[react-love] " .. initConfig.bundlePath .. " not found -- run `npm run build` first")
+      error("[reactjit] " .. initConfig.bundlePath .. " not found -- run `npm run build` first")
     end
 
     -- Tell the bundle to defer root.render() so JS_Eval returns immediately.
     -- React's synchronous LegacyRoot render would otherwise block inside JS_Eval.
     bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
 
-    print("[react-love] Evaluating bundle (" .. #bundleJS .. " bytes)...")
+    print("[reactjit] Evaluating bundle (" .. #bundleJS .. " bytes)...")
     bridge:eval(bundleJS, initConfig.bundlePath)
-    print("[react-love] Bundle loaded OK")
+    print("[reactjit] Bundle loaded OK")
 
     -- Don't mount yet — that happens in the first update() call so the
     -- Love2D event loop is running and we can tick timers between frames.
-    ReactLove._needsMount = true
+    ReactJIT._needsMount = true
 
     -- Load theme registry
     local thOk, thMod = pcall(require, "lua.themes")
@@ -738,7 +738,7 @@ function ReactLove.init(config)
       end
     end
 
-    print("[react-love] Initialized in NATIVE mode (QuickJS bridge)")
+    print("[reactjit] Initialized in NATIVE mode (QuickJS bridge)")
   end
 
   -- Load RPC handler modules (native and canvas modes) — gated by storage permit
@@ -941,7 +941,7 @@ function ReactLove.init(config)
         rpcHandlers[method] = gated("crypto", handler)
       end
     elseif not cok then
-      io.write("[react-love] crypto module not loaded: " .. tostring(cryptomod) .. "\n"); io.flush()
+      io.write("[reactjit] crypto module not loaded: " .. tostring(cryptomod) .. "\n"); io.flush()
     end
   end
 
@@ -996,7 +996,7 @@ function ReactLove.init(config)
       audioEngine.init(args)
       return true
     end
-    io.write("[react-love] Audio engine loaded\n"); io.flush()
+    io.write("[reactjit] Audio engine loaded\n"); io.flush()
   end
 
   -- Load declarative capabilities (Audio, Timer, etc.)
@@ -1007,7 +1007,7 @@ function ReactLove.init(config)
     for method, handler in pairs(capabilities.getHandlers()) do
       rpcHandlers[method] = handler
     end
-    io.write("[react-love] Capabilities registry loaded\n"); io.flush()
+    io.write("[reactjit] Capabilities registry loaded\n"); io.flush()
   end
 
   -- Load HTTP server — gated by network permit (it binds a port)
@@ -1018,7 +1018,7 @@ function ReactLove.init(config)
       for method, handler in pairs(httpserver.getHandlers()) do
         rpcHandlers[method] = gated("network", handler)
       end
-      io.write("[react-love] HTTP server loaded\n"); io.flush()
+      io.write("[reactjit] HTTP server loaded\n"); io.flush()
     end
   end
 
@@ -1028,7 +1028,7 @@ function ReactLove.init(config)
     if brOk and brMod then
       browse = brMod
       browse.init()
-      io.write("[react-love] Browse module loaded\n"); io.flush()
+      io.write("[reactjit] Browse module loaded\n"); io.flush()
     end
   end
 
@@ -1038,7 +1038,7 @@ function ReactLove.init(config)
     for method, handler in pairs(arMod.getHandlers()) do
       rpcHandlers[method] = handler
     end
-    io.write("[react-love] Archive module loaded\n"); io.flush()
+    io.write("[reactjit] Archive module loaded\n"); io.flush()
   end
 
   -- Load media scanner module (optional — directory scanning + indexing)
@@ -1047,7 +1047,7 @@ function ReactLove.init(config)
     for method, handler in pairs(mdMod.getHandlers()) do
       rpcHandlers[method] = handler
     end
-    io.write("[react-love] Media scanner loaded\n"); io.flush()
+    io.write("[reactjit] Media scanner loaded\n"); io.flush()
   end
 
   -- Register map RPC handlers (panTo, zoomTo, flyTo, fitBounds, etc.)
@@ -1060,7 +1060,7 @@ function ReactLove.init(config)
     for _, method in ipairs(mapRpcMethods) do
       rpcHandlers[method] = function(args) return mapmod.handleRPC(method, args) end
     end
-    io.write("[react-love] Map module loaded\n"); io.flush()
+    io.write("[reactjit] Map module loaded\n"); io.flush()
   end
 
   -- Register permit + audit + manifest RPC handlers (always available for inspector queries)
@@ -1095,7 +1095,7 @@ end
 
 --- Call once per frame from love.update(dt).
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
-function ReactLove.update(dt)
+function ReactJIT.update(dt)
   if mode == "web" then
     -- Web mode: poll the Module.FS inbox and flush the outbox
     bridge.poll()
@@ -1204,7 +1204,7 @@ function ReactLove.update(dt)
       elseif info.modtime ~= hmrLastMtime then
         hmrLastMtime = info.modtime
         if hmrHasLoaded then
-          ReactLove.reload()
+          ReactJIT.reload()
           return
         end
       end
@@ -1215,11 +1215,11 @@ function ReactLove.update(dt)
   -- Deferred mount: trigger root.render() on the first update so the
   -- Love2D event loop is already running. Uses callGlobal (JS_Call)
   -- instead of eval because JS_Eval hangs after complex React renders.
-  if ReactLove._needsMount then
-    ReactLove._needsMount = nil
-    io.write("[react-love] Triggering deferred mount...\n"); io.flush()
+  if ReactJIT._needsMount then
+    ReactJIT._needsMount = nil
+    io.write("[reactjit] Triggering deferred mount...\n"); io.flush()
     bridge:callGlobal("__mount")
-    io.write("[react-love] Mount call returned\n"); io.flush()
+    io.write("[reactjit] Mount call returned\n"); io.flush()
     -- Tick immediately to drain any scheduled microtasks/timers
     bridge:tick()
     -- Push initial viewport dimensions so useWindowDimensions can pick them up
@@ -1409,7 +1409,7 @@ function ReactLove.update(dt)
             if painter then painter.setTheme(currentTheme) end
             if tree then tree.markDirty() end
             if themeMenuEnabled then themeMenu.setCurrentTheme(name, currentTheme) end
-            io.write("[react-love] Theme switched to: " .. name .. "\n"); io.flush()
+            io.write("[reactjit] Theme switched to: " .. name .. "\n"); io.flush()
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:registry" then
@@ -1417,7 +1417,7 @@ function ReactLove.update(dt)
           local payload = cmd.payload
           if payload and payload.services and settingsEnabled then
             settings.setServices(payload.services)
-            io.write("[react-love] Settings: registered " .. #payload.services .. " services\n"); io.flush()
+            io.write("[reactjit] Settings: registered " .. #payload.services .. " services\n"); io.flush()
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:keys:set" then
@@ -1434,9 +1434,9 @@ function ReactLove.update(dt)
     end
 
     if #treeCommands > 0 then
-      if not ReactLove._loggedCommands then
-        ReactLove._loggedCommands = true
-        io.write("[react-love] First batch: " .. #treeCommands .. " commands\n"); io.flush()
+      if not ReactJIT._loggedCommands then
+        ReactJIT._loggedCommands = true
+        io.write("[reactjit] First batch: " .. #treeCommands .. " commands\n"); io.flush()
       end
       tree.applyCommands(treeCommands)
     end
@@ -1865,7 +1865,7 @@ end
 
 --- Call once per frame from love.draw().
 --- Paints the retained UI tree (native and canvas modes).
-function ReactLove.draw()
+function ReactJIT.draw()
   if not isRendering() then return end
 
   -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
@@ -1879,13 +1879,13 @@ function ReactLove.draw()
 
   local root = tree.getTree()
   if root then
-    if not ReactLove._loggedDraw then
-      ReactLove._loggedDraw = true
+    if not ReactJIT._loggedDraw then
+      ReactJIT._loggedDraw = true
       local c = root.computed
       local w = c and c.w or "nil"
       local h = c and c.h or "nil"
       local nc = root.children and #root.children or 0
-      io.write("[react-love] draw: root " .. w .. "x" .. h .. " children=" .. nc .. "\n"); io.flush()
+      io.write("[reactjit] draw: root " .. w .. "x" .. h .. " children=" .. nc .. "\n"); io.flush()
       if root.children then
         for i = 1, math.min(3, #root.children) do
           local ch = root.children[i]
@@ -2140,7 +2140,7 @@ end
 --- Call from love.mousepressed(x, y, button).
 --- Hit-tests the tree and dispatches a click event to JS.
 --- Also starts tracking for potential drag operations.
-function ReactLove.mousepressed(x, y, button)
+function ReactJIT.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
   if settingsEnabled and settings.mousepressed(x, y, button) then return end
@@ -2359,7 +2359,7 @@ end
 
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
-function ReactLove.mousereleased(x, y, button)
+function ReactJIT.mousereleased(x, y, button)
   if inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if settingsEnabled and settings.mousereleased(x, y, button) then return end
   if themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
@@ -2472,7 +2472,7 @@ end
 --- Call from love.mousemoved(x, y, dx, dy).
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
-function ReactLove.mousemoved(x, y)
+function ReactJIT.mousemoved(x, y)
   if settingsEnabled then settings.mousemoved(x, y) end
   if themeMenuEnabled then themeMenu.mousemoved(x, y) end
   if inspectorEnabled then devtools.mousemoved(x, y) end
@@ -2645,7 +2645,7 @@ end
 
 --- Call from love.resize(w, h).
 --- Marks the tree dirty so layout is recomputed next frame.
-function ReactLove.resize(w, h)
+function ReactJIT.resize(w, h)
   if not isRendering() then return end
   if measure then
     measure.clearCache()
@@ -2660,7 +2660,7 @@ end
 
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
-function ReactLove.keypressed(key, scancode, isrepeat)
+function ReactJIT.keypressed(key, scancode, isrepeat)
   if settingsEnabled and settings.keypressed(key) then return end
   if themeMenuEnabled and themeMenu.keypressed(key) then return end
   if inspectorEnabled and devtools.keypressed(key) then return end
@@ -2832,7 +2832,7 @@ end
 
 --- Call from love.keyreleased(key, scancode).
 --- Routes keyup to focused node when in focus mode, broadcasts otherwise.
-function ReactLove.keyreleased(key, scancode)
+function ReactJIT.keyreleased(key, scancode)
   if not isRendering() then return end
   if gamemod then gamemod.keyreleased(key, scancode) end
   if emumod and emumod.keyreleased(key, scancode) then
@@ -2857,7 +2857,7 @@ end
 
 --- Call from love.textinput(text).
 --- Routes text input to focused node when in focus mode, broadcasts otherwise.
-function ReactLove.textinput(text)
+function ReactJIT.textinput(text)
   -- Settings overlay captures text input when active
   if settingsEnabled and settings.textinput(text) then return end
   -- Theme menu captures text input when active
@@ -2890,7 +2890,7 @@ end
 --- If the wheel event hits a scroll container, update its scroll position
 --- directly in Lua for immediate visual response AND send the event to JS.
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
-function ReactLove.wheelmoved(x, y)
+function ReactJIT.wheelmoved(x, y)
   if settingsEnabled and settings.wheelmoved(x, y) then return end
   if themeMenuEnabled and themeMenu.wheelmoved(x, y) then return end
   if inspectorEnabled and devtools.wheelmoved(x, y) then return end
@@ -2950,7 +2950,7 @@ end
 
 --- Call from love.touchpressed(id, x, y, dx, dy, pressure).
 --- Dispatches a touchstart event to the node under the touch point.
-function ReactLove.touchpressed(id, x, y, dx, dy, pressure)
+function ReactJIT.touchpressed(id, x, y, dx, dy, pressure)
   if not isRendering() then return end
 
   local root = tree.getTree()
@@ -2965,7 +2965,7 @@ end
 
 --- Call from love.touchreleased(id, x, y, dx, dy, pressure).
 --- Dispatches a touchend event to the node under the touch point.
-function ReactLove.touchreleased(id, x, y, dx, dy, pressure)
+function ReactJIT.touchreleased(id, x, y, dx, dy, pressure)
   if not isRendering() then return end
 
   local root = tree.getTree()
@@ -2980,7 +2980,7 @@ end
 
 --- Call from love.touchmoved(id, x, y, dx, dy, pressure).
 --- Dispatches a touchmove event (broadcast globally, finger may have moved off element).
-function ReactLove.touchmoved(id, x, y, dx, dy, pressure)
+function ReactJIT.touchmoved(id, x, y, dx, dy, pressure)
   if not isRendering() then return end
   if not bridge then return end
 
@@ -2989,7 +2989,7 @@ end
 
 --- Call from love.joystickadded(joystick).
 --- Shows a toast notification and emits event to JS.
-function ReactLove.joystickadded(joystick)
+function ReactJIT.joystickadded(joystick)
   controllerToast.timer = 3.0
   controllerToast.text = "Controller connected"
   if bridge then
@@ -3002,7 +3002,7 @@ end
 
 --- Call from love.joystickremoved(joystick).
 --- Shows a toast, switches to mouse mode if no controllers remain.
-function ReactLove.joystickremoved(joystick)
+function ReactJIT.joystickremoved(joystick)
   controllerToast.timer = 3.0
   controllerToast.text = "Controller disconnected"
   -- If no joysticks remain, switch back to mouse mode
@@ -3021,7 +3021,7 @@ end
 --- Call from love.gamepadpressed(joystick, button).
 --- D-pad drives spatial navigation, A activates, B/Start synthesize Escape.
 --- Other buttons pass through as gamepad events for custom handling.
-function ReactLove.gamepadpressed(joystick, button)
+function ReactJIT.gamepadpressed(joystick, button)
   if not isRendering() then return end
   if not bridge then return end
 
@@ -3086,7 +3086,7 @@ end
 
 --- Call from love.gamepadreleased(joystick, button).
 --- A release synthesizes mouseup on focused node.
-function ReactLove.gamepadreleased(joystick, button)
+function ReactJIT.gamepadreleased(joystick, button)
   if not isRendering() then return end
   if not bridge then return end
 
@@ -3120,7 +3120,7 @@ end
 --- Call from love.gamepadaxis(joystick, axis, value).
 --- Left stick feeds focus navigation (processed in update).
 --- Right stick scrolls the nearest scroll ancestor of the focused node.
-function ReactLove.gamepadaxis(joystick, axis, value)
+function ReactJIT.gamepadaxis(joystick, axis, value)
   if not isRendering() then return end
   if not bridge then return end
 
@@ -3294,7 +3294,7 @@ end
 --- Call from love.filedropped(file).
 --- Lua modules get first crack at file drops. If no module consumes it,
 --- falls through to React via the bridge.
-function ReactLove.filedropped(file)
+function ReactJIT.filedropped(file)
   if not isRendering() then return end
 
   -- love.mouse.getPosition() is stale during OS file drags.
@@ -3373,7 +3373,7 @@ end
 
 --- Call from love.directorydropped(path).
 --- Hit-tests at current mouse position and dispatches a directorydrop event to JS.
-function ReactLove.directorydropped(dir)
+function ReactJIT.directorydropped(dir)
   if not isRendering() then return end
   if not bridge then return end
 
@@ -3397,13 +3397,13 @@ end
 --- Hot-reload the JS bundle without restarting Love2D.
 --- Destroys the QuickJS context, clears all Lua-side state, recreates
 --- the bridge with the new bundle, and restores dev state if available.
-function ReactLove.reload()
+function ReactJIT.reload()
   if mode ~= "native" or not bridge or not initConfig then
-    print("[react-love] reload() only works in native mode")
+    print("[reactjit] reload() only works in native mode")
     return
   end
 
-  io.write("[react-love] Hot reload starting...\n"); io.flush()
+  io.write("[reactjit] Hot reload starting...\n"); io.flush()
 
   -- 1. Read dev state from JS before teardown (pcall'd — safe if missing)
   local devStateCache = nil
@@ -3453,7 +3453,7 @@ function ReactLove.reload()
     errors.push({
       source = "lua",
       message = initConfig.bundlePath .. " not found during reload",
-      context = "ReactLove.reload",
+      context = "ReactJIT.reload",
     })
     return
   end
@@ -3473,7 +3473,7 @@ function ReactLove.reload()
     errors.push({
       source = "js",
       message = tostring(eerr),
-      context = "ReactLove.reload (bundle eval)",
+      context = "ReactJIT.reload (bundle eval)",
     })
     return
   end
@@ -3484,16 +3484,16 @@ function ReactLove.reload()
   end
 
   -- 8. Trigger mount on next update
-  ReactLove._needsMount = true
-  ReactLove._loggedCommands = nil
-  ReactLove._loggedDraw = nil
+  ReactJIT._needsMount = true
+  ReactJIT._loggedCommands = nil
+  ReactJIT._loggedDraw = nil
 
-  io.write("[react-love] Hot reload complete (" .. #bundleJS .. " bytes)\n"); io.flush()
+  io.write("[reactjit] Hot reload complete (" .. #bundleJS .. " bytes)\n"); io.flush()
 end
 
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
-function ReactLove.quit()
+function ReactJIT.quit()
   if dragdrop then dragdrop.cleanup() end
   if videos then videos.shutdown() end
   if tor then tor.stop() end
@@ -3509,52 +3509,52 @@ end
 
 --- Return the active bridge instance.
 --- Useful for game code that needs to push custom events or call bridge APIs.
-function ReactLove.getBridge()
+function ReactJIT.getBridge()
   return bridge
 end
 
 --- Return the current mode ("web", "native", or "canvas").
-function ReactLove.getMode()
+function ReactJIT.getMode()
   return mode
 end
 
 --- Return the tree module (native/canvas mode only).
-function ReactLove.getTree()
+function ReactJIT.getTree()
   return tree
 end
 
 --- Return the measure module (native/canvas mode only).
 --- Useful for game code that needs to measure text outside the layout pass.
-function ReactLove.getMeasure()
+function ReactJIT.getMeasure()
   return measure
 end
 
 --- Return the SQLite module.
 --- Use sqlite.open(path) to create/open databases.
 --- Returns a stub with .available = false if libsqlite3 not found.
-function ReactLove.getSqlite()
+function ReactJIT.getSqlite()
   return sqlite
 end
 
 --- Return the document store module.
 --- Use docstore.open(path) for a schema-free Mongo-like API over SQLite.
 --- Returns a stub with .available = false if libsqlite3 not found.
-function ReactLove.getDocStore()
+function ReactJIT.getDocStore()
   return docstore
 end
 
 --- Return the current theme table (colors, etc.).
-function ReactLove.getTheme()
+function ReactJIT.getTheme()
   return currentTheme
 end
 
 --- Return the current theme name (e.g. "catppuccin-mocha").
-function ReactLove.getThemeName()
+function ReactJIT.getThemeName()
   return currentThemeName
 end
 
 --- Return the full themes registry table.
-function ReactLove.getThemes()
+function ReactJIT.getThemes()
   return themes
 end
 
@@ -3562,7 +3562,7 @@ end
 --- Handlers receive args table and return a result (or throw).
 --- @param method string The RPC method name (e.g. "storage:get")
 --- @param handler function(args) -> result
-function ReactLove.rpc(method, handler)
+function ReactJIT.rpc(method, handler)
   rpcHandlers[method] = handler
 end
 
@@ -3570,7 +3570,7 @@ end
 --- @param nodeId number|string The node ID of the scroll container
 --- @param scrollX number Desired horizontal scroll position in pixels
 --- @param scrollY number Desired vertical scroll position in pixels
-function ReactLove.setScroll(nodeId, scrollX, scrollY)
+function ReactJIT.setScroll(nodeId, scrollX, scrollY)
   if not isRendering() then return end
   if not tree then return end
   tree.setScroll(nodeId, scrollX or 0, scrollY or 0)
@@ -3580,4 +3580,4 @@ function ReactLove.setScroll(nodeId, scrollX, scrollY)
   end
 end
 
-return ReactLove
+return ReactJIT

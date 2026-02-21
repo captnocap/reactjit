@@ -6,7 +6,7 @@
  * they'd add their own custom service.
  *
  * @example
- * import { builtinServices, type ServiceDefinition } from '@ilovereact/apis/registry';
+ * import { builtinServices, type ServiceDefinition } from '@reactjit/apis/registry';
  *
  * const myServices: ServiceDefinition[] = [
  *   ...builtinServices,

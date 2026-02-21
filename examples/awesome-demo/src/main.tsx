@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { createAwesomeServer } from '@ilovereact/awesome';
+import { createAwesomeServer } from '@reactjit/awesome';
 import App from './App';
 
 const server = createAwesomeServer({
@@ -15,6 +15,6 @@ const server = createAwesomeServer({
 });
 
 // Diagnostic output goes to stderr (AwesomeWM shows via naughty.notify)
-console.error('iLoveReact AwesomeWM demo started (400x30)');
+console.error('ReactJIT AwesomeWM demo started (400x30)');
 
 server.render(<App />);

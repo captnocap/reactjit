@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, FlexColumn } from '@ilovereact/core';
+import { Box, Text, FlexColumn } from '@reactjit/core';
 
 function Bar({ label, color, width }: { label: string; color: string; width: number }) {
   return (

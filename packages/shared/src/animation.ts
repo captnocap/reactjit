@@ -1,5 +1,5 @@
 /**
- * Animation system for react-love.
+ * Animation system for reactjit.
  *
  * Provides AnimatedValue (mutable value container), timing/spring animations,
  * composite animations (parallel, sequence, stagger, loop), convenience hooks
