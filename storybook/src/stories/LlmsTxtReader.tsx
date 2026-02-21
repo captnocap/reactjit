@@ -44,7 +44,7 @@ function ModeButton({ label, active, onPress }: { label: string; active: boolean
 
 export function LlmsTxtReader() {
   const c = useThemeColors();
-  const { data: raw, loading, error } = useTextFile('public/llms.txt');
+  const { data: raw, loading, error } = useTextFile('llms.txt');
   const [mode, setMode] = useState<'single' | 'chunked'>('chunked');
 
   const lines = useMemo(() => {
