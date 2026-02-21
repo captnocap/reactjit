@@ -11,6 +11,7 @@
 import React, { useState, useCallback } from 'react';
 import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
+import { setCryptoBridge } from '../../packages/crypto/src/rpc';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost } from '../../packages/shared/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
@@ -209,6 +210,7 @@ function Storybook() {
 // ── Bootstrap ─────────────────────────────────────────────
 
 const bridge = new NativeBridge();
+setCryptoBridge(bridge);
 const root = createRoot();
 
 // When __deferMount is true (set by Lua before eval), store the mount function
