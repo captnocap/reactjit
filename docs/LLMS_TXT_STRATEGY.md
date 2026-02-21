@@ -1,8 +1,8 @@
-# /llms.txt Strategy for iLoveReact Documentation
+# /llms.txt Strategy for ReactJIT Documentation
 
 ## Overview
 
-The `/llms.txt` system provides **LLM-optimized, plaintext access** to iLoveReact documentation through structured HTTP endpoints and static file exports. This enables AI agents to consume and understand the framework without needing to parse HTML or crawl web pages.
+The `/llms.txt` system provides **LLM-optimized, plaintext access** to ReactJIT documentation through structured HTTP endpoints and static file exports. This enables AI agents to consume and understand the framework without needing to parse HTML or crawl web pages.
 
 ---
 
@@ -129,7 +129,7 @@ anotherProp         string            yes         Required prop
 
 ```
 ========================================
-iLoveReact Documentation (LLM Edition)
+ReactJIT Documentation (LLM Edition)
 ========================================
 
 Generated: 2024-02-11
@@ -160,7 +160,7 @@ TABLE OF CONTENTS
 
 ```
 ========================================
-iLoveReact API Reference
+ReactJIT API Reference
 ========================================
 
 COMPONENTS
@@ -205,7 +205,7 @@ useState
 
 ```
 ========================================
-iLoveReact Components Reference
+ReactJIT Components Reference
 ========================================
 
 PRIMITIVES
@@ -310,19 +310,19 @@ useSpring(value, config) → animatedValue
 
 CLI COMMANDS
 ------------
-ilovereact init <name>
-ilovereact dev
-ilovereact build [dist:love | dist:terminal]
-ilovereact lint
-ilovereact screenshot
-ilovereact update
+reactjit init <name>
+reactjit dev
+reactjit build [dist:love | dist:terminal]
+reactjit lint
+reactjit screenshot
+reactjit update
 ```
 
 ### **/llms/examples.txt** (Code Examples)
 
 ```
 ========================================
-iLoveReact Code Examples
+ReactJIT Code Examples
 ========================================
 
 HELLO WORLD
@@ -330,13 +330,13 @@ HELLO WORLD
 
 EXAMPLE: Basic text rendering
 --------
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 
 export default function App() {
   return (
     <Box style={{ width: '100%', height: '100%',
                    justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontSize: 32 }}>Hello, iLoveReact!</Text>
+      <Text style={{ fontSize: 32 }}>Hello, ReactJIT!</Text>
     </Box>
   );
 }
@@ -349,7 +349,7 @@ INTERACTIVE APP
 EXAMPLE: Counter with state
 --------
 import { useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 
 export default function Counter() {
   const [count, setCount] = useState(0);
@@ -418,7 +418,7 @@ function generateLlmsDocs(outputDir: string): void {
 
 function generateFullDocumentation(): string {
   let doc = `========================================
-iLoveReact Documentation (LLM Edition)
+ReactJIT Documentation (LLM Edition)
 ========================================
 
 Generated: ${new Date().toISOString()}
@@ -454,7 +454,7 @@ function generateAPIReference(): string {
   const hooks = extractAPIFromSource('packages/shared/src/hooks');
 
   let doc = `========================================
-iLoveReact API Reference
+ReactJIT API Reference
 ========================================\n\n`;
 
   doc += 'COMPONENTS\n----------\n\n';
@@ -617,11 +617,11 @@ app.listen(3000, () => {
 import requests
 
 # Fetch API reference
-response = requests.get('https://ilovereact.dev/llms/api.txt')
+response = requests.get('https://reactjit.dev/llms/api.txt')
 api_doc = response.text
 
 # Search for something
-response = requests.get('https://ilovereact.dev/llms/search?q=flexGrow')
+response = requests.get('https://reactjit.dev/llms/search?q=flexGrow')
 results = response.json()
 ```
 
@@ -629,18 +629,18 @@ results = response.json()
 
 ```bash
 # Download full documentation
-curl https://ilovereact.dev/llms.txt > ilovereact-docs.txt
+curl https://reactjit.dev/llms.txt > reactjit-docs.txt
 
 # Search locally
-grep -i "flexgrow" ilovereact-docs.txt
+grep -i "flexgrow" reactjit-docs.txt
 ```
 
 ### **Integration with Claude/ChatGPT**
 
 ```
-User: "How do I use flexGrow in iLoveReact?"
+User: "How do I use flexGrow in ReactJIT?"
 
-Claude: I'll check the iLoveReact documentation for you.
+Claude: I'll check the ReactJIT documentation for you.
 [Fetches /llms.txt or /llms/layout.txt]
 Based on the documentation:
 - flexGrow requires parent sizing context
@@ -653,8 +653,8 @@ Based on the documentation:
 ## Distribution
 
 ### **Web Hosting**
-- Primary: https://ilovereact.dev/llms.txt
-- API: https://ilovereact.dev/llms/
+- Primary: https://reactjit.dev/llms.txt
+- API: https://reactjit.dev/llms/
 - Fallback: GitHub raw content
 
 ### **Static Files**
@@ -664,9 +664,9 @@ Based on the documentation:
 - Web: Served from `/llms/`
 
 ### **npm Package**
-- Publish as `@ilovereact/docs`
+- Publish as `@reactjit/docs`
 - Include full `/llms.txt` in package
-- Install: `npm install @ilovereact/docs`
+- Install: `npm install @reactjit/docs`
 
 ---
 

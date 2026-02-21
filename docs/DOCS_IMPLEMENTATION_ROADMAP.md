@@ -1,8 +1,8 @@
-# iLoveReact Documentation Implementation Roadmap
+# ReactJIT Documentation Implementation Roadmap
 
 ## Project Vision
 
-**Build comprehensive iLoveReact documentation using iLoveReact itself**, rendering to all targets as a reference implementation and marketing showcase.
+**Build comprehensive ReactJIT documentation using ReactJIT itself**, rendering to all targets as a reference implementation and marketing showcase.
 
 - **Web Version:** Full-featured interactive docs site
 - **Love2D Version:** Desktop app for offline browsing
@@ -18,7 +18,7 @@
 ## Project Structure
 
 ```
-ilovereact-docs/
+reactjit-docs/
 ├── src/
 │   ├── content/                 # All documentation content (shared)
 │   │   ├── sections/
@@ -126,7 +126,7 @@ ilovereact-docs/
 ### **PHASE 1: Core Infrastructure (Weeks 1-2)**
 
 #### 1.1 Project Setup
-- [ ] Create `ilovereact-docs` example project (or use existing docs folder)
+- [ ] Create `reactjit-docs` example project (or use existing docs folder)
 - [ ] Initialize npm workspace with shared packages
 - [ ] Setup TypeScript configuration
 - [ ] Configure esbuild for multi-target builds
@@ -187,12 +187,12 @@ ilovereact-docs/
 - [ ] **Source-of-Truth Architecture** (critical)
 
 #### 2.3 Section 3: CLI Reference
-- [ ] `ilovereact init`
-- [ ] `ilovereact dev`
-- [ ] `ilovereact build` (all variants)
-- [ ] `ilovereact update`
-- [ ] `ilovereact lint`
-- [ ] `ilovereact screenshot`
+- [ ] `reactjit init`
+- [ ] `reactjit dev`
+- [ ] `reactjit build` (all variants)
+- [ ] `reactjit update`
+- [ ] `reactjit lint`
+- [ ] `reactjit screenshot`
 - [ ] Flags & options tables
 
 #### 2.4 Section 4: Layout System
@@ -456,7 +456,7 @@ Each target gets:
 ### **Shared**
 - React 18.3+ (core framework)
 - TypeScript (type safety)
-- iLoveReact (rendering across targets)
+- ReactJIT (rendering across targets)
 - Zod (schema validation for content)
 
 ### **Web**
@@ -474,7 +474,7 @@ Each target gets:
 ### **Terminal**
 - Node.js 18+
 - chalk (colors)
-- ink (TUI rendering) / iLoveReact terminal
+- ink (TUI rendering) / ReactJIT terminal
 - fuse.js (fuzzy search)
 
 ### **ComputerCraft**
@@ -575,7 +575,7 @@ export const BoxComponent: ComponentDoc = {
 
 ```
 ========================================
-iLoveReact API Reference
+ReactJIT API Reference
 ========================================
 
 COMPONENTS
@@ -634,7 +634,7 @@ width, height, padding, margin, ...
 # Setup
 npm install
 make cli-setup
-ilovereact update
+reactjit update
 
 # Development
 npm run dev                    # Watch all targets
@@ -666,14 +666,14 @@ npm run generate:llms        # Generate /llms.txt
 - `/llms.txt` accessible via HTTP
 
 ### **Love2D**
-- Self-extracting binary (ilovereact build dist:love)
+- Self-extracting binary (reactjit build dist:love)
 - Upload to itch.io, GitHub Releases
 - Cross-platform (Linux, Windows, macOS)
 
 ### **Terminal**
 - Single-file Node.js executable (npm pkg-based)
 - Upload to npm registry
-- `npm install -g ilovereact-docs`
+- `npm install -g reactjit-docs`
 - GitHub Releases
 
 ### **ComputerCraft**
@@ -726,7 +726,7 @@ npm run generate:llms        # Generate /llms.txt
 
 ## Next Steps
 
-1. **Fork `ilovereact` repo or create `ilovereact-docs` example project**
+1. **Fork `reactjit` repo or create `reactjit-docs` example project**
 2. **Copy this roadmap into project README**
 3. **Set up Phase 1 infrastructure**
 4. **Create content structure from master checklist**
@@ -739,10 +739,10 @@ npm run generate:llms        # Generate /llms.txt
 
 ## Notes
 
-- This docs site is a **reference implementation** of iLoveReact
+- This docs site is a **reference implementation** of ReactJIT
 - Use it to showcase framework capabilities
 - Every feature used in docs can be a teaching example
 - The code becomes part of the examples
 - The docs become marketing material
 
-This approach turns documentation into a living, multi-platform showcase of what iLoveReact can do.
+This approach turns documentation into a living, multi-platform showcase of what ReactJIT can do.

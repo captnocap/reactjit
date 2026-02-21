@@ -1,4 +1,4 @@
-# iLoveReact — Target Interfaces
+# ReactJIT — Target Interfaces
 
 > **i** = interface, **Love** = where it started, **React** = what we love
 
@@ -234,7 +234,7 @@ Panic's Playdate handheld uses a Lua SDK. 400x240 1-bit display, crank input. A 
 
 ### Terminal / TUI
 
-Pure terminal rendering with ANSI escape codes. No Lua runtime needed — the painter outputs escape sequences to stdout. This would position iLoveReact as a React-based TUI framework (similar to Ink but with our own layout engine).
+Pure terminal rendering with ANSI escape codes. No Lua runtime needed — the painter outputs escape sequences to stdout. This would position ReactJIT as a React-based TUI framework (similar to Ink but with our own layout engine).
 
 - Transport: Direct (Node.js process, or any JS runtime)
 - Painter: ANSI escape codes — `\033[row;colH` for positioning, `\033[38;2;r;g;bm` for color
@@ -243,7 +243,7 @@ Pure terminal rendering with ANSI escape codes. No Lua runtime needed — the pa
 
 ### Qt (via Lua bindings)
 
-Full desktop application rendering through Qt's widget or QML system. This would put iLoveReact in the same space as React Native for desktop.
+Full desktop application rendering through Qt's widget or QML system. This would put ReactJIT in the same space as React Native for desktop.
 
 - Transport: lqt bindings or custom C bridge
 - Painter: QPainter / QWidget API
@@ -277,31 +277,31 @@ Full desktop application rendering through Qt's widget or QML system. This would
 Painters and transports are plug-in packages. A target is a `transport` + `painter` pair. The core is shared.
 
 ```
-@ilovereact/core              ← reconciler, tree, layout engine, primitives
-@ilovereact/transport-ffi     ← QuickJS FFI (in-process, zero-copy)
-@ilovereact/transport-ws      ← WebSocket (cross-process, cross-machine)
-@ilovereact/transport-stdio   ← stdio pipe (child process)
-@ilovereact/painter-love2d    ← love.graphics.*
-@ilovereact/painter-obs       ← obs_enter_graphics / gs_texture
-@ilovereact/painter-cc        ← term / paintutils (ComputerCraft)
-@ilovereact/painter-terminal  ← ANSI escape codes
-@ilovereact/painter-awesome   ← Cairo / wibox
-@ilovereact/painter-nvim      ← nvim_buf_set_lines / floating windows
-@ilovereact/painter-hs        ← hs.canvas (Hammerspoon)
-@ilovereact/painter-reaper    ← gfx.* (ReaScript)
+@reactjit/core              ← reconciler, tree, layout engine, primitives
+@reactjit/transport-ffi     ← QuickJS FFI (in-process, zero-copy)
+@reactjit/transport-ws      ← WebSocket (cross-process, cross-machine)
+@reactjit/transport-stdio   ← stdio pipe (child process)
+@reactjit/painter-love2d    ← love.graphics.*
+@reactjit/painter-obs       ← obs_enter_graphics / gs_texture
+@reactjit/painter-cc        ← term / paintutils (ComputerCraft)
+@reactjit/painter-terminal  ← ANSI escape codes
+@reactjit/painter-awesome   ← Cairo / wibox
+@reactjit/painter-nvim      ← nvim_buf_set_lines / floating windows
+@reactjit/painter-hs        ← hs.canvas (Hammerspoon)
+@reactjit/painter-reaper    ← gfx.* (ReaScript)
 ```
 
 **Why this structure matters:**
 - The package list *is* the documentation. Scan the npm org, see every target.
 - Adding a target = publish two small packages. Core never changes.
-- Users install exactly what they need. `npm i @ilovereact/core @ilovereact/transport-ws @ilovereact/painter-cc` and they're rendering React inside Minecraft.
+- Users install exactly what they need. `npm i @reactjit/core @reactjit/transport-ws @reactjit/painter-cc` and they're rendering React inside Minecraft.
 - Community can contribute painters without touching core. The interface is small enough that a painter is a weekend project.
 
 **Usage:**
 ```tsx
-import { createRoot } from '@ilovereact/core'
-import { WebSocketTransport } from '@ilovereact/transport-ws'
-import { ComputerCraftPainter } from '@ilovereact/painter-cc'
+import { createRoot } from '@reactjit/core'
+import { WebSocketTransport } from '@reactjit/transport-ws'
+import { ComputerCraftPainter } from '@reactjit/painter-cc'
 
 const transport = new WebSocketTransport({ port: 8080 })
 const painter = new ComputerCraftPainter({ palette: 'default' })
@@ -337,30 +337,30 @@ Note: For Lua-side painters (Love2D, AwesomeWM, Hammerspoon, ReaScript), the pai
 **Phase 1: Extract interfaces from current code**
 - Factor `painter.lua` into `PainterInterface` + `painter-love2d`
 - Factor `bridge_quickjs.lua` into `TransportInterface` + `transport-ffi`
-- Core becomes `@ilovereact/core` (reconciler, tree, layout, primitives)
+- Core becomes `@reactjit/core` (reconciler, tree, layout, primitives)
 
 **Phase 2: First two new targets**
-- `@ilovereact/transport-ws` + `@ilovereact/painter-cc` — ComputerCraft. Proves the architecture generalizes across process boundaries.
-- `@ilovereact/painter-love2d` as OBS window source — already works, just needs packaging and a guide.
+- `@reactjit/transport-ws` + `@reactjit/painter-cc` — ComputerCraft. Proves the architecture generalizes across process boundaries.
+- `@reactjit/painter-love2d` as OBS window source — already works, just needs packaging and a guide.
 
 **Phase 3: Direct-embed targets**
-- Hammerspoon, AwesomeWM, Neovim — all LuaJIT, so `@ilovereact/core` (layout engine) drops in directly. Each target is just a new painter package.
+- Hammerspoon, AwesomeWM, Neovim — all LuaJIT, so `@reactjit/core` (layout engine) drops in directly. Each target is just a new painter package.
 
 **Phase 4: Non-Lua targets**
-- `@ilovereact/painter-terminal` — JS-native, no Lua needed
+- `@reactjit/painter-terminal` — JS-native, no Lua needed
 - Qt, Roblox — custom bridges
 
 **Phase 5: Rebrand and README rewrite**
-- Rename project from `react-love` to `iLoveReact`
+- Rename project from `reactjit` to `ReactJIT`
 - Rewrite the README to reflect the multi-target identity:
   - Lead with the universal pitch: "Write it in React, render it anywhere there's a surface"
   - Architecture diagram showing core + pluggable transports/painters
   - Quick-start examples for each implemented target (not hypothetical ones — only targets that ship)
-  - Package table listing every published `@ilovereact/*` package with one-line descriptions
+  - Package table listing every published `@reactjit/*` package with one-line descriptions
   - Feature highlights: HMR, error reporting with source maps, binary distribution, flexbox layout engine
   - "Add a target" guide showing the painter/transport interfaces for community contributors
 - Update package.json names, repo references, and imports across the monorepo
-- Rename GitHub repo (`react-love` → `ilovereact`), set up redirect from the old name
+- Rename GitHub repo (`reactjit` → `reactjit`), set up redirect from the old name
 
 ---
 
@@ -368,6 +368,6 @@ Note: For Lua-side painters (Love2D, AwesomeWM, Hammerspoon, ReaScript), the pai
 
 Every target on this list is a **surface that people already want to put UI on**, but where the DX is terrible. Lua tables, immediate-mode `gfx` calls, ANSI escape codes, XML widget trees.
 
-iLoveReact says: **write it in React, render it anywhere there's a surface.**
+ReactJIT says: **write it in React, render it anywhere there's a surface.**
 
 Not "React Native for X." Not "Electron but smaller." Just: here's a reconciler, here's a layout engine, here's a 50-line painter for your target. Ship it.

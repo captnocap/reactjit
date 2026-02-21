@@ -16,7 +16,7 @@
 
 - Claim (medium): Taffy (Rust flexbox/grid engine used by Dioxus) does not implement inline text layout at all. It delegates to external text layout engines (e.g. Parley) via measure functions, following the same leaf-node pattern as Yoga. This confirms that flexbox-only layout engines universally treat text as opaque measured leaves, not as inline flow participants. — [Taffy GitHub](https://github.com/DioxusLabs/taffy), [Taffy docs](https://docs.rs/taffy)
 
-- Claim (high): iLoveReact's current bug (mixed JSX children in `<Text>` creating overlapping `__TEXT__` nodes) is a direct consequence of treating the reconciler's text instances as flex children. When `<Text>Hello {name}</Text>` produces two `createTextInstance` calls ("Hello " and the value of `name`), those become two separate Yoga flex items at y=0, hence the overlap. The template literal workaround (`{`Hello ${name}`}`) produces a single string child, hence one `createTextInstance` call and one Yoga node. — [Project context from CLAUDE.md]
+- Claim (high): ReactJIT's current bug (mixed JSX children in `<Text>` creating overlapping `__TEXT__` nodes) is a direct consequence of treating the reconciler's text instances as flex children. When `<Text>Hello {name}</Text>` produces two `createTextInstance` calls ("Hello " and the value of `name`), those become two separate Yoga flex items at y=0, hence the overlap. The template literal workaround (`{`Hello ${name}`}`) produces a single string child, hence one `createTextInstance` call and one Yoga node. — [Project context from CLAUDE.md]
 
 ## Evidence
 
@@ -30,7 +30,7 @@
 - Servo: "A single DOM node may be split into multiple fragments" and uses glyph runs within text runs for caching — [Servo Layout Overview](https://github.com/servo/servo/wiki/Layout-Overview)
 - react-pdf has the same problem: `display: 'inline'` on Text doesn't work, elements stack instead of flowing inline — [react-pdf issue #767](https://github.com/diegomura/react-pdf/issues/767)
 
-## Recommended Solutions for iLoveReact (Three Tiers)
+## Recommended Solutions for ReactJIT (Three Tiers)
 
 ### Tier 1: Shadow tree text flattening (React Native pattern)
 The reconciler intercepts `<Text>` children before they reach the layout engine. When a `<Text>` node has mixed children (strings + nested `<Text>`), the shadow tree collects all child text fragments, concatenates them with style annotations, and presents a single measured leaf to the Lua layout engine. The Yoga constraint ("measured nodes cannot have children") is the key insight: the `<Text>` Yoga node should use a measure function and have zero Yoga children, even though it has React children.
@@ -45,7 +45,7 @@ For the simplest case (no nested `<Text>`, just string children), return `true` 
 
 - Exactly how React Native's Fabric (C++) implementation of `ParagraphShadowNode` differs from the older Obj-C `RCTBaseTextShadowView` — the newer C++ code was not accessible in search results.
 - Whether Ink actually concatenates text from virtual text children during rendering or whether each still gets its own Yoga node (the reconciler creates them, but the rendering path for text squashing is in files I couldn't fully inspect).
-- How iLoveReact's Lua layout engine currently handles the `__TEXT__` node type internally — whether it already has a concept of "leaf measured node" or whether text nodes are just regular flex children with measured intrinsic size. This determines which tier of solution is feasible.
+- How ReactJIT's Lua layout engine currently handles the `__TEXT__` node type internally — whether it already has a concept of "leaf measured node" or whether text nodes are just regular flex children with measured intrinsic size. This determines which tier of solution is feasible.
 - The performance implications of text flattening on the JS-to-Lua bridge — if the reconciler flattens text on the JS side, it sends fewer mutations across the bridge, but if it sends individual text fragments, the Lua side would need to do the flattening.
 - How style inheritance should work for nested `<Text>` with different styles (bold, color) — React Native's attributed string approach naturally handles this, but a simpler concatenation approach would lose per-fragment styling.
 

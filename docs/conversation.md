@@ -196,7 +196,7 @@ Step 1 — "React-like patterns in Lua" (Reactor): Reimplement hooks, reconciler
 
 Step 2 — "Love2D inside React" (conceptual): Treat Love2D as a rendering target. This is the right mental model.
 
-Step 3 — "Literal React inside Love2D" (react-love): Embed QuickJS (210KB JS engine) via LuaJIT FFI. Run the actual react and react-reconciler npm packages inside it. Write a custom host config that emits mutation commands over a bridge. Love2D applies those commands to a retained tree, runs flexbox layout, and paints.
+Step 3 — "Literal React inside Love2D" (reactjit): Embed QuickJS (210KB JS engine) via LuaJIT FFI. Run the actual react and react-reconciler npm packages inside it. Write a custom host config that emits mutation commands over a bridge. Love2D applies those commands to a retained tree, runs flexbox layout, and paints.
 
 This is exactly the react-native architecture: JS engine → bridge → native renderer. We're just adding Love2D to the list alongside DOM, iOS, Android, terminal (Ink), and Three.js (react-three-fiber).
 

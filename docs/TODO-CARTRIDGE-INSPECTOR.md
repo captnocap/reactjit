@@ -49,9 +49,9 @@ Contents:
 ```
 
 - [ ] Define manifest format (schema, embedded location in binary)
-- [ ] CLI command: `ilovereact manifest <project>` — generates manifest from build
-- [ ] CLI command: `ilovereact sign <cart>` — signs manifest with developer key
-- [ ] `ilovereact build dist:*` embeds manifest automatically
+- [ ] CLI command: `reactjit manifest <project>` — generates manifest from build
+- [ ] CLI command: `reactjit sign <cart>` — signs manifest with developer key
+- [ ] `reactjit build dist:*` embeds manifest automatically
 
 ---
 

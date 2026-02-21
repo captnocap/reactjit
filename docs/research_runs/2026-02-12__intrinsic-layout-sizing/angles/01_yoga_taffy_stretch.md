@@ -4,7 +4,7 @@
 
 - Claim (high): Yoga, Taffy, and Stretch all use **measure functions** (callbacks) on leaf nodes to delegate intrinsic sizing to external systems (text engines, image loaders, etc.). The layout engine never hard-codes how to measure content -- it asks. Yoga's C signature: `YGSize (*YGMeasureFunc)(YGNodeRef node, float width, YGMeasureMode widthMode, float height, YGMeasureMode heightMode)`. Taffy's closure receives `known_dimensions: Size<Option<f32>>`, `available_space: Size<AvailableSpace>`, `node_id`, `node_context`, and `style`.
 
-- Claim (high): Yoga enforces that **only leaf nodes** (nodes with no children) can have measure functions. A node with a measure function cannot have children -- Yoga asserts on this. This means the tree is split cleanly: branch nodes use flexbox to size children, leaf nodes use measure functions to report intrinsic size. This is the architectural pattern iLoveReact's layout.lua would need to adopt.
+- Claim (high): Yoga enforces that **only leaf nodes** (nodes with no children) can have measure functions. A node with a measure function cannot have children -- Yoga asserts on this. This means the tree is split cleanly: branch nodes use flexbox to size children, leaf nodes use measure functions to report intrinsic size. This is the architectural pattern ReactJIT's layout.lua would need to adopt.
 
 - Claim (high): Yoga passes **three MeasureMode values** to the measure callback per axis: **Exactly** (use this exact size, analogous to stretch-fit), **AtMost** (return up to this size, analogous to fit-content), and **Undefined** (return your natural/max-content size, no upper bound). These three modes are sufficient to express all the constraint scenarios flexbox needs from leaf nodes.
 
@@ -14,7 +14,7 @@
 
 - Claim (medium): The measure function is called **as few times as possible** by Yoga -- ideally once per leaf per layout pass. Yoga caches results and skips measurement when a node already has a definite dimension. The dirty-marking system (`YGNodeMarkDirty`) propagates up to ancestors when content changes, triggering re-measurement only where needed.
 
-- Claim (medium): **LuaJIT FFI bindings for Yoga exist** (`lyoga` by Planimeter) with precompiled shared libraries. This means replacing iLoveReact's hand-rolled Lua layout engine with Yoga via FFI is technically feasible, though iLoveReact uses QuickJS (not LuaJIT), so the FFI path would require C bindings rather than LuaJIT's FFI.
+- Claim (medium): **LuaJIT FFI bindings for Yoga exist** (`lyoga` by Planimeter) with precompiled shared libraries. This means replacing ReactJIT's hand-rolled Lua layout engine with Yoga via FFI is technically feasible, though ReactJIT uses QuickJS (not LuaJIT), so the FFI path would require C bindings rather than LuaJIT's FFI.
 
 - Claim (medium): Taffy has **work-in-progress WASM bindings** (PR #394) that could theoretically be consumed from QuickJS if compiled to a shared library, but this is not production-ready and would require significant integration work.
 
@@ -47,7 +47,7 @@
 - **Taffy's actual maturity for non-Rust consumers**: The WASM bindings are WIP (PR #394). Whether they are stable enough for production use in 2026 is unclear from public sources.
 - **Performance characteristics of measure callbacks across FFI boundaries**: If layout.lua were replaced by Yoga-via-FFI, each text measurement would cross Lua->C->Lua boundaries. Whether this is faster or slower than the current pure-Lua approach with explicit sizing is unknown without benchmarking.
 - **How Yoga handles the "Box with no intrinsic width" problem specifically**: The docs focus on leaf node measurement. For intermediate containers (like a row Box), Yoga determines size from children's intrinsic sizes + flex rules. The exact algorithm for propagating intrinsic sizes upward through container nodes is not fully documented in public-facing materials -- it lives in the ~3000-line C++ implementation.
-- **Whether Yoga's "no min-content" trade-off** would cause visible layout differences vs. web CSS for iLoveReact's use cases.
+- **Whether Yoga's "no min-content" trade-off** would cause visible layout differences vs. web CSS for ReactJIT's use cases.
 
 ## Sources
 

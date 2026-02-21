@@ -13,7 +13,7 @@ returns 0 for such tables.
 
 ## Investigation 1: hostConfig.ts -- Is the array empty when flushed?
 
-**File:** `/home/siah/creative/react-love/packages/native/src/hostConfig.ts`
+**File:** `/home/siah/creative/reactjit/packages/native/src/hostConfig.ts`
 
 **Finding: The JS side is correct. The array is NOT empty.**
 
@@ -49,7 +49,7 @@ command objects during initial render.
 
 ## Investigation 2: `jsValueToLua` and TAG_FLOAT64
 
-**File:** `/home/siah/creative/react-love/lua/bridge_quickjs.lua` (lines 114-121, 140-225)
+**File:** `/home/siah/creative/reactjit/lua/bridge_quickjs.lua` (lines 114-121, 140-225)
 
 **Finding: The tag auto-detection works correctly, but is not the root cause.**
 
@@ -84,7 +84,7 @@ tag dispatch. The tag auto-detection handles the quickjs-ng change properly.
 
 ## Investigation 3: C trampoline `argv` passing -- THE ROOT CAUSE IS HERE (partially)
 
-**File:** `/home/siah/creative/react-love/quickjs/qjs_ffi_shim.c` (lines 118-124)
+**File:** `/home/siah/creative/reactjit/quickjs/qjs_ffi_shim.c` (lines 118-124)
 
 **Finding: The C trampoline correctly passes `argv` to the Lua callback.**
 
@@ -121,8 +121,8 @@ correctly. The problem is what the Lua callback does with `argv[0]`.
 
 ## Investigation 4: `JS_IsArray` signature mismatch -- THE ACTUAL ROOT CAUSE
 
-**File:** `/home/siah/creative/react-love/lua/bridge_quickjs.lua` (line 75)
-**File:** `/home/siah/creative/react-love/quickjs/quickjs.h` (line 947)
+**File:** `/home/siah/creative/reactjit/lua/bridge_quickjs.lua` (line 75)
+**File:** `/home/siah/creative/reactjit/quickjs/quickjs.h` (line 947)
 
 **Finding: CRITICAL BUG. The Lua FFI declares `JS_IsArray` with a wrong signature.**
 
@@ -265,7 +265,7 @@ the tag auto-detection ensures `TAG_FLOAT64` is updated to 8. No issue here.
 
 ## The Fix
 
-In `/home/siah/creative/react-love/lua/bridge_quickjs.lua`, line 75, change:
+In `/home/siah/creative/reactjit/lua/bridge_quickjs.lua`, line 75, change:
 
 ```lua
 -- BEFORE (wrong: has extra JSContext* parameter)

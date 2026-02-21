@@ -1,4 +1,4 @@
-# iLoveReact Docs: Content-First Architecture
+# ReactJIT Docs: Content-First Architecture
 
 ## Core Principle
 
@@ -13,7 +13,7 @@ Single source of truth → Multiple renderings.
 ### **New Approach: Content First**
 
 ```
-ilovereact-docs/
+reactjit-docs/
 ├── content/                        # ← SINGLE SOURCE OF TRUTH (plaintext)
 │   ├── sections/
 │   │   ├── 01-getting-started/
@@ -175,7 +175,7 @@ ilovereact-docs/
 │
 ├── scripts/
 │   ├── build-docs.ts            # Parse content + render to all formats
-│   ├── extract-api.ts           # Extract API from ilovereact source
+│   ├── extract-api.ts           # Extract API from reactjit source
 │   ├── validate-content.ts      # Validate .txt files
 │   └── generate-search.ts       # Build search indices
 │
@@ -278,11 +278,11 @@ related: Text, Image, Pressable
 difficulty: beginner
 
 === OVERVIEW ===
-Box is the fundamental layout component in iLoveReact. It uses Flexbox to arrange children
+Box is the fundamental layout component in ReactJIT. It uses Flexbox to arrange children
 in rows or columns, with full control over sizing, spacing, and alignment.
 
 The Box component is your go-to for building any kind of layout. Everything is a Box,
-and understanding Box is understanding iLoveReact layouts.
+and understanding Box is understanding ReactJIT layouts.
 
 === API / SYNTAX ===
 <Box style={boxStyle} onPress={handler}>{children}</Box>

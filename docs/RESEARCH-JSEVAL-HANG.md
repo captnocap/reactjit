@@ -369,16 +369,16 @@ The user says:
 This means the user is appending `__hostLog('SENTINEL')` to the source code AFTER `})();`. The JS code would look like:
 
 ```javascript
-var ReactLoveStorybook = (() => {
+var ReactJITStorybook = (() => {
     // ... 21000+ lines ...
-    console.log("[react-love] Native storybook mounted ...");
+    console.log("[reactjit] Native storybook mounted ...");
 })();
 __hostLog('SENTINEL');
 ```
 
 The fact that the console.log inside the IIFE fires but `__hostLog('SENTINEL')` after it does NOT fire means **execution hangs or crashes between the end of the IIFE and the next statement**.
 
-The IIFE returns the value of its last expression. Looking at the IIFE's structure (line 1: `var ReactLoveStorybook = (() => {`), the arrow function's body uses curly braces, so the return value is `undefined` unless there's an explicit `return`. The assignment `var ReactLoveStorybook = (...)();` would set the variable to `undefined`.
+The IIFE returns the value of its last expression. Looking at the IIFE's structure (line 1: `var ReactJITStorybook = (() => {`), the arrow function's body uses curly braces, so the return value is `undefined` unless there's an explicit `return`. The assignment `var ReactJITStorybook = (...)();` would set the variable to `undefined`.
 
 **But the critical observation is: `root.render()` at line 21510-21512 returns `undefined` (the `render` method returns nothing). After that, `console.log(...)` runs at line 21513. Then the IIFE closes at line 21514 with `})();`. The IIFE's implicit return is `undefined`.**
 
@@ -472,7 +472,7 @@ if (m != NULL || (flags & JS_EVAL_FLAG_ASYNC)) {
 
 Don't call `root.render()` inside the IIFE that's passed to `JS_Eval`. Instead:
 
-1. Eval the bundle (defines `ReactLoveStorybook` and all modules)
+1. Eval the bundle (defines `ReactJITStorybook` and all modules)
 2. Return control to Lua
 3. Call `root.render()` separately via a second `JS_Eval` or by calling a JS function
 4. Tick the Lua event loop (`Bridge:tick()`) each frame to drain promises and timers

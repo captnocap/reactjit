@@ -1,7 +1,6 @@
 # CLAUDE.md
 
 This is React stripped of browser magic and rendered as raw geometry.
-In this framework, love is not a place just for making games.
 If you didn't say how big it is, surfaces take a quarter of their parent.
 If you said grow, it grows exactly.
 If you nested flex containers, you own the consequences.
@@ -32,43 +31,46 @@ Every new native feature (audio, timers, sensors, file watchers, notifications, 
 
 ## What This Is
 
-iLoveReact is a platform-agnostic React rendering framework. The core pipeline — reconciler, tree, layout engine, component library — is target-agnostic. Each target supplies two modules: `measure` (text metrics) and `painter` (how to turn `{x, y, w, h, color, text}` into visible output on that surface). Swap the target table, change the renderer entirely.
+ReactJIT is a React rendering framework with a hand-rolled renderer. The core pipeline — reconciler, tree, layout engine, component library — is target-agnostic. Each target supplies two modules: `measure` (text metrics) and `painter` (how to turn `{x, y, w, h, color, text}` into visible output on that surface). Swap the target table, change the renderer entirely.
 
 **Rendering pipeline:** React reconciler → mutation commands → transport layer → layout engine → target-specific painter.
 
-**Native targets (Lua-side, pixel-accurate):**
-- **SDL2 / OpenGL** — Custom renderer: LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. No game engine dependency. Entry point: `luajit sdl2_init.lua`. This is the primary forward direction — a renderer we fully own.
-- **Love2D** — The original proving ground. Full-featured: images, video (FFmpeg), audio, inspector, binary dist. Still excellent for game UI and kiosks.
+**Primary renderer — SDL2 / OpenGL:**
+LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. No game engine dependency. We own the run loop, the GL context, the font rasterizer, and the event pump. Entry point: `luajit sdl2_init.lua`. This is the focus — everything else is secondary.
 
-**Grid / JS targets:** Terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM, Web.
+**Also supported:**
+- **Love2D** — The original proving ground. Still available for game developers who want Love2D's ecosystem (images, video, audio, binary dist). Entry point: `love .`
+- **Grid / JS targets** — Terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM
+- **Web (planned)** — WASM build from SDL2/OpenGL via Emscripten. Renders to `<canvas>`, not DOM.
 
-The target interface is formalized in `lua/target_love2d.lua` and `lua/target_sdl2.lua`. A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
+The target interface is formalized in `lua/target_sdl2.lua` (primary) and `lua/target_love2d.lua` (legacy). A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
 
 ## CLI-First Workflow (IMPORTANT)
 
-**Always use the `ilovereact` CLI tool instead of manual esbuild commands.** The CLI
+**Always use the `reactjit` CLI tool instead of manual esbuild commands.** The CLI
 encodes correct esbuild flags, enforces lint gates before builds, handles runtime file
 placement, and produces correct distribution packages. Running raw esbuild commands
 directly will use wrong flags, skip linting, and produce broken builds.
 
 ```bash
-ilovereact init <name>            # Scaffold new project (do NOT mkdir + copy manually)
-ilovereact dev [target]           # Watch mode (default: love). Do NOT run esbuild --watch manually.
-ilovereact build [target]         # Lint gate + dev build (default: love). Do NOT run esbuild manually.
-ilovereact build dist:<target>    # Production build for any target
-ilovereact lint                   # Static layout linter — run after ANY component change
-ilovereact screenshot [--output]  # Headless capture — verify layouts visually
+reactjit init <name>            # Scaffold new project (do NOT mkdir + copy manually)
+reactjit dev [target]           # Watch mode (default: sdl2). Do NOT run esbuild --watch manually.
+reactjit build [target]         # Lint gate + dev build (default: sdl2). Do NOT run esbuild manually.
+reactjit build dist:<target>    # Production build for any target
+reactjit lint                   # Static layout linter — run after ANY component change
+reactjit screenshot [--output]  # Headless capture — verify layouts visually
 ```
 
-**Targets:** `love`, `terminal`, `cc`, `nvim`, `hs`, `awesome`, `web`
+**Targets:** `sdl2`, `love`, `terminal`, `cc`, `nvim`, `hs`, `awesome`, `web`
 
 **Dist formats:**
+- `dist:sdl2` — Native binary (SDL2 + OpenGL + LuaJIT)
 - `dist:love` — Self-extracting Linux binary (Love2D + bundled glibc)
 - `dist:terminal` / `dist:cc` / `dist:nvim` / `dist:hs` / `dist:awesome` — Single-file Node.js executable (shebang + CJS)
-- `dist:web` — Production ESM bundle
+- `dist:web` — WASM + WebGL bundle (planned — Emscripten compilation of SDL2 renderer)
 
-**After writing or modifying any component:** run `ilovereact lint`, then
-`ilovereact screenshot --output /tmp/preview.png` and inspect the result.
+**After writing or modifying any component:** run `reactjit lint`, then
+`reactjit screenshot --output /tmp/preview.png` and inspect the result.
 
 The CLI handles all targets. The npm scripts in root package.json are for monorepo
 development convenience only — never use raw esbuild commands for project builds.
@@ -81,48 +83,48 @@ There are two categories of files: **globally distributed** (framework internals
 
 These live at the **monorepo root** and get copied into projects via the CLI:
 
-| Source of truth | Copied to by `make cli-setup` | Copied to projects by `ilovereact init/update` |
+| Source of truth | Copied to by `make cli-setup` | Copied to projects by `reactjit init/update` |
 |---|---|---|
 | `lua/*.lua` | `cli/runtime/lua/` | `<project>/lua/` |
-| `packages/shared/` | `cli/runtime/ilovereact/shared/` | `<project>/ilovereact/shared/` |
-| `packages/native/` | `cli/runtime/ilovereact/native/` | `<project>/ilovereact/native/` |
+| `packages/shared/` | `cli/runtime/reactjit/shared/` | `<project>/reactjit/shared/` |
+| `packages/native/` | `cli/runtime/reactjit/native/` | `<project>/reactjit/native/` |
 | `quickjs/libquickjs.so` | `cli/runtime/lib/` | `<project>/lib/` |
 
 **Rules:**
-- **ALWAYS edit the source-of-truth files** (`lua/`, `packages/shared/`, `packages/native/`). NEVER edit `cli/runtime/` or `<project>/lua/` or `<project>/ilovereact/` directly — those are disposable copies.
+- **ALWAYS edit the source-of-truth files** (`lua/`, `packages/shared/`, `packages/native/`). NEVER edit `cli/runtime/` or `<project>/lua/` or `<project>/reactjit/` directly — those are disposable copies.
 - After editing any source-of-truth file, run the full sync pipeline:
   ```bash
   make cli-setup              # source → cli/runtime/
   cd examples/<project>
-  ilovereact update           # cli/runtime/ → project's local copies
-  ilovereact build dist:love  # rebuild
+  reactjit update             # cli/runtime/ → project's local copies
+  reactjit build dist:sdl2    # rebuild
   ```
-- `ilovereact update` syncs `lua/`, `lib/`, and `ilovereact/` from the CLI runtime into the current project without touching `src/`. Use it to hydrate existing projects after framework changes.
-- `ilovereact update` is symlink-aware: if a destination (e.g. `lua/`) is a symlink, it skips the copy and prints a message. This protects the storybook's source-of-truth symlinks.
-- `ilovereact build dist:love` has a fallback: if no local `lua/` exists, it reads from `cli/runtime/lua/`. But `ilovereact dev` and `love .` require local copies, so always run `ilovereact update` for dev workflows.
+- `reactjit update` syncs `lua/`, `lib/`, and `reactjit/` from the CLI runtime into the current project without touching `src/`. Use it to hydrate existing projects after framework changes.
+- `reactjit update` is symlink-aware: if a destination (e.g. `lua/`) is a symlink, it skips the copy and prints a message. This protects the storybook's source-of-truth symlinks.
+- `reactjit build dist:sdl2` has a fallback: if no local `lua/` exists, it reads from `cli/runtime/lua/`. But `reactjit dev` requires local copies, so always run `reactjit update` for dev workflows.
 
 ### The storybook reads from source directly (NEVER copy into it)
 
 The storybook is NOT a consumer project — it IS the framework. It reads from source-of-truth directly:
-- **TypeScript**: esbuild resolves `packages/*/src/` via relative imports and npm workspace symlinks. `storybook/ilovereact/` does not exist and must never be created.
+- **TypeScript**: esbuild resolves `packages/*/src/` via relative imports and npm workspace symlinks. `storybook/reactjit/` does not exist and must never be created.
 - **Lua**: `storybook/love/lua` is a symlink → `../../lua` (the monorepo root `lua/`). Never replace this symlink with a real directory.
 - **`make cli-setup` does NOT sync into the storybook.** Only `cli/runtime/` is populated.
-- **Do NOT run `ilovereact update` from the storybook directory.** The symlink guard will skip `lua/`, but there's no reason to run it.
-- **Do NOT create `storybook/lua/` or `storybook/ilovereact/` as real directories.** Both are gitignored. If they appear, something is wrong.
+- **Do NOT run `reactjit update` from the storybook directory.** The symlink guard will skip `lua/`, but there's no reason to run it.
+- **Do NOT create `storybook/lua/` or `storybook/reactjit/` as real directories.** Both are gitignored. If they appear, something is wrong.
 
 ### Project-specific files (application code)
 
 These are unique to each project and are NOT managed by the CLI:
 
 - `src/` — user application code (App.tsx, stories, etc.)
-- `main.lua`, `conf.lua` — Love2D entry points
+- `main.lua`, `conf.lua` — Love2D entry points (if using Love2D target)
 - `package.json` — project dependencies
 - `packaging/` — build customizations
 
 **Rules:**
 - These files are safe to edit directly in any project.
-- `ilovereact init` creates starter versions; `ilovereact update` never touches them.
-- To copy app code between projects, copy only `src/` and any custom `main.lua`/`conf.lua`.
+- `reactjit init` creates starter versions; `reactjit update` never touches them.
+- To copy app code between projects, copy only `src/` and any custom entry points.
 
 ### Adding a new Lua-side feature (checklist)
 
@@ -131,44 +133,44 @@ These are unique to each project and are NOT managed by the CLI:
 3. The storybook picks up both changes automatically (Lua via symlink, TS via esbuild). Rebuild the storybook bundle: `make build-storybook-native`
 4. `make cli-setup` — propagates to `cli/runtime/` for consumer projects
 5. For each example project that needs the feature:
-   - `cd examples/<project> && ilovereact update` — syncs runtime files
-   - `ilovereact build dist:love` — rebuilds
-6. For new projects: `ilovereact init <name>` — gets everything automatically
+   - `cd examples/<project> && reactjit update` — syncs runtime files
+   - `reactjit build dist:sdl2` — rebuilds
+6. For new projects: `reactjit init <name>` — gets everything automatically
 
 ## Other Build Commands
 
 ```bash
 npm install                       # Install dependencies
 
-# QuickJS setup (needed for Love2D target)
+# QuickJS setup (needed for native targets)
 make setup                        # Clones quickjs-ng, builds libquickjs.so
 make build                        # Builds all targets
 make dist-storybook               # Self-extracting Linux binary with bundled glibc
 ```
 
 The root package.json still has `npm run build:*` scripts for monorepo example builds,
-but prefer `cd examples/<project> && ilovereact build <target>` for consistency.
+but prefer `cd examples/<project> && reactjit build <target>` for consistency.
 
 ## Monorepo Structure
 
-npm workspaces monorepo. Path aliases (`@ilovereact/*`) defined in `tsconfig.base.json`.
+npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.json`.
 
 | Package | Import | Role |
 |---------|--------|------|
-| `packages/shared` | `@ilovereact/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
-| `packages/native` | `@ilovereact/native` | react-reconciler host config, instance tree, event dispatch |
-| `packages/web` | `@ilovereact/web` | DOM overlay renderer |
-| `packages/grid` | `@ilovereact/grid` | Shared layout engine for character-grid targets |
-| `packages/terminal` | `@ilovereact/terminal` | Pure JS terminal renderer (ANSI truecolor) |
-| `packages/cc` | `@ilovereact/cc` | ComputerCraft target (WebSocket, 16-color) |
-| `packages/nvim` | `@ilovereact/nvim` | Neovim target (stdio, floating windows) |
-| `packages/hs` | `@ilovereact/hs` | Hammerspoon target (WebSocket, pixel canvas) |
-| `packages/awesome` | `@ilovereact/awesome` | AwesomeWM target (stdio, Cairo) |
-| `packages/components` | `@ilovereact/components` | Re-exports layout helpers (Card, Badge, FlexRow, etc.) |
+| `packages/shared` | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
+| `packages/native` | `@reactjit/native` | react-reconciler host config, instance tree, event dispatch |
+| `packages/web` | `@reactjit/web` | DOM overlay renderer (legacy — will be replaced by WASM target) |
+| `packages/grid` | `@reactjit/grid` | Shared layout engine for character-grid targets |
+| `packages/terminal` | `@reactjit/terminal` | Pure JS terminal renderer (ANSI truecolor) |
+| `packages/cc` | `@reactjit/cc` | ComputerCraft target (WebSocket, 16-color) |
+| `packages/nvim` | `@reactjit/nvim` | Neovim target (stdio, floating windows) |
+| `packages/hs` | `@reactjit/hs` | Hammerspoon target (WebSocket, pixel canvas) |
+| `packages/awesome` | `@reactjit/awesome` | AwesomeWM target (stdio, Cairo) |
+| `packages/components` | `@reactjit/components` | Re-exports layout helpers (Card, Badge, FlexRow, etc.) |
 
 **Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12).
 
-**Target interface** — `lua/target_love2d.lua` (default; uses `painter.lua` + `measure.lua`) and `lua/target_sdl2.lua` (custom OpenGL renderer; uses `sdl2_painter.lua` + `sdl2_measure.lua` + `sdl2_font.lua`). SDL2 run loop: `lua/sdl2_init.lua`. OpenGL bindings: `lua/sdl2_gl.lua`.
+**Target interface** — `lua/target_sdl2.lua` (primary; uses `sdl2_painter.lua` + `sdl2_measure.lua` + `sdl2_font.lua`) and `lua/target_love2d.lua` (legacy; uses `painter.lua` + `measure.lua`). SDL2 run loop: `lua/sdl2_init.lua`. OpenGL bindings: `lua/sdl2_gl.lua`.
 
 **Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
 
@@ -178,9 +180,9 @@ npm workspaces monorepo. Path aliases (`@ilovereact/*`) defined in `tsconfig.bas
 
 These are encoded in `cli/targets.mjs` — you should never need to specify them manually:
 
-- **Love2D / SDL2**: `--format=iife --global-name=ReactLove` (bundle runs inside QuickJS in-process). Love2D: launched via `love .`. SDL2: launched via `luajit sdl2_init.lua`. Same bundle format, different run loop.
+- **SDL2 / Love2D**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). SDL2: launched via `luajit sdl2_init.lua`. Love2D: launched via `love .`. Same bundle format, different run loop.
 - **Grid targets** (terminal, nvim, cc, hs, awesome): `--platform=node --format=esm`
-- **Web**: `--format=esm`
+- **Web**: `--format=esm` (current), WASM (planned)
 - WebSocket targets (cc, hs) additionally need `--external:ws`
 - **Dist builds** (grid): `--format=cjs --platform=node --external:ws` + shebang
 
@@ -203,7 +205,7 @@ The layout engine has three sizing tiers. They resolve in order — the first on
 3. **Use `flexGrow: 1` for space-filling elements** — in a column of header + content + footer, the content should have `flexGrow: 1` to absorb remaining space. Do NOT hardcode pixel heights to "fill" a known window size — that creates deadspace at different resolutions
 4. **Row Boxes NEED explicit width for `justifyContent` to work** — a `flexDirection: 'row'` Box without an explicit width won't respond to `justifyContent: 'center'`. Add `width: '100%'` (or a fixed width) to row Boxes that need horizontal content distribution
 5. **ScrollView needs explicit height** — scroll containers are excluded from the proportional fallback. They need `height` or `flexGrow` to define their viewport
-6. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in Love2D's default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`
+6. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in the default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`
 
 ### Layout anti-patterns (DO NOT DO)
 
@@ -286,13 +288,13 @@ If you skip steps 2-3, the handler silently disappears — `extractHandlers` in 
 
 ## Primitives by Target
 
-**Love2D / Web:** Import from `@ilovereact/core` — `Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, etc.
+**SDL2 / Love2D:** Import from `@reactjit/core` — `Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, etc.
 
 **Grid targets:** Use lowercase JSX intrinsics (`<view>`, `<text>`) and define local `Box`/`Text` wrappers.
 
 ## The Storybook IS the Framework (CRITICAL)
 
-The storybook (`storybook/`) lives at the monorepo root, not in `examples/`. It is not a demo — it is the canonical reference implementation of iLoveReact. Every framework capability is demonstrated there. The long-term vision is that the storybook, the CLI, the docs, the playground, and the visual editor all converge into a single binary: `ilovereact`.
+The storybook (`storybook/`) lives at the monorepo root, not in `examples/`. It is not a demo — it is the canonical reference implementation of ReactJIT. Every framework capability is demonstrated there. The long-term vision is that the storybook, the CLI, the docs, the playground, and the visual editor all converge into a single binary: `reactjit`.
 
 This has two non-negotiable consequences:
 
