@@ -670,6 +670,98 @@ export interface WindowProps {
   key?: string | number;
 }
 
+// ── GPIO Capability Components ───────────────────────────
+
+/**
+ * Declarative GPIO digital pin (input or output).
+ *
+ * @example
+ * <Pin pin={17} mode="output" value={ledOn} />
+ * <Pin pin={4} mode="input" pull="up" edge="both" onChange={(e) => setButton(e.value)} />
+ */
+export interface PinProps {
+  chip?: string;
+  pin: number;
+  mode?: 'input' | 'output';
+  value?: boolean;
+  pull?: 'none' | 'up' | 'down';
+  edge?: 'none' | 'rising' | 'falling' | 'both';
+  activeLow?: boolean;
+  onChange?: (event: LoveEvent) => void;
+  onRising?: (event: LoveEvent) => void;
+  onFalling?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
+ * Software PWM via GPIO pin toggling.
+ *
+ * @example
+ * <PWM pin={18} duty={brightness} />
+ * <PWM pin={18} frequency={500} duty={0.5} enabled={motorOn} />
+ */
+export interface PWMProps {
+  chip?: string;
+  pin: number;
+  frequency?: number;
+  duty?: number;
+  enabled?: boolean;
+  key?: string | number;
+}
+
+/**
+ * Declarative serial port (UART) for microcontroller communication.
+ *
+ * @example
+ * <SerialPort port="/dev/ttyUSB0" baud={115200} onLine={(e) => handleData(e.line)} />
+ */
+export interface SerialPortProps {
+  port: string;
+  baud?: number;
+  dataBits?: number;
+  stopBits?: number;
+  parity?: 'none' | 'even' | 'odd';
+  flowControl?: 'none' | 'hardware';
+  onLine?: (event: LoveEvent) => void;
+  onData?: (event: LoveEvent) => void;
+  onError?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
+ * Declarative I2C device with register polling.
+ *
+ * @example
+ * <I2CDevice bus={1} address={0x48} register={0x00} pollInterval={100}
+ *   onData={(e) => setTemperature(e.value)} />
+ */
+export interface I2CDeviceProps {
+  bus?: number;
+  address: number;
+  register?: number;
+  readLength?: number;
+  pollInterval?: number;
+  enabled?: boolean;
+  onData?: (event: LoveEvent) => void;
+  onError?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
+ * Declarative SPI device for full-duplex transfers.
+ *
+ * @example
+ * <SPIDevice bus={0} device={0} speed={1000000} />
+ */
+export interface SPIDeviceProps {
+  bus?: number;
+  device?: number;
+  speed?: number;
+  mode?: number;
+  bitsPerWord?: number;
+  key?: string | number;
+}
+
 /**
  * Schema returned by capabilities:list RPC for AI discovery.
  */

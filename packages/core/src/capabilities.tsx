@@ -18,7 +18,10 @@
 
 import React from 'react';
 import { Native } from './Native';
-import type { AudioProps, TimerProps, LLMAgentProps, WindowProps } from './types';
+import type {
+  AudioProps, TimerProps, LLMAgentProps, WindowProps,
+  PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
+} from './types';
 
 /**
  * Declarative audio playback.
@@ -68,4 +71,59 @@ export function LLMAgent(props: LLMAgentProps) {
  */
 export function Window(props: WindowProps) {
   return <Native type="Window" {...props} />;
+}
+
+// ── GPIO Capabilities ─────────────────────────────────────
+
+/**
+ * Declarative GPIO digital pin (input or output).
+ *
+ * @example
+ * <Pin pin={17} mode="output" value={ledOn} />
+ * <Pin pin={4} mode="input" pull="up" edge="both" onChange={(e) => setButton(e.value)} />
+ */
+export function Pin(props: PinProps) {
+  return <Native type="Pin" {...props} />;
+}
+
+/**
+ * Software PWM via GPIO pin toggling.
+ *
+ * @example
+ * <PWM pin={18} duty={brightness} />
+ * <PWM pin={18} frequency={500} duty={0.5} enabled={motorOn} />
+ */
+export function PWM(props: PWMProps) {
+  return <Native type="PWM" {...props} />;
+}
+
+/**
+ * Declarative serial port (UART) for microcontroller communication.
+ *
+ * @example
+ * <SerialPort port="/dev/ttyUSB0" baud={115200} onLine={(e) => handleData(e.line)} />
+ */
+export function SerialPort(props: SerialPortProps) {
+  return <Native type="SerialPort" {...props} />;
+}
+
+/**
+ * Declarative I2C device with register polling.
+ *
+ * @example
+ * <I2CDevice bus={1} address={0x48} register={0x00} pollInterval={100}
+ *   onData={(e) => setTemperature(e.value)} />
+ */
+export function I2CDevice(props: I2CDeviceProps) {
+  return <Native type="I2CDevice" {...props} />;
+}
+
+/**
+ * Declarative SPI device.
+ *
+ * @example
+ * <SPIDevice bus={0} device={0} speed={1000000} />
+ */
+export function SPIDevice(props: SPIDeviceProps) {
+  return <Native type="SPIDevice" {...props} />;
 }
