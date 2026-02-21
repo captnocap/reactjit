@@ -216,6 +216,13 @@ ffi.cdef[[
 
   llama_token llama_sampler_sample(llama_sampler *smpl, llama_context *ctx, int32_t idx);
 
+  // ── Embeddings ──
+  int32_t llama_model_n_embd(const llama_model *model);
+  void    llama_set_embeddings(llama_context *ctx, bool embeddings);
+  float  *llama_get_embeddings(llama_context *ctx);
+  float  *llama_get_embeddings_ith(llama_context *ctx, int32_t i);
+  float  *llama_get_embeddings_seq(llama_context *ctx, llama_seq_id seq_id);
+
   // ── Perf ──
   void llama_perf_context_print(const llama_context *ctx);
 
@@ -352,6 +359,9 @@ function LLM.load(path, opts)
     chat_template = ffi.string(chat_tmpl_ptr)
   end
 
+  -- Get embedding dimensions (available for all models)
+  local n_embd = lib.llama_model_n_embd(model)
+
   -- Create context
   local cparams = lib.llama_context_default_params()
   cparams.n_ctx = opts.n_ctx or 2048
@@ -360,6 +370,13 @@ function LLM.load(path, opts)
   cparams.n_threads_batch = opts.n_threads_batch or cparams.n_threads
   cparams.no_perf = false
 
+  -- Embedding mode: enable embeddings + mean pooling
+  local is_embedding = opts.embeddings or false
+  if is_embedding then
+    cparams.embeddings = true
+    cparams.pooling_type = 1  -- LLAMA_POOLING_TYPE_MEAN
+  end
+
   local ctx = lib.llama_init_from_model(model, cparams)
   if ctx == nil then
     lib.llama_model_free(model)
@@ -367,7 +384,8 @@ function LLM.load(path, opts)
   end
 
   local n_ctx = lib.llama_n_ctx(ctx)
-  print(string.format("[llm] context: %d tokens", n_ctx))
+  local mode_str = is_embedding and "embedding" or "generative"
+  print(string.format("[llm] context: %d tokens, %d embd dims (%s mode)", n_ctx, n_embd, mode_str))
 
   local self = setmetatable({
     _model = model,
@@ -375,8 +393,10 @@ function LLM.load(path, opts)
     _vocab = vocab,
     _n_ctx = n_ctx,
     _n_ctx_train = n_ctx_train,
+    _n_embd = n_embd,
     _chat_template = chat_template,
     _desc = desc,
+    _is_embedding = is_embedding,
     _freed = false,
   }, Model)
 
@@ -447,6 +467,86 @@ function Model:apply_chat_template(messages, add_assistant)
   lib.llama_chat_apply_template(tmpl, c_messages, n_msg, add_assistant, buf, needed + 1)
 
   return ffi.string(buf, needed)
+end
+
+-- ============================================================================
+-- Embedding extraction
+-- ============================================================================
+
+--- Extract an embedding vector for the given text.
+--- Returns a Lua table of floats and the embedding dimension.
+--- The model must be loaded with { embeddings = true }.
+function Model:embed(text)
+  if not self._is_embedding then
+    error("[llm] model not loaded in embedding mode (pass { embeddings = true } to llm.load)")
+  end
+
+  -- Tokenize (no special tokens for embedding models)
+  local tokens, n_tokens = self:tokenize(text, true, false)
+
+  if n_tokens > self._n_ctx then
+    error(string.format("[llm] text too long for embedding: %d tokens, context is %d", n_tokens, self._n_ctx))
+  end
+
+  -- Build batch with all logits enabled (needed to get embeddings)
+  local batch = lib.llama_batch_init(n_tokens, 0, 1)
+  batch.n_tokens = n_tokens
+  for i = 0, n_tokens - 1 do
+    batch.token[i] = tokens[i]
+    batch.pos[i] = i
+    batch.n_seq_id[i] = 1
+    batch.seq_id[i][0] = 0
+    batch.logits[i] = 1  -- request output for all tokens
+  end
+
+  -- Decode
+  local rc = lib.llama_decode(self._ctx, batch)
+  lib.llama_batch_free(batch)
+  if rc ~= 0 then
+    error("[llm] embedding decode failed, rc=" .. rc)
+  end
+
+  -- Get embedding (pooled by sequence id 0, since we set pooling_type = MEAN)
+  local n_embd = self._n_embd
+  local emb_ptr = lib.llama_get_embeddings_seq(self._ctx, 0)
+
+  if emb_ptr == nil then
+    -- Fallback: try getting embeddings for the last token
+    emb_ptr = lib.llama_get_embeddings_ith(self._ctx, -1)
+  end
+
+  if emb_ptr == nil then
+    error("[llm] failed to get embeddings (returned NULL)")
+  end
+
+  -- Copy to Lua table and L2-normalize
+  local embedding = {}
+  local norm = 0
+  for i = 0, n_embd - 1 do
+    local v = emb_ptr[i]
+    embedding[i + 1] = v
+    norm = norm + v * v
+  end
+
+  -- Normalize
+  norm = math.sqrt(norm)
+  if norm > 0 then
+    for i = 1, n_embd do
+      embedding[i] = embedding[i] / norm
+    end
+  end
+
+  return embedding, n_embd
+end
+
+--- Embed multiple texts and return array of {embedding, n_embd} pairs.
+function Model:embed_batch(texts)
+  local results = {}
+  for i, text in ipairs(texts) do
+    local emb, dim = self:embed(text)
+    results[i] = { embedding = emb, dimensions = dim }
+  end
+  return results
 end
 
 -- ============================================================================
