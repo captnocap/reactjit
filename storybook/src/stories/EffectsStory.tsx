@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
-  Box, Text, Pressable,
+  Box, Text, Pressable, Image,
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
   Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
+  Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
 } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -21,6 +22,14 @@ const effects = [
   { name: 'Contours', Component: Contours },
   { name: 'Feedback', Component: Feedback },
   { name: 'PixelSort', Component: PixelSort },
+  { name: 'Terrain', Component: Terrain },
+  { name: 'Automata', Component: Automata },
+  { name: 'Combustion', Component: Combustion },
+  { name: 'ReactionDiffusion', Component: ReactionDiffusion },
+  { name: 'EdgeGravity', Component: EdgeGravity },
+  { name: 'Orbits', Component: Orbits },
+  { name: 'Plotter', Component: Plotter },
+  { name: 'LSystem', Component: LSystem },
 ] as const;
 
 type Mode = 'normal' | 'infinite' | 'reactive';
@@ -36,7 +45,6 @@ export function EffectsStory() {
   const [mode, setMode] = useState<Mode>('normal');
   const SelectedEffect = effects[selected].Component;
   const nextIndex = (selected + 1) % effects.length;
-  const NextEffect = effects[nextIndex].Component;
 
   const modeProps = {
     normal: {},
@@ -142,31 +150,97 @@ export function EffectsStory() {
               </Text>
             </Box>
 
-            {/* Second card with different effect */}
+            {/* Profile HUD card using current effect */}
             <Box style={{
               borderRadius: 10,
               borderWidth: 1,
               borderColor: c.border,
-              padding: 14,
               overflow: 'hidden',
-              height: 100,
-              justifyContent: 'center',
-              alignItems: 'center',
+              height: 170,
             }}>
-              <NextEffect background speed={0.5} {...modeProps} />
-              <Pressable
-                onPress={() => setSelected(nextIndex)}
-                style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                  borderRadius: 6,
-                  backgroundColor: 'rgba(255,255,255,0.15)',
+              <SelectedEffect background speed={0.55} {...modeProps} />
+
+              <Box style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: '100%',
+                height: '100%',
+                backgroundColor: 'rgba(8,10,18,0.34)',
+              }} />
+
+              <Box style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: '100%',
+                height: '100%',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <Box style={{
+                  width: 102,
+                  height: 102,
+                  borderRadius: 51,
                   borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.3)',
-                }}
-              >
-                <Text style={{ color: '#fff', fontSize: 11 }}>Next Effect</Text>
-              </Pressable>
+                  borderColor: 'rgba(255,255,255,0.22)',
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Image
+                    src="lib/placeholders/avatar.png"
+                    style={{
+                      width: 84,
+                      height: 84,
+                      borderRadius: 42,
+                      objectFit: 'cover',
+                    }}
+                  />
+                </Box>
+                <Box style={{
+                  position: 'absolute',
+                  width: 122,
+                  height: 122,
+                  borderRadius: 61,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.16)',
+                }} />
+                <Box style={{
+                  position: 'absolute',
+                  width: 144,
+                  height: 144,
+                  borderRadius: 72,
+                    borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.08)',
+                }} />
+              </Box>
+
+              <Box style={{
+                position: 'absolute',
+                left: 0,
+                bottom: 10,
+                width: '100%',
+                alignItems: 'center',
+                gap: 6,
+              }}>
+                <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'bold' }}>Nova Echo</Text>
+                <Pressable
+                  onPress={() => setSelected(nextIndex)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                    borderRadius: 6,
+                    backgroundColor: 'rgba(255,255,255,0.18)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.34)',
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                    {effects[selected].name} Next
+                  </Text>
+                </Pressable>
+              </Box>
             </Box>
           </Box>
         </Box>
