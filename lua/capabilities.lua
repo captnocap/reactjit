@@ -202,6 +202,7 @@ function Capabilities.loadAll()
   local files = {
     "audio",
     "timer",
+    "llm_agent",
   }
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)
