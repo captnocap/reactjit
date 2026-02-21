@@ -1111,7 +1111,6 @@ function Bridge:callGlobal(name)
   end
 
   if qjs.JS_IsFunction(ctx, fn) == 0 then
-    io.write("[react-love] callGlobal('" .. name .. "'): value exists but is NOT a function\n"); io.flush()
     qjs.JS_FreeValue(ctx, fn)
     qjs.JS_FreeValue(ctx, global)
     return

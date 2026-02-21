@@ -451,6 +451,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
     return
   end
 
+  -- Background-mode effects (e.g. <Spirograph background />) skip layout entirely.
+  if not Layout._effects then
+    local ok, mod = pcall(require, "lua.effects")
+    if ok then Layout._effects = mod end
+  end
+  if Layout._effects and Layout._effects.isBackgroundEffect(node) then
+    node.computed = { x = px, y = py, w = 0, h = 0 }
+    return
+  end
+
   local ru = Layout.resolveUnit
 
   -- Resolve min/max constraints
@@ -1278,6 +1288,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- Clamp scroll positions
     local maxScrollX = math.max(0, contentW - w)
     local maxScrollY = math.max(0, contentH - h)
+
+    local horizontalMode = node.props and node.props.horizontal
+    if horizontalMode == true then
+      maxScrollY = 0
+      scrollY = 0
+    elseif horizontalMode == false then
+      maxScrollX = 0
+      scrollX = 0
+    end
+
     scrollX = math.max(0, math.min(scrollX, maxScrollX))
     scrollY = math.max(0, math.min(scrollY, maxScrollY))
 

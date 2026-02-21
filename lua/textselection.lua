@@ -118,6 +118,124 @@ local function resolveTextStyle(node)
   return fontSize, fontFamily, fontWeight, lineHeight, letterSpacing
 end
 
+--- Resolve textAlign for a text node (mirrors painter.lua behavior).
+local function resolveTextAlign(node)
+  local s = node.style or {}
+  local align = s.textAlign
+
+  if not align and node.type == "__TEXT__" and node.parent then
+    align = (node.parent.style or {}).textAlign
+  end
+
+  if align == "center" or align == "right" then
+    return align
+  end
+  return "left"
+end
+
+local function resolveTextOverflow(node)
+  local s = node.style or {}
+  local textOverflow = s.textOverflow
+
+  if not textOverflow and node.type == "__TEXT__" and node.parent then
+    textOverflow = (node.parent.style or {}).textOverflow
+  end
+
+  return textOverflow
+end
+
+local function resolveNumberOfLines(node)
+  local p = node.props or {}
+  local numberOfLines = p.numberOfLines
+
+  if not numberOfLines and node.type == "__TEXT__" and node.parent then
+    numberOfLines = (node.parent.props or {}).numberOfLines
+  end
+
+  return numberOfLines
+end
+
+local function getLineAlignOffset(align, maxWidth, lineWidth)
+  if align == "center" then
+    return (maxWidth - lineWidth) * 0.5
+  end
+  if align == "right" then
+    return maxWidth - lineWidth
+  end
+  return 0
+end
+
+local ELLIPSIS = "..."
+
+local function truncateWithEllipsis(font, text, maxWidth, letterSpacing)
+  if not maxWidth or maxWidth <= 0 then
+    return text
+  end
+
+  local fullWidth = Measure.getWidthWithSpacing(font, text, letterSpacing)
+  if fullWidth <= maxWidth then
+    return text
+  end
+
+  local ellipsisW = Measure.getWidthWithSpacing(font, ELLIPSIS, letterSpacing)
+  local available = maxWidth - ellipsisW
+  if available <= 0 then
+    return ELLIPSIS
+  end
+
+  local lo, hi = 0, #text
+  while lo < hi do
+    local mid = math.floor((lo + hi + 1) / 2)
+    local prefix = text:sub(1, mid)
+    local pw = Measure.getWidthWithSpacing(font, prefix, letterSpacing)
+    if pw <= available then
+      lo = mid
+    else
+      hi = mid - 1
+    end
+  end
+
+  if lo == 0 then
+    return ELLIPSIS
+  end
+
+  return text:sub(1, lo) .. ELLIPSIS
+end
+
+local function getVisibleLines(font, text, maxWidth, numberOfLines, textOverflow, letterSpacing)
+  text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
+
+  local wrapConstraint = maxWidth
+  if letterSpacing and letterSpacing ~= 0 then
+    local avgCharW = font:getWidth("M")
+    if avgCharW > 0 then
+      local ratio = avgCharW / (avgCharW + letterSpacing)
+      wrapConstraint = maxWidth * ratio
+    end
+  end
+
+  local _, lines = font:getWrap(text, wrapConstraint)
+  if #lines == 0 then
+    lines = { "" }
+  end
+
+  if not numberOfLines or numberOfLines <= 0 or #lines <= numberOfLines then
+    return lines
+  end
+
+  local visible = {}
+  for i = 1, numberOfLines do
+    visible[i] = lines[i]
+  end
+
+  if textOverflow == "ellipsis" and numberOfLines > 0 then
+    local lastLine = visible[numberOfLines] or ""
+    visible[numberOfLines] = truncateWithEllipsis(font, lastLine, maxWidth, letterSpacing)
+  end
+
+  return visible
+end
+
 --- Resolve text content from a node (same as layout.lua's resolveTextContent).
 local function resolveTextContent(node)
   if node.type == "__TEXT__" then
@@ -157,24 +275,21 @@ local function getWrappedLines(node)
   local text = resolveTextContent(node)
   if text == "" then return { "" }, font, fontSize, lineHeight, letterSpacing end
 
-  text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
-
   local maxWidth = c.w
   if maxWidth and maxWidth > 0 then
-    local wrapConstraint = maxWidth
-    if letterSpacing and letterSpacing ~= 0 then
-      local avgCharW = font:getWidth("M")
-      if avgCharW > 0 then
-        local ratio = avgCharW / (avgCharW + letterSpacing)
-        wrapConstraint = maxWidth * ratio
-      end
+    local textOverflow = resolveTextOverflow(node)
+    local numberOfLines = resolveNumberOfLines(node)
+
+    if textOverflow == "ellipsis" and not numberOfLines then
+      local truncated = truncateWithEllipsis(font, text, maxWidth, letterSpacing)
+      return { truncated }, font, fontSize, lineHeight, letterSpacing
     end
 
-    local _, lines = font:getWrap(text, wrapConstraint)
-    if #lines == 0 then lines = { "" } end
+    local lines = getVisibleLines(font, text, maxWidth, numberOfLines, textOverflow, letterSpacing)
     return lines, font, fontSize, lineHeight, letterSpacing
   end
 
+  text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
   return { text }, font, fontSize, lineHeight, letterSpacing
 end
 
@@ -352,6 +467,7 @@ function TextSelection.screenToPos(node, mx, my)
   local c = canonical.computed
   local lines, font, _, lineHeight, letterSpacing = getWrappedLines(canonical)
   local effectiveLineH = lineHeight or font:getHeight()
+  local align = resolveTextAlign(canonical)
 
   local sx, sy = mx, my
   if Events and Events.screenToContent then
@@ -362,8 +478,10 @@ function TextSelection.screenToPos(node, mx, my)
   local line = math.floor(relY / effectiveLineH) + 1
   line = math.max(1, math.min(line, #lines))
 
-  local relX = sx - c.x
   local lineText = lines[line] or ""
+  local lineWidth = Measure.getWidthWithSpacing(font, lineText, letterSpacing)
+  local lineOffset = getLineAlignOffset(align, c.w or 0, lineWidth)
+  local relX = sx - c.x - lineOffset
   local col = 0
   local bytePos = 1
   local len = #lineText
@@ -622,6 +740,7 @@ function TextSelection.drawHighlight(node)
   local lines, font, _, lineHeight, letterSpacing = getWrappedLines(node)
   if #lines == 0 then return end
   local effectiveLineH = lineHeight or font:getHeight()
+  local align = resolveTextAlign(node)
 
   local startLine, startCol = 1, 0
   local endLine = #lines
@@ -638,7 +757,9 @@ function TextSelection.drawHighlight(node)
 
   for i = startLine, endLine do
     local lineText = lines[i] or ""
-    local x0 = c.x
+    local lineWidth = Measure.getWidthWithSpacing(font, lineText, letterSpacing)
+    local lineOffset = getLineAlignOffset(align, c.w or 0, lineWidth)
+    local x0 = c.x + lineOffset
     local y0 = c.y + (i - 1) * effectiveLineH
 
     local sx, ex

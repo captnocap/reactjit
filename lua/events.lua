@@ -204,6 +204,46 @@ function Events.findScrollContainer(node, mx, my)
   return nil
 end
 
+--- Resolve enabled scroll axes for a scroll container.
+--- ScrollView sets props.horizontal explicitly:
+---   true  => horizontal-only
+---   false => vertical-only
+--- Other overflow:scroll nodes (e.g. Box) keep two-axis scrolling.
+local function getScrollAxisFlags(node)
+  local props = node and node.props
+  if props and props.horizontal == true then
+    return true, false
+  end
+  if props and props.horizontal == false then
+    return false, true
+  end
+  return true, true
+end
+
+--- Normalize wheel deltas for a specific scroll container.
+--- For horizontal-only containers, map vertical wheel delta to horizontal
+--- when no horizontal wheel delta is provided (typical mouse wheel).
+--- @param node table Scroll container node
+--- @param dx number
+--- @param dy number
+--- @return number, number
+function Events.resolveScrollWheelDeltas(node, dx, dy)
+  local allowX, allowY = getScrollAxisFlags(node)
+
+  local wheelX = dx or 0
+  local wheelY = dy or 0
+
+  if allowX and not allowY and wheelX == 0 and wheelY ~= 0 then
+    wheelX = wheelY
+    wheelY = 0
+  end
+
+  if not allowX then wheelX = 0 end
+  if not allowY then wheelY = 0 end
+
+  return wheelX, wheelY
+end
+
 --- Find the nearest scroll container that can consume a wheel delta.
 --- Walks from hit node upward and skips saturated scroll containers so wheel
 --- input can chain to parent containers naturally.
@@ -220,6 +260,7 @@ function Events.findScrollableContainer(node, dx, dy)
   while current do
     local s = current.style or {}
     if s.overflow == "scroll" and current.scrollState and current.computed then
+      local wheelX, wheelY = Events.resolveScrollWheelDeltas(current, dx, dy)
       local ss = current.scrollState
       local c = current.computed
       local maxX = math.max(0, (ss.contentW or c.w or 0) - (c.w or 0))
@@ -232,17 +273,17 @@ function Events.findScrollableContainer(node, dx, dy)
 
       -- x > 0 means scrolling left (decreasing scrollX)
       -- x < 0 means scrolling right (increasing scrollX)
-      if dx > 0 then
+      if wheelX > 0 then
         canScrollX = sx > 0
-      elseif dx < 0 then
+      elseif wheelX < 0 then
         canScrollX = sx < maxX
       end
 
       -- y > 0 means scrolling up (decreasing scrollY)
       -- y < 0 means scrolling down (increasing scrollY)
-      if dy > 0 then
+      if wheelY > 0 then
         canScrollY = sy > 0
-      elseif dy < 0 then
+      elseif wheelY < 0 then
         canScrollY = sy < maxY
       end
 

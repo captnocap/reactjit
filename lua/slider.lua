@@ -97,6 +97,35 @@ local function queueEvent(nodeId, eventType, value)
   }
 end
 
+local function snapHalf(v)
+  return math.floor(v) + 0.5
+end
+
+local function drawSoftCircle(cx, cy, radius, r, g, b, a, opacity)
+  local baseA = (a or 1) * opacity
+
+  -- Two-pass shadow softens jagged silhouette against dark backgrounds.
+  love.graphics.setColor(0, 0, 0, 0.22 * opacity)
+  love.graphics.circle("fill", cx, cy + 1.0, radius + 1.1)
+  love.graphics.setColor(0, 0, 0, 0.10 * opacity)
+  love.graphics.circle("fill", cx, cy + 1.2, radius + 2.0)
+
+  -- Outer halo masks stair-step edges before the solid fill.
+  love.graphics.setColor(r, g, b, baseA * 0.22)
+  love.graphics.circle("fill", cx, cy, radius + 1.2)
+
+  -- Main thumb body.
+  love.graphics.setColor(r, g, b, baseA)
+  love.graphics.circle("fill", cx, cy, radius)
+
+  -- Edge ring + highlight make the contour read smoother at small sizes.
+  love.graphics.setLineWidth(1)
+  love.graphics.setColor(0, 0, 0, baseA * 0.24)
+  love.graphics.circle("line", cx, cy + 0.1, math.max(0.5, radius - 0.2))
+  love.graphics.setColor(1, 1, 1, 0.22 * opacity)
+  love.graphics.circle("line", cx, cy - 0.6, math.max(0.5, radius - 1.2))
+end
+
 -- ============================================================================
 -- Drawing
 -- ============================================================================
@@ -146,11 +175,11 @@ function Slider.draw(node, effectiveOpacity)
   end
 
   -- Draw thumb
-  local thumbX = trackX + fillW
-  local thumbY = c.y + c.h / 2
+  local thumbX = snapHalf(trackX + fillW)
+  local thumbY = snapHalf(c.y + c.h / 2)
+  local thumbRadius = thumbSize / 2
   local cr, cg, cb, ca = parseColor(p.thumbColor)
-  love.graphics.setColor(cr, cg, cb, ca * opacity)
-  love.graphics.circle("fill", thumbX, thumbY, thumbSize / 2)
+  drawSoftCircle(thumbX, thumbY, thumbRadius, cr, cg, cb, ca, opacity)
 end
 
 -- ============================================================================

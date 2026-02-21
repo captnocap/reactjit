@@ -267,6 +267,10 @@ local function ensureCursorVisible(node, es)
     es.scrollY = cursorY + va.lineHeight - va.textAreaH
   end
 
+  -- Clamp vertical scroll to valid bounds (matches handleWheel logic)
+  local maxScrollY = math.max(0, lineCount(es) * va.lineHeight - va.textAreaH + va.lineHeight)
+  es.scrollY = math.max(0, math.min(es.scrollY, maxScrollY))
+
   local cursorX = font:getWidth(currentLine(es):sub(1, es.cursorCol))
   local textW = va.textAreaW - va.padding * 2
   if cursorX - es.scrollX > textW - 20 then
@@ -274,6 +278,9 @@ local function ensureCursorVisible(node, es)
   elseif cursorX - es.scrollX < 0 then
     es.scrollX = math.max(0, cursorX - 20)
   end
+
+  -- Clamp horizontal scroll to valid bounds
+  es.scrollX = math.max(0, es.scrollX)
 end
 
 --- Convert screen coordinates to line/col within the editor.
@@ -513,6 +520,9 @@ function TextEditor.syncValue(node)
     es.lines = textToLines(props.value)
     es.lastValue = props.value
     clampCursor(es)
+    -- Reset scroll when content changes externally (e.g. file drop)
+    es.scrollY = 0
+    es.scrollX = 0
   end
 end
 
@@ -847,8 +857,13 @@ function TextEditor.draw(node, effectiveOpacity)
   local useSyntax = (node.props or {}).syntaxHighlight == true
   local tooltipLevel = (node.props or {}).tooltipLevel
 
-  -- Sync controlled value
+  -- Sync controlled value first (content may change, invalidating scroll)
   TextEditor.syncValue(node)
+
+  -- Clamp scroll bounds every frame (layout or content changes can invalidate scroll position)
+  local maxScrollY = math.max(0, lineCount(es) * lh - va.textAreaH + lh)
+  es.scrollY = math.max(0, math.min(es.scrollY, maxScrollY))
+  es.scrollX = math.max(0, es.scrollX)
 
   love.graphics.setFont(font)
 
@@ -865,8 +880,12 @@ function TextEditor.draw(node, effectiveOpacity)
   local br = s.borderRadius or 0
   love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, br, br)
 
-  -- Scissor to node bounds
-  love.graphics.setScissor(c.x, c.y, c.w, c.h)
+  -- Save parent scissor and intersect (so parent overflow clips are respected)
+  local prevScissor = {love.graphics.getScissor()}
+  local sx, sy = love.graphics.transformPoint(c.x, c.y)
+  local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
+  local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
+  love.graphics.intersectScissor(sx, sy, sw, sh)
 
   -- Gutter
   if va.gutterW > 0 then
@@ -917,7 +936,9 @@ function TextEditor.draw(node, effectiveOpacity)
     end
 
     -- Text (clip to text area, not gutter)
-    love.graphics.setScissor(va.textAreaX, c.y, va.textAreaW, c.h)
+    local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
+    local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
+    love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
 
     local textY = y + (lh - font:getHeight()) / 2
     local textX = va.textAreaX + va.padding - es.scrollX
@@ -957,7 +978,7 @@ function TextEditor.draw(node, effectiveOpacity)
     end
 
     -- Restore full-node scissor
-    love.graphics.setScissor(c.x, c.y, c.w, c.h)
+    love.graphics.intersectScissor(sx, sy, sw, sh)
   end
 
   -- Placeholder
@@ -977,10 +998,12 @@ function TextEditor.draw(node, effectiveOpacity)
     local cy = va.textAreaY + (es.cursorLine - 1) * lh - es.scrollY
     local cx = va.textAreaX + va.padding +
       font:getWidth(currentLine(es):sub(1, es.cursorCol)) - es.scrollX
-    love.graphics.setScissor(va.textAreaX, c.y, va.textAreaW, c.h)
+    local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
+    local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
+    love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
     setColorWithOpacity(colors.cursor, effectiveOpacity)
     love.graphics.rectangle("fill", cx, cy + 3, 2, lh - 6)
-    love.graphics.setScissor(c.x, c.y, c.w, c.h)
+    love.graphics.intersectScissor(sx, sy, sw, sh)
   end
 
   -- Scrollbar
@@ -1000,7 +1023,12 @@ function TextEditor.draw(node, effectiveOpacity)
     love.graphics.rectangle("line", c.x, c.y, c.w, c.h, br, br)
   end
 
-  love.graphics.setScissor()
+  -- Restore parent scissor (so parent overflow clips are preserved)
+  if #prevScissor > 0 then
+    love.graphics.setScissor(unpack(prevScissor))
+  else
+    love.graphics.setScissor()
+  end
 
   -- ── Hover tooltip (drawn OUTSIDE the scissor so it can overflow) ──
   if tooltipLevel and tooltipLevel ~= "" and tooltipLevel ~= "clean"

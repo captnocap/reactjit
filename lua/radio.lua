@@ -82,6 +82,31 @@ local function queueEvent(nodeId, eventType, value, groupId)
   }
 end
 
+local function snapHalf(v)
+  return math.floor(v) + 0.5
+end
+
+local function drawSoftDot(cx, cy, radius, r, g, b, a, opacity)
+  local baseA = (a or 1) * opacity
+
+  love.graphics.setColor(0, 0, 0, 0.20 * opacity)
+  love.graphics.circle("fill", cx, cy + 0.8, radius + 0.9)
+  love.graphics.setColor(0, 0, 0, 0.09 * opacity)
+  love.graphics.circle("fill", cx, cy + 1.0, radius + 1.6)
+
+  love.graphics.setColor(r, g, b, baseA * 0.22)
+  love.graphics.circle("fill", cx, cy, radius + 0.9)
+
+  love.graphics.setColor(r, g, b, baseA)
+  love.graphics.circle("fill", cx, cy, radius)
+
+  love.graphics.setLineWidth(1)
+  love.graphics.setColor(0, 0, 0, baseA * 0.22)
+  love.graphics.circle("line", cx, cy + 0.1, math.max(0.5, radius - 0.2))
+  love.graphics.setColor(1, 1, 1, 0.20 * opacity)
+  love.graphics.circle("line", cx, cy - 0.5, math.max(0.5, radius - 0.9))
+end
+
 -- ============================================================================
 -- Drawing
 -- ============================================================================
@@ -109,8 +134,8 @@ function Radio.draw(node, effectiveOpacity)
   local innerRadius = innerSize / 2
 
   -- Circle position (vertically centered)
-  local circleX = c.x + radius
-  local circleY = c.y + c.h / 2
+  local circleX = snapHalf(c.x + radius)
+  local circleY = snapHalf(c.y + c.h / 2)
 
   -- Draw outer circle
   local borderColor = isSelected and p.color or p.uncheckedColor
@@ -123,8 +148,7 @@ function Radio.draw(node, effectiveOpacity)
   -- Draw inner dot when selected
   if isSelected then
     local ar, ag, ab, aa = parseColor(p.color)
-    love.graphics.setColor(ar, ag, ab, aa * opacity)
-    love.graphics.circle("fill", circleX, circleY, innerRadius)
+    drawSoftDot(circleX, circleY, innerRadius, ar, ag, ab, aa, opacity)
   end
 
   -- Draw label
