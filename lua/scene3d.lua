@@ -699,8 +699,8 @@ local function ensureMeshModel(scene, meshNode)
 
   local entry = scene.meshes[meshId]
 
-  -- Determine geometry key
-  local geometry = props.geometry or "box"
+  -- Determine geometry key (model prop = OBJ path, geometry = built-in)
+  local geometry = props.model or props.geometry or "box"
   local color = props.color
   local textureProp = props.texture
   local seed = props.seed
@@ -716,16 +716,6 @@ local function ensureMeshModel(scene, meshNode)
     or entry.seed ~= seed
 
   if needsCreate then
-    -- Generate or load vertices
-    local generator = geometryGenerators[geometry]
-    local verts
-    if generator then
-      verts = generator()
-    else
-      -- Unknown geometry, fall back to box
-      verts = generateBox()
-    end
-
     -- Resolve texture: procedural name, or flat color
     local texture
     if textureProp and type(textureProp) == "string" then
@@ -735,7 +725,21 @@ local function ensureMeshModel(scene, meshNode)
       texture = getColorTexture(color)
     end
 
-    local model = g3d.newModel(verts, texture)
+    local model
+    if geometry:sub(-4) == ".obj" then
+      -- OBJ file loading via g3d
+      model = g3d.newModel(geometry, texture)
+    else
+      -- Built-in geometry generators
+      local generator = geometryGenerators[geometry]
+      local verts
+      if generator then
+        verts = generator()
+      else
+        verts = generateBox()
+      end
+      model = g3d.newModel(verts, texture)
+    end
 
     entry = {
       model = model,
@@ -813,14 +817,26 @@ local function syncScene(node)
   -- Parse background color from props
   local props = node.props or {}
   if props.backgroundColor then
-    local hex = props.backgroundColor:gsub("#", "")
-    if #hex == 6 then
-      scene.bgColor = {
-        tonumber(hex:sub(1, 2), 16) / 255,
-        tonumber(hex:sub(3, 4), 16) / 255,
-        tonumber(hex:sub(5, 6), 16) / 255,
-        1,
-      }
+    if props.backgroundColor == "transparent" then
+      scene.bgColor = {0, 0, 0, 0}
+    else
+      local hex = props.backgroundColor:gsub("#", "")
+      if #hex == 8 then
+        -- #RRGGBBAA
+        scene.bgColor = {
+          tonumber(hex:sub(1, 2), 16) / 255,
+          tonumber(hex:sub(3, 4), 16) / 255,
+          tonumber(hex:sub(5, 6), 16) / 255,
+          tonumber(hex:sub(7, 8), 16) / 255,
+        }
+      elseif #hex == 6 then
+        scene.bgColor = {
+          tonumber(hex:sub(1, 2), 16) / 255,
+          tonumber(hex:sub(3, 4), 16) / 255,
+          tonumber(hex:sub(5, 6), 16) / 255,
+          1,
+        }
+      end
     end
   end
 

@@ -55,6 +55,8 @@ import { MapBasicStory } from './MapBasicStory';
 import { CartridgeInspectorStory } from './CartridgeInspectorStory';
 import { LocalStoreStory } from './LocalStoreStory';
 import { EffectsStory } from './EffectsStory';
+import { PolyPizzaStory } from './PolyPizzaStory';
+import { AICortexStory } from './AICortexStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -87,6 +89,7 @@ export const stories: StoryDef[] = [
 
   // Data
   { id: 'data', title: 'Data', category: 'Data', component: DataStory },
+  { id: 'poly-pizza', title: 'Poly Pizza', category: 'Data', component: PolyPizzaStory },
 
   // Demo
   { id: 'demo', title: 'Demos', category: 'Demo', component: DemoStory },
@@ -98,6 +101,7 @@ export const stories: StoryDef[] = [
   { id: 'llms-txt-reader', title: 'llms.txt Reader', category: 'Stress Test', component: LlmsTxtReader },
 
   // AI
+  { id: 'ai-cortex', title: 'AI Cortex', category: 'AI', component: AICortexStory },
   { id: 'ai-chat', title: 'AI Chat', category: 'AI', component: AIChatDemoStory },
   { id: 'ai-canvas', title: 'AI Canvas', category: 'AI', component: AICanvasStory },
   { id: 'mcp', title: 'MCP Server', category: 'AI', component: MCPDemoStory },
