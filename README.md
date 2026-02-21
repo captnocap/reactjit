@@ -1,6 +1,6 @@
 # ReactJIT
 
-Write it in React, render it anywhere there's a surface.
+React rendered through a hand-rolled SDL2 + OpenGL renderer on LuaJIT.
 
 ```
 React JSX
@@ -9,166 +9,106 @@ React JSX
 Reconciler ──► mutation commands
    │
    ▼
-Transport (QuickJS FFI / WebSocket / stdio / direct)
+QuickJS FFI bridge
    │
    ▼
 Layout engine ──► computed {x, y, w, h}
    │
    ▼
-Painter (target-specific) ──► pixels / characters / widgets
+SDL2 + OpenGL painter ──► pixels
 ```
 
-A reconciler, a layout engine, and a small painter per target. That's it.
+A reconciler, a layout engine, and a painter. That's it.
 
 ---
 
-# For Consumers
-
-Use ReactJIT to build UIs once, deploy them anywhere. Write React components, compile with the CLI, run on your target.
-
-## Targets
-
-| Target | What it is | Status |
-|--------|-----------|--------|
-| **SDL2 / OpenGL** | Hand-rolled renderer — LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI | Primary target, fully owned |
-| **Love2D** | Game engine UI (QuickJS in-process) | Full flexbox, images, video, inspector, binary dist |
-| **Web (WASM)** | SDL2 compiled to WASM + WebGL via Emscripten | Planned — `<canvas>`, not DOM |
-| **Terminal** | 24-bit truecolor ANSI | Cell buffer with diff-based updates |
-| **ComputerCraft** | Minecraft computers (WebSocket) | 16-color palette, 51x19 character grid |
-| **Neovim** | Floating windows in Neovim (stdio) | 24-bit highlights, buffer rendering |
-| **Hammerspoon** | macOS desktop overlays (WebSocket) | Pixel-based, `hs.canvas` |
-| **AwesomeWM** | Linux desktop widgets (stdio) | Pixel-based, Cairo/Pango |
-
 ## Quick Start
-
-### SDL2 (primary — native desktop)
 
 ```bash
 reactjit init my-app
 cd my-app
-reactjit dev sdl2
+reactjit dev
 ```
 
-Your React app renders in a native SDL2 + OpenGL window. No game engine required.
+Your React app renders in a native SDL2 + OpenGL window. No browser, no Electron, no game engine.
 
-### Terminal (pure JS, zero dependencies)
+## Targets
 
-```tsx
-import { createTerminalApp } from '@reactjit/terminal';
-
-const app = createTerminalApp();
-app.render(<App />);
-```
-
-Run `node dist/main.js` and your React app renders in the terminal.
-
-### Love2D (game UI)
-
-```tsx
-import { NativeBridge, createRoot } from '@reactjit/native';
-import { BridgeProvider, RendererProvider } from '@reactjit/core';
-
-const bridge = new NativeBridge();
-const root = createRoot();
-root.render(
-  <BridgeProvider bridge={bridge}>
-    <RendererProvider mode="native">
-      <App />
-    </RendererProvider>
-  </BridgeProvider>
-);
-```
-
-### ComputerCraft (Minecraft)
-
-```tsx
-import { createCCServer } from '@reactjit/cc';
-
-const server = createCCServer({ port: 8080 });
-server.render(<App />);
-```
-
-Run the server, drop `startup.lua` on a CC computer, and your React app renders in Minecraft.
-
-### Neovim
-
-```tsx
-import { createNvimServer } from '@reactjit/nvim';
-
-const server = createNvimServer({ cols: 60, rows: 20 });
-server.render(<App />);
-```
-
-In Neovim: `:lua require("reactjit").setup({ entry = "dist/main.js" })` — a floating window appears with your React UI.
-
-### Hammerspoon (macOS desktop)
-
-```tsx
-import { createHammerspoonServer } from '@reactjit/hs';
-
-const server = createHammerspoonServer({ port: 8081, width: 400, height: 300 });
-server.render(<App />);
-```
-
-### AwesomeWM (Linux desktop)
-
-```tsx
-import { createAwesomeServer } from '@reactjit/awesome';
-
-const server = createAwesomeServer({ width: 400, height: 30 });
-server.render(<App />);
-```
+| Target | What it is |
+|--------|-----------|
+| **SDL2 / OpenGL** | Hand-rolled renderer — LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. Primary target. |
+| **Love2D** | Game engine UI via QuickJS in-process. For game devs who want Love2D's ecosystem. |
+| **Web (WASM)** | Same SDL2 renderer compiled to WASM + WebGL via Emscripten. Planned. `<canvas>`, not DOM. |
 
 ## Packages
 
-```
-@reactjit/core          Shared components, hooks, animation, types
-@reactjit/native        SDL2 + Love2D renderer (QuickJS FFI bridge, react-reconciler)
-@reactjit/grid          Shared layout engine + render server for grid targets
-@reactjit/terminal      Pure-JS terminal renderer (ANSI truecolor)
-@reactjit/cc            ComputerCraft target (WebSocket + 16-color palette)
-@reactjit/nvim          Neovim target (stdio + floating windows)
-@reactjit/hs            Hammerspoon target (WebSocket + hs.canvas)
-@reactjit/awesome       AwesomeWM target (stdio + Cairo)
-```
+### Core
+
+| Package | Import | What it does |
+|---------|--------|-------------|
+| `packages/shared` | `@reactjit/core` | Primitives (`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, `Slider`, `Switch`, `Checkbox`, `Radio`, `Select`, `FlatList`), hooks, animation, types |
+| `packages/native` | `@reactjit/native` | react-reconciler host config, QuickJS FFI bridge, instance tree, event dispatch |
+| `packages/components` | `@reactjit/components` | Layout helpers — `Card`, `Badge`, `FlexRow`, `FlexColumn`, `Spacer`, `Divider` |
+
+### UI & Interaction
+
+| Package | Import | What it does |
+|---------|--------|-------------|
+| `packages/controls` | `@reactjit/controls` | Hardware-style controls — `Knob`, `Fader`, `Meter`, `LEDIndicator`, `PadButton`, `StepSequencer`, `TransportBar` |
+| `packages/theme` | `@reactjit/theme` | Theme system — `ThemeProvider`, `ThemeSwitcher`, `useTheme`, built-in dark/light/solarized themes |
+| `packages/router` | `@reactjit/router` | In-app navigation — `useRouter`, `Route`, screen transitions |
+
+### Media & 3D
+
+| Package | Import | What it does |
+|---------|--------|-------------|
+| `packages/3d` | `@reactjit/3d` | 3D scenes — `Scene`, `Mesh`, `Camera`, `AmbientLight`, `DirectionalLight` (OpenGL) |
+| `packages/audio` | `@reactjit/audio` | Audio playback and synthesis hooks |
+| `packages/media` | `@reactjit/media` | Video, image, and media library management |
+| `packages/geo` | `@reactjit/geo` | Maps — `Map`, `TileLayer`, `Marker`, `Polygon`, `Polyline`, `GeoJSON` |
+
+### Data & Networking
+
+| Package | Import | What it does |
+|---------|--------|-------------|
+| `packages/crypto` | `@reactjit/crypto` | Cryptography — hashing, encryption, key derivation, signing (noble/scure) |
+| `packages/storage` | `@reactjit/storage` | Local persistence — key-value store, CRUD, adapters |
+| `packages/server` | `@reactjit/server` | HTTP server hooks for local APIs |
+| `packages/rss` | `@reactjit/rss` | RSS feed parsing and subscription |
+| `packages/webhooks` | `@reactjit/webhooks` | Webhook listener hooks |
+| `packages/apis` | `@reactjit/apis` | External API integration — service registry, API key management |
+| `packages/ai` | `@reactjit/ai` | AI chat UI components, MCP protocol, model provider abstraction |
 
 ## Features
 
-- **Flexbox layout engine** — `flexDirection`, `justifyContent`, `alignItems`, `flexGrow`/`flexShrink`, `flexWrap`, `gap`, `padding`, `margin`, `%`/`vw`/`vh` units, absolute positioning
-- **Hot module reload** — edit components, see changes without restarting
-- **Error reporting** — source-mapped errors with visual overlay
-- **Binary distribution** — ship as a single executable
-- **Prop diffing** — only changed properties cross the bridge. Style objects are deep-diffed. Multiple updates per node coalesce into one command
-- **Event bubbling** — mouse, touch, drag events bubble through the component tree with `stopPropagation()`
-- **Animation** — timing, spring physics, easing, composite animations (`parallel`, `sequence`, `stagger`, `loop`), interpolation
+- **Flexbox layout** — the full set: directions, wrapping, alignment, grow/shrink, gap, padding, margin, `%`/`vw`/`vh` units, absolute positioning
+- **Animation** — timing, spring physics, easing, composite (`parallel`, `sequence`, `stagger`, `loop`), interpolation
+- **Event system** — mouse, touch, drag, keyboard, file drop — bubbling with `stopPropagation()`
+- **Prop diffing** — only changed properties cross the bridge; style objects deep-diffed; updates coalesced per frame
+- **Hot reload** — edit components, see changes without restarting
+- **Error overlay** — source-mapped errors rendered in-app
+- **Visual inspector** — F12 to inspect the layout tree, computed styles, node boundaries
+- **Gradients, shadows, transforms, clipping, border radius** — CSS-level visual capability
+- **Text rendering** — FreeType font rasterization, font weight, alignment, overflow, line height, letter spacing
+- **Binary distribution** — ship as a single self-extracting executable
+- **Declarative capabilities** — register native features (audio, sensors, timers) as React components with auto-generated schemas for AI discovery
 
 ## Components
 
-All components work across every target that supports them.
-
-### Primitives
-
 ```tsx
-import { Box, Text, Image } from '@reactjit/core';
+import { Box, Text, Image, Pressable } from '@reactjit/core';
 
-<Box style={{ flexDirection: 'row', gap: 8, padding: 16 }}>
+<Box style={{ flexDirection: 'row', gap: 8, padding: 16, alignItems: 'center' }}>
   <Image src="avatar.png" style={{ width: 48, height: 48, borderRadius: 24 }} />
-  <Text style={{ color: '#fff', fontSize: 14 }}>Hello world</Text>
+  <Box style={{ flexGrow: 1 }}>
+    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#f8fafc' }}>Username</Text>
+    <Text style={{ fontSize: 13, color: '#94a3b8' }}>Online now</Text>
+  </Box>
+  <Pressable onPress={() => console.log('tap')} style={{ padding: 8, backgroundColor: '#3b82f6', borderRadius: 6 }}>
+    <Text style={{ fontSize: 13, color: '#fff' }}>Message</Text>
+  </Pressable>
 </Box>
 ```
-
-### Interactive
-
-- **`Pressable`** — touch/click with pressed/hovered/focused state, long press, hit slop
-- **`TextInput`** — controlled/uncontrolled, secure entry, multiline, cursor management
-- **`ScrollView`** — scrollable container with imperative `scrollTo`
-- **`Modal`** — dialog with backdrop, fade/slide animation, escape dismissal
-- **`Slider`** — draggable value selector, horizontal/vertical, step snapping
-- **`Switch`** — boolean toggle with animated thumb
-- **`Checkbox`** — toggleable with label, custom colors
-- **`Radio` / `RadioGroup`** — exclusive selection via context
-- **`Select`** — dropdown (native `<select>` on web, inline accordion on native)
-- **`FlatList`** — virtualized list with windowed rendering, grid mode, inverted
 
 ### Animation
 
@@ -184,240 +124,97 @@ parallel([
 ]).start();
 ```
 
-## Style System
+## Built-in Tooling
 
-| Category | Properties |
-|----------|-----------|
-| Sizing | `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight`, `aspectRatio` |
-| Flexbox | `display`, `flexDirection`, `flexWrap`, `justifyContent`, `alignItems`, `alignSelf`, `flexGrow`, `flexShrink`, `flexBasis`, `gap` |
-| Spacing | `padding`, `paddingLeft/Right/Top/Bottom`, `margin`, `marginLeft/Right/Top/Bottom` |
-| Visual | `backgroundColor`, `borderRadius`, `overflow`, `opacity`, `zIndex` |
-| Border | `borderWidth`, `borderColor` (per-side variants) |
-| Shadow | `shadowColor`, `shadowOffsetX/Y`, `shadowBlur` |
-| Gradient | `backgroundGradient: { direction, colors }` |
-| Transform | `transform: { translateX, translateY, rotate, scaleX, scaleY }` |
-| Text | `color`, `fontSize`, `fontFamily`, `fontWeight`, `textAlign`, `textOverflow`, `lineHeight`, `letterSpacing` |
-| Image | `objectFit` (`fill`, `contain`, `cover`, `none`) |
-| Position | `position` (`relative`, `absolute`), `top`, `bottom`, `left`, `right` |
-
-## Auto-Sizing (Content-Based Layout)
-
-Containers automatically size to fit their content when dimensions are not specified:
-
-- **Column containers** (default): width = max of children, height = sum of children + gaps
-- **Row containers** (`flexDirection: 'row'`): width = sum of children + gaps, height = max of children
-- **Text nodes** measure themselves via font metrics and propagate dimensions upward
-
-Use auto-sizing for cards, badges, buttons, labels. Use explicit sizing for root containers (`width: '100%'`, `height: '100%'`), percentage-based children, and performance-critical layouts.
-
-```jsx
-<Box>
-  <Text fontSize={16}>Title</Text>
-  <Text fontSize={14}>Subtitle</Text>
-</Box>
-```
-^ Container auto-sizes to fit both text elements.
-
-## Critical Layout Rules
-
-1. **Root containers** need `width: '100%', height: '100%'` — NOT `flexGrow: 1`
-2. **Every `<Text>` MUST have explicit `fontSize`** — the linter enforces this
-3. **Row Boxes NEED explicit width for `justifyContent` to work** — Box nodes have no intrinsic width
-4. **No `flexGrow` without sibling sizing context** — needs a parent with known dimensions
-5. **Pre-compute grid dimensions** — don't rely on child content to infer container size
-6. **Keep flex trees shallow** — prefer direct layout over deep wrapper hierarchies
-7. **Fill the viewport** — native targets are fixed canvases. No reflow, no scroll, no default height. What you don't size is zero.
-8. **Use `█` (U+2588) as a grid blueprint only, never in `<Text>`** — convert it to a boolean grid with colored `<Box>` elements instead. The linter enforces this via `no-block-char-in-text`
-
-The static linter catches violations as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
+- **Visual Inspector (F12)** — hover any element to see its computed bounds, style properties, and position in the tree. Click to lock. Works at runtime in both SDL2 and Love2D.
+- **Error Overlay** — source-mapped stack traces rendered directly in the app window. No terminal hunting.
+- **Console** — in-app eval console for live debugging (`lua/console.lua`)
+- **DevTools** — runtime tree viewer, node property inspector, performance stats
+- **Screenshot Capture** — headless `reactjit screenshot` for CI/visual regression
+- **Static Linter** — catches layout bugs (missing fontSize, hardcoded heights, unicode in Text) at build time as blocking errors
+- **Theme Menu** — runtime theme switcher with built-in presets (dark, light, solarized, nord, dracula, etc.)
+- **On-Screen Keyboard** — soft keyboard for kiosk/touchscreen deployments
+- **Context Menu** — right-click menus with nested submenus
+- **Drag & Drop** — file drop events from OS, in-app drag reordering
+- **Spellcheck** — inline spellcheck for TextInput/TextEditor
+- **Text Editor** — full multiline editor with syntax highlighting, tooltips, cursor management
 
 ## Using the CLI
 
-Always use the `reactjit` CLI instead of running esbuild directly. The CLI encodes correct build flags, enforces lint gates, handles runtime file placement, and produces correct distribution packages.
-
-### Project Setup & Development
-
 ```bash
-reactjit init <name>            # Create a new project
-reactjit dev [target]           # Watch mode (default: sdl2). Do NOT run esbuild manually.
-reactjit build [target]         # Lint + bundle for dev
+reactjit init <name>              # Create a new project
+reactjit dev [target]             # Watch mode (default: sdl2)
+reactjit build [target]           # Lint + bundle for dev
+reactjit build dist:<target>      # Production build (sdl2, love)
+reactjit lint                     # Static layout linter
+reactjit screenshot [--output]    # Headless screenshot capture
+reactjit update                   # Sync runtime files into current project
 ```
-
-### Building & Distribution
-
-```bash
-reactjit build dist:<target>    # Production build (sdl2, love, terminal, cc, nvim, hs, awesome, web)
-```
-
-**Dist formats:**
-- `dist:sdl2` — Native binary (SDL2 + OpenGL + LuaJIT)
-- `dist:love` — Self-extracting Linux binary (Love2D + bundled glibc)
-- `dist:terminal` / `dist:cc` / `dist:nvim` / `dist:hs` / `dist:awesome` — Single-file Node.js executable (shebang + CJS)
-- `dist:web` — WASM + WebGL bundle (planned)
-
-### Component Development
-
-```bash
-reactjit lint                   # Static layout linter
-reactjit screenshot [--output]  # Headless screenshot capture
-```
-
-**After writing or modifying any component:** run `reactjit lint`, then `reactjit screenshot --output /tmp/preview.png` and inspect the result.
-
-### Runtime Management
-
-```bash
-reactjit update                 # Sync runtime files from CLI into current project
-```
-
-### Poly Pizza One-Liner (OBJ + Attribution)
-
-```bash
-POLY_PIZZA_API_KEY=... npm run poly:fetch -- --model <model-id-or-url> --out assets/models
-```
-
-This downloads OBJ/MTL/textures into `assets/models/<model>/` and upserts attribution into `assets/models/ATTRIBUTIONS.md`.
 
 ---
 
-# For Developers
-
-Contributing to ReactJIT? Read this section. Here's how the framework is organized, where files live, what's safe to edit, and how to make changes that propagate correctly.
-
-## Source of Truth Architecture (CRITICAL)
-
-There are two categories of files: **globally distributed** (framework internals) and **project-specific** (user application code). Editing the wrong copy is the #1 source of "it builds but doesn't work" bugs.
-
-### Framework files (source of truth at monorepo root)
-
-These get copied into projects via the CLI. **ALWAYS edit these, never the copies.**
-
-| Source of truth | Role | Copied to projects by `reactjit init/update` |
-|---|---|---|
-| `lua/` | Lua runtime — layout, painter, events, bridges, error overlay, inspector | `<project>/lua/` |
-| `packages/shared/` | React primitives, components, hooks, animation, types | `<project>/reactjit/shared/` |
-| `packages/native/` | Native reconciler, host config, event dispatcher | `<project>/reactjit/native/` |
-
-**DO NOT edit files inside `cli/runtime/`, `<project>/lua/`, or `<project>/reactjit/` directly.** These are disposable copies that `make cli-setup` and `reactjit update` will overwrite.
-
-### Project files (application code)
-
-These are unique to each project and safe to edit directly. `reactjit init` creates starter versions; `reactjit update` never touches them.
-
-| Location | Role |
-|---|---|
-| `<project>/src/` | Application code (App.tsx, components, stories) |
-| `<project>/main.lua`, `conf.lua` | Love2D entry points (if using Love2D target) |
-| `<project>/package.json` | Project dependencies |
-| `<project>/packaging/` | Build customizations |
-
-## Distribution Flow
-
-```
-lua/  ──────────────────┐
-packages/shared/  ──────┤  make cli-setup     reactjit init
-packages/native/  ──────┼────────────────►  cli/runtime/  ──────────────►  <project>/
-quickjs/libquickjs.so ─┘                                  reactjit update
-```
-
-1. **`make cli-setup`** copies source-of-truth files into `cli/runtime/`
-2. **`reactjit init <name>`** creates a new project from `cli/runtime/` (one-time)
-3. **`reactjit update`** re-syncs `cli/runtime/` into an existing project (repeatable)
-
-## Making Framework Changes (Checklist)
-
-When you modify any framework file (`lua/`, `packages/shared/`, `packages/native/`):
-
-1. Edit/create files in `lua/` or `packages/shared/src/` or `packages/native/src/` (the source of truth)
-2. `make cli-setup` — propagates to `cli/runtime/`
-3. For each example project that needs the change:
-   - `cd examples/<project> && reactjit update` — syncs runtime files (`lua/`, `lib/`, `reactjit/`)
-   - `reactjit build dist:sdl2` — rebuilds
-4. For new projects: `reactjit init <name>` — gets everything automatically
-
-`reactjit update` replaces `lua/`, `lib/`, and `reactjit/` wholesale. It never touches `src/`, `main.lua`, `conf.lua`, or `package.json`.
-
-## Project Structure
-
-```
-reactjit/
-  packages/
-    shared/          @reactjit/core — components, hooks, animation, types
-    native/          @reactjit/native — SDL2 + Love2D renderer (QuickJS FFI)
-    grid/            @reactjit/grid — shared layout + render server
-    terminal/        @reactjit/terminal — ANSI terminal renderer
-    cc/              @reactjit/cc — ComputerCraft target
-    nvim/            @reactjit/nvim — Neovim target
-    hs/              @reactjit/hs — Hammerspoon target
-    awesome/         @reactjit/awesome — AwesomeWM target
-  targets/
-    computercraft/   CC client (startup.lua)
-    neovim/          Neovim plugin (Lua)
-    hammerspoon/     Hammerspoon Spoon (Lua)
-    awesome/         AwesomeWM widget (Lua + Cairo)
-  lua/               Lua modules (tree, layout, painter, events, bridges)
-  examples/
-    native-hud/      SDL2 + QuickJS demo
-    terminal-demo/   Terminal dashboard
-    cc-demo/         ComputerCraft dashboard
-    nvim-demo/       Neovim floating window
-    hs-demo/         Hammerspoon desktop widget
-    awesome-demo/    AwesomeWM status bar
-  cli/               reactjit CLI and runtime
-```
-
 ## Architecture
 
-### How Targets Work
+### Rendering Pipeline
 
-Every target follows the same pattern:
-
-1. **React reconciler** diffs component trees and emits mutation commands
-2. **Transport** delivers commands to the target (FFI, WebSocket, stdio, or direct)
-3. **Layout engine** computes `{x, y, w, h}` for every node
-4. **Painter** draws using the target's native API
-
-Adding a target means writing a painter (~50-100 lines) and choosing a transport. The reconciler, layout engine, and component library are shared.
-
-### Grid Targets (CC, Neovim, Terminal, Hammerspoon, AwesomeWM)
-
-These use `@reactjit/grid` — a simplified JS flexbox engine that outputs flat `DrawCommand[]` arrays. Each target provides a thin client that receives commands and draws.
-
-### Native Targets (SDL2 + Love2D)
-
-Both native targets share the same pipeline: QuickJS bridge, retained tree, layout engine, event system. The target interface (`lua/target_*.lua`) is the only thing that changes.
-
-**SDL2 / OpenGL** (`lua/target_sdl2.lua`): The primary target. LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI — no game engine required. Runs anywhere LuaJIT does. Entry point: `luajit sdl2_init.lua`. Same React pipeline, same layout engine, same QuickJS bridge, different painter.
-
-**Love2D** (`lua/target_love2d.lua`): The original proving ground. React runs inside Love2D via QuickJS. Full painter with gradients, shadows, transforms, clipping. Images, video (libmpv), audio, bidirectional event handling, visual inspector (F12). Ships as a self-extracting binary. Available for game developers who want Love2D's ecosystem.
+```
+React component tree
+   │  react-reconciler
+   ▼
+Instance tree (JS) ──── mutation commands ────► Instance tree (Lua)
+                         QuickJS FFI               │
+                                                   ▼
+                                            Layout engine
+                                            (flexbox, % units, auto-sizing)
+                                                   │
+                                                   ▼
+                                            Target painter
+                                            SDL2: sdl2_painter.lua (OpenGL 2.1)
+                                            Love2D: painter.lua (love.graphics)
+```
 
 ### Bridge Protocol (Lua ↔ JS)
 
-Values cross the Lua/JS bridge via direct QuickJS C API traversal — no JSON serialization. The bridge validates JSValue tag layout at init and falls back to JSON if needed.
+Values cross the bridge via direct QuickJS C API traversal — no JSON serialization. The bridge validates JSValue tag layout at init and falls back to JSON if needed.
 
 - **Commands** (JS → Lua): Mutation commands coalesced and flushed once per frame
 - **Events** (Lua → JS): Input events collected in a Lua queue, returned as raw array when polled
 - **Handlers stay in JS** — only `hasHandlers` boolean crosses the bridge; dispatch happens in JS
 
-## Adding a Target
+### Source of Truth
 
-A target needs two things:
+| Source of truth | Copied to projects by `reactjit init/update` |
+|---|---|
+| `lua/` | `<project>/lua/` |
+| `packages/shared/` | `<project>/reactjit/shared/` |
+| `packages/native/` | `<project>/reactjit/native/` |
 
-1. **Transport** — how draw commands reach the target (WebSocket, stdio, direct write)
-2. **Client** — target-specific code that receives commands and draws
+**Never edit copies.** Always edit `lua/`, `packages/shared/`, `packages/native/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
 
-For grid-based targets, use `@reactjit/grid`:
+### Project Structure
 
-```typescript
-import { createRenderServer, createWebSocketTransport } from '@reactjit/grid';
-
-const transport = createWebSocketTransport(8080);
-const server = createRenderServer({
-  width: 80,
-  height: 24,
-  transport,
-});
-server.render(<App />);
 ```
-
-Then write a client in whatever language your target uses (~25-80 lines) that connects to the transport and draws.
+reactjit/
+  lua/                 Lua runtime (layout, painter, tree, events, bridges, inspector)
+  packages/
+    shared/            @reactjit/core — primitives, components, hooks, animation, types
+    native/            @reactjit/native — reconciler, QuickJS bridge, event dispatch
+    components/        @reactjit/components — layout helpers (Card, Badge, FlexRow...)
+    controls/          @reactjit/controls — hardware UI (Knob, Fader, Meter...)
+    theme/             @reactjit/theme — theme system
+    router/            @reactjit/router — navigation
+    3d/                @reactjit/3d — 3D scenes (OpenGL)
+    audio/             @reactjit/audio — audio playback/synthesis
+    media/             @reactjit/media — video/media library
+    geo/               @reactjit/geo — maps and geospatial
+    crypto/            @reactjit/crypto — cryptography
+    storage/           @reactjit/storage — local persistence
+    server/            @reactjit/server — HTTP server hooks
+    ai/                @reactjit/ai — AI chat UI + MCP
+    apis/              @reactjit/apis — external API integration
+    rss/               @reactjit/rss — RSS feeds
+    webhooks/          @reactjit/webhooks — webhook listeners
+  storybook/           Reference implementation — component catalog, playground, docs
+  cli/                 reactjit CLI and runtime
+  examples/            Example projects
+```
