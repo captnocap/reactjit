@@ -463,6 +463,9 @@ if #granted > 0 then
 end
 real_io.write("\n")
 real_io.write("[sandbox] verdict: " .. verdictName .. "\n")
+if bootFacts.namespaces and bootFacts.namespaces ~= "none" then
+  real_io.write("[sandbox] namespaces: " .. bootFacts.namespaces .. "\n")
+end
 real_io.flush()
 
 -- ── Launch the cart ──────────────────────────────────────────────────────────

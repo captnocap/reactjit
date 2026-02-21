@@ -38,6 +38,7 @@ f = real_io.open(TEST_DIR .. "/run/boot-facts", "w")
 f:write("kernel=6.1.0-test\n")
 f:write("uptime=42\n")
 f:write("manifest_hash=abc123\n")
+f:write("namespaces=net,mnt,pid\n")
 f:close()
 
 -- Mock verdict pipe: code=1 (verified) + 8 bytes key_id + 8 bytes padding
@@ -339,6 +340,18 @@ test("eval catches errors",              ok == false and result:find("boom"))
 -- Eval shows multi-return (nil holes)
 ok, result = CART_BOOT.eval("io.open('/etc/passwd')")
 test("eval shows sandbox block msg",     ok == true and result:find("sandbox"))
+
+-- ── Namespace tests (Layer 2 — kernel-level, N/A on host) ────────────────
+
+io.write("\n-- Namespace tests (SKIP: requires kernel namespaces) --\n")
+io.write("  SKIP  net namespace active (requires CLONE_NEWNET)\n"); skip = skip + 1
+io.write("  SKIP  mnt namespace active (requires CLONE_NEWNS)\n"); skip = skip + 1
+io.write("  SKIP  pid namespace active (requires CLONE_NEWPID)\n"); skip = skip + 1
+io.write("  SKIP  mount ns: /etc/passwd invisible (requires pivot_root)\n"); skip = skip + 1
+
+-- But we CAN verify the boot-facts namespace field was parsed
+test("boot-facts has namespaces",          CART_BOOT.facts.namespaces ~= nil)
+test("boot-facts namespaces=net,mnt,pid",  CART_BOOT.facts.namespaces == "net,mnt,pid")
 
 -- ── Summary ────────────────────────────────────────────────────────────────
 

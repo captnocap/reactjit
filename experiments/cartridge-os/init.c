@@ -1,3 +1,5 @@
+#define _GNU_SOURCE  /* clone(), CLONE_NEW* */
+
 /*
  * CartridgeOS init.c — PID 1
  *
@@ -24,8 +26,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sched.h>
 #include <sys/mount.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 
 #include "cart.h"
@@ -413,6 +418,131 @@ static void write_boot_facts(int verdict, const struct cart_header *hdr,
     puts("  Boot facts written to /run/boot-facts");
 }
 
+/* ── Layer 2: Namespace isolation ─────────────────────────────────────────
+ * Replace fork() with clone() using capability-derived namespace flags.
+ * Even if the cart bypasses the Lua sandbox via FFI, the kernel denies
+ * the syscalls (no network interface, no visible files, no other PIDs).
+ */
+
+/* musl doesn't wrap pivot_root — call it directly */
+static int pivot_root(const char *new_root, const char *put_old) {
+    return (int)syscall(SYS_pivot_root, new_root, put_old);
+}
+
+struct child_args {
+    int verdict_fd;      /* read end of verdict pipe (becomes FD 3) */
+    int do_mount_ns;     /* set up restricted mount tree */
+    int do_proc;         /* mount /proc inside the namespace */
+};
+
+/* Bind-mount helper: creates the mount point and bind-mounts src → dst.
+ * If read_only is set, remounts MS_RDONLY after the initial bind. */
+static void bind_mount(const char *src, const char *dst, int read_only) {
+    struct stat st;
+    if (stat(src, &st) != 0) return;    /* source doesn't exist, skip */
+
+    if (S_ISDIR(st.st_mode)) {
+        mkdir(dst, 0755);
+    } else {
+        /* file bind mount: create empty file as mount point */
+        int fd = open(dst, O_CREAT | O_WRONLY, 0644);
+        if (fd >= 0) close(fd);
+    }
+
+    mount(src, dst, NULL, MS_BIND, NULL);
+    if (read_only)
+        mount(NULL, dst, NULL, MS_BIND | MS_REMOUNT | MS_RDONLY, NULL);
+}
+
+/* Build a minimal mount tree inside /mnt (a tmpfs), then pivot_root into it.
+ * The cart can only see: /app, /os, /usr/lib, /usr/bin, /usr/share/fonts,
+ * /lib, /dev/dri, /dev/console, /tmp, and optionally /proc. */
+static void setup_restricted_mounts(int mount_proc) {
+    /* Make all existing mounts private so changes don't leak to parent */
+    mount("", "/", "", MS_REC | MS_PRIVATE, NULL);
+
+    /* Create tmpfs as the new root at /mnt */
+    mkdir("/mnt", 0755);
+    mount("tmpfs", "/mnt", "tmpfs", 0, "size=128m,mode=0755");
+
+    /* Create directory structure inside new root */
+    mkdir("/mnt/app", 0755);
+    mkdir("/mnt/os", 0755);
+    mkdir("/mnt/usr", 0755);
+    mkdir("/mnt/usr/lib", 0755);
+    mkdir("/mnt/usr/bin", 0755);
+    mkdir("/mnt/usr/share", 0755);
+    mkdir("/mnt/usr/share/fonts", 0755);
+    mkdir("/mnt/lib", 0755);
+    mkdir("/mnt/dev", 0755);
+    mkdir("/mnt/dev/dri", 0755);
+    mkdir("/mnt/tmp", 01777);
+    mkdir("/mnt/run", 0755);
+
+    /* Bind mount only what the cart needs */
+    bind_mount("/app",              "/mnt/app",              1);  /* cart code (RO) */
+    bind_mount("/os",               "/mnt/os",               1);  /* sandbox.lua (RO) */
+    bind_mount("/usr/lib",          "/mnt/usr/lib",          1);  /* SDL2, Mesa, musl (RO) */
+    bind_mount("/usr/bin",          "/mnt/usr/bin",          1);  /* luajit (RO) */
+    bind_mount("/usr/share/fonts",  "/mnt/usr/share/fonts",  1);  /* fonts (RO) */
+    bind_mount("/lib",              "/mnt/lib",              1);  /* musl dynamic linker (RO) */
+    bind_mount("/dev/dri",          "/mnt/dev/dri",          0);  /* GPU device nodes (RW) */
+    bind_mount("/dev/console",      "/mnt/dev/console",      0);  /* stdout/stderr */
+    bind_mount("/run/boot-facts",   "/mnt/run/boot-facts",   1);  /* attestation (RO) */
+
+    /* /proc only if sysmon capability is granted */
+    if (mount_proc) {
+        mkdir("/mnt/proc", 0555);
+        mount("proc", "/mnt/proc", "proc", 0, NULL);
+    }
+
+    /* /tmp as fresh tmpfs for scratch space */
+    mount("tmpfs", "/mnt/tmp", "tmpfs", 0, "size=32m,mode=1777");
+
+    /* pivot_root: swap /mnt → / and move old root to /mnt/oldroot */
+    mkdir("/mnt/oldroot", 0755);
+    if (pivot_root("/mnt", "/mnt/oldroot") != 0) {
+        /* Fallback to chroot if pivot_root fails (e.g. initramfs) */
+        fprintf(stderr, "[init] pivot_root failed (%s), falling back to chroot\n",
+                strerror(errno));
+        if (chroot("/mnt") != 0) {
+            fprintf(stderr, "[init] chroot also failed: %s\n", strerror(errno));
+            return;
+        }
+        chdir("/");
+        return;
+    }
+
+    /* Detach the old root and remove the mount point */
+    umount2("/oldroot", MNT_DETACH);
+    rmdir("/oldroot");
+    chdir("/");
+}
+
+#define CHILD_STACK_SIZE (1024 * 1024)  /* 1 MB */
+
+static int child_fn(void *arg) {
+    struct child_args *ca = (struct child_args *)arg;
+
+    /* Set up FD 3 as verdict pipe read end */
+    if (ca->verdict_fd >= 0) {
+        dup2(ca->verdict_fd, 3);
+        if (ca->verdict_fd != 3)
+            close(ca->verdict_fd);
+    }
+
+    /* Mount namespace setup (if CLONE_NEWNS was used) */
+    if (ca->do_mount_ns)
+        setup_restricted_mounts(ca->do_proc);
+
+    /* sandbox.lua lives in the OS rootfs, NOT in the cart.
+     * The cart cannot replace or modify the jailer. */
+    char *argv[] = { "/usr/bin/luajit", "/os/sandbox.lua", NULL };
+    execv("/usr/bin/luajit", argv);
+    fprintf(stderr, "[init] execv luajit: %s\n", strerror(errno));
+    _exit(1);
+}
+
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
 int main(void) {
@@ -580,8 +710,9 @@ int main(void) {
     /* ── Load input modules (gated on manifest capabilities) ────────────── */
     /* Read /app/manifest.json and check for keyboard/mouse/usb caps.
      * Uses simple string search — cartridge-pack.py produces canonical JSON. */
+    int has_keyboard = 0, has_mouse = 0, has_usb = 0;
+    int has_network = 0, has_filesystem = 0, has_process = 0, has_sysmon = 0;
     {
-        int has_keyboard = 0, has_mouse = 0, has_usb = 0;
         FILE *mf = fopen("/app/manifest.json", "r");
         if (mf) {
             char mbuf[4096];
@@ -594,6 +725,14 @@ int main(void) {
                 has_mouse = 1;
             if (strstr(mbuf, "\"usb\":true") || strstr(mbuf, "\"usb\": true"))
                 has_usb = 1;
+            if (strstr(mbuf, "\"network\":true") || strstr(mbuf, "\"network\": true"))
+                has_network = 1;
+            if (strstr(mbuf, "\"filesystem\":true") || strstr(mbuf, "\"filesystem\": true"))
+                has_filesystem = 1;
+            if (strstr(mbuf, "\"process\":true") || strstr(mbuf, "\"process\": true"))
+                has_process = 1;
+            if (strstr(mbuf, "\"sysmon\":true") || strstr(mbuf, "\"sysmon\": true"))
+                has_sysmon = 1;
         }
 
         if (has_keyboard || has_mouse) {
@@ -635,27 +774,68 @@ int main(void) {
         goto shell;
     }
 
+    /* ── Build namespace flags from manifest capabilities ────────────── */
+    int clone_flags = SIGCHLD;
+    if (!has_network)    clone_flags |= CLONE_NEWNET;
+    if (!has_filesystem) clone_flags |= CLONE_NEWNS;
+    if (!has_process)    clone_flags |= CLONE_NEWPID;
+
+    /* Log active namespaces */
+    {
+        const char *ns_names[3];
+        int ns_count = 0;
+        if (!has_network)    ns_names[ns_count++] = "net";
+        if (!has_filesystem) ns_names[ns_count++] = "mnt";
+        if (!has_process)    ns_names[ns_count++] = "pid";
+        if (ns_count > 0) {
+            printf("  Namespaces: ");
+            for (int i = 0; i < ns_count; i++)
+                printf("%s%s", ns_names[i], i < ns_count - 1 ? ", " : "");
+            printf("\n");
+        } else {
+            printf("  Namespaces: none (all capabilities granted)\n");
+        }
+    }
+
+    /* Append namespace state to boot-facts (written earlier, before manifest parse) */
+    {
+        FILE *bf = fopen("/run/boot-facts", "a");
+        if (bf) {
+            fprintf(bf, "namespaces=");
+            int first = 1;
+            if (!has_network)    { fprintf(bf, "%snet", first ? "" : ","); first = 0; }
+            if (!has_filesystem) { fprintf(bf, "%smnt", first ? "" : ","); first = 0; }
+            if (!has_process)    { fprintf(bf, "%spid", first ? "" : ","); first = 0; }
+            if (first) fprintf(bf, "none");
+            fprintf(bf, "\n");
+            fclose(bf);
+            chmod("/run/boot-facts", 0444);
+        }
+    }
+
     printf("\n  Launching iLoveReact (%s)...\n\n",
            verdict == CART_VERDICT_VERIFIED ? "verified" : "unsigned/dev");
     fflush(stdout);
 
-    pid_t app = fork();
-    if (app == 0) {
-        /* child: set up FD 3 as verdict pipe read end */
-        if (verdict_pipe[0] >= 0) {
-            dup2(verdict_pipe[0], 3);
-            if (verdict_pipe[0] != 3)
-                close(verdict_pipe[0]);
-        }
-        /* sandbox.lua lives in the OS rootfs, NOT in the cart.
-         * The cart cannot replace or modify the jailer. */
-        char *argv[] = { "/usr/bin/luajit", "/os/sandbox.lua", NULL };
-        execv("/usr/bin/luajit", argv);
-        fprintf(stderr, "[init] execv luajit: %s\n", strerror(errno));
-        _exit(1);
+    /* Allocate child stack for clone() */
+    char *child_stack = (char *)mmap(NULL, CHILD_STACK_SIZE,
+                                      PROT_READ | PROT_WRITE,
+                                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK,
+                                      -1, 0);
+    if (child_stack == MAP_FAILED) {
+        fprintf(stderr, "[init] mmap child stack failed: %s\n", strerror(errno));
+        goto shell;
     }
+    char *stack_top = child_stack + CHILD_STACK_SIZE;
 
-    /* parent: close read end */
+    struct child_args cargs;
+    cargs.verdict_fd  = verdict_pipe[0];
+    cargs.do_mount_ns = !has_filesystem;
+    cargs.do_proc     = has_sysmon;
+
+    pid_t app = clone(child_fn, stack_top, clone_flags, &cargs);
+
+    /* parent: close read end of verdict pipe */
     if (verdict_pipe[0] >= 0)
         close(verdict_pipe[0]);
 
@@ -669,8 +849,10 @@ int main(void) {
         else
             printf("\n  [init] app stopped (raw status %d)\n", status);
     } else {
-        fprintf(stderr, "[init] fork failed: %s\n", strerror(errno));
+        fprintf(stderr, "[init] clone failed: %s\n", strerror(errno));
     }
+
+    munmap(child_stack, CHILD_STACK_SIZE);
 
 shell:
     /* ── Fallback shell ───────────────────────────────────────────────────── */

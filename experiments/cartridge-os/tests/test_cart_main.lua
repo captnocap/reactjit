@@ -61,6 +61,32 @@ io.write("  INFO  kernel=" .. tostring(facts.kernel) .. "\n")
 io.write("  INFO  uptime=" .. tostring(facts.uptime) .. "\n")
 io.write("  INFO  dri=" .. tostring(facts.dri) .. "\n")
 
+-- ── Namespace attestation (Layer 2) ──────────────────────────────────────
+io.write("\n-- Namespace attestation --\n")
+local ns = facts.namespaces or ""
+test("namespaces fact exists",             facts.namespaces ~= nil)
+test("net namespace active",               ns:find("net") ~= nil)
+test("mnt namespace active",               ns:find("mnt") ~= nil)
+test("pid namespace active",               ns:find("pid") ~= nil)
+io.write("  INFO  namespaces=" .. tostring(facts.namespaces) .. "\n")
+
+-- Mount namespace: /etc should be invisible (no bind mount for it)
+local fh_ns, err_ns = io.open("/etc/passwd", "r")
+if fh_ns then
+  -- The Lua sandbox may block this first, but if mount ns is active
+  -- and Lua sandbox is bypassed, /etc/passwd simply wouldn't exist.
+  -- Either way, we should NOT get a valid file handle.
+  fh_ns:close()
+  test("mount ns: /etc/passwd invisible", false)
+else
+  test("mount ns: /etc/passwd invisible", true)
+  io.write("  INFO  /etc/passwd error: " .. tostring(err_ns) .. "\n")
+end
+
+-- PID namespace: we should be PID 1 (or at least a low PID)
+-- Can't easily test this without /proc (no sysmon cap), so just check the fact
+test("pid namespace in boot-facts",        ns:find("pid") ~= nil)
+
 -- ── Nil'd globals ──────────────────────────────────────────────────────────
 io.write("\n-- Nil'd globals --\n")
 test("loadstring nil",                    loadstring == nil)
