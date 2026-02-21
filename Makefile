@@ -38,26 +38,14 @@ $(LIB_DIR)/libquickjs.so: $(QUICKJS_DIR) $(LIB_DIR)
 	cp zig-out/lib/libquickjs.so $(LIB_DIR)/
 
 # ── BLAKE3 (crypto) ────────────────────────────────────
-# Built from vendored C reference implementation in third_party/blake3/.
-# Uses x86-64 assembly for SSE2/SSE4.1/AVX2/AVX512 + portable C fallback.
+# Built via zig build (cross-compilable). Uses x86-64 assembly on unix,
+# portable C on Windows/aarch64.
 
-BLAKE3_SRC = third_party/blake3
-BLAKE3_OBJS = /tmp/blake3.o /tmp/blake3_dispatch.o /tmp/blake3_portable.o \
-              /tmp/blake3_sse2_asm.o /tmp/blake3_sse41_asm.o \
-              /tmp/blake3_avx2_asm.o /tmp/blake3_avx512_asm.o
-
-lib/libblake3.so: $(BLAKE3_SRC)/blake3.c
+lib/libblake3.so: third_party/blake3/blake3.c
+	zig build blake3
 	mkdir -p lib
-	cc -c -fPIC -O3 -o /tmp/blake3.o $(BLAKE3_SRC)/blake3.c
-	cc -c -fPIC -O3 -o /tmp/blake3_dispatch.o $(BLAKE3_SRC)/blake3_dispatch.c
-	cc -c -fPIC -O3 -o /tmp/blake3_portable.o $(BLAKE3_SRC)/blake3_portable.c
-	cc -c -fPIC -O3 -o /tmp/blake3_sse2_asm.o $(BLAKE3_SRC)/blake3_sse2_x86-64_unix.S
-	cc -c -fPIC -O3 -o /tmp/blake3_sse41_asm.o $(BLAKE3_SRC)/blake3_sse41_x86-64_unix.S
-	cc -c -fPIC -O3 -o /tmp/blake3_avx2_asm.o $(BLAKE3_SRC)/blake3_avx2_x86-64_unix.S
-	cc -c -fPIC -O3 -o /tmp/blake3_avx512_asm.o $(BLAKE3_SRC)/blake3_avx512_x86-64_unix.S
-	cc -shared -o $@ $(BLAKE3_OBJS)
-	rm -f $(BLAKE3_OBJS)
-	@echo "  Built libblake3.so"
+	cp zig-out/lib/libblake3.so $@
+	@echo "  Built libblake3.so (via zig)"
 
 build-blake3: lib/libblake3.so
 
@@ -409,12 +397,10 @@ cli-setup: setup
 	else \
 		echo "  Warning: libcrypto.so not found — BLAKE2s/PBKDF2 won't be bundled"; \
 	fi
-	@if [ -f lib/libblake3.so ]; then \
-		cp lib/libblake3.so cli/runtime/lib/libblake3.so; \
-		echo "  Bundled libblake3.so"; \
-	else \
-		echo "  Warning: lib/libblake3.so not found — run 'make build-blake3' first"; \
-	fi
+	@zig build blake3 \
+		&& cp zig-out/lib/libblake3.so cli/runtime/lib/libblake3.so \
+		&& echo "  Bundled libblake3.so (via zig)" \
+		|| echo "  Warning: libblake3.so build failed — BLAKE3 hashing unavailable"
 	@TOR=$$(which tor 2>/dev/null); \
 	if [ -n "$$TOR" ]; then \
 		cp "$$(readlink -f "$$TOR")" cli/runtime/bin/tor; \

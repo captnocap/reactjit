@@ -1,20 +1,22 @@
-//! iLoveReact — build.zig
+//! ReactJIT — build.zig
 //!
 //! Compiles all native C artifacts via zig cc with full cross-compilation support.
 //! Replaces the gcc-based Makefile targets for C code.
 //!
 //! Usage:
-//!   zig build                          → libquickjs + ft_helper for native host (debug)
+//!   zig build                          → libquickjs + ft_helper + blake3 for native host (debug)
 //!   zig build -Doptimize=ReleaseFast   → optimized
 //!   zig build libquickjs               → QuickJS shared library only
-//!   zig build ft-helper                → FreeType bridge (requires freetype2 on host)
+//!   zig build ft-helper                → FreeType bridge (FreeType compiled from source)
+//!   zig build blake3                   → BLAKE3 hash library
 //!   zig build cartridge                → CartridgeOS PID 1 (x86_64-linux-musl, static)
 //!   zig build all                      → all of the above
 //!
-//! Cross-compilation:
-//!   zig build libquickjs -Dtarget=x86_64-macos
-//!   zig build libquickjs -Dtarget=aarch64-macos
-//!   zig build libquickjs -Dtarget=x86_64-windows-gnu
+//! Cross-compilation (all steps respect -Dtarget):
+//!   zig build all -Dtarget=x86_64-windows-gnu
+//!   zig build all -Dtarget=aarch64-linux-gnu
+//!   zig build all -Dtarget=x86_64-macos
+//!   zig build all -Dtarget=aarch64-macos
 //!   zig build win-launcher  → zig-out/bin/ilr-launcher.exe (always x86_64-windows)
 //!
 //! Outputs → zig-out/lib/ (shared libraries) and zig-out/cartridge/ (init binary).
@@ -170,6 +172,65 @@ pub fn build(b: *std.Build) void {
         const step = b.step("ft-helper", "Build ft_helper + FreeType from source (fully cross-compilable)");
         step.dependOn(&install.step);
         all_step.dependOn(&install.step);
+    }
+
+    // ── libblake3 ───────────────────────────────────────────────────────
+    // BLAKE3 hash library from vendored C reference implementation.
+    // Uses x86-64 assembly on unix, C intrinsics on Windows, portable C on aarch64.
+    {
+        const blake3_mod = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        });
+
+        const blake3_lib = b.addLibrary(.{
+            .name = "blake3",
+            .linkage = .dynamic,
+            .root_module = blake3_mod,
+        });
+
+        blake3_lib.addIncludePath(b.path("third_party/blake3"));
+
+        const blake3_os = target.result.os.tag;
+        const blake3_arch = target.result.cpu.arch;
+        const blake3_use_asm = blake3_arch == .x86_64 and blake3_os != .windows;
+
+        // Core portable sources (always included).
+        // Non-assembly builds define BLAKE3_NO_* so dispatch.c doesn't reference
+        // SIMD functions that aren't linked in.
+        const blake3_portable_flags: []const []const u8 = if (blake3_use_asm)
+            &.{"-O3"}
+        else
+            &.{ "-O3", "-DBLAKE3_NO_SSE2", "-DBLAKE3_NO_SSE41", "-DBLAKE3_NO_AVX2", "-DBLAKE3_NO_AVX512" };
+
+        blake3_lib.addCSourceFiles(.{
+            .root = b.path("third_party/blake3"),
+            .files = &.{
+                "blake3.c",
+                "blake3_dispatch.c",
+                "blake3_portable.c",
+            },
+            .flags = blake3_portable_flags,
+        });
+
+        if (blake3_use_asm) {
+            // Unix x86_64: hand-written assembly (fastest path)
+            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_sse2_x86-64_unix.S"));
+            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_sse41_x86-64_unix.S"));
+            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_avx2_x86-64_unix.S"));
+            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_avx512_x86-64_unix.S"));
+        }
+        // Windows + aarch64: portable C only. Still fast — the portable
+        // implementation uses compiler auto-vectorization.
+
+        blake3_lib.linkLibC();
+
+        const blake3_install = b.addInstallArtifact(blake3_lib, .{});
+        b.getInstallStep().dependOn(&blake3_install.step);
+
+        const blake3_step = b.step("blake3", "Build libblake3 shared library (cross-compilable)");
+        blake3_step.dependOn(&blake3_install.step);
+        all_step.dependOn(&blake3_install.step);
     }
 
     // ── CartridgeOS init (x86_64-linux-musl, static) ─────────────────────
