@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <dirent.h>
 
 #include "cart.h"
 #include "sha512.h"
@@ -412,6 +413,52 @@ static void write_boot_facts(int verdict, const struct cart_header *hdr,
     fprintf(f, "pubkey=%s\n", pubkey_hex);
     fprintf(f, "boot_time=%lld\n", (long long)now);
     fprintf(f, "cart_path=%s\n", cart_path ? cart_path : "none");
+
+    /* Pre-read system info that the sandbox may not be able to access
+     * (mount namespace hides /proc when sysmon: false) */
+    {
+        FILE *vf = fopen("/proc/version", "r");
+        if (vf) {
+            char line[512];
+            if (fgets(line, sizeof(line), vf)) {
+                /* Extract "Linux version X.Y.Z" → just the version token */
+                char *tok = strtok(line, " ");  /* "Linux" */
+                tok = strtok(NULL, " ");         /* "version" */
+                tok = strtok(NULL, " ");         /* "X.Y.Z-something" */
+                if (tok) fprintf(f, "kernel=%s\n", tok);
+            }
+            fclose(vf);
+        }
+
+        FILE *uf = fopen("/proc/uptime", "r");
+        if (uf) {
+            char ubuf[64];
+            if (fgets(ubuf, sizeof(ubuf), uf)) {
+                char *sp = strchr(ubuf, ' ');
+                if (sp) *sp = '\0';
+                char *nl = strchr(ubuf, '\n');
+                if (nl) *nl = '\0';
+                fprintf(f, "uptime=%s\n", ubuf);
+            }
+            fclose(uf);
+        }
+
+        /* DRI devices */
+        DIR *dri = opendir("/dev/dri");
+        if (dri) {
+            struct dirent *de;
+            int first = 1;
+            fprintf(f, "dri=");
+            while ((de = readdir(dri)) != NULL) {
+                if (de->d_name[0] == '.') continue;
+                fprintf(f, "%s%s", first ? "" : "  ", de->d_name);
+                first = 0;
+            }
+            fprintf(f, "\n");
+            closedir(dri);
+        }
+    }
+
     fclose(f);
 
     chmod("/run/boot-facts", 0444);
