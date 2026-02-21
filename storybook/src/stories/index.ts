@@ -17,27 +17,16 @@ import { InputStory } from './InputStory';
 import { GradientStory } from './Gradient';
 import { AnimationTimingStory } from './AnimationTiming';
 import { AnimationSpringStory } from './AnimationSpring';
-import { SettingsDemoStory } from './SettingsDemo';
-import { NeofetchDemoStory } from './NeofetchDemo';
-import { WeatherDemoStory } from './WeatherDemo';
+import { DemoStory } from './DemoStory';
 import { ErrorTestStory } from './ErrorTest';
-import { BlockTestStory } from './BlockTestStory';
-import { TableStory } from './TableStory';
-import { BarChartStory } from './BarChartStory';
-import { ProgressBarStory } from './ProgressBarStory';
-import { SparklineStory } from './SparklineStory';
-import { DataDashboardDemoStory } from './DataDashboardDemo';
+import { DataStory } from './DataStory';
 import { NavPanelStory } from './NavPanelStory';
 import { TabsStory } from './TabsStory';
 import { BreadcrumbsStory } from './BreadcrumbsStory';
 import { ToolbarStory } from './ToolbarStory';
-import { AppShellDemoStory } from './AppShellDemo';
-import { TradingViewBarsStory } from './TradingViewBarsStory';
 import { TradingPerfLabStory } from './TradingPerfLabStory';
 import { OverflowStressStory } from './OverflowStress';
-import { FetchStory } from './FetchStory';
-import { WebSocketStory } from './WebSocketStory';
-import { TorIRCStory } from './TorIRCStory';
+import { NetworkingStory } from './NetworkingStory';
 import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
 import { FontShowcaseStory } from './FontShowcase';
@@ -45,18 +34,9 @@ import { LlmsTxtReader } from './LlmsTxtReader';
 import { AIChatDemoStory } from './AIChatDemo';
 import { AICanvasStory } from './AICanvasDemo';
 import { MCPDemoStory } from './MCPDemo';
-import { APIsStory } from './APIsStory';
-import { RSSStory } from './RSSStory';
-import { WebhooksStory } from './WebhooksStory';
 import { CryptoStory } from './CryptoStory';
 import { MediaStory } from './MediaStory';
 import EmulatorStory from './EmulatorStory';
-import { HorizontalBarChartStory } from './HorizontalBarChartStory';
-import { StackedBarChartStory } from './StackedBarChartStory';
-import { LineChartStory } from './LineChartStory';
-import { AreaChartStory } from './AreaChartStory';
-import { PieChartStory } from './PieChartStory';
-import { RadarChartStory } from './RadarChartStory';
 import { Scene3DBasicStory } from './Scene3DBasic';
 import { Scene3DPlanetStory } from './Scene3DPlanet';
 import { Scene3DFrameworkCubeStory } from './Scene3DFrameworkCube';
@@ -106,24 +86,10 @@ export const stories: StoryDef[] = [
   { id: 'toolbar', title: 'Toolbar', category: 'Navigation', component: ToolbarStory },
 
   // Data
-  { id: 'table', title: 'Table', category: 'Data', component: TableStory },
-  { id: 'bar-chart', title: 'Bar Chart', category: 'Data', component: BarChartStory },
-  { id: 'progress-bar', title: 'Progress Bar', category: 'Data', component: ProgressBarStory },
-  { id: 'sparkline', title: 'Sparkline', category: 'Data', component: SparklineStory },
-  { id: 'horizontal-bar-chart', title: 'Horizontal Bar', category: 'Data', component: HorizontalBarChartStory },
-  { id: 'stacked-bar-chart', title: 'Stacked Bar', category: 'Data', component: StackedBarChartStory },
-  { id: 'line-chart', title: 'Line Chart', category: 'Data', component: LineChartStory },
-  { id: 'area-chart', title: 'Area Chart', category: 'Data', component: AreaChartStory },
-  { id: 'pie-chart', title: 'Pie / Donut', category: 'Data', component: PieChartStory },
-  { id: 'radar-chart', title: 'Radar Chart', category: 'Data', component: RadarChartStory },
+  { id: 'data', title: 'Data', category: 'Data', component: DataStory },
 
   // Demo
-  { id: 'settings-demo', title: 'Settings Demo', category: 'Demo', component: SettingsDemoStory },
-  { id: 'neofetch-demo', title: 'Neofetch', category: 'Demo', component: NeofetchDemoStory },
-  { id: 'weather-demo', title: 'Weather', category: 'Demo', component: WeatherDemoStory },
-  { id: 'data-dashboard', title: 'Data Dashboard', category: 'Demo', component: DataDashboardDemoStory },
-  { id: 'app-shell', title: 'App Shell', category: 'Demo', component: AppShellDemoStory },
-  { id: 'tradingview-bars', title: 'TradingView 2D/3D', category: 'Demo', component: TradingViewBarsStory },
+  { id: 'demo', title: 'Demos', category: 'Demo', component: DemoStory },
 
   // Stress Test
   { id: 'overflow-stress', title: 'Overflow Stress', category: 'Stress Test', component: OverflowStressStory },
@@ -137,12 +103,7 @@ export const stories: StoryDef[] = [
   { id: 'mcp', title: 'MCP Server', category: 'AI', component: MCPDemoStory },
 
   // Networking
-  { id: 'fetch', title: 'Fetch', category: 'Networking', component: FetchStory },
-  { id: 'websocket', title: 'WebSocket', category: 'Networking', component: WebSocketStory },
-  { id: 'tor-irc', title: 'Tor IRC', category: 'Networking', component: TorIRCStory },
-  { id: 'apis', title: 'REST APIs', category: 'Networking', component: APIsStory },
-  { id: 'rss', title: 'RSS Feeds', category: 'Networking', component: RSSStory },
-  { id: 'webhooks', title: 'Webhooks', category: 'Networking', component: WebhooksStory },
+  { id: 'networking', title: 'Networking', category: 'Networking', component: NetworkingStory },
 
   // Security
   { id: 'crypto', title: 'Crypto', category: 'Security', component: CryptoStory },
@@ -183,7 +144,6 @@ export const stories: StoryDef[] = [
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },
-  { id: 'block-test', title: 'Block Test', category: 'Dev Tools', component: BlockTestStory },
 
   // Storage
   { id: 'local-store', title: 'Local Store', category: 'Storage', component: LocalStoreStory },

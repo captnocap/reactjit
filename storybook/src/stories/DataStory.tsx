@@ -38,11 +38,11 @@ interface Employee {
 }
 
 const EMPLOYEES: Employee[] = [
-  { name: 'Alice', role: 'Engineer', status: 'active', score: 94 },
-  { name: 'Bob', role: 'Designer', status: 'active', score: 87 },
-  { name: 'Carol', role: 'PM', status: 'away', score: 76 },
-  { name: 'Dan', role: 'Engineer', status: 'active', score: 91 },
-  { name: 'Eva', role: 'Data', status: 'offline', score: 82 },
+  { name: 'Alice Chen', role: 'Engineer', status: 'active', score: 94 },
+  { name: 'Bob Park', role: 'Designer', status: 'active', score: 87 },
+  { name: 'Carol Wu', role: 'PM', status: 'away', score: 76 },
+  { name: 'Dan Kim', role: 'Engineer', status: 'active', score: 91 },
+  { name: 'Eva Lopez', role: 'Data', status: 'offline', score: 82 },
 ];
 
 const BAR_DATA = [
@@ -106,6 +106,7 @@ const RADAR_AXES = [
   { label: 'Accuracy', max: 100 },
   { label: 'Stamina', max: 100 },
 ];
+
 const RADAR_DATA = [85, 70, 60, 90, 75];
 
 const VIEW_OPTIONS: Array<{ id: DataView; label: string; subtitle: string }> = [
@@ -121,18 +122,41 @@ const VIEW_OPTIONS: Array<{ id: DataView; label: string; subtitle: string }> = [
   { id: 'radar', label: 'Radar', subtitle: 'Axis profile' },
 ];
 
-function ShellCard({ children }: { children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{title}</Text>
+      <Box
+        style={{
+          width: '100%',
+          backgroundColor: c.bgElevated,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 12,
+          gap: 10,
+          alignItems: 'center',
+        }}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+function DemoSurface({ children }: { children: React.ReactNode }) {
   const c = useThemeColors();
   return (
     <Box
       style={{
         width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
+        maxWidth: 620,
+        backgroundColor: c.surface,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: c.border,
-        padding: 12,
-        gap: 10,
+        padding: 10,
         alignItems: 'center',
       }}
     >
@@ -141,10 +165,11 @@ function ShellCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DataTableDemo() {
-  const columns: TableColumn<Employee>[] = useMemo(() => [
-    { key: 'name', title: 'Name', width: 90 },
-    { key: 'role', title: 'Role', width: 80 },
+function DataViewBody({ view }: { view: DataView }) {
+  const c = useThemeColors();
+  const tableColumns: TableColumn<Employee>[] = useMemo(() => [
+    { key: 'name', title: 'Name', width: 110 },
+    { key: 'role', title: 'Role', width: 90 },
     {
       key: 'status',
       title: 'Status',
@@ -159,129 +184,106 @@ function DataTableDemo() {
     { key: 'score', title: 'Score', width: 60, align: 'right' },
   ], []);
 
-  return (
-    <Box style={{ width: '100%', maxWidth: 420, alignItems: 'center' }}>
-      <Table columns={columns} data={EMPLOYEES} rowKey="name" striped />
-    </Box>
-  );
-}
-
-function DataBarDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 560, alignItems: 'center' }}>
-      <BarChart data={BAR_DATA} height={150} showValues interactive />
-    </Box>
-  );
-}
-
-function DataProgressDemo() {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', maxWidth: 380, gap: 8, alignItems: 'center' }}>
-      <ProgressBar value={0.28} showLabel label="Build Queue" />
-      <ProgressBar value={0.63} showLabel label="Data Sync" color={c.warning} />
-      <ProgressBar value={0.91} showLabel label="Deploy" color={c.success} />
-    </Box>
-  );
-}
-
-function DataSparklineDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 420, gap: 10, alignItems: 'center' }}>
-      <Box style={{ gap: 4, alignItems: 'center' }}>
-        <Text style={{ fontSize: 10, color: '#93a4c0' }}>Revenue (mini)</Text>
-        <Sparkline data={SPARK_DATA} width={280} height={46} interactive color="#22c55e" />
-      </Box>
-      <Box style={{ gap: 4, alignItems: 'center' }}>
-        <Text style={{ fontSize: 10, color: '#93a4c0' }}>Latency (mini)</Text>
-        <Sparkline data={SPARK_DATA.map((v) => 14 - (v / 2))} width={280} height={46} interactive color="#ef4444" />
-      </Box>
-    </Box>
-  );
-}
-
-function DataHorizontalDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 520, alignItems: 'center' }}>
-      <HorizontalBarChart data={HBAR_DATA} showValues interactive />
-    </Box>
-  );
-}
-
-function DataStackedDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 560, alignItems: 'center' }}>
-      <StackedBarChart labels={STACKED_LABELS} series={STACKED_SERIES} interactive />
-    </Box>
-  );
-}
-
-function DataLineDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 560, alignItems: 'center' }}>
-      <LineChart data={LINE_DATA} showArea interactive color="#3b82f6" />
-    </Box>
-  );
-}
-
-function DataAreaDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 560, alignItems: 'center' }}>
-      <AreaChart data={AREA_DATA} interactive color="#22c55e" showDots />
-    </Box>
-  );
-}
-
-function DataPieDemo() {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', maxWidth: 560, alignItems: 'center', gap: 10 }}>
-      <PieChart data={PIE_DATA} size={180} innerRadius={42} interactive />
-      <Box style={{ width: '100%', flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 }}>
-        {PIE_DATA.map((slice) => (
-          <Box key={slice.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Box style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: slice.color }} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>{slice.label}</Text>
-          </Box>
-        ))}
-      </Box>
-    </Box>
-  );
-}
-
-function DataRadarDemo() {
-  return (
-    <Box style={{ width: '100%', maxWidth: 420, alignItems: 'center' }}>
-      <RadarChart axes={RADAR_AXES} data={RADAR_DATA} size={160} interactive color="#8b5cf6" />
-    </Box>
-  );
-}
-
-function DataViewBody({ view }: { view: DataView }) {
-  switch (view) {
-    case 'table':
-      return <DataTableDemo />;
-    case 'bar':
-      return <DataBarDemo />;
-    case 'progress':
-      return <DataProgressDemo />;
-    case 'sparkline':
-      return <DataSparklineDemo />;
-    case 'horizontal':
-      return <DataHorizontalDemo />;
-    case 'stacked':
-      return <DataStackedDemo />;
-    case 'line':
-      return <DataLineDemo />;
-    case 'area':
-      return <DataAreaDemo />;
-    case 'pie':
-      return <DataPieDemo />;
-    case 'radar':
-      return <DataRadarDemo />;
-    default:
-      return null;
+  if (view === 'table') {
+    return (
+      <DemoSurface>
+        <Table columns={tableColumns} data={EMPLOYEES} rowKey="name" striped />
+      </DemoSurface>
+    );
   }
+
+  if (view === 'bar') {
+    return (
+      <DemoSurface>
+        <BarChart data={BAR_DATA} height={170} showValues interactive />
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'progress') {
+    return (
+      <DemoSurface>
+        <Box style={{ width: '100%', maxWidth: 420, gap: 8, alignItems: 'center' }}>
+          <ProgressBar value={0.28} showLabel label="Build Queue" />
+          <ProgressBar value={0.63} showLabel label="Data Sync" color={c.warning} />
+          <ProgressBar value={0.91} showLabel label="Deploy" color={c.success} />
+        </Box>
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'sparkline') {
+    return (
+      <DemoSurface>
+        <Box style={{ gap: 10, alignItems: 'center' }}>
+          <Box style={{ gap: 4, alignItems: 'center' }}>
+            <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>Revenue trend</Text>
+            <Sparkline data={SPARK_DATA} width={360} height={52} interactive color="#22c55e" />
+          </Box>
+          <Box style={{ gap: 4, alignItems: 'center' }}>
+            <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>Latency trend</Text>
+            <Sparkline data={SPARK_DATA.map((v) => 14 - (v / 2))} width={360} height={52} interactive color="#ef4444" />
+          </Box>
+        </Box>
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'horizontal') {
+    return (
+      <DemoSurface>
+        <HorizontalBarChart data={HBAR_DATA} showValues interactive />
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'stacked') {
+    return (
+      <DemoSurface>
+        <StackedBarChart labels={STACKED_LABELS} series={STACKED_SERIES} interactive />
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'line') {
+    return (
+      <DemoSurface>
+        <LineChart data={LINE_DATA} showArea interactive color="#3b82f6" />
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'area') {
+    return (
+      <DemoSurface>
+        <AreaChart data={AREA_DATA} interactive color="#22c55e" showDots />
+      </DemoSurface>
+    );
+  }
+
+  if (view === 'pie') {
+    return (
+      <DemoSurface>
+        <Box style={{ gap: 10, alignItems: 'center' }}>
+          <PieChart data={PIE_DATA} size={190} innerRadius={44} interactive />
+          <Box style={{ width: '100%', flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 }}>
+            {PIE_DATA.map((slice) => (
+              <Box key={slice.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Box style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: slice.color }} />
+                <Text style={{ color: c.textSecondary, fontSize: 10 }}>{slice.label}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </DemoSurface>
+    );
+  }
+
+  return (
+    <DemoSurface>
+      <RadarChart axes={RADAR_AXES} data={RADAR_DATA} size={180} interactive color="#8b5cf6" />
+    </DemoSurface>
+  );
 }
 
 export function DataStory() {
@@ -291,22 +293,24 @@ export function DataStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 900, gap: 12, alignItems: 'center' }}>
-        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>
-          Data Hub
-        </Text>
-        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-          One centered story for all charts and data primitives.
-        </Text>
-
-        <ShellCard>
+      <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
+        <Section title="1. Data Menu">
+          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+            Select a data primitive to preview.
+          </Text>
           <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
             {VIEW_OPTIONS.map((opt) => (
               <Pressable
                 key={opt.id}
                 onPress={() => setSelected(opt.id)}
-                style={{
-                  backgroundColor: selected === opt.id ? c.primary : c.surface,
+                style={({ pressed, hovered }) => ({
+                  backgroundColor: selected === opt.id
+                    ? c.primary
+                    : pressed
+                      ? c.surfaceHover
+                      : hovered
+                        ? c.surfaceHover
+                        : c.surface,
                   borderRadius: 6,
                   borderWidth: 1,
                   borderColor: selected === opt.id ? c.primary : c.border,
@@ -314,7 +318,7 @@ export function DataStory() {
                   paddingRight: 10,
                   paddingTop: 6,
                   paddingBottom: 6,
-                }}
+                })}
               >
                 <Text style={{ color: selected === opt.id ? '#fff' : c.text, fontSize: 10 }}>
                   {opt.label}
@@ -322,13 +326,13 @@ export function DataStory() {
               </Pressable>
             ))}
           </Box>
-        </ShellCard>
+        </Section>
 
-        <ShellCard>
+        <Section title="2. Active Preview">
           <Text style={{ color: c.text, fontSize: 11, textAlign: 'center' }}>{current.label}</Text>
           <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>{current.subtitle}</Text>
           <DataViewBody view={selected} />
-        </ShellCard>
+        </Section>
       </Box>
     </Box>
   );
