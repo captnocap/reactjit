@@ -32,7 +32,6 @@
       "@reactjit/crypto": ["./packages/crypto/src"],
       "@reactjit/media": ["./packages/media/src"],
       "@reactjit/3d": ["./packages/3d/src"],
-      "@reactjit/game": ["./packages/game/src"],
       "@reactjit/theme": ["./packages/theme/src"],
       "@reactjit/controls": ["./packages/controls/src"],
       "@reactjit/geo": ["./packages/geo/src"]
