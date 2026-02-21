@@ -327,7 +327,7 @@ export const templates: Template[] = [
   {
     id: 'settings',
     name: 'Settings Panel',
-    description: 'Sliders, switches, checkboxes, radio, select',
+    description: 'Two-column layout with sliders, switches, selects, radios',
     category: 'Forms',
     code: `function MyComponent() {
   var [masterVol, setMasterVol] = useState(0.8);
@@ -341,69 +341,123 @@ export const templates: Template[] = [
   var [difficulty, setDifficulty] = useState('normal');
   var [autoSave, setAutoSave] = useState(true);
   var [tutorials, setTutorials] = useState(true);
+  var [sensitivity, setSensitivity] = useState(0.5);
+  var [brightness, setBrightness] = useState(0.7);
 
-  function SettingRow(props) {
+  var BG = '#0c1021';
+  var CARD = '#151d30';
+  var BORDER = '#1e2d45';
+  var BRIGHT = '#e2e8f0';
+  var DIM = '#64748b';
+
+  function Section(props) {
     return (
-      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        <Text style={{ color: '#cbd5e1', fontSize: 14 }}>{props.label}</Text>
+      <Box style={{
+        backgroundColor: CARD,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: BORDER,
+        padding: 12,
+        gap: 8,
+      }}>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
+          <Box style={{ width: 3, height: 14, backgroundColor: props.color, borderRadius: 2 }} />
+          <Text style={{ color: BRIGHT, fontSize: 12, fontWeight: 'bold' }}>{props.title}</Text>
+        </Box>
         {props.children}
       </Box>
     );
   }
 
+  function SliderRow(props) {
+    return (
+      <Box style={{ gap: 2 }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+          <Text style={{ color: DIM, fontSize: 11 }}>{props.label}</Text>
+          <Text style={{ color: props.color, fontSize: 11, fontWeight: 'bold' }}>
+            {Math.round(props.value * 100) + '%'}
+          </Text>
+        </Box>
+        <Slider
+          value={props.value}
+          onValueChange={props.onChange}
+          activeTrackColor={props.color}
+          thumbColor={props.color}
+        />
+      </Box>
+    );
+  }
+
+  function ToggleRow(props) {
+    return (
+      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <Text style={{ color: BRIGHT, fontSize: 12 }}>{props.label}</Text>
+        <Switch value={props.value} onValueChange={props.onChange} />
+      </Box>
+    );
+  }
+
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', padding: 16, gap: 20, overflow: 'scroll' }}>
-      <Text style={{ color: '#e2e8f0', fontSize: 22, fontWeight: 'bold' }}>
-        Game Settings
-      </Text>
-
-      <Box style={{ gap: 12, backgroundColor: '#1e293b', borderRadius: 10, padding: 14 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>Audio</Text>
-        <Box style={{ gap: 4 }}>
-          <SettingRow label={'Master: ' + Math.round(masterVol * 100) + '%'}><Box /></SettingRow>
-          <Slider value={masterVol} onValueChange={setMasterVol} activeTrackColor="#3b82f6" style={{ width: 200 }} />
-        </Box>
-        <Box style={{ gap: 4 }}>
-          <SettingRow label={'Music: ' + Math.round(musicVol * 100) + '%'}><Box /></SettingRow>
-          <Slider value={musicVol} onValueChange={setMusicVol} activeTrackColor="#8b5cf6" thumbColor="#8b5cf6" style={{ width: 200 }} />
-        </Box>
-        <Box style={{ gap: 4 }}>
-          <SettingRow label={'SFX: ' + Math.round(sfxVol * 100) + '%'}><Box /></SettingRow>
-          <Slider value={sfxVol} onValueChange={setSfxVol} activeTrackColor="#f59e0b" thumbColor="#f59e0b" style={{ width: 200 }} />
-        </Box>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 14, gap: 10 }}>
+      <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>Settings</Text>
+        <Badge label={quality.toUpperCase()} variant="info" />
       </Box>
+      <Divider color={BORDER} />
 
-      <Box style={{ gap: 12, backgroundColor: '#1e293b', borderRadius: 10, padding: 14 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>Display</Text>
-        <Box style={{ gap: 8 }}>
-          <Text style={{ color: '#94a3b8', fontSize: 12 }}>Resolution</Text>
-          <Select value={resolution} onValueChange={setResolution} options={[
-            { label: '1280 x 720', value: '1280x720' },
-            { label: '1920 x 1080', value: '1920x1080' },
-            { label: '2560 x 1440', value: '2560x1440' },
-          ]} />
+      <Box style={{ flexDirection: 'row', width: '100%', gap: 10, flexGrow: 1 }}>
+        <Box style={{ flexGrow: 1, gap: 10 }}>
+          <Section title="Audio" color="#8b5cf6">
+            <SliderRow label="Master" value={masterVol} onChange={setMasterVol} color="#8b5cf6" />
+            <SliderRow label="Music" value={musicVol} onChange={setMusicVol} color="#6366f1" />
+            <SliderRow label="SFX" value={sfxVol} onChange={setSfxVol} color="#a78bfa" />
+          </Section>
+
+          <Section title="Controls" color="#f59e0b">
+            <SliderRow label="Mouse Sensitivity" value={sensitivity} onChange={setSensitivity} color="#f59e0b" />
+            <SliderRow label="Brightness" value={brightness} onChange={setBrightness} color="#fbbf24" />
+          </Section>
+
+          <Section title="Gameplay" color="#22c55e">
+            <ToggleRow label="Auto-save" value={autoSave} onChange={setAutoSave} />
+            <ToggleRow label="Show Tutorials" value={tutorials} onChange={setTutorials} />
+          </Section>
         </Box>
-        <Box style={{ gap: 6, marginTop: 4 }}>
-          <Checkbox value={fullscreen} onValueChange={setFullscreen} label="Fullscreen" />
-          <Checkbox value={vsync} onValueChange={setVsync} label="V-Sync" />
-          <Checkbox value={showFps} onValueChange={setShowFps} label="Show FPS Counter" color="#22c55e" />
+
+        <Box style={{ flexGrow: 1, gap: 10 }}>
+          <Section title="Display" color="#3b82f6">
+            <Box style={{ gap: 4 }}>
+              <Text style={{ color: DIM, fontSize: 10 }}>Resolution</Text>
+              <Select value={resolution} onValueChange={setResolution} options={[
+                { label: '1280 x 720', value: '1280x720' },
+                { label: '1920 x 1080', value: '1920x1080' },
+                { label: '2560 x 1440', value: '2560x1440' },
+              ]} />
+            </Box>
+            <Box style={{ gap: 4 }}>
+              <Text style={{ color: DIM, fontSize: 10 }}>Quality</Text>
+              <Select value={quality} onValueChange={setQuality} options={[
+                { label: 'Low', value: 'low' },
+                { label: 'Medium', value: 'medium' },
+                { label: 'High', value: 'high' },
+                { label: 'Ultra', value: 'ultra' },
+              ]} />
+            </Box>
+            <Divider color={BORDER} />
+            <Checkbox value={fullscreen} onValueChange={setFullscreen} label="Fullscreen" />
+            <Checkbox value={vsync} onValueChange={setVsync} label="V-Sync" />
+            <Checkbox value={showFps} onValueChange={setShowFps} label="Show FPS" color="#22c55e" />
+          </Section>
+
+          <Section title="Difficulty" color="#ef4444">
+            <RadioGroup value={difficulty} onValueChange={setDifficulty}>
+              <Radio value="easy" label="Easy" color="#22c55e" />
+              <Radio value="normal" label="Normal" color="#3b82f6" />
+              <Radio value="hard" label="Hard" color="#f59e0b" />
+              <Radio value="nightmare" label="Nightmare" color="#ef4444" />
+            </RadioGroup>
+          </Section>
         </Box>
-      </Box>
-
-      <Box style={{ gap: 12, backgroundColor: '#1e293b', borderRadius: 10, padding: 14 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>Difficulty</Text>
-        <RadioGroup value={difficulty} onValueChange={setDifficulty}>
-          <Radio value="easy" label="Easy" color="#22c55e" />
-          <Radio value="normal" label="Normal" color="#3b82f6" />
-          <Radio value="hard" label="Hard" color="#f59e0b" />
-          <Radio value="nightmare" label="Nightmare" color="#ef4444" />
-        </RadioGroup>
-      </Box>
-
-      <Box style={{ gap: 10, backgroundColor: '#1e293b', borderRadius: 10, padding: 14 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>Gameplay</Text>
-        <SettingRow label="Auto-save"><Switch value={autoSave} onValueChange={setAutoSave} /></SettingRow>
-        <SettingRow label="Tutorials"><Switch value={tutorials} onValueChange={setTutorials} /></SettingRow>
       </Box>
     </Box>
   );
@@ -1161,13 +1215,13 @@ export const templates: Template[] = [
 
             <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'end' }}>
               <Knob value={tempo} onChange={setTempo} min={90} max={160} step={1} label="Tempo" />
-              <Fader value={energy} onChange={setEnergy} min={0} max={1} step={0.01} label="Energy" height={90} />
+              <Fader value={energy} onChange={setEnergy} min={0} max={1} step={0.01} label="Energy" height={70} />
               <Knob value={swing} onChange={setSwing} min={0} max={0.3} step={0.01} label="Swing" />
               <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'end', marginLeft: 8 }}>
                 {levels.map(function(level, i) {
                   return (
                     <Box key={i} style={{ alignItems: 'center', gap: 4 }}>
-                      <Meter value={level} peak={Math.min(1, level + 0.12)} width={12} height={70} />
+                      <Meter value={level} peak={Math.min(1, level + 0.12)} width={12} height={60} />
                       <Text style={{ color: '#64748b', fontSize: 9 }}>{['K', 'S', 'H', 'B'][i]}</Text>
                     </Box>
                   );
@@ -1209,18 +1263,18 @@ export const templates: Template[] = [
                 gap: 6,
               }}>
                 <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Groove Contour</Text>
-                <AreaChart data={grooveLine} width={360} height={120} color="#22d3ee" interactive />
-                <BarChart data={stepBars} height={72} showLabels={false} interactive />
+                <AreaChart data={grooveLine} width={280} height={100} color="#22d3ee" interactive />
+                <BarChart data={stepBars} height={60} showLabels={false} interactive />
               </Box>
 
               <Box style={{
-                width: 210,
+                width: 180,
                 backgroundColor: '#0e1729',
                 borderRadius: 8,
                 borderWidth: 1,
                 borderColor: '#1e2d45',
                 padding: 8,
-                gap: 8,
+                gap: 6,
               }}>
                 <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Mix DNA</Text>
                 <RadarChart
@@ -1232,11 +1286,11 @@ export const templates: Template[] = [
                     { label: 'headroom' },
                   ]}
                   data={radarData}
-                  size={130}
+                  size={110}
                   color="#a78bfa"
                   interactive
                 />
-                <PieChart data={pieData} size={118} innerRadius={24} />
+                <PieChart data={pieData} size={100} innerRadius={20} />
                 <Text style={{ color: '#64748b', fontSize: 10 }}>
                   {'Pattern density: ' + Math.round(density() * 100) + '%'}
                 </Text>
@@ -1246,8 +1300,8 @@ export const templates: Template[] = [
         </Card>
 
         <Card
-          style={{ width: 360, height: '100%' }}
-          bodyStyle={{ height: '100%', gap: 10 }}
+          style={{ width: 280, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 8 }}
           title="AI Notes"
           subtitle="Prompt ideas and get production guidance"
         >
@@ -1395,7 +1449,7 @@ export const templates: Template[] = [
         >
           <Box style={{ width: '100%', height: '100%', gap: 10 }}>
             <Scene
-              style={{ width: '100%', height: 260, borderRadius: 10, overflow: 'hidden' }}
+              style={{ width: '100%', height: 200, borderRadius: 10, overflow: 'hidden' }}
               backgroundColor={panelBg}
               stars={true}
               orbitControls={true}
@@ -1423,18 +1477,18 @@ export const templates: Template[] = [
               />
             </Scene>
 
-            <Box style={{ flexDirection: 'row', gap: 14 }}>
-              <Box style={{ gap: 3 }}>
+            <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+              <Box style={{ gap: 2, flexGrow: 1 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Mood: ' + Math.round(mood * 100)}</Text>
-                <Slider value={mood} onValueChange={setMood} minimumValue={0} maximumValue={1} step={0.01} style={{ width: 160 }} />
+                <Slider value={mood} onValueChange={setMood} minimumValue={0} maximumValue={1} step={0.01} />
               </Box>
-              <Box style={{ gap: 3 }}>
+              <Box style={{ gap: 2, flexGrow: 1 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Chaos: ' + Math.round(chaos * 100)}</Text>
-                <Slider value={chaos} onValueChange={setChaos} minimumValue={0} maximumValue={1} step={0.01} style={{ width: 160 }} />
+                <Slider value={chaos} onValueChange={setChaos} minimumValue={0} maximumValue={1} step={0.01} />
               </Box>
-              <Box style={{ gap: 3 }}>
+              <Box style={{ gap: 2, flexGrow: 1 }}>
                 <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Glow: ' + Math.round(glow * 100)}</Text>
-                <Slider value={glow} onValueChange={setGlow} minimumValue={0} maximumValue={1} step={0.01} style={{ width: 160 }} />
+                <Slider value={glow} onValueChange={setGlow} minimumValue={0} maximumValue={1} step={0.01} />
               </Box>
             </Box>
 
@@ -1462,21 +1516,21 @@ export const templates: Template[] = [
                 gap: 6,
               }}>
                 <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Atmosphere Wave</Text>
-                <AreaChart data={lineData} width={360} height={126} color={colorMain} interactive />
-                <BarChart data={pulseBars} height={68} showLabels={false} interactive />
+                <AreaChart data={lineData} width={280} height={100} color={colorMain} interactive />
+                <BarChart data={pulseBars} height={55} showLabels={false} interactive />
               </Box>
 
               <Box style={{
-                width: 190,
+                width: 170,
                 backgroundColor: '#0d1323',
                 borderRadius: 8,
                 borderWidth: 1,
                 borderColor: '#1f2a44',
                 padding: 8,
-                gap: 8,
+                gap: 6,
               }}>
                 <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Palette Weight</Text>
-                <PieChart data={paletteWeight} size={126} innerRadius={24} />
+                <PieChart data={paletteWeight} size={100} innerRadius={20} />
                 <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Mesh: ' + meshType}</Text>
                 <Text style={{ color: '#64748b', fontSize: 10 }}>
                   {'Vibe score: ' + Math.round((mood * 0.4 + glow * 0.35 + (1 - chaos) * 0.25) * 100)}
@@ -1487,12 +1541,12 @@ export const templates: Template[] = [
         </Card>
 
         <Card
-          style={{ width: 360, height: '100%' }}
-          bodyStyle={{ height: '100%', gap: 10 }}
+          style={{ width: 280, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 8 }}
           title="AI + Metrics"
           subtitle="Prompt log and vibe telemetry"
         >
-          <Box style={{ gap: 8 }}>
+          <Box style={{ gap: 6 }}>
             <RadarChart
               axes={[
                 { label: 'focus' },
@@ -1502,11 +1556,11 @@ export const templates: Template[] = [
                 { label: 'depth' },
               ]}
               data={radarData}
-              size={138}
+              size={110}
               color={colorMain}
               interactive
             />
-            <LineChart data={lineData.slice(8)} width={320} height={78} color={colorAlt} showArea interactive />
+            <LineChart data={lineData.slice(8)} width={240} height={60} color={colorAlt} showArea interactive />
           </Box>
 
           <Box style={{ width: '100%', flexGrow: 1, minHeight: 0 }}>
@@ -1639,67 +1693,93 @@ export const templates: Template[] = [
   var phase = boss.stats.hp > boss.stats.maxHp * 0.5 ? 'Phase I' : 'Phase II';
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#080d18', padding: 12, gap: 10 }}>
-      <Card title="Bossfight Conductor" subtitle="Run the encounter like a musical performance">
-        <Box style={{ gap: 10 }}>
-          <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
-            <Box style={{ flexGrow: 1, gap: 8 }}>
-              <Text style={{ color: '#cbd5e1', fontSize: 11 }}>Hero</Text>
-              <HealthBar hp={hero.stats.hp} maxHp={hero.stats.maxHp} width={240} height={12} />
-              <GameStatusBar value={Math.round(focus * 100)} max={100} width={240} height={8} fillColor="#38bdf8" />
-
-              <Text style={{ color: '#cbd5e1', fontSize: 11, marginTop: 4 }}>Boss</Text>
-              <HealthBar hp={boss.stats.hp} maxHp={boss.stats.maxHp} width={240} height={12} />
-              <ProgressBar value={boss.stats.hp / boss.stats.maxHp} color="#fb7185" height={6} />
-            </Box>
-
-            <Box style={{ width: 270, gap: 8 }}>
-              <QuestLog quests={quests} width={260} showCompleted />
-              <Box style={{ gap: 4 }}>
-                <Text style={{ color: '#94a3b8', fontSize: 10 }}>Inventory</Text>
-                <InventoryGrid inventory={bag} columns={4} slotSize={34} />
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#080d18', padding: 12 }}>
+      <Box style={{ flexDirection: 'row', width: '100%', height: '100%', gap: 12 }}>
+        <Card
+          style={{ flexGrow: 1, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 8 }}
+          title="Bossfight Conductor"
+          subtitle="Run the encounter like a performance"
+        >
+          <Box style={{ width: '100%', height: '100%', gap: 8 }}>
+            <Box style={{ gap: 4 }}>
+              <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center', width: '100%' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 11, width: 30 }}>Hero</Text>
+                <HealthBar hp={hero.stats.hp} maxHp={hero.stats.maxHp} width={220} height={10} />
+                <GameStatusBar value={Math.round(focus * 100)} max={100} width={80} height={6} fillColor="#38bdf8" />
+              </Box>
+              <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center', width: '100%' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 11, width: 30 }}>Boss</Text>
+                <HealthBar hp={boss.stats.hp} maxHp={boss.stats.maxHp} width={220} height={10} />
+                <Badge label={phase} variant="warning" />
               </Box>
             </Box>
-          </Box>
 
-          <TransportBar
-            playing={playing}
-            onPlay={function() { setPlaying(true); }}
-            onStop={function() { setPlaying(false); }}
-            bpm={Math.round(96 + intensity * 52)}
-            position={phase}
-          />
-
-          <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'end' }}>
-            <Knob value={intensity} onChange={setIntensity} min={0} max={1} step={0.01} label="Intensity" />
-            <Fader value={focus} onChange={setFocus} min={0} max={1} step={0.01} label="Focus" height={90} />
-            <Box style={{ alignItems: 'center', gap: 4 }}>
-              <Meter value={threat} peak={Math.min(1, threat + 0.1)} width={14} height={80} />
-              <Text style={{ color: '#94a3b8', fontSize: 9 }}>Threat</Text>
+            <Box style={{ flexDirection: 'row', width: '100%', gap: 10 }}>
+              <Box style={{ flexGrow: 1 }}>
+                <QuestLog quests={quests} width={220} showCompleted />
+              </Box>
+              <Box style={{ gap: 4 }}>
+                <Text style={{ color: '#64748b', fontSize: 10 }}>Inventory</Text>
+                <InventoryGrid inventory={bag} columns={4} slotSize={28} />
+              </Box>
             </Box>
-            <ActionBar
-              size="md"
-              items={[
-                { key: 'strike', label: 'Strike', color: '#93c5fd' },
-                { key: 'potion', label: 'Potion', color: '#86efac' },
-                { key: 'overdrive', label: 'Overdrive', color: '#f9a8d4' },
-              ]}
-              onAction={function(key) {
-                if (key === 'strike') strike();
-                if (key === 'potion') drinkPotion();
-                if (key === 'overdrive') overdrive();
-              }}
-            />
-          </Box>
-        </Box>
-      </Card>
 
-      <Card title="AI Tactical Coach" subtitle="Ask for pacing, survival, or damage routes">
-        <Box style={{ width: '100%', height: 180 }}>
-          <AIMessageList messages={messages} />
-        </Box>
-        <AIChatInput send={askCoach} placeholder="ex: Should I burst now or heal?" />
-      </Card>
+            <TransportBar
+              playing={playing}
+              onPlay={function() { setPlaying(true); }}
+              onStop={function() { setPlaying(false); }}
+              bpm={Math.round(96 + intensity * 52)}
+              position={phase}
+            />
+
+            <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'end' }}>
+              <Knob value={intensity} onChange={setIntensity} min={0} max={1} step={0.01} label="Intensity" />
+              <Fader value={focus} onChange={setFocus} min={0} max={1} step={0.01} label="Focus" height={70} />
+              <Box style={{ alignItems: 'center', gap: 4 }}>
+                <Meter value={threat} peak={Math.min(1, threat + 0.1)} width={12} height={60} />
+                <Text style={{ color: '#94a3b8', fontSize: 9 }}>Threat</Text>
+              </Box>
+              <ActionBar
+                size="md"
+                items={[
+                  { key: 'strike', label: 'Strike', color: '#93c5fd' },
+                  { key: 'potion', label: 'Potion', color: '#86efac' },
+                  { key: 'overdrive', label: 'Overdrive', color: '#f9a8d4' },
+                ]}
+                onAction={function(key) {
+                  if (key === 'strike') strike();
+                  if (key === 'potion') drinkPotion();
+                  if (key === 'overdrive') overdrive();
+                }}
+              />
+            </Box>
+          </Box>
+        </Card>
+
+        <Card
+          style={{ width: 280, height: '100%' }}
+          bodyStyle={{ height: '100%', gap: 8 }}
+          title="AI Coach"
+          subtitle="Tactical guidance"
+        >
+          <ActionBar
+            size="sm"
+            items={[
+              { key: 'assess', label: 'Assess', color: '#93c5fd' },
+              { key: 'survive', label: 'Survive', color: '#86efac' },
+            ]}
+            onAction={function(key) {
+              if (key === 'assess') askCoach('What should I do right now?');
+              if (key === 'survive') askCoach('How do I survive this phase?');
+            }}
+          />
+          <Box style={{ width: '100%', flexGrow: 1, minHeight: 0 }}>
+            <AIMessageList messages={messages} />
+          </Box>
+          <AIChatInput send={askCoach} placeholder="ex: Should I burst or heal?" />
+        </Card>
+      </Box>
     </Box>
   );
 }`,
