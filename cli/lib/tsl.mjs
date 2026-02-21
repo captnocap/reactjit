@@ -54,7 +54,7 @@ export function transpile(source, fileName = 'input.tsl') {
     sourceFile,
     indent: 0,
     exports: [],          // collected export names for module return
-    usesSpread: false,    // whether we need the table merge helper
+    usesStdlib: false,    // whether we need to require tsl_stdlib
     errors: [],
   };
 
@@ -73,25 +73,10 @@ export function transpile(source, fileName = 'input.tsl') {
     lines.push(`return {\n${pairs.join('\n')}\n}`);
   }
 
-  // Prepend spread helper if needed
+  // Prepend stdlib require if any helpers were used
   let output = lines.join('\n');
-  if (ctx.usesSpread) {
-    const helper = [
-      'local function __tsl_merge(...)',
-      '  local result = {}',
-      '  for i = 1, select("#", ...) do',
-      '    local t = select(i, ...)',
-      '    if t then',
-      '      for k, v in pairs(t) do',
-      '        result[k] = v',
-      '      end',
-      '    end',
-      '  end',
-      '  return result',
-      'end',
-      '',
-    ].join('\n');
-    output = helper + output;
+  if (ctx.usesStdlib) {
+    output = 'local __tsl = require("lua.tsl_stdlib")\n\n' + output;
   }
 
   if (ctx.errors.length > 0) {
@@ -813,14 +798,11 @@ function emitMethodCall(node, ctx) {
       return `table.remove(${obj}, 1)`;
     case 'concat':
       // table concat: simple merge
-      ctx.usesSpread = true;
-      return `__tsl_merge(${obj}, ${args.join(', ')})`;
-    case 'indexOf': {
-      // Could be string or array — check context, default to generic search
-      // For strings: string.find; for arrays: linear scan
-      // Without type info, emit a helper comment
-      return `__tsl_indexOf(${obj}, ${args[0]})`;
-    }
+      ctx.usesStdlib = true;
+      return `__tsl.merge(${obj}, ${args.join(', ')})`;
+    case 'indexOf':
+      ctx.usesStdlib = true;
+      return `__tsl.indexOf(${obj}, ${args[0]})`;
     case 'includes':
       return `(string.find(${obj}, ${args[0]}, 1, true) ~= nil)`;
     case 'slice':
@@ -832,19 +814,18 @@ function emitMethodCall(node, ctx) {
     case 'sort':
       if (args.length > 0) return `table.sort(${obj}, ${args[0]})`;
       return `table.sort(${obj})`;
-    case 'reverse': {
-      // In-place reverse — no direct Lua equivalent, but common enough
-      return `__tsl_reverse(${obj})`;
-    }
+    case 'reverse':
+      ctx.usesStdlib = true;
+      return `__tsl.reverse(${obj})`;
     case 'forEach':
-      // arr.forEach(fn) → for _, v in ipairs(arr) do fn(v) end
-      // This is an expression context, so we can't easily emit a for loop.
-      // Return a helper call.
-      return `__tsl_forEach(${obj}, ${args[0]})`;
+      ctx.usesStdlib = true;
+      return `__tsl.forEach(${obj}, ${args[0]})`;
     case 'map':
-      return `__tsl_map(${obj}, ${args[0]})`;
+      ctx.usesStdlib = true;
+      return `__tsl.map(${obj}, ${args[0]})`;
     case 'filter':
-      return `__tsl_filter(${obj}, ${args[0]})`;
+      ctx.usesStdlib = true;
+      return `__tsl.filter(${obj}, ${args[0]})`;
   }
 
   // String methods
@@ -870,7 +851,8 @@ function emitMethodCall(node, ctx) {
     case 'charCodeAt':
       return `string.byte(${obj}, ${args[0]} + 1)`;
     case 'split':
-      return `__tsl_split(${obj}, ${args[0]})`;
+      ctx.usesStdlib = true;
+      return `__tsl.split(${obj}, ${args[0]})`;
     case 'replace':
       return `string.gsub(${obj}, ${args[0]}, ${args[1]})`;
     case 'substring':
@@ -885,14 +867,17 @@ function emitMethodCall(node, ctx) {
   if (ts.isIdentifier(prop.expression) && prop.expression.text === 'Object') {
     switch (methodName) {
       case 'keys':
-        return `__tsl_keys(${args[0]})`;
+        ctx.usesStdlib = true;
+        return `__tsl.keys(${args[0]})`;
       case 'values':
-        return `__tsl_values(${args[0]})`;
+        ctx.usesStdlib = true;
+        return `__tsl.values(${args[0]})`;
       case 'entries':
-        return `__tsl_entries(${args[0]})`;
+        ctx.usesStdlib = true;
+        return `__tsl.entries(${args[0]})`;
       case 'assign':
-        ctx.usesSpread = true;
-        return `__tsl_merge(${args.join(', ')})`;
+        ctx.usesStdlib = true;
+        return `__tsl.merge(${args.join(', ')})`;
     }
   }
 
@@ -950,7 +935,7 @@ function emitObjectLiteral(node, ctx) {
   // Check for spread properties
   const hasSpread = node.properties.some(p => ts.isSpreadAssignment(p));
   if (hasSpread) {
-    ctx.usesSpread = true;
+    ctx.usesStdlib = true;
     const parts = [];
     for (const prop of node.properties) {
       if (ts.isSpreadAssignment(prop)) {
@@ -960,7 +945,7 @@ function emitObjectLiteral(node, ctx) {
         parts.push(`{ ${emitObjectProperty(prop, ctx)} }`);
       }
     }
-    return `__tsl_merge(${parts.join(', ')})`;
+    return `__tsl.merge(${parts.join(', ')})`;
   }
 
   const props = node.properties.map(p => emitObjectProperty(p, ctx));
