@@ -124,6 +124,91 @@ parallel([
 ]).start();
 ```
 
+## TSL — TypeScript-to-Lua
+
+TSL (`.tsl` files) lets you write Lua-side logic in TypeScript syntax. The transpiler converts it 1:1 to idiomatic Lua — no runtime, no class emulation, no bridge overhead. It runs at LuaJIT speed because the output *is* Lua.
+
+**Who it's for:** Application developers who want Lua performance for hot paths (particle systems, physics, shaders, data transforms) without learning Lua's syntax or module system.
+
+**What it is not:** A language bridge. If Lua can't do something natively, TSL can't either. Arrays are 1-indexed. No promises, no DOM, no Node APIs.
+
+### Workflow
+
+Place `.tsl` files in `src/tsl/`. The CLI handles the rest:
+
+```bash
+reactjit dev    # transpiles src/tsl/*.tsl → lua/tsl/*.lua on startup, re-transpiles on save
+reactjit build  # transpiles before bundling; TSL errors block the build like lint errors
+```
+
+Then require the output from Lua normally:
+
+```lua
+local particles = require("lua.tsl.particles")
+particles.update(state, dt)
+```
+
+### What works
+
+```typescript
+// src/tsl/easing.tsl
+
+export function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+}
+
+export function bounce(t: number): number {
+  if (t < 1 / 2.75) {
+    return 7.5625 * t * t
+  } else if (t < 2 / 2.75) {
+    t -= 1.5 / 2.75
+    return 7.5625 * t * t + 0.75
+  } else {
+    t -= 2.625 / 2.75
+    return 7.5625 * t * t + 0.984375
+  }
+}
+```
+
+Transpiles to clean, readable Lua — no wrappers, no overhead.
+
+Supported features:
+- Variables (`const`, `let`) → `local`
+- Functions, arrow functions → `function`
+- `if / else if / else`
+- `for`, `while`, `do-while`, numeric `for`, `for-of`, `for-in`
+- Objects → tables, arrays → tables
+- Destructuring, template literals, optional chaining (`?.`), nullish coalescing (`??`)
+- `Math.*`, `string.*`, array method transforms (`map`, `filter`, `forEach`, `find`, `reduce`, `some`, `every`, `flat`, etc.)
+- Imports → `require`, exports → return table
+- Type annotations stripped cleanly
+- Comments preserved
+
+Standard library helpers (injected automatically only when used): `map`, `filter`, `forEach`, `indexOf`, `reverse`, `find`, `findIndex`, `some`, `every`, `reduce`, `flat`, `keys`, `values`, `entries`, `split`, `merge`.
+
+### What's not supported (hard errors)
+
+These are build-blocking errors — TSL will refuse to transpile:
+
+| Feature | Why |
+|---------|-----|
+| `class` | Lua has no classes. Use tables and functions. |
+| `async` / `await` | No event loop in LuaJIT. |
+| `try` / `catch` | Use `pcall`. |
+| `new` | No constructors. Return a table from a function. |
+| `yield` / generators | Not available in LuaJIT. |
+
+### CLI
+
+```bash
+reactjit tsl src/tsl/myfile.tsl          # transpile to stdout
+reactjit tsl src/tsl/myfile.tsl -o out.lua  # transpile to file
+reactjit tsl src/tsl/                    # transpile whole directory
+reactjit tsl --test                      # run the test suite
+```
+
+---
+
 ## Built-in Tooling
 
 - **Visual Inspector (F12)** — hover any element to see its computed bounds, style properties, and position in the tree. Click to lock. Works at runtime in both SDL2 and Love2D.
