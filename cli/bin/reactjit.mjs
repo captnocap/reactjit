@@ -8,6 +8,7 @@ import { lintCommand } from '../commands/lint.mjs';
 import { screenshotCommand } from '../commands/screenshot.mjs';
 import { updateCommand } from '../commands/update.mjs';
 import { manifestCommand } from '../commands/manifest.mjs';
+import { tslCommand } from '../commands/tsl.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -23,6 +24,8 @@ const HELP = `
     ilr build dist:<target>      Production build
     ilr update                   Sync runtime files (lua/, lib/, reactjit/)
     ilr lint                     Check src/ for layout mistakes
+    ilr tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
+    ilr tsl --test               Run TSL transpiler test suite
     ilr screenshot [--output]    Lint + build + headless screenshot
     ilr manifest                 Generate or update manifest.json
     ilr help                     Show this help message
@@ -71,6 +74,9 @@ switch (command) {
     break;
   case 'manifest':
     await manifestCommand(args);
+    break;
+  case 'tsl':
+    await tslCommand(args);
     break;
   case 'help':
   case '--help':
