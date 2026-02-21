@@ -224,9 +224,22 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent, Window } from './capabilities';
+export { Audio, Timer, LLMAgent, Window, Pin, PWM, SerialPort, I2CDevice, SPIDevice } from './capabilities';
 export { useCapabilities } from './useCapabilities';
-export type { NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps, CapabilitySchema } from './types';
+export type {
+  NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps,
+  PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
+  CapabilitySchema,
+} from './types';
+
+// GPIO hooks
+export {
+  usePin, usePWM, useSerial, useI2C,
+  type UsePinOptions, type UsePinResult,
+  type UsePWMOptions, type UsePWMResult,
+  type UseSerialOptions, type UseSerialResult,
+  type UseI2COptions, type UseI2CResult,
+} from './useGPIO';
 
 // Generative canvas effects
 export {
