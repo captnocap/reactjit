@@ -1,7 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Pressable, ScrollView } from '../../../packages/shared/src';
+import { Box, Text, Pressable } from '../../../packages/shared/src';
 import { useCrypto } from '../../../packages/crypto/src';
 import { useThemeColors } from '../../../packages/theme/src';
+
+// ── Section layout (same pattern as DataStory) ────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{title}</Text>
+      <Box
+        style={{
+          width: '100%',
+          backgroundColor: c.bgElevated,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 12,
+          gap: 10,
+        }}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+}
 
 // ── Hash Demo ──────────────────────────────────────────
 
@@ -35,32 +59,29 @@ function HashDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 8 }}>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 6, borderWidth: 1, borderColor: c.border }}>
-        <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Hash Functions</Text>
-        <Text style={{ fontSize: 9, color: c.textDim }}>libsodium + libcrypto + libblake3 via Lua FFI</Text>
+    <>
+      <Text style={{ fontSize: 9, color: c.textDim }}>libsodium + libcrypto + libblake3 via Lua FFI</Text>
 
-        <Box style={{ gap: 4 }}>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>Input:</Text>
-          <Box style={{ backgroundColor: c.bg, padding: 6, borderRadius: 4 }}>
-            <Text style={{ fontSize: 10, color: c.info }}>{`"${input}"`}</Text>
+      <Box style={{ gap: 4 }}>
+        <Text style={{ fontSize: 10, color: c.textSecondary }}>Input:</Text>
+        <Box style={{ backgroundColor: c.bg, padding: 6, borderRadius: 4 }}>
+          <Text style={{ fontSize: 10, color: c.info }}>{`"${input}"`}</Text>
+        </Box>
+      </Box>
+
+      {error && (
+        <Text style={{ fontSize: 10, color: c.error }}>{`Hash error: ${error}`}</Text>
+      )}
+
+      {hashes.map(h => (
+        <Box key={h.label} style={{ gap: 2 }}>
+          <Text style={{ fontSize: 10, color: h.color, fontWeight: '700' }}>{`${h.label}:`}</Text>
+          <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
+            <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${h.hex.slice(0, 64)}${h.hex.length > 64 ? '...' : ''}`}</Text>
           </Box>
         </Box>
-
-        {error && (
-          <Text style={{ fontSize: 10, color: c.error }}>{`Hash error: ${error}`}</Text>
-        )}
-
-        {hashes.map(h => (
-          <Box key={h.label} style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: h.color, fontWeight: '700' }}>{`${h.label}:`}</Text>
-            <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-              <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${h.hex.slice(0, 64)}${h.hex.length > 64 ? '...' : ''}`}</Text>
-            </Box>
-          </Box>
-        ))}
-      </Box>
-    </Box>
+      ))}
+    </>
   );
 }
 
@@ -89,21 +110,18 @@ function TokenDemo() {
   }, []);
 
   return (
-    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 13, color: c.text, fontWeight: '700', flexGrow: 1 }}>Token Generation</Text>
+    <>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
+        <Text style={{ fontSize: 9, color: c.textDim, flexGrow: 1 }}>libsodium randombytes_buf via Lua FFI</Text>
         <Pressable onPress={regenerate}>
           <Box style={{ backgroundColor: c.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 10, color: '#000', fontWeight: '700' }}>Regenerate</Text>
           </Box>
         </Pressable>
       </Box>
-      <Text style={{ fontSize: 9, color: c.textDim }}>libsodium randombytes_buf via Lua FFI</Text>
 
       {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>
-          {`Token generation failed: ${error}`}
-        </Text>
+        <Text style={{ fontSize: 10, color: c.error }}>{`Token generation failed: ${error}`}</Text>
       )}
 
       <Box style={{ gap: 2 }}>
@@ -119,7 +137,7 @@ function TokenDemo() {
           <Text style={{ fontSize: 10, color: c.textSecondary }}>{tokens.id}</Text>
         </Box>
       </Box>
-    </Box>
+    </>
   );
 }
 
@@ -155,15 +173,8 @@ function SignDemo() {
   }, []);
 
   return (
-    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Ed25519 Signing</Text>
+    <>
       <Text style={{ fontSize: 9, color: c.textDim }}>libsodium crypto_sign via Lua FFI</Text>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>
-          {`Signing failed: ${error}`}
-        </Text>
-      )}
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: c.textSecondary }}>Message:</Text>
@@ -171,6 +182,10 @@ function SignDemo() {
           <Text style={{ fontSize: 10, color: c.info }}>{'"iLoveReact is awesome"'}</Text>
         </Box>
       </Box>
+
+      {error && (
+        <Text style={{ fontSize: 10, color: c.error }}>{`Signing failed: ${error}`}</Text>
+      )}
 
       {result && (
         <>
@@ -199,7 +214,7 @@ function SignDemo() {
           </Box>
         </>
       )}
-    </Box>
+    </>
   );
 }
 
@@ -238,14 +253,11 @@ function EncryptDemo() {
   }, []);
 
   return (
-    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Password Encryption</Text>
+    <>
       <Text style={{ fontSize: 9, color: c.textDim }}>{`${algo || 'XChaCha20-Poly1305'} + ${kdf || 'Argon2id'} KDF via libsodium FFI`}</Text>
 
       {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>
-          {`Encryption failed: ${error}`}
-        </Text>
+        <Text style={{ fontSize: 10, color: c.error }}>{`Encryption failed: ${error}`}</Text>
       )}
 
       <Box style={{ gap: 2 }}>
@@ -278,7 +290,7 @@ function EncryptDemo() {
           {decrypted === plaintext ? 'Round-trip OK' : decrypted ? 'Decryption failed' : 'Computing...'}
         </Text>
       </Box>
-    </Box>
+    </>
   );
 }
 
@@ -302,7 +314,7 @@ function FeatureList() {
   ];
 
   return (
-    <Box style={{ gap: 4 }}>
+    <>
       {features.map(f => (
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
@@ -310,16 +322,16 @@ function FeatureList() {
           <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
         </Box>
       ))}
-    </Box>
+    </>
   );
 }
 
 // ── Code Examples ──────────────────────────────────────
 
-function CryptoCodeBlock({ label, code, color }: { label: string; code: string[]; color?: string }) {
+function CodeBlock({ label, code, color }: { label: string; code: string[]; color?: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 10, gap: 3, borderWidth: 1, borderColor: c.border }}>
+    <Box style={{ backgroundColor: c.bg, borderRadius: 6, padding: 10, gap: 3 }}>
       <Text style={{ fontSize: 9, color: c.textDim }}>{label}</Text>
       {code.map((line, i) => (
         <Text key={i} style={{ fontSize: 10, color: color || c.success }}>{line}</Text>
@@ -330,8 +342,8 @@ function CryptoCodeBlock({ label, code, color }: { label: string; code: string[]
 
 function UsageExamples() {
   return (
-    <Box style={{ gap: 8 }}>
-      <CryptoCodeBlock
+    <>
+      <CodeBlock
         label="// Hashing -- async, runs in C via Lua FFI"
         code={[
           "import { useCrypto } from '@ilovereact/crypto';",
@@ -343,7 +355,7 @@ function UsageExamples() {
         ]}
       />
 
-      <CryptoCodeBlock
+      <CodeBlock
         label="// Password encryption (Argon2id + XChaCha20)"
         code={[
           "const sealed = await crypto.encrypt('secret', 'password');",
@@ -351,7 +363,7 @@ function UsageExamples() {
         ]}
       />
 
-      <CryptoCodeBlock
+      <CodeBlock
         label="// Digital signatures (Ed25519)"
         code={[
           "const keys = await crypto.generateSigningKeys();",
@@ -360,7 +372,7 @@ function UsageExamples() {
         ]}
       />
 
-      <CryptoCodeBlock
+      <CodeBlock
         label="// Diffie-Hellman key exchange (X25519)"
         code={[
           "const alice = await crypto.generateDHKeys();",
@@ -371,14 +383,14 @@ function UsageExamples() {
         ]}
       />
 
-      <CryptoCodeBlock
+      <CodeBlock
         label="// Tokens"
         code={[
           "const token = await crypto.randomToken(32);",
           "const id = await crypto.randomId(16);",
         ]}
       />
-    </Box>
+    </>
   );
 }
 
@@ -386,50 +398,40 @@ function UsageExamples() {
 
 export function CryptoStory() {
   const c = useThemeColors();
-  const [tab, setTab] = useState<'hashes' | 'encrypt' | 'sign' | 'tokens' | 'code' | 'features'>('hashes');
-
-  const tabs = [
-    { key: 'hashes' as const, label: 'Hashes' },
-    { key: 'encrypt' as const, label: 'Encrypt' },
-    { key: 'sign' as const, label: 'Sign' },
-    { key: 'tokens' as const, label: 'Tokens' },
-    { key: 'code' as const, label: 'Usage' },
-    { key: 'features' as const, label: 'All' },
-  ];
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>@ilovereact/crypto</Text>
-        <Text style={{ fontSize: 11, color: c.textDim }}>libsodium + OpenSSL + BLAKE3 -- all crypto runs in C via Lua FFI. Zero JS overhead.</Text>
-      </Box>
+    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
+      <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
+        <Section title="1. @ilovereact/crypto">
+          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+            libsodium + OpenSSL + BLAKE3 -- all crypto runs in C via Lua FFI. Zero JS overhead.
+          </Text>
+        </Section>
 
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-        {tabs.map((t) => (
-          <Pressable key={t.key} onPress={() => setTab(t.key)}>
-            <Box style={{
-              backgroundColor: tab === t.key ? c.info : c.bgElevated,
-              paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-              borderRadius: 4,
-            }}>
-              <Text style={{ fontSize: 10, color: tab === t.key ? '#000' : c.textSecondary, fontWeight: '700' }}>
-                {t.label}
-              </Text>
-            </Box>
-          </Pressable>
-        ))}
-      </Box>
+        <Section title="2. Hash Functions">
+          <HashDemo />
+        </Section>
 
-      <ScrollView style={{ flexGrow: 1 }}>
-        <Box style={{ gap: 12, paddingRight: 4 }}>
-          {tab === 'hashes' && <HashDemo />}
-          {tab === 'encrypt' && <EncryptDemo />}
-          {tab === 'sign' && <SignDemo />}
-          {tab === 'tokens' && <TokenDemo />}
-          {tab === 'code' && <UsageExamples />}
-          {tab === 'features' && <FeatureList />}
-        </Box>
-      </ScrollView>
+        <Section title="3. Password Encryption">
+          <EncryptDemo />
+        </Section>
+
+        <Section title="4. Ed25519 Signing">
+          <SignDemo />
+        </Section>
+
+        <Section title="5. Token Generation">
+          <TokenDemo />
+        </Section>
+
+        <Section title="6. Algorithm Catalog">
+          <FeatureList />
+        </Section>
+
+        <Section title="7. Usage Examples">
+          <UsageExamples />
+        </Section>
+      </Box>
     </Box>
   );
 }
