@@ -199,6 +199,7 @@ const NativeScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
 
     const hostProps: Record<string, any> = {
       style: mergedStyle,
+      horizontal,
       showScrollIndicator,
       onScroll,
       onScrollBegin,

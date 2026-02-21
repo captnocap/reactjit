@@ -220,6 +220,13 @@ export interface LoveEvent {
   // File drop events
   filePath?: string;
   fileSize?: number;
+  fileDropMode?: FileDropMode;
+  fileName?: string;
+  fileExtension?: string;
+  filePreviewText?: string;
+  filePreviewTruncated?: boolean;
+  filePreviewEncoding?: string;
+  filePreviewError?: string;
 
   // Capability events (Audio, Timer, etc.)
   handler?: string;         // Which handler to invoke (e.g. "onProgress", "onTick")
@@ -234,6 +241,8 @@ export interface LoveEvent {
   currentTarget?: number;
   stopPropagation?: () => void;
 }
+
+export type FileDropMode = 'upload' | 'preview';
 
 export interface LayoutEvent {
   targetId?: number;
@@ -298,6 +307,12 @@ export interface BoxProps {
   onDragStart?: (event: LoveEvent) => void;
   onDrag?: (event: LoveEvent) => void;
   onDragEnd?: (event: LoveEvent) => void;
+  /**
+   * Controls how Lua treats dropped files for this subtree.
+   * - 'upload'  => metadata only (path/size), attachment-style flow
+   * - 'preview' => attempts to read text content and includes it in filedrop events
+   */
+  fileDropMode?: FileDropMode;
   onFileDrop?: (event: LoveEvent) => void;
   onDirectoryDrop?: (event: LoveEvent) => void;
   onFileDragEnter?: (event: LoveEvent) => void;

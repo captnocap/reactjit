@@ -2,6 +2,7 @@
 export type {
   Style,
   Color,
+  FileDropMode,
   LoveEvent,
   BoxProps,
   TextProps,
@@ -226,6 +227,12 @@ export { Native } from './Native';
 export { Audio, Timer } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type { NativeProps, AudioProps, TimerProps, CapabilitySchema } from './types';
+
+// Generative canvas effects
+export {
+  Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
+  type EffectProps, type SpirographProps, type MirrorProps, type CymaticsProps,
+} from './effects';
 
 // Cartridge Inspector
 export { CartridgeInspector, type CartridgeInspectorProps } from './CartridgeInspector';

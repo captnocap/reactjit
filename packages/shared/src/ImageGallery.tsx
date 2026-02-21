@@ -56,7 +56,16 @@ export function ImageGallery({
   const [activeIndex, setActiveIndex] = useState(0);
 
   const normalizedColumns = clampColumns(columns);
-  const tileBasis = useMemo(() => `${100 / normalizedColumns}%`, [normalizedColumns]);
+  const rows = useMemo<Array<Array<{ item: ImageGalleryItem; index: number }>>>(() => {
+    const groupedRows: Array<Array<{ item: ImageGalleryItem; index: number }>> = [];
+    for (let rowStart = 0; rowStart < images.length; rowStart += normalizedColumns) {
+      const rowItems = images
+        .slice(rowStart, rowStart + normalizedColumns)
+        .map((item, offset) => ({ item, index: rowStart + offset }));
+      groupedRows.push(rowItems);
+    }
+    return groupedRows;
+  }, [images, normalizedColumns]);
 
   const openViewer = (index: number) => {
     setActiveIndex(index);
@@ -74,61 +83,67 @@ export function ImageGallery({
       <Box
         style={{
           width: '100%',
-          flexDirection: 'row',
-          flexWrap: 'wrap',
           gap,
           ...style,
         }}
       >
-        {images.map((item, index) => (
-          <Pressable
-            key={item.id ?? `${item.src}-${index}`}
-            style={{
-              flexBasis: tileBasis,
-              maxWidth: tileBasis,
-              flexGrow: 1,
-              minWidth: 120,
-            }}
-            onPress={() => {
-              onImagePress?.(index, item);
-              openViewer(index);
-            }}
-          >
-            {({ pressed, hovered }) => (
-              <Box
+        {rows.map((row, rowIndex) => (
+          <Box key={`row-${rowIndex}`} style={{ width: '100%', flexDirection: 'row', gap }}>
+            {row.map(({ item, index }) => (
+              <Pressable
+                key={item.id ?? `${item.src}-${index}`}
                 style={{
-                  width: '100%',
-                  borderRadius: 8,
-                  overflow: 'hidden',
-                  borderWidth: 1,
-                  borderColor: hovered ? 'borderFocus' : 'border',
-                  backgroundColor: pressed ? 'surfaceHover' : 'surface',
-                  opacity: pressed ? 0.88 : 1,
-                  ...tileStyle,
+                  flexBasis: 0,
+                  flexGrow: 1,
+                  minWidth: 0,
+                }}
+                onPress={() => {
+                  onImagePress?.(index, item);
+                  openViewer(index);
                 }}
               >
-                <Image
-                  src={item.thumbnailSrc || item.src}
-                  style={{
-                    width: '100%',
-                    height: thumbnailHeight,
-                    objectFit: 'cover',
-                    ...imageStyle,
-                  }}
-                />
-                {showTitles && (item.title || item.subtitle) && (
-                  <Box style={{ padding: 8, gap: 1, backgroundColor: 'bgElevated' }}>
-                    {item.title && (
-                      <Text style={{ fontSize: 11, color: 'text', fontWeight: 'bold' }}>{item.title}</Text>
-                    )}
-                    {item.subtitle && (
-                      <Text style={{ fontSize: 9, color: 'textSecondary' }}>{item.subtitle}</Text>
+                {({ pressed, hovered }) => (
+                  <Box
+                    style={{
+                      width: '100%',
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      borderWidth: 1,
+                      borderColor: hovered ? 'borderFocus' : 'border',
+                      backgroundColor: pressed ? 'surfaceHover' : 'surface',
+                      opacity: pressed ? 0.88 : 1,
+                      ...tileStyle,
+                    }}
+                  >
+                    <Image
+                      src={item.thumbnailSrc || item.src}
+                      style={{
+                        width: '100%',
+                        height: thumbnailHeight,
+                        objectFit: 'cover',
+                        ...imageStyle,
+                      }}
+                    />
+                    {showTitles && (item.title || item.subtitle) && (
+                      <Box style={{ padding: 8, gap: 1, backgroundColor: 'bgElevated' }}>
+                        {item.title && (
+                          <Text style={{ fontSize: 11, color: 'text', fontWeight: 'bold' }}>{item.title}</Text>
+                        )}
+                        {item.subtitle && (
+                          <Text style={{ fontSize: 9, color: 'textSecondary' }}>{item.subtitle}</Text>
+                        )}
+                      </Box>
                     )}
                   </Box>
                 )}
-              </Box>
-            )}
-          </Pressable>
+              </Pressable>
+            ))}
+
+            {row.length < normalizedColumns &&
+              Array.from({ length: normalizedColumns - row.length }, (_, fillerIndex) => (
+                <Box key={`filler-${rowIndex}-${fillerIndex}`} style={{ flexBasis: 0, flexGrow: 1, minWidth: 0 }} />
+              ))}
+          </Box>
         ))}
       </Box>
 
