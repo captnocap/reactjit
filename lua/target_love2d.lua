@@ -17,13 +17,14 @@
         images.unload(src)
         images.getDimensions(src) -> width, height
         images.clearCache()
-    - videos: Video loading, caching, and FFmpeg transcoding (optional, may be nil)
-        videos.get(src) -> video or nil
-        videos.load(src)
-        videos.unload(src)
+    - videos: Video loading + playback via libmpv (optional, may be nil)
+        videos.get(src) -> canvas or nil
         videos.getDimensions(src) -> width, height
-        videos.getStatus(src) -> "ready" | "transcoding" | "error" | nil
+        videos.getStatus(src) -> "loading" | "ready" | "error" | nil
+        videos.syncWithTree(nodes)
+        videos.renderAll()
         videos.poll() -> events table
+        videos.pollPlayback() -> events table
         videos.clearCache()
     - painter: Rendering backend
         painter.init(config)  -- receives { measure, images, videos }

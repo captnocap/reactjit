@@ -24,6 +24,7 @@ local Tree = {}
 local nodes = {}          -- id -> node
 local rootChildren = {}   -- ordered list of top-level children
 local treeDirty = true
+local syntheticRoot = nil -- cached wrapper when #rootChildren > 1
 
 -- ============================================================================
 -- Internal helpers
@@ -75,6 +76,7 @@ function Tree.init(config)
   nodes = {}
   rootChildren = {}
   treeDirty = true
+  syntheticRoot = nil
 end
 
 --- Apply an array of mutation commands from the React reconciler.
@@ -287,16 +289,22 @@ end
 --- If there is exactly one root child, return it directly.
 --- Otherwise wrap rootChildren in a synthetic full-size View.
 function Tree.getTree()
-  if #rootChildren == 0 then return nil end
-  if #rootChildren == 1 then return rootChildren[1] end
-  return {
-    id = 0,
-    type = "View",
-    style = { width = "100%", height = "100%" },
-    children = rootChildren,
-    props = {},
-    computed = nil,
-  }
+  if #rootChildren == 0 then syntheticRoot = nil; return nil end
+  if #rootChildren == 1 then syntheticRoot = nil; return rootChildren[1] end
+  -- Reuse cached wrapper so layout's computed values persist across calls
+  if not syntheticRoot then
+    syntheticRoot = {
+      id = 0,
+      type = "View",
+      style = { width = "100%", height = "100%" },
+      children = rootChildren,
+      props = {},
+      computed = nil,
+    }
+  end
+  -- Always keep children in sync (rootChildren may have changed)
+  syntheticRoot.children = rootChildren
+  return syntheticRoot
 end
 
 --- Return the raw nodes table (id -> node).
@@ -343,6 +351,15 @@ function Tree.setScroll(nodeId, scrollX, scrollY)
   if c then
     maxScrollX = math.max(0, (ss.contentW or 0) - c.w)
     maxScrollY = math.max(0, (ss.contentH or 0) - c.h)
+  end
+
+  local horizontalMode = node.props and node.props.horizontal
+  if horizontalMode == true then
+    maxScrollY = 0
+    scrollY = 0
+  elseif horizontalMode == false then
+    maxScrollX = 0
+    scrollX = 0
   end
 
   local function sanitize(v, maxValue)

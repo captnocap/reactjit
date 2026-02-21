@@ -395,6 +395,15 @@ function TextInput.blur(node)
 end
 
 -- ============================================================================
+-- Public API: focus (called when node gains focus externally)
+-- ============================================================================
+
+function TextInput.focus(node)
+  local is = ensureState(node)
+  resetBlink(is)
+end
+
+-- ============================================================================
 -- Input handlers
 -- ============================================================================
 
@@ -559,10 +568,9 @@ function TextInput.handleMousePressed(node, mx, my, button)
   local c = node.computed
   if not c then return false end
 
-  -- Check bounds
-  if mx < c.x or mx > c.x + c.w or my < c.y or my > c.y + c.h then
-    return false
-  end
+  -- No bounds check here — events.hitTest already verified the click
+  -- is within this node. Re-checking with potentially different coordinates
+  -- (screenToContent vs hitTest traversal) can cause false negatives.
 
   local pos = screenToPos(node, is, mx)
   is.cursorPos = pos
@@ -644,10 +652,18 @@ function TextInput.draw(node, effectiveOpacity)
   setColorWithOpacity(bgColor, effectiveOpacity)
   love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
 
-  -- Scissor clip to bounds (transform-aware for scroll containers)
+  -- Focused background tint (subtle overlay to signal active state)
+  if isFocused then
+    love.graphics.setColor(0.15, 0.25, 0.45, 0.12 * effectiveOpacity)
+    love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+  end
+
+  -- Save parent scissor and intersect (so parent overflow clips are respected)
+  local prevScissor = {love.graphics.getScissor()}
   local sx, sy = love.graphics.transformPoint(c.x, c.y)
   local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
-  love.graphics.setScissor(sx, sy, sx2 - sx, sy2 - sy)
+  local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
+  love.graphics.intersectScissor(sx, sy, sw, sh)
 
   local textAreaX = c.x + padding
   local textAreaY = c.y + paddingTop
@@ -692,12 +708,13 @@ function TextInput.draw(node, effectiveOpacity)
   end
 
   -- Text or placeholder
-  if isEmpty and not isFocused then
-    -- Placeholder
+  if isEmpty then
+    -- Show placeholder (dimmed when focused, normal when unfocused)
     local ph = getPlaceholder(node)
     if ph ~= "" then
       local phColor = parseColor(props.placeholderColor, { 0.45, 0.45, 0.50, 1 })
-      setColorWithOpacity(phColor, effectiveOpacity)
+      local phOpacity = isFocused and (effectiveOpacity * 0.45) or effectiveOpacity
+      setColorWithOpacity(phColor, phOpacity)
       love.graphics.print(ph, textAreaX, textY)
     end
   else
@@ -715,12 +732,19 @@ function TextInput.draw(node, effectiveOpacity)
     love.graphics.rectangle("fill", cursorX, textY + 1, 2, lineH - 2)
   end
 
-  love.graphics.setScissor()
+  -- Restore previous scissor (don't clear — parent scroll containers need theirs)
+  if prevScissor[1] then
+    love.graphics.setScissor(prevScissor[1], prevScissor[2], prevScissor[3], prevScissor[4])
+  else
+    love.graphics.setScissor()
+  end
 
   -- Border
   local borderColor
+  local bw = s.borderWidth or 1
   if isFocused then
-    borderColor = parseColor(props.cursorColor, { 0.29, 0.56, 0.85, 0.8 })
+    borderColor = parseColor(props.cursorColor, { 0.29, 0.56, 0.85, 0.9 })
+    bw = math.max(bw, 2)  -- at least 2px when focused
   else
     local bc = parseColor(s.borderColor, nil)
     if bc then
@@ -728,7 +752,6 @@ function TextInput.draw(node, effectiveOpacity)
     end
   end
   if borderColor then
-    local bw = s.borderWidth or 1
     setColorWithOpacity(borderColor, effectiveOpacity)
     love.graphics.setLineWidth(bw)
     love.graphics.rectangle("line", c.x, c.y, c.w, c.h, borderRadius, borderRadius)

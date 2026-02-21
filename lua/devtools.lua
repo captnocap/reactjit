@@ -234,6 +234,9 @@ function DevTools.textinput(text)
   return false
 end
 
+-- Forward declaration (defined after DevTools.mousepressed, called within it)
+local logsMousepressed
+
 --- Handle mouse press. Returns true if consumed.
 function DevTools.mousepressed(x, y, button)
   if not state.open then
@@ -516,7 +519,7 @@ local function drawLogsTab(region)
 end
 
 --- Handle click on logs tab. Returns true if consumed.
-local function logsMousepressed(x, y, button, region)
+logsMousepressed = function(x, y, button, region)
   if button ~= 1 then return false end
   if x < region.x or x > region.x + region.w then return false end
   if y < region.y or y > region.y + region.h then return false end

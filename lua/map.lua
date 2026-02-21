@@ -34,6 +34,7 @@ local TileCache = nil
 local g3d = nil           -- lazy-loaded for 3D rendering (pitch > 0)
 local mapShader = nil     -- MVP + Canvas Y-flip shader for 3D tiles
 local sharedQuad = nil    -- reusable unit quad model for tile rendering
+local missingTileTexture = nil
 
 -- ============================================================================
 -- State
@@ -120,6 +121,7 @@ function Map.init()
     local dummyData = love.image.newImageData(1, 1)
     dummyData:setPixel(0, 0, 1, 1, 1, 1)
     local dummyTex = love.graphics.newImage(dummyData)
+    missingTileTexture = dummyTex
     sharedQuad = g3d.newModel(verts, dummyTex, {0,0,0}, {0,0,0}, {1,1,1})
   end
 end
@@ -1076,6 +1078,23 @@ local function renderTileLayers3D(m)
               {scaledTileSize, scaledTileSize, 1}
             )
             sharedQuad:draw(mapShader)
+          elseif missingTileTexture then
+            -- Keep 3D mode readable offline: render a faint ground tile when
+            -- imagery is unavailable instead of leaving the canvas empty.
+            local tilePxX = tx * tileSize
+            local tilePxY = ty * tileSize
+            local worldX = (tilePxX - centerPx) * fracScale
+            local worldY = -((tilePxY - centerPy) * fracScale)
+
+            sharedQuad.mesh:setTexture(missingTileTexture)
+            sharedQuad:setTransform(
+              {worldX, worldY, 0},
+              {0, 0, 0},
+              {scaledTileSize, scaledTileSize, 1}
+            )
+            love.graphics.setColor(0.80, 0.82, 0.86, 0.12 * layer.opacity)
+            sharedQuad:draw(mapShader)
+            love.graphics.setColor(1, 1, 1, 1)
           end
         end
       end
