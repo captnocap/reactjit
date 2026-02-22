@@ -109,6 +109,26 @@ local function valueToAngle(value, min, max)
 end
 
 -- ============================================================================
+-- Font helper (works on both Love2D and SDL2)
+-- ============================================================================
+
+-- Default font size for labels
+local LABEL_FONT_SIZE = 10
+
+--- Get a font handle for text measurement.
+--- Uses the injected Measure module (works on both targets) with a fallback
+--- to love.graphics.newFont for pure Love2D environments where Measure is nil.
+local function getFontHandle(fontSize)
+  if Measure and Measure.getFont then
+    return Measure.getFont(fontSize)
+  end
+  if love and love.graphics and love.graphics.newFont then
+    return love.graphics.newFont(fontSize)
+  end
+  return nil
+end
+
+-- ============================================================================
 -- Drawing
 -- ============================================================================
 
@@ -187,8 +207,8 @@ function Knob.draw(node, effectiveOpacity)
   love.graphics.setLineWidth(1)
 
   -- Draw label below
-  if p.label and Measure then
-    local font = love.graphics.getFont()
+  if p.label then
+    local font = getFontHandle(LABEL_FONT_SIZE)
     if font then
       local labelWidth = font:getWidth(p.label)
       local labelX = c.x + (c.w - labelWidth) / 2
