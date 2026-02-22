@@ -120,10 +120,13 @@ export function useRack(options?: UseRackOptions): UseRackResult {
     const topo = topologySignature(modules, connections);
 
     // Idle engine emits empty state at ~30fps; avoid pointless rerenders.
-    if (!topologyOnly && topo === '' && lastTopologyRef.current === '') {
+    if (topo === '' && lastTopologyRef.current === '') {
       return;
     }
-    if (topologyOnly && topo === lastTopologyRef.current) {
+    // Topology-only mode: skip if module/connection graph hasn't changed.
+    // Full mode: also skip — useRack consumers care about structure, not per-frame
+    // param churn (clock phase, envelope values). Use useModule/useParam for those.
+    if (topo === lastTopologyRef.current) {
       return;
     }
 
@@ -181,10 +184,19 @@ export function useModule(moduleId: string): UseModuleResult {
 
   const setParamRpc = useLoveRPC('audio:setParam');
 
+  const stateRef = useRef(state);
+
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = normalizeList<ModuleState>((rackState as any)?.modules)
       .find((m) => m.id === moduleId);
     if (mod) {
+      // Skip re-render if params haven't changed
+      const prev = stateRef.current;
+      if (prev.id === mod.id && prev.type === mod.type
+        && JSON.stringify(prev.params) === JSON.stringify(mod.params)) {
+        return;
+      }
+      stateRef.current = mod;
       setState(mod);
     }
   });
@@ -223,16 +235,22 @@ export function useParam(
   const [value, setValue] = useState<any>(null);
   const setParamRpc = useLoveRPC('audio:setParam');
 
+  const valueRef = useRef(value);
+
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = normalizeList<ModuleState>((rackState as any)?.modules)
       .find((m) => m.id === moduleId);
     if (mod && mod.params[paramName] !== undefined) {
-      setValue(mod.params[paramName]);
+      if (mod.params[paramName] !== valueRef.current) {
+        valueRef.current = mod.params[paramName];
+        setValue(mod.params[paramName]);
+      }
     }
   });
 
   const setParam = useCallback(
     (newValue: any) => {
+      valueRef.current = newValue;
       setValue(newValue); // optimistic update
       return setParamRpc({ moduleId, param: paramName, value: newValue });
     },
@@ -385,14 +403,26 @@ export function useClock(moduleId: string): UseClockResult {
 
   const setParamRpc = useLoveRPC('audio:setParam');
 
+  const posRef = useRef(position);
+  const bpmRef = useRef(bpm);
+
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = normalizeList<ModuleState>((rackState as any)?.modules)
       .find((m) => m.id === moduleId);
     if (mod) {
       if (mod.clock) {
-        setPosition(mod.clock);
+        const prev = posRef.current;
+        // Only re-render for discrete changes (beat/bar/step/running).
+        // Phase is a continuous float that changes every audio tick — comparing
+        // it here would trigger 30fps re-renders even when nothing visible changed.
+        if (prev.beat !== mod.clock.beat || prev.bar !== mod.clock.bar
+          || prev.step !== mod.clock.step || prev.running !== mod.clock.running) {
+          posRef.current = mod.clock;
+          setPosition(mod.clock);
+        }
       }
-      if (mod.params.bpm !== undefined) {
+      if (mod.params.bpm !== undefined && mod.params.bpm !== bpmRef.current) {
+        bpmRef.current = mod.params.bpm;
         setBpmState(mod.params.bpm);
       }
     }
@@ -478,12 +508,23 @@ export function useSampler(moduleId: string): UseSamplerResult {
   const clearSampleRpc = useLoveRPC('audio:clearSample');
   const noteOnRpc = useLoveRPC('audio:noteOn');
 
+  const slotsRef = useRef<string>('');
+  const voicesRef = useRef<string>('');
+
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = normalizeList<ModuleState>((rackState as any)?.modules)
       .find((m) => m.id === moduleId);
     if (mod?.sampler) {
-      setSlots(mod.sampler.slots || {});
-      setVoices(normalizeList<SamplerVoice>(mod.sampler.voices as ListLike<SamplerVoice>));
+      const slotSig = JSON.stringify(mod.sampler.slots || {});
+      if (slotSig !== slotsRef.current) {
+        slotsRef.current = slotSig;
+        setSlots(mod.sampler.slots || {});
+      }
+      const voiceSig = JSON.stringify(mod.sampler.voices || []);
+      if (voiceSig !== voicesRef.current) {
+        voicesRef.current = voiceSig;
+        setVoices(normalizeList<SamplerVoice>(mod.sampler.voices as ListLike<SamplerVoice>));
+      }
     }
   });
 
@@ -586,13 +627,24 @@ export function useSequencer(moduleId: string): UseSequencerResult {
   const setTargetRpc = useLoveRPC('audio:setTrackTarget');
   const clearPatternRpc = useLoveRPC('audio:clearPattern');
 
+  const stepRef = useRef(currentStep);
+  const patternRef = useRef<string>('');
+
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = normalizeList<ModuleState>((rackState as any)?.modules)
       .find((m) => m.id === moduleId);
     if (mod?.sequencer) {
-      setPattern(mod.sequencer.pattern || {});
-      setCurrentStep(mod.sequencer.currentStep || 0);
-      setTrackTargets(mod.sequencer.trackTargets || {});
+      const newStep = mod.sequencer.currentStep || 0;
+      if (newStep !== stepRef.current) {
+        stepRef.current = newStep;
+        setCurrentStep(newStep);
+      }
+      const patSig = JSON.stringify(mod.sequencer.pattern || {});
+      if (patSig !== patternRef.current) {
+        patternRef.current = patSig;
+        setPattern(mod.sequencer.pattern || {});
+        setTrackTargets(mod.sequencer.trackTargets || {});
+      }
     }
   });
 
