@@ -418,7 +418,16 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
         local marEnd = isRow and (ru(cs.marginRight, pw) or cmar)
                               or (ru(cs.marginBottom, ph) or cmar)
 
-        local size = estimateIntrinsicMain(child, isRow, pw, ph) + marStart + marEnd
+        -- Check explicit dimension first (mirrors main-axis branch).
+        -- Without this, percentage widths like "100%" are ignored and we
+        -- recurse into grandchildren, collapsing the cross-axis estimate.
+        local explicitCross = isRow and ru(cs.width, pw) or ru(cs.height, ph)
+        local size
+        if explicitCross then
+          size = explicitCross + marStart + marEnd
+        else
+          size = estimateIntrinsicMain(child, isRow, pw, ph) + marStart + marEnd
+        end
         if size > max then max = size end
       end
     end
