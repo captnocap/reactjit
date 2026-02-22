@@ -79,6 +79,11 @@ ffi.cdef[[
   void          SDL_GL_GetDrawableSize(SDL_Window *win, int *w, int *h);
   void          SDL_GetWindowSize(SDL_Window *win, int *w, int *h);
   void          SDL_StartTextInput(void);
+  int           SDL_GL_SetSwapInterval(int interval);
+  char         *SDL_GetClipboardText(void);
+  int           SDL_SetClipboardText(const char *text);
+  int           SDL_HasClipboardText(void);
+  void          SDL_free(void *mem);
 ]]
 
 local loader = require("lua.lib_loader")
@@ -301,6 +306,70 @@ function SDL2Init.run(config)
   local capabilities = require("lua.capabilities")
   capabilities.loadAll()
 
+  -- ------------------------------------------------------------------
+  -- 3e. RPC handler registry
+  -- ------------------------------------------------------------------
+  local rpcHandlers = {}
+
+  -- Capabilities RPC (capabilities:list, capabilities:schema)
+  for method, handler in pairs(capabilities.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+
+  -- Permit + audit + manifest RPC handlers (always available)
+  local permit = require("lua.permit")
+  local audit  = require("lua.audit")
+  local manifestMod = require("lua.manifest")
+  for method, handler in pairs(permit.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+  for method, handler in pairs(audit.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+  for method, handler in pairs(manifestMod.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+
+  -- Clipboard RPC handlers (SDL2 FFI)
+  rpcHandlers["clipboard:read"] = function()
+    local ptr = sdl.SDL_GetClipboardText()
+    if ptr ~= nil then
+      local text = ffi.string(ptr)
+      sdl.SDL_free(ptr)
+      return text
+    end
+    return ""
+  end
+  rpcHandlers["clipboard:write"] = function(args)
+    sdl.SDL_SetClipboardText(args.text or "")
+    return true
+  end
+
+  -- HTTP module (optional — graceful degradation)
+  local http = nil
+  local httpOk, httpMod = pcall(require, "lua.http")
+  if httpOk and httpMod then
+    http = httpMod
+    io.write("[sdl2_init] HTTP module loaded\n"); io.flush()
+  end
+
+  -- Audio engine (optional)
+  local audioEngine = nil
+  local aeOk, aeMod = pcall(require, "lua.audio.engine")
+  if aeOk and aeMod then
+    audioEngine = aeMod
+    for method, handler in pairs(audioEngine.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    rpcHandlers["audio:init"] = function(args)
+      args = args or {}
+      args.bridge = bridge
+      audioEngine.init(args)
+      return true
+    end
+    io.write("[sdl2_init] Audio engine loaded\n"); io.flush()
+  end
+
   -- Push initial viewport
   bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
 
@@ -313,10 +382,26 @@ function SDL2Init.run(config)
   local running = true
   local TARGET_MS = math.floor(1000/60)
 
+  -- Enable vsync so SDL_GL_SwapWindow throttles to display refresh rate.
+  -- If vsync fails (returns -1), fall back to manual frame cap.
+  local vsyncOk = sdl.SDL_GL_SetSwapInterval(1) == 0
+  if vsyncOk then
+    io.write("[sdl2_init] vsync enabled\n"); io.flush()
+  else
+    io.write("[sdl2_init] vsync not available, using manual frame cap\n"); io.flush()
+  end
+
+  local lastTicks = sdl.SDL_GetTicks()
+
   io.write("[sdl2_init] entering run loop\n"); io.flush()
 
   while running do
-    local frameStart = sdl.SDL_GetTicks()
+    local now = sdl.SDL_GetTicks()
+    local frameDeltaMs = now - lastTicks
+    if frameDeltaMs < 1 then frameDeltaMs = 1 end    -- avoid zero dt
+    if frameDeltaMs > 100 then frameDeltaMs = 100 end -- clamp spikes
+    lastTicks = now
+    local frameStart = now
 
     -- ---- Event pump ----
     while sdl.SDL_PollEvent(event) == 1 do
@@ -412,7 +497,10 @@ function SDL2Init.run(config)
         events.setActiveWindow(evtWin)
         local winRoot = getWindowRoot(evtWin, tree)
         if winRoot then
-          events.updateHover(winRoot, mx, my)
+          local hoverEvents = events.updateHover(winRoot, mx, my)
+          for _, evt in ipairs(hoverEvents) do
+            pushEvent(evt)
+          end
         end
 
       elseif t == SDL_MOUSEBTNDOWN or t == SDL_MOUSEBTNUP then
@@ -569,15 +657,132 @@ function SDL2Init.run(config)
     -- ---- Drain commands → update tree ----
     local commands = bridge:drainCommands()
     if #commands > 0 then
-      tree.applyCommands(commands)
-      -- Mark all windows as needing layout when tree changes
-      for _, win in ipairs(WM.getAll()) do
-        win.needsLayout = true
+      -- Filter out RPC calls, HTTP requests, and other non-tree commands
+      local treeCommands = commands
+      local hasSpecial = false
+      for _, cmd in ipairs(commands) do
+        if type(cmd) == "table" then
+          local ct = cmd.type
+          if ct == "rpc:call" or ct == "http:request" or ct == "http:stream"
+             or ct == "theme:set" then
+            hasSpecial = true
+            break
+          end
+        end
+      end
+
+      if hasSpecial then
+        treeCommands = {}
+        for _, cmd in ipairs(commands) do
+          if type(cmd) == "table" and cmd.type == "rpc:call" then
+            local payload = cmd.payload
+            if payload and payload.method and payload.id then
+              local handler = rpcHandlers[payload.method]
+              if handler then
+                local rok, result = pcall(handler, payload.args)
+                if rok then
+                  pushEvent({ type = "rpc:" .. payload.id, payload = { result = result } })
+                else
+                  pushEvent({ type = "rpc:" .. payload.id, payload = { error = tostring(result) } })
+                end
+              else
+                pushEvent({ type = "rpc:" .. payload.id, payload = { error = "Unknown RPC method: " .. payload.method } })
+              end
+            end
+          elseif type(cmd) == "table" and cmd.type == "http:request" then
+            local payload = cmd.payload
+            if payload and payload.id and payload.url then
+              if http then
+                local immediate = http.request(payload.id, {
+                  url = payload.url,
+                  method = payload.method,
+                  headers = payload.headers,
+                  body = payload.body,
+                })
+                if immediate then
+                  pushEvent({
+                    type = "http:response",
+                    payload = { _json = json.encode(immediate) },
+                  })
+                end
+              else
+                pushEvent({
+                  type = "http:response",
+                  payload = { _json = json.encode({
+                    id = payload.id,
+                    status = 0,
+                    headers = {},
+                    body = "",
+                    error = "HTTP module not available",
+                  }) },
+                })
+              end
+            end
+          elseif type(cmd) == "table" and cmd.type == "http:stream" then
+            local payload = cmd.payload
+            if payload and payload.id and payload.url then
+              if http then
+                local immediate = http.streamRequest(payload.id, {
+                  url = payload.url,
+                  method = payload.method,
+                  headers = payload.headers,
+                  body = payload.body,
+                })
+                if immediate then
+                  pushEvent({
+                    type = "http:response",
+                    payload = { _json = json.encode(immediate) },
+                  })
+                end
+              else
+                pushEvent({
+                  type = "http:stream:error",
+                  payload = { id = payload.id, error = "HTTP module not available" },
+                })
+              end
+            end
+          elseif type(cmd) == "table" and cmd.type == "theme:set" then
+            -- Theme switching not fully wired on SDL2 yet, but don't crash
+            local payload = cmd.payload
+            if payload and payload.name then
+              io.write("[sdl2_init] Theme set request: " .. tostring(payload.name) .. "\n"); io.flush()
+            end
+          else
+            treeCommands[#treeCommands + 1] = cmd
+          end
+        end
+      end
+
+      if #treeCommands > 0 then
+        tree.applyCommands(treeCommands)
+        -- Mark all windows as needing layout when tree changes
+        for _, win in ipairs(WM.getAll()) do
+          win.needsLayout = true
+        end
       end
     end
 
+    -- ---- HTTP poll (deliver completed async responses) ----
+    if http then
+      local responses = http.poll()
+      for _, resp in ipairs(responses) do
+        if resp.type == "chunk" then
+          pushEvent({ type = "http:stream:chunk", payload = { id = resp.id, data = resp.data } })
+        elseif resp.type == "done" then
+          pushEvent({ type = "http:stream:done", payload = { id = resp.id, status = resp.status, headers = resp.headers } })
+        elseif resp.type == "error" then
+          pushEvent({ type = "http:stream:error", payload = { id = resp.id, error = resp.error } })
+        else
+          pushEvent({ type = "http:response", payload = { _json = json.encode(resp) } })
+        end
+      end
+    end
+
+    -- ---- Audio engine update ----
+    if audioEngine then audioEngine.update(frameDeltaMs / 1000) end
+
     -- ---- Capabilities sync ----
-    local dt = TARGET_MS / 1000
+    local dt = frameDeltaMs / 1000
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
 
     -- ---- Per-window layout + paint ----
@@ -634,9 +839,11 @@ function SDL2Init.run(config)
       sdl.SDL_GL_SwapWindow(win.sdlWindow)
     end
 
-    -- ---- Frame cap ----
-    local elapsed = sdl.SDL_GetTicks() - frameStart
-    if elapsed < TARGET_MS then sdl.SDL_Delay(TARGET_MS - elapsed) end
+    -- ---- Frame cap (only when vsync is not available) ----
+    if not vsyncOk then
+      local elapsed = sdl.SDL_GetTicks() - frameStart
+      if elapsed < TARGET_MS then sdl.SDL_Delay(TARGET_MS - elapsed) end
+    end
   end
 
   -- ------------------------------------------------------------------
