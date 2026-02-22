@@ -9,26 +9,28 @@ import { screenshotCommand } from '../commands/screenshot.mjs';
 import { updateCommand } from '../commands/update.mjs';
 import { manifestCommand } from '../commands/manifest.mjs';
 import { tslCommand } from '../commands/tsl.mjs';
+import { diagnoseCommand } from '../commands/diagnose.mjs';
 
 const [,, command, ...args] = argv;
 
 const HELP = `
-  reactjit (ilr) - CLI for ReactJIT
+  reactjit (rjit) - CLI for ReactJIT
 
   Usage:
-    ilr init <name>              Create a new project (interactive)
-    ilr init <name> --all        Include all optional packages
-    ilr init <name> --minimal    Core only, no optional packages
-    ilr dev [target]             Watch mode (default: love)
-    ilr build [target]           Dev build (default: love)
-    ilr build dist:<target>      Production build
-    ilr update                   Sync runtime files (lua/, lib/, reactjit/)
-    ilr lint                     Check src/ for layout mistakes
-    ilr tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
-    ilr tsl --test               Run TSL transpiler test suite
-    ilr screenshot [--output]    Lint + build + headless screenshot
-    ilr manifest                 Generate or update manifest.json
-    ilr help                     Show this help message
+    rjit init <name>              Create a new project (interactive)
+    rjit init <name> --all        Include all optional packages
+    rjit init <name> --minimal    Core only, no optional packages
+    rjit dev [target]             Watch mode (default: sdl2)
+    rjit build [target]           Dev build (default: sdl2)
+    rjit build dist:<target>      Production build
+    rjit update                   Sync runtime files (lua/, lib/, reactjit/)
+    rjit lint                     Check src/ for layout mistakes
+    rjit tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
+    rjit tsl --test               Run TSL transpiler test suite
+    rjit screenshot [--output]    Lint + build + headless screenshot
+    rjit diagnose                 Find ghost nodes (in tree, not painting)
+    rjit manifest                 Generate or update manifest.json
+    rjit help                     Show this help message
 
   Targets:
     love        Love2D (IIFE, QuickJS)      → bundle.js
@@ -77,6 +79,9 @@ switch (command) {
     break;
   case 'tsl':
     await tslCommand(args);
+    break;
+  case 'diagnose':
+    await diagnoseCommand(args);
     break;
   case 'help':
   case '--help':
