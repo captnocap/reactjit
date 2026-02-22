@@ -7,8 +7,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { Box } from './primitives';
-import type { ContextMenuProps, ContextMenuEvent, LoveEvent } from './types';
+import type { ContextMenuProps, LoveEvent } from './types';
 
 export function ContextMenu({
   items,

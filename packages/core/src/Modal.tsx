@@ -1,13 +1,12 @@
 /**
- * Modal component for reactjit
+ * Modal component for reactjit — native mode only.
  *
- * Displays content in a full-screen overlay with backdrop. Works in both web
- * and native mode via the Portal / PortalHost system.
+ * Displays content in a full-screen overlay with backdrop via the Portal system.
  *
  * Features:
  * - Backdrop with customizable color (tap/click to dismiss)
  * - Centered content via flexbox
- * - Escape key dismissal
+ * - Escape key dismissal via onKeyDown broadcast
  * - onShow / onRequestClose lifecycle callbacks
  *
  * Native requirements:
@@ -15,7 +14,7 @@
  *   Without it the portal registers with a null context and renders nothing.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Portal } from './Portal';
 import { Box } from './primitives';
 import { Pressable } from './Pressable';
@@ -25,8 +24,6 @@ export interface ModalProps {
   visible: boolean;
   onRequestClose?: () => void;
   onShow?: () => void;
-  /** Animations only apply in web mode. Native always shows/hides instantly. */
-  animationType?: 'none' | 'fade' | 'slide';
   transparent?: boolean;
   backdropColor?: Color;
   /** Close when tapping/clicking outside the content. Default true. */
@@ -40,13 +37,21 @@ export function Modal({
   visible,
   onRequestClose,
   onShow,
-  animationType = 'none',
   transparent = false,
   backdropColor = [0, 0, 0, 0.5],
   backdropDismiss = true,
   children,
   style,
 }: ModalProps) {
+  // Fire onShow when modal becomes visible
+  const prevVisibleRef = useRef(false);
+  useEffect(() => {
+    if (visible && !prevVisibleRef.current && onShow) {
+      onShow();
+    }
+    prevVisibleRef.current = visible;
+  }, [visible, onShow]);
+
   const handleBackdropPress = useCallback(() => {
     if (backdropDismiss && onRequestClose) onRequestClose();
   }, [backdropDismiss, onRequestClose]);
@@ -60,8 +65,6 @@ export function Modal({
 
   const finalBackdropColor = transparent ? [0, 0, 0, 0] as Color : backdropColor;
 
-  // ── Native mode ──────────────────────────────────────────────────────
-  //
   // Layout:
   //   Outer Box (position:absolute, fills viewport, flex-center)
   //     Backdrop Pressable (position:absolute, fills viewport, zIndex:0)

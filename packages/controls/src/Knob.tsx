@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import type { Style, Color } from '@reactjit/core';
 import { useScaledStyle, useScale } from '@reactjit/core';
 
@@ -24,32 +24,6 @@ function clamp(val: number, min: number, max: number): number {
 function snapToStep(value: number, step: number, min: number, max: number): number {
   const steps = Math.round((value - min) / step);
   return clamp(min + steps * step, min, max);
-}
-
-// Map value to angle: 0% = -135deg, 100% = +135deg (270deg sweep, gap at bottom)
-function valueToAngle(value: number, min: number, max: number): number {
-  const normalized = (value - min) / (max - min);
-  return -135 + normalized * 270;
-}
-
-// Generate arc dots for the track
-function arcDots(
-  count: number,
-  radius: number,
-  startAngle: number,
-  endAngle: number,
-): Array<{ x: number; y: number }> {
-  const dots: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < count; i++) {
-    const t = i / (count - 1);
-    const angle = startAngle + t * (endAngle - startAngle);
-    const rad = (angle * Math.PI) / 180;
-    dots.push({
-      x: Math.cos(rad) * radius,
-      y: Math.sin(rad) * radius,
-    });
-  }
-  return dots;
 }
 
 export function Knob({

@@ -1,13 +1,12 @@
 /**
- * Select (dropdown) component for web and native (Love2D) modes.
+ * Select (dropdown) component — native (Love2D) mode only.
  *
- * Uses a floating overlay panel (same pattern as inspector tooltips
- * and BarChart interactive tooltips). The trigger button stays in flow,
- * the options panel floats below it via absolute positioning.
+ * All open/close, hover tracking, keyboard nav handled in lua/select.lua.
+ * React is a declarative wrapper that passes props and receives boundary events.
  */
 
-import React, { useCallback } from 'react';
-import type { Style, LoveEvent, Color } from './types';
+import React from 'react';
+import type { Style, Color } from './types';
 
 export interface SelectOption {
   label: string;
@@ -35,30 +34,20 @@ export function Select({
   style,
   color = '#3b82f6',
 }: SelectProps) {
-  const isControlled = controlledValue !== undefined;
-  const selectedValue = isControlled ? controlledValue : defaultValue;
+  const selectedValue = controlledValue !== undefined ? controlledValue : defaultValue;
 
-  const handleSelect = useCallback((optionValue: string) => {
-    if (disabled) return;
-    onValueChange?.(optionValue);
-  }, [disabled, onValueChange]);
-
-  // ── Native mode: Lua-owned host element ─────────────────
-  // All open/close, hover tracking, keyboard nav handled in lua/select.lua.
   return React.createElement('Select', {
     value: selectedValue,
     options: JSON.stringify(options),
     placeholder,
     disabled,
     color: typeof color === 'string' ? color : '#3b82f6',
-    onValueChange: (e: any) => {
-      const optionValue = e.value;
-      handleSelect(optionValue);
-      onValueChange?.(optionValue);
-    },
+    onValueChange: onValueChange
+      ? (e: any) => onValueChange(e.value)
+      : undefined,
     style: {
       minWidth: 160,
-      height: 36 + 4,  // trigger height + margin
+      height: 36 + 4,
       ...style,
     },
   });
