@@ -94,9 +94,25 @@ local function classifyNode(node, capabilities, vpW, vpH, rootChildren)
     return "opacity-zero"
   end
 
-  -- Off-screen (entirely outside viewport)
+  -- Off-screen (entirely outside viewport) — but only if not inside a scroll
+  -- container. Scroll children have computed positions in content-space which
+  -- can legitimately exceed viewport bounds.
   if c.x + c.w < 0 or c.y + c.h < 0 or c.x > vpW or c.y > vpH then
-    return "off-screen"
+    local inScroll = false
+    local ancestor = node.parent
+    local depth = 0
+    while ancestor and depth < 32 do
+      local as = ancestor.style or {}
+      if as.overflow == "scroll" or as.overflow == "hidden" then
+        inScroll = true
+        break
+      end
+      ancestor = ancestor.parent
+      depth = depth + 1
+    end
+    if not inScroll then
+      return "off-screen"
+    end
   end
 
   return "painted"
