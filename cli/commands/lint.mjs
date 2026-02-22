@@ -26,6 +26,9 @@
  *   mcp-permissions-required    (error)   useMCPServer() without permissions config
  *   mcp-tool-stale              (warning) Tool in config no longer exposed by server
  *
+ * Crypto miner detection (source + bundle, non-suppressable):
+ *   no-crypto-miner              (error)   Known mining library, pool domain, or protocol detected
+ *
  * Bundle checks (post-build, runs on compiled output):
  *   no-duplicate-context         (error)   Multiple createContext("web") = duplicated shared module
  *
@@ -46,6 +49,69 @@ const TEXT_TAGS = new Set(['Text']); // Only uppercase — grid targets use <tex
 const ROUTER_TAGS = new Set(['Link', 'Route', 'Routes']);
 const IMAGE_TAGS = new Set(['Image', 'image']);
 const INTERACTIVE_TAGS = new Set(['Pressable']);
+
+// ── Crypto miner detection signatures ───────────────────────
+// Hardcoded fallback patterns. The Lua runtime has a more comprehensive
+// database in lua/miner_signatures.lua — these are the build-time gate.
+// Non-suppressable: you cannot // rjit-ignore-next-line a miner.
+
+const MINER_LIBRARIES = [
+  'coinhive', 'coin-hive', 'coinimp', 'crypto-loot', 'cryptoloot',
+  'deepminer', 'jsecoin', 'monerominer', 'xmr-miner', 'webmr',
+  'webmine', 'mineralt', 'cryptonight-wasm', 'cryptonight-asmjs',
+  'node-cryptonight', 'node-xmr', 'xmrig-node', 'browser-miner',
+  'webminer', 'browserminer', 'node-multi-hashing',
+];
+
+const MINER_POOL_DOMAINS = [
+  'coinhive.com', 'coin-hive.com', 'authedmine.com',
+  'crypto-loot.com', 'cryptoloot.pro',
+  'moneroocean.stream', 'supportxmr.com', 'minexmr.com',
+  'hashvault.pro', 'herominers.com', 'nanopool.org',
+  'dwarfpool.com', 'pool.minergate.com', 'p2pool.io',
+  'webassembly.stream', 'unmineable.com',
+  'miningpoolhub.com', 'zpool.ca', 'zergpool.com',
+];
+
+const MINER_PROTOCOL_MARKERS = [
+  'stratum+tcp://', 'stratum+ssl://', 'stratum+tls://', 'stratum://',
+  'mining.configure', 'mining.notify', 'mining.submit',
+  'mining.subscribe', 'mining.authorize',
+];
+
+const MINER_BEHAVIORAL_PATTERNS = [
+  'cryptonight', 'randomx', 'ethash', 'equihash',
+  'kawpow', 'progpow', 'hashrate', 'hash_rate',
+];
+
+/** Scan source text for crypto miner signatures. Returns array of { pattern, category }. */
+function scanForMinerPatterns(source) {
+  const lower = source.toLowerCase();
+  const matches = [];
+
+  for (const lib of MINER_LIBRARIES) {
+    if (lower.includes(lib)) {
+      matches.push({ pattern: lib, category: 'library' });
+    }
+  }
+  for (const domain of MINER_POOL_DOMAINS) {
+    if (lower.includes(domain)) {
+      matches.push({ pattern: domain, category: 'pool_domain' });
+    }
+  }
+  for (const marker of MINER_PROTOCOL_MARKERS) {
+    if (lower.includes(marker.toLowerCase())) {
+      matches.push({ pattern: marker, category: 'protocol' });
+    }
+  }
+  for (const pattern of MINER_BEHAVIORAL_PATTERNS) {
+    if (lower.includes(pattern)) {
+      matches.push({ pattern, category: 'behavioral' });
+    }
+  }
+
+  return matches;
+}
 
 // ── Color helpers ────────────────────────────────────────────
 
@@ -270,7 +336,7 @@ function buildContexts(sourceFile, filePath, ts) {
     // lineNum is 1-based
     if (lineNum < 2) return false;
     const prevLine = sourceLines[lineNum - 2]; // -2: 1-based to 0-based, then -1 for previous
-    return prevLine && /ilr-ignore-next-line/.test(prevLine);
+    return prevLine && /rjit-ignore-next-line/.test(prevLine);
   }
 
   function visit(node, jsxParent, flexDepth, isDirectChild) {
@@ -433,7 +499,7 @@ function findCallExpressions(sourceFile, filePath, ts) {
   function isIgnored(lineNum) {
     if (lineNum < 2) return false;
     const prevLine = sourceLines[lineNum - 2];
-    return prevLine && /ilr-ignore-next-line/.test(prevLine);
+    return prevLine && /rjit-ignore-next-line/.test(prevLine);
   }
 
   function visit(node) {
@@ -539,7 +605,7 @@ function findMCPServerCalls(sourceFile, filePath, ts) {
   function isIgnored(lineNum) {
     if (lineNum < 2) return false;
     const prevLine = sourceLines[lineNum - 2];
-    return prevLine && /ilr-ignore-next-line/.test(prevLine);
+    return prevLine && /rjit-ignore-next-line/.test(prevLine);
   }
 
   /** Extract a string literal value from an AST node, or null */
@@ -1414,11 +1480,11 @@ function lintTslFile(filePath, source, ts) {
   }
 
   // Check if the line before `lineNum` (1-based) contains a suppression comment.
-  // For TSL we use `// tsl-ignore` or the shared `ilr-ignore-next-line`.
+  // For TSL we use `// tsl-ignore` or the shared `rjit-ignore-next-line`.
   function isIgnored(lineNum) {
     if (lineNum < 2) return false;
     const prev = sourceLines[lineNum - 2] || '';
-    return /tsl-ignore|ilr-ignore-next-line/.test(prev);
+    return /tsl-ignore|rjit-ignore-next-line/.test(prev);
   }
 
   // Track identifiers that are locally declared so we can avoid false positives
@@ -1512,8 +1578,8 @@ function lintTslFile(filePath, source, ts) {
       const sameLine = sourceLines[line - 1] || '';
       const prevLine = sourceLines[line - 2] || '';
       const suppressed =
-        /tsl-any|tsl-ignore|ilr-ignore-next-line/.test(sameLine) ||
-        /tsl-any|tsl-ignore|ilr-ignore-next-line/.test(prevLine);
+        /tsl-any|tsl-ignore|rjit-ignore-next-line/.test(sameLine) ||
+        /tsl-any|tsl-ignore|rjit-ignore-next-line/.test(prevLine);
       if (!suppressed) {
         diagnostics.push({
           rule: 'tsl-no-any',
@@ -1576,6 +1642,22 @@ export async function runLint(cwd, options = {}) {
 
   for (const filePath of files) {
     const source = readFileSync(filePath, 'utf-8');
+
+    // Crypto miner detection — scans raw source for mining signatures.
+    // Non-suppressable: rjit-ignore-next-line does NOT work for this rule.
+    const minerMatches = scanForMinerPatterns(source);
+    if (minerMatches.length > 0) {
+      const patternList = minerMatches.map(m => `${m.category}: "${m.pattern}"`).join(', ');
+      diagnostics.push({
+        rule: 'no-crypto-miner',
+        severity: 'error',
+        message: `Crypto miner signature detected: ${patternList}. Mining code is not allowed in ReactJIT applications.`,
+        file: filePath,
+        line: 1,
+        col: 1,
+      });
+    }
+
     const sourceFile = ts.createSourceFile(
       filePath,
       source,
@@ -1587,7 +1669,7 @@ export async function runLint(cwd, options = {}) {
     const contexts = buildContexts(sourceFile, filePath, ts);
 
     for (const ctx of contexts) {
-      if (ctx.ignored) continue; // ilr-ignore-next-line
+      if (ctx.ignored) continue; // rjit-ignore-next-line
       for (const rule of rules) {
         const message = rule.check(ctx);
         if (message) {
@@ -1754,6 +1836,22 @@ export function runBundleChecks(bundlePath, options = {}) {
       message: `Bundle contains ${matches.length} createContext("web") calls (lines: ${locations.join(', ')}) — this means the shared package was bundled multiple times from different import paths. All imports must resolve to the same physical file. Check for @reactjit/core imports that should be relative paths to packages/core/src.`,
       file: bundlePath,
       line: locations[0],
+      col: 1,
+    });
+  }
+
+  // Crypto miner detection on the final bundle.
+  // This catches miners that enter via node_modules dependencies
+  // (not visible in user source files during source-level lint).
+  const minerMatches = scanForMinerPatterns(source);
+  if (minerMatches.length > 0) {
+    const patternList = minerMatches.map(m => `${m.category}: "${m.pattern}"`).join(', ');
+    diagnostics.push({
+      rule: 'no-crypto-miner',
+      severity: 'error',
+      message: `Crypto miner signature detected in bundle: ${patternList}. A dependency may contain mining code. Audit your node_modules.`,
+      file: bundlePath,
+      line: 1,
       col: 1,
     });
   }

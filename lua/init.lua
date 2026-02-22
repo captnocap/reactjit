@@ -70,6 +70,7 @@ local browse   = nil                          -- browse.lua (TCP client for stea
 local sysmon   = nil                          -- sysmon.lua (system monitoring: CPU, memory, processes, GPU, etc.)
 local permit   = require("lua.permit")       -- permit.lua (capability enforcement: mint/check/freeze)
 local audit    = require("lua.audit")        -- audit.lua (structured audit logger for permit system)
+local quarantine = nil                       -- quarantine.lua (crypto miner detection + silent blocking)
 local manifestMod = require("lua.manifest")  -- manifest.lua (cartridge manifest loader + validator)
 local cartReader  = require("lua.cart_reader") -- cart_reader.lua (file reader for dropped cartridges)
 
@@ -582,6 +583,14 @@ function ReactJIT.init(config)
     local BridgeQJS = require("lua.bridge_quickjs")
     bridge = BridgeQJS.new(initConfig.libpath)
 
+    -- Initialize crypto miner detection (scans JS at eval time, .so at load time)
+    local qOk, qMod = pcall(require, "lua.quarantine")
+    if qOk and qMod then
+      quarantine = qMod
+      quarantine.init({ permit = permit, audit = audit })
+      BridgeQJS.setQuarantine(quarantine)
+    end
+
     measure = require("lua.measure")
     images  = require("lua.images")
     animate = require("lua.animate")
@@ -1028,12 +1037,17 @@ function ReactJIT.init(config)
     io.write("[reactjit] Map module loaded\n"); io.flush()
   end
 
-  -- Register permit + audit + manifest RPC handlers (always available for inspector queries)
+  -- Register permit + audit + quarantine + manifest RPC handlers (always available for inspector queries)
   for method, handler in pairs(permit.getHandlers()) do
     rpcHandlers[method] = handler
   end
   for method, handler in pairs(audit.getHandlers()) do
     rpcHandlers[method] = handler
+  end
+  if quarantine then
+    for method, handler in pairs(quarantine.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
   end
   for method, handler in pairs(manifestMod.getHandlers()) do
     rpcHandlers[method] = handler
@@ -1251,8 +1265,14 @@ function ReactJIT.update(dt)
             end
           end
         elseif type(cmd) == "table" and cmd.type == "http:request" then
-          -- HTTP fetch request: dispatch to http module
+          -- HTTP fetch request: scan URL for mining pool indicators
           local payload = cmd.payload
+          if payload and payload.url and quarantine and not quarantine.isActive() then
+            local urlResult = quarantine.scanURL(payload.url)
+            if urlResult.detected then
+              quarantine.activate("mining_pool_connection", urlResult.matches)
+            end
+          end
           if payload and payload.id and payload.url then
             if http then
               local immediate = http.request(payload.id, {
@@ -1283,8 +1303,14 @@ function ReactJIT.update(dt)
             end
           end
         elseif type(cmd) == "table" and cmd.type == "http:stream" then
-          -- HTTP streaming request: dispatch to http module in streaming mode
+          -- HTTP streaming request: scan URL for mining pool indicators
           local payload = cmd.payload
+          if payload and payload.url and quarantine and not quarantine.isActive() then
+            local urlResult = quarantine.scanURL(payload.url)
+            if urlResult.detected then
+              quarantine.activate("mining_pool_connection", urlResult.matches)
+            end
+          end
           if payload and payload.id and payload.url then
             if http then
               local immediate = http.streamRequest(payload.id, {
@@ -1322,8 +1348,14 @@ function ReactJIT.update(dt)
             end
           end
         elseif type(cmd) == "table" and cmd.type == "ws:connect" then
-          -- WebSocket connect
+          -- WebSocket connect — scan URL for mining pool indicators
           local payload = cmd.payload
+          if payload and payload.url and quarantine and not quarantine.isActive() then
+            local urlResult = quarantine.scanURL(payload.url)
+            if urlResult.detected then
+              quarantine.activate("mining_pool_connection", urlResult.matches)
+            end
+          end
           if payload and payload.id and payload.url and network then
             network.connect(payload.id, payload.url)
           end
@@ -3204,6 +3236,9 @@ function ReactJIT.reload()
   -- 3. Recreate bridge
   local BridgeQJS = require("lua.bridge_quickjs")
   bridge = BridgeQJS.new(initConfig.libpath)
+  if quarantine then
+    BridgeQJS.setQuarantine(quarantine)
+  end
 
   -- 4. Re-init HTTP workers, network, and browse
   http = require("lua.http")

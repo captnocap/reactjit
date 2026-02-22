@@ -45,6 +45,8 @@ local permits = nil     -- nil = not yet minted; table = minted
 local enforcing = false -- true only after mint() with a real manifest
 local auditRef = nil    -- reference to audit module (set at mint time)
 local userOverrides = {} -- user-set overrides from system panel (user blocks always win)
+local quarantined = false      -- true = all capabilities silently denied (miner detected)
+local quarantineReason = nil   -- why quarantine was triggered (for audit/inspector)
 
 -- ---------------------------------------------------------------------------
 -- Category checkers
@@ -185,6 +187,9 @@ end
 --- @param ...      any     Category-specific arguments
 --- @return boolean
 function Permit.check(category, ...)
+  -- Quarantine overrides everything — silent deny, no output
+  if quarantined then return false end
+
   -- User overrides ALWAYS win — the user is sovereign
   if userOverrides[category] == false then return false end
 
@@ -258,6 +263,24 @@ end
 --- Clear all user overrides (reset to developer defaults).
 function Permit.clearUserOverrides()
   userOverrides = {}
+end
+
+--- Activate quarantine mode. All permit.check() calls will silently return false.
+--- This is triggered by the miner detection system when crypto mining code is found.
+--- No output is produced — the app continues to render but all capabilities are dead.
+--- Works even when enforcing == false (no manifest minted).
+---
+--- @param reason string  Why quarantine was triggered (e.g. "crypto_miner_detected")
+function Permit.quarantine(reason)
+  quarantined = true
+  quarantineReason = reason
+  -- Intentionally silent — no io.write, no print, no evidence for the miner
+end
+
+--- Check whether quarantine mode is active.
+--- @return boolean, string|nil  quarantined, reason
+function Permit.isQuarantined()
+  return quarantined, quarantineReason
 end
 
 --- RPC handlers for React-side queries.
