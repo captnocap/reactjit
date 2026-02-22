@@ -1,8 +1,30 @@
 import React from 'react';
-import { Box, Text, Pressable, ScrollView } from '../../../packages/core/src';
+import { Box, Text, Pressable } from '../../../packages/core/src';
 import { ThemeSwitcher, useTheme, useThemeColors, themeNames, themes } from '../../../packages/theme/src';
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
+      <Box style={{
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: c.border,
+        padding: 12,
+        gap: 8,
+        alignItems: 'center',
+      }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
 function ColorSwatch({ color, label }: { color: string; label: string }) {
+  const c = useThemeColors();
   return (
     <Box style={{
       flexDirection: 'row',
@@ -14,8 +36,8 @@ function ColorSwatch({ color, label }: { color: string; label: string }) {
       paddingBottom: 5,
       borderRadius: 6,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.12)',
-      backgroundColor: 'rgba(255,255,255,0.03)',
+      borderColor: c.border,
+      backgroundColor: c.surface,
     }}>
       <Box style={{
         width: 14,
@@ -23,9 +45,9 @@ function ColorSwatch({ color, label }: { color: string; label: string }) {
         backgroundColor: color,
         borderRadius: 3,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
+        borderColor: c.border,
       }} />
-      <Text style={{ color: '#aab0c5', fontSize: 9 }}>{label}</Text>
+      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
     </Box>
   );
 }
@@ -59,69 +81,52 @@ function ThemeCard({
 
   return (
     <Pressable onPress={onPress} style={{
-      flexGrow: 1,
-      flexBasis: 360,
-      minWidth: 320,
-      maxWidth: 560,
-      minHeight: 116,
-      padding: 12,
+      width: '100%',
+      maxWidth: 360,
+      minHeight: 80,
+      padding: 10,
       borderRadius: 8,
       borderWidth: isActive ? 2 : 1,
       borderColor: isActive ? tc.primary : tc.border,
       backgroundColor: tc.bg,
-      flexDirection: 'row',
-      gap: 12,
-      alignItems: 'stretch',
-      flexShrink: 0,
+      gap: 6,
     }}>
-      <Box style={{ flexGrow: 1, minWidth: 0, gap: 3 }}>
-        <Text style={{ color: tc.text, fontSize: 12, fontWeight: 'bold' }}>
-          {theme.displayName}
-        </Text>
-        <Text style={{ color: tc.textDim, fontSize: 9 }}>{id}</Text>
+      <Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
+          <Text style={{ color: tc.text, fontSize: 11, fontWeight: 'bold' }}>
+            {theme.displayName}
+          </Text>
+          <Text style={{ color: tc.textDim, fontSize: 9 }}>{id}</Text>
+        </Box>
         <Box style={{
           paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
           backgroundColor: tc.primary,
           borderRadius: 4,
-          alignSelf: 'flex-start',
         }}>
           <Text style={{ color: tc.bg, fontSize: 9 }}>Button</Text>
         </Box>
-        <Text style={{ color: tc.textSecondary, fontSize: 9 }}>Secondary text</Text>
       </Box>
-
       <Box style={{
-        width: 144,
-        flexShrink: 0,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: isActive ? tc.primary : tc.border,
-        backgroundColor: tc.surface,
-        padding: 6,
-        gap: 5,
+        width: '100%',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 3,
       }}>
-        <Text style={{ color: tc.textDim, fontSize: 8 }}>Colors</Text>
-        <Box style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 4,
-          justifyContent: 'center',
-        }}>
-          {swatches.map((color, i) => (
-            <Box key={i} style={{
-              width: 14,
-              height: 14,
-              backgroundColor: color,
-              borderRadius: 3,
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.16)',
-            }} />
-          ))}
-        </Box>
+        {swatches.map((color, i) => (
+          <Box key={i} style={{
+            width: 12,
+            height: 12,
+            backgroundColor: color,
+            borderRadius: 2,
+            borderWidth: 1,
+            borderColor: tc.border,
+          }} />
+        ))}
       </Box>
     </Pressable>
   );
 }
+
 export function ThemeStory() {
   const { themeId, setTheme } = useTheme();
   const c = useThemeColors();
@@ -133,44 +138,28 @@ export function ThemeStory() {
     families.get(family)!.push(name);
   }
 
-  const gridGap = 10;
-
   return (
-    <ScrollView style={{ width: '100%', height: '100%' }}>
-      <Box style={{ padding: 16, gap: 12, width: '100%' }}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Theme System</Text>
-        <Text style={{ color: c.textSecondary, fontSize: 11 }}>{`${themeNames.length} themes across ${families.size} families. Click a card to switch.`}</Text>
+    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
+      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
 
-        <Box style={{
-          flexDirection: 'row',
-          gap: 10,
-          padding: 10,
-          backgroundColor: c.bgElevated,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: c.border,
-          alignItems: 'center',
-          width: '100%',
-        }}>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>Active theme</Text>
-            <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'bold' }}>{themeId}</Text>
+        <Section title="1. Active Theme">
+          <Box style={{ width: '100%', flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Box style={{ gap: 2, flexGrow: 1 }}>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>Active theme</Text>
+              <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'bold' }}>{themeId}</Text>
+            </Box>
+            <ThemeSwitcher />
           </Box>
-          <Box style={{ flexGrow: 1 }} />
-          <ThemeSwitcher />
-        </Box>
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            {`${themeNames.length} themes across ${families.size} families. Click a card below to switch.`}
+          </Text>
+        </Section>
 
-        <Box style={{
-          gap: 8,
-          width: '100%',
-          padding: 10,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: c.border,
-          backgroundColor: c.surface,
-        }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10 }}>Semantic Tokens</Text>
-          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', width: '100%' }}>
+        <Section title="2. Semantic Tokens">
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            All color tokens available via useThemeColors().
+          </Text>
+          <Box style={{ width: '100%', flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             <ColorSwatch color={c.bg} label="bg" />
             <ColorSwatch color={c.bgAlt} label="bgAlt" />
             <ColorSwatch color={c.bgElevated} label="bgElevated" />
@@ -186,19 +175,25 @@ export function ThemeStory() {
             <ColorSwatch color={c.success} label="success" />
             <ColorSwatch color={c.info} label="info" />
           </Box>
-        </Box>
+        </Section>
 
-        <Box style={{ flexDirection: 'row', gap: gridGap, flexWrap: 'wrap', width: '100%', paddingBottom: 16 }}>
-          {themeNames.map(id => (
-            <ThemeCard
-              key={id}
-              id={id}
-              isActive={id === themeId}
-              onPress={() => setTheme(id)}
-            />
-          ))}
-        </Box>
+        <Section title="3. Theme Gallery">
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Click any card to switch themes.
+          </Text>
+          <Box style={{ width: '100%', flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {themeNames.map(id => (
+              <ThemeCard
+                key={id}
+                id={id}
+                isActive={id === themeId}
+                onPress={() => setTheme(id)}
+              />
+            ))}
+          </Box>
+        </Section>
+
       </Box>
-    </ScrollView>
+    </Box>
   );
 }
