@@ -114,7 +114,6 @@ function Errors.draw()
     return
   end
 
-  -- All rendering in pcall so the error system never crashes
   local ok, drawErr = pcall(function()
     local entry = buffer[currentIndex]
     if not entry then return end
@@ -123,13 +122,7 @@ function Errors.draw()
     local screenH = love.graphics.getHeight()
     local overlayH = math.max(MIN_OVERLAY_HEIGHT, math.floor(screenH * OVERLAY_HEIGHT_FRAC))
     local overlayY = screenH - overlayH
-
-    -- Save graphics state
-    love.graphics.push("all")
-
-    -- Reset any transforms/scissors/stencils
-    love.graphics.origin()
-    love.graphics.setScissor()
+    local pad = 16
 
     -- Shadow behind overlay
     love.graphics.setColor(SHADOW_COLOR)
@@ -139,136 +132,53 @@ function Errors.draw()
     love.graphics.setColor(BG_COLOR)
     love.graphics.rectangle("fill", 0, overlayY, screenW, overlayH)
 
-    -- Top accent line
-    love.graphics.setColor(TEXT_COLOR[1], TEXT_COLOR[2], TEXT_COLOR[3], 0.3)
-    love.graphics.rectangle("fill", 0, overlayY, screenW, 2)
-
-    -- Content area
-    local pad = 16
-    local x = pad
-    local y = overlayY + pad
-
-    -- Use default font at reasonable size
+    -- Header: "ERROR  --  context"
     local titleFont = love.graphics.newFont(14)
-    local bodyFont = love.graphics.newFont(12)
-    local stackFont = love.graphics.newFont(11)
-
-    -- Header line: ERROR  ·  context  timestamp
     love.graphics.setFont(titleFont)
     love.graphics.setColor(TEXT_COLOR)
+
     local header = "ERROR"
     if entry.context and entry.context ~= "" then
       header = header .. "  --  " .. entry.context
     end
-    love.graphics.print(header, x, y)
-
-    -- Timestamp on right
-    love.graphics.setColor(DIM_COLOR)
-    local tsW = titleFont:getWidth(entry.timestamp)
-    love.graphics.print(entry.timestamp, screenW - pad - tsW, y)
-
-    y = y + titleFont:getHeight() + 12
+    love.graphics.print(header, pad, overlayY + pad)
 
     -- Error message
+    local bodyFont = love.graphics.newFont(12)
     love.graphics.setFont(bodyFont)
     love.graphics.setColor(TEXT_COLOR)
+
     local msgPrefix = entry.source ~= "unknown" and (entry.source .. ": ") or ""
-    local msg = msgPrefix .. entry.message
-
-    -- Word-wrap the message within the available width
-    local maxTextW = screenW - pad * 2
-    local wrappedW, wrappedLines = bodyFont:getWrap(msg, maxTextW)
-    for _, line in ipairs(wrappedLines) do
-      love.graphics.print(line, x, y)
-      y = y + bodyFont:getHeight()
-    end
-
-    y = y + 8
+    love.graphics.print(msgPrefix .. entry.message, pad, overlayY + pad + 24)
 
     -- Stack trace
     if entry.stack and entry.stack ~= "" then
+      local stackFont = love.graphics.newFont(11)
       love.graphics.setFont(stackFont)
       love.graphics.setColor(SECONDARY)
 
+      local sy = overlayY + pad + 50
       local lineCount = 0
       for line in entry.stack:gmatch("[^\n]+") do
-        if lineCount >= MAX_STACK_LINES then
-          love.graphics.setColor(DIM_COLOR)
-          love.graphics.print("  ... (" .. (select(2, entry.stack:gsub("\n", "")) + 1 - MAX_STACK_LINES) .. " more frames)", x, y)
-          break
-        end
-
-        -- Don't overflow the overlay
-        if y + stackFont:getHeight() > screenH - pad - 20 then
-          love.graphics.setColor(DIM_COLOR)
-          love.graphics.print("  ... (truncated)", x, y)
-          break
-        end
-
-        love.graphics.print("  " .. line, x, y)
-        y = y + stackFont:getHeight()
+        if lineCount >= MAX_STACK_LINES then break end
+        if sy + 14 > screenH - pad then break end
+        love.graphics.print("  " .. line, pad, sy)
+        sy = sy + 14
         lineCount = lineCount + 1
       end
     end
 
-    -- Footer: error count + [COPY] button + dismiss hint
-    love.graphics.setFont(stackFont)
-    local footerY = screenH - pad - stackFont:getHeight()
-
-    -- Error count (left)
-    love.graphics.setColor(DIM_COLOR)
-    local footer = ""
+    -- Counter (if multiple errors)
     if #buffer > 1 then
-      footer = "[" .. currentIndex .. " of " .. #buffer .. " errors]"
+      love.graphics.setColor(DIM_COLOR)
+      local counter = currentIndex .. "/" .. #buffer
+      love.graphics.print(counter, screenW - pad - 60, overlayY + pad)
     end
-    love.graphics.print(footer, x, footerY)
 
-    -- Dismiss hint (right)
-    local dismiss = "click to dismiss"
-    local dismissW = stackFont:getWidth(dismiss)
-    love.graphics.print(dismiss, screenW - pad - dismissW, footerY)
-
-    -- Copy button (center-ish, next to error count)
-    local isCopied = love.timer.getTime() < copiedFlashUntil
-    local copyLabel = isCopied and "Copied!" or "[ Copy ]"
-    local copyW = stackFont:getWidth(copyLabel) + 12
-    local copyH = stackFont:getHeight() + 4
-    local copyX = x + stackFont:getWidth(footer) + 16
-    local copyY = footerY - 2
-
-    -- Button background
-    love.graphics.setColor(isCopied and {0.2, 0.7, 0.3, 0.9} or {1, 1, 1, 0.15})
-    love.graphics.rectangle("fill", copyX, copyY, copyW, copyH, 3, 3)
-
-    -- Button text
-    love.graphics.setColor(isCopied and {1, 1, 1, 1} or TEXT_COLOR)
-    love.graphics.print(copyLabel, copyX + 6, copyY + 2)
-
-    -- Store hit rect for mousepressed
-    copyBtnRect.x = copyX
-    copyBtnRect.y = copyY
-    copyBtnRect.w = copyW
-    copyBtnRect.h = copyH
-
-    -- Restore graphics state
-    love.graphics.pop()
+    -- Footer
+    love.graphics.setColor(DIM_COLOR)
+    love.graphics.print("click to dismiss", pad, screenH - pad - 14)
   end)
-
-  if not ok then
-    -- Last resort: draw a minimal red bar and print to terminal
-    pcall(function()
-      love.graphics.setColor(0.86, 0.15, 0.15, 0.95)
-      love.graphics.rectangle("fill", 0, love.graphics.getHeight() - 40,
-                              love.graphics.getWidth(), 40)
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.print("ERROR: " .. tostring(drawErr), 16,
-                          love.graphics.getHeight() - 30)
-    end)
-    pcall(function()
-      io.write("[reactjit] Error overlay draw failed: " .. tostring(drawErr) .. "\n")
-      io.flush()
-    end)
-  end
 end
 
 --- Handle mouse press for dismissing the overlay.
