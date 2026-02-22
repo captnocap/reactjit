@@ -245,6 +245,33 @@ function timer.getTime()
 end
 
 -- ============================================================================
+-- love.system (clipboard, OS info)
+-- ============================================================================
+
+local system = {}
+
+function system.getClipboardText()
+  if not sdl then return "" end
+  local ptr = sdl.SDL_GetClipboardText()
+  if ptr ~= nil then
+    local text = ffi.string(ptr)
+    sdl.SDL_free(ptr)
+    return text
+  end
+  return ""
+end
+
+function system.setClipboardText(text)
+  if not sdl then return end
+  sdl.SDL_SetClipboardText(text or "")
+end
+
+function system.getOS()
+  if jit and jit.os then return jit.os end
+  return "Linux"
+end
+
+-- ============================================================================
 -- Public API
 -- ============================================================================
 
@@ -260,6 +287,7 @@ function Shim.init(cfg)
     mouse    = mouse,
     keyboard = keyboard,
     timer    = timer,
+    system   = system,
   }
 end
 
