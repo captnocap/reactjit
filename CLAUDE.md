@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 When adding a new capability, feature, or integration — always ask: **can someone who doesn't code use this in one line?** If the answer is no, wrap it until it is. The target user is someone who knows their domain (music, art, data, games) but doesn't know bridges, RPCs, or Lua internals. An AI should be able to discover and control it without documentation.
 
-The pattern is the **declarative capability system** (`lua/capabilities.lua`):
+The pattern is the **declarative capability system** (`lua/capabilities.lua` + `lua/capabilities/` for multi-file capabilities):
 1. Lua side: `Capabilities.register("Audio", { schema, create, update, tick, destroy })`
 2. React side: `<Audio src="beat.mp3" playing volume={0.8} />`
 3. AI discovery: `useCapabilities()` returns schemas for everything registered
@@ -157,6 +157,20 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 |---------|--------|------|
 | `packages/core` | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
 | `packages/native` | `@reactjit/native` | react-reconciler host config, instance tree, event dispatch |
+| `packages/3d` | `@reactjit/3d` | 3D scene, lighting, materials (Scene3D) |
+| `packages/ai` | `@reactjit/ai` | LLM agent integration |
+| `packages/apis` | `@reactjit/apis` | External API wrappers |
+| `packages/audio` | `@reactjit/audio` | Audio playback, synth capabilities |
+| `packages/controls` | `@reactjit/controls` | Higher-level UI controls |
+| `packages/crypto` | `@reactjit/crypto` | Cryptographic utilities |
+| `packages/geo` | `@reactjit/geo` | Geolocation, maps |
+| `packages/media` | `@reactjit/media` | Video, media playback |
+| `packages/router` | `@reactjit/router` | Navigation / routing |
+| `packages/rss` | `@reactjit/rss` | RSS feed parsing |
+| `packages/server` | `@reactjit/server` | HTTP server capabilities |
+| `packages/storage` | `@reactjit/storage` | Persistent storage (SQLite, docstore) |
+| `packages/theme` | `@reactjit/theme` | Theming system |
+| `packages/webhooks` | `@reactjit/webhooks` | Webhook handling |
 
 **Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12).
 
@@ -164,7 +178,7 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 
 **Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
 
-**Examples** (`examples/`): `native-hud/`, `neofetch/`, `playground/`.
+**Examples** (`examples/`): Consumer projects that demonstrate framework features. Includes `native-hud/`, `neofetch/`, `playground/`, `wallet/`, `dvd/`, `audio-synth/`, `browser/`, `ai-box/`, `weather/`, and others. Each is self-contained with its own `package.json` and local runtime copies via `reactjit update`.
 
 ## esbuild Formats by Target
 
@@ -173,6 +187,8 @@ These are encoded in `cli/targets.mjs` — you should never need to specify them
 - **SDL2 / Love2D**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). SDL2: launched via `luajit sdl2_init.lua`. Love2D: launched via `love .`. Same bundle format, different run loop.
 
 ## Critical Layout Rules
+
+**The flex layout engine is pixel-perfect.** It has been exhaustively verified — flex distribution math, cursor positions, and post-layout sizes are all exact to the pixel. If you encounter a layout overflow or sizing problem, it is almost certainly **not** a layout engine bug. Look at the component itself first: does it hardcode a width that overflows its parent? Does it ignore its container's bounds? The Slider component once hardcoded `width: 200` regardless of parent size — that caused a month of debugging that blamed the flex engine when the engine was correct all along. Check components before blaming layout.
 
 ### How sizing works (know this before writing layouts)
 
@@ -199,7 +215,7 @@ The layout engine has three sizing tiers. They resolve in order — the first on
 - **Budgeting pixels manually.** Don't add up `48 + 260 + 80 + gaps` to hit a target height. Let flex do this — one element grows, the rest auto-size from content.
 - **Using fixed dimensions where auto-sizing works.** If a panel contains text and buttons, it knows its own size. Don't constrain it with a hardcoded height — let it shrink-wrap, and give a sibling `flexGrow: 1` to fill the gap.
 
-The static linter (`cli/commands/lint.mjs`) catches many of these as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
+The static linter (`cli/commands/lint.mjs`) catches many of these as build-blocking errors. Escape hatch: `// rjit-ignore-next-line`.
 
 ## Auto-Sizing and Proportional Fallback
 
