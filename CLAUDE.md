@@ -35,14 +35,14 @@ ReactJIT is a React rendering framework with a hand-rolled renderer. The core pi
 
 **Rendering pipeline:** React reconciler → mutation commands → transport layer → layout engine → target-specific painter.
 
-**Primary renderer — SDL2 / OpenGL:**
-LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. No game engine dependency. We own the run loop, the GL context, the font rasterizer, and the event pump. Entry point: `luajit sdl2_init.lua`. This is the focus — everything else is secondary.
+**Primary renderer — Forked Love2D:**
+LuaJIT + Love2D (customized fork) + OpenGL 2.1 + SDL2 backend. Multi-window support via custom Love APIs (`love.window.createSecondary()`, `love.window.activateSecondary()`, etc.). Entry point: `love .`. The Love fork owns the run loop, the GL context, the font rasterizer, and the event pump.
 
 **Also supported:**
-- **Love2D** — The original proving ground. Still available for game developers who want Love2D's ecosystem (images, video, audio, binary dist). Entry point: `love .`
+- **SDL2 / OpenGL** — Raw SDL2 + LuaJIT + OpenGL 2.1 + FreeType via FFI. No game engine middleware. We own the run loop and all graphics context management directly. Entry point: `luajit sdl2_init.lua`. Alternative when game engine features are not needed.
 - **Web (planned)** — WASM build from SDL2/OpenGL via Emscripten. Renders to `<canvas>`, not DOM.
 
-The target interface is formalized in `lua/target_sdl2.lua` (primary) and `lua/target_love2d.lua` (legacy). A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
+The target interface is formalized in `lua/target_love2d.lua` (primary) and `lua/target_sdl2.lua` (alternative). A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active. The `lua/window_manager.lua` module abstracts the backend and provides a unified API for both Love2D and SDL2 multi-window management.
 
 ## CLI-First Workflow (IMPORTANT)
 
@@ -53,18 +53,18 @@ directly will use wrong flags, skip linting, and produce broken builds.
 
 ```bash
 reactjit init <name>            # Scaffold new project (do NOT mkdir + copy manually)
-reactjit dev [target]           # Watch mode (default: sdl2). Do NOT run esbuild --watch manually.
-reactjit build [target]         # Lint gate + dev build (default: sdl2). Do NOT run esbuild manually.
+reactjit dev [target]           # Watch mode (default: love). Do NOT run esbuild --watch manually.
+reactjit build [target]         # Lint gate + dev build (default: love). Do NOT run esbuild manually.
 reactjit build dist:<target>    # Production build for any target
 reactjit lint                   # Static layout linter — run after ANY component change
 reactjit screenshot [--output]  # Headless capture — verify layouts visually
 ```
 
-**Targets:** `sdl2`, `love`
+**Targets:** `love`, `sdl2`
 
 **Dist formats:**
+- `dist:love` — Self-extracting Linux binary (Love2D fork + bundled glibc)
 - `dist:sdl2` — Native binary (SDL2 + OpenGL + LuaJIT)
-- `dist:love` — Self-extracting Linux binary (Love2D + bundled glibc)
 - `dist:web` — WASM + WebGL bundle (planned — Emscripten compilation of SDL2 renderer)
 
 **After writing or modifying any component:** run `reactjit lint`, then
@@ -172,9 +172,9 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 | `packages/theme` | `@reactjit/theme` | Theming system |
 | `packages/webhooks` | `@reactjit/webhooks` | Webhook handling |
 
-**Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12).
+**Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12), multi-window manager (`window_manager.lua`).
 
-**Target interface** — `lua/target_sdl2.lua` (primary; uses `sdl2_painter.lua` + `sdl2_measure.lua` + `sdl2_font.lua`) and `lua/target_love2d.lua` (legacy; uses `painter.lua` + `measure.lua`). SDL2 run loop: `lua/sdl2_init.lua`. OpenGL bindings: `lua/sdl2_gl.lua`.
+**Target interface** — `lua/target_love2d.lua` (primary; uses `painter.lua` + `measure.lua` + forked Love2D backend) and `lua/target_sdl2.lua` (alternative; uses `sdl2_painter.lua` + `sdl2_measure.lua` + `sdl2_font.lua` + raw SDL2 FFI). Love2D entry point: `love .`. SDL2 run loop: `lua/sdl2_init.lua`. OpenGL bindings: `lua/sdl2_gl.lua`. Multi-window support: `lua/window_manager.lua` (abstracts both backends).
 
 **Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
 
@@ -184,7 +184,7 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 
 These are encoded in `cli/targets.mjs` — you should never need to specify them manually:
 
-- **SDL2 / Love2D**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). SDL2: launched via `luajit sdl2_init.lua`. Love2D: launched via `love .`. Same bundle format, different run loop.
+- **Love2D / SDL2**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). Love2D (primary): launched via `love .`. SDL2 (alternative): launched via `luajit sdl2_init.lua`. Same bundle format, different run loop.
 
 ## Critical Layout Rules
 

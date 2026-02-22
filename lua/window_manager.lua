@@ -191,7 +191,8 @@ function WindowManager.create(config)
   if backend == "love" then
     -- Use forked Love2D's secondary window API
     -- Love2D wrapper defaults x/y to SDL_WINDOWPOS_CENTERED when omitted
-    local loveId = love.window.createSecondary(title, w, h, x, y)
+    local moddedTitle = title .. " [MODDED]"
+    local loveId = love.window.createSecondary(moddedTitle, w, h, x, y)
 
     local ww, wh, pw, ph = love.window.getSecondarySize(loveId)
     local sx = (ww > 0) and (pw / ww) or 1
