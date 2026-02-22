@@ -332,6 +332,13 @@ function timer.getTime()
   return sdl.SDL_GetTicks() / 1000.0
 end
 
+-- Track delta for getDelta() — updated by Shim.setDelta() from the run loop
+local _dt = 1/60
+
+function timer.getDelta()
+  return _dt
+end
+
 -- ============================================================================
 -- love.system (clipboard, OS info)
 -- ============================================================================
@@ -360,6 +367,57 @@ function system.getOS()
 end
 
 -- ============================================================================
+-- love.filesystem (stub — uses plain Lua IO since Love2D sandbox unavailable)
+-- ============================================================================
+
+local filesystem = {}
+
+-- Save directory for SDL2: use a local .save/ directory
+local _saveDir = ".save"
+
+function filesystem.read(path)
+  local f = io.open(_saveDir .. "/" .. path, "r")
+  if not f then return nil end
+  local content = f:read("*a")
+  f:close()
+  return content
+end
+
+function filesystem.write(path, data)
+  local f = io.open(_saveDir .. "/" .. path, "w")
+  if not f then return false end
+  f:write(data)
+  f:close()
+  return true
+end
+
+function filesystem.createDirectory(path)
+  os.execute('mkdir -p "' .. _saveDir .. '/' .. path .. '"')
+  return true
+end
+
+function filesystem.getSaveDirectory()
+  return _saveDir
+end
+
+-- ============================================================================
+-- love.audio (stub — device enumeration not yet available on SDL2)
+-- ============================================================================
+
+local audio = {}
+
+function audio.getPlaybackDevices() return {} end
+function audio.getRecordingDevices() return {} end
+
+-- ============================================================================
+-- love.joystick (stub — joystick enumeration not yet available on SDL2)
+-- ============================================================================
+
+local joystick = {}
+
+function joystick.getJoysticks() return {} end
+
+-- ============================================================================
 -- Public API
 -- ============================================================================
 
@@ -371,11 +429,14 @@ function Shim.init(cfg)
 
   -- Install global love table
   love = {
-    graphics = graphics,
-    mouse    = mouse,
-    keyboard = keyboard,
-    timer    = timer,
-    system   = system,
+    graphics   = graphics,
+    mouse      = mouse,
+    keyboard   = keyboard,
+    timer      = timer,
+    system     = system,
+    filesystem = filesystem,
+    audio      = audio,
+    joystick   = joystick,
   }
 end
 
@@ -389,6 +450,10 @@ end
 
 function Shim.setKeyDown(key, down)
   _keysDown[key] = down or nil
+end
+
+function Shim.setDelta(dt)
+  _dt = dt
 end
 
 return Shim

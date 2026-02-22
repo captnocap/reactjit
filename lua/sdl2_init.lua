@@ -1063,6 +1063,7 @@ function SDL2Init.run(config)
 
     -- ---- Capabilities sync ----
     local dt = frameDeltaMs / 1000
+    Shim.setDelta(dt)
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
 
     -- ---- Per-window layout + paint ----
