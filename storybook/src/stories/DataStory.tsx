@@ -124,7 +124,10 @@ const VIEW_OPTIONS: Array<{ id: DataView; label: string; subtitle: string }> = [
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Text style={{ color: c.text, fontSize: 12 }}>{title}</Text>
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
+      {children}
+    </Box>
   );
 }
 
