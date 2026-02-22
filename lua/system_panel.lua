@@ -367,7 +367,7 @@ local function scanDevices()
       for i, dev in ipairs(devs) do
         state.cachedAudioIn[#state.cachedAudioIn + 1] = {
           id = i,
-          name = dev:getName and dev:getName() or ("Input " .. i),
+          name = dev.getName and dev:getName() or ("Input " .. i),
         }
       end
     end

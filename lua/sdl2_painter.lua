@@ -686,21 +686,24 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   elseif not isHidden and node.type == "TextInput" then
     if not TextInputModule then
       local ok, mod = pcall(require, "lua.textinput")
-      if ok then TextInputModule = mod end
+      if ok then TextInputModule = mod
+      else io.write("[painter] TextInput load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if TextInputModule then TextInputModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "TextEditor" then
     if not TextEditorModule then
       local ok, mod = pcall(require, "lua.texteditor")
-      if ok then TextEditorModule = mod end
+      if ok then TextEditorModule = mod
+      else io.write("[painter] TextEditor load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if TextEditorModule then TextEditorModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "CodeBlock" then
     if not CodeBlockModule then
       local ok, mod = pcall(require, "lua.codeblock")
-      if ok then CodeBlockModule = mod end
+      if ok then CodeBlockModule = mod
+      else io.write("[painter] CodeBlock load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if CodeBlockModule and CodeBlockModule.render then
       if c and c.w > 0 and c.h > 0 then
@@ -711,49 +714,56 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   elseif not isHidden and node.type == "Slider" then
     if not SliderModule then
       local ok, mod = pcall(require, "lua.slider")
-      if ok then SliderModule = mod end
+      if ok then SliderModule = mod
+      else io.write("[painter] Slider load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if SliderModule then SliderModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "Fader" then
     if not FaderModule then
       local ok, mod = pcall(require, "lua.fader")
-      if ok then FaderModule = mod end
+      if ok then FaderModule = mod
+      else io.write("[painter] Fader load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if FaderModule then FaderModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "Knob" then
     if not KnobModule then
       local ok, mod = pcall(require, "lua.knob")
-      if ok then KnobModule = mod end
+      if ok then KnobModule = mod
+      else io.write("[painter] Knob load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if KnobModule then KnobModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "Switch" then
     if not SwitchModule then
       local ok, mod = pcall(require, "lua.switch")
-      if ok then SwitchModule = mod end
+      if ok then SwitchModule = mod
+      else io.write("[painter] Switch load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if SwitchModule then SwitchModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "Checkbox" then
     if not CheckboxModule then
       local ok, mod = pcall(require, "lua.checkbox")
-      if ok then CheckboxModule = mod end
+      if ok then CheckboxModule = mod
+      else io.write("[painter] Checkbox load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if CheckboxModule then CheckboxModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "Radio" then
     if not RadioModule then
       local ok, mod = pcall(require, "lua.radio")
-      if ok then RadioModule = mod end
+      if ok then RadioModule = mod
+      else io.write("[painter] Radio load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if RadioModule then RadioModule.draw(node, eff) end
 
   elseif not isHidden and node.type == "Select" then
     if not SelectModule then
       local ok, mod = pcall(require, "lua.select")
-      if ok then SelectModule = mod end
+      if ok then SelectModule = mod
+      else io.write("[painter] Select load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if SelectModule then SelectModule.draw(node, eff) end
   end

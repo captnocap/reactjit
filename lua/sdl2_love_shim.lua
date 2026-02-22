@@ -157,6 +157,24 @@ function graphics.circle(mode, cx, cy, r)
   end
 end
 
+--- polygon: draw a filled or outlined polygon from a flat list of vertices.
+--- Signature: polygon(mode, x1, y1, x2, y2, x3, y3, ...)
+function graphics.polygon(mode, ...)
+  local verts = {...}
+  GL.glDisable(GL.TEXTURE_2D)
+  GL.glColor4f(_colorR, _colorG, _colorB, _colorA)
+  if mode == "fill" then
+    GL.glBegin(GL.TRIANGLE_FAN)
+  else
+    GL.glLineWidth(_lineWidth)
+    GL.glBegin(GL.LINE_LOOP)
+  end
+  for i = 1, #verts - 1, 2 do
+    GL.glVertex2f(verts[i], verts[i + 1])
+  end
+  GL.glEnd()
+end
+
 function graphics.line(x1, y1, x2, y2)
   GL.glDisable(GL.TEXTURE_2D)
   GL.glColor4f(_colorR, _colorG, _colorB, _colorA)

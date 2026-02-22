@@ -310,6 +310,40 @@ function SDL2Init.run(config)
   devtools.init({ inspector = inspector, console = console, tree = tree, bridge = bridge, pushEvent = pushEvent })
 
   -- ------------------------------------------------------------------
+  -- 3c2. Widgets (unified init for Slider/Fader/Knob/Switch/Checkbox/Radio/Select)
+  -- ------------------------------------------------------------------
+  local widgets = require("lua.widgets")
+  widgets.init({ measure = Measure })
+
+  -- ------------------------------------------------------------------
+  -- 3c3. Overlays (theme menu, settings, system panel, context menu)
+  -- ------------------------------------------------------------------
+  local themeMenu   = require("lua.theme_menu")
+  local settings    = require("lua.settings")
+  local systemPanel = require("lua.system_panel")
+  local contextmenu = nil
+  local textselection = nil
+
+  themeMenu.init({ key = "f9" })
+  settings.init({ key = "f10" })
+  systemPanel.init({
+    permit = permit,
+    audit = audit,
+  })
+
+  local ok_ts, tsMod = pcall(require, "lua.textselection")
+  if ok_ts then
+    textselection = tsMod
+    textselection.init({ measure = Measure, events = events, tree = tree })
+  end
+
+  local ok_cm, cmMod = pcall(require, "lua.contextmenu")
+  if ok_cm then
+    contextmenu = cmMod
+    contextmenu.init({ measure = Measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+  end
+
+  -- ------------------------------------------------------------------
   -- 3d. Capabilities (audio, timer, window, etc.)
   -- ------------------------------------------------------------------
   local capabilities = require("lua.capabilities")
@@ -500,6 +534,9 @@ function SDL2Init.run(config)
 
         if evtWin.isMain then
           Shim.setMousePosition(mx, my)
+          systemPanel.mousemoved(mx, my)
+          settings.mousemoved(mx, my)
+          themeMenu.mousemoved(mx, my)
           devtools.mousemoved(mx, my)
         end
 
@@ -549,6 +586,29 @@ function SDL2Init.run(config)
         end
 
         if not devConsumed then
+          -- Overlay panels get mouse events before the tree
+          local overlayConsumed = false
+          if t == SDL_MOUSEBTNDOWN then
+            if systemPanel.mousepressed(mx, my, btn) then overlayConsumed = true
+            elseif settings.mousepressed(mx, my, btn) then overlayConsumed = true
+            elseif themeMenu.mousepressed(mx, my, btn) then overlayConsumed = true
+            elseif contextmenu and contextmenu.isOpen() then
+              contextmenu.handleMousePressed(mx, my, btn)
+              overlayConsumed = true
+            elseif btn == 3 and contextmenu then
+              -- Right-click: open context menu
+              local winRoot = getWindowRoot(evtWin, tree)
+              contextmenu.open(mx, my, winRoot, pushEvent)
+              overlayConsumed = true
+            end
+          elseif t == SDL_MOUSEBTNUP then
+            if systemPanel.mousereleased(mx, my, btn) then overlayConsumed = true
+            elseif settings.mousereleased(mx, my, btn) then overlayConsumed = true
+            elseif themeMenu.mousereleased(mx, my, btn) then overlayConsumed = true
+            end
+          end
+
+          if not overlayConsumed then
           local winRoot = getWindowRoot(evtWin, tree)
           if winRoot then
             local hit = events.hitTest(winRoot, mx, my)
@@ -660,6 +720,7 @@ function SDL2Init.run(config)
               events.clearPressedNode()
             end
           end
+          end -- if not overlayConsumed
         end
 
       elseif t == SDL_MOUSEWHEEL then
@@ -671,10 +732,17 @@ function SDL2Init.run(config)
 
         events.setActiveWindow(evtWin)
 
-        -- Route to devtools first (main window only)
-        local devConsumed = evtWin.isMain and devtools.wheelmoved(dx, dy)
+        -- Route to overlay panels first, then devtools, then tree
+        local wheelConsumed = false
+        if evtWin.isMain then
+          if systemPanel.isOpen() and systemPanel.wheelmoved(dx, dy) then wheelConsumed = true
+          elseif settings.isOpen() and settings.wheelmoved(dx, dy) then wheelConsumed = true
+          elseif themeMenu.isOpen() and themeMenu.wheelmoved(dx, dy) then wheelConsumed = true
+          elseif devtools.wheelmoved(dx, dy) then wheelConsumed = true
+          end
+        end
 
-        if not devConsumed then
+        if not wheelConsumed then
           local winRoot = getWindowRoot(evtWin, tree)
           if winRoot then
             local hit = events.hitTest(winRoot, mx, my)
@@ -724,6 +792,18 @@ function SDL2Init.run(config)
           if devtools.keypressed(keyname) then
             consumed = true
             mainWin.needsLayout = true
+
+          -- Overlay panels (F9 theme, F10 settings, F11 system)
+          elseif systemPanel.keypressed(keyname) then
+            consumed = true
+          elseif settings.keypressed(keyname) then
+            consumed = true
+          elseif themeMenu.keypressed(keyname) then
+            consumed = true
+
+          -- Context menu (Escape to close)
+          elseif contextmenu and contextmenu.isOpen() and contextmenu.keypressed(keyname) then
+            consumed = true
 
           -- Focused TextEditor gets next shot at keys
           elseif focus.get() and focus.get().type == "TextEditor" then
@@ -807,8 +887,14 @@ function SDL2Init.run(config)
       elseif t == SDL_TEXTINPUT then
         local text = ffi.string(event.text.text)
         if text ~= "" then
-          -- Route to devtools first (console text input)
-          if devtools.textinput(text) then
+          -- Route to overlay panels first, then devtools, then text widgets
+          if systemPanel.textinput(text) then
+            -- consumed by system panel
+          elseif settings.textinput(text) then
+            -- consumed by settings
+          elseif themeMenu.textinput(text) then
+            -- consumed by theme menu
+          elseif devtools.textinput(text) then
             -- consumed by devtools
           elseif focus.get() and focus.get().type == "TextEditor" then
             texteditor.handleTextInput(focus.get(), text)
@@ -1019,10 +1105,14 @@ function SDL2Init.run(config)
         end
       end
 
-      -- Devtools overlay (main window only)
+      -- Overlays (main window only, drawn on top of everything)
       if win.isMain then
         root = winRoot  -- keep for cleanup compatibility
         devtools.draw(winRoot)
+        if settings.isOpen() then settings.draw() end
+        if systemPanel.isOpen() then systemPanel.draw() end
+        if themeMenu.isOpen() then themeMenu.draw() end
+        if contextmenu and contextmenu.isOpen() then contextmenu.draw() end
       end
 
       sdl.SDL_GL_SwapWindow(win.sdlWindow)
