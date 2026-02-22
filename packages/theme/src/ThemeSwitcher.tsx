@@ -14,12 +14,28 @@ export interface ThemeSwitcherProps {
   style?: any;
 }
 
-function MiniSwatch({ color, size = 8 }: { color: string; size?: number }) {
+function MiniSwatch({ color, size }: { color: string; size?: number }) {
+  if (size !== undefined) {
+    // Fixed size mode
+    return (
+      <Box
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: color,
+          borderRadius: 3,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.2)',
+        }}
+      />
+    );
+  }
+  // Responsive mode: fill parent height, maintain 1:1 aspect
   return (
     <Box
       style={{
-        width: size,
-        height: size,
+        height: '100%',
+        aspectRatio: 1,
         backgroundColor: color,
         borderRadius: 3,
         borderWidth: 1,
@@ -53,13 +69,14 @@ export function ThemeSwitcher({ style }: ThemeSwitcherProps) {
       style={{
         flexDirection: 'row',
         gap: 3,
-        alignItems: 'center',
+        alignItems: 'stretch',
+        height: '100%',
         ...style,
       }}
     >
-      <MiniSwatch color={currentColors.bg} size={6} />
-      <MiniSwatch color={currentColors.primary} size={6} />
-      <MiniSwatch color={currentColors.accent} size={6} />
+      <MiniSwatch color={currentColors.bg} />
+      <MiniSwatch color={currentColors.primary} />
+      <MiniSwatch color={currentColors.accent} />
     </Pressable>
   );
 }
