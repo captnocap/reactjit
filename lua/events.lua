@@ -16,9 +16,22 @@ local Log = require("lua.debug_log")
 local Events = {}
 
 local treeModule = nil
+local widgetsModule = nil
+
+-- Non-widget Lua-owned types that are always hittable.
+-- Widget types (Slider, Fader, etc.) are checked dynamically via widgetsModule.
+local LUA_HITTABLE = {
+  TextEditor = true, TextInput = true, CodeBlock = true,
+  Video = true, VideoPlayer = true, ContextMenu = true,
+  Scene3D = true, Map2D = true, GameCanvas = true,
+}
 
 function Events.setTreeModule(tree)
   treeModule = tree
+end
+
+function Events.setWidgetsModule(w)
+  widgetsModule = w
 end
 
 -- ============================================================================
@@ -100,22 +113,8 @@ function Events.hitTest(node, mx, my)
   -- even when no JS handler is attached
   if isScroll then return node end
   -- Lua-owned interactive nodes are always hittable
-  if node.type == "TextEditor" then return node end
-  if node.type == "TextInput" then return node end
-  if node.type == "CodeBlock" then return node end
-  if node.type == "Video" then return node end
-  if node.type == "VideoPlayer" then return node end
-  if node.type == "ContextMenu" then return node end
-  if node.type == "Scene3D" then return node end
-  if node.type == "Map2D" then return node end
-  if node.type == "Slider" then return node end
-  if node.type == "Fader" then return node end
-  if node.type == "Knob" then return node end
-  if node.type == "Switch" then return node end
-  if node.type == "Checkbox" then return node end
-  if node.type == "Radio" then return node end
-  if node.type == "Select" then return node end
-  if node.type == "GameCanvas" then return node end
+  if LUA_HITTABLE[node.type] then return node end
+  if widgetsModule and widgetsModule.isLuaInteractive(node.type) then return node end
   return nil
 end
 

@@ -30,8 +30,19 @@ local syntheticRoot = nil -- cached wrapper when #rootChildren > 1
 -- Internal helpers
 -- ============================================================================
 
+local MAX_CLEANUP_DEPTH = 32
+
 --- Recursively remove a node and all its descendants from the nodes table.
-local function cleanup(id)
+--- Depth-limited to MAX_CLEANUP_DEPTH to guard against pathologically deep trees.
+local function cleanup(id, depth)
+  depth = depth or 0
+  if depth > MAX_CLEANUP_DEPTH then
+    io.write("[tree] cleanup depth limit reached at id=" .. tostring(id) .. "\n")
+    io.flush()
+    nodes[id] = nil
+    return
+  end
+
   local n = nodes[id]
   if n then
     Log.log("tree", "cleanup id=%s type=%s children=%d", tostring(id), tostring(n.type), #n.children)
@@ -54,7 +65,7 @@ local function cleanup(id)
 
     -- Recursively cleanup children
     for _, c in ipairs(n.children) do
-      cleanup(c.id)
+      cleanup(c.id, depth + 1)
     end
     nodes[id] = nil
   end

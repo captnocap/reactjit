@@ -51,13 +51,7 @@ local texteditor = nil                        -- texteditor.lua (loaded on deman
 local textinput  = nil                        -- textinput.lua (loaded on demand)
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
 local textselection = nil                    -- textselection.lua (text highlight + copy)
-local slider     = nil                        -- slider.lua (Lua-owned slider interaction)
-local fader      = nil                        -- fader.lua (Lua-owned vertical fader)
-local knob       = nil                        -- knob.lua (Lua-owned rotary knob)
-local switch_mod = nil                        -- switch.lua (Lua-owned toggle switch)
-local checkbox   = nil                        -- checkbox.lua (Lua-owned checkbox)
-local radio      = nil                        -- radio.lua (Lua-owned radio buttons)
-local selectmod  = nil                        -- select.lua (Lua-owned dropdown select)
+local widgets    = nil                        -- widgets.lua (unified widget dispatch for Slider/Fader/Knob/Switch/Checkbox/Radio/Select)
 local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
 local osk      = nil                          -- osk.lua (on-screen keyboard for gamepad)
 local http     = nil                          -- http.lua (async HTTP + local file fetch)
@@ -257,6 +251,27 @@ local function findScrollAncestor(node)
     current = current.parent
   end
   return nil
+end
+
+-- ============================================================================
+-- Theme loading helper (used in both canvas and native init branches)
+-- ============================================================================
+
+local function loadThemes()
+  local thOk, thMod = pcall(require, "lua.themes")
+  if thOk and type(thMod) == "table" then
+    themes = thMod
+    if themeMenuEnabled then themeMenu.setThemes(themes) end
+    local resolvedTheme = nil
+    if themeMenuEnabled and themeMenu.getResolvedTheme then
+      resolvedTheme = themeMenu.getResolvedTheme(currentThemeName)
+    end
+    currentTheme = resolvedTheme or themes[currentThemeName]
+    if painter then painter.setTheme(currentTheme) end
+    if themeMenuEnabled then
+      themeMenu.setCurrentTheme(currentThemeName, currentTheme)
+    end
+  end
 end
 
 -- ============================================================================
@@ -522,26 +537,8 @@ function ReactJIT.init(config)
     videoplayer = require("lua.videoplayer")
     videoplayer.init({ measure = measure, videos = videos })
 
-    slider = require("lua.slider")
-    slider.init({ measure = measure })
-
-    fader = require("lua.fader")
-    fader.init({ measure = measure })
-
-    knob = require("lua.knob")
-    knob.init({ measure = measure })
-
-    switch_mod = require("lua.switch")
-    switch_mod.init({ measure = measure })
-
-    checkbox = require("lua.checkbox")
-    checkbox.init({ measure = measure })
-
-    radio = require("lua.radio")
-    radio.init({ measure = measure })
-
-    selectmod = require("lua.select")
-    selectmod.init({ measure = measure })
+    widgets = require("lua.widgets")
+    widgets.init({ measure = measure })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events, tree = tree })
@@ -563,21 +560,9 @@ function ReactJIT.init(config)
 
     focus.init(tree, pushEvent)
 
-    -- Load theme registry
-    local thOk, thMod = pcall(require, "lua.themes")
-    if thOk and type(thMod) == "table" then
-      themes = thMod
-      if themeMenuEnabled then themeMenu.setThemes(themes) end
-      local resolvedTheme = nil
-      if themeMenuEnabled and themeMenu.getResolvedTheme then
-        resolvedTheme = themeMenu.getResolvedTheme(currentThemeName)
-      end
-      currentTheme = resolvedTheme or themes[currentThemeName]
-      if painter then painter.setTheme(currentTheme) end
-      if themeMenuEnabled then
-        themeMenu.setCurrentTheme(currentThemeName, currentTheme)
-      end
-    end
+    events.setWidgetsModule(widgets)
+
+    loadThemes()
 
     print("[reactjit] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
     -- Push initial viewport dimensions for canvas mode
@@ -637,26 +622,8 @@ function ReactJIT.init(config)
     videoplayer = require("lua.videoplayer")
     videoplayer.init({ measure = measure, videos = videos })
 
-    slider = require("lua.slider")
-    slider.init({ measure = measure })
-
-    fader = require("lua.fader")
-    fader.init({ measure = measure })
-
-    knob = require("lua.knob")
-    knob.init({ measure = measure })
-
-    switch_mod = require("lua.switch")
-    switch_mod.init({ measure = measure })
-
-    checkbox = require("lua.checkbox")
-    checkbox.init({ measure = measure })
-
-    radio = require("lua.radio")
-    radio.init({ measure = measure })
-
-    selectmod = require("lua.select")
-    selectmod.init({ measure = measure })
+    widgets = require("lua.widgets")
+    widgets.init({ measure = measure })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events, tree = tree })
@@ -677,6 +644,8 @@ function ReactJIT.init(config)
     spellcheck.init()
 
     focus.init(tree, pushEvent)
+
+    events.setWidgetsModule(widgets)
 
     -- Initialize async HTTP (love.thread + LuaSocket) — gated by network permit
     if permit.check("network") then
@@ -732,21 +701,7 @@ function ReactJIT.init(config)
     -- Love2D event loop is running and we can tick timers between frames.
     ReactJIT._needsMount = true
 
-    -- Load theme registry
-    local thOk, thMod = pcall(require, "lua.themes")
-    if thOk and type(thMod) == "table" then
-      themes = thMod
-      if themeMenuEnabled then themeMenu.setThemes(themes) end
-      local resolvedTheme = nil
-      if themeMenuEnabled and themeMenu.getResolvedTheme then
-        resolvedTheme = themeMenu.getResolvedTheme(currentThemeName)
-      end
-      currentTheme = resolvedTheme or themes[currentThemeName]
-      if painter then painter.setTheme(currentTheme) end
-      if themeMenuEnabled then
-        themeMenu.setCurrentTheme(currentThemeName, currentTheme)
-      end
-    end
+    loadThemes()
 
     print("[reactjit] Initialized in NATIVE mode (QuickJS bridge)")
   end
@@ -1612,126 +1567,12 @@ function ReactJIT.update(dt)
     end
   end
 
-  -- 10. Drain Lua-owned slider events
-  if slider then
-    local sliderEvents = slider.drainEvents()
-    if sliderEvents then
-      for _, evt in ipairs(sliderEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
+  -- 10. Drain Lua-owned widget events (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
+  if widgets then
+    widgets.drainAllEvents(pushEvent)
   end
 
-  -- 10b. Drain Lua-owned fader events
-  if fader then
-    local faderEvents = fader.drainEvents()
-    if faderEvents then
-      for _, evt in ipairs(faderEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
-  end
-
-  -- 10c. Drain Lua-owned knob events
-  if knob then
-    local knobEvents = knob.drainEvents()
-    if knobEvents then
-      for _, evt in ipairs(knobEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
-  end
-
-  -- 10d. Drain Lua-owned switch events
-  if switch_mod then
-    local switchEvents = switch_mod.drainEvents()
-    if switchEvents then
-      for _, evt in ipairs(switchEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
-  end
-
-  -- 10e. Drain Lua-owned checkbox events
-  if checkbox then
-    local checkboxEvents = checkbox.drainEvents()
-    if checkboxEvents then
-      for _, evt in ipairs(checkboxEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
-  end
-
-  -- 10f. Drain Lua-owned radio events
-  if radio then
-    local radioEvents = radio.drainEvents()
-    if radioEvents then
-      for _, evt in ipairs(radioEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
-  end
-
-  -- 10g. Drain Lua-owned select events
-  if selectmod then
-    local selectEvents = selectmod.drainEvents()
-    if selectEvents then
-      for _, evt in ipairs(selectEvents) do
-        pushEvent({
-          type = evt.type,
-          payload = {
-            type = evt.type,
-            targetId = evt.nodeId,
-            value = evt.value,
-          },
-        })
-      end
-    end
-  end
-
-  -- 10h. Drain Lua-owned map events
+  -- 10b. Drain Lua-owned map events (different payload shape)
   if mapmod then
     local mapEvents = mapmod.drainEvents()
     if mapEvents then
@@ -2315,35 +2156,9 @@ function ReactJIT.mousepressed(x, y, button)
       if mapmod then
         mapmod.handleMousePressed(hit, x, y, button)
       end
-    elseif hit.type == "Slider" then
-      -- Clicked a Slider: handle drag interaction in Lua
-      if slider then
-        slider.handleMousePressed(hit, x, y, button)
-      end
-    elseif hit.type == "Fader" then
-      if fader then
-        fader.handleMousePressed(hit, x, y, button)
-      end
-    elseif hit.type == "Knob" then
-      if knob then
-        knob.handleMousePressed(hit, x, y, button)
-      end
-    elseif hit.type == "Switch" then
-      if switch_mod then
-        switch_mod.handleMousePressed(hit, x, y, button)
-      end
-    elseif hit.type == "Checkbox" then
-      if checkbox then
-        checkbox.handleMousePressed(hit, x, y, button)
-      end
-    elseif hit.type == "Radio" then
-      if radio then
-        radio.handleMousePressed(hit, x, y, button)
-      end
-    elseif hit.type == "Select" then
-      if selectmod then
-        selectmod.handleMousePressed(hit, x, y, button)
-      end
+    elseif widgets and widgets.handleMousePressed(hit, x, y, button) then
+      -- Handled by unified widget dispatch (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
+      do end  -- no-op body; dispatch already happened in the condition
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)
@@ -2427,40 +2242,9 @@ function ReactJIT.mousereleased(x, y, button)
     end
   end
 
-  -- Slider drag release (check all Slider nodes — mouse may have left bounds)
-  if slider and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Slider" and node._slider then
-          slider.handleMouseReleased(node, x, y, button)
-        end
-      end
-    end
-  end
-
-  -- Fader drag release
-  if fader and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Fader" and node._fader then
-          fader.handleMouseReleased(node, x, y, button)
-        end
-      end
-    end
-  end
-
-  -- Knob drag release
-  if knob and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Knob" and node._knob then
-          knob.handleMouseReleased(node, x, y, button)
-        end
-      end
-    end
+  -- Widget drag release (Slider, Fader, Knob — mouse may have left bounds)
+  if widgets then
+    widgets.handleMouseReleased(tree, x, y, button)
   end
 
   local root = tree.getTree()
@@ -2584,52 +2368,9 @@ function ReactJIT.mousemoved(x, y)
     end
   end
 
-  -- Slider: handle active drag (mouse may be outside the node)
-  if slider and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Slider" and node._slider and node._slider.isDragging then
-          slider.handleMouseMoved(node, x, y)
-        end
-      end
-    end
-  end
-
-  -- Fader: handle active drag
-  if fader and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Fader" and node._fader and node._fader.isDragging then
-          fader.handleMouseMoved(node, x, y)
-        end
-      end
-    end
-  end
-
-  -- Knob: handle active drag
-  if knob and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Knob" and node._knob and node._knob.isDragging then
-          knob.handleMouseMoved(node, x, y)
-        end
-      end
-    end
-  end
-
-  -- Select: handle hover tracking on open dropdown
-  if selectmod and tree then
-    local nodes = tree.getNodes()
-    if nodes then
-      for _, node in pairs(nodes) do
-        if node.type == "Select" and node._select and node._select.isOpen then
-          selectmod.handleMouseMoved(node, x, y)
-        end
-      end
-    end
+  -- Widget active drag / open dropdown tracking (Slider, Fader, Knob, Select)
+  if widgets then
+    widgets.handleMouseMoved(tree, x, y)
   end
 
   -- Update drag if active
