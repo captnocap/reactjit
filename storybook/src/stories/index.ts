@@ -21,6 +21,9 @@ import { NavigationStory } from './NavigationStory';
 import { NetworkingStory } from './NetworkingStory';
 import { CryptoStory } from './CryptoStory';
 import { MediaStory } from './MediaStory';
+import { ImageBasicStory } from './ImageBasic';
+import { ImageGalleryStory } from './ImageGalleryStory';
+import { VideoStory } from './VideoStory';
 import EmulatorStory from './EmulatorStory';
 import { Scene3DShowcaseStory } from './Scene3DShowcaseStory';
 import { AudioRackStory } from './AudioRackStory';
@@ -45,6 +48,9 @@ export const stories: StoryDef[] = [
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
   { id: 'layout', title: 'Layout', section: 'Core', component: FlexRowStory },
   { id: 'style', title: 'Style', section: 'Core', component: GradientStory },
+  { id: 'image', title: 'Image', section: 'Core', component: ImageBasicStory },
+  { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },
+  { id: 'video', title: 'Video', section: 'Core', component: VideoStory },
   { id: 'composition', title: 'Composition', section: 'Core', component: CompositionStory },
   { id: 'input', title: 'Input', section: 'Core', component: InputStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
