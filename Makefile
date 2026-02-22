@@ -429,7 +429,6 @@ cli-setup: setup
 	cp -r packages/webhooks cli/runtime/reactjit/webhooks
 	cp -r packages/crypto cli/runtime/reactjit/crypto
 	cp -r packages/media cli/runtime/reactjit/media
-	cp -r packages/game cli/runtime/reactjit/game
 	cp -r packages/3d cli/runtime/reactjit/3d
 	cp -r packages/controls cli/runtime/reactjit/controls
 	cp -r packages/geo cli/runtime/reactjit/geo
