@@ -92,9 +92,9 @@ export function Slider({
 
   // ── Native mode: single Lua-owned host element ──────────────────
   if (mode !== 'web') {
-    const trackWidth = Math.round(((style?.width as number) || 200) * scale);
+    const explicitWidth = style?.width as number | undefined;
     const nativeStyle: Style = {
-      width: trackWidth,
+      width: explicitWidth != null ? Math.round(explicitWidth * scale) : '100%',
       height: scaledThumbSize + Math.round(8 * scale),
       ...scaledStyle,
     };
