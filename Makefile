@@ -366,6 +366,10 @@ cli-setup: setup
 		&& cp zig-out/lib/libft_helper.so cli/runtime/lib/ft_helper.so \
 		&& echo "  Bundled ft_helper.so" \
 		|| echo "  Warning: ft_helper.so build failed — SDL2 target text rendering unavailable"
+	@zig build image-helper \
+		&& cp zig-out/lib/libimage_helper.so cli/runtime/lib/image_helper.so \
+		&& echo "  Bundled image_helper.so" \
+		|| echo "  Warning: image_helper.so build failed — SDL2 image loading unavailable"
 	@zig build sdl2 \
 		&& cp zig-out/lib/libSDL2.so cli/runtime/lib/libSDL2.so \
 		&& echo "  Bundled libSDL2.so (via zig)" \
