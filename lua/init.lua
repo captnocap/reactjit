@@ -973,6 +973,15 @@ function ReactJIT.init(config)
     io.write("[reactjit] Audio engine loaded\n"); io.flush()
   end
 
+  -- Initialize window manager (multi-window support)
+  -- Must happen before capabilities so the Window capability can use WM.create().
+  local wmOk, wmMod = pcall(require, "lua.window_manager")
+  if wmOk and wmMod then
+    wmMod.init()  -- auto-detects Love2D backend
+    wmMod.registerMain()
+    io.write("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")\n"); io.flush()
+  end
+
   -- Load declarative capabilities (Audio, Timer, etc.)
   local capOk, capMod = pcall(require, "lua.capabilities")
   if capOk and capMod then
@@ -1808,6 +1817,40 @@ function ReactJIT.draw()
       if fsNode then
         videoplayer.draw(fsNode, 1.0)
       end
+    end
+
+    -- Multi-window paint: render each child window's subtree
+    if wmOk and wmMod then
+      local allWins = wmMod.getAll()
+      for _, win in ipairs(allWins) do
+        if not win.isMain and win.rootNodeId then
+          -- Find the root node for this window's subtree
+          local allNodes = tree.getNodes()
+          local winRoot = allNodes[win.rootNodeId]
+          if winRoot then
+            wmMod.activate(win)
+
+            -- Set up Love2D state for the secondary window
+            love.graphics.clear(0.05, 0.05, 0.09, 1.0)
+            love.graphics.setBlendMode("alpha")
+            love.graphics.origin()
+
+            winRoot._isWindowRoot = true
+            local wok, werr = pcall(painter.paint, winRoot)
+            winRoot._isWindowRoot = nil
+            if not wok then
+              errors.push({
+                source = "lua",
+                message = tostring(werr),
+                context = "painter.paint (window #" .. win.id .. ")",
+              })
+            end
+
+            wmMod.swap(win)
+          end
+        end
+      end
+      wmMod.activateMain()
     end
   end
 
