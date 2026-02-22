@@ -345,6 +345,14 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       strokedRoundedRect(c.x,c.y,c.w,c.h, r, bw)
     end
 
+  -- Visual capabilities with a custom draw callback (e.g. Boids)
+  elseif not isHidden and CapabilitiesModule and CapabilitiesModule.isCapability(node.type) then
+    local cap  = CapabilitiesModule.getDefinition(node.type)
+    local inst = cap and CapabilitiesModule.getInstance(node.id)
+    if cap and cap.draw and inst then
+      cap.draw(node.id, inst.state, inst.props, c, eff)
+    end
+
   -- Text / __TEXT__
   elseif not isHidden and (node.type=="Text" or node.type=="__TEXT__") then
     local ps = (node.type=="__TEXT__" and node.parent and node.parent.style) or {}

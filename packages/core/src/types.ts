@@ -616,6 +616,25 @@ export interface AudioProps {
  * <Timer interval={1000} onTick={() => setCount(c => c + 1)} />
  * <Timer interval={5000} repeat={false} onTick={() => showTimeout()} />
  */
+/**
+ * Boids flocking simulation powered by TSL (TypeScript-to-Lua transpiler).
+ *
+ * @example
+ * <Boids count={60} speed={1.0} style={{ flexGrow: 1 }} />
+ * <Boids count={80} speed={1.4} separation={1.2} alignment={0.9} cohesion={1.0} />
+ */
+export interface BoidsProps {
+  count?: number;
+  speed?: number;
+  separation?: number;
+  alignment?: number;
+  cohesion?: number;
+  running?: boolean;
+  color?: Color;
+  style?: Style;
+  key?: string | number;
+}
+
 export interface TimerProps {
   interval: number;
   repeat?: boolean;

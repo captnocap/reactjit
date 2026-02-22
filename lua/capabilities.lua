@@ -208,12 +208,28 @@ end
 
 --- Load all capability files from lua/capabilities/.
 --- Each file should call Capabilities.register() when required.
+--- Get the raw capability definition table (includes schema, draw, etc.).
+--- @param typeName string
+--- @return table|nil
+function Capabilities.getDefinition(typeName)
+  return registry[typeName]
+end
+
+--- Get the live instance for a node by ID.
+--- Returns { type, state, props } or nil if not found.
+--- @param id string
+--- @return table|nil
+function Capabilities.getInstance(id)
+  return instances[id]
+end
+
 function Capabilities.loadAll()
   local files = {
     "audio",
     "timer",
     "llm_agent",
     "window",
+    "boids",
   }
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)

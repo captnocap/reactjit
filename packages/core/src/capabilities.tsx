@@ -21,6 +21,7 @@ import { Native } from './Native';
 import type {
   AudioProps, TimerProps, LLMAgentProps, WindowProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
+  BoidsProps,
 } from './types';
 
 /**
@@ -33,6 +34,19 @@ import type {
  */
 export function Audio(props: AudioProps) {
   return <Native type="Audio" {...props} />;
+}
+
+/**
+ * Boids flocking simulation. The simulation logic is authored in TypeScript-like
+ * TSL (storybook/src/tsl/boids.tsl), transpiled to Lua by `reactjit tsl`, and
+ * executed natively at LuaJIT speed inside the capability tick.
+ *
+ * @example
+ * <Boids count={60} speed={1.0} style={{ flexGrow: 1 }} />
+ * <Boids count={80} speed={1.4} separation={1.2} alignment={0.9} cohesion={1.0} />
+ */
+export function Boids(props: BoidsProps) {
+  return <Native type="Boids" {...props} />;
 }
 
 /**

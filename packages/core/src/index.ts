@@ -224,11 +224,12 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent, Window, Pin, PWM, SerialPort, I2CDevice, SPIDevice } from './capabilities';
+export { Audio, Timer, LLMAgent, Window, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type {
   NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
+  BoidsProps,
   CapabilitySchema,
 } from './types';
 
