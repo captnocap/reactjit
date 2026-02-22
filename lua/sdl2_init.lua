@@ -1191,6 +1191,22 @@ function SDL2Init.run(config)
       sdl.SDL_GL_SwapWindow(win.sdlWindow)
     end
 
+    -- ---- Diagnostic capture (after paint, like screenshot) ----
+    if diagEnabled and not diagDone then
+      diagFrameCount = diagFrameCount + 1
+      if diagFrameCount >= diagWaitFrames then
+        diagDone = true
+        local dok, diagMod = pcall(require, "lua.diagnostics")
+        if dok then
+          diagMod.run(tree, capabilities, W, H)
+        else
+          io.write("[sdl2_init] failed to load diagnostics: " .. tostring(diagMod) .. "\n")
+          io.flush()
+        end
+        running = false
+      end
+    end
+
     -- ---- Frame cap (only when vsync is not available) ----
     if not vsyncOk then
       local elapsed = sdl.SDL_GetTicks() - frameStart
