@@ -101,9 +101,8 @@ draw paths.
 - [x] **Port widget drawing to target-agnostic API** `[#13, #23, #31, #44]` — **FIXED** (commits `1598c97`–`d8fcc08`). All 7 core widgets now work on SDL2. `slider.lua` and `switch.lua` were already compatible (no text measurement). `fader.lua`, `knob.lua`, `checkbox.lua`, `radio.lua`, `select.lua` each received a `getFontHandle()` helper using injected Measure module with Love2D `newFont()` fallback, replacing `love.graphics.getFont()` which the SDL2 shim doesn't provide.
   - Files: `lua/fader.lua`, `lua/knob.lua`, `lua/checkbox.lua`, `lua/radio.lua`, `lua/select.lua`
 
-- [ ] **Port TextInput** `[#31]` — Needs full graphics API port for cursor, selection, text rendering.
-  - Files: `lua/textinput.lua`
-  - Verify: Local Store "text memory" section renders in SDL2
+- [x] **Port TextInput** `[#31]` — **FIXED** (commit `7852063`). Added shim functions (getScissor, intersectScissor, transformPoint, getFont), TextInput dispatch in sdl2_painter, focus/keyboard/mouse event routing in sdl2_init, blink timer, and change event draining. Hardened getFont fallback in textinput.lua.
+  - Files: `lua/sdl2_love_shim.lua`, `lua/sdl2_painter.lua`, `lua/sdl2_init.lua`, `lua/textinput.lua`
 
 - [ ] **Port TextEditor** — Multi-line text editing with cursor, selection, scrolling.
   - Files: `lua/texteditor.lua`
@@ -273,7 +272,7 @@ Which phases fix which audit observations. ✅ = fully done, 🔶 = partially do
 | 1c | #9 (partial), #10, #18 (partial) | 3 | ✅ All 3 fixed |
 | 2 | #1 | 1 | Not started |
 | 3 | #3, #4 | 2 | 🔶 Hover events wired; tooltip render unverified |
-| 4 | #13, #23, #44 done; #31, #47 remain | 5 | 🔶 3/5 fixed (TextInput, devtools remain) |
+| 4 | #13, #23, #31, #44 done; #47 remains | 5 | 🔶 4/5 fixed (devtools remain) |
 | 5 | #22, #43 | 2 | Not started |
 | 6 | clipboard done; #20 partial; #21, #38 remain | 3 | 🔶 1.5/3 |
 | 7 | #27, #38, #39, #40 | 4 | Not started |
