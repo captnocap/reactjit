@@ -261,10 +261,14 @@ function SDL2Init.run(config)
   events.setTreeModule(tree)
   layout.init({ measure = Measure })
 
-  -- Focus and TextInput (Lua-owned interactive widgets)
-  local focus     = require("lua.focus")
-  local textinput = require("lua.textinput")
+  -- Focus and Lua-owned text widgets
+  local focus      = require("lua.focus")
+  local textinput  = require("lua.textinput")
+  local texteditor = require("lua.texteditor")
+  local codeblock  = require("lua.codeblock")
   textinput.init({ measure = Measure })
+  texteditor.init({ measure = Measure })
+  codeblock.init({ measure = Measure })
 
   -- ------------------------------------------------------------------
   -- 3a. Window manager (multi-window support)
@@ -508,11 +512,16 @@ function SDL2Init.run(config)
           end
         end
 
-        -- TextInput drag selection
+        -- Text widget drag selection
         local focusedNode = focus.get()
-        if focusedNode and focusedNode.type == "TextInput" then
-          local cx, cy = events.screenToContent(focusedNode, mx, my)
-          textinput.handleMouseMoved(focusedNode, cx, cy)
+        if focusedNode then
+          if focusedNode.type == "TextInput" then
+            local cx, cy = events.screenToContent(focusedNode, mx, my)
+            textinput.handleMouseMoved(focusedNode, cx, cy)
+          elseif focusedNode.type == "TextEditor" then
+            local cx, cy = events.screenToContent(focusedNode, mx, my)
+            texteditor.handleMouseMoved(focusedNode, cx, cy)
+          end
         end
 
       elseif t == SDL_MOUSEBTNDOWN or t == SDL_MOUSEBTNUP then
@@ -547,17 +556,43 @@ function SDL2Init.run(config)
               if t == SDL_MOUSEBTNDOWN then
                 events.setPressedNode(hit)
 
-                -- TextInput focus management
-                if hit.type == "TextInput" then
-                  local prevFocused = focus.get()
-                  if prevFocused and prevFocused ~= hit and prevFocused.type == "TextInput" then
+                -- Blur any previously focused text widget when clicking elsewhere
+                local prevFocused = focus.get()
+                local isTextHit = (hit.type == "TextInput" or hit.type == "TextEditor")
+                if prevFocused and prevFocused ~= hit then
+                  if prevFocused.type == "TextInput" then
                     local value = textinput.blur(prevFocused)
+                    focus.clear()
                     pushEvent({
                       type = "textinput:blur",
                       payload = { type = "textinput:blur", targetId = prevFocused.id, value = value },
                     })
+                  elseif prevFocused.type == "TextEditor" then
+                    local value = texteditor.blur(prevFocused)
+                    focus.clear()
+                    pushEvent({
+                      type = "texteditor:blur",
+                      payload = { type = "texteditor:blur", targetId = prevFocused.id, value = value },
+                    })
                   end
-                  if prevFocused ~= hit then
+                end
+
+                -- TextEditor focus + mouse press
+                if hit.type == "TextEditor" then
+                  local cx, cy = events.screenToContent(hit, mx, my)
+                  if texteditor.handleMousePressed(hit, cx, cy, btn) then
+                    if not focus.isFocused(hit) then
+                      focus.set(hit)
+                      pushEvent({
+                        type = "texteditor:focus",
+                        payload = { type = "texteditor:focus", targetId = hit.id },
+                      })
+                    end
+                  end
+
+                -- TextInput focus + mouse press
+                elseif hit.type == "TextInput" then
+                  if not focus.isFocused(hit) then
                     focus.set(hit)
                     textinput.focus(hit)
                     pushEvent({
@@ -567,28 +602,25 @@ function SDL2Init.run(config)
                   end
                   local cx, cy = events.screenToContent(hit, mx, my)
                   textinput.handleMousePressed(hit, cx, cy, btn)
-                else
-                  -- Clicking a non-TextInput node: blur any focused TextInput
-                  local prevFocused = focus.get()
-                  if prevFocused and prevFocused.type == "TextInput" then
-                    local value = textinput.blur(prevFocused)
-                    focus.clear()
-                    pushEvent({
-                      type = "textinput:blur",
-                      payload = { type = "textinput:blur", targetId = prevFocused.id, value = value },
-                    })
-                  end
+
+                -- CodeBlock copy button
+                elseif hit.type == "CodeBlock" then
+                  local cx, cy = events.screenToContent(hit, mx, my)
+                  codeblock.handleMousePressed(hit, cx, cy, btn)
                 end
 
                 local path = events.buildBubblePath(hit)
                 bridge:pushEvent(
                   events.createEvent("click", hit.id, mx, my, btn, path))
               else
-                -- Mouse button up
-                -- TextInput drag release
+                -- Mouse button up: release drag on focused text widget
                 local focusedNode = focus.get()
-                if focusedNode and focusedNode.type == "TextInput" then
-                  textinput.handleMouseReleased(focusedNode)
+                if focusedNode then
+                  if focusedNode.type == "TextInput" then
+                    textinput.handleMouseReleased(focusedNode)
+                  elseif focusedNode.type == "TextEditor" then
+                    texteditor.handleMouseReleased(focusedNode)
+                  end
                 end
 
                 events.clearPressedNode()
@@ -597,20 +629,33 @@ function SDL2Init.run(config)
                   events.createEvent("release", hit.id, mx, my, btn, path))
               end
             elseif t == SDL_MOUSEBTNDOWN then
-              -- Click outside any node: blur TextInput
+              -- Click outside any node: blur focused text widget
               local prevFocused = focus.get()
-              if prevFocused and prevFocused.type == "TextInput" then
-                local value = textinput.blur(prevFocused)
-                focus.clear()
-                pushEvent({
-                  type = "textinput:blur",
-                  payload = { type = "textinput:blur", targetId = prevFocused.id, value = value },
-                })
+              if prevFocused then
+                if prevFocused.type == "TextInput" then
+                  local value = textinput.blur(prevFocused)
+                  focus.clear()
+                  pushEvent({
+                    type = "textinput:blur",
+                    payload = { type = "textinput:blur", targetId = prevFocused.id, value = value },
+                  })
+                elseif prevFocused.type == "TextEditor" then
+                  local value = texteditor.blur(prevFocused)
+                  focus.clear()
+                  pushEvent({
+                    type = "texteditor:blur",
+                    payload = { type = "texteditor:blur", targetId = prevFocused.id, value = value },
+                  })
+                end
               end
             elseif t == SDL_MOUSEBTNUP then
               local focusedNode = focus.get()
-              if focusedNode and focusedNode.type == "TextInput" then
-                textinput.handleMouseReleased(focusedNode)
+              if focusedNode then
+                if focusedNode.type == "TextInput" then
+                  textinput.handleMouseReleased(focusedNode)
+                elseif focusedNode.type == "TextEditor" then
+                  texteditor.handleMouseReleased(focusedNode)
+                end
               end
               events.clearPressedNode()
             end
@@ -634,6 +679,10 @@ function SDL2Init.run(config)
           if winRoot then
             local hit = events.hitTest(winRoot, mx, my)
             if hit then
+              -- TextEditor handles its own scroll entirely in Lua
+              if hit.type == "TextEditor" then
+                texteditor.handleWheel(hit, dx, dy)
+              end
               -- Update Lua-side scroll state for immediate visual response
               local scrollContainer = events.findScrollableContainer(hit, dx, -dy)
               if scrollContainer and scrollContainer.scrollState then
@@ -676,6 +725,31 @@ function SDL2Init.run(config)
             consumed = true
             mainWin.needsLayout = true
 
+          -- Focused TextEditor gets next shot at keys
+          elseif focus.get() and focus.get().type == "TextEditor" then
+            local focusedNode = focus.get()
+            local result = texteditor.handleKeyPressed(focusedNode, keyname, tostring(scan), isRep)
+            if result == "blur" then
+              local value = texteditor.blur(focusedNode)
+              focus.clear()
+              pushEvent({
+                type = "texteditor:blur",
+                payload = { type = "texteditor:blur", targetId = focusedNode.id, value = value },
+              })
+              consumed = true
+            elseif result == "submit" then
+              local value = texteditor.getValue(focusedNode)
+              pushEvent({
+                type = "texteditor:submit",
+                payload = { type = "texteditor:submit", targetId = focusedNode.id, value = value },
+              })
+              consumed = true
+            elseif result == false then
+              -- TextEditor didn't handle this key combo, let it through
+            elseif result then
+              consumed = true
+            end
+
           -- Focused TextInput gets next shot at keys
           elseif focus.get() and focus.get().type == "TextInput" then
             local focusedNode = focus.get()
@@ -699,7 +773,7 @@ function SDL2Init.run(config)
               consumed = true
             end
 
-          -- Escape: quit (only if devtools and TextInput didn't consume it)
+          -- Escape: quit (only if devtools and text widgets didn't consume it)
           elseif keyname == "escape" then
             running = false
             consumed = true
@@ -736,8 +810,9 @@ function SDL2Init.run(config)
           -- Route to devtools first (console text input)
           if devtools.textinput(text) then
             -- consumed by devtools
+          elseif focus.get() and focus.get().type == "TextEditor" then
+            texteditor.handleTextInput(focus.get(), text)
           elseif focus.get() and focus.get().type == "TextInput" then
-            -- Route to focused TextInput (Lua-owned)
             textinput.handleTextInput(focus.get(), text)
           else
             bridge:pushEvent(events.createTextInputEvent(text))
@@ -877,18 +952,21 @@ function SDL2Init.run(config)
     -- ---- Audio engine update ----
     if audioEngine then audioEngine.update(frameDeltaMs / 1000) end
 
-    -- ---- TextInput blink timer + change events ----
+    -- ---- Text widget blink timers + change events ----
     local focusedNode = focus.get()
-    if focusedNode and focusedNode.type == "TextInput" then
-      textinput.update(focusedNode, frameDeltaMs / 1000)
-      -- Detect text changes and push change events to JS
-      local is = focusedNode.inputState
-      if is and is.text ~= is.lastValue then
-        pushEvent({
-          type = "textinput:change",
-          payload = { type = "textinput:change", targetId = focusedNode.id, value = is.text },
-        })
-        is.lastValue = is.text
+    if focusedNode then
+      if focusedNode.type == "TextInput" then
+        textinput.update(focusedNode, frameDeltaMs / 1000)
+        local is = focusedNode.inputState
+        if is and is.text ~= is.lastValue then
+          pushEvent({
+            type = "textinput:change",
+            payload = { type = "textinput:change", targetId = focusedNode.id, value = is.text },
+          })
+          is.lastValue = is.text
+        end
+      elseif focusedNode.type == "TextEditor" then
+        texteditor.update(focusedNode, frameDeltaMs / 1000)
       end
     end
 

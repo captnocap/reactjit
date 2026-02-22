@@ -172,6 +172,22 @@ function graphics.print(text, x, y)
   Font.draw(tostring(text), x, y, _fontSize, _colorR, _colorG, _colorB, _colorA)
 end
 
+--- printf: aligned text within a width limit (Love2D compatible).
+--- Signature: printf(text, x, y, limit, align)
+function graphics.printf(text, x, y, limit, align)
+  if not text or text == "" then return end
+  text = tostring(text)
+  align = align or "left"
+  local tw = Font.measureWidth(text, _fontSize)
+  local dx = x
+  if align == "center" then
+    dx = x + (limit - tw) / 2
+  elseif align == "right" then
+    dx = x + limit - tw
+  end
+  Font.draw(text, dx, y, _fontSize, _colorR, _colorG, _colorB, _colorA)
+end
+
 function graphics.push(mode)
   table.insert(_stateStack, {
     colorR = _colorR, colorG = _colorG, colorB = _colorB, colorA = _colorA,

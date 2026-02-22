@@ -444,6 +444,15 @@ end
 -- Lazy-loaded modules
 local CapabilitiesModule = nil
 local TextInputModule = nil
+local TextEditorModule = nil
+local CodeBlockModule = nil
+local SliderModule = nil
+local FaderModule = nil
+local KnobModule = nil
+local SwitchModule = nil
+local CheckboxModule = nil
+local RadioModule = nil
+local SelectModule = nil
 
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
@@ -673,15 +682,80 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
-  -- TextInput (Lua-owned: delegate rendering to textinput.lua)
+  -- Lua-owned interactive widgets: delegate rendering to their modules
   elseif not isHidden and node.type == "TextInput" then
     if not TextInputModule then
       local ok, mod = pcall(require, "lua.textinput")
       if ok then TextInputModule = mod end
     end
-    if TextInputModule then
-      TextInputModule.draw(node, eff)
+    if TextInputModule then TextInputModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "TextEditor" then
+    if not TextEditorModule then
+      local ok, mod = pcall(require, "lua.texteditor")
+      if ok then TextEditorModule = mod end
     end
+    if TextEditorModule then TextEditorModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "CodeBlock" then
+    if not CodeBlockModule then
+      local ok, mod = pcall(require, "lua.codeblock")
+      if ok then CodeBlockModule = mod end
+    end
+    if CodeBlockModule and CodeBlockModule.render then
+      if c and c.w > 0 and c.h > 0 then
+        CodeBlockModule.render(node, c, eff)
+      end
+    end
+
+  elseif not isHidden and node.type == "Slider" then
+    if not SliderModule then
+      local ok, mod = pcall(require, "lua.slider")
+      if ok then SliderModule = mod end
+    end
+    if SliderModule then SliderModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Fader" then
+    if not FaderModule then
+      local ok, mod = pcall(require, "lua.fader")
+      if ok then FaderModule = mod end
+    end
+    if FaderModule then FaderModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Knob" then
+    if not KnobModule then
+      local ok, mod = pcall(require, "lua.knob")
+      if ok then KnobModule = mod end
+    end
+    if KnobModule then KnobModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Switch" then
+    if not SwitchModule then
+      local ok, mod = pcall(require, "lua.switch")
+      if ok then SwitchModule = mod end
+    end
+    if SwitchModule then SwitchModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Checkbox" then
+    if not CheckboxModule then
+      local ok, mod = pcall(require, "lua.checkbox")
+      if ok then CheckboxModule = mod end
+    end
+    if CheckboxModule then CheckboxModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Radio" then
+    if not RadioModule then
+      local ok, mod = pcall(require, "lua.radio")
+      if ok then RadioModule = mod end
+    end
+    if RadioModule then RadioModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Select" then
+    if not SelectModule then
+      local ok, mod = pcall(require, "lua.select")
+      if ok then SelectModule = mod end
+    end
+    if SelectModule then SelectModule.draw(node, eff) end
   end
 
   -- Generic capability draw dispatch — any visual capability with a draw()

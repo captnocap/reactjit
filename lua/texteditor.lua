@@ -117,12 +117,19 @@ end
 
 --- Get the font for this editor node.
 local function getFont(node)
-  if not Measure then return love.graphics.getFont() end
   local s = node.style or {}
-  local fontSize = Measure.scaleFontSize(s.fontSize or 14, node)
-  local fontFamily = s.fontFamily or nil
-  local fontWeight = s.fontWeight or nil
-  return Measure.getFont(fontSize, fontFamily, fontWeight)
+  local fontSize = s.fontSize or 14
+  if Measure then
+    fontSize = Measure.scaleFontSize(fontSize, node)
+    local fontFamily = s.fontFamily or nil
+    local fontWeight = s.fontWeight or nil
+    return Measure.getFont(fontSize, fontFamily, fontWeight)
+  end
+  if love and love.graphics then
+    if love.graphics.newFont then return love.graphics.newFont(fontSize) end
+    if love.graphics.getFont then return love.graphics.getFont() end
+  end
+  return nil
 end
 
 --- Get line height for this editor.
