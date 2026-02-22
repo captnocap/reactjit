@@ -376,7 +376,7 @@ function Bridge.new(libpath)
 
   -- ffi.load uses dlopen which resolves relative to process CWD, not Love2D's
   -- game directory. Resolve to an absolute path using love.filesystem.getSource().
-  if libpath:sub(1, 1) ~= "/" and love and love.filesystem then
+  if libpath:sub(1, 1) ~= "/" and love and love.filesystem and love.filesystem.getSource then
     local source = love.filesystem.getSource()
     if source then
       -- getSource() returns a file path (fused binary or .love file), not a
