@@ -8,12 +8,12 @@
  * Navigation: click story names, or use Up/Down + Enter keys.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
-import { BridgeProvider, RendererProvider } from '../../packages/core/src/context';
-import { Box, Text, Pressable, ScaleProvider, PortalHost } from '../../packages/core/src';
+import { BridgeProvider, RendererProvider, useBridge } from '../../packages/core/src/context';
+import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -64,6 +64,83 @@ function StorybookPanel() {
       setActiveIdx(i => Math.max(i - 1, 0));
     }
   }, []);
+
+  // ── Ghost node diagnostic crawl (Ctrl+Shift+D) ──
+  const bridge = useBridge();
+  const crawlingRef = useRef(false);
+
+  useHotkey('ctrl+shift+d', useCallback(async () => {
+    if (crawlingRef.current) return;
+    crawlingRef.current = true;
+
+    const originalIdx = activeIdx;
+    const SETTLE_MS = 500;
+    const allResults: Array<{ story: string; id: string; total: number; painted: number; ghost: number; ghosts: any[] }> = [];
+
+    console.log('\n[diagnose] Starting ghost node crawl across ' + stories.length + ' stories...\n');
+
+    for (let i = 0; i < stories.length; i++) {
+      const story = stories[i];
+      setActiveIdx(i);
+
+      // Wait for React re-render + Lua layout to settle
+      await new Promise(r => setTimeout(r, SETTLE_MS));
+
+      try {
+        const result = await bridge.rpc<any>('diagnose:run', undefined, 5000);
+        if (result && !result.error) {
+          const ghostNodes = (result.nodes || []).filter((n: any) => n.status !== 'non-visual-cap' && n.status !== 'own-surface');
+          allResults.push({
+            story: story.title,
+            id: story.id,
+            total: result.total,
+            painted: result.painted,
+            ghost: result.ghost,
+            ghosts: ghostNodes,
+          });
+
+          if (ghostNodes.length > 0) {
+            console.log('[diagnose] ' + story.title + ': ' + ghostNodes.length + ' ghost node(s)');
+            for (const g of ghostNodes) {
+              console.log('  - id=' + g.id + ' type=' + (g.type || '?') + ' status=' + g.status + ' debugName=' + (g.debugName || '-'));
+            }
+          }
+        } else {
+          console.log('[diagnose] ' + story.title + ': ERROR - ' + (result?.error || 'unknown'));
+        }
+      } catch (err: any) {
+        console.log('[diagnose] ' + story.title + ': RPC failed - ' + (err?.message || err));
+      }
+    }
+
+    // Print summary
+    const storiesWithGhosts = allResults.filter(r => r.ghost > 0);
+    const totalGhosts = allResults.reduce((sum, r) => sum + r.ghost, 0);
+
+    console.log('\n[diagnose] ═══════════════════════════════════════');
+    console.log('[diagnose]  Ghost Node Crawl Complete');
+    console.log('[diagnose] ═══════════════════════════════════════');
+    console.log('[diagnose]  Stories scanned:     ' + stories.length);
+    console.log('[diagnose]  Stories with ghosts: ' + storiesWithGhosts.length);
+    console.log('[diagnose]  Total ghost nodes:   ' + totalGhosts);
+
+    if (storiesWithGhosts.length > 0) {
+      console.log('[diagnose] ───────────────────────────────────────');
+      for (const r of storiesWithGhosts) {
+        console.log('[diagnose]  ' + r.story + ' (' + r.ghost + ' ghosts, ' + r.total + ' total)');
+        for (const g of r.ghosts) {
+          console.log('[diagnose]    ' + g.id + ' ' + (g.type || '?') + ' [' + g.status + '] ' + (g.debugName || ''));
+        }
+      }
+    } else {
+      console.log('[diagnose]  No ghost nodes found in any story.');
+    }
+    console.log('[diagnose] ═══════════════════════════════════════\n');
+
+    // Restore original story
+    setActiveIdx(originalIdx);
+    crawlingRef.current = false;
+  }, [activeIdx, bridge]));
 
   return (
     <Box style={{ flexDirection: 'row', width: '100%', height: '100%' }} onKeyDown={handleKeyDown}>

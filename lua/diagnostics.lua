@@ -112,7 +112,7 @@ end
 --- @param vpW        number Viewport width
 --- @param vpH        number Viewport height
 --- @return table     { total, painted, ghost, info, nodes = { {id, type, status, ...}, ... } }
-function Diagnostics.run(tree, caps, vpW, vpH)
+function Diagnostics.run(tree, caps, vpW, vpH, quiet)
   local allNodes = tree.getNodes()
 
   -- Build root children list for orphan detection
@@ -134,7 +134,7 @@ function Diagnostics.run(tree, caps, vpW, vpH)
     nodes = {},
   }
 
-  io.write("GHOST_DIAG:START\n")
+  if not quiet then io.write("GHOST_DIAG:START\n") end
 
   for id, node in pairs(allNodes) do
     results.total = results.total + 1
@@ -174,30 +174,32 @@ function Diagnostics.run(tree, caps, vpW, vpH)
     return tostring(a.id) < tostring(b.id)
   end)
 
-  -- Print each ghost/info node
-  for _, entry in ipairs(results.nodes) do
-    local c = entry.computed
-    local computedStr = "none"
-    if c then
-      computedStr = string.format("%dx%d@(%d,%d)", c.w, c.h, c.x, c.y)
+  -- Print each ghost/info node (only in non-quiet mode, for CLI parsing)
+  if not quiet then
+    for _, entry in ipairs(results.nodes) do
+      local c = entry.computed
+      local computedStr = "none"
+      if c then
+        computedStr = string.format("%dx%d@(%d,%d)", c.w, c.h, c.x, c.y)
+      end
+      io.write(string.format(
+        "GHOST_DIAG:NODE id=%s type=%s status=%s computed=%s debugName=%s parent=%s\n",
+        tostring(entry.id),
+        tostring(entry.type),
+        entry.status,
+        computedStr,
+        tostring(entry.debugName or "-"),
+        tostring(entry.parentId or "none")
+      ))
     end
-    io.write(string.format(
-      "GHOST_DIAG:NODE id=%s type=%s status=%s computed=%s debugName=%s parent=%s\n",
-      tostring(entry.id),
-      tostring(entry.type),
-      entry.status,
-      computedStr,
-      tostring(entry.debugName or "-"),
-      tostring(entry.parentId or "none")
-    ))
-  end
 
-  io.write(string.format(
-    "GHOST_DIAG:SUMMARY total=%d painted=%d ghost=%d info=%d\n",
-    results.total, results.painted, results.ghost, results.info
-  ))
-  io.write("GHOST_DIAG:END\n")
-  io.flush()
+    io.write(string.format(
+      "GHOST_DIAG:SUMMARY total=%d painted=%d ghost=%d info=%d\n",
+      results.total, results.painted, results.ghost, results.info
+    ))
+    io.write("GHOST_DIAG:END\n")
+    io.flush()
+  end
 
   return results
 end

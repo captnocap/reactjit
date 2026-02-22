@@ -394,6 +394,15 @@ function SDL2Init.run(config)
     return true
   end
 
+  -- Diagnostics RPC handler (ghost node analysis, used by storybook crawl)
+  rpcHandlers["diagnose:run"] = function()
+    local dok, diagMod = pcall(require, "lua.diagnostics")
+    if not dok then
+      return { error = "Failed to load diagnostics: " .. tostring(diagMod) }
+    end
+    return diagMod.run(tree, capabilities, W, H, true)
+  end
+
   -- HTTP module (optional — graceful degradation)
   local http = nil
   local httpOk, httpMod = pcall(require, "lua.http")
