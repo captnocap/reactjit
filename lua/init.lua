@@ -27,12 +27,15 @@ local Log        = require("lua.debug_log")   -- channel-based debug logging (:l
 local inspector  = require("lua.inspector")   -- debug inspector (F12 toggle, self-contained)
 local console    = require("lua.console")     -- interactive eval console (` toggle, self-contained)
 local devtools   = require("lua.devtools")    -- unified bottom panel with tabs (Elements + Console)
-local settings   = require("lua.settings")    -- API key management overlay (F10 toggle)
-local themeMenu  = require("lua.theme_menu")  -- theme browser overlay (F9 toggle)
-local screenshot = nil                        -- screenshot.lua (loaded on demand)
-local inspectorEnabled = true                 -- can be disabled via config.inspector = false
-local settingsEnabled  = true                 -- can be disabled via config.settings = false
-local themeMenuEnabled = true                 -- can be disabled via config.themeMenu = false
+local settings    = require("lua.settings")      -- API key management overlay (F10 toggle)
+local themeMenu   = require("lua.theme_menu")    -- theme browser overlay (F9 toggle)
+local systemPanel = require("lua.system_panel")  -- user-owned device & permissions (F11 — NON-NEGOTIABLE)
+local screenshot = nil                           -- screenshot.lua (loaded on demand)
+local inspectorEnabled = true                    -- can be disabled via config.inspector = false
+local settingsEnabled  = true                    -- can be disabled via config.settings = false
+local themeMenuEnabled = true                    -- can be disabled via config.themeMenu = false
+-- NOTE: There is NO systemPanelEnabled flag. The system panel cannot be disabled.
+-- It protects the user FROM the developer, not the other way around.
 
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
@@ -452,6 +455,13 @@ function ReactJIT.init(config)
       end
     })
   end
+
+  -- System panel: ALWAYS initialized, no config flag can suppress it
+  systemPanel.init({
+    permit = require("lua.permit"),
+    audit = pcall(require, "lua.audit") and require("lua.audit") or nil,
+    midi = pcall(require, "lua.audio.midi") and require("lua.audio.midi") or nil,
+  })
 
   mode = detectMode(config)
   local ns = config.namespace or "default"
@@ -1096,6 +1106,9 @@ end
 --- Call once per frame from love.update(dt).
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
+  -- System panel update runs regardless of mode (debounced save, device rescan)
+  systemPanel.update(dt)
+
   if mode == "web" then
     -- Web mode: poll the Module.FS inbox and flush the outbox
     bridge.poll()
@@ -1941,6 +1954,9 @@ function ReactJIT.draw()
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   if inspectorEnabled then devtools.draw(root) end
 
+  -- System panel (NON-NEGOTIABLE — draws over devtools, no guard)
+  if systemPanel.isOpen() then systemPanel.draw() end
+
   -- Settings overlay (after devtools, before context menu/errors)
   if settingsEnabled and settings.isOpen() then settings.draw() end
 
@@ -2143,6 +2159,7 @@ end
 function ReactJIT.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
+  if systemPanel.mousepressed(x, y, button) then return end  -- NON-NEGOTIABLE
   if settingsEnabled and settings.mousepressed(x, y, button) then return end
   if themeMenuEnabled and themeMenu.mousepressed(x, y, button) then return end
   if inspectorEnabled and devtools.mousepressed(x, y, button) then return end
@@ -2360,6 +2377,7 @@ end
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactJIT.mousereleased(x, y, button)
+  if systemPanel.mousereleased(x, y, button) then return end  -- NON-NEGOTIABLE
   if inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if settingsEnabled and settings.mousereleased(x, y, button) then return end
   if themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
@@ -2473,6 +2491,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
+  systemPanel.mousemoved(x, y)  -- NON-NEGOTIABLE
   if settingsEnabled then settings.mousemoved(x, y) end
   if themeMenuEnabled then themeMenu.mousemoved(x, y) end
   if inspectorEnabled then devtools.mousemoved(x, y) end
@@ -2661,6 +2680,7 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
+  if systemPanel.keypressed(key) then return end  -- NON-NEGOTIABLE: always first, no guard
   if settingsEnabled and settings.keypressed(key) then return end
   if themeMenuEnabled and themeMenu.keypressed(key) then return end
   if inspectorEnabled and devtools.keypressed(key) then return end
@@ -2858,6 +2878,8 @@ end
 --- Call from love.textinput(text).
 --- Routes text input to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.textinput(text)
+  -- System panel captures text input when open (NON-NEGOTIABLE)
+  if systemPanel.textinput(text) then return end
   -- Settings overlay captures text input when active
   if settingsEnabled and settings.textinput(text) then return end
   -- Theme menu captures text input when active
@@ -2891,6 +2913,7 @@ end
 --- directly in Lua for immediate visual response AND send the event to JS.
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactJIT.wheelmoved(x, y)
+  if systemPanel.wheelmoved(x, y) then return end  -- NON-NEGOTIABLE
   if settingsEnabled and settings.wheelmoved(x, y) then return end
   if themeMenuEnabled and themeMenu.wheelmoved(x, y) then return end
   if inspectorEnabled and devtools.wheelmoved(x, y) then return end
@@ -2992,6 +3015,7 @@ end
 function ReactJIT.joystickadded(joystick)
   controllerToast.timer = 3.0
   controllerToast.text = "Controller connected"
+  systemPanel.notifyDeviceAdded("controllers", joystick:getID(), joystick:getName())
   if bridge then
     pushEvent({
       type = "joystickadded",
@@ -3005,6 +3029,7 @@ end
 function ReactJIT.joystickremoved(joystick)
   controllerToast.timer = 3.0
   controllerToast.text = "Controller disconnected"
+  systemPanel.notifyDeviceRemoved("controllers", joystick:getID())
   -- If no joysticks remain, switch back to mouse mode
   local joysticks = love.joystick.getJoysticks()
   if #joysticks == 0 then
@@ -3024,6 +3049,7 @@ end
 function ReactJIT.gamepadpressed(joystick, button)
   if not isRendering() then return end
   if not bridge then return end
+  if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
@@ -3089,6 +3115,7 @@ end
 function ReactJIT.gamepadreleased(joystick, button)
   if not isRendering() then return end
   if not bridge then return end
+  if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
 
@@ -3123,6 +3150,7 @@ end
 function ReactJIT.gamepadaxis(joystick, axis, value)
   if not isRendering() then return end
   if not bridge then return end
+  if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
   focus.setControllerMode()

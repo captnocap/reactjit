@@ -28,6 +28,11 @@
  *
  * Bundle checks (post-build, runs on compiled output):
  *   no-duplicate-context         (error)   Multiple createContext("web") = duplicated shared module
+ *
+ * TSL checks (runs on .tsl files in src/):
+ *   tsl-no-js-globals            (error)   JS globals that don't exist in LuaJIT (console, Date, setTimeout, fetch, window, etc.)
+ *   tsl-no-zero-index            (error)   arr[0] is always nil — Lua arrays are 1-indexed
+ *   tsl-no-any                   (warning) `any` type suppresses checking — add // tsl-any to suppress intentionally
  */
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
@@ -51,7 +56,7 @@ const cyan   = color('36');
 const dim    = color('2');
 const bold   = color('1');
 
-// ── Find .tsx files recursively ──────────────────────────────
+// ── Find .tsx / .tsl files recursively ───────────────────────
 
 function findTsxFiles(dir) {
   const files = [];
@@ -62,6 +67,21 @@ function findTsxFiles(dir) {
       const full = join(d, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith('.tsx')) files.push(full);
+    }
+  }
+  walk(dir);
+  return files;
+}
+
+function findTslFiles(dir) {
+  const files = [];
+  const skip = new Set(['node_modules', 'dist', '.git', 'build', 'out']);
+  function walk(d) {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.tsl')) files.push(full);
     }
   }
   walk(dir);
@@ -1357,6 +1377,176 @@ const rules = [
 
 ];
 
+// ── TSL lint ─────────────────────────────────────────────────
+
+// JS globals that silently don't exist in LuaJIT.
+// Accessing these produces nil/errors at runtime, not at transpile time.
+const TSL_BANNED_GLOBALS = new Set([
+  'console', 'Date', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+  'fetch', 'window', 'document', 'navigator', 'location', 'history',
+  'localStorage', 'sessionStorage', 'XMLHttpRequest', 'WebSocket',
+  'Promise', 'Symbol', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect',
+  'process', 'Buffer', 'global', 'globalThis',
+]);
+
+/**
+ * Lint a single .tsl file using the TypeScript AST.
+ * Returns a flat list of diagnostic objects.
+ */
+function lintTslFile(filePath, source, ts) {
+  const diagnostics = [];
+  const sourceLines = source.split('\n');
+
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.ES2020,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TS,
+  );
+
+  function lineOf(node) {
+    return ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile)).line + 1;
+  }
+
+  function colOf(node) {
+    return ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile)).character + 1;
+  }
+
+  // Check if the line before `lineNum` (1-based) contains a suppression comment.
+  // For TSL we use `// tsl-ignore` or the shared `ilr-ignore-next-line`.
+  function isIgnored(lineNum) {
+    if (lineNum < 2) return false;
+    const prev = sourceLines[lineNum - 2] || '';
+    return /tsl-ignore|ilr-ignore-next-line/.test(prev);
+  }
+
+  // Track identifiers that are locally declared so we can avoid false positives
+  // on things like `const Date = myCustomThing`. Simple heuristic: if the name
+  // appears in a VariableDeclaration or Parameter at any scope, don't flag it.
+  const locallyDeclared = new Set();
+  function collectDeclarations(node) {
+    if (
+      ts.isVariableDeclaration(node) ||
+      ts.isParameter(node) ||
+      ts.isFunctionDeclaration(node) ||
+      ts.isArrowFunction(node)
+    ) {
+      if (node.name && ts.isIdentifier(node.name)) {
+        locallyDeclared.add(node.name.text);
+      }
+      if (ts.isFunctionDeclaration(node) && node.parameters) {
+        for (const p of node.parameters) {
+          if (ts.isIdentifier(p.name)) locallyDeclared.add(p.name.text);
+        }
+      }
+    }
+    ts.forEachChild(node, collectDeclarations);
+  }
+  collectDeclarations(sourceFile);
+
+  function visit(node) {
+    // ── Rule: no-js-globals ──────────────────────────────────
+    // Flag references to JS globals that don't exist in LuaJIT.
+    // Matches:
+    //   - console.log(...)         → PropertyAccessExpression, obj=console
+    //   - setTimeout(fn, 100)      → CallExpression callee is banned Identifier
+    //   - window.innerWidth        → PropertyAccessExpression, obj=window
+    //   - document.getElementById  → PropertyAccessExpression, obj=document
+    //   - new Date()               → NewExpression callee=Date (already hard-errors on `new`, but flag the global too)
+    if (ts.isIdentifier(node)) {
+      const name = node.text;
+      if (TSL_BANNED_GLOBALS.has(name) && !locallyDeclared.has(name)) {
+        // Only flag identifiers that are in expression position (not as a
+        // property name in `obj.console` or an import specifier).
+        const parent = node.parent;
+        const isPropertyName =
+          parent &&
+          ts.isPropertyAccessExpression(parent) &&
+          parent.name === node;
+        const isImportSpecifier =
+          parent && (ts.isImportSpecifier(parent) || ts.isImportClause(parent));
+        const isTypeReference =
+          parent && ts.isTypeReferenceNode(parent);
+
+        if (!isPropertyName && !isImportSpecifier && !isTypeReference) {
+          const line = lineOf(node);
+          if (!isIgnored(line)) {
+            diagnostics.push({
+              rule: 'tsl-no-js-globals',
+              severity: 'error',
+              message: `"${name}" doesn't exist in LuaJIT — this will produce nil or a runtime error. ${name === 'console' ? 'Use print() instead.' : name === 'Date' ? 'Use os.time() or os.date() instead.' : `Remove it or rewrite using Lua stdlib.`}`,
+              file: filePath,
+              line,
+              col: colOf(node),
+            });
+          }
+        }
+      }
+    }
+
+    // ── Rule: tsl-no-zero-index ──────────────────────────────
+    // arr[0] compiles to Lua arr[0] which is nil — Lua arrays are 1-indexed.
+    if (ts.isElementAccessExpression(node)) {
+      const arg = node.argumentExpression;
+      if (ts.isNumericLiteral(arg) && arg.text === '0') {
+        const line = lineOf(node);
+        if (!isIgnored(line)) {
+          diagnostics.push({
+            rule: 'tsl-no-zero-index',
+            severity: 'error',
+            message: 'Array index [0] is always nil in Lua — arrays are 1-indexed. Use [1] for the first element.',
+            file: filePath,
+            line,
+            col: colOf(node),
+          });
+        }
+      }
+    }
+
+    // ── Rule: tsl-no-any ────────────────────────────────────
+    // `any` silently suppresses type checking. Warn unless suppressed with // tsl-any.
+    if (node.kind === ts.SyntaxKind.AnyKeyword) {
+      const line = lineOf(node);
+      // tsl-any on the same line or the line above both count as suppression
+      const sameLine = sourceLines[line - 1] || '';
+      const prevLine = sourceLines[line - 2] || '';
+      const suppressed =
+        /tsl-any|tsl-ignore|ilr-ignore-next-line/.test(sameLine) ||
+        /tsl-any|tsl-ignore|ilr-ignore-next-line/.test(prevLine);
+      if (!suppressed) {
+        diagnostics.push({
+          rule: 'tsl-no-any',
+          severity: 'warning',
+          message: '`any` suppresses type checking — give this a concrete type or table shape. Add `// tsl-any` to suppress intentionally.',
+          file: filePath,
+          line,
+          col: colOf(node),
+        });
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return diagnostics;
+}
+
+/**
+ * Run TSL lint on all .tsl files under srcDir.
+ * Returns flat diagnostics array.
+ */
+function runTslLint(srcDir, ts) {
+  const files = findTslFiles(srcDir);
+  const diagnostics = [];
+  for (const filePath of files) {
+    const source = readFileSync(filePath, 'utf-8');
+    diagnostics.push(...lintTslFile(filePath, source, ts));
+  }
+  return { diagnostics, fileCount: files.length };
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 /**
@@ -1380,11 +1570,6 @@ export async function runLint(cwd, options = {}) {
   }
 
   const files = findTsxFiles(srcDir);
-  if (files.length === 0) {
-    if (!options.silent) console.log('  No .tsx files found in src/.');
-    return { errors: 0, warnings: 0, diagnostics: [] };
-  }
-
   const diagnostics = [];
   const allMCPCalls = [];
   const apiUsage = { imports: [], hasSettingsRegistry: false };
@@ -1443,6 +1628,15 @@ export async function runLint(cwd, options = {}) {
 
     // API usage detection — find imports from @reactjit/apis or @reactjit/ai
     detectAPIUsage(sourceFile, filePath, ts, apiUsage);
+  }
+
+  // TSL lint pass — scan .tsl files in src/
+  const { diagnostics: tslDiagnostics, fileCount: tslFileCount } = runTslLint(srcDir, ts);
+  diagnostics.push(...tslDiagnostics);
+
+  if (files.length === 0 && tslFileCount === 0) {
+    if (!options.silent) console.log('  No .tsx or .tsl files found in src/.');
+    return { errors: 0, warnings: 0, diagnostics: [] };
   }
 
   // Async MCP discovery pass — connect to servers and manage mcp.tools.json
@@ -1504,10 +1698,12 @@ export async function runLint(cwd, options = {}) {
     const parts = [];
     if (errors > 0) parts.push(red(`${errors} error${errors !== 1 ? 's' : ''}`));
     if (warnings > 0) parts.push(yellow(`${warnings} warning${warnings !== 1 ? 's' : ''}`));
-    console.log(`  ${parts.join(', ')} in ${files.length} file${files.length !== 1 ? 's' : ''}`);
+    const totalFiles = files.length + tslFileCount;
+    console.log(`  ${parts.join(', ')} in ${totalFiles} file${totalFiles !== 1 ? 's' : ''}`);
     console.log('');
   } else if (!options.silent) {
-    console.log(`\n  ${dim('OK')} ${files.length} file${files.length !== 1 ? 's' : ''} checked, no issues\n`);
+    const totalFiles = files.length + tslFileCount;
+    console.log(`\n  ${dim('OK')} ${totalFiles} file${totalFiles !== 1 ? 's' : ''} checked, no issues\n`);
   }
 
   return { errors, warnings, diagnostics };

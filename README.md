@@ -186,6 +186,23 @@ Supported features:
 
 Standard library helpers (injected automatically only when used): `map`, `filter`, `forEach`, `indexOf`, `reverse`, `find`, `findIndex`, `some`, `every`, `reduce`, `flat`, `keys`, `values`, `entries`, `split`, `merge`.
 
+### Linting
+
+`reactjit lint` checks `.tsl` files alongside `.tsx` files. TSL-specific rules:
+
+| Rule | Severity | What it catches |
+|------|----------|----------------|
+| `tsl-no-js-globals` | error | `console`, `Date`, `setTimeout`, `setInterval`, `fetch`, `window`, `document`, and other JS globals that don't exist in LuaJIT |
+| `tsl-no-zero-index` | error | `arr[0]` — always `nil` in Lua; arrays are 1-indexed |
+| `tsl-no-any` | warning | `any` type annotations that suppress checking |
+
+Suppressions:
+
+```typescript
+// tsl-ignore        — suppress the next line (any rule)
+// tsl-any           — suppress tsl-no-any on the next line or same line
+```
+
 ### What's not supported (hard errors)
 
 These are build-blocking errors — TSL will refuse to transpile:
