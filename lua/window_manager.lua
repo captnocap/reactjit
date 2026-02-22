@@ -1,21 +1,22 @@
 --[[
-  window_manager.lua — Multi-window registry for SDL2 target
+  window_manager.lua — Multi-window registry
 
-  Tracks all open SDL2 windows and their per-window state (dimensions, scale,
+  Tracks all open windows and their per-window state (dimensions, scale,
   mouse position, event state). The main window is registered as ID 0. Child
   windows are created by the Window capability.
 
+  Supports two backends:
+    - "love"  — uses love.window.createSecondary() (forked Love2D)
+    - "sdl2"  — uses raw SDL2 FFI (LuaJIT + SDL2 target)
+
   Usage:
     local WM = require("lua.window_manager")
-    WM.init(sdl)                                       -- pass SDL2 FFI handle
-    WM.registerMain(window, ctx, w, h)                 -- register main window
+    WM.init({ sdl = sdlLib })        -- SDL2 backend
+    WM.init()                        -- Love2D backend (auto-detected)
+    WM.registerMain(...)
     local win = WM.create({ title="Panel", width=400, height=300 })
     WM.destroy(win.id)
 ]]
-
-local ffi = require("ffi")
-local bit = require("bit")
-local GL  = require("lua.sdl2_gl")
 
 local WindowManager = {}
 
@@ -23,27 +24,34 @@ local WindowManager = {}
 -- State
 -- ============================================================================
 
-local sdl                    -- SDL2 FFI handle (set by init)
+local backend = nil          -- "love" or "sdl2"
+local sdl     = nil          -- SDL2 FFI handle (sdl2 backend only)
 local windows = {}           -- id -> window entry
 local sdlIdMap = {}          -- SDL window ID (uint32) -> framework window ID
 local nextId = 1             -- next framework window ID (0 is main)
 local mainWin = nil          -- shortcut to windows[0]
 
--- SDL constants (duplicated from sdl2_init to keep this module self-contained)
+-- SDL2 backend-specific setup (lazy loaded)
+local ffi, bit, GL
 local SDL_WINDOW_OPENGL    = 0x00000002
 local SDL_WINDOW_SHOWN     = 0x00000004
 local SDL_WINDOW_RESIZABLE = 0x00000020
 local SDL_WINDOWPOS_CENTERED = 0x2FFF0000
 local SDL_GL_SHARE_WITH_CURRENT_CONTEXT = 22
 
--- SDL FFI for window management (may already be declared by sdl2_init)
-pcall(ffi.cdef, [[
-  uint32_t  SDL_GetWindowID(SDL_Window *win);
-  void      SDL_SetWindowTitle(SDL_Window *win, const char *title);
-  void      SDL_SetWindowSize(SDL_Window *win, int w, int h);
-  void      SDL_SetWindowPosition(SDL_Window *win, int x, int y);
-  int       SDL_GL_MakeCurrent(SDL_Window *win, SDL_GLContext ctx);
-]])
+local function initSDL2Deps()
+  if ffi then return end
+  ffi = require("ffi")
+  bit = require("bit")
+  GL  = require("lua.sdl2_gl")
+  pcall(ffi.cdef, [[
+    uint32_t  SDL_GetWindowID(SDL_Window *win);
+    void      SDL_SetWindowTitle(SDL_Window *win, const char *title);
+    void      SDL_SetWindowSize(SDL_Window *win, int w, int h);
+    void      SDL_SetWindowPosition(SDL_Window *win, int x, int y);
+    int       SDL_GL_MakeCurrent(SDL_Window *win, SDL_GLContext ctx);
+  ]])
+end
 
 -- ============================================================================
 -- Internal helpers
@@ -59,7 +67,7 @@ local function newDragState()
   }
 end
 
-local function queryScale(window_ptr)
+local function queryScaleSDL2(window_ptr)
   local dw = ffi.new("int[1]")
   local dh = ffi.new("int[1]")
   local ww = ffi.new("int[1]")
@@ -75,36 +83,97 @@ end
 -- Public API
 -- ============================================================================
 
---- Initialize the window manager with the SDL2 FFI handle.
---- Must be called before any other WM function.
-function WindowManager.init(sdlLib)
-  sdl = sdlLib
+--- Initialize the window manager.
+--- @param opts table|nil  { sdl = <SDL2 FFI handle> } for SDL2, or nil/empty for Love2D
+function WindowManager.init(opts)
+  opts = opts or {}
+  if opts.sdl then
+    backend = "sdl2"
+    sdl = opts.sdl
+    initSDL2Deps()
+  elseif love and love.window and love.window.createSecondary then
+    backend = "love"
+  else
+    -- Fallback: no multi-window support
+    backend = nil
+    io.write("[window_manager] WARNING: no multi-window backend available\n")
+    io.flush()
+  end
 end
 
---- Register the main window (ID 0). Called once during sdl2_init startup.
+--- Get the current backend name.
+function WindowManager.getBackend()
+  return backend
+end
+
+--- Register the main window (ID 0). Called once during startup.
+--- For SDL2: pass (sdlWindow, glContext, w, h).
+--- For Love2D: pass no args (queries love.graphics).
 function WindowManager.registerMain(sdlWindow, glContext, w, h)
-  local sdlId = sdl.SDL_GetWindowID(sdlWindow)
-  local dw, dh, sx, sy = queryScale(sdlWindow)
-  local entry = {
-    id          = 0,
-    sdlWindow   = sdlWindow,
-    glContext   = glContext,
-    sdlId       = sdlId,
-    width       = dw,
-    height      = dh,
-    scaleX      = sx,
-    scaleY      = sy,
-    mx          = 0,
-    my          = 0,
-    rootNodeId  = nil,           -- main window uses tree.getTree()
-    hoveredNode = nil,
-    pressedNode = nil,
-    dragState   = newDragState(),
-    needsLayout = true,
-    isMain      = true,
-  }
+  local entry
+
+  if backend == "sdl2" then
+    local sdlId = sdl.SDL_GetWindowID(sdlWindow)
+    local dw, dh, sx, sy = queryScaleSDL2(sdlWindow)
+    entry = {
+      id          = 0,
+      sdlWindow   = sdlWindow,
+      glContext   = glContext,
+      sdlId       = sdlId,
+      width       = dw,
+      height      = dh,
+      scaleX      = sx,
+      scaleY      = sy,
+      mx          = 0,
+      my          = 0,
+      rootNodeId  = nil,
+      hoveredNode = nil,
+      pressedNode = nil,
+      dragState   = newDragState(),
+      needsLayout = true,
+      isMain      = true,
+    }
+    sdlIdMap[sdlId] = 0
+
+  elseif backend == "love" then
+    local pw = love.graphics.getWidth()
+    local ph = love.graphics.getHeight()
+    entry = {
+      id          = 0,
+      loveId      = nil,  -- main window has no secondary ID
+      width       = pw,
+      height      = ph,
+      scaleX      = love.window.getDPIScale(),
+      scaleY      = love.window.getDPIScale(),
+      mx          = 0,
+      my          = 0,
+      rootNodeId  = nil,
+      hoveredNode = nil,
+      pressedNode = nil,
+      dragState   = newDragState(),
+      needsLayout = true,
+      isMain      = true,
+    }
+  else
+    -- No backend, still register a stub main window
+    entry = {
+      id          = 0,
+      width       = w or 800,
+      height      = h or 600,
+      scaleX      = 1,
+      scaleY      = 1,
+      mx          = 0,
+      my          = 0,
+      rootNodeId  = nil,
+      hoveredNode = nil,
+      pressedNode = nil,
+      dragState   = newDragState(),
+      needsLayout = true,
+      isMain      = true,
+    }
+  end
+
   windows[0] = entry
-  sdlIdMap[sdlId] = 0
   mainWin = entry
   return entry
 end
@@ -116,78 +185,126 @@ function WindowManager.create(config)
   local title  = config.title  or "ReactJIT"
   local w      = config.width  or 640
   local h      = config.height or 480
-  local x      = config.x      or SDL_WINDOWPOS_CENTERED
-  local y      = config.y      or SDL_WINDOWPOS_CENTERED
+  local x      = config.x
+  local y      = config.y
 
-  -- Enable GL context sharing with the main window
-  sdl.SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1)
+  if backend == "love" then
+    -- Use forked Love2D's secondary window API
+    -- Love2D wrapper defaults x/y to SDL_WINDOWPOS_CENTERED when omitted
+    local loveId = love.window.createSecondary(title, w, h, x, y)
 
-  local win = sdl.SDL_CreateWindow(
-    title, x, y, w, h,
-    bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_RESIZABLE)
-  )
-  if win == nil then
-    io.write("[window_manager] SDL_CreateWindow failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n")
+    local ww, wh, pw, ph = love.window.getSecondarySize(loveId)
+    local sx = (ww > 0) and (pw / ww) or 1
+    local sy = (wh > 0) and (ph / wh) or 1
+    local sdlId = love.window.getSecondarySDLId(loveId)
+
+    local id = nextId
+    nextId = nextId + 1
+
+    local entry = {
+      id          = id,
+      loveId      = loveId,
+      sdlId       = sdlId,
+      width       = pw,
+      height      = ph,
+      scaleX      = sx,
+      scaleY      = sy,
+      mx          = 0,
+      my          = 0,
+      rootNodeId  = config.rootNodeId or nil,
+      hoveredNode = nil,
+      pressedNode = nil,
+      dragState   = newDragState(),
+      needsLayout = true,
+      isMain      = false,
+    }
+
+    windows[id] = entry
+    sdlIdMap[sdlId] = id
+
+    io.write("[window_manager] created window #" .. id .. " (" .. pw .. "x" .. ph .. ") loveId=" .. loveId .. "\n")
+    io.flush()
+    return entry
+
+  elseif backend == "sdl2" then
+    -- Use raw SDL2 FFI
+    x = x or SDL_WINDOWPOS_CENTERED
+    y = y or SDL_WINDOWPOS_CENTERED
+
+    sdl.SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1)
+
+    local win = sdl.SDL_CreateWindow(
+      title, x, y, w, h,
+      bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_RESIZABLE)
+    )
+    if win == nil then
+      io.write("[window_manager] SDL_CreateWindow failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n")
+      io.flush()
+      return nil
+    end
+
+    local ctx = sdl.SDL_GL_CreateContext(win)
+    if ctx == nil then
+      sdl.SDL_DestroyWindow(win)
+      io.write("[window_manager] SDL_GL_CreateContext failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n")
+      io.flush()
+      return nil
+    end
+
+    -- Set up GL state for this context
+    sdl.SDL_GL_MakeCurrent(win, ctx)
+    GL.glEnable(GL.BLEND)
+    GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+
+    local dw, dh, sx, sy = queryScaleSDL2(win)
+    GL.glViewport(0, 0, dw, dh)
+    GL.glClearColor(0.05, 0.05, 0.09, 1.0)
+    GL.glMatrixMode(GL.PROJECTION)
+    GL.glLoadIdentity()
+    GL.glOrtho(0, dw, dh, 0, -1, 1)
+    GL.glMatrixMode(GL.MODELVIEW)
+    GL.glLoadIdentity()
+
+    -- Restore main context as current
+    if mainWin then
+      sdl.SDL_GL_MakeCurrent(mainWin.sdlWindow, mainWin.glContext)
+    end
+
+    local id = nextId
+    nextId = nextId + 1
+    local sdlId = sdl.SDL_GetWindowID(win)
+
+    local entry = {
+      id          = id,
+      sdlWindow   = win,
+      glContext   = ctx,
+      sdlId       = sdlId,
+      width       = dw,
+      height      = dh,
+      scaleX      = sx,
+      scaleY      = sy,
+      mx          = 0,
+      my          = 0,
+      rootNodeId  = config.rootNodeId or nil,
+      hoveredNode = nil,
+      pressedNode = nil,
+      dragState   = newDragState(),
+      needsLayout = true,
+      isMain      = false,
+    }
+
+    windows[id] = entry
+    sdlIdMap[sdlId] = id
+
+    io.write("[window_manager] created window #" .. id .. " (" .. dw .. "x" .. dh .. ") sdlId=" .. sdlId .. "\n")
+    io.flush()
+    return entry
+
+  else
+    io.write("[window_manager] no backend available, cannot create window\n")
     io.flush()
     return nil
   end
-
-  local ctx = sdl.SDL_GL_CreateContext(win)
-  if ctx == nil then
-    sdl.SDL_DestroyWindow(win)
-    io.write("[window_manager] SDL_GL_CreateContext failed: " .. ffi.string(sdl.SDL_GetError()) .. "\n")
-    io.flush()
-    return nil
-  end
-
-  -- Set up GL state for this context
-  sdl.SDL_GL_MakeCurrent(win, ctx)
-  GL.glEnable(GL.BLEND)
-  GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-
-  local dw, dh, sx, sy = queryScale(win)
-  GL.glViewport(0, 0, dw, dh)
-  GL.glClearColor(0.05, 0.05, 0.09, 1.0)
-  GL.glMatrixMode(GL.PROJECTION)
-  GL.glLoadIdentity()
-  GL.glOrtho(0, dw, dh, 0, -1, 1)
-  GL.glMatrixMode(GL.MODELVIEW)
-  GL.glLoadIdentity()
-
-  -- Restore main context as current
-  if mainWin then
-    sdl.SDL_GL_MakeCurrent(mainWin.sdlWindow, mainWin.glContext)
-  end
-
-  local id = nextId
-  nextId = nextId + 1
-  local sdlId = sdl.SDL_GetWindowID(win)
-
-  local entry = {
-    id          = id,
-    sdlWindow   = win,
-    glContext   = ctx,
-    sdlId       = sdlId,
-    width       = dw,
-    height      = dh,
-    scaleX      = sx,
-    scaleY      = sy,
-    mx          = 0,
-    my          = 0,
-    rootNodeId  = config.rootNodeId or nil,
-    hoveredNode = nil,
-    pressedNode = nil,
-    dragState   = newDragState(),
-    needsLayout = true,
-    isMain      = false,
-  }
-
-  windows[id] = entry
-  sdlIdMap[sdlId] = id
-
-  io.write("[window_manager] created window #" .. id .. " (" .. dw .. "x" .. dh .. ") sdlId=" .. sdlId .. "\n")
-  io.flush()
-  return entry
 end
 
 --- Destroy a child window by framework ID.
@@ -199,9 +316,16 @@ function WindowManager.destroy(id)
     return
   end
 
-  sdlIdMap[entry.sdlId] = nil
-  sdl.SDL_GL_DeleteContext(entry.glContext)
-  sdl.SDL_DestroyWindow(entry.sdlWindow)
+  if backend == "love" and entry.loveId then
+    love.window.destroySecondary(entry.loveId)
+  elseif backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_GL_DeleteContext(entry.glContext)
+    sdl.SDL_DestroyWindow(entry.sdlWindow)
+  end
+
+  if entry.sdlId then
+    sdlIdMap[entry.sdlId] = nil
+  end
   windows[id] = nil
 
   io.write("[window_manager] destroyed window #" .. id .. "\n"); io.flush()
@@ -238,28 +362,84 @@ end
 
 --- Update a window's dimensions after resize. Recalculates scale factors.
 function WindowManager.handleResize(entry)
-  local dw, dh, sx, sy = queryScale(entry.sdlWindow)
-  entry.width  = dw
-  entry.height = dh
-  entry.scaleX = sx
-  entry.scaleY = sy
+  if backend == "sdl2" and entry.sdlWindow then
+    local dw, dh, sx, sy = queryScaleSDL2(entry.sdlWindow)
+    entry.width  = dw
+    entry.height = dh
+    entry.scaleX = sx
+    entry.scaleY = sy
+  elseif backend == "love" then
+    if entry.isMain then
+      entry.width  = love.graphics.getWidth()
+      entry.height = love.graphics.getHeight()
+      entry.scaleX = love.window.getDPIScale()
+      entry.scaleY = love.window.getDPIScale()
+    elseif entry.loveId then
+      local ww, wh, pw, ph = love.window.getSecondarySize(entry.loveId)
+      entry.width  = pw
+      entry.height = ph
+      local sx = (ww > 0) and (pw / ww) or 1
+      local sy = (wh > 0) and (ph / wh) or 1
+      entry.scaleX = sx
+      entry.scaleY = sy
+    end
+  end
   entry.needsLayout = true
 end
 
 --- Set a window's title.
 function WindowManager.setTitle(entry, title)
-  sdl.SDL_SetWindowTitle(entry.sdlWindow, title)
+  if backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_SetWindowTitle(entry.sdlWindow, title)
+  elseif backend == "love" then
+    if entry.isMain then
+      love.window.setTitle(title)
+    end
+    -- Love2D secondary windows: title is set at creation, no API to change it yet
+  end
 end
 
 --- Set a window's size.
 function WindowManager.setSize(entry, w, h)
-  sdl.SDL_SetWindowSize(entry.sdlWindow, w, h)
+  if backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_SetWindowSize(entry.sdlWindow, w, h)
+  end
+  -- Love2D secondary windows: no resize API yet
   WindowManager.handleResize(entry)
 end
 
 --- Set a window's position.
 function WindowManager.setPosition(entry, x, y)
-  sdl.SDL_SetWindowPosition(entry.sdlWindow, x, y)
+  if backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_SetWindowPosition(entry.sdlWindow, x, y)
+  end
+  -- Love2D secondary windows: no position API yet
+end
+
+--- Activate a secondary window's GL context (Love2D backend).
+function WindowManager.activate(entry)
+  if backend == "love" and entry.loveId then
+    love.window.activateSecondary(entry.loveId)
+  elseif backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_GL_MakeCurrent(entry.sdlWindow, entry.glContext)
+  end
+end
+
+--- Swap buffers for a secondary window (Love2D backend).
+function WindowManager.swap(entry)
+  if backend == "love" and entry.loveId then
+    love.window.swapSecondary(entry.loveId)
+  end
+  -- SDL2: swap is handled in the paint loop directly
+end
+
+--- Restore the main window's GL context (Love2D backend).
+function WindowManager.activateMain()
+  if backend == "love" then
+    love.window.activateMain()
+  elseif backend == "sdl2" and mainWin and mainWin.sdlWindow then
+    sdl.SDL_GL_MakeCurrent(mainWin.sdlWindow, mainWin.glContext)
+  end
 end
 
 --- Return count of all windows.

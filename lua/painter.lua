@@ -697,6 +697,14 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   end
   if CapabilitiesModule and CapabilitiesModule.isNonVisual(node.type) then return end
 
+  -- Nodes that render in their own surface (Window capability) are painted in a
+  -- separate pass by the multi-window paint loop in init.lua. Skip them here
+  -- unless they are the active window root being painted right now.
+  if CapabilitiesModule and CapabilitiesModule.rendersInOwnSurface(node.type)
+     and not node._isWindowRoot then
+    return
+  end
+
   -- 3D child nodes (Mesh3D, Camera3D, Light3D, etc.) are rendered by scene3d.lua,
   -- not by the 2D painter. Skip them entirely.
   if Scene3DModule and Scene3DModule.is3DChildType(node.type) then return end
