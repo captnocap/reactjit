@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runLint, runBundleChecks } from './lint.mjs';
 import { updateCommand } from './update.mjs';
-import { TARGETS, TARGET_NAMES, esbuildArgs, esbuildDistArgs, PLATFORMS, PLATFORM_NAMES, detectHostPlatform } from '../targets.mjs';
+import { TARGETS, TARGET_NAMES, esbuildArgs, PLATFORMS, PLATFORM_NAMES, detectHostPlatform } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
 import { transpile } from '../lib/tsl.mjs';
 
@@ -427,7 +427,7 @@ async function buildDistGrid(cwd, projectName, targetName) {
   console.log('  [1/2] Bundling JS...');
   execSync([
     'npx', 'esbuild',
-    ...esbuildDistArgs(target),
+    ...esbuildArgs(target),
     `--outfile=${tmpFile}`,
     ...getEsbuildAliases(cwd),
     entry,
