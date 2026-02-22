@@ -14,9 +14,20 @@ import {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ color: c.primary, fontSize: 12, fontWeight: '700' }}>{title}</Text>
-      {children}
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
+      <Box style={{
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: c.border,
+        padding: 12,
+        gap: 8,
+        alignItems: 'center',
+      }}>
+        {children}
+      </Box>
     </Box>
   );
 }
@@ -29,8 +40,11 @@ function KnobDemo() {
   const [v4, setV4] = useState(440);
 
   return (
-    <Section title="KNOBS">
-      <Box style={{ flexDirection: 'row', gap: 20, alignItems: 'flex-end' }}>
+    <Section title="1. Knobs">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Rotary controls with drag interaction. Supports custom ranges, colors, sizes, and disabled state.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 20, alignItems: 'flex-end', justifyContent: 'center', flexWrap: 'wrap' }}>
         <Box style={{ alignItems: 'center', gap: 4 }}>
           <Knob value={v1} onChange={setV1} label="Volume" />
           <Text style={{ color: c.textDim, fontSize: 9 }}>{`${Math.round(v1 * 100)}%`}</Text>
@@ -71,8 +85,11 @@ function FaderDemo() {
   const [v4, setV4] = useState(0.3);
 
   return (
-    <Section title="FADERS">
-      <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-end' }}>
+    <Section title="2. Faders">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Vertical channel faders for mixer-style layouts. Drag to set level.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 16, alignItems: 'flex-end', justifyContent: 'center' }}>
         <Fader value={v1} onChange={setV1} label="Kick" color="#6366f1" />
         <Fader value={v2} onChange={setV2} label="Snare" color="#22c55e" />
         <Fader value={v3} onChange={setV3} label="Hi-Hat" color="#f59e0b" height={160} />
@@ -84,9 +101,9 @@ function FaderDemo() {
 }
 
 function MeterDemo() {
+  const c = useThemeColors();
   const [levels, setLevels] = useState([0.6, 0.4, 0.8, 0.3]);
 
-  // Animate levels
   useEffect(() => {
     const id = setInterval(() => {
       setLevels((prev) =>
@@ -100,8 +117,11 @@ function MeterDemo() {
   }, []);
 
   return (
-    <Section title="METERS">
-      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end' }}>
+    <Section title="3. Meters">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Animated level meters with peak hold. Vertical and horizontal orientations.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 12, alignItems: 'flex-end', justifyContent: 'center' }}>
         <Meter value={levels[0]} height={80} />
         <Meter value={levels[1]} height={80} />
         <Meter value={levels[2]} height={80} peak={0.9} />
@@ -115,6 +135,7 @@ function MeterDemo() {
 }
 
 function LEDDemo() {
+  const c = useThemeColors();
   const [blink, setBlink] = useState(false);
 
   useEffect(() => {
@@ -123,8 +144,11 @@ function LEDDemo() {
   }, []);
 
   return (
-    <Section title="LED INDICATORS">
-      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+    <Section title="4. LED Indicators">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Status indicators with on/off glow. Supports custom colors and sizes.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
         <LEDIndicator on />
         <LEDIndicator on color="#ef4444" />
         <LEDIndicator on={blink} color="#f59e0b" />
@@ -136,12 +160,16 @@ function LEDDemo() {
 }
 
 function PadDemo() {
+  const c = useThemeColors();
   const [activePads, setActivePads] = useState<Set<number>>(new Set());
   const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444', '#8b5cf6', '#14b8a6'];
 
   return (
-    <Section title="PAD BUTTONS">
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <Section title="5. Pad Buttons">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Toggle pads for triggering samples or toggling states. Click to activate.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
         {Array.from({ length: 8 }, (_, i) => (
           <PadButton
             key={i}
@@ -164,6 +192,7 @@ function PadDemo() {
 }
 
 function SequencerDemo() {
+  const c = useThemeColors();
   const [pattern, setPattern] = useState<boolean[][]>(() => {
     const p: boolean[][] = [];
     for (let t = 0; t < 4; t++) {
@@ -194,7 +223,10 @@ function SequencerDemo() {
   }, [playing]);
 
   return (
-    <Section title="STEP SEQUENCER + TRANSPORT">
+    <Section title="6. Step Sequencer + Transport">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        16-step pattern sequencer with 4 tracks. Transport bar controls playback and shows position.
+      </Text>
       <TransportBar
         playing={playing}
         onPlay={() => { setPlaying(true); setStep(0); }}
@@ -222,40 +254,16 @@ function SequencerDemo() {
 }
 
 export function ControlsStory() {
-  const c = useThemeColors();
-
   return (
-    <Box
-      style={{
-        width: '100%',
-        height: '100%',
-        backgroundColor: c.bg,
-        padding: 16,
-        gap: 20,
-      }}
-    >
-      <Box style={{ gap: 2 }}>
-        <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>Controls</Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>
-          Hardware-style controls from @reactjit/controls
-        </Text>
+    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
+      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
+        <KnobDemo />
+        <FaderDemo />
+        <MeterDemo />
+        <LEDDemo />
+        <PadDemo />
+        <SequencerDemo />
       </Box>
-
-      <Box style={{ flexDirection: 'row', gap: 24, width: '100%' }}>
-        {/* Left column */}
-        <Box style={{ gap: 20, flexGrow: 1, flexBasis: 0 }}>
-          <KnobDemo />
-          <LEDDemo />
-          <PadDemo />
-        </Box>
-        {/* Right column */}
-        <Box style={{ gap: 20, flexGrow: 1, flexBasis: 0 }}>
-          <FaderDemo />
-          <MeterDemo />
-        </Box>
-      </Box>
-
-      <SequencerDemo />
     </Box>
   );
 }
