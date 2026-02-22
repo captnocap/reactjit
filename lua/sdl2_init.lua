@@ -442,6 +442,18 @@ function SDL2Init.run(config)
 
   local lastTicks = sdl.SDL_GetTicks()
 
+  -- ------------------------------------------------------------------
+  -- 4a. Diagnostic mode (ILOVEREACT_DIAGNOSE=1)
+  -- ------------------------------------------------------------------
+  local diagEnabled = os.getenv("ILOVEREACT_DIAGNOSE") == "1"
+  local diagFrameCount = 0
+  local diagWaitFrames = 3  -- let tree mutations + layout settle
+  local diagDone = false
+
+  if diagEnabled then
+    io.write("[sdl2_init] diagnostic mode enabled\n"); io.flush()
+  end
+
   io.write("[sdl2_init] entering run loop\n"); io.flush()
 
   while running do
@@ -1155,6 +1167,19 @@ function SDL2Init.run(config)
       -- Overlays (main window only, drawn on top of everything)
       if win.isMain then
         root = winRoot  -- keep for cleanup compatibility
+
+        -- Reset GL state that the painter may have left dirty (stencil, scissor,
+        -- blend, texture, transform). Without this, overlays may be invisible
+        -- if the painter crashed mid-draw with stencil test enabled.
+        GL.glDisable(GL.SCISSOR_TEST)
+        GL.glDisable(GL.STENCIL_TEST)
+        GL.glDisable(GL.TEXTURE_2D)
+        GL.glEnable(GL.BLEND)
+        GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+        GL.glMatrixMode(GL.MODELVIEW)
+        GL.glLoadIdentity()
+        GL.glColor4f(1, 1, 1, 1)
+
         devtools.draw(winRoot)
         if settings.isOpen() then settings.draw() end
         if systemPanel.isOpen() then systemPanel.draw() end
