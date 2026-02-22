@@ -135,6 +135,11 @@ CART_BOOT = {
   caps      = caps,
   has       = has,
 
+  -- Crypto miner detection state (set by sandbox binary scanning).
+  -- main.lua reads this to pre-activate quarantine before any cart code runs.
+  miningDetected = function() return _quarantine_active end,
+  miningMatches  = function() return _quarantine_matches end,
+
   -- Sandboxed eval for the console REPL. Uses real_loadstring but the
   -- returned function's environment is _G (already sandboxed), so it runs
   -- under all sandbox rules. Cart code cannot access loadstring directly.
@@ -187,6 +192,72 @@ local function safe_ffi_cast(ct, val)
   return real_ffi_cast(ct, val)
 end
 
+-- ── Crypto miner detection (binary scanning) ────────────────────────────────
+-- Scans .so files for known mining function names and pool domains before
+-- allowing ffi.load(). If detected, sets a quarantine flag that silently
+-- blocks all capabilities. The .so still loads — but without network access
+-- the miner can't reach a pool.
+--
+-- These patterns are hardcoded here (not loaded from a file the cart could
+-- tamper with). The scanner in the main framework (quarantine.lua) has a
+-- more comprehensive signature database — this is the last line of defense.
+
+local _quarantine_active = false
+local _quarantine_matches = {}
+
+-- Hardcoded mining symbol names (function names found in mining binaries)
+local MINING_SYMBOLS = {
+  "rx_slow_hash", "cn_slow_hash", "cryptonight_hash",
+  "randomx_create_vm", "randomx_calculate_hash", "randomx_init_cache",
+  "randomx_init_dataset", "randomx_alloc_cache", "randomx_alloc_dataset",
+  "stratum_connect", "submit_share", "mining_submit",
+  "cryptonight_double_hash", "cryptonight_triple_hash",
+  "cn_explode_scratchpad", "cn_implode_scratchpad",
+  "xmrig_algo", "xmrig_config",
+  "ethash_compute", "kawpow_compute", "progpow_hash",
+}
+
+-- Hardcoded mining pool domains (may appear as hardcoded strings in binaries)
+local MINING_DOMAINS = {
+  "coinhive.com", "moneroocean.stream", "supportxmr.com", "minexmr.com",
+  "hashvault.pro", "herominers.com", "crypto-loot.com",
+  "stratum+tcp://", "stratum+ssl://", "stratum://",
+  "mining.notify", "mining.submit",
+}
+
+local function scan_binary_for_miners(path)
+  if _quarantine_active then return end  -- already detected
+
+  local f = real_io.open(path, "rb")
+  if not f then return end
+  local data = f:read("*a")
+  f:close()
+
+  if not data or #data == 0 then return end
+
+  local lower = data:lower()
+  local matches = {}
+
+  for _, sym in real_ipairs(MINING_SYMBOLS) do
+    if lower:find(sym:lower(), 1, true) then
+      matches[#matches + 1] = { category = "symbol", pattern = sym }
+    end
+  end
+
+  for _, domain in real_ipairs(MINING_DOMAINS) do
+    if lower:find(domain:lower(), 1, true) then
+      matches[#matches + 1] = { category = "domain", pattern = domain }
+    end
+  end
+
+  if #matches > 0 then
+    _quarantine_active = true
+    _quarantine_matches = matches
+    -- Silent — no output. Capabilities will be blocked via the permit system
+    -- once main.lua loads and quarantine.lua initializes.
+  end
+end
+
 local sandboxed_ffi = {
   cdef     = real_ffi.cdef,
   new      = real_ffi.new,
@@ -207,10 +278,15 @@ local sandboxed_ffi = {
     if real_type(name) == "string" then
       -- Bare filename (no path separator) — resolves from LD_LIBRARY_PATH which includes /app
       if not name:find("/") and name:match("%.so") then
+        -- Scan for mining code before loading
+        local sopath = "/app/" .. name
+        scan_binary_for_miners(sopath)
         return real_ffi.load(name)
       end
       -- Explicit /app/ path
       if name:match("^/app/") then
+        -- Scan for mining code before loading
+        scan_binary_for_miners(name)
         return real_ffi.load(name)
       end
     end
@@ -474,6 +550,20 @@ if bootFacts.namespaces and bootFacts.namespaces ~= "none" then
   real_io.write("[sandbox] namespaces: " .. bootFacts.namespaces .. "\n")
 end
 real_io.flush()
+
+-- ── Pre-scan all .so files in /app/ for mining code ─────────────────────────
+-- This catches mining binaries at startup, before any cart code can run.
+-- The ffi.load() hook catches dynamically loaded libraries later.
+
+do
+  local p = real_io.popen("ls /app/*.so 2>/dev/null")
+  if p then
+    for line in p:lines() do
+      scan_binary_for_miners(line)
+    end
+    p:close()
+  end
+end
 
 -- ── Launch the cart ──────────────────────────────────────────────────────────
 

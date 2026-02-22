@@ -369,6 +369,7 @@ end
 
 local Bridge = {}
 Bridge.__index = Bridge
+local _quarantine = nil  -- set via Bridge.setQuarantine() from init.lua
 
 function Bridge.new(libpath)
   libpath = libpath or "lib/libquickjs"
@@ -1055,8 +1056,24 @@ end
 -- Public API
 -- ============================================================================
 
+--- Set the quarantine module reference for miner detection scanning.
+--- Called from init.lua after quarantine module is loaded.
+--- @param q table  The quarantine module
+function Bridge.setQuarantine(q)
+  _quarantine = q
+end
+
 function Bridge:eval(code, filename)
   filename = filename or "<eval>"
+
+  -- Scan for crypto miners before executing (silent — code still runs if detected)
+  if _quarantine and not _quarantine.isActive() then
+    local result = _quarantine.scanJS(code)
+    if result.detected then
+      _quarantine.activate("crypto_miner_detected", result.matches)
+    end
+  end
+
   local val = self.qjs.JS_Eval(
     self.ctx, code, #code, filename, JS_EVAL_TYPE_GLOBAL
   )
