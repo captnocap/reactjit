@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runLint, runBundleChecks } from './lint.mjs';
 import { updateCommand } from './update.mjs';
-import { TARGETS, TARGET_NAMES, esbuildArgs, esbuildDistArgs } from '../targets.mjs';
+import { TARGETS, TARGET_NAMES, esbuildArgs, esbuildDistArgs, PLATFORMS, PLATFORM_NAMES, detectHostPlatform } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
 import { transpile } from '../lib/tsl.mjs';
 
@@ -149,7 +149,9 @@ export async function buildCommand(args) {
   const projectName = basename(cwd);
   const hasDebugFlag = args.includes('--debug');
   const skipUpdate = args.includes('--no-update');
-  const rawTarget = args.filter(a => !a.startsWith('--'))[0]; // e.g. "dist:love", "terminal", or undefined
+  const targetPlatformIdx = args.indexOf('--target');
+  const targetPlatform = targetPlatformIdx !== -1 ? args[targetPlatformIdx + 1] : null;
+  const rawTarget = args.filter(a => !a.startsWith('--') && a !== targetPlatform)[0]; // e.g. "dist:love", "terminal", or undefined
 
   // Auto-update runtime files before building (love + sdl2 — both use lua/ runtime; grid/web don't)
   const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2'].includes(rawTarget);
@@ -204,7 +206,7 @@ export async function buildCommand(args) {
     if (target.kind === 'love') {
       await buildDistLove(cwd, projectName, { debug: hasDebugFlag });
     } else if (target.kind === 'sdl2') {
-      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag });
+      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform });
     } else if (target.kind === 'web') {
       // Web dist is just the ESM bundle (no shebang — not a Node.js executable)
       await buildDevTarget(cwd, projectName, targetName);
@@ -742,24 +744,46 @@ async function buildDistLove(cwd, projectName, opts = {}) {
 
 // ── reactjit build dist:sdl2 ────────────────────────────
 //
-// Self-extracting binary: LuaJIT + SDL2 + FreeType + ft_helper.so +
-// libquickjs.so + lua runtime + JS bundle.
-// No Love2D, no X11/Wayland required. Launches via SDL2 kmsdrm or
-// whatever display backend SDL2 auto-detects on the target system.
+// Cross-compilable dist pipeline using zig-built artifacts.
+// All native deps (SDL2, FreeType, QuickJS, BLAKE3, LuaJIT) are compiled
+// from source via zig build / build-luajit-cross.sh.
+//
+// Usage:
+//   reactjit build dist:sdl2                     → host platform (auto-detect)
+//   reactjit build dist:sdl2 --target linux-x64  → cross-compile
+//   reactjit build dist:sdl2 --target windows-x64
+//
+// Targets: linux-x64, linux-arm64, windows-x64, macos-x64, macos-arm64
 
 async function buildDistSdl2(cwd, projectName, opts = {}) {
   const target = TARGETS.sdl2;
   const entryCandidates = target.entries.map(e => `src/${e}`);
   const entry = findEntry(cwd, ...entryCandidates);
   const luaDir = findLuaRuntime(cwd);
-  const libquickjs = findLibQuickJS(cwd);
 
-  const distDir    = join(cwd, 'dist');
-  const outFile    = join(distDir, `${projectName}-sdl2`);
+  // Parse --target flag
+  const targetFlag = opts.targetPlatform || detectHostPlatform();
+  if (!targetFlag) {
+    console.error('  Cannot detect host platform. Use --target <platform>.');
+    console.error('  Platforms: ' + PLATFORM_NAMES.join(', '));
+    process.exit(1);
+  }
+  const plat = PLATFORMS[targetFlag];
+  if (!plat) {
+    console.error(`  Unknown platform: ${targetFlag}`);
+    console.error('  Platforms: ' + PLATFORM_NAMES.join(', '));
+    process.exit(1);
+  }
+
+  const monoRoot  = join(CLI_ROOT, '..');
+  const zigOut    = join(monoRoot, 'zig-out');
+  const distDir   = join(cwd, 'dist');
+  const suffix    = plat.os === 'windows' ? '.exe' : '';
+  const outFile   = join(distDir, `${projectName}-sdl2${suffix}`);
   const stagingDir = join('/tmp', `reactjit-sdl2-${projectName}`);
   const payloadDir = join('/tmp', `reactjit-sdl2-payload-${projectName}`);
 
-  console.log(`\n  Building dist:sdl2 for ${projectName}...\n`);
+  console.log(`\n  Building dist:sdl2 for ${projectName} (${targetFlag})...\n`);
 
   // 1. Lint gate
   const { errors } = await runLint(cwd, { silent: false });
@@ -768,8 +792,54 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
     process.exit(1);
   }
 
-  // 2. Bundle JS (IIFE — runs inside QuickJS, same as Love2D)
-  console.log('  [1/5] Bundling JS...');
+  // 2. Ensure zig artifacts exist
+  console.log(`  [1/6] Building native artifacts for ${targetFlag}...`);
+  const zigTriple = plat.zigTriple;
+  try {
+    execSync(`zig build all -Dtarget=${zigTriple}`, { cwd: monoRoot, stdio: 'pipe' });
+  } catch (e) {
+    console.error(`  zig build failed for ${zigTriple}:`);
+    console.error(e.stderr?.toString() || e.message);
+    process.exit(1);
+  }
+
+  // 3. Ensure LuaJIT exists
+  console.log(`  [2/6] Building LuaJIT for ${targetFlag}...`);
+  const luajitDir = join(zigOut, 'luajit', zigTriple);
+  if (!existsSync(join(luajitDir, plat.luajitBin))) {
+    try {
+      execSync(`bash scripts/build-luajit-cross.sh ${zigTriple}`, { cwd: monoRoot, stdio: 'pipe' });
+    } catch (e) {
+      console.error(`  LuaJIT build failed for ${zigTriple}:`);
+      console.error(e.stderr?.toString() || e.message);
+      process.exit(1);
+    }
+  }
+
+  // Verify all artifacts exist
+  const libPrefix = plat.os === 'windows' ? '' : 'lib';
+  const artifacts = {
+    luajit:   join(luajitDir, plat.luajitBin),
+    SDL2:     join(zigOut, 'lib', `${libPrefix}SDL2${plat.ext}`),
+    quickjs:  join(zigOut, 'lib', `${libPrefix}quickjs${plat.ext}`),
+    ft_helper: join(zigOut, 'lib', `${libPrefix}ft_helper${plat.ext}`),
+    blake3:   join(zigOut, 'lib', `${libPrefix}blake3${plat.ext}`),
+  };
+  // Windows LuaJIT also produces lua51.dll
+  if (plat.os === 'windows') {
+    artifacts.lua51 = join(luajitDir, 'lua51.dll');
+  }
+
+  for (const [name, path] of Object.entries(artifacts)) {
+    if (!existsSync(path)) {
+      console.error(`  Missing artifact: ${name} (${path})`);
+      console.error('  Run: zig build all && scripts/build-luajit-cross.sh ' + zigTriple);
+      process.exit(1);
+    }
+  }
+
+  // 4. Bundle JS
+  console.log('  [3/6] Bundling JS...');
   rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(join(stagingDir, 'lua'), { recursive: true });
   mkdirSync(join(stagingDir, 'sdl2'), { recursive: true });
@@ -791,11 +861,11 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
     process.exit(1);
   }
 
-  // 3. Stage lua runtime + entry point
-  console.log('  [2/5] Staging Lua runtime...');
+  // 5. Stage lua runtime + entry point
+  console.log('  [4/6] Staging Lua runtime + native libs...');
   cpSync(luaDir, join(stagingDir, 'lua'), { recursive: true });
 
-  // Project entry point (sdl2_main.lua or generated stub)
+  // Project entry point
   const sdl2MainCandidates = [
     join(cwd, 'sdl2_main.lua'),
     join(cwd, 'main-sdl2.lua'),
@@ -804,7 +874,6 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   if (sdl2Main) {
     cpSync(sdl2Main, join(stagingDir, 'main.lua'));
   } else {
-    // Generate a default launcher
     const stub =
       'require("lua.sdl2_init").run({\n' +
       '  bundle = "sdl2/bundle.js",\n' +
@@ -813,99 +882,70 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
     writeFileSync(join(stagingDir, 'main.lua'), stub);
   }
 
-  // Copy manifest.json into staging if it exists
-  const manifestPathSdl2 = join(cwd, 'manifest.json');
-  if (existsSync(manifestPathSdl2)) {
-    cpSync(manifestPathSdl2, join(stagingDir, 'manifest.json'));
+  // Manifest
+  const manifestPath = join(cwd, 'manifest.json');
+  if (existsSync(manifestPath)) {
+    cpSync(manifestPath, join(stagingDir, 'manifest.json'));
     console.log('  Embedded manifest.json');
   }
 
-  // 4. Bundle shared libraries
-  console.log('  [3/5] Bundling SDL2 + FreeType + QuickJS...');
+  // 6. Assemble payload from zig artifacts
+  console.log('  [5/6] Assembling payload...');
   rmSync(payloadDir, { recursive: true, force: true });
   mkdirSync(join(payloadDir, 'lib'), { recursive: true });
-
-  // Copy staging into payload
   cpSync(stagingDir, payloadDir, { recursive: true });
 
-  // libquickjs.so
-  cpSync(libquickjs, join(payloadDir, 'lib', 'libquickjs.so'));
-
-  // ft_helper.so (compiled C bridge for FreeType)
-  const ftHelperCandidates = [
-    join(cwd, 'lib', 'ft_helper.so'),
-    join(CLI_ROOT, 'runtime', 'lib', 'ft_helper.so'),
-  ];
-  const ftHelper = ftHelperCandidates.find(p => existsSync(p));
-  if (!ftHelper) {
-    console.error('  ft_helper.so not found. Run: make cli-setup');
-    process.exit(1);
-  }
-  cpSync(ftHelper, join(payloadDir, 'lib', 'ft_helper.so'));
-
-  // Resolve SDL2 and its deps
-  const sdl2Lib = execSync('ldconfig -p | grep "libSDL2-2.0.so.0 " | grep x86-64 | awk \'{print $NF}\' | head -1',
-    { encoding: 'utf-8' }).trim();
-  if (!sdl2Lib) {
-    console.error('  libSDL2-2.0.so.0 not found. Install libsdl2.');
-    process.exit(1);
-  }
-  const bundleLibWithDeps = (libPath, destDir) => {
-    const soname = basename(libPath);
-    const dest   = join(destDir, soname);
-    if (!existsSync(dest)) {
-      try { cpSync(execSync(`readlink -f "${libPath}"`, { encoding: 'utf-8' }).trim(), dest); } catch {}
-    }
-    try {
-      const lddOut = execSync(`ldd "${libPath}"`, { encoding: 'utf-8' });
-      for (const line of lddOut.split('\n')) {
-        if (line.includes('linux-vdso')) continue;
-        const m = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
-        if (m) {
-          const [, name, path] = m;
-          const d = join(destDir, name);
-          if (!existsSync(d)) {
-            try { cpSync(execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim(), d); } catch {}
-          }
-        }
-      }
-    } catch {}
-  };
-  bundleLibWithDeps(sdl2Lib, join(payloadDir, 'lib'));
-
-  // FreeType
-  const freetypeLib = execSync('ldconfig -p | grep "libfreetype.so.6 " | grep x86-64 | awk \'{print $NF}\' | head -1',
-    { encoding: 'utf-8' }).trim();
-  if (freetypeLib) bundleLibWithDeps(freetypeLib, join(payloadDir, 'lib'));
+  // Copy all shared libraries
+  cpSync(artifacts.SDL2,      join(payloadDir, 'lib', `${libPrefix}SDL2${plat.ext}`));
+  cpSync(artifacts.quickjs,   join(payloadDir, 'lib', `${libPrefix}quickjs${plat.ext}`));
+  cpSync(artifacts.ft_helper, join(payloadDir, 'lib', `${libPrefix}ft_helper${plat.ext}`));
+  cpSync(artifacts.blake3,    join(payloadDir, 'lib', `${libPrefix}blake3${plat.ext}`));
 
   // LuaJIT binary
-  const luajitBin = execSync('readlink -f $(which luajit)', { encoding: 'utf-8' }).trim();
-  cpSync(luajitBin, join(payloadDir, 'luajit.bin'));
-  bundleLibWithDeps(luajitBin, join(payloadDir, 'lib'));
-
-  // Bundle the dynamic linker
-  try {
-    const ld = execSync('readlink -f /lib64/ld-linux-x86-64.so.2', { encoding: 'utf-8' }).trim();
-    cpSync(ld, join(payloadDir, 'lib', 'ld-linux-x86-64.so.2'));
-  } catch {
-    console.error('  ld-linux not found. x86_64 Linux required for dist:sdl2.');
-    process.exit(1);
+  cpSync(artifacts.luajit, join(payloadDir, plat.luajitBin));
+  if (plat.os === 'windows') {
+    cpSync(artifacts.lua51, join(payloadDir, 'lua51.dll'));
   }
 
-  // 5. Launcher + pack
-  console.log('  [4/5] Creating launcher...');
+  // Copy LuaJIT jit/ library if present
+  const jitLib = join(luajitDir, 'jit');
+  if (existsSync(jitLib)) {
+    cpSync(jitLib, join(payloadDir, 'jit'), { recursive: true });
+  }
+
+  // 7. Package per platform
+  console.log('  [6/6] Packaging...');
+  mkdirSync(distDir, { recursive: true });
+
+  if (plat.os === 'linux') {
+    packageLinux(payloadDir, outFile, projectName);
+  } else if (plat.os === 'windows') {
+    packageWindows(payloadDir, outFile, projectName);
+  } else if (plat.os === 'macos') {
+    packageMacOS(payloadDir, outFile, projectName);
+  }
+
+  rmSync(stagingDir, { recursive: true, force: true });
+  rmSync(payloadDir, { recursive: true, force: true });
+
+  const sizeMb = (statSync(outFile).size / (1024 * 1024)).toFixed(1);
+  console.log(`\n  Done! ${sizeMb} MB → ${outFile}`);
+}
+
+// ── Per-platform packaging helpers ──────────────────────────────────────
+
+function packageLinux(payloadDir, outFile, projectName) {
+  // Launcher script — no ld-linux bundling needed since we compile SDL2/FreeType
+  // ourselves, their only transitive dep is glibc (always present on target).
+  // OpenGL (ffi.load("GL")) comes from the target's GPU driver.
   const launcher =
     '#!/bin/sh\n' +
     'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
-    'export LD_PRELOAD=\n' +
-    'exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache \\\n' +
-    '     --library-path "$DIR/lib" \\\n' +
-    '     "$DIR/luajit.bin" "$DIR/main.lua" "$@"\n';
+    'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"\n' +
+    'exec "$DIR/luajit" "$DIR/main.lua" "$@"\n';
   writeFileSync(join(payloadDir, 'run'), launcher, { mode: 0o755 });
 
-  console.log('  [5/5] Packing self-extracting binary...');
-  mkdirSync(distDir, { recursive: true });
-
+  // Self-extracting binary
   const tarball = join('/tmp', `${projectName}-sdl2-payload.tar.gz`);
   execSync(`cd "${payloadDir}" && tar czf "${tarball}" .`, { stdio: 'pipe' });
 
@@ -926,16 +966,43 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
     '__ARCHIVE__\n';
 
   const headerBuf = Buffer.from(header);
-  const tarBuf    = readFileSync(tarball);
-  const out       = Buffer.concat([headerBuf, tarBuf]);
+  const tarBuf = readFileSync(tarball);
+  const out = Buffer.concat([headerBuf, tarBuf]);
   writeFileSync(outFile, out, { mode: 0o755 });
+  rmSync(tarball, { force: true });
 
-  rmSync(stagingDir, { recursive: true, force: true });
-  rmSync(payloadDir, { recursive: true, force: true });
-  rmSync(tarball,    { force: true });
+  console.log(`  Run:  ./${basename(outFile)}`);
+  console.log('  Note: Requires OpenGL + display server (X11/Wayland/KMS).');
+}
 
-  const sizeMb = (out.length / (1024 * 1024)).toFixed(1);
-  console.log(`\n  Done! ${sizeMb} MB → dist/${projectName}-sdl2`);
-  console.log(`  Run:  ./dist/${projectName}-sdl2`);
-  console.log(`  Note: Requires a display (X11, Wayland, or KMS/DRM).\n`);
+function packageWindows(payloadDir, outFile, projectName) {
+  // Windows: tar.gz archive (self-extracting .exe is Phase 6 follow-up)
+  // For now, produce a zip-like archive that extracts to a directory.
+  // The user runs luajit.exe main.lua from the extracted directory.
+  const launcher =
+    '@echo off\r\n' +
+    'cd /d "%~dp0"\r\n' +
+    'luajit.exe main.lua %*\r\n';
+  writeFileSync(join(payloadDir, 'run.bat'), launcher);
+
+  // Pack as tar.gz (Windows users can use 7-Zip or built-in tar)
+  const archivePath = outFile.replace(/\.exe$/, '.tar.gz');
+  execSync(`cd "${payloadDir}" && tar czf "${archivePath}" .`, { stdio: 'pipe' });
+
+  console.log(`  Extract and run: run.bat`);
+}
+
+function packageMacOS(payloadDir, outFile, projectName) {
+  // macOS: tar.gz with launcher script
+  const launcher =
+    '#!/bin/sh\n' +
+    'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
+    'export DYLD_LIBRARY_PATH="$DIR/lib:$DYLD_LIBRARY_PATH"\n' +
+    'exec "$DIR/luajit" "$DIR/main.lua" "$@"\n';
+  writeFileSync(join(payloadDir, 'run.sh'), launcher, { mode: 0o755 });
+
+  const archivePath = outFile + '.tar.gz';
+  execSync(`cd "${payloadDir}" && tar czf "${archivePath}" .`, { stdio: 'pipe' });
+
+  console.log(`  Extract and run: ./run.sh`);
 }
