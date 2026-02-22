@@ -181,6 +181,38 @@ pub fn build(b: *std.Build) void {
         all_step.dependOn(&install.step);
     }
 
+    // ── image_helper ─────────────────────────────────────────────────────
+    // Thin stb_image wrapper for LuaJIT FFI — loads images into RGBA8 pixel
+    // buffers for the SDL2 rendering target and image processing capabilities.
+    // stb_image is a single-header library (vendored in vendor/stb/).
+    {
+        const img_mod = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        });
+
+        const img_lib = b.addLibrary(.{
+            .name = "image_helper",
+            .linkage = .dynamic,
+            .root_module = img_mod,
+        });
+
+        img_lib.addIncludePath(b.path("vendor/stb"));
+        img_lib.addCSourceFile(.{
+            .file = b.path("lua/sdl2_image_helper.c"),
+            .flags = &.{"-O2"},
+        });
+
+        img_lib.linkLibC();
+
+        const img_install = b.addInstallArtifact(img_lib, .{});
+        b.getInstallStep().dependOn(&img_install.step);
+
+        const img_step = b.step("image-helper", "Build image_helper (stb_image wrapper for LuaJIT FFI)");
+        img_step.dependOn(&img_install.step);
+        all_step.dependOn(&img_install.step);
+    }
+
     // ── libblake3 ───────────────────────────────────────────────────────
     // BLAKE3 hash library from vendored C reference implementation.
     // Uses x86-64 assembly on unix, C intrinsics on Windows, portable C on aarch64.
