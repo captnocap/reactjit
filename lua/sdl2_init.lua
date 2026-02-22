@@ -79,6 +79,7 @@ ffi.cdef[[
   void          SDL_GL_GetDrawableSize(SDL_Window *win, int *w, int *h);
   void          SDL_GetWindowSize(SDL_Window *win, int *w, int *h);
   void          SDL_StartTextInput(void);
+  int           SDL_GL_MakeCurrent(SDL_Window *win, SDL_GLContext ctx);
   int           SDL_GL_SetSwapInterval(int interval);
   char         *SDL_GetClipboardText(void);
   int           SDL_SetClipboardText(const char *text);
@@ -316,7 +317,14 @@ function SDL2Init.run(config)
   widgets.init({ measure = Measure })
 
   -- ------------------------------------------------------------------
-  -- 3c3. Overlays (theme menu, settings, system panel, context menu)
+  -- 3c3. Permit + audit + manifest (must init before system panel)
+  -- ------------------------------------------------------------------
+  local permit      = require("lua.permit")
+  local audit       = require("lua.audit")
+  local manifestMod = require("lua.manifest")
+
+  -- ------------------------------------------------------------------
+  -- 3c4. Overlays (theme menu, settings, system panel, context menu)
   -- ------------------------------------------------------------------
   local themeMenu   = require("lua.theme_menu")
   local settings    = require("lua.settings")
@@ -360,9 +368,6 @@ function SDL2Init.run(config)
   end
 
   -- Permit + audit + manifest RPC handlers (always available)
-  local permit = require("lua.permit")
-  local audit  = require("lua.audit")
-  local manifestMod = require("lua.manifest")
   for method, handler in pairs(permit.getHandlers()) do
     rpcHandlers[method] = handler
   end
