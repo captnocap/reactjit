@@ -5,17 +5,17 @@ import { useThemeColors } from '../../../packages/theme/src';
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>
-        {title}
-      </Text>
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
       <Box style={{
-        backgroundColor: c.surface,
-        borderRadius: 8,
-        padding: 16,
-        gap: 12,
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 10,
         borderWidth: 1,
         borderColor: c.border,
+        padding: 12,
+        gap: 8,
+        alignItems: 'center',
       }}>
         {children}
       </Box>
@@ -28,7 +28,7 @@ function CounterDemo() {
   const [count, setCount] = useLocalStore('counter', 0, { namespace: 'demo' });
 
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       <Pressable
         onPress={() => setCount(n => n - 1)}
         style={(state) => ({
@@ -64,7 +64,7 @@ function TextMemoryDemo() {
   const [note, setNote] = useLocalStore('note', '', { namespace: 'demo' });
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ width: '100%', gap: 8 }}>
       <TextInput
         value={note}
         onChangeText={setNote}
@@ -93,6 +93,7 @@ function ToggleDemo() {
     <Pressable
       onPress={() => setEnabled(v => !v)}
       style={(state) => ({
+        width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
@@ -123,21 +124,26 @@ function ClearStoreButton() {
   }, [clearStore]);
 
   return (
-    <Pressable
-      onPress={handleClear}
-      style={(state) => ({
-        backgroundColor: state.hovered ? c.error : c.bgAlt,
-        paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: c.border,
-        alignSelf: 'flex-start',
-      })}
-    >
-      <Text style={{ color: c.textSecondary, fontSize: 11 }}>
-        Clear demo store
+    <Box style={{ width: '100%', gap: 8 }}>
+      <Pressable
+        onPress={handleClear}
+        style={(state) => ({
+          backgroundColor: state.hovered ? c.error : c.bgAlt,
+          paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: c.border,
+          alignSelf: 'flex-start',
+        })}
+      >
+        <Text style={{ color: c.textSecondary, fontSize: 11 }}>
+          Clear demo store
+        </Text>
+      </Pressable>
+      <Text style={{ color: c.textDim, fontSize: 10 }}>
+        Clears demo namespace only. Theme and playground have their own namespaces.
       </Text>
-    </Pressable>
+    </Box>
   );
 }
 
@@ -145,34 +151,38 @@ export function LocalStoreStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20 }}>
-      <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.text, fontSize: 18, fontWeight: 'bold' }}>
-          Local Store
-        </Text>
-        <Text style={{ color: c.textDim, fontSize: 12 }}>
-          SQLite-backed persistence. Values survive app restarts.
-        </Text>
+    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
+      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
+
+        <Section title="1. Persistent Counter">
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            SQLite-backed persistence via useLocalStore. Values survive app restarts.
+          </Text>
+          <CounterDemo />
+        </Section>
+
+        <Section title="2. Text Memory">
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Free-form text stored persistently. Type anything and close the app -- it stays.
+          </Text>
+          <TextMemoryDemo />
+        </Section>
+
+        <Section title="3. Persistent Toggle">
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Boolean state that remembers its value across sessions.
+          </Text>
+          <ToggleDemo />
+        </Section>
+
+        <Section title="4. Manage Store">
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+            Clear persisted data for this demo namespace.
+          </Text>
+          <ClearStoreButton />
+        </Section>
+
       </Box>
-
-      <Section title="PERSISTENT COUNTER">
-        <CounterDemo />
-      </Section>
-
-      <Section title="TEXT MEMORY">
-        <TextMemoryDemo />
-      </Section>
-
-      <Section title="PERSISTENT TOGGLE">
-        <ToggleDemo />
-      </Section>
-
-      <Section title="MANAGE">
-        <ClearStoreButton />
-        <Text style={{ color: c.textDim, fontSize: 10 }}>
-          Clears demo namespace only. Theme and playground have their own namespaces.
-        </Text>
-      </Section>
     </Box>
   );
 }
