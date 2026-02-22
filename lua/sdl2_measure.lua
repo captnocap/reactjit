@@ -88,8 +88,7 @@ local function makeFontHandle(size)
       return nil, lines
     end,
     getDescent = function(self)
-      -- Approximate: ~20% of line height
-      return math.floor(Font.lineHeight(self._size) * 0.2)
+      return Font.descent(self._size)
     end,
   }
   fontHandleCache[size] = h

@@ -180,6 +180,11 @@ function Font.ascender(size)
   return ft.ft_get_ascender()
 end
 
+function Font.descent(size)
+  ensureSize(size)
+  return ft.ft_get_line_height() - ft.ft_get_ascender()
+end
+
 function Font.done()
   ft.ft_done()
 end
