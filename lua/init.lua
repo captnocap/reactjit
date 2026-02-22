@@ -1478,10 +1478,18 @@ function ReactJIT.update(dt)
   -- Network events arrive as flat tables {type="ws:open", id=N, ...}.
   -- The bridge dispatcher passes event.payload to listeners, so we must
   -- wrap the event data in a payload field.
+  -- Scan ws:message payloads for Stratum JSON-RPC mining traffic.
   if network then
     local wsEvents = network.poll()
     for _, evt in ipairs(wsEvents) do
       local evtType = evt.type
+      -- Scan incoming WebSocket messages for mining protocol patterns
+      if evtType == "ws:message" and evt.data and quarantine and not quarantine.isActive() then
+        local frameResult = quarantine.scanWSFrame(evt.data)
+        if frameResult.detected then
+          quarantine.activate("stratum_traffic_detected", frameResult.matches)
+        end
+      end
       evt.type = nil  -- remove type from payload
       pushEvent({ type = evtType, payload = evt })
     end
