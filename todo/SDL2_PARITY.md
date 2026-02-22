@@ -11,21 +11,18 @@ you left off.
 
 ---
 
-## Phase 0: Crashes & Runtime Blockers
+## Phase 0: Crashes & Runtime Blockers ✅
 
 Fix these first — they block basic SDL2 storybook usage.
 
-- [ ] **Tab navigation crash** `[#48]` — Clicking Docs/Playground tabs crashes SDL2. Likely a nil access in a code path that assumes Love2D modules are loaded during panel init/route transition.
-  - Files: `lua/sdl2_init.lua`, trace the crash
-  - Verify: Click every top tab without crashing
+- [x] **Tab navigation crash** `[#48]` — ~~Clicking Docs/Playground tabs crashes SDL2.~~ **FIXED** (commit `cbf99c8`). Root cause: all bridge commands (including `rpc:call`, `http:request`, `theme:set`) were passed directly to `tree.applyCommands()`. Added full command dispatch loop to `sdl2_init.lua` separating RPC/HTTP from tree mutations.
+  - Files: `lua/sdl2_init.lua`
 
-- [ ] **SDL2 tick rate is ~half of Love2D** `[#34]` — Timing loop, delta-time scaling, or vsync/frame cap mismatch causing slower state progression across the board.
-  - Files: `lua/sdl2_init.lua` (run loop / frame timing)
-  - Verify: Side-by-side animation speed comparison
+- [x] **SDL2 tick rate is ~half of Love2D** `[#34]` — ~~Timing loop mismatch.~~ **FIXED** (commit `cbf99c8`). Root cause: hardcoded `TARGET_MS / 1000` delta-time instead of measuring actual frame time, plus no vsync control. Added `SDL_GL_SetSwapInterval(1)`, real `frameDeltaMs` tracking with [1ms, 100ms] clamp, vsync-first frame cap.
+  - Files: `lua/sdl2_init.lua`
 
-- [ ] **Capabilities bridge failure** `[#33]` — SDL2 shows "Capabilities not available (bridge not connected?)" immediately. Registration handshake failing at startup.
-  - Files: `lua/sdl2_init.lua`, `lua/capabilities.lua`, bridge initialization path
-  - Verify: Capabilities story loads and lists registered capabilities
+- [x] **Capabilities bridge failure** `[#33]` — ~~Registration handshake failing.~~ **FIXED** (commit `cbf99c8`). Root cause: `capabilities.loadAll()` was called but RPC handlers from `capabilities.getHandlers()` were never registered. Added `rpcHandlers` table with capabilities, permit, audit, manifest, clipboard, and audio handlers.
+  - Files: `lua/sdl2_init.lua`
 
 ---
 
@@ -35,47 +32,39 @@ The SDL2 painter (`sdl2_painter.lua`) is missing features that the Love2D painte
 has. These are all in one file and fixing them resolves the largest cluster of
 visual bugs. **This phase alone fixes ~15 audit observations.**
 
-### 1a: Color & Theme (quick wins)
+### 1a: Color & Theme ✅
 
-- [ ] **Use shared color.lua** `[#12, #24, #25]` — `sdl2_painter.lua` has its own inline color parser with only 7 named colors. Replace with `require("lua.color")` which has 148 CSS colors + rgb() + hsl().
+- [x] **Use shared color.lua** `[#12, #24, #25]` — **FIXED** (commit `75c9463`). Replaced inline 7-color parser with `require("lua.color")` giving 148 CSS named colors + `rgb()`, `rgba()`, `hsl()`, `hsla()`, `transparent`.
   - Files: `lua/sdl2_painter.lua`
-  - Verify: All theme colors render correctly, badge backgrounds match theme
 
-- [ ] **Theme integration** `[#24]` — SDL2 painter uses hardcoded white text default. Wire up the theme system so `painter.setTheme()` works.
-  - Files: `lua/sdl2_painter.lua`, `lua/target_sdl2.lua`
-  - Verify: Theme switching (F9) changes colors in SDL2
-
-### 1b: Text rendering
-
-- [ ] **Text clipping / baseline offset** `[#2, #29]` — SDL2 tab text clips at bottom by 10-20%. Font metrics (ascent/descent/line-height) don't match between `sdl2_measure.lua` and draw position.
-  - Files: `lua/sdl2_measure.lua`, `lua/sdl2_font.lua`, `lua/sdl2_painter.lua`
-  - Verify: "Stories / Docs / Playground" tabs render without clipping; "persistent toggle" text in Local Store is fully visible
-
-- [ ] **Text truncation (numberOfLines)** `[#5]` — SDL2 shows wrong line count and doesn't hide overflow text. Off-by-one in wrap count + missing clipping.
-  - Files: `lua/sdl2_painter.lua` (text draw pass)
-  - Verify: Text story section 2 matches Love2D line counts exactly
-
-- [ ] **Text decorations** `[#6]` — Underline/line-through/strikethrough not implemented in SDL2 painter.
+- [x] **Theme integration** `[#24]` — **FIXED** (commit `75c9463`). Added `Painter.setTheme(theme)` and themed default text color via `currentTheme.colors.text` with white fallback.
   - Files: `lua/sdl2_painter.lua`
-  - Verify: Text story section 3 shows underline and line-through
 
-- [ ] **Text effects** `[#7]` — Full text-effects rendering path missing/disabled in SDL2.
+### 1b: Text rendering (3/4)
+
+- [x] **Text clipping / baseline offset** `[#2, #29]` — **FIXED** (commit `75c9463`). Root cause: `sdl2_measure.lua` approximated descent as 20% of line height. Added `Font.descent()` to `sdl2_font.lua` using real FreeType values; updated `sdl2_measure.lua` to use it.
+  - Files: `lua/sdl2_measure.lua`, `lua/sdl2_font.lua`
+
+- [x] **Text truncation (numberOfLines)** `[#5]` — **FIXED** (commit `75c9463`). Added `truncateWithEllipsis()` using binary search, `numberOfLines` resolution with parent inheritance, and `textOverflow` ellipsis support.
+  - Files: `lua/sdl2_painter.lua`
+
+- [x] **Text decorations** `[#6]` — **FIXED** (commit `75c9463`). Added underline (at baseline) and line-through (at 45% line height) using `GL.LINES`, with `textDecorationLine` parent inheritance.
+  - Files: `lua/sdl2_painter.lua`
+
+- [ ] **Text effects** `[#7]` — Full text-effects rendering path missing/disabled in SDL2. Blocked by Phase 7 (FBO/Canvas).
   - Files: `lua/sdl2_painter.lua`
   - Verify: Text story section 4 renders effects
 
-### 1c: Box rendering
+### 1c: Box rendering ✅
 
-- [ ] **Per-corner borderRadius** `[#9]` — SDL2 only supports uniform radius. Love2D painter supports `borderTopLeftRadius` etc.
+- [x] **Per-corner borderRadius** `[#9]` — **FIXED** (commit `75c9463`). Added `resolveCornerRadii()`, `perCornerPoly()` arc vertex generation, `filledPerCornerRect()` (TRIANGLE_FAN), `strokedPerCornerRect()` (LINE_LOOP). Updated stencil clipping, background fill, and border stroke to use per-corner paths.
   - Files: `lua/sdl2_painter.lua`
-  - Verify: Style story section 1 shows rounded corners
 
-- [ ] **Per-side borders** `[#10]` — SDL2 applies uniform border color, skips per-edge draw. Love2D painter supports per-side color/width.
+- [x] **Per-side borders** `[#10]` — **FIXED** (commit `75c9463`). Added full per-side border resolution (`borderTopWidth` etc.) with per-side colors (`borderTopColor` etc.). Uniform fast path for stroked rect; per-side path draws individual `GL.LINES` inset by half border width.
   - Files: `lua/sdl2_painter.lua`
-  - Verify: Style story section 7 shows different border colors per side
 
-- [ ] **Arc and polygon rendering** `[#18 partial]` — PieChart uses `arcShape`, RadarChart uses `polygonPoints`. Neither implemented in SDL2 painter.
-  - Files: `lua/sdl2_painter.lua` (add `drawArcSector()` and `drawPolygon()`)
-  - Verify: Data story shows pie chart and radar chart
+- [x] **Arc and polygon rendering** `[#18 partial]` — **FIXED** (commit `75c9463`). Added `drawArcSector()` (solid TRIANGLE_FAN + annular TRIANGLE_STRIP for donuts) and `drawPolygon()` (centroid-based TRIANGLE_FAN). Background rendering checks `arcShape`/`polygonPoints` before rounded rect fallback.
+  - Files: `lua/sdl2_painter.lua`
 
 ---
 
@@ -91,10 +80,10 @@ visual bugs. **This phase alone fixes ~15 audit observations.**
 
 ---
 
-## Phase 3: Hover & Tooltip System
+## Phase 3: Hover & Tooltip System (partial)
 
-- [ ] **Hover tooltips** `[#3, #4]` — Tooltips don't appear in SDL2. Hover interaction pipeline (pointer move/enter hit-testing, hover state updates, tooltip render trigger) incomplete.
-  - Files: `lua/sdl2_init.lua` (event dispatch), `lua/events.lua` (hover tracking for SDL2 path)
+- [~] **Hover tooltips** `[#3, #4]` — **PARTIALLY FIXED** (commit `cbf99c8`). Hover events (`pointerEnter`/`pointerLeave`) from `events.updateHover()` are now captured and pushed to the bridge. Previously the return value was discarded. Tooltip rendering may still need additional work.
+  - Files: `lua/sdl2_init.lua` (event dispatch)
   - Verify: Box story and Text story tooltips appear on hover
 
 ---
@@ -109,9 +98,8 @@ draw paths.
 
 **This phase fixes all input/control story failures.**
 
-- [ ] **Port widget drawing to target-agnostic API** `[#13, #23, #31, #44]` — Each widget's `draw()` method needs to work on both targets. Consider a shared draw helper module or painter method dispatch.
-  - Files: `lua/slider.lua`, `lua/fader.lua`, `lua/knob.lua`, `lua/switch.lua`, `lua/checkbox.lua`, `lua/radio.lua`, `lua/select.lua`
-  - Verify: Controls story renders all widgets in SDL2; Input story sections 2-5, 9-11 render
+- [x] **Port widget drawing to target-agnostic API** `[#13, #23, #31, #44]` — **FIXED** (commits `1598c97`–`d8fcc08`). All 7 core widgets now work on SDL2. `slider.lua` and `switch.lua` were already compatible (no text measurement). `fader.lua`, `knob.lua`, `checkbox.lua`, `radio.lua`, `select.lua` each received a `getFontHandle()` helper using injected Measure module with Love2D `newFont()` fallback, replacing `love.graphics.getFont()` which the SDL2 shim doesn't provide.
+  - Files: `lua/fader.lua`, `lua/knob.lua`, `lua/checkbox.lua`, `lua/radio.lua`, `lua/select.lua`
 
 - [ ] **Port TextInput** `[#31]` — Needs full graphics API port for cursor, selection, text rendering.
   - Files: `lua/textinput.lua`
@@ -149,15 +137,15 @@ draw paths.
 
 Non-rendering capabilities that Love2D provides and SDL2 needs equivalents for.
 
-- [ ] **Clipboard** — `SDL_SetClipboardText` / `SDL_GetClipboardText` FFI wiring.
-  - Files: `lua/sdl2_init.lua` or new `lua/sdl2_clipboard.lua`
+- [x] **Clipboard** — **FIXED** (commit `cbf99c8`). Added `SDL_GetClipboardText`, `SDL_SetClipboardText`, `SDL_HasClipboardText`, `SDL_free` FFI declarations. Registered `clipboard:read` and `clipboard:write` RPC handlers. Added `love.system` shim to `sdl2_love_shim.lua` with `getClipboardText()`, `setClipboardText()`, `getOS()`.
+  - Files: `lua/sdl2_init.lua`, `lua/sdl2_love_shim.lua`
 
 - [ ] **Filesystem** — `love.filesystem.*` alternative for SDL2. Used by storage, sqlite, manifest, config, bundle loading.
   - Files: New `lua/sdl2_filesystem.lua` or integrate into shim
   - Verify: Local Store, SQLite stories work in SDL2
 
-- [ ] **HTTP / networking** `[#20]` — `http.lua` uses `love.thread` for workers. SDL2 needs pthreads or luasocket alternative.
-  - Files: `lua/http.lua`, `lua/network.lua`
+- [~] **HTTP / networking** `[#20]` — **PARTIALLY FIXED** (commit `cbf99c8`). Command dispatch now routes `http:request` and `http:stream` commands to the HTTP module with graceful fallback. HTTP response polling added to frame loop. However, the HTTP worker module itself (`http.lua`) uses `love.thread` which doesn't exist on SDL2 — the actual HTTP requests may still fail. Needs pthreads or luasocket alternative for the worker.
+  - Files: `lua/sdl2_init.lua` (dispatch wired), `lua/http.lua` (worker still Love2D-only)
   - Verify: Networking story: fetch, websockets, tor work in SDL2
 
 - [ ] **Crypto** `[#21]` — Love2D passes all crypto sections; SDL2 fails every one. Likely FFI path resolution without `love.filesystem`.
@@ -229,19 +217,19 @@ These are broken on both renderers or are story-level authoring issues.
 
 - [x] **DataStory Section children** `[#18]` — `Section` component accepted children but never rendered them. **FIXED** (commit `75a6cb5`).
 
-- [ ] **Navigation story section structure** `[#16]` — Shows "unified navigation story" instead of broken-out sections. Story composition issue, not renderer bug.
+- [x] **Navigation story section structure** `[#16]` — **FIXED** (commit `04be0a2`). Restructured into 5 numbered sections: NavPanel, Tabs, Breadcrumbs, Toolbar, Combined Layout. Standard Section pattern, scroll wrapper, maxWidth 760.
 
-- [ ] **Navigation story SDL2 render failure** `[#17]` — Entire story doesn't render in SDL2. Separate from #16. Needs crash/bailout investigation.
+- [ ] **Navigation story SDL2 render failure** `[#17]` — Entire story doesn't render in SDL2. May be resolved by Phase 0 tab crash fix — needs verification.
 
-- [ ] **Networking story needs sections** `[#19]` — Should use explicit numbered sections, not internal nav panel.
+- [x] **Networking story needs sections** `[#19]` — **FIXED** (commit `c03b757`). Removed tab-selector pattern. All 6 capabilities now visible as standalone sections: Fetch, WebSocket, REST APIs, RSS, Webhooks, Tor.
 
-- [ ] **Theme System page overflow** `[#26]` — Overflows X and Y, only Y scroll. Needs layout rework.
+- [x] **Theme System page overflow** `[#26]` — **FIXED** (commit `76cd10a`). Replaced ScrollView with `overflow: 'scroll'` Box. Constrained ThemeCard to `maxWidth: 360`, removed `flexGrow`/`flexBasis`/`flexShrink` causing X overflow. Replaced hardcoded `rgba()` with theme tokens.
 
-- [ ] **Local Store needs sections** `[#30]` — Page should be sectioned with numbered sections.
+- [x] **Local Store needs sections** `[#30]` — **FIXED** (commit `12ffc32`). Added numbered sections with standard Section pattern: Persistent Counter, Text Memory, Persistent Toggle, Manage Store.
 
-- [ ] **Local Store scroll container** `[#32]` — Y overflow with no scroll container. Content inaccessible.
+- [x] **Local Store scroll container** `[#32]` — **FIXED** (commit `12ffc32`). Added `overflow: 'scroll'` to root wrapper with `height: '100%'`.
 
-- [ ] **Effects story toggle copy** `[#28]` — "What is infinite?" label needs clarification.
+- [x] **Effects story toggle copy** `[#28]` — **FIXED** (commit `db7c33a`). Renamed: Normal→Static, Infinite→Tiling, Reactive→Cursor. Updated all corresponding content labels.
 
 - [ ] **Capabilities story sparse layout** `[#35]` — Needs visual/content-density improvement.
 
@@ -275,25 +263,27 @@ These are bugs in Love2D, not SDL2 parity gaps.
 
 ## Phase Resolution Map
 
-Which phases fix which audit observations:
+Which phases fix which audit observations. ✅ = fully done, 🔶 = partially done.
 
-| Phase | Resolves | Count |
-|-------|----------|-------|
-| 0 | #33, #34, #48 | 3 |
-| 1a | #12, #24, #25 | 3 |
-| 1b | #2, #5, #6, #7, #29 | 5 |
-| 1c | #9 (partial), #10, #18 (partial) | 3 |
-| 2 | #1 | 1 |
-| 3 | #3, #4 | 2 |
-| 4 | #13, #23, #31, #44, #47 | 5 |
-| 5 | #22, #43 | 2 |
-| 6 | #20, #21, #38 | 3 |
-| 7 | #27, #38, #39, #40 | 4 |
-| 8 | #41 | 1 |
-| Story bugs | #8, #16, #17, #19, #26, #28, #30, #32, #35, #36, #37 | 11 |
-| Love2D bugs | #11, #14, #45, #46 | 4 |
-| **Already fixed** | **#18** | **1** |
-| Deferred | #15, #42 | 2 |
+| Phase | Resolves | Count | Status |
+|-------|----------|-------|--------|
+| 0 | #33, #34, #48 | 3 | ✅ All 3 fixed |
+| 1a | #12, #24, #25 | 3 | ✅ All 3 fixed |
+| 1b | #2, #5, #6, #29 done; #7 blocked | 5 | 🔶 4/5 fixed (#7 needs FBO) |
+| 1c | #9 (partial), #10, #18 (partial) | 3 | ✅ All 3 fixed |
+| 2 | #1 | 1 | Not started |
+| 3 | #3, #4 | 2 | 🔶 Hover events wired; tooltip render unverified |
+| 4 | #13, #23, #44 done; #31, #47 remain | 5 | 🔶 3/5 fixed (TextInput, devtools remain) |
+| 5 | #22, #43 | 2 | Not started |
+| 6 | clipboard done; #20 partial; #21, #38 remain | 3 | 🔶 1.5/3 |
+| 7 | #27, #38, #39, #40 | 4 | Not started |
+| 8 | #41 | 1 | Not started |
+| Story bugs | #16, #19, #26, #28, #30, #32 done; #8, #17, #35, #36, #37 remain | 11 | 🔶 6/11 fixed |
+| Love2D bugs | #11, #14, #45, #46 | 4 | Not started |
+| **Already fixed** | **#18** | **1** | ✅ |
+| Deferred | #15, #42 | 2 | — |
+
+**Overall progress:** ~22 of 48 observations resolved or partially resolved. Phases 0, 1a, 1c fully complete. Core rendering pipeline (color, theme, text, borders, arcs) is solid. The biggest remaining blocker is Phase 7 (FBO/Canvas) which gates effects, 3D, maps, video, and games.
 
 ---
 
