@@ -1,6 +1,6 @@
 // ── Base Utilities ──────────────────────────────────────
 export { useAPI, useAPIMutation, bearer, qs } from './base';
-export type { APIResult, APIOptions } from './base';
+export type { APIResult, APIOptions, RateLimitConfig } from './base';
 
 // ── Service Registry ──────────────────────────────────────
 export { builtinServices } from './registry';

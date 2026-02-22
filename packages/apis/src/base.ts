@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { rateLimitedFetch, type RateLimitConfig } from './rateLimit';
 
 // ── Result types ────────────────────────────────────────
 
@@ -17,6 +18,8 @@ export interface APIResult<T> {
 export interface APIOptions {
   headers?: Record<string, string>;
   interval?: number;
+  /** Optional rate limit — requests exceeding the budget queue until a slot opens. */
+  rateLimit?: RateLimitConfig;
 }
 
 // ── Reactive data hook ──────────────────────────────────
@@ -49,7 +52,10 @@ export function useAPI<T = any>(
     const init: RequestInit = {};
     if (optionsRef.current?.headers) init.headers = optionsRef.current.headers;
 
-    fetch(url, init)
+    const rl = optionsRef.current?.rateLimit;
+    const doFetch = rl ? rateLimitedFetch(url, init, rl) : fetch(url, init);
+
+    doFetch
       .then((res: any) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const ct = res.headers?.get?.('content-type') || '';
@@ -85,6 +91,7 @@ export function useAPI<T = any>(
 
 export function useAPIMutation<TResponse = any>(
   headers?: Record<string, string>,
+  mutationOptions?: { rateLimit?: RateLimitConfig },
 ): {
   execute: (url: string, options?: { method?: string; body?: any; headers?: Record<string, string> }) => Promise<TResponse>;
   loading: boolean;
@@ -96,6 +103,8 @@ export function useAPIMutation<TResponse = any>(
   const [loading, setLoading] = useState(false);
   const headersRef = useRef(headers);
   headersRef.current = headers;
+  const mutationOptionsRef = useRef(mutationOptions);
+  mutationOptionsRef.current = mutationOptions;
 
   const execute = useCallback(async (
     url: string,
@@ -115,7 +124,8 @@ export function useAPIMutation<TResponse = any>(
       if (options?.body !== undefined) {
         init.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
       }
-      const res: any = await fetch(url, init);
+      const rl = mutationOptionsRef.current?.rateLimit;
+      const res: any = await (rl ? rateLimitedFetch(url, init, rl) : fetch(url, init));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -133,6 +143,8 @@ export function useAPIMutation<TResponse = any>(
 }
 
 // ── Helpers ─────────────────────────────────────────────
+
+export type { RateLimitConfig } from './rateLimit';
 
 export function bearer(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
