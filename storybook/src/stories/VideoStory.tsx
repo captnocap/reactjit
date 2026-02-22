@@ -1,27 +1,10 @@
 import React, { useState } from 'react';
 import { Box, Text, TextInput, Video, VideoPlayer } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 const DEMO_VIDEO_SRC = 'docs/experiments/test.mp4';
 const DEMO_VIDEO_FITS: Array<'contain' | 'cover' | 'fill'> = ['contain', 'cover', 'fill'];
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 10,
-      alignItems: 'center',
-    }}>
-      {children}
-    </Box>
-  );
-}
 
 function StatusPill({ label, value }: { label: string; value: string }) {
   const c = useThemeColors();
@@ -159,89 +142,83 @@ export function VideoStory() {
   const [time, setTime] = useState('0:00');
 
   return (
-    <Box style={{ width: '100%', padding: 16, alignItems: 'center' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14 }}>
-        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>1. Video primitive (`Video`)</Text>
-        <SectionCard>
-          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-            The Love2D runtime renders through libmpv. Formats like MP4, WebM, MKV, and OGV
-            are loaded directly without a Theora conversion pass.
-          </Text>
-          <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
-            <Video
-              src={DEMO_VIDEO_SRC}
-              style={{
-                width: '100%',
-                aspectRatio: 16 / 9,
-                borderRadius: 6,
-                objectFit: 'contain',
-                backgroundColor: c.surface,
-              }}
-              loop
-              onReady={() => setStatus('Ready')}
-              onPlay={() => setStatus('Playing')}
-              onPause={() => setStatus('Paused')}
-              onEnded={() => setStatus('Ended')}
-              onError={() => setStatus('Error')}
-              onTimeUpdate={(e) => {
-                const m = Math.floor(e.currentTime / 60);
-                const s = Math.floor(e.currentTime % 60);
-                setTime(`${m}:${s < 10 ? '0' : ''}${s}`);
-              }}
-            />
-            <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
-              <StatusPill label="Status" value={status} />
-              <StatusPill label="Time" value={time} />
-            </Box>
+    <StoryPage>
+      <StorySection index={1} title="Video primitive (`Video`)">
+        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+          The Love2D runtime renders through libmpv. Formats like MP4, WebM, MKV, and OGV
+          are loaded directly without a Theora conversion pass.
+        </Text>
+        <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
+          <Video
+            src={DEMO_VIDEO_SRC}
+            style={{
+              width: '100%',
+              aspectRatio: 16 / 9,
+              borderRadius: 6,
+              objectFit: 'contain',
+              backgroundColor: c.surface,
+            }}
+            loop
+            onReady={() => setStatus('Ready')}
+            onPlay={() => setStatus('Playing')}
+            onPause={() => setStatus('Paused')}
+            onEnded={() => setStatus('Ended')}
+            onError={() => setStatus('Error')}
+            onTimeUpdate={(e) => {
+              const m = Math.floor(e.currentTime / 60);
+              const s = Math.floor(e.currentTime % 60);
+              setTime(`${m}:${s < 10 ? '0' : ''}${s}`);
+            }}
+          />
+          <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+            <StatusPill label="Status" value={status} />
+            <StatusPill label="Time" value={time} />
           </Box>
-        </SectionCard>
+        </Box>
+      </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>2. Player controls (`VideoPlayer`)</Text>
-        <SectionCard>
+      <StorySection index={2} title="Player controls (`VideoPlayer`)">
+        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+          `VideoPlayer` is Lua-owned UI over the same mpv backend: play/pause, seek, volume,
+          loop, and fullscreen.
+        </Text>
+        <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
+          <VideoPlayer src={DEMO_VIDEO_SRC} w="100%" h={292} radius={6} />
           <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-            `VideoPlayer` is Lua-owned UI over the same mpv backend: play/pause, seek, volume,
-            loop, and fullscreen.
+            objectFit preview (contain / cover / fill)
           </Text>
-          <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
-            <VideoPlayer src={DEMO_VIDEO_SRC} w="100%" h={292} radius={6} />
-            <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-              objectFit preview (contain / cover / fill)
-            </Text>
-            <Box
-              style={{
-                width: '100%',
-                flexDirection: 'row',
-                gap: 8,
-                justifyContent: 'center',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              {DEMO_VIDEO_FITS.map((fit) => (
-                <FitPreview key={fit} fit={fit} />
-              ))}
-            </Box>
+          <Box
+            style={{
+              width: '100%',
+              flexDirection: 'row',
+              gap: 8,
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            {DEMO_VIDEO_FITS.map((fit) => (
+              <FitPreview key={fit} fit={fit} />
+            ))}
           </Box>
-        </SectionCard>
+        </Box>
+      </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>3. M3U8 / HLS stream URL</Text>
-        <SectionCard>
-          <StreamLoader />
-        </SectionCard>
+      <StorySection index={3} title="M3U8 / HLS stream URL">
+        <StreamLoader />
+      </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>4. Runtime notes</Text>
-        <SectionCard>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Love2D: mpv renders into a private OpenGL framebuffer, then blits into a Canvas each frame.
-          </Text>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Web: falls back to native HTML5 video behavior.
-          </Text>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Grid targets (terminal/cc/nvim/awesome): video is not rendered.
-          </Text>
-        </SectionCard>
-      </Box>
-    </Box>
+      <StorySection index={4} title="Runtime notes">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Love2D: mpv renders into a private OpenGL framebuffer, then blits into a Canvas each frame.
+        </Text>
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Web: falls back to native HTML5 video behavior.
+        </Text>
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Grid targets (terminal/cc/nvim/awesome): video is not rendered.
+        </Text>
+      </StorySection>
+    </StoryPage>
   );
 }

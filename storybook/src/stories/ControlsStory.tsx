@@ -10,27 +10,7 @@ import {
   StepSequencer,
   TransportBar,
 } from '../../../packages/controls/src';
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
-      <Box style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 8,
-        alignItems: 'center',
-      }}>
-        {children}
-      </Box>
-    </Box>
-  );
-}
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function KnobDemo() {
   const c = useThemeColors();
@@ -40,7 +20,7 @@ function KnobDemo() {
   const [v4, setV4] = useState(440);
 
   return (
-    <Section title="1. Knobs">
+    <StorySection index={1} title="Knobs">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Rotary controls with drag interaction. Supports custom ranges, colors, sizes, and disabled state.
       </Text>
@@ -73,7 +53,7 @@ function KnobDemo() {
           <Knob value={0.5} disabled label="Off" size={36} />
         </Box>
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -85,7 +65,7 @@ function FaderDemo() {
   const [v4, setV4] = useState(0.3);
 
   return (
-    <Section title="2. Faders">
+    <StorySection index={2} title="Faders">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Vertical channel faders for mixer-style layouts. Drag to set level.
       </Text>
@@ -96,7 +76,7 @@ function FaderDemo() {
         <Fader value={v4} onChange={setV4} label="Bass" color="#ec4899" />
         <Fader value={0.5} disabled label="Muted" />
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -117,7 +97,7 @@ function MeterDemo() {
   }, []);
 
   return (
-    <Section title="3. Meters">
+    <StorySection index={3} title="Meters">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Animated level meters with peak hold. Vertical and horizontal orientations.
       </Text>
@@ -130,7 +110,7 @@ function MeterDemo() {
           <Meter value={levels[0]} orientation="horizontal" width={120} />
         </Box>
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -144,7 +124,7 @@ function LEDDemo() {
   }, []);
 
   return (
-    <Section title="4. LED Indicators">
+    <StorySection index={4} title="LED Indicators">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Status indicators with on/off glow. Supports custom colors and sizes.
       </Text>
@@ -155,7 +135,7 @@ function LEDDemo() {
         <LEDIndicator on={false} color="#6366f1" />
         <LEDIndicator on color="#06b6d4" size={12} />
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -165,7 +145,7 @@ function PadDemo() {
   const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444', '#8b5cf6', '#14b8a6'];
 
   return (
-    <Section title="5. Pad Buttons">
+    <StorySection index={5} title="Pad Buttons">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Toggle pads for triggering samples or toggling states. Click to activate.
       </Text>
@@ -187,7 +167,7 @@ function PadDemo() {
           />
         ))}
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -223,7 +203,7 @@ function SequencerDemo() {
   }, [playing]);
 
   return (
-    <Section title="6. Step Sequencer + Transport">
+    <StorySection index={6} title="Step Sequencer + Transport">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         16-step pattern sequencer with 4 tracks. Transport bar controls playback and shows position.
       </Text>
@@ -249,21 +229,19 @@ function SequencerDemo() {
           });
         }}
       />
-    </Section>
+    </StorySection>
   );
 }
 
 export function ControlsStory() {
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
-        <KnobDemo />
-        <FaderDemo />
-        <MeterDemo />
-        <LEDDemo />
-        <PadDemo />
-        <SequencerDemo />
-      </Box>
-    </Box>
+    <StoryPage>
+      <KnobDemo />
+      <FaderDemo />
+      <MeterDemo />
+      <LEDDemo />
+      <PadDemo />
+      <SequencerDemo />
+    </StoryPage>
   );
 }

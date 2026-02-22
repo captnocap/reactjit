@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Text, Pressable, Slider } from '../../../packages/core/src';
+import { Box, Text, Pressable, Slider, useLoveRPC } from '../../../packages/core/src';
 import {
   useAudioInit,
   useRack,
@@ -340,6 +340,7 @@ function StepGrid({
   trackColors: string[];
 }) {
   const seq = useSequencer(sequencerId);
+  const [localPattern, setLocalPattern] = React.useState<Record<number, Record<number, boolean>>>({});
 
   return (
     <Box style={{ gap: 3, alignItems: 'center' }}>
@@ -513,6 +514,7 @@ function RackInfo() {
 export function AudioRackStory() {
   const ready = useAudioInit();
   const rack = useRack();
+  const setTrackTargetRpc = useLoveRPC('audio:setTrackTarget');
   const patchBuilt = useRef(false);
 
   // Build the patch once
@@ -547,6 +549,14 @@ export function AudioRackStory() {
 
     // Wire clock -> sequencer
     rack.connect('clock1', 'gate_out', 'seq1', 'clock_in');
+
+    // Set sequencer track targets
+    // Tracks 0-2 (KICK/SNARE/HAT) trigger the envelope which gates the synth chain
+    // Track 3 (PERC) triggers the sampler
+    setTrackTargetRpc({ moduleId: 'seq1', track: 0, target: 'env1' });
+    setTrackTargetRpc({ moduleId: 'seq1', track: 1, target: 'env1' });
+    setTrackTargetRpc({ moduleId: 'seq1', track: 2, target: 'env1' });
+    setTrackTargetRpc({ moduleId: 'seq1', track: 3, target: 'sampler1' });
   }, [ready]);
 
   if (!ready) {

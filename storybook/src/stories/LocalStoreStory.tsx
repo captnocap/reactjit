@@ -1,27 +1,7 @@
 import React, { useCallback } from 'react';
 import { Box, Text, Pressable, TextInput, useLocalStore, useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
-      <Box style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 8,
-        alignItems: 'center',
-      }}>
-        {children}
-      </Box>
-    </Box>
-  );
-}
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function CounterDemo() {
   const c = useThemeColors();
@@ -151,38 +131,36 @@ export function LocalStoreStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
+    <StoryPage>
 
-        <Section title="1. Persistent Counter">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            SQLite-backed persistence via useLocalStore. Values survive app restarts.
-          </Text>
-          <CounterDemo />
-        </Section>
+      <StorySection index={1} title="Persistent Counter">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          SQLite-backed persistence via useLocalStore. Values survive app restarts.
+        </Text>
+        <CounterDemo />
+      </StorySection>
 
-        <Section title="2. Text Memory">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Free-form text stored persistently. Type anything and close the app -- it stays.
-          </Text>
-          <TextMemoryDemo />
-        </Section>
+      <StorySection index={2} title="Text Memory">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Free-form text stored persistently. Type anything and close the app -- it stays.
+        </Text>
+        <TextMemoryDemo />
+      </StorySection>
 
-        <Section title="3. Persistent Toggle">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Boolean state that remembers its value across sessions.
-          </Text>
-          <ToggleDemo />
-        </Section>
+      <StorySection index={3} title="Persistent Toggle">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Boolean state that remembers its value across sessions.
+        </Text>
+        <ToggleDemo />
+      </StorySection>
 
-        <Section title="4. Manage Store">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Clear persisted data for this demo namespace.
-          </Text>
-          <ClearStoreButton />
-        </Section>
+      <StorySection index={4} title="Manage Store">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Clear persisted data for this demo namespace.
+        </Text>
+        <ClearStoreButton />
+      </StorySection>
 
-      </Box>
-    </Box>
+    </StoryPage>
   );
 }
