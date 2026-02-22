@@ -85,7 +85,7 @@ function ParamSlider({
   color: string; onChange: (v: number) => void; suffix?: string;
 }) {
   return (
-    <Box style={{ gap: 2 }}>
+    <Box>
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
         <Label>{label}</Label>
         <Value color={color}>{`${Math.round(value)}${suffix || ''}`}</Value>
@@ -115,8 +115,8 @@ function ModulePanel({ title, color, children }: {
       borderTopWidth: 3,
       borderTopColor: color,
       borderRadius: 6,
-      padding: 12,
-      gap: 10,
+      padding: 8,
+      gap: 6,
       flexGrow: 1,
       flexBasis: 0,
     }}>
@@ -136,12 +136,12 @@ function Transport({ clockId }: { clockId: string }) {
     <Box style={{
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: 10,
       backgroundColor: C.panel,
       borderWidth: 1,
       borderColor: C.border,
       borderRadius: 6,
-      padding: 10,
+      padding: 8,
       width: '100%',
     }}>
       {/* Play/Stop */}
@@ -342,9 +342,9 @@ function StepGrid({
   const seq = useSequencer(sequencerId);
 
   return (
-    <Box style={{ gap: 4 }}>
+    <Box style={{ gap: 3, alignItems: 'center' }}>
       {Array.from({ length: tracks }, (_, track) => (
-        <Box key={track} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Box key={track} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
           <Box style={{ width: 40 }}>
             <Text style={{
               color: trackColors[track] || C.dim,
@@ -366,8 +366,8 @@ function StepGrid({
                   seq.setStep(track, step, !isActive, 36 + track, isActive ? 0 : 100);
                 }}
                 style={({ hovered }) => ({
-                  width: 22,
-                  height: 22,
+                  width: 18,
+                  height: 18,
                   borderRadius: 3,
                   backgroundColor: isActive
                     ? (isCurrent ? C.stepCur : trackColors[track] || C.stepOn)
@@ -402,9 +402,9 @@ function SamplerSlots({ moduleId }: { moduleId: string }) {
   const slotColors = [C.accent, C.green, C.orange, C.pink, C.cyan, C.red];
 
   return (
-    <Box style={{ gap: 6 }}>
+    <Box style={{ gap: 4 }}>
       <Label>SAMPLE SLOTS</Label>
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+      <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
         {Array.from({ length: 8 }, (_, i) => {
           const slot = sampler.slots[i + 1];
           const hasVoice = sampler.voices.some((v) => v.slot === i + 1);
@@ -414,8 +414,8 @@ function SamplerSlots({ moduleId }: { moduleId: string }) {
               key={i}
               onPress={() => sampler.trigger(i + 1)}
               style={({ pressed, hovered }) => ({
-                width: 50,
-                height: 40,
+                width: 46,
+                height: 34,
                 backgroundColor: pressed
                   ? (slotColors[i % slotColors.length] + '60')
                   : hasVoice
@@ -568,18 +568,9 @@ export function AudioRackStory() {
       width: '100%',
       height: '100%',
       backgroundColor: C.bg,
-      padding: 16,
-      gap: 12,
+      padding: 10,
+      gap: 8,
     }}>
-      {/* Header */}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        <Box style={{ gap: 2 }}>
-          <Text style={{ color: C.text, fontSize: 18, fontWeight: '700' }}>Audio Rack</Text>
-          <Text style={{ color: C.dim, fontSize: 10 }}>Modular synth + sampler + sequencer</Text>
-        </Box>
-        <RackInfo />
-      </Box>
-
       {/* Transport */}
       <Transport clockId="clock1" />
 
@@ -589,8 +580,8 @@ export function AudioRackStory() {
         borderWidth: 1,
         borderColor: C.border,
         borderRadius: 6,
-        padding: 12,
-        gap: 8,
+        padding: 8,
+        gap: 6,
       }}>
         <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <Text style={{ color: C.orange, fontSize: 11, fontWeight: '700' }}>STEP SEQUENCER</Text>
@@ -621,8 +612,8 @@ export function AudioRackStory() {
           borderTopWidth: 3,
           borderTopColor: C.green,
           borderRadius: 6,
-          padding: 12,
-          gap: 10,
+          padding: 8,
+          gap: 6,
           flexGrow: 1,
           flexBasis: 0,
         }}>
@@ -637,8 +628,8 @@ export function AudioRackStory() {
           borderTopWidth: 3,
           borderTopColor: C.orange,
           borderRadius: 6,
-          padding: 12,
-          gap: 10,
+          padding: 8,
+          gap: 6,
           flexGrow: 1,
           flexBasis: 0,
         }}>
