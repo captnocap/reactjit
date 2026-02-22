@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text, TextEffect, type TextEffectType } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StorySection } from './_shared/StoryScaffold';
 
 type VariantDef = {
   id: TextEffectType;
@@ -60,72 +61,67 @@ export function TextEffectsStory() {
   const surfaceVariants = VARIANTS.filter((v) => SURFACE_EFFECT_IDS.includes(v.id));
 
   return (
-    <Box style={{ width: '100%', padding: 16, alignItems: 'center' }}>
-      <Box style={{ width: '100%', maxWidth: 460, gap: 8 }}>
-        <Text style={{ color: c.text, fontSize: 12 }}>4. Text effects</Text>
-        <Box style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 14, gap: 12, alignItems: 'center' }}>
-          <Box style={{ width: '100%', gap: 6 }}>
-            <Text style={{ color: c.text, fontSize: 11 }}>Inline-capable (no frame)</Text>
-            {inlineVariants.map((v) => (
-              <Box key={v.id} style={{ width: '100%', paddingVertical: 2, gap: 3 }}>
-                <Text style={{ color: c.textDim, fontSize: 11 }}>
-                  {v.label}
-                </Text>
-                <TextEffect
-                  type={v.id}
-                  text={v.sample}
-                  fontSize={v.previewFontSize ?? 24}
-                  letterSpacing={v.letterSpacing ?? 0.95}
-                  speed={v.speed ?? 1}
-                  amplitude={v.amplitude ?? 0.72}
-                  typingSpeed={v.typingSpeed ?? 14}
-                  style={{ width: '100%', height: 84 }}
-                />
-                <Text style={{ color: c.textDim, fontSize: 10 }}>
-                  {v.id}
-                </Text>
-              </Box>
-            ))}
+    <StorySection index={4} title="Text effects">
+      <Box style={{ width: '100%', gap: 6 }}>
+        <Text style={{ color: c.text, fontSize: 11 }}>Inline-capable (no frame)</Text>
+        {inlineVariants.map((v) => (
+          <Box key={v.id} style={{ width: '100%', paddingVertical: 2, gap: 3 }}>
+            <Text style={{ color: c.textDim, fontSize: 11 }}>
+              {v.label}
+            </Text>
+            <TextEffect
+              type={v.id}
+              text={v.sample}
+              fontSize={v.previewFontSize ?? 24}
+              letterSpacing={v.letterSpacing ?? 0.95}
+              speed={v.speed ?? 1}
+              amplitude={v.amplitude ?? 0.72}
+              typingSpeed={v.typingSpeed ?? 14}
+              style={{ width: '100%', height: 84 }}
+            />
+            <Text style={{ color: c.textDim, fontSize: 10 }}>
+              {v.id}
+            </Text>
           </Box>
-
-          <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
-
-          <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-            <Text style={{ color: c.text, fontSize: 11, width: '100%' }}>Surface / mini-scene (framed)</Text>
-            {surfaceVariants.map((v) => (
-            <Box
-              key={v.id}
-              style={{
-                width: 280,
-                backgroundColor: c.surface,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: c.border,
-                padding: 8,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: c.textDim, fontSize: 11 }}>
-                {v.label}
-              </Text>
-              <TextEffect
-                type={v.id}
-                text={v.sample}
-                fontSize={v.previewFontSize ?? 24}
-                letterSpacing={v.letterSpacing ?? 0.95}
-                speed={v.speed ?? 1}
-                amplitude={v.amplitude ?? 0.72}
-                typingSpeed={v.typingSpeed ?? 14}
-                style={{ width: '100%', height: 96 }}
-              />
-              <Text style={{ color: c.textDim, fontSize: 10 }}>
-                {v.id}
-              </Text>
-            </Box>
-          ))}
-          </Box>
-        </Box>
+        ))}
       </Box>
-    </Box>
+
+      <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
+
+      <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+        <Text style={{ color: c.text, fontSize: 11, width: '100%' }}>Surface / mini-scene (framed)</Text>
+        {surfaceVariants.map((v) => (
+        <Box
+          key={v.id}
+          style={{
+            width: 280,
+            backgroundColor: c.surface,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: c.border,
+            padding: 8,
+            gap: 4,
+          }}
+        >
+          <Text style={{ color: c.textDim, fontSize: 11 }}>
+            {v.label}
+          </Text>
+          <TextEffect
+            type={v.id}
+            text={v.sample}
+            fontSize={v.previewFontSize ?? 24}
+            letterSpacing={v.letterSpacing ?? 0.95}
+            speed={v.speed ?? 1}
+            amplitude={v.amplitude ?? 0.72}
+            typingSpeed={v.typingSpeed ?? 14}
+            style={{ width: '100%', height: 96 }}
+          />
+          <Text style={{ color: c.textDim, fontSize: 10 }}>
+            {v.id}
+          </Text>
+        </Box>
+      ))}
+      </Box>
+    </StorySection>
   );
 }

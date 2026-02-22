@@ -13,27 +13,7 @@ import { useCoinPrice } from '../../../packages/apis/src';
 import { useRSSFeed } from '../../../packages/rss/src';
 import { hmacSHA256 } from '../../../packages/webhooks/src';
 import { useThemeColors } from '../../../packages/theme/src';
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
-      <Box style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 8,
-        alignItems: 'center',
-      }}>
-        {children}
-      </Box>
-    </Box>
-  );
-}
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 const FEED_OPTIONS = {
   'Hacker News': 'https://hnrss.org/frontpage',
@@ -51,7 +31,7 @@ function FetchSection() {
   }, []);
 
   return (
-    <Section title="1. Fetch">
+    <StorySection index={1} title="Fetch">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         HTTP requests with useFetch hook. Returns JSON data with loading and error states.
       </Text>
@@ -79,7 +59,7 @@ function FetchSection() {
           </Text>
         )}
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -111,7 +91,7 @@ function WebSocketSection() {
   }, [client.send]);
 
   return (
-    <Section title="2. WebSocket">
+    <StorySection index={2} title="WebSocket">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Local peer server and client loop. Start a server, connect a client, and exchange messages.
       </Text>
@@ -147,7 +127,7 @@ function WebSocketSection() {
           ))
         )}
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -159,7 +139,7 @@ function RESTAPISection() {
   const change = (data as any)?.bitcoin?.usd_24h_change;
 
   return (
-    <Section title="3. REST APIs">
+    <StorySection index={3} title="REST APIs">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         One-liner API hooks. useCoinPrice fetches live Bitcoin data from CoinGecko.
       </Text>
@@ -183,7 +163,7 @@ function RESTAPISection() {
           <Text style={{ color: c.textSecondary, fontSize: 10 }}>Refetch</Text>
         </Pressable>
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -193,7 +173,7 @@ function RSSSection() {
   const { items, loading, error } = useRSSFeed(FEED_OPTIONS[feedName], { limit: 8 });
 
   return (
-    <Section title="4. RSS">
+    <StorySection index={4} title="RSS">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Feed subscription and aggregation. Select a source to load its latest entries.
       </Text>
@@ -229,7 +209,7 @@ function RSSSection() {
           </Box>
         ))}
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -243,7 +223,7 @@ function WebhooksSection() {
   const signature = useMemo(() => hmacSHA256(secret, payload), [secret, payload]);
 
   return (
-    <Section title="5. Webhooks">
+    <StorySection index={5} title="Webhooks">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         HMAC signing and payload integrity verification. Select a payload variant to compute its signature.
       </Text>
@@ -264,7 +244,7 @@ function WebhooksSection() {
         <Text style={{ color: c.textDim, fontSize: 10 }}>x-hub-signature-256</Text>
         <Text style={{ color: c.warning, fontSize: 10 }}>{`sha256=${signature}`}</Text>
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
@@ -300,7 +280,7 @@ function TorSection() {
   });
 
   return (
-    <Section title="6. Tor">
+    <StorySection index={6} title="Tor">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Hidden-service networking bootstrapped by the runtime and exposed over RPC/events.
       </Text>
@@ -318,21 +298,19 @@ function TorSection() {
           <Text style={{ color: c.textSecondary, fontSize: 10 }}>Refresh</Text>
         </Pressable>
       </Box>
-    </Section>
+    </StorySection>
   );
 }
 
 export function NetworkingStory() {
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
-        <FetchSection />
-        <WebSocketSection />
-        <RESTAPISection />
-        <RSSSection />
-        <WebhooksSection />
-        <TorSection />
-      </Box>
-    </Box>
+    <StoryPage>
+      <FetchSection />
+      <WebSocketSection />
+      <RESTAPISection />
+      <RSSSection />
+      <WebhooksSection />
+      <TorSection />
+    </StoryPage>
   );
 }

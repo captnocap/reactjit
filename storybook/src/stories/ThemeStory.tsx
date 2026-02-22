@@ -1,27 +1,7 @@
 import React from 'react';
 import { Box, Text, Pressable } from '../../../packages/core/src';
 import { ThemeSwitcher, useTheme, useThemeColors, themeNames, themes } from '../../../packages/theme/src';
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
-      <Box style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 8,
-        alignItems: 'center',
-      }}>
-        {children}
-      </Box>
-    </Box>
-  );
-}
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function ColorSwatch({ color, label }: { color: string; label: string }) {
   const c = useThemeColors();
@@ -139,61 +119,59 @@ export function ThemeStory() {
   }
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
+    <StoryPage>
 
-        <Section title="1. Active Theme">
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-            <Box style={{ gap: 2, flexGrow: 1 }}>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>Active theme</Text>
-              <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'bold' }}>{themeId}</Text>
-            </Box>
-            <ThemeSwitcher />
+      <StorySection index={1} title="Active Theme">
+        <Box style={{ width: '100%', flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <Box style={{ gap: 2, flexGrow: 1 }}>
+            <Text style={{ color: c.textDim, fontSize: 10 }}>Active theme</Text>
+            <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'bold' }}>{themeId}</Text>
           </Box>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            {`${themeNames.length} themes across ${families.size} families. Click a card below to switch.`}
-          </Text>
-        </Section>
+          <ThemeSwitcher />
+        </Box>
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          {`${themeNames.length} themes across ${families.size} families. Click a card below to switch.`}
+        </Text>
+      </StorySection>
 
-        <Section title="2. Semantic Tokens">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            All color tokens available via useThemeColors().
-          </Text>
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            <ColorSwatch color={c.bg} label="bg" />
-            <ColorSwatch color={c.bgAlt} label="bgAlt" />
-            <ColorSwatch color={c.bgElevated} label="bgElevated" />
-            <ColorSwatch color={c.text} label="text" />
-            <ColorSwatch color={c.textSecondary} label="textSecondary" />
-            <ColorSwatch color={c.textDim} label="textDim" />
-            <ColorSwatch color={c.primary} label="primary" />
-            <ColorSwatch color={c.accent} label="accent" />
-            <ColorSwatch color={c.surface} label="surface" />
-            <ColorSwatch color={c.border} label="border" />
-            <ColorSwatch color={c.error} label="error" />
-            <ColorSwatch color={c.warning} label="warning" />
-            <ColorSwatch color={c.success} label="success" />
-            <ColorSwatch color={c.info} label="info" />
-          </Box>
-        </Section>
+      <StorySection index={2} title="Semantic Tokens">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          All color tokens available via useThemeColors().
+        </Text>
+        <Box style={{ width: '100%', flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          <ColorSwatch color={c.bg} label="bg" />
+          <ColorSwatch color={c.bgAlt} label="bgAlt" />
+          <ColorSwatch color={c.bgElevated} label="bgElevated" />
+          <ColorSwatch color={c.text} label="text" />
+          <ColorSwatch color={c.textSecondary} label="textSecondary" />
+          <ColorSwatch color={c.textDim} label="textDim" />
+          <ColorSwatch color={c.primary} label="primary" />
+          <ColorSwatch color={c.accent} label="accent" />
+          <ColorSwatch color={c.surface} label="surface" />
+          <ColorSwatch color={c.border} label="border" />
+          <ColorSwatch color={c.error} label="error" />
+          <ColorSwatch color={c.warning} label="warning" />
+          <ColorSwatch color={c.success} label="success" />
+          <ColorSwatch color={c.info} label="info" />
+        </Box>
+      </StorySection>
 
-        <Section title="3. Theme Gallery">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            Click any card to switch themes.
-          </Text>
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {themeNames.map(id => (
-              <ThemeCard
-                key={id}
-                id={id}
-                isActive={id === themeId}
-                onPress={() => setTheme(id)}
-              />
-            ))}
-          </Box>
-        </Section>
+      <StorySection index={3} title="Theme Gallery">
+        <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          Click any card to switch themes.
+        </Text>
+        <Box style={{ width: '100%', flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {themeNames.map(id => (
+            <ThemeCard
+              key={id}
+              id={id}
+              isActive={id === themeId}
+              onPress={() => setTheme(id)}
+            />
+          ))}
+        </Box>
+      </StorySection>
 
-      </Box>
-    </Box>
+    </StoryPage>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from '../../../packages/core/src';
 import type { LoveEvent } from '../../../packages/core/src/types';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 interface SpellError {
   word: string;
@@ -58,33 +59,6 @@ const DIFFICULTY_OPTIONS = [
   { label: 'Hard', value: 'hard' },
   { label: 'Nightmare', value: 'nightmare' },
 ];
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{title}</Text>
-      <Box style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 10,
-        alignItems: 'center',
-      }}>
-        {children}
-      </Box>
-    </Box>
-  );
-}
 
 export function InputStory() {
   const c = useThemeColors();
@@ -195,9 +169,8 @@ export function InputStory() {
   };
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
-        <Section title="1. Pressable">
+    <StoryPage>
+        <StorySection index={1} title="Pressable">
           <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
             <Pressable
               onPress={() => {
@@ -248,9 +221,9 @@ export function InputStory() {
             <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Press count: ${pressCount}`}</Text>
             <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Last action: ${lastPressAction}`}</Text>
           </Box>
-        </Section>
+        </StorySection>
 
-        <Section title="2. Slider + Switch">
+        <StorySection index={2} title="Slider + Switch">
           <Box style={{ width: '100%', maxWidth: 420, gap: 4, alignItems: 'center' }}>
             <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Slider (0-1)</Text>
             <Slider
@@ -290,9 +263,9 @@ export function InputStory() {
               <Text style={{ color: c.text, fontSize: 12 }}>{`Custom: ${switchB ? 'ON' : 'OFF'}`}</Text>
             </Box>
           </Box>
-        </Section>
+        </StorySection>
 
-        <Section title="3. ScrollView">
+        <StorySection index={3} title="ScrollView">
           <Box style={{ gap: 4 }}>
             <Text style={{ color: c.textDim, fontSize: 10 }}>Vertical (height: 120)</Text>
             <ScrollView style={{ height: 120, backgroundColor: c.surface, borderRadius: 6, padding: 8 }}>
@@ -349,9 +322,9 @@ export function InputStory() {
               </ScrollView>
             </Box>
           </Box>
-        </Section>
+        </StorySection>
 
-        <Section title="4. TextEditor">
+        <StorySection index={4} title="TextEditor">
           <Text style={{ color: c.textDim, fontSize: 10 }}>
             {`Click to focus. Esc blurs. Ctrl+Enter submits.`}
           </Text>
@@ -379,9 +352,9 @@ export function InputStory() {
               {`Last submit: ${editorSubmitValue.slice(0, 60)}...`}
             </Text>
           )}
-        </Section>
+        </StorySection>
 
-        <Section title="5. Spell check">
+        <StorySection index={5} title="Spell check">
           {!spellAvailable ? (
             <Text style={{ color: c.textSecondary, fontSize: 12 }}>
               Spell check not available (dictionary service unavailable).
@@ -436,9 +409,9 @@ export function InputStory() {
               )}
             </>
           )}
-        </Section>
+        </StorySection>
 
-        <Section title="6. Keyboard hooks + clipboard">
+        <StorySection index={6} title="Keyboard hooks + clipboard">
           <Text style={{ color: c.textDim, fontSize: 10 }}>
             Press Ctrl+Z, Ctrl+Shift+S, or Escape anywhere.
           </Text>
@@ -478,9 +451,9 @@ export function InputStory() {
           <Text style={{ color: c.textSecondary, fontSize: 12 }}>
             {pastedText ? `Pasted: "${pastedText}"` : 'Pasted: (nothing yet)'}
           </Text>
-        </Section>
+        </StorySection>
 
-        <Section title="7. Raw key event modifiers">
+        <StorySection index={7} title="Raw key event modifiers">
           <Text style={{ color: c.textDim, fontSize: 10 }}>
             Press any key while focusing the box below.
           </Text>
@@ -510,9 +483,9 @@ export function InputStory() {
               <Text style={{ color: c.textDim, fontSize: 12 }}>Waiting for keypress...</Text>
             )}
           </Box>
-        </Section>
+        </StorySection>
 
-        <Section title="8. Modal">
+        <StorySection index={8} title="Modal">
           <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
             <Pressable
               onPress={() => setModalOpen(true)}
@@ -576,9 +549,9 @@ export function InputStory() {
               </Box>
             </Box>
           </Modal>
-        </Section>
+        </StorySection>
 
-        <Section title="9. Checkbox">
+        <StorySection index={9} title="Checkbox">
           <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
             <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
               <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Basic</Text>
@@ -612,9 +585,9 @@ export function InputStory() {
               {`Values: ${checkboxA ? 'A:on' : 'A:off'} | ${checkboxB ? 'B:on' : 'B:off'} | ${checkboxC ? 'C:on' : 'C:off'}`}
             </Text>
           </Box>
-        </Section>
+        </StorySection>
 
-        <Section title="10. Radio">
+        <StorySection index={10} title="Radio">
           <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
             <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
               <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Favorite fruit</Text>
@@ -639,9 +612,9 @@ export function InputStory() {
               {`Selected: fruit=${radioFruit}, size=${radioSize}`}
             </Text>
           </Box>
-        </Section>
+        </StorySection>
 
-        <Section title="11. Select">
+        <StorySection index={11} title="Select">
           <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
             <Box style={{ width: '100%', gap: 4, alignItems: 'center' }}>
               <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>With placeholder</Text>
@@ -676,8 +649,7 @@ export function InputStory() {
               {`Selected: fruit=${selectFruit ?? 'none'}, difficulty=${selectDifficulty}`}
             </Text>
           </Box>
-        </Section>
-      </Box>
-    </Box>
+        </StorySection>
+    </StoryPage>
   );
 }

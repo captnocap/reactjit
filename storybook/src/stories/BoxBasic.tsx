@@ -1,29 +1,15 @@
 import React from 'react';
 import { Box, Text, ChartTooltip } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 export function BoxBasicStory() {
   const c = useThemeColors();
   const [hoveredLayer, setHoveredLayer] = React.useState<'outer' | 'middle' | 'inner' | null>(null);
 
   return (
-    <Box style={{
-      width: '100%',
-      height: '100%',
-      padding: 16,
-      justifyContent: 'center',
-      alignItems: 'center',
-    }}>
-      <Box style={{ width: 420, gap: 14 }}>
-        <Text style={{ color: c.text, fontSize: 12 }}>1. Unstyled boxes (hover to inspect nesting)</Text>
-        <Box style={{
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          padding: 14,
-          borderWidth: 1,
-          borderColor: c.border,
-          alignItems: 'center',
-        }}>
+    <StoryPage>
+        <StorySection index={1} title="Unstyled boxes (hover to inspect nesting)">
           <Box
             onPointerEnter={() => setHoveredLayer('outer')}
             onPointerLeave={() => setHoveredLayer(prev => (prev === 'outer' ? null : prev))}
@@ -75,17 +61,9 @@ export function BoxBasicStory() {
               </Box>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>2. Styled + nested boxes (centered)</Text>
-        <Box style={{
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          padding: 14,
-          borderWidth: 1,
-          borderColor: c.border,
-          alignItems: 'center',
-        }}>
+        <StorySection index={2} title="Styled + nested boxes (centered)">
           <Box style={{
             width: 300,
             height: 170,
@@ -114,8 +92,7 @@ export function BoxBasicStory() {
               </Box>
             </Box>
           </Box>
-        </Box>
-      </Box>
-    </Box>
+        </StorySection>
+    </StoryPage>
   );
 }

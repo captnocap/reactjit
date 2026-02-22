@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 const ROW_COLORS = ['#ef4444', '#f97316', '#eab308'];
 const WRAP_COLORS = [
@@ -45,18 +46,8 @@ export function FlexRowStory() {
   const [toggled, setToggled] = useState(false);
 
   return (
-    <Box style={{ width: '100%', padding: 16, alignItems: 'center' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14 }}>
-        <Text style={{ color: c.text, fontSize: 12 }}>1. Row layout (`justifyContent`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-        }}>
+    <StoryPage>
+        <StorySection index={1} title="Row layout (`justifyContent`)">
           <Text style={{ color: c.textDim, fontSize: 10 }}>
             Row boxes need explicit width for `justifyContent` to distribute children.
           </Text>
@@ -78,18 +69,9 @@ export function FlexRowStory() {
               </Box>
             </Box>
           ))}
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>2. Column layout (`alignItems`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-        }}>
+        <StorySection index={2} title="Column layout (`alignItems`)">
           <Box style={{ width: '100%', flexDirection: 'row', gap: 10 }}>
             {(['start', 'center', 'end'] as const).map((align, i) => (
               <Box
@@ -111,18 +93,9 @@ export function FlexRowStory() {
               </Box>
             ))}
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>3. Wrapping (`flexWrap`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-        }}>
+        <StorySection index={3} title="Wrapping (`flexWrap`)">
           <Box style={{ gap: 4 }}>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Fixed-size items + gap</Text>
             <Box style={{
@@ -167,18 +140,9 @@ export function FlexRowStory() {
               ))}
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>4. Spacing (`padding` + `margin`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-        }}>
+        <StorySection index={4} title="Spacing (`padding` + `margin`)">
           <Box style={{ gap: 4 }}>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Uniform `padding: 20`</Text>
             <Box style={{
@@ -233,18 +197,9 @@ export function FlexRowStory() {
               <Box style={{ width: 36, height: 36, backgroundColor: '#eab308', borderRadius: 5, marginLeft: 8 }} />
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>5. Flex shrink (`flexShrink`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-        }}>
+        <StorySection index={5} title="Flex shrink (`flexShrink`)">
           <Box style={{ gap: 4 }}>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Default shrink (items wider than container)</Text>
             <Box style={{ width: 250, flexDirection: 'row', gap: 4, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
@@ -289,18 +244,9 @@ export function FlexRowStory() {
               </Box>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>6. Aspect ratio (`aspectRatio`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-        }}>
+        <StorySection index={6} title="Aspect ratio (`aspectRatio`)">
           <Box style={{ gap: 4 }}>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Square from width: `width: 80, aspectRatio: 1`</Text>
             <Box style={{ width: 80, aspectRatio: 1, backgroundColor: '#ef4444', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
@@ -330,19 +276,9 @@ export function FlexRowStory() {
               <Box style={{ height: 34, aspectRatio: 3, backgroundColor: '#ec4899', borderRadius: 5 }} />
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>8. Spring Layout Animation</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 12,
-          alignItems: 'center',
-        }}>
+        <StorySection index={8} title="Spring Layout Animation">
           <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
             <Box style={{ width: 320, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 10, alignItems: 'center' }}>
               <Text style={{ color: c.textSecondary, fontSize: 10 }}>Width spring</Text>
@@ -399,8 +335,7 @@ export function FlexRowStory() {
               </Box>
             </Box>
           </Box>
-        </Box>
-      </Box>
-    </Box>
+        </StorySection>
+    </StoryPage>
   );
 }

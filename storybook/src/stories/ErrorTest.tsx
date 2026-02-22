@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function ErrorButton({ label, color, onPress }: { label: string; color: string; onPress: () => void }) {
   const c = useThemeColors();
@@ -34,59 +35,58 @@ export function ErrorTestStory() {
   const [triggerRenderError, setTriggerRenderError] = useState(false);
 
   return (
-    <Box style={{ width: '100%', gap: 16, padding: 16 }}>
-      <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>
-        Error Reporting Test
-      </Text>
-      <Text style={{ color: c.textSecondary, fontSize: 13 }}>
-        Click buttons below to trigger different error types. A red overlay should appear at the bottom of the screen with the error details.
-      </Text>
+    <StoryPage>
+      <StorySection index={1} title="Error Reporting Test">
+        <Text style={{ color: c.textSecondary, fontSize: 13 }}>
+          Click buttons below to trigger different error types. A red overlay should appear at the bottom of the screen with the error details.
+        </Text>
 
-      <Box style={{ gap: 10 }}>
-        <ErrorButton
-          label="Throw in onClick handler"
-          color="#ef4444"
-          onPress={() => {
-            throw new Error('Handler error: deliberate throw in onClick');
-          }}
-        />
+        <Box style={{ gap: 10 }}>
+          <ErrorButton
+            label="Throw in onClick handler"
+            color="#ef4444"
+            onPress={() => {
+              throw new Error('Handler error: deliberate throw in onClick');
+            }}
+          />
 
-        <ErrorButton
-          label="TypeError (call non-function)"
-          color="#f59e0b"
-          onPress={() => {
-            const notAFunction = null as any;
-            notAFunction();
-          }}
-        />
+          <ErrorButton
+            label="TypeError (call non-function)"
+            color="#f59e0b"
+            onPress={() => {
+              const notAFunction = null as any;
+              notAFunction();
+            }}
+          />
 
-        <ErrorButton
-          label="ReferenceError (undefined var)"
-          color="#f97316"
-          onPress={() => {
-            // @ts-ignore
-            const x = thisVariableDoesNotExist;
-          }}
-        />
+          <ErrorButton
+            label="ReferenceError (undefined var)"
+            color="#f97316"
+            onPress={() => {
+              // @ts-ignore
+              const x = thisVariableDoesNotExist;
+            }}
+          />
 
-        <ErrorButton
-          label="console.error with Error object"
-          color="#8b5cf6"
-          onPress={() => {
-            console.error(new Error('Console.error test: error with stack trace'));
-          }}
-        />
+          <ErrorButton
+            label="console.error with Error object"
+            color="#8b5cf6"
+            onPress={() => {
+              console.error(new Error('Console.error test: error with stack trace'));
+            }}
+          />
 
-        <ErrorButton
-          label="Trigger render error (React)"
-          color="#ec4899"
-          onPress={() => {
-            setTriggerRenderError(true);
-          }}
-        />
-      </Box>
+          <ErrorButton
+            label="Trigger render error (React)"
+            color="#ec4899"
+            onPress={() => {
+              setTriggerRenderError(true);
+            }}
+          />
+        </Box>
 
-      {triggerRenderError && <BombComponent />}
-    </Box>
+        {triggerRenderError && <BombComponent />}
+      </StorySection>
+    </StoryPage>
   );
 }

@@ -11,38 +11,7 @@ import {
   type ImageGalleryItem,
 } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-
-function SectionCard({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  const c = useThemeColors();
-
-  return (
-    <Box
-      style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 10,
-      }}
-    >
-      <Box style={{ gap: 2, alignItems: 'center' }}>
-        <Text style={{ fontSize: 13, color: c.text, fontWeight: '700', textAlign: 'center' }}>{title}</Text>
-        <Text style={{ fontSize: 10, color: c.textSecondary, textAlign: 'center' }}>{subtitle}</Text>
-      </Box>
-      {children}
-    </Box>
-  );
-}
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function StatusPill({ label }: { label: string }) {
   const c = useThemeColors();
@@ -423,83 +392,52 @@ export function ImageGalleryStory() {
   const wrapImages = images.slice(0, 8);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
-      <ScrollView style={{ width: '100%', height: '100%' }}>
-        <Box
-          style={{
-            width: '100%',
-            minHeight: '100%',
-            alignItems: 'center',
-            paddingLeft: 16,
-            paddingRight: 16,
-            paddingTop: 12,
-            paddingBottom: 16,
+    <StoryPage>
+      <Box style={{ gap: 2, alignItems: 'center' }}>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700', textAlign: 'center' }}>Gallery Layout Setups</Text>
+        <Text style={{ fontSize: 11, color: c.textDim, textAlign: 'center' }}>
+        Same image collection shown in different row/preview systems.
+        </Text>
+      </Box>
+
+      <StorySection index={1} title="Wrap Tiles">
+        <ImageGallery
+          images={wrapImages}
+          layout="wrap"
+          gap={10}
+          thumbnailWidth={wrapThumb}
+          thumbnailHeight={wrapThumb}
+          showTitles={false}
+          showFilmstrip={false}
+          style={{ justifyContent: 'center' }}
+          onImagePress={(index) => setWrapActiveIndex(index)}
+          onViewerOpenChange={(isOpen, index) => {
+            setWrapViewerOpen(isOpen);
+            setWrapActiveIndex(index);
           }}
-        >
-          <Box style={{ width: '100%', maxWidth: 1240, gap: 14 }}>
-            <Box style={{ gap: 2, alignItems: 'center' }}>
-              <Text style={{ fontSize: 18, color: c.text, fontWeight: '700', textAlign: 'center' }}>Gallery Layout Setups</Text>
-              <Text style={{ fontSize: 11, color: c.textDim, textAlign: 'center' }}>
-              Same image collection shown in different row/preview systems.
-              </Text>
-            </Box>
-
-            <SectionCard
-              title="1) Wrap Tiles"
-              subtitle="8 fixed-size images that naturally wrap"
-            >
-              <ImageGallery
-                images={wrapImages}
-                layout="wrap"
-                gap={10}
-                thumbnailWidth={wrapThumb}
-                thumbnailHeight={wrapThumb}
-                showTitles={false}
-                showFilmstrip={false}
-                style={{ justifyContent: 'center' }}
-                onImagePress={(index) => setWrapActiveIndex(index)}
-                onViewerOpenChange={(isOpen, index) => {
-                  setWrapViewerOpen(isOpen);
-                  setWrapActiveIndex(index);
-                }}
-              />
-              <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-                <StatusPill label={`Active: ${wrapImages[wrapActiveIndex]?.title || 'None'}`} />
-                <StatusPill label={`Viewer: ${wrapViewerOpen ? 'Open' : 'Closed'}`} />
-                <StatusPill label={`Tile: ${wrapThumb} x ${wrapThumb}`} />
-              </Box>
-            </SectionCard>
-
-            <SectionCard
-              title="2) Nested Rows + Hover Preview"
-              subtitle="Hover a tile in the nested rows to drive the main preview image"
-            >
-              <HoverPreviewRows images={images.slice(0, 18)} />
-            </SectionCard>
-
-            <SectionCard
-              title="3) Side-by-Side Hover Preview"
-              subtitle="Horizontal split: preview on the left, gallery panel on the right"
-            >
-              <HoverPreviewSplit images={images.slice(0, 18)} />
-            </SectionCard>
-
-            <SectionCard
-              title="4) Stacked Columns"
-              subtitle="Three fixed columns with mixed tile heights for a denser editorial gallery"
-            >
-              <StackedColumnsGallery images={images.slice(0, 15)} />
-            </SectionCard>
-
-            <SectionCard
-              title="5) Bento Grid"
-              subtitle="Single-row bento with three nested columns"
-            >
-              <BentoGallery images={images.slice(0, 8)} />
-            </SectionCard>
-          </Box>
+        />
+        <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+          <StatusPill label={`Active: ${wrapImages[wrapActiveIndex]?.title || 'None'}`} />
+          <StatusPill label={`Viewer: ${wrapViewerOpen ? 'Open' : 'Closed'}`} />
+          <StatusPill label={`Tile: ${wrapThumb} x ${wrapThumb}`} />
         </Box>
-      </ScrollView>
-    </Box>
+      </StorySection>
+
+      <StorySection index={2} title="Nested Rows + Hover Preview">
+        <HoverPreviewRows images={images.slice(0, 18)} />
+      </StorySection>
+
+      <StorySection index={3} title="Side-by-Side Hover Preview">
+        <HoverPreviewSplit images={images.slice(0, 18)} />
+      </StorySection>
+
+      <StorySection index={4} title="Stacked Columns">
+        <StackedColumnsGallery images={images.slice(0, 15)} />
+      </StorySection>
+
+      <StorySection index={5} title="Bento Grid">
+        <BentoGallery images={images.slice(0, 8)} />
+      </StorySection>
+    </StoryPage>
   );
 }

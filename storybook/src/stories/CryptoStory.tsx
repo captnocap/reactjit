@@ -2,30 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useCrypto } from '../../../packages/crypto/src';
 import { useThemeColors } from '../../../packages/theme/src';
-
-// ── Section layout (same pattern as DataStory) ────────
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{title}</Text>
-      <Box
-        style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 10,
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
-  );
-}
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 // ── Hash Demo ──────────────────────────────────────────
 
@@ -400,38 +377,36 @@ export function CryptoStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
-        <Section title="1. @reactjit/crypto">
-          <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-            libsodium + OpenSSL + BLAKE3 -- all crypto runs in C via Lua FFI. Zero JS overhead.
-          </Text>
-        </Section>
+    <StoryPage>
+      <StorySection index={1} title="@reactjit/crypto">
+        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
+          libsodium + OpenSSL + BLAKE3 -- all crypto runs in C via Lua FFI. Zero JS overhead.
+        </Text>
+      </StorySection>
 
-        <Section title="2. Hash Functions">
-          <HashDemo />
-        </Section>
+      <StorySection index={2} title="Hash Functions">
+        <HashDemo />
+      </StorySection>
 
-        <Section title="3. Password Encryption">
-          <EncryptDemo />
-        </Section>
+      <StorySection index={3} title="Password Encryption">
+        <EncryptDemo />
+      </StorySection>
 
-        <Section title="4. Ed25519 Signing">
-          <SignDemo />
-        </Section>
+      <StorySection index={4} title="Ed25519 Signing">
+        <SignDemo />
+      </StorySection>
 
-        <Section title="5. Token Generation">
-          <TokenDemo />
-        </Section>
+      <StorySection index={5} title="Token Generation">
+        <TokenDemo />
+      </StorySection>
 
-        <Section title="6. Algorithm Catalog">
-          <FeatureList />
-        </Section>
+      <StorySection index={6} title="Algorithm Catalog">
+        <FeatureList />
+      </StorySection>
 
-        <Section title="7. Usage Examples">
-          <UsageExamples />
-        </Section>
-      </Box>
-    </Box>
+      <StorySection index={7} title="Usage Examples">
+        <UsageExamples />
+      </StorySection>
+    </StoryPage>
   );
 }

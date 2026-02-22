@@ -16,6 +16,7 @@ import {
 } from '../../../packages/core/src';
 import type { TableColumn } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 type DataView =
   | 'table'
@@ -120,16 +121,6 @@ const VIEW_OPTIONS: Array<{ id: DataView; label: string; subtitle: string }> = [
   { id: 'pie', label: 'Pie / Donut', subtitle: 'Share breakdown' },
   { id: 'radar', label: 'Radar', subtitle: 'Axis profile' },
 ];
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
-      {children}
-    </Box>
-  );
-}
 
 function DataViewBody({ view }: { view: DataView }) {
   const c = useThemeColors();
@@ -262,32 +253,19 @@ export function DataStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 860, gap: 14, alignItems: 'center' }}>
-        <Section title="1. Data Primitives">
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
-            One page with all chart/table primitives in section order.
-          </Text>
-        </Section>
+    <StoryPage>
+      <StorySection index={1} title="Data Primitives">
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
+          One page with all chart/table primitives in section order.
+        </Text>
+      </StorySection>
 
-        {VIEW_OPTIONS.map((opt, idx) => (
-          <Section key={opt.id} title={`${idx + 2}. ${opt.label}`}>
-            <Box style={{
-              width: '100%',
-              backgroundColor: c.bgElevated,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: c.border,
-              padding: 12,
-              gap: 10,
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>{opt.subtitle}</Text>
-            <DataViewBody view={opt.id} />
-            </Box>
-          </Section>
-        ))}
-      </Box>
-    </Box>
+      {VIEW_OPTIONS.map((opt, idx) => (
+        <StorySection key={opt.id} index={idx + 2} title={opt.label}>
+          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>{opt.subtitle}</Text>
+          <DataViewBody view={opt.id} />
+        </StorySection>
+      ))}
+    </StoryPage>
   );
 }

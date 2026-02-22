@@ -1,23 +1,13 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 export function GradientStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', padding: 16, alignItems: 'center' }}>
-      <Box style={{ width: '100%', maxWidth: 760, gap: 14 }}>
-        <Text style={{ color: c.text, fontSize: 12 }}>1. Gradients</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-          alignItems: 'center',
-        }}>
+    <StoryPage>
+        <StorySection index={1} title="Gradients">
           <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
             <Box style={{
               width: 170,
@@ -60,18 +50,9 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 11 }}>RGBA Colors</Text>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>2. Box shadow</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          alignItems: 'center',
-        }}>
+        <StorySection index={2} title="Box shadow">
           <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
             <Box style={{
               width: 150,
@@ -116,19 +97,9 @@ export function GradientStory() {
               <Text style={{ color: c.text, fontSize: 10 }}>Red halo</Text>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>3. Border radius</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <StorySection index={3} title="Border radius">
           <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
             {[0, 4, 8, 16, 24, 50].map(r => (
               <Box key={r} style={{
@@ -167,19 +138,9 @@ export function GradientStory() {
               <Text style={{ color: c.success, fontSize: 10 }}>Border + Radius</Text>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>4. Transforms</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <StorySection index={4} title="Transforms">
           <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
             <Text style={{ color: c.textSecondary, fontSize: 10, width: 62 }}>rotate</Text>
             {[0, 15, 45, 90].map(deg => (
@@ -248,19 +209,9 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 8 }}>all</Text>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>5. Opacity</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <StorySection index={5} title="Opacity">
           <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
             {[1.0, 0.75, 0.5, 0.25, 0.1].map(op => (
               <Box key={op} style={{
@@ -293,19 +244,9 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 10 }}>Child: 0.5 (effective 0.4)</Text>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>6. Z-index</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <StorySection index={6} title="Z-index">
           <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>Overlapping cards; blue (`z:3`) should be on top.</Text>
           <Box style={{ width: 180, height: 120, position: 'relative' }}>
             <Box style={{
@@ -351,19 +292,9 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 10 }}>z:2</Text>
             </Box>
           </Box>
-        </Box>
+        </StorySection>
 
-        <Text style={{ color: c.text, fontSize: 12 }}>7. Per-side borders</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <StorySection index={7} title="Per-side borders">
           <Box style={{ gap: 4, alignItems: 'center' }}>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Individual sides</Text>
             <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
@@ -420,8 +351,7 @@ export function GradientStory() {
               <Text style={{ color: c.textSecondary, fontSize: 9 }}>Top/Right/Bottom/Left</Text>
             </Box>
           </Box>
-        </Box>
-      </Box>
-    </Box>
+        </StorySection>
+    </StoryPage>
   );
 }

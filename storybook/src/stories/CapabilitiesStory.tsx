@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Slider, Pressable, Timer, useCapabilities } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function LectureCard({
   title,
@@ -188,11 +189,8 @@ function OneLinerShowcase() {
 export function CapabilitiesStory() {
   const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 920, gap: 12 }}>
-        <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold' }}>
-          {'Declarative Native Capabilities'}
-        </Text>
+    <StoryPage>
+      <StorySection index={1} title="Declarative Native Capabilities">
         <Text style={{ fontSize: 11, color: c.textDim }}>
           {'One component per capability. React sets intent; Lua owns execution and runtime lifecycle.'}
         </Text>
@@ -220,7 +218,9 @@ export function CapabilitiesStory() {
             {'Step C: react to emitted events and adjust props; no bridge-specific code needed.'}
           </Text>
         </LectureCard>
+      </StorySection>
 
+      <StorySection index={2} title="Live Demos">
         <Box style={{ flexDirection: 'row', gap: 16, width: '100%', alignItems: 'flex-start' }}>
           <Box style={{ flexGrow: 1, gap: 16 }}>
             <TimerDemo />
@@ -241,7 +241,7 @@ export function CapabilitiesStory() {
             </LectureCard>
           </Box>
         </Box>
-      </Box>
-    </Box>
+      </StorySection>
+    </StoryPage>
   );
 }
