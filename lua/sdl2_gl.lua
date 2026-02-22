@@ -55,7 +55,8 @@ ffi.cdef[[
   unsigned int glGetError(void);
 ]]
 
-local lib = ffi.load("GL")
+local loader = require("lua.lib_loader")
+local lib = loader.opengl()
 
 -- Proxy table: GL.glEnable(...) → lib.glEnable(...)
 -- Constants are direct fields.

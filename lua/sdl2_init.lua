@@ -81,7 +81,8 @@ ffi.cdef[[
   void          SDL_StartTextInput(void);
 ]]
 
-local sdl = ffi.load("SDL2")
+local loader = require("lua.lib_loader")
+local sdl = loader.load("SDL2")
 
 local SDL_INIT_VIDEO       = 0x00000020
 local SDL_WINDOW_OPENGL    = 0x00000002

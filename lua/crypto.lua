@@ -238,41 +238,20 @@ local sodium, crypto_lib, blake3
 
 -- libsodium
 local function loadSodium()
-  local paths = { "sodium", "libsodium.so.23", "libsodium.so" }
-  -- Try project-local lib/ first
-  local cwd = love and love.filesystem.getSource() or "."
-  table.insert(paths, 1, cwd .. "/lib/libsodium.so")
-  for _, p in ipairs(paths) do
-    local ok, lib = pcall(ffi.load, p)
-    if ok then return lib end
-  end
-  return nil
+  local loader = require("lua.lib_loader")
+  return loader.try_load("sodium", { "libsodium.so.23" })
 end
 
 -- OpenSSL libcrypto
 local function loadCrypto()
-  local paths = { "crypto", "libcrypto.so.3", "libcrypto.so" }
-  local cwd = love and love.filesystem.getSource() or "."
-  table.insert(paths, 1, cwd .. "/lib/libcrypto.so")
-  for _, p in ipairs(paths) do
-    local ok, lib = pcall(ffi.load, p)
-    if ok then return lib end
-  end
-  return nil
+  local loader = require("lua.lib_loader")
+  return loader.try_load("crypto", { "libcrypto.so.3" })
 end
 
 -- BLAKE3
 local function loadBlake3()
-  local paths = {}
-  local cwd = love and love.filesystem.getSource() or "."
-  table.insert(paths, cwd .. "/lib/libblake3.so")
-  table.insert(paths, "blake3")
-  table.insert(paths, "libblake3.so")
-  for _, p in ipairs(paths) do
-    local ok, lib = pcall(ffi.load, p)
-    if ok then return lib end
-  end
-  return nil
+  local loader = require("lua.lib_loader")
+  return loader.try_load("blake3")
 end
 
 sodium = loadSodium()

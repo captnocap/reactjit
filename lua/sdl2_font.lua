@@ -23,24 +23,8 @@ ffi.cdef[[
   int  ft_measure_text_utf8(const char *text, int byte_len);
 ]]
 
-local function findFtHelper()
-  local candidates = {
-    "lib/ft_helper.so",
-    "lib/libft_helper.so",
-  }
-  for _, p in ipairs(candidates) do
-    local f = io.open(p, "r")
-    if f then f:close(); return p end
-  end
-  -- Try next to this file (storybook / dev layout)
-  local dir = debug.getinfo(1, "S").source:match("@(.*/)") or "./"
-  local p = dir .. "../lib/ft_helper.so"
-  local f = io.open(p, "r")
-  if f then f:close(); return p end
-  error("[sdl2_font] ft_helper.so not found in lib/. Run: make cli-setup")
-end
-
-local ft = ffi.load(findFtHelper())
+local loader = require("lua.lib_loader")
+local ft = loader.load("ft_helper")
 
 local Font = {}
 
