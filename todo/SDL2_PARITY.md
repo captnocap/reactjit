@@ -104,13 +104,14 @@ draw paths.
 - [x] **Port TextInput** `[#31]` — **FIXED** (commit `7852063`). Added shim functions (getScissor, intersectScissor, transformPoint, getFont), TextInput dispatch in sdl2_painter, focus/keyboard/mouse event routing in sdl2_init, blink timer, and change event draining. Hardened getFont fallback in textinput.lua.
   - Files: `lua/sdl2_love_shim.lua`, `lua/sdl2_painter.lua`, `lua/sdl2_init.lua`, `lua/textinput.lua`
 
-- [ ] **Port TextEditor** — Multi-line text editing with cursor, selection, scrolling.
-  - Files: `lua/texteditor.lua`
-  - Verify: TextEditor renders and accepts input in SDL2
+- [x] **Port TextEditor** — **FIXED** (commit `27dd617`). Added TextEditor dispatch in sdl2_painter, full event routing in sdl2_init (keyboard, text input, mouse press/release/move, wheel scroll, blink timer). Added `love.graphics.printf` to shim. Hardened getFont fallback.
+  - Files: `lua/sdl2_painter.lua`, `lua/sdl2_init.lua`, `lua/sdl2_love_shim.lua`, `lua/texteditor.lua`
 
-- [ ] **Port CodeBlock** — Read-only code display with syntax highlighting and copy button.
-  - Files: `lua/codeblock.lua`
-  - Verify: CodeBlock renders in SDL2
+- [x] **Port CodeBlock** — **FIXED** (commit `27dd617`). Added CodeBlock dispatch in sdl2_painter, mouse press routing (copy button) in sdl2_init. All required shim functions already existed.
+  - Files: `lua/sdl2_painter.lua`, `lua/sdl2_init.lua`
+
+- [x] **Add all widget dispatch to SDL2 painter** — **FIXED** (commit `27dd617`). SDL2 painter now dispatches to ALL 10 Lua-owned widget types: Slider, Fader, Knob, Switch, Checkbox, Radio, Select, TextInput, TextEditor, CodeBlock. Previously only View/box and Text were rendered — all other widget nodes were invisible.
+  - Files: `lua/sdl2_painter.lua`
 
 - [ ] **Port devtools/inspector/console overlays** `[#47]` — These use `love.graphics.*` for their draw passes. Need SDL2 painter equivalents.
   - Files: `lua/inspector.lua`, `lua/console.lua`, `lua/devtools.lua`, `lua/errors.lua`
