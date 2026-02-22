@@ -21,7 +21,7 @@ import { Native } from './Native';
 import type {
   AudioProps, TimerProps, LLMAgentProps, WindowProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps,
+  BoidsProps, ImageSelectProps,
 } from './types';
 
 /**
@@ -85,6 +85,23 @@ export function LLMAgent(props: LLMAgentProps) {
  */
 export function Window(props: WindowProps) {
   return <Native type="Window" {...props} />;
+}
+
+/**
+ * Interactive image selection via flood fill + Sobel edge detection.
+ * Click on the image to select a region; the mask overlay highlights selected pixels.
+ * SDL2 target only.
+ *
+ * @example
+ * <ImageSelect src="photo.jpg" tolerance={32} edgeDetection
+ *   selectX={point?.x} selectY={point?.y}
+ *   onClick={(e) => setPoint({ x: e.x, y: e.y })}
+ *   onMaskReady={(e) => console.log(e.pixelCount)}
+ *   style={{ flexGrow: 1 }}
+ * />
+ */
+export function ImageSelect(props: ImageSelectProps) {
+  return <Native type="ImageSelect" {...props} />;
 }
 
 // ── GPIO Capabilities ─────────────────────────────────────

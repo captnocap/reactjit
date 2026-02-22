@@ -230,6 +230,7 @@ function Capabilities.loadAll()
     "llm_agent",
     "window",
     "boids",
+    "image_select",
   }
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)

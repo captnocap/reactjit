@@ -689,6 +689,50 @@ export interface WindowProps {
   key?: string | number;
 }
 
+/**
+ * Interactive image selection via flood fill + Sobel edge detection.
+ * Click on the image to select a region; the mask overlay highlights selected pixels.
+ * SDL2 target only (requires image_helper.so).
+ *
+ * @example
+ * <ImageSelect
+ *   src="photo.jpg"
+ *   tolerance={32}
+ *   edgeDetection
+ *   selectX={point?.x}
+ *   selectY={point?.y}
+ *   onClick={(e) => setPoint({ x: e.x, y: e.y })}
+ *   onMaskReady={(e) => console.log(e.pixelCount)}
+ *   style={{ flexGrow: 1 }}
+ * />
+ */
+export interface ImageSelectProps {
+  /** Image file path */
+  src?: string;
+  /** Color distance threshold for flood fill (0–255, default 32) */
+  tolerance?: number;
+  /** Enable Sobel edge detection to block flood fill at edges */
+  edgeDetection?: boolean;
+  /** Sobel edge sensitivity threshold (0–255, default 30) */
+  edgeThreshold?: number;
+  /** Selection origin X coordinate (layout coords) */
+  selectX?: number;
+  /** Selection origin Y coordinate (layout coords) */
+  selectY?: number;
+  /** Selection mode: "select" or "remove-background" */
+  mode?: 'select' | 'remove-background';
+  /** Mask overlay color (hex with alpha, default #3399FF80) */
+  maskColor?: string;
+  /** Fired when mask computation completes */
+  onMaskReady?: (event: LoveEvent) => void;
+  /** Fired on image load error */
+  onError?: (event: LoveEvent) => void;
+  /** Click handler for selection origin */
+  onClick?: (event: LoveEvent) => void;
+  style?: Style;
+  key?: string | number;
+}
+
 // ── GPIO Capability Components ───────────────────────────
 
 /**

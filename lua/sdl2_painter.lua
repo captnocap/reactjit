@@ -684,6 +684,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     end
   end
 
+  -- Generic capability draw dispatch — any visual capability with a draw()
+  -- function gets called here. No hardcoded capability names in the painter.
+  if not isHidden and CapabilitiesModule then
+    local def = CapabilitiesModule.getDefinition(node.type)
+    if def and def.draw then
+      local inst = CapabilitiesModule.getInstance(tostring(node.id))
+      if inst then
+        def.draw(tostring(node.id), inst.state, inst.props or {}, c, eff)
+      end
+    end
+  end
+
   -- Children
   local scrollX, scrollY = 0, 0
   if isScroll and node.scrollState then
