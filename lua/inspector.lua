@@ -136,6 +136,29 @@ local PROP_KEY_COL  = { 0.70, 0.55, 0.85, 1 }    -- purple for style keys
 local PROP_VAL_COL  = { 0.88, 0.90, 0.94, 1 }    -- bright for values
 local SECTION_COL   = { 0.45, 0.48, 0.55, 1 }    -- section headers
 
+-- Sizing provenance colors
+local PROV_EXPLICIT  = { 0.30, 0.80, 0.40, 1 }   -- green: you set this
+local PROV_FLEX      = { 0.38, 0.65, 0.98, 1 }   -- blue: parent flex assigned
+local PROV_CONTENT   = { 0.88, 0.90, 0.94, 1 }   -- white: auto from content
+local PROV_PARENT    = { 0.95, 0.75, 0.20, 1 }   -- yellow: inherited parent width
+local PROV_FALLBACK  = { 0.95, 0.40, 0.30, 1 }   -- red: surface fallback (viewport/4)
+local PROV_ROOT      = { 0.65, 0.55, 0.85, 1 }   -- purple: root viewport fill
+
+-- Human-readable provenance labels
+local PROV_LABELS = {
+  ["explicit"]         = { "EXPLICIT",         "you set this in style",     PROV_EXPLICIT },
+  ["flex"]             = { "FLEX",             "parent flex distributed",   PROV_FLEX },
+  ["stretch"]          = { "STRETCH",          "parent cross-axis stretch", PROV_FLEX },
+  ["content"]          = { "CONTENT",          "auto-sized from children",  PROV_CONTENT },
+  ["text"]             = { "TEXT",             "measured from text content", PROV_CONTENT },
+  ["parent"]           = { "PARENT WIDTH",     "inherited parent's width",  PROV_PARENT },
+  ["root"]             = { "ROOT FILL",        "auto-filled viewport",      PROV_ROOT },
+  ["surface-fallback"] = { "SURFACE FALLBACK", "viewport/4 (empty surface)",PROV_FALLBACK },
+  ["aspect-ratio"]     = { "ASPECT RATIO",     "derived from other axis",   PROV_FLEX },
+  ["scroll-default"]   = { "SCROLL DEFAULT",   "scroll needs explicit h",   PROV_FALLBACK },
+  ["unknown"]          = { "???",              "could not determine",       PROV_FALLBACK },
+}
+
 -- Forward declarations (defined later, called in mousepressed)
 local startEditing
 local commitEdit
@@ -941,6 +964,7 @@ function drawTooltip()
   -- Build tooltip lines
   local lines = {}
   local accents = {} -- indices that should use accent color
+  local lineColors = {} -- per-line color overrides
 
   -- Component name (if available)
   if node.debugName then
@@ -964,9 +988,20 @@ function drawTooltip()
     lines[#lines + 1] = loc
   end
 
-  -- Computed dimensions
-  lines[#lines + 1] = string.format("x:%d  y:%d  w:%d  h:%d",
-    math.floor(c.x), math.floor(c.y), math.floor(c.w), math.floor(c.h))
+  -- Computed dimensions with provenance
+  local wProv = PROV_LABELS[c.wSource or "unknown"] or PROV_LABELS["unknown"]
+  local hProv = PROV_LABELS[c.hSource or "unknown"] or PROV_LABELS["unknown"]
+  lines[#lines + 1] = string.format("%d x %d", math.floor(c.w), math.floor(c.h))
+  lines[#lines + 1] = string.format("w:%s  h:%s", wProv[1], hProv[1])
+  -- Use the "worst" provenance color for the summary line (fallback > parent > flex > content > explicit)
+  local provPriority = { ["surface-fallback"] = 5, ["scroll-default"] = 5, ["unknown"] = 5,
+    ["parent"] = 4, ["root"] = 3, ["flex"] = 2, ["stretch"] = 2, ["aspect-ratio"] = 2,
+    ["content"] = 1, ["text"] = 1, ["explicit"] = 0 }
+  local wPri = provPriority[c.wSource or "unknown"] or 5
+  local hPri = provPriority[c.hSource or "unknown"] or 5
+  local worstSource = wPri >= hPri and (c.wSource or "unknown") or (c.hSource or "unknown")
+  local worstProv = PROV_LABELS[worstSource] or PROV_LABELS["unknown"]
+  lineColors[#lines] = worstProv[3]
 
   -- Non-default style properties
   local skipProps = { display = true }
@@ -1027,7 +1062,9 @@ function drawTooltip()
   love.graphics.setFont(font)
   local textY = ty + pad
   for i, line in ipairs(lines) do
-    if accents[i] then
+    if lineColors[i] then
+      love.graphics.setColor(lineColors[i])
+    elseif accents[i] then
       love.graphics.setColor(TOOLTIP_ACCENT)
     elseif i == 2 then
       love.graphics.setColor(TOOLTIP_DIM)
@@ -1674,14 +1711,39 @@ function drawDetailPanel(rx, ry, rw, rh)
   love.graphics.rectangle("fill", rx + 4, y, rw - 8, 1)
   y = y + 6
 
-  -- ── Computed layout (read-only) ──
+  -- ── Sizing provenance (the key debugging info) ──
   if c then
     love.graphics.setColor(SECTION_COL)
-    love.graphics.print("computed", x, y)
+    love.graphics.print("sizing", x, y)
+    y = y + lineH
+
+    -- Position
+    love.graphics.setColor(TREE_DIM)
+    love.graphics.print(string.format("x: %d   y: %d", math.floor(c.x), math.floor(c.y)), x, y)
+    y = y + lineH + 2
+
+    -- Width with provenance
+    local wProv = PROV_LABELS[c.wSource or "unknown"] or PROV_LABELS["unknown"]
+    love.graphics.setColor(TOOLTIP_TEXT)
+    local wStr = string.format("w: %d  ", math.floor(c.w))
+    love.graphics.print(wStr, x, y)
+    love.graphics.setColor(wProv[3])
+    love.graphics.print(wProv[1], x + font:getWidth(wStr), y)
     y = y + lineH
     love.graphics.setColor(TREE_DIM)
-    love.graphics.print(string.format("x: %d   y: %d   w: %d   h: %d",
-      math.floor(c.x), math.floor(c.y), math.floor(c.w), math.floor(c.h)), x, y)
+    love.graphics.print(wProv[2], x + 10, y)
+    y = y + lineH + 2
+
+    -- Height with provenance
+    local hProv = PROV_LABELS[c.hSource or "unknown"] or PROV_LABELS["unknown"]
+    love.graphics.setColor(TOOLTIP_TEXT)
+    local hStr = string.format("h: %d  ", math.floor(c.h))
+    love.graphics.print(hStr, x, y)
+    love.graphics.setColor(hProv[3])
+    love.graphics.print(hProv[1], x + font:getWidth(hStr), y)
+    y = y + lineH
+    love.graphics.setColor(TREE_DIM)
+    love.graphics.print(hProv[2], x + 10, y)
     y = y + lineH + 4
   end
 

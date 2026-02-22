@@ -444,7 +444,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- ==================================================================
   if s.display == "none" then
     Log.log("layout", "  skip display:none id=%s", tostring(node.id))
-    node.computed = { x = px, y = py, w = 0, h = 0 }
+    node.computed = { x = px, y = py, w = 0, h = 0, wSource = "none", hSource = "none" }
     return
   end
 
@@ -493,28 +493,35 @@ function Layout.layoutNode(node, px, py, pw, ph)
   local explicitH = ru(s.height, ph)
 
   local w, h
+  local wSource, hSource  -- provenance: why this dimension has its value
 
   -- Width resolution with auto-sizing
   if explicitW then
     w = explicitW
+    wSource = "explicit"
   elseif pw then
     w = pw  -- Use parent's available width
+    wSource = "parent"
   else
     -- No explicit width and no parent width: auto-size from content
     w = estimateIntrinsicMain(node, true, pw, ph)
+    wSource = "content"
   end
 
   -- Height resolution - use existing deferred auto-height behavior
   -- (computed later after laying out children, lines 864-890)
   h = explicitH
+  if h then hSource = "explicit" end
 
   -- aspectRatio: compute missing dimension from the other
   local ar = s.aspectRatio
   if ar and ar > 0 then
     if explicitW and not h then
       h = explicitW / ar
+      hSource = "aspect-ratio"
     elseif h and not explicitW then
       w = h * ar
+      wSource = "aspect-ratio"
     end
   end
 
@@ -524,7 +531,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
   local parentAssignedW = false
   if node._flexW then
     w = node._flexW
+    wSource = node._rootAutoW and "root" or "flex"
     node._flexW = nil
+    node._rootAutoW = nil
     parentAssignedW = true
   end
 
@@ -532,8 +541,17 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- so innerH is correct for children and auto-sizing doesn't override it.
   if h == nil and node._stretchH then
     h = node._stretchH
+    if node._rootAutoH then
+      hSource = "root"
+    elseif node._flexGrowH then
+      hSource = "flex"
+    else
+      hSource = "stretch"
+    end
   end
   node._stretchH = nil
+  node._rootAutoH = nil
+  node._flexGrowH = nil
 
   -- Resolve padding early so text measurement can use inner width.
   -- We use the outer width for percentage-based padding resolution.
@@ -569,10 +587,12 @@ function Layout.layoutNode(node, px, py, pw, ph)
         if not explicitW and not parentAssignedW then
           -- Node width = measured text width + padding
           w = mw + padL + padR
+          wSource = "text"
         end
         if not explicitH then
           -- Node height = measured text height + padding
           h = mh + padT + padB
+          hSource = "text"
         end
       end
     end
@@ -587,6 +607,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
       local measured = CodeBlockModule.measure(node)
       if measured then
         h = measured.height
+        hSource = "text"
       end
     end
   elseif isTextInput then
@@ -597,6 +618,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
       local fontSize = math.floor((s.fontSize or 14) * ts)
       local font = Measure.getFont(fontSize, s.fontFamily or nil, s.fontWeight or nil)
       h = font:getHeight() + padT + padB
+      hSource = "text"
     end
   end
 
@@ -657,7 +679,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
     -- display:none children are completely skipped from layout
     if cs.display == "none" then
-      child.computed = { x = 0, y = 0, w = 0, h = 0 }
+      child.computed = { x = 0, y = 0, w = 0, h = 0, wSource = "none", hSource = "none" }
     elseif cs.position == "absolute" then
       -- Absolute children are removed from flex flow and positioned separately
       absoluteIndices[#absoluteIndices + 1] = i
@@ -1136,6 +1158,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
           child._stretchH = ch_final
         elseif not isRow and ci.grow > 0 then
           child._stretchH = ch_final
+          child._flexGrowH = true
         end
       end
 
@@ -1189,15 +1212,18 @@ function Layout.layoutNode(node, px, py, pw, ph)
       -- Scroll containers without explicit height default to 0.
       -- They need an explicit height or flex-grow to have visible area.
       h = 0
+      hSource = "scroll-default"
     elseif isRow then
       -- Row direction: main axis is horizontal, cross axis is vertical.
       -- Auto height = total cross-axis extent (sum of line heights + gaps).
       h = crossCursor + padT + padB
+      hSource = "content"
     else
       -- Column direction: main axis is vertical.
       -- Auto height = furthest main-axis child end.
       -- contentMainEnd already includes padT (from cc.y - y), so only add padB.
       h = contentMainEnd + padB
+      hSource = "content"
     end
   end
 
@@ -1212,13 +1238,14 @@ function Layout.layoutNode(node, px, py, pw, ph)
      and not explicitH then
     local vH = Layout._viewportH or 600
     h = math.min(vH / 4, ph or vH)
+    hSource = "surface-fallback"
   end
 
   -- Final min/max height clamping for auto-height
   h = clampDim(h, minH, maxH)
 
   Log.log("layout", "  final id=%s computed x=%d y=%d w=%d h=%d", tostring(node.id), x, y, w, h)
-  node.computed = { x = x, y = y, w = w, h = h }
+  node.computed = { x = x, y = y, w = w, h = h, wSource = wSource or "unknown", hSource = hSource or "unknown" }
 
   -- ====================================================================
   -- Absolute positioning: lay out position:absolute children
@@ -1384,8 +1411,8 @@ function Layout.layout(node, x, y, w, h)
   -- layoutNode to use the viewport size via the same signals that the
   -- flex algorithm uses for parent-determined sizing.
   local s = node.style or {}
-  if not s.width  then node._flexW    = w end
-  if not s.height then node._stretchH = h end
+  if not s.width  then node._flexW = w; node._rootAutoW = true end
+  if not s.height then node._stretchH = h; node._rootAutoH = true end
 
   Layout.layoutNode(node, x, y, w, h)
 end
