@@ -108,6 +108,26 @@ local function drawSoftDot(cx, cy, radius, r, g, b, a, opacity)
 end
 
 -- ============================================================================
+-- Font helper (works on both Love2D and SDL2)
+-- ============================================================================
+
+-- Default font size for labels
+local LABEL_FONT_SIZE = 12
+
+--- Get a font handle for text measurement.
+--- Uses the injected Measure module (works on both targets) with a fallback
+--- to love.graphics.newFont for pure Love2D environments where Measure is nil.
+local function getFontHandle(fontSize)
+  if Measure and Measure.getFont then
+    return Measure.getFont(fontSize)
+  end
+  if love and love.graphics and love.graphics.newFont then
+    return love.graphics.newFont(fontSize)
+  end
+  return nil
+end
+
+-- ============================================================================
 -- Drawing
 -- ============================================================================
 
@@ -153,7 +173,7 @@ function Radio.draw(node, effectiveOpacity)
 
   -- Draw label
   if p.label then
-    local font = love.graphics.getFont()
+    local font = getFontHandle(LABEL_FONT_SIZE)
     if font then
       local labelX = c.x + size + 8
       local labelY = c.y + (c.h - font:getHeight()) / 2
