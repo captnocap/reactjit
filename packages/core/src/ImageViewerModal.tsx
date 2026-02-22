@@ -137,26 +137,6 @@ export function ImageViewerModal({
     if (key === 'end') goTo(total - 1);
   }, [goNext, goPrev, goTo, total]);
 
-  useEffect(() => {
-    if (mode !== 'web' || !visible) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        goPrev();
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        goNext();
-      } else if (event.key === 'Home') {
-        event.preventDefault();
-        goTo(0);
-      } else if (event.key === 'End') {
-        event.preventDefault();
-        goTo(total - 1);
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [mode, visible, goNext, goPrev, goTo, total]);
 
   if (!visible || !current) return null;
 
