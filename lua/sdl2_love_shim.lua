@@ -391,8 +391,26 @@ function filesystem.write(path, data)
   return true
 end
 
+-- FFI mkdir for safe directory creation (no shell injection)
+local _ffi_mkdir = nil
+pcall(function()
+  ffi.cdef("int mkdir(const char *path, int mode);")
+  _ffi_mkdir = ffi.C.mkdir
+end)
+
 function filesystem.createDirectory(path)
-  os.execute('mkdir -p "' .. _saveDir .. '/' .. path .. '"')
+  -- Sanitize: only allow alphanumeric, slash, underscore, dash, dot
+  local safe = path:gsub("[^%w/_%-%.]", "")
+  local fullPath = _saveDir .. "/" .. safe
+  if _ffi_mkdir then
+    local accum = ""
+    for part in fullPath:gmatch("[^/]+") do
+      accum = accum .. "/" .. part
+      _ffi_mkdir(accum, tonumber("0755", 8))
+    end
+  else
+    os.execute('mkdir -p "' .. fullPath .. '"')
+  end
   return true
 end
 
