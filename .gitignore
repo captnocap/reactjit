@@ -60,6 +60,9 @@ Thumbs.db
 .zig-cache/
 zig-out/
 
+# Cloned third-party sources (fetched by build scripts)
+third_party/luajit/
+
 # Environment variables & secrets
 .env
 .env.*
