@@ -277,6 +277,12 @@ function MIDI.poll()
     -- CC data is at data[0..4]: channel, unused, unused, param, value
     local deviceName = ev.source_client .. ":" .. ev.source_port
 
+    -- Check if this device is blocked by the user via system panel
+    local _sp = package.loaded["lua.system_panel"]
+    if _sp and _sp.isDeviceBlocked and _sp.isDeviceBlocked("midi", deviceName) then
+      goto continue_poll
+    end
+
     if evType == 6 then  -- NOTEON
       local channel  = ev.data[0]
       local note     = ev.data[1]
@@ -320,6 +326,7 @@ function MIDI.poll()
     elseif evType == 42 then  -- STOP
       events[#events + 1] = { type = "stop" }
     end
+    ::continue_poll::
   end
 
   -- Periodic device re-scan (every ~5 seconds)

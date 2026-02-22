@@ -44,6 +44,7 @@ local Permit = {}
 local permits = nil     -- nil = not yet minted; table = minted
 local enforcing = false -- true only after mint() with a real manifest
 local auditRef = nil    -- reference to audit module (set at mint time)
+local userOverrides = {} -- user-set overrides from system panel (user blocks always win)
 
 -- ---------------------------------------------------------------------------
 -- Category checkers
@@ -184,6 +185,9 @@ end
 --- @param ...      any     Category-specific arguments
 --- @return boolean
 function Permit.check(category, ...)
+  -- User overrides ALWAYS win — the user is sovereign
+  if userOverrides[category] == false then return false end
+
   -- No manifest = trust all (backwards compatibility)
   if not enforcing then return true end
 
@@ -227,6 +231,33 @@ function Permit.getDeclared()
     copy[k] = v
   end
   return copy
+end
+
+--- Set a user override for a permission category.
+--- Called by the system panel. User blocks always win over developer grants.
+--- @param category string  The capability category
+--- @param value boolean|nil  false = blocked, nil = remove override (use developer default)
+function Permit.setUserOverride(category, value)
+  if value == nil then
+    userOverrides[category] = nil
+  else
+    userOverrides[category] = value
+  end
+end
+
+--- Get all current user overrides (for system panel display).
+--- @return table  { [category] = false }
+function Permit.getUserOverrides()
+  local copy = {}
+  for k, v in pairs(userOverrides) do
+    copy[k] = v
+  end
+  return copy
+end
+
+--- Clear all user overrides (reset to developer defaults).
+function Permit.clearUserOverrides()
+  userOverrides = {}
 end
 
 --- RPC handlers for React-side queries.
