@@ -21,6 +21,15 @@ export const ALIAS_MAP = {
   audio: '@reactjit/audio',
   server: '@reactjit/server',
   ai: '@reactjit/ai',
+  geo: '@reactjit/geo',
+  theme: '@reactjit/theme',
+  '3d': '@reactjit/3d',
+  controls: '@reactjit/controls',
+  media: '@reactjit/media',
+  crypto: '@reactjit/crypto',
+  rss: '@reactjit/rss',
+  webhooks: '@reactjit/webhooks',
+  apis: '@reactjit/apis',
 };
 
 /**

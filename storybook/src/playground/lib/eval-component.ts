@@ -39,10 +39,6 @@ import {
 import {
   Scene, Camera, Mesh, DirectionalLight, AmbientLight,
 } from '../../../../packages/3d/src';
-import {
-  useCombat, useQuest, useInventory, useGameState,
-  HealthBar, StatusBar as GameStatusBar, QuestLog, InventoryGrid,
-} from '../../../../packages/game/src';
 
 export interface EvalResult { component: React.ComponentType | null; error: string | null; }
 
@@ -73,8 +69,6 @@ const SCOPE_NAMES = [
   'AIMessageList', 'AIChatInput',
   // 3D package
   'Scene', 'Camera', 'Mesh', 'DirectionalLight', 'AmbientLight',
-  // Game package
-  'useCombat', 'useQuest', 'useInventory', 'useGameState', 'HealthBar', 'GameStatusBar', 'QuestLog', 'InventoryGrid',
 ] as const;
 
 const SCOPE_VALUES = [
@@ -91,7 +85,6 @@ const SCOPE_VALUES = [
   useAudioInit, useRack, useModule, useParam, useClock, useClockEvent, useSequencer, useSampler, useMIDI,
   AIMessageList, AIChatInput,
   Scene, Camera, Mesh, DirectionalLight, AmbientLight,
-  useCombat, useQuest, useInventory, useGameState, HealthBar, GameStatusBar, QuestLog, InventoryGrid,
 ];
 
 export function evalComponent(transformedCode: string): EvalResult {

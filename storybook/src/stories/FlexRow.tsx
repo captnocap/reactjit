@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { FlexRowStory as CoreFlexRowStory } from '../../../packages/components/src/FlexRow/FlexRow.story';
-import { FlexColumnStory as CoreFlexColumnStory } from '../../../packages/components/src/FlexColumn/FlexColumn.story';
 
 const ROW_COLORS = ['#ef4444', '#f97316', '#eab308'];
 const WRAP_COLORS = [
@@ -330,30 +328,6 @@ export function FlexRowStory() {
               <Box style={{ height: 34, aspectRatio: 1, backgroundColor: '#a855f7', borderRadius: 5 }} />
               <Box style={{ height: 34, aspectRatio: 2, backgroundColor: '#d946ef', borderRadius: 5 }} />
               <Box style={{ height: 34, aspectRatio: 3, backgroundColor: '#ec4899', borderRadius: 5 }} />
-            </Box>
-          </Box>
-        </Box>
-
-        <Text style={{ color: c.text, fontSize: 12 }}>7. Core Layout Components (`FlexRow` / `FlexColumn`)</Text>
-        <Box style={{
-          width: '100%',
-          backgroundColor: c.bgElevated,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 12,
-          gap: 12,
-        }}>
-          <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Core `FlexRow` component</Text>
-            <Box style={{ backgroundColor: c.surface, borderRadius: 6 }}>
-              <CoreFlexRowStory />
-            </Box>
-          </Box>
-          <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Core `FlexColumn` component</Text>
-            <Box style={{ backgroundColor: c.surface, borderRadius: 6 }}>
-              <CoreFlexColumnStory />
             </Box>
           </Box>
         </Box>
