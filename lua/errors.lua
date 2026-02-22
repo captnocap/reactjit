@@ -255,7 +255,15 @@ function Errors.draw()
   end)
 
   if not ok then
-    -- Last resort: try to print that the error overlay itself failed
+    -- Last resort: draw a minimal red bar and print to terminal
+    pcall(function()
+      love.graphics.setColor(0.86, 0.15, 0.15, 0.95)
+      love.graphics.rectangle("fill", 0, love.graphics.getHeight() - 40,
+                              love.graphics.getWidth(), 40)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.print("ERROR: " .. tostring(drawErr), 16,
+                          love.graphics.getHeight() - 30)
+    end)
     pcall(function()
       io.write("[reactjit] Error overlay draw failed: " .. tostring(drawErr) .. "\n")
       io.flush()
