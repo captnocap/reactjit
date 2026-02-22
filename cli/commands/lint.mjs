@@ -84,33 +84,89 @@ const MINER_BEHAVIORAL_PATTERNS = [
   'kawpow', 'progpow', 'hashrate', 'hash_rate',
 ];
 
-/** Scan source text for crypto miner signatures. Returns array of { pattern, category }. */
+// Miner-specific config/CLI tokens that survive across builds
+// COMPOSITE trigger: could appear in config parsing code individually
+const MINER_CONFIG_TOKENS = [
+  '--donate-level', '--randomx-init', '--randomx-no-numa',
+  '--randomx-1gb-pages', '--cpu-max-threads-hint',
+  "'h' hashrate, 'p' pause, 'r' resume",
+  'forceASMJS', 'cpuminer',
+];
+
+// Miner self-identification strings — HARD trigger
+const MINER_STRATUM_AGENTS = [
+  'XMRig/', 'xmrig/', 'cpuminer/', 'ccminer/',
+];
+
+// WASM export names from known mining modules — HARD trigger
+const MINER_WASM_EXPORTS = [
+  '_hash_cn', '_cryptonight_hash', '_hash_cn_dark',
+  'hash_cn', 'randomx_hash', 'cn_hash',
+];
+
+/**
+ * Scan source text for crypto miner signatures with confidence scoring.
+ * Returns { matches: [{ pattern, category, trigger }], detected: boolean }.
+ * Hard triggers (libraries, pool domains, protocol, agents) quarantine on one hit.
+ * Composite triggers (behavioral, config tokens) require 2+ from different categories.
+ */
 function scanForMinerPatterns(source) {
   const lower = source.toLowerCase();
   const matches = [];
 
+  // === HARD triggers (single match = detected) ===
+
   for (const lib of MINER_LIBRARIES) {
     if (lower.includes(lib)) {
-      matches.push({ pattern: lib, category: 'library' });
+      matches.push({ pattern: lib, category: 'library', trigger: 'hard' });
     }
   }
   for (const domain of MINER_POOL_DOMAINS) {
     if (lower.includes(domain)) {
-      matches.push({ pattern: domain, category: 'pool_domain' });
+      matches.push({ pattern: domain, category: 'pool_domain', trigger: 'hard' });
     }
   }
   for (const marker of MINER_PROTOCOL_MARKERS) {
     if (lower.includes(marker.toLowerCase())) {
-      matches.push({ pattern: marker, category: 'protocol' });
+      matches.push({ pattern: marker, category: 'protocol', trigger: 'hard' });
     }
   }
-  for (const pattern of MINER_BEHAVIORAL_PATTERNS) {
-    if (lower.includes(pattern)) {
-      matches.push({ pattern, category: 'behavioral' });
+  for (const agent of MINER_STRATUM_AGENTS) {
+    if (lower.includes(agent.toLowerCase())) {
+      matches.push({ pattern: agent, category: 'stratum_agent', trigger: 'hard' });
+    }
+  }
+  for (const exp of MINER_WASM_EXPORTS) {
+    if (lower.includes(exp.toLowerCase())) {
+      matches.push({ pattern: exp, category: 'wasm_export', trigger: 'hard' });
     }
   }
 
-  return matches;
+  // === COMPOSITE triggers (need 2+ from different categories) ===
+
+  for (const pattern of MINER_BEHAVIORAL_PATTERNS) {
+    if (lower.includes(pattern)) {
+      matches.push({ pattern, category: 'behavioral', trigger: 'composite' });
+    }
+  }
+  for (const token of MINER_CONFIG_TOKENS) {
+    if (lower.includes(token.toLowerCase())) {
+      matches.push({ pattern: token, category: 'config_token', trigger: 'composite' });
+    }
+  }
+
+  // Evaluate confidence: any hard = detected, OR 2+ distinct composite categories
+  let detected = false;
+  if (matches.some(m => m.trigger === 'hard')) {
+    detected = true;
+  } else {
+    const compositeCategories = new Set(
+      matches.filter(m => m.trigger === 'composite').map(m => m.category)
+    );
+    detected = compositeCategories.size >= 2;
+  }
+
+  return { matches, detected };
 }
 
 // ── Color helpers ────────────────────────────────────────────
@@ -1645,9 +1701,12 @@ export async function runLint(cwd, options = {}) {
 
     // Crypto miner detection — scans raw source for mining signatures.
     // Non-suppressable: rjit-ignore-next-line does NOT work for this rule.
-    const minerMatches = scanForMinerPatterns(source);
-    if (minerMatches.length > 0) {
-      const patternList = minerMatches.map(m => `${m.category}: "${m.pattern}"`).join(', ');
+    // Uses confidence scoring: hard triggers on single hit, composite needs 2+ categories.
+    const minerResult = scanForMinerPatterns(source);
+    if (minerResult.detected) {
+      const patternList = minerResult.matches.map(m =>
+        `${m.category}: "${m.pattern}" [${m.trigger}]`
+      ).join(', ');
       diagnostics.push({
         rule: 'no-crypto-miner',
         severity: 'error',
@@ -1843,9 +1902,12 @@ export function runBundleChecks(bundlePath, options = {}) {
   // Crypto miner detection on the final bundle.
   // This catches miners that enter via node_modules dependencies
   // (not visible in user source files during source-level lint).
-  const minerMatches = scanForMinerPatterns(source);
-  if (minerMatches.length > 0) {
-    const patternList = minerMatches.map(m => `${m.category}: "${m.pattern}"`).join(', ');
+  // Uses confidence scoring: hard triggers on single hit, composite needs 2+ categories.
+  const minerResult = scanForMinerPatterns(source);
+  if (minerResult.detected) {
+    const patternList = minerResult.matches.map(m =>
+      `${m.category}: "${m.pattern}" [${m.trigger}]`
+    ).join(', ');
     diagnostics.push({
       rule: 'no-crypto-miner',
       severity: 'error',

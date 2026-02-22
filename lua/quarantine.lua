@@ -1,16 +1,27 @@
 --[[
   quarantine.lua — Crypto miner detection and silent capability blocking
 
-  Scans JavaScript source and native binaries for known crypto mining patterns.
-  When detected, activates quarantine mode via permit.quarantine() which silently
-  makes all capability checks return false. The miner code runs but is neutered:
-  no network, no storage, no IPC. It can't reach a pool or submit hashes.
+  Scans JavaScript source, native binaries, and network URLs for known crypto
+  mining patterns. When detected, activates quarantine mode via permit.quarantine()
+  which silently makes all capability checks return false. The miner code runs but
+  is neutered: no network, no storage, no IPC. It can't reach a pool or submit hashes.
+
+  Confidence model:
+    - HARD triggers quarantine on a single match.
+      These are unambiguous indicators: exact binary/WASM hashes, known miner
+      library imports, pool domain connections, stratum protocol URIs, mining
+      symbol names in binaries.
+    - COMPOSITE triggers require 2+ matches from DIFFERENT categories.
+      These are patterns that could appear in legitimate code individually
+      (algorithm names in docs, config tokens in parsers, crypto primitives
+      in security research) but become damning in combination.
 
   Defense in depth:
     - Loads patterns from lua/miner_signatures.lua (updateable, versionable)
     - Embeds hardcoded fallback patterns that can't be removed by file tampering
     - Scans JS source at Bridge:eval() time
     - Scans .so binaries at ffi.load() time (CartridgeOS)
+    - Scans URLs at ws:connect / http:request time
 
   Usage:
     local quarantine = require("lua.quarantine")
@@ -40,6 +51,22 @@ local _audit = nil      -- reference to audit module
 local _active = false   -- quarantine triggered
 local _matches = {}     -- what was detected (forensic detail)
 local _signatures = nil -- loaded from miner_signatures.lua
+
+-- ---------------------------------------------------------------------------
+-- Confidence classification
+-- ---------------------------------------------------------------------------
+-- Each match is tagged as "hard" or "composite". Hard triggers quarantine
+-- immediately on a single hit. Composite triggers only quarantine when 2+
+-- matches come from different composite categories.
+
+local HARD = "hard"
+local COMPOSITE = "composite"
+
+-- Categories and their trigger levels:
+--   hard: library, pool_domain, protocol, binary_hash, malware_hash,
+--         wasm_hash, symbol_name, stratum_method, pool_url, pool_protocol
+--   composite: behavioral, config_token, randomx_personalization,
+--              algorithm_constant, ws_indicator
 
 -- ---------------------------------------------------------------------------
 -- Hardcoded fallback patterns (can't be removed by tampering with signatures file)
@@ -88,7 +115,6 @@ local function init_sha256()
   -- Try to load libcrypto (OpenSSL)
   local ok, lib = pcall(ffi.load, "crypto")
   if not ok then
-    -- Try explicit paths
     ok, lib = pcall(ffi.load, "libcrypto.so.3")
     if not ok then
       ok, lib = pcall(ffi.load, "libcrypto.so.1.1")
@@ -124,12 +150,69 @@ local function sha256(data)
 end
 
 -- ---------------------------------------------------------------------------
+-- Detection evaluation — confidence scoring
+-- ---------------------------------------------------------------------------
+
+--- Evaluate a list of categorized matches and determine if quarantine triggers.
+--- Hard matches trigger on a single hit. Composite matches require 2+ hits
+--- from different categories.
+---
+--- @param matches table  List of { category, pattern, trigger, ... }
+--- @return boolean  Whether quarantine should activate
+local function should_quarantine(matches)
+  if #matches == 0 then return false end
+
+  -- Any hard trigger = immediate quarantine
+  for _, m in ipairs(matches) do
+    if m.trigger == HARD then
+      return true
+    end
+  end
+
+  -- Count distinct composite categories
+  local composite_categories = {}
+  for _, m in ipairs(matches) do
+    if m.trigger == COMPOSITE then
+      composite_categories[m.category] = true
+    end
+  end
+
+  local count = 0
+  for _ in pairs(composite_categories) do
+    count = count + 1
+  end
+
+  -- 2+ distinct composite categories = quarantine
+  return count >= 2
+end
+
+-- ---------------------------------------------------------------------------
+-- Deduplication helper
+-- ---------------------------------------------------------------------------
+
+local function deduplicate(matches)
+  local seen = {}
+  local unique = {}
+  for _, m in ipairs(matches) do
+    local key = m.category .. ":" .. m.pattern
+    if not seen[key] then
+      seen[key] = true
+      unique[#unique + 1] = m
+    end
+  end
+  return unique
+end
+
+-- ---------------------------------------------------------------------------
 -- JS source scanning
 -- ---------------------------------------------------------------------------
 
 --- Scan JavaScript source for crypto miner patterns.
+--- Uses confidence scoring: hard triggers quarantine on single match,
+--- composite triggers require 2+ matches from different categories.
+---
 --- @param source string  The JavaScript source code
---- @return table  { detected = bool, matches = { { category, pattern } ... } }
+--- @return table  { detected = bool, matches = { { category, pattern, trigger } ... } }
 function Quarantine.scanJS(source)
   if _active then
     return { detected = true, matches = _matches }
@@ -142,61 +225,143 @@ function Quarantine.scanJS(source)
   local matches = {}
   local lower = source:lower()
 
-  -- Helper: check a list of patterns against lowercased source
-  local function checkPatterns(patterns, category)
+  -- Helper: check a list of patterns (plain string find)
+  local function checkPlain(patterns, category, trigger)
     for _, pattern in ipairs(patterns) do
       local lp = pattern:lower()
       if lower:find(lp, 1, true) then
-        matches[#matches + 1] = { category = category, pattern = pattern }
+        matches[#matches + 1] = { category = category, pattern = pattern, trigger = trigger }
       end
     end
   end
 
   -- Helper: check Lua patterns (not plain string find)
-  local function checkLuaPatterns(patterns, category)
+  local function checkLua(patterns, category, trigger)
     for _, pattern in ipairs(patterns) do
       local lp = pattern:lower()
       if lower:find(lp) then
-        matches[#matches + 1] = { category = category, pattern = pattern }
+        matches[#matches + 1] = { category = category, pattern = pattern, trigger = trigger }
       end
     end
   end
 
-  -- Check hardcoded fallback patterns first (always present)
-  checkPatterns(FALLBACK_LIBRARIES, "library")
-  checkPatterns(FALLBACK_POOL_DOMAINS, "pool_domain")
-  checkPatterns(FALLBACK_PROTOCOL_MARKERS, "protocol")
-  checkPatterns(FALLBACK_BEHAVIORAL, "behavioral")
+  -- ===== HARD triggers (single match = quarantine) =====
 
-  -- Check signatures file patterns (if loaded)
-  if _signatures then
-    if _signatures.libraries then
-      checkPatterns(_signatures.libraries, "library")
-    end
-    if _signatures.pool_domains then
-      checkPatterns(_signatures.pool_domains, "pool_domain")
-    end
-    if _signatures.protocol_markers then
-      checkPatterns(_signatures.protocol_markers, "protocol")
-    end
-    if _signatures.behavioral_patterns then
-      checkLuaPatterns(_signatures.behavioral_patterns, "behavioral")
+  -- Known mining libraries — unambiguous
+  checkPlain(FALLBACK_LIBRARIES, "library", HARD)
+  if _signatures and _signatures.libraries then
+    checkPlain(_signatures.libraries, "library", HARD)
+  end
+
+  -- Mining pool domains — unambiguous
+  checkPlain(FALLBACK_POOL_DOMAINS, "pool_domain", HARD)
+  if _signatures and _signatures.pool_domains then
+    checkPlain(_signatures.pool_domains, "pool_domain", HARD)
+  end
+
+  -- Stratum protocol markers — unambiguous
+  checkPlain(FALLBACK_PROTOCOL_MARKERS, "protocol", HARD)
+  if _signatures and _signatures.protocol_markers then
+    checkPlain(_signatures.protocol_markers, "protocol", HARD)
+  end
+
+  -- Stratum JSON-RPC agent strings (e.g. "XMRig/")
+  if _signatures and _signatures.stratum_json_rpc and _signatures.stratum_json_rpc.agent_patterns then
+    checkPlain(_signatures.stratum_json_rpc.agent_patterns, "stratum_agent", HARD)
+  end
+
+  -- WASM export names (mining-specific function exports)
+  if _signatures and _signatures.wasm_patterns and _signatures.wasm_patterns.export_names then
+    checkPlain(_signatures.wasm_patterns.export_names, "wasm_export", HARD)
+  end
+
+  -- ===== COMPOSITE triggers (2+ from different categories) =====
+
+  -- Behavioral patterns — algorithm names could appear in docs/research
+  checkPlain(FALLBACK_BEHAVIORAL, "behavioral", COMPOSITE)
+  if _signatures and _signatures.behavioral_patterns then
+    checkLua(_signatures.behavioral_patterns, "behavioral", COMPOSITE)
+  end
+
+  -- Miner config tokens — could appear in config parsing code
+  if _signatures and _signatures.miner_config_tokens then
+    checkPlain(_signatures.miner_config_tokens, "config_token", COMPOSITE)
+  end
+
+  -- RandomX personalization strings — high-signal but could be in security research
+  if _signatures and _signatures.randomx_personalization then
+    checkPlain(_signatures.randomx_personalization, "randomx_personalization", COMPOSITE)
+  end
+
+  -- Stratum JSON-RPC method names — "login"/"submit" are generic alone
+  if _signatures and _signatures.stratum_json_rpc and _signatures.stratum_json_rpc.methods then
+    -- Only match these in JSON-like context: "method":"login" etc.
+    for _, method in ipairs(_signatures.stratum_json_rpc.methods) do
+      -- Check for JSON-RPC style: "method":"<name>" or "method": "<name>"
+      local json_pat = '"method":%s*"' .. method:lower() .. '"'
+      if lower:find(json_pat) then
+        matches[#matches + 1] = {
+          category = "stratum_rpc",
+          pattern = 'method:' .. method,
+          trigger = COMPOSITE,
+        }
+      end
     end
   end
 
-  -- Deduplicate matches (fallback and file may overlap)
-  local seen = {}
-  local unique = {}
-  for _, m in ipairs(matches) do
-    local key = m.category .. ":" .. m.pattern
-    if not seen[key] then
-      seen[key] = true
-      unique[#unique + 1] = m
+  -- Stratum JSON-RPC distinctive fields (job_id + nonce + result together)
+  if _signatures and _signatures.stratum_json_rpc and _signatures.stratum_json_rpc.fields then
+    for _, field in ipairs(_signatures.stratum_json_rpc.fields) do
+      local lf = field:lower()
+      -- Dotted fields like "params.login" — check for "params":{"login"
+      if lf:find(".", 1, true) then
+        local parts = {}
+        for part in lf:gmatch("[^%.]+") do parts[#parts + 1] = part end
+        if #parts == 2 then
+          local pat = '"' .. parts[1] .. '".-"' .. parts[2] .. '"'
+          if lower:find(pat) then
+            matches[#matches + 1] = {
+              category = "stratum_field",
+              pattern = field,
+              trigger = COMPOSITE,
+            }
+          end
+        end
+      else
+        -- Simple field: "job_id", "nonce", "result" — only in JSON context
+        local pat = '"' .. lf .. '"'
+        if lower:find(pat, 1, true) then
+          matches[#matches + 1] = {
+            category = "stratum_field",
+            pattern = field,
+            trigger = COMPOSITE,
+          }
+        end
+      end
     end
   end
 
+  -- Algorithm constants (string_values only, hex isn't in JS source)
+  if _signatures and _signatures.algorithm_constants then
+    for _, ac in ipairs(_signatures.algorithm_constants) do
+      if ac.string_values then
+        for _, sv in ipairs(ac.string_values) do
+          if lower:find(sv:lower(), 1, true) then
+            matches[#matches + 1] = {
+              category = "algorithm_constant",
+              pattern = sv,
+              trigger = COMPOSITE,
+              name = ac.name,
+            }
+          end
+        end
+      end
+    end
+  end
+
+  local unique = deduplicate(matches)
   return {
-    detected = #unique > 0,
+    detected = should_quarantine(unique),
     matches = unique,
   }
 end
@@ -206,11 +371,11 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Scan a native binary for crypto miner patterns.
---- Checks against known binary hashes (SHA-256) and scans for mining
---- function names in the ELF string table.
+--- Checks against known binary hashes (SHA-256), malware sample hashes,
+--- mining function names, algorithm constants, and embedded strings.
 ---
 --- @param path string  Path to the .so file
---- @return table  { detected = bool, matches = { { category, pattern } ... } }
+--- @return table  { detected = bool, matches = { { category, pattern, trigger } ... } }
 function Quarantine.scanBinary(path)
   if _active then
     return { detected = true, matches = _matches }
@@ -230,17 +395,43 @@ function Quarantine.scanBinary(path)
     return { detected = false, matches = {} }
   end
 
-  -- 1. Check full-file SHA-256 against known mining binary hashes
+  -- ===== HARD triggers =====
+
+  -- 1. Full-file SHA-256 against known mining binary hashes
   if _sha256_available then
     local hash = sha256(data)
     if hash then
-      -- Check hardcoded hashes (none yet — populated by Gemini research)
-      -- Check signature file hashes
+      -- Check official release hashes
       if _signatures and _signatures.binary_hashes and _signatures.binary_hashes[hash] then
         local info = _signatures.binary_hashes[hash]
         matches[#matches + 1] = {
           category = "binary_hash",
           pattern = hash,
+          trigger = HARD,
+          name = info.name,
+          source = info.source,
+        }
+      end
+
+      -- Check known malware sample hashes
+      if _signatures and _signatures.malware_sample_hashes and _signatures.malware_sample_hashes[hash] then
+        local info = _signatures.malware_sample_hashes[hash]
+        matches[#matches + 1] = {
+          category = "malware_hash",
+          pattern = hash,
+          trigger = HARD,
+          name = info.name,
+          source = info.source,
+        }
+      end
+
+      -- Check WASM hashes (in case a .so wraps a WASM module)
+      if _signatures and _signatures.wasm_hashes and _signatures.wasm_hashes[hash] then
+        local info = _signatures.wasm_hashes[hash]
+        matches[#matches + 1] = {
+          category = "wasm_hash",
+          pattern = hash,
+          trigger = HARD,
           name = info.name,
           source = info.source,
         }
@@ -248,30 +439,67 @@ function Quarantine.scanBinary(path)
     end
   end
 
-  -- 2. Scan for mining symbol names in the binary's string sections
-  -- ELF binaries contain null-terminated strings in .strtab, .dynstr, .rodata
-  -- We can find them with simple string.find on the raw bytes
+  -- 2. Mining symbol names in the binary (ELF .strtab/.dynstr/.rodata)
   local lower_data = data:lower()
 
-  -- Check hardcoded fallback symbol names
   for _, sym in ipairs(FALLBACK_SYMBOL_NAMES) do
     local lsym = sym:lower()
     if lower_data:find(lsym, 1, true) then
-      matches[#matches + 1] = { category = "symbol_name", pattern = sym }
+      matches[#matches + 1] = { category = "symbol_name", pattern = sym, trigger = HARD }
     end
   end
 
-  -- Check signature file symbol names
   if _signatures and _signatures.symbol_names then
     for _, sym in ipairs(_signatures.symbol_names) do
       local lsym = sym:lower()
       if lower_data:find(lsym, 1, true) then
-        matches[#matches + 1] = { category = "symbol_name", pattern = sym }
+        matches[#matches + 1] = { category = "symbol_name", pattern = sym, trigger = HARD }
       end
     end
   end
 
-  -- 3. Check for algorithm constants (string markers)
+  -- 3. Embedded pool domains (hardcoded URLs in the binary)
+  for _, domain in ipairs(FALLBACK_POOL_DOMAINS) do
+    if lower_data:find(domain:lower(), 1, true) then
+      matches[#matches + 1] = { category = "embedded_pool_domain", pattern = domain, trigger = HARD }
+    end
+  end
+  if _signatures and _signatures.pool_domains then
+    for _, domain in ipairs(_signatures.pool_domains) do
+      if lower_data:find(domain:lower(), 1, true) then
+        matches[#matches + 1] = { category = "embedded_pool_domain", pattern = domain, trigger = HARD }
+      end
+    end
+  end
+
+  -- 4. Stratum protocol strings in the binary
+  for _, marker in ipairs(FALLBACK_PROTOCOL_MARKERS) do
+    if lower_data:find(marker:lower(), 1, true) then
+      matches[#matches + 1] = { category = "embedded_protocol", pattern = marker, trigger = HARD }
+    end
+  end
+
+  -- ===== COMPOSITE triggers =====
+
+  -- 5. Miner config tokens (CLI flags, user-agent fragments)
+  if _signatures and _signatures.miner_config_tokens then
+    for _, token in ipairs(_signatures.miner_config_tokens) do
+      if lower_data:find(token:lower(), 1, true) then
+        matches[#matches + 1] = { category = "config_token", pattern = token, trigger = COMPOSITE }
+      end
+    end
+  end
+
+  -- 6. RandomX personalization strings
+  if _signatures and _signatures.randomx_personalization then
+    for _, ps in ipairs(_signatures.randomx_personalization) do
+      if data:find(ps, 1, true) then
+        matches[#matches + 1] = { category = "randomx_personalization", pattern = ps, trigger = COMPOSITE }
+      end
+    end
+  end
+
+  -- 7. Algorithm constants (string values)
   if _signatures and _signatures.algorithm_constants then
     for _, ac in ipairs(_signatures.algorithm_constants) do
       if ac.string_values then
@@ -280,6 +508,7 @@ function Quarantine.scanBinary(path)
             matches[#matches + 1] = {
               category = "algorithm_constant",
               pattern = sv,
+              trigger = COMPOSITE,
               name = ac.name,
             }
           end
@@ -288,40 +517,18 @@ function Quarantine.scanBinary(path)
     end
   end
 
-  -- 4. Check for mining pool domains in the binary (hardcoded URLs)
-  for _, domain in ipairs(FALLBACK_POOL_DOMAINS) do
-    if lower_data:find(domain:lower(), 1, true) then
-      matches[#matches + 1] = { category = "embedded_pool_domain", pattern = domain }
-    end
-  end
-  if _signatures and _signatures.pool_domains then
-    for _, domain in ipairs(_signatures.pool_domains) do
-      if lower_data:find(domain:lower(), 1, true) then
-        matches[#matches + 1] = { category = "embedded_pool_domain", pattern = domain }
+  -- 8. Stratum JSON-RPC agent patterns in binary strings
+  if _signatures and _signatures.stratum_json_rpc and _signatures.stratum_json_rpc.agent_patterns then
+    for _, agent in ipairs(_signatures.stratum_json_rpc.agent_patterns) do
+      if data:find(agent, 1, true) then
+        matches[#matches + 1] = { category = "stratum_agent", pattern = agent, trigger = HARD }
       end
     end
   end
 
-  -- 5. Check for stratum protocol strings in the binary
-  for _, marker in ipairs(FALLBACK_PROTOCOL_MARKERS) do
-    if lower_data:find(marker:lower(), 1, true) then
-      matches[#matches + 1] = { category = "embedded_protocol", pattern = marker }
-    end
-  end
-
-  -- Deduplicate
-  local seen = {}
-  local unique = {}
-  for _, m in ipairs(matches) do
-    local key = m.category .. ":" .. m.pattern
-    if not seen[key] then
-      seen[key] = true
-      unique[#unique + 1] = m
-    end
-  end
-
+  local unique = deduplicate(matches)
   return {
-    detected = #unique > 0,
+    detected = should_quarantine(unique),
     matches = unique,
   }
 end
@@ -334,7 +541,7 @@ end
 --- Called from the bridge's network polyfills.
 ---
 --- @param url string  The URL being connected to
---- @return table  { detected = bool, matches = { { category, pattern } ... } }
+--- @return table  { detected = bool, matches = { { category, pattern, trigger } ... } }
 function Quarantine.scanURL(url)
   if _active then
     return { detected = true, matches = _matches }
@@ -347,58 +554,152 @@ function Quarantine.scanURL(url)
   local matches = {}
   local lower = url:lower()
 
-  -- Check pool domains
+  -- ===== HARD triggers =====
+
+  -- Pool domains — connecting to a pool is unambiguous
   for _, domain in ipairs(FALLBACK_POOL_DOMAINS) do
     if lower:find(domain:lower(), 1, true) then
-      matches[#matches + 1] = { category = "pool_url", pattern = domain }
+      matches[#matches + 1] = { category = "pool_url", pattern = domain, trigger = HARD }
     end
   end
   if _signatures and _signatures.pool_domains then
     for _, domain in ipairs(_signatures.pool_domains) do
       if lower:find(domain:lower(), 1, true) then
-        matches[#matches + 1] = { category = "pool_url", pattern = domain }
+        matches[#matches + 1] = { category = "pool_url", pattern = domain, trigger = HARD }
       end
     end
   end
 
-  -- Check protocol markers
+  -- Protocol markers — stratum:// in a URL is unambiguous
   for _, marker in ipairs(FALLBACK_PROTOCOL_MARKERS) do
     if lower:find(marker:lower(), 1, true) then
-      matches[#matches + 1] = { category = "pool_protocol", pattern = marker }
+      matches[#matches + 1] = { category = "pool_protocol", pattern = marker, trigger = HARD }
     end
   end
   if _signatures and _signatures.protocol_markers then
     for _, marker in ipairs(_signatures.protocol_markers) do
       if lower:find(marker:lower(), 1, true) then
-        matches[#matches + 1] = { category = "pool_protocol", pattern = marker }
+        matches[#matches + 1] = { category = "pool_protocol", pattern = marker, trigger = HARD }
       end
     end
   end
 
-  -- Check network-specific indicators
+  -- ===== COMPOSITE triggers =====
+
+  -- Generic network indicators (words like "mining", "pool" in URLs)
   if _signatures and _signatures.network_patterns then
     if _signatures.network_patterns.ws_indicators then
       for _, ind in ipairs(_signatures.network_patterns.ws_indicators) do
         if lower:find(ind:lower(), 1, true) then
-          matches[#matches + 1] = { category = "ws_indicator", pattern = ind }
+          matches[#matches + 1] = { category = "ws_indicator", pattern = ind, trigger = COMPOSITE }
+        end
+      end
+    end
+
+    -- Mining port detection
+    if _signatures.network_patterns.mining_ports then
+      for _, port in ipairs(_signatures.network_patterns.mining_ports) do
+        -- Match :PORT at end of host or before path
+        local port_str = ":" .. tostring(port)
+        if lower:find(port_str .. "$") or lower:find(port_str .. "/") or lower:find(port_str .. "?") then
+          matches[#matches + 1] = {
+            category = "mining_port",
+            pattern = port_str,
+            trigger = COMPOSITE,
+          }
         end
       end
     end
   end
 
-  -- Deduplicate
-  local seen = {}
-  local unique = {}
-  for _, m in ipairs(matches) do
-    local key = m.category .. ":" .. m.pattern
-    if not seen[key] then
-      seen[key] = true
-      unique[#unique + 1] = m
+  local unique = deduplicate(matches)
+  return {
+    detected = should_quarantine(unique),
+    matches = unique,
+  }
+end
+
+-- ---------------------------------------------------------------------------
+-- WebSocket frame scanning (for Stratum JSON-RPC detection)
+-- ---------------------------------------------------------------------------
+
+--- Scan a WebSocket message payload for Stratum JSON-RPC patterns.
+--- Called from the bridge's WebSocket onmessage path.
+---
+--- @param payload string  The WebSocket message text
+--- @return table  { detected = bool, matches = { { category, pattern, trigger } ... } }
+function Quarantine.scanWSFrame(payload)
+  if _active then
+    return { detected = true, matches = _matches }
+  end
+
+  if type(payload) ~= "string" or #payload == 0 then
+    return { detected = false, matches = {} }
+  end
+
+  local matches = {}
+  local lower = payload:lower()
+
+  -- Look for JSON-RPC mining patterns in the frame
+  -- A Stratum login message looks like:
+  --   {"method":"login","params":{"login":"wallet","pass":"x","agent":"XMRig/6.25.0"}}
+  -- A job notification looks like:
+  --   {"method":"job","params":{"job_id":"...","blob":"...","target":"..."}}
+
+  -- Check for Stratum method + distinctive fields together
+  local has_method = false
+  local has_job_id = lower:find('"job_id"', 1, true) ~= nil
+  local has_nonce = lower:find('"nonce"', 1, true) ~= nil
+
+  if _signatures and _signatures.stratum_json_rpc then
+    -- Check method names in JSON context
+    if _signatures.stratum_json_rpc.methods then
+      for _, method in ipairs(_signatures.stratum_json_rpc.methods) do
+        local pat = '"method":%s*"' .. method:lower() .. '"'
+        if lower:find(pat) then
+          has_method = true
+          matches[#matches + 1] = {
+            category = "stratum_rpc_method",
+            pattern = method,
+            trigger = COMPOSITE,
+          }
+        end
+      end
+    end
+
+    -- Agent strings are hard triggers (miner self-identifying)
+    if _signatures.stratum_json_rpc.agent_patterns then
+      for _, agent in ipairs(_signatures.stratum_json_rpc.agent_patterns) do
+        if lower:find(agent:lower(), 1, true) then
+          matches[#matches + 1] = {
+            category = "stratum_agent",
+            pattern = agent,
+            trigger = HARD,
+          }
+        end
+      end
     end
   end
 
+  -- Stratum method + job_id/nonce = hard trigger (this IS mining traffic)
+  if has_method and (has_job_id or has_nonce) then
+    matches[#matches + 1] = {
+      category = "stratum_traffic",
+      pattern = "method+" .. (has_job_id and "job_id" or "nonce"),
+      trigger = HARD,
+    }
+  end
+
+  -- Pool domains in the payload
+  for _, domain in ipairs(FALLBACK_POOL_DOMAINS) do
+    if lower:find(domain:lower(), 1, true) then
+      matches[#matches + 1] = { category = "pool_domain", pattern = domain, trigger = HARD }
+    end
+  end
+
+  local unique = deduplicate(matches)
   return {
-    detected = #unique > 0,
+    detected = should_quarantine(unique),
     matches = unique,
   }
 end
@@ -411,7 +712,7 @@ end
 --- Logs to audit system but produces no stdout/stderr output.
 ---
 --- @param reason string  Why quarantine was triggered
---- @param matches table  List of { category, pattern } matches that triggered it
+--- @param matches table  List of { category, pattern, trigger } matches that triggered it
 function Quarantine.activate(reason, matches)
   if _active then return end  -- already quarantined, no-op
 
@@ -427,7 +728,8 @@ function Quarantine.activate(reason, matches)
   if _audit then
     local match_summary = {}
     for _, m in ipairs(_matches) do
-      match_summary[#match_summary + 1] = m.category .. ": " .. m.pattern
+      local entry = m.category .. ": " .. m.pattern .. " [" .. (m.trigger or "?") .. "]"
+      match_summary[#match_summary + 1] = entry
     end
     _audit.log("blocked", "quarantine", {
       reason = reason,
@@ -485,6 +787,7 @@ function Quarantine.getHandlers()
         matches = _matches,
         sha256_available = _sha256_available,
         signatures_loaded = _signatures ~= nil,
+        confidence_model = "hard+composite",
       }
     end,
   }
