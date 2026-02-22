@@ -14,16 +14,26 @@ import { useRSSFeed } from '../../../packages/rss/src';
 import { hmacSHA256 } from '../../../packages/webhooks/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
-type NetworkingView = 'fetch' | 'websocket' | 'apis' | 'rss' | 'webhooks' | 'tor';
-
-const NETWORKING_VIEWS: Array<{ id: NetworkingView; label: string; subtitle: string }> = [
-  { id: 'fetch', label: 'Fetch', subtitle: 'HTTP and JSON response handling' },
-  { id: 'websocket', label: 'WebSocket', subtitle: 'Local peer server and client loop' },
-  { id: 'apis', label: 'REST APIs', subtitle: 'One-liner API hooks' },
-  { id: 'rss', label: 'RSS', subtitle: 'Feed subscription and aggregation basics' },
-  { id: 'webhooks', label: 'Webhooks', subtitle: 'HMAC signing and payload integrity' },
-  { id: 'tor', label: 'Tor', subtitle: 'Hidden service address status' },
-];
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <Text style={{ fontSize: 11, color: c.muted }}>{title.toUpperCase()}</Text>
+      <Box style={{
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: c.border,
+        padding: 12,
+        gap: 8,
+        alignItems: 'center',
+      }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
 
 const FEED_OPTIONS = {
   'Hacker News': 'https://hnrss.org/frontpage',
@@ -31,27 +41,7 @@ const FEED_OPTIONS = {
   NASA: 'https://www.nasa.gov/news-release/feed/',
 } as const;
 
-function ShellCard({ children }: { children: React.ReactNode }) {
-  const c = useThemeColors();
-  return (
-    <Box
-      style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 12,
-        gap: 10,
-        alignItems: 'center',
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
-
-function FetchPanel() {
+function FetchSection() {
   const c = useThemeColors();
   const [url, setUrl] = useState<string | null>(null);
   const { data, error, loading } = useFetch<any>(url);
@@ -61,7 +51,10 @@ function FetchPanel() {
   }, []);
 
   return (
-    <Box style={{ width: '100%', maxWidth: 620, gap: 8, alignItems: 'center' }}>
+    <Section title="1. Fetch">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        HTTP requests with useFetch hook. Returns JSON data with loading and error states.
+      </Text>
       <Pressable
         onPress={run}
         style={{
@@ -86,11 +79,11 @@ function FetchPanel() {
           </Text>
         )}
       </Box>
-    </Box>
+    </Section>
   );
 }
 
-function WebSocketPanel() {
+function WebSocketSection() {
   const c = useThemeColors();
   const [serverPort, setServerPort] = useState<number | null>(null);
   const [clientUrl, setClientUrl] = useState<string | null>(null);
@@ -118,8 +111,11 @@ function WebSocketPanel() {
   }, [client.send]);
 
   return (
-    <Box style={{ width: '100%', maxWidth: 680, gap: 10, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+    <Section title="2. WebSocket">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Local peer server and client loop. Start a server, connect a client, and exchange messages.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Pressable onPress={() => { setServerPort(8080); setLogs([]); }} style={{ backgroundColor: c.primary, borderRadius: 6, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 }}>
           <Text style={{ color: '#fff', fontSize: 10 }}>Start Server</Text>
         </Pressable>
@@ -151,11 +147,11 @@ function WebSocketPanel() {
           ))
         )}
       </Box>
-    </Box>
+    </Section>
   );
 }
 
-function APIsPanel() {
+function RESTAPISection() {
   const c = useThemeColors();
   const { data, loading, error, refetch } = useCoinPrice('bitcoin', { include24hChange: true });
 
@@ -163,7 +159,10 @@ function APIsPanel() {
   const change = (data as any)?.bitcoin?.usd_24h_change;
 
   return (
-    <Box style={{ width: '100%', maxWidth: 620, gap: 10, alignItems: 'center' }}>
+    <Section title="3. REST APIs">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        One-liner API hooks. useCoinPrice fetches live Bitcoin data from CoinGecko.
+      </Text>
       <Box style={{ backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, width: '100%', padding: 12, gap: 6, alignItems: 'center' }}>
         <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>useCoinPrice('bitcoin')</Text>
         {loading && <Text style={{ color: c.warning, fontSize: 10 }}>Loading price...</Text>}
@@ -184,18 +183,21 @@ function APIsPanel() {
           <Text style={{ color: c.textSecondary, fontSize: 10 }}>Refetch</Text>
         </Pressable>
       </Box>
-    </Box>
+    </Section>
   );
 }
 
-function RSSPanel() {
+function RSSSection() {
   const c = useThemeColors();
   const [feedName, setFeedName] = useState<keyof typeof FEED_OPTIONS>('Hacker News');
   const { items, loading, error } = useRSSFeed(FEED_OPTIONS[feedName], { limit: 8 });
 
   return (
-    <Box style={{ width: '100%', maxWidth: 680, gap: 10, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+    <Section title="4. RSS">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Feed subscription and aggregation. Select a source to load its latest entries.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
         {(Object.keys(FEED_OPTIONS) as Array<keyof typeof FEED_OPTIONS>).map((name) => (
           <Pressable
             key={name}
@@ -227,11 +229,11 @@ function RSSPanel() {
           </Box>
         ))}
       </Box>
-    </Box>
+    </Section>
   );
 }
 
-function WebhooksPanel() {
+function WebhooksSection() {
   const c = useThemeColors();
   const [variant, setVariant] = useState<'push' | 'deploy'>('push');
   const secret = 'my-webhook-secret';
@@ -241,8 +243,11 @@ function WebhooksPanel() {
   const signature = useMemo(() => hmacSHA256(secret, payload), [secret, payload]);
 
   return (
-    <Box style={{ width: '100%', maxWidth: 680, gap: 10, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+    <Section title="5. Webhooks">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        HMAC signing and payload integrity verification. Select a payload variant to compute its signature.
+      </Text>
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
         <Pressable onPress={() => setVariant('push')} style={{ backgroundColor: variant === 'push' ? c.primary : c.surface, borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5 }}>
           <Text style={{ color: variant === 'push' ? '#fff' : c.text, fontSize: 10 }}>Push payload</Text>
         </Pressable>
@@ -259,11 +264,11 @@ function WebhooksPanel() {
         <Text style={{ color: c.textDim, fontSize: 10 }}>x-hub-signature-256</Text>
         <Text style={{ color: c.warning, fontSize: 10 }}>{`sha256=${signature}`}</Text>
       </Box>
-    </Box>
+    </Section>
   );
 }
 
-function TorPanel() {
+function TorSection() {
   const c = useThemeColors();
   const getHostname = useLoveRPC<string>('tor:getHostname');
   const [hostname, setHostname] = useState<string | null>(null);
@@ -295,9 +300,9 @@ function TorPanel() {
   });
 
   return (
-    <Box style={{ width: '100%', maxWidth: 620, gap: 10, alignItems: 'center' }}>
+    <Section title="6. Tor">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-        Tor hidden-service networking can be bootstrapped by the runtime and exposed over RPC/events.
+        Hidden-service networking bootstrapped by the runtime and exposed over RPC/events.
       </Text>
 
       <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 6, alignItems: 'center' }}>
@@ -313,74 +318,20 @@ function TorPanel() {
           <Text style={{ color: c.textSecondary, fontSize: 10 }}>Refresh</Text>
         </Pressable>
       </Box>
-    </Box>
+    </Section>
   );
 }
 
-function NetworkingViewBody({ view }: { view: NetworkingView }) {
-  switch (view) {
-    case 'fetch':
-      return <FetchPanel />;
-    case 'websocket':
-      return <WebSocketPanel />;
-    case 'apis':
-      return <APIsPanel />;
-    case 'rss':
-      return <RSSPanel />;
-    case 'webhooks':
-      return <WebhooksPanel />;
-    case 'tor':
-      return <TorPanel />;
-    default:
-      return null;
-  }
-}
-
 export function NetworkingStory() {
-  const c = useThemeColors();
-  const [selected, setSelected] = useState<NetworkingView>('fetch');
-  const current = NETWORKING_VIEWS.find((opt) => opt.id === selected) || NETWORKING_VIEWS[0];
-
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, alignItems: 'center', overflow: 'scroll' }}>
-      <Box style={{ width: '100%', maxWidth: 920, gap: 12, alignItems: 'center' }}>
-        <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>
-          Networking Hub
-        </Text>
-        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-          One centered story for transport, APIs, feeds, and webhook tooling.
-        </Text>
-
-        <ShellCard>
-          <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-            {NETWORKING_VIEWS.map((opt) => (
-              <Pressable
-                key={opt.id}
-                onPress={() => setSelected(opt.id)}
-                style={{
-                  backgroundColor: selected === opt.id ? c.primary : c.surface,
-                  borderRadius: 6,
-                  borderWidth: 1,
-                  borderColor: selected === opt.id ? c.primary : c.border,
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 6,
-                  paddingBottom: 6,
-                }}
-              >
-                <Text style={{ color: selected === opt.id ? '#fff' : c.text, fontSize: 10 }}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
-          </Box>
-        </ShellCard>
-
-        <ShellCard>
-          <Text style={{ color: c.text, fontSize: 11, textAlign: 'center' }}>{current.label}</Text>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>{current.subtitle}</Text>
-          <NetworkingViewBody view={selected} />
-        </ShellCard>
+      <Box style={{ width: '100%', maxWidth: 760, gap: 14, alignItems: 'center' }}>
+        <FetchSection />
+        <WebSocketSection />
+        <RESTAPISection />
+        <RSSSection />
+        <WebhooksSection />
+        <TorSection />
       </Box>
     </Box>
   );
