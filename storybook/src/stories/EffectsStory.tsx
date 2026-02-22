@@ -39,9 +39,9 @@ const effectsWithIndex = effects.map((effect, originalIndex) => ({ ...effect, or
 
 type Mode = 'normal' | 'infinite' | 'reactive';
 const modes: { label: string; value: Mode }[] = [
-  { label: 'Normal', value: 'normal' },
-  { label: 'Infinite', value: 'infinite' },
-  { label: 'Reactive', value: 'reactive' },
+  { label: 'Static', value: 'normal' },
+  { label: 'Tiling', value: 'infinite' },
+  { label: 'Cursor', value: 'reactive' },
 ];
 
 export function EffectsStory() {
@@ -180,7 +180,7 @@ export function EffectsStory() {
         {/* Standalone effect */}
         <Box style={{ flexGrow: 1, flexBasis: 0, gap: 4, minHeight: 0 }}>
           <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
-            {mode === 'normal' ? 'Standalone' : mode === 'infinite' ? 'Infinite Canvas' : 'Move your mouse'}
+            {mode === 'normal' ? 'Standalone' : mode === 'infinite' ? 'Seamless Tiling' : 'Cursor-Reactive'}
           </Text>
           <Box style={{
             flexGrow: 1,
@@ -198,7 +198,7 @@ export function EffectsStory() {
         {/* Background texture demo */}
         <Box style={{ width: 208, gap: 4, minHeight: 0 }}>
           <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
-            {mode === 'reactive' ? 'Reactive Background' : 'As Background'}
+            {mode === 'reactive' ? 'Cursor-Reactive Background' : 'As Background'}
           </Text>
           <Box style={{
             flexGrow: 1,
@@ -221,7 +221,7 @@ export function EffectsStory() {
                 {effects[selected].name}
               </Text>
               <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 4 }}>
-                {mode === 'reactive' ? 'Hover to activate' : mode === 'infinite' ? 'Infinite scroll' : 'Living background texture'}
+                {mode === 'reactive' ? 'Follows cursor movement' : mode === 'infinite' ? 'Tiles seamlessly' : 'Living background texture'}
               </Text>
             </Box>
 
