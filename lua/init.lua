@@ -1830,7 +1830,12 @@ function ReactJIT.draw()
           if winRoot then
             wmMod.activate(win)
 
-            -- Set up Love2D state for the secondary window
+            -- Re-bind Love2D's graphics state for this context.
+            -- After a context switch, viewport/shader/blend are stale.
+            if love.graphics.prepareWindowContext then
+              love.graphics.prepareWindowContext(win.width, win.height)
+            end
+
             love.graphics.clear(0.05, 0.05, 0.09, 1.0)
             love.graphics.setBlendMode("alpha")
             love.graphics.origin()
@@ -1851,6 +1856,13 @@ function ReactJIT.draw()
         end
       end
       wmMod.activateMain()
+      -- Restore main window's graphics state
+      if love.graphics.prepareWindowContext then
+        local mw = wmMod.getMain()
+        if mw then
+          love.graphics.prepareWindowContext(mw.width, mw.height)
+        end
+      end
     end
   end
 
