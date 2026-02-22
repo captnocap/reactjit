@@ -26,6 +26,10 @@ local _fontSize = 12
 local _lineWidth = 1
 local _stateStack = {}
 
+-- Scissor state (for getScissor / intersectScissor)
+local _scissorActive = false
+local _scissorX, _scissorY, _scissorW, _scissorH = 0, 0, 0, 0
+
 -- ============================================================================
 -- love.graphics
 -- ============================================================================
@@ -172,6 +176,9 @@ function graphics.push(mode)
   table.insert(_stateStack, {
     colorR = _colorR, colorG = _colorG, colorB = _colorB, colorA = _colorA,
     fontSize = _fontSize, lineWidth = _lineWidth,
+    scissorActive = _scissorActive,
+    scissorX = _scissorX, scissorY = _scissorY,
+    scissorW = _scissorW, scissorH = _scissorH,
   })
   GL.glPushMatrix()
 end
@@ -182,6 +189,11 @@ function graphics.pop()
     _colorR, _colorG, _colorB, _colorA = s.colorR, s.colorG, s.colorB, s.colorA
     _fontSize = s.fontSize
     _lineWidth = s.lineWidth
+    if s.scissorActive then
+      graphics.setScissor(s.scissorX, s.scissorY, s.scissorW, s.scissorH)
+    else
+      graphics.setScissor()
+    end
   end
   GL.glPopMatrix()
 end
@@ -196,12 +208,54 @@ end
 
 function graphics.setScissor(x, y, w, h)
   if x then
+    _scissorActive = true
+    _scissorX, _scissorY, _scissorW, _scissorH = x, y, w, h
     GL.glEnable(GL.SCISSOR_TEST)
     -- GL scissor is bottom-left origin; flip Y
     GL.glScissor(x, _H - (y + h), w, h)
   else
+    _scissorActive = false
     GL.glDisable(GL.SCISSOR_TEST)
   end
+end
+
+function graphics.getScissor()
+  if _scissorActive then
+    return _scissorX, _scissorY, _scissorW, _scissorH
+  end
+  return nil
+end
+
+function graphics.intersectScissor(x, y, w, h)
+  if _scissorActive then
+    -- Compute intersection with existing scissor
+    local ix1 = math.max(x, _scissorX)
+    local iy1 = math.max(y, _scissorY)
+    local ix2 = math.min(x + w, _scissorX + _scissorW)
+    local iy2 = math.min(y + h, _scissorY + _scissorH)
+    graphics.setScissor(ix1, iy1, math.max(0, ix2 - ix1), math.max(0, iy2 - iy1))
+  else
+    graphics.setScissor(x, y, w, h)
+  end
+end
+
+--- Transform a point through the current graphics transform.
+--- On SDL2 during the paint pass the modelview is identity (layout coords == pixels),
+--- so this is a pass-through.
+function graphics.transformPoint(x, y)
+  return x, y
+end
+
+function graphics.getFont()
+  return {
+    _size = _fontSize,
+    getWidth = function(self, text)
+      return Font.measureWidth(text, self._size)
+    end,
+    getHeight = function(self)
+      return Font.lineHeight(self._size)
+    end,
+  }
 end
 
 function graphics.getWidth()  return _W end

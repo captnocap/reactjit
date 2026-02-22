@@ -441,8 +441,9 @@ end
 -- Node painter
 -- ============================================================================
 
--- Lazy-loaded capabilities module for checking rendersInOwnSurface
+-- Lazy-loaded modules
 local CapabilitiesModule = nil
+local TextInputModule = nil
 
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
@@ -670,6 +671,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
           GL.glVertex2f(c.x + c.w, midY)
         GL.glEnd()
       end
+    end
+
+  -- TextInput (Lua-owned: delegate rendering to textinput.lua)
+  elseif not isHidden and node.type == "TextInput" then
+    if not TextInputModule then
+      local ok, mod = pcall(require, "lua.textinput")
+      if ok then TextInputModule = mod end
+    end
+    if TextInputModule then
+      TextInputModule.draw(node, eff)
     end
   end
 
