@@ -36,17 +36,41 @@ local _scissorX, _scissorY, _scissorW, _scissorH = 0, 0, 0, 0
 
 local graphics = {}
 
-function graphics.newFont(size)
-  local s = size or 12
+--- Build a font object with Love2D-compatible methods.
+local function makeFontObject(size)
   return {
-    _size = s,
+    _size = size,
     getWidth = function(self, text)
       return Font.measureWidth(text, self._size)
     end,
     getHeight = function(self)
       return Font.lineHeight(self._size)
     end,
+    getWrap = function(self, text, limit)
+      local lines = {}
+      for raw in text:gmatch("[^\n]+") do
+        local words = {}
+        for w in raw:gmatch("%S+") do words[#words + 1] = w end
+        local line = ""
+        for _, word in ipairs(words) do
+          local cand = line == "" and word or (line .. " " .. word)
+          if Font.measureWidth(cand, self._size) <= limit then
+            line = cand
+          else
+            if line ~= "" then lines[#lines + 1] = line end
+            line = word
+          end
+        end
+        if line ~= "" then lines[#lines + 1] = line end
+      end
+      if #lines == 0 then lines[1] = "" end
+      return nil, lines
+    end,
   }
+end
+
+function graphics.newFont(size)
+  return makeFontObject(size or 12)
 end
 
 function graphics.setFont(f)
@@ -281,15 +305,7 @@ function graphics.transformPoint(x, y)
 end
 
 function graphics.getFont()
-  return {
-    _size = _fontSize,
-    getWidth = function(self, text)
-      return Font.measureWidth(text, self._size)
-    end,
-    getHeight = function(self)
-      return Font.lineHeight(self._size)
-    end,
-  }
+  return makeFontObject(_fontSize)
 end
 
 function graphics.getWidth()  return _W end

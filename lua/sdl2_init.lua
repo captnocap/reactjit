@@ -290,8 +290,9 @@ function SDL2Init.run(config)
   })
 
   -- ------------------------------------------------------------------
-  -- 3c. Devtools (inspector, console, unified panel)
+  -- 3c. Devtools, errors, inspector, console
   -- ------------------------------------------------------------------
+  local errors    = require("lua.errors")
   local inspector = require("lua.inspector")
   local console   = require("lua.console")
   local devtools  = require("lua.devtools")
@@ -451,7 +452,8 @@ function SDL2Init.run(config)
     lastTicks = now
     local frameStart = now
 
-    -- ---- Event pump ----
+    -- ---- Event pump (pcall-wrapped so crashes show in error overlay) ----
+    local _pumpOk, _pumpErr = pcall(function()
     while sdl.SDL_PollEvent(event) == 1 do
       local t = event.type
 
@@ -581,6 +583,11 @@ function SDL2Init.run(config)
         end
 
         -- Route to devtools first (main window only)
+        -- Error overlay gets first priority on clicks
+        if evtWin.isMain and t == SDL_MOUSEBTNDOWN and errors.mousepressed(mx, my, btn) then
+          -- consumed by error overlay
+        else
+
         local devConsumed = false
         if evtWin.isMain then
           if t == SDL_MOUSEBTNDOWN then
@@ -727,6 +734,7 @@ function SDL2Init.run(config)
           end
           end -- if not overlayConsumed
         end
+        end -- error overlay if-else
 
       elseif t == SDL_MOUSEWHEEL then
         local wid = event.wheel.wid
@@ -911,10 +919,25 @@ function SDL2Init.run(config)
         end
       end
     end
+    end) -- pcall event pump
+    if not _pumpOk then
+      errors.push({
+        source = "lua",
+        message = tostring(_pumpErr),
+        context = "event pump",
+      })
+    end
 
     -- ---- Bridge tick ----
     bridge:tick()
-    pcall(function() bridge:callGlobal("_pollAndDispatchEvents") end)
+    local evtOk, evtErr = pcall(function() bridge:callGlobal("_pollAndDispatchEvents") end)
+    if not evtOk then
+      errors.push({
+        source = "bridge",
+        message = tostring(evtErr),
+        context = "event dispatch (_pollAndDispatchEvents)",
+      })
+    end
 
     -- ---- Drain commands → update tree ----
     local commands = bridge:drainCommands()
@@ -1016,10 +1039,18 @@ function SDL2Init.run(config)
       end
 
       if #treeCommands > 0 then
-        tree.applyCommands(treeCommands)
-        -- Mark all windows as needing layout when tree changes
-        for _, win in ipairs(WM.getAll()) do
-          win.needsLayout = true
+        local tOk, tErr = pcall(tree.applyCommands, treeCommands)
+        if not tOk then
+          errors.push({
+            source = "lua",
+            message = tostring(tErr),
+            context = "tree.applyCommands",
+          })
+        else
+          -- Mark all windows as needing layout when tree changes
+          for _, win in ipairs(WM.getAll()) do
+            win.needsLayout = true
+          end
         end
       end
     end
@@ -1072,14 +1103,21 @@ function SDL2Init.run(config)
     for _, win in ipairs(allWindows) do
       local winRoot = getWindowRoot(win, tree)
       if winRoot and win.needsLayout then
+        local lOk, lErr
         if win.isMain then
           local vh = devtools.getViewportHeight()
-          layout.layout(winRoot, 0, 0, win.width, vh)
+          lOk, lErr = pcall(layout.layout, winRoot, 0, 0, win.width, vh)
         else
-          -- Mark node as window root so layout doesn't skip it via isNonVisual
           winRoot._isWindowRoot = true
-          layout.layout(winRoot, 0, 0, win.width, win.height)
+          lOk, lErr = pcall(layout.layout, winRoot, 0, 0, win.width, win.height)
           winRoot._isWindowRoot = nil
+        end
+        if not lOk then
+          errors.push({
+            source = "lua",
+            message = tostring(lErr),
+            context = "layout (window #" .. win.id .. ")",
+          })
         end
         win.needsLayout = false
       end
@@ -1106,8 +1144,11 @@ function SDL2Init.run(config)
         local ok, err = pcall(Painter.paint, winRoot)
         if not win.isMain then winRoot._isWindowRoot = nil end
         if not ok then
-          io.write("[sdl2_init] paint error (window #" .. win.id .. "): " .. tostring(err) .. "\n")
-          io.flush()
+          errors.push({
+            source = "lua",
+            message = tostring(err),
+            context = "paint (window #" .. win.id .. ")",
+          })
         end
       end
 
@@ -1119,6 +1160,7 @@ function SDL2Init.run(config)
         if systemPanel.isOpen() then systemPanel.draw() end
         if themeMenu.isOpen() then themeMenu.draw() end
         if contextmenu and contextmenu.isOpen() then contextmenu.draw() end
+        errors.draw()
       end
 
       sdl.SDL_GL_SwapWindow(win.sdlWindow)
