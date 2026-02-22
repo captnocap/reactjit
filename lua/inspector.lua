@@ -992,7 +992,16 @@ function drawTooltip()
   local wProv = PROV_LABELS[c.wSource or "unknown"] or PROV_LABELS["unknown"]
   local hProv = PROV_LABELS[c.hSource or "unknown"] or PROV_LABELS["unknown"]
   lines[#lines + 1] = string.format("%d x %d", math.floor(c.w), math.floor(c.h))
-  lines[#lines + 1] = string.format("w:%s  h:%s", wProv[1], hProv[1])
+  -- Show original style value in tooltip when explicit
+  local wLabel = wProv[1]
+  local hLabel = hProv[1]
+  if c.wSource == "explicit" and s.width ~= nil then
+    wLabel = fmtVal(s.width)
+  end
+  if c.hSource == "explicit" and s.height ~= nil then
+    hLabel = fmtVal(s.height)
+  end
+  lines[#lines + 1] = string.format("w:%s  h:%s", wLabel, hLabel)
   -- Use the "worst" provenance color for the summary line (fallback > parent > flex > content > explicit)
   local provPriority = { ["surface-fallback"] = 5, ["scroll-default"] = 5, ["unknown"] = 5,
     ["parent"] = 4, ["root"] = 3, ["flex"] = 2, ["stretch"] = 2, ["aspect-ratio"] = 2,
@@ -1730,8 +1739,15 @@ function drawDetailPanel(rx, ry, rw, rh)
     love.graphics.setColor(wProv[3])
     love.graphics.print(wProv[1], x + font:getWidth(wStr), y)
     y = y + lineH
+    -- Show original style value when explicit (e.g. "width: '100%'" → resolved to 1679)
+    local wDesc = wProv[2]
+    if c.wSource == "explicit" and s.width ~= nil then
+      wDesc = "style.width = " .. fmtVal(s.width)
+    elseif c.wSource == "parent" and node.parent and node.parent.computed then
+      wDesc = "parent w = " .. math.floor(node.parent.computed.w)
+    end
     love.graphics.setColor(TREE_DIM)
-    love.graphics.print(wProv[2], x + 10, y)
+    love.graphics.print(wDesc, x + 10, y)
     y = y + lineH + 2
 
     -- Height with provenance
@@ -1742,8 +1758,18 @@ function drawDetailPanel(rx, ry, rw, rh)
     love.graphics.setColor(hProv[3])
     love.graphics.print(hProv[1], x + font:getWidth(hStr), y)
     y = y + lineH
+    local hDesc = hProv[2]
+    if c.hSource == "explicit" and s.height ~= nil then
+      hDesc = "style.height = " .. fmtVal(s.height)
+    elseif c.hSource == "content" and node.children then
+      hDesc = "auto from " .. #node.children .. " children"
+    elseif c.hSource == "text" then
+      hDesc = "measured from text (fontSize " .. tostring(s.fontSize or "?") .. ")"
+    elseif c.hSource == "surface-fallback" then
+      hDesc = "empty surface got viewport/4"
+    end
     love.graphics.setColor(TREE_DIM)
-    love.graphics.print(hProv[2], x + 10, y)
+    love.graphics.print(hDesc, x + 10, y)
     y = y + lineH + 4
   end
 
