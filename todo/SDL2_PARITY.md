@@ -113,12 +113,11 @@ draw paths.
 - [x] **Add all widget dispatch to SDL2 painter** — **FIXED** (commit `27dd617`). SDL2 painter now dispatches to ALL 10 Lua-owned widget types: Slider, Fader, Knob, Switch, Checkbox, Radio, Select, TextInput, TextEditor, CodeBlock. Previously only View/box and Text were rendered — all other widget nodes were invisible.
   - Files: `lua/sdl2_painter.lua`
 
-- [ ] **Port devtools/inspector/console overlays** `[#47]` — These use `love.graphics.*` for their draw passes. Need SDL2 painter equivalents.
-  - Files: `lua/inspector.lua`, `lua/console.lua`, `lua/devtools.lua`, `lua/errors.lua`
-  - Verify: Error Test story shows devtools error panel in SDL2; F12 inspector works
+- [x] **Port devtools/inspector/console overlays** `[#47]` — **FIXED** (commit `96fdb3d`). All overlay modules now use `love.graphics.*` which routes through the SDL2 shim. Devtools (F12) was already working. Added F9 (theme menu), F10 (settings), F11 (system panel) key handlers, text input routing, mouse press/release/move routing, wheel event routing, and overlay drawing after devtools.
+  - Files: `lua/sdl2_init.lua`, `lua/sdl2_love_shim.lua`
 
-- [ ] **Port context menu** — Right-click context menu rendering.
-  - Files: `lua/contextmenu.lua`
+- [x] **Port context menu** — **FIXED** (commit `96fdb3d`). Right-click context menu wired: button 3 opens menu, mouse press/release routing, keyboard dismiss. Drawing after other overlays.
+  - Files: `lua/sdl2_init.lua`
 
 - [ ] **Port on-screen keyboard** — Gamepad OSK rendering.
   - Files: `lua/osk.lua`
@@ -127,8 +126,8 @@ draw paths.
 
 ## Phase 5: Images
 
-- [ ] **stb_image FFI for SDL2** — `target_sdl2.lua` has `images = nil` with a TODO. Every `<Image>` is invisible.
-  - Files: `lua/target_sdl2.lua`, new `lua/sdl2_images.lua` (or extend existing)
+- [x] **stb_image FFI for SDL2** — **FIXED** (commit `7a4f61c`). Added `lua/sdl2_images.lua` using stb_image FFI for image loading, GL texture upload, and draw. Wired into `target_sdl2.lua`.
+  - Files: `lua/sdl2_images.lua`, `lua/target_sdl2.lua`
   - Verify: Any story with images shows them; Media Library Gallery tab works `[#22]`; Poly Pizza content renders `[#43]`
 
 ---
@@ -140,9 +139,9 @@ Non-rendering capabilities that Love2D provides and SDL2 needs equivalents for.
 - [x] **Clipboard** — **FIXED** (commit `cbf99c8`). Added `SDL_GetClipboardText`, `SDL_SetClipboardText`, `SDL_HasClipboardText`, `SDL_free` FFI declarations. Registered `clipboard:read` and `clipboard:write` RPC handlers. Added `love.system` shim to `sdl2_love_shim.lua` with `getClipboardText()`, `setClipboardText()`, `getOS()`.
   - Files: `lua/sdl2_init.lua`, `lua/sdl2_love_shim.lua`
 
-- [ ] **Filesystem** — `love.filesystem.*` alternative for SDL2. Used by storage, sqlite, manifest, config, bundle loading.
-  - Files: New `lua/sdl2_filesystem.lua` or integrate into shim
-  - Verify: Local Store, SQLite stories work in SDL2
+- [~] **Filesystem** — **PARTIALLY FIXED** (commit `bd88803`). Added `love.filesystem` stubs to SDL2 shim (read/write/createDirectory using plain Lua IO with `.save/` directory). Settings and system panel persistence now work. Full `love.filesystem` API (enumerate, append, etc.) still incomplete.
+  - Files: `lua/sdl2_love_shim.lua`
+  - Verify: Settings persist between sessions; Local Store, SQLite stories work in SDL2
 
 - [~] **HTTP / networking** `[#20]` — **PARTIALLY FIXED** (commit `cbf99c8`). Command dispatch now routes `http:request` and `http:stream` commands to the HTTP module with graceful fallback. HTTP response polling added to frame loop. However, the HTTP worker module itself (`http.lua`) uses `love.thread` which doesn't exist on SDL2 — the actual HTTP requests may still fail. Needs pthreads or luasocket alternative for the worker.
   - Files: `lua/sdl2_init.lua` (dispatch wired), `lua/http.lua` (worker still Love2D-only)
