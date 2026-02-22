@@ -9,7 +9,7 @@ STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 STORYBOOK_SDL2 = storybook/sdl2
 STORYBOOK_SDL2_LIB = $(STORYBOOK_SDL2)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows cli-setup build-blake3
+.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows cli-setup build-blake3 build-natives build-luajit build-all-platforms
 
 all: setup build
 
@@ -112,7 +112,7 @@ build-storybook-sdl2: node_modules
 
 # ── Storybook ──────────────────────────────────────────
 
-storybook-sdl2: build-storybook-sdl2 $(STORYBOOK_SDL2_LIB)/libquickjs.so $(STORYBOOK_SDL2_LIB)/libft_helper.so
+storybook-sdl2: build-storybook-sdl2 $(STORYBOOK_SDL2_LIB)/libquickjs.so $(STORYBOOK_SDL2_LIB)/libft_helper.so $(STORYBOOK_SDL2_LIB)/libSDL2.so
 	@echo ""
 	@echo "=== SDL2 Storybook ready ==="
 	@echo "  Run:  cd $(STORYBOOK_SDL2) && luajit main.lua"
@@ -123,6 +123,10 @@ $(STORYBOOK_SDL2_LIB)/libquickjs.so: zig-out/lib/libquickjs.so
 	cp $< $@
 
 $(STORYBOOK_SDL2_LIB)/libft_helper.so: zig-out/lib/libft_helper.so
+	mkdir -p $(STORYBOOK_SDL2_LIB)
+	cp $< $@
+
+$(STORYBOOK_SDL2_LIB)/libSDL2.so: zig-out/lib/libSDL2.so
 	mkdir -p $(STORYBOOK_SDL2_LIB)
 	cp $< $@
 
@@ -362,6 +366,10 @@ cli-setup: setup
 		&& cp zig-out/lib/libft_helper.so cli/runtime/lib/ft_helper.so \
 		&& echo "  Bundled ft_helper.so" \
 		|| echo "  Warning: ft_helper.so build failed — SDL2 target text rendering unavailable"
+	@zig build sdl2 \
+		&& cp zig-out/lib/libSDL2.so cli/runtime/lib/libSDL2.so \
+		&& echo "  Bundled libSDL2.so (via zig)" \
+		|| echo "  Warning: libSDL2.so build failed — SDL2 target unavailable"
 	@LIBMPV=$$(ldconfig -p | grep 'libmpv.so.2 ' | head -1 | sed 's/.*=> //'); \
 	if [ -n "$$LIBMPV" ]; then \
 		cp "$$LIBMPV" cli/runtime/lib/libmpv.so.2; \
@@ -439,6 +447,33 @@ cli-setup: setup
 		echo "  Bundled data ($$(du -sh data | cut -f1))"; \
 	fi
 	@echo "=== CLI runtime ready. Run: cd cli && npm link ==="
+
+# ── Cross-compilation targets ─────────────────────────────
+# Build all native artifacts (zig + LuaJIT) for a target platform.
+# Usage: make build-natives TARGET=x86_64-linux-gnu
+#        make build-luajit TARGET=x86_64-windows-gnu
+#        make build-all-platforms
+
+build-natives:
+	@test -n "$(TARGET)" || { echo "Usage: make build-natives TARGET=<zig-triple>"; exit 1; }
+	zig build all -Dtarget=$(TARGET)
+	@echo "=== Native artifacts built for $(TARGET) ==="
+
+build-luajit:
+	@test -n "$(TARGET)" || { echo "Usage: make build-luajit TARGET=<zig-triple>"; exit 1; }
+	bash scripts/build-luajit-cross.sh $(TARGET)
+
+build-all-platforms:
+	@echo "=== Building for all platforms ==="
+	zig build all
+	bash scripts/build-luajit-cross.sh native
+	zig build all -Dtarget=x86_64-linux-gnu
+	bash scripts/build-luajit-cross.sh x86_64-linux-gnu
+	zig build all -Dtarget=x86_64-windows-gnu
+	bash scripts/build-luajit-cross.sh x86_64-windows-gnu
+	zig build all -Dtarget=aarch64-linux-gnu
+	bash scripts/build-luajit-cross.sh aarch64-linux-gnu
+	@echo "=== All platforms built ==="
 
 # ── Clean ───────────────────────────────────────────────
 
