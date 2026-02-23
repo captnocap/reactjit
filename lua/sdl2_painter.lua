@@ -46,17 +46,47 @@ function Painter.applyOpacity(op)
 end
 
 -- ============================================================================
+-- Quad batcher: accumulates solid-color quads and flushes in one draw call.
+-- Any operation that changes GL state must call flushQuads() first.
+-- ============================================================================
+
+local quadBuf = {}   -- flat array: x,y, x,y, x,y, x,y, r,g,b,a  (12 floats per quad)
+local quadCount = 0
+
+local function flushQuads()
+  if quadCount == 0 then return end
+  GL.glBegin(GL.QUADS)
+  local idx = 1
+  for _ = 1, quadCount do
+    local qr, qg, qb, qa = quadBuf[idx+8], quadBuf[idx+9], quadBuf[idx+10], quadBuf[idx+11]
+    GL.glColor4f(qr, qg, qb, qa)
+    GL.glVertex2f(quadBuf[idx],   quadBuf[idx+1])
+    GL.glVertex2f(quadBuf[idx+2], quadBuf[idx+3])
+    GL.glVertex2f(quadBuf[idx+4], quadBuf[idx+5])
+    GL.glVertex2f(quadBuf[idx+6], quadBuf[idx+7])
+    idx = idx + 12
+  end
+  GL.glEnd()
+  quadCount = 0
+end
+
+-- ============================================================================
 -- Geometry
 -- ============================================================================
 
 local function filledRect(x,y,w,h)
-  GL.glBegin(GL.TRIANGLE_STRIP)
-    GL.glVertex2f(x,y); GL.glVertex2f(x+w,y)
-    GL.glVertex2f(x,y+h); GL.glVertex2f(x+w,y+h)
-  GL.glEnd()
+  local idx = quadCount * 12 + 1
+  quadBuf[idx]    = x;     quadBuf[idx+1]  = y
+  quadBuf[idx+2]  = x+w;   quadBuf[idx+3]  = y
+  quadBuf[idx+4]  = x+w;   quadBuf[idx+5]  = y+h
+  quadBuf[idx+6]  = x;     quadBuf[idx+7]  = y+h
+  quadBuf[idx+8]  = cr;    quadBuf[idx+9]  = cg
+  quadBuf[idx+10] = cb;    quadBuf[idx+11] = ca
+  quadCount = quadCount + 1
 end
 
 local function strokedRect(x,y,w,h,lw)
+  flushQuads()
   GL.glLineWidth(lw or 1)
   GL.glBegin(GL.LINE_LOOP)
     GL.glVertex2f(x,y); GL.glVertex2f(x+w,y)
@@ -87,6 +117,7 @@ end
 
 local function filledRoundedRect(x,y,w,h,r)
   if r<=0 then filledRect(x,y,w,h); return end
+  flushQuads()
   local v=roundedPoly(x,y,w,h,r)
   GL.glBegin(GL.TRIANGLE_FAN)
     GL.glVertex2f(x+w/2, y+h/2)
@@ -96,6 +127,7 @@ local function filledRoundedRect(x,y,w,h,r)
 end
 
 local function strokedRoundedRect(x,y,w,h,r,lw)
+  flushQuads()
   GL.glLineWidth(lw or 1)
   if r<=0 then strokedRect(x,y,w,h,lw); GL.glLineWidth(1); return end
   local v=roundedPoly(x,y,w,h,r)
@@ -110,6 +142,7 @@ end
 -- ============================================================================
 
 local function drawGradient(x,y,w,h,dir,c1,c2,op)
+  flushQuads()
   local r1,g1,b1,a1=parseColor(c1); a1=a1*op
   local r2,g2,b2,a2=parseColor(c2); a2=a2*op
   if dir=="horizontal" then
@@ -151,6 +184,7 @@ end
 local scissorStack = {}
 
 local function pushScissor(x,y,w,h)
+  flushQuads()
   if #scissorStack>0 then
     local p=scissorStack[#scissorStack]
     local nx=math.max(p.x,x); local ny=math.max(p.y,y)
@@ -163,6 +197,7 @@ local function pushScissor(x,y,w,h)
 end
 
 local function popScissor()
+  flushQuads()
   table.remove(scissorStack)
   if #scissorStack>0 then
     local p=scissorStack[#scissorStack]
@@ -177,6 +212,7 @@ end
 -- ============================================================================
 
 local function writeStencil(value, drawFn)
+  flushQuads()
   GL.glEnable(GL.STENCIL_TEST)
   GL.glStencilFunc(GL.ALWAYS, value, 0xFF)
   GL.glStencilOp(GL.KEEP, GL.KEEP, GL.REPLACE)
@@ -188,11 +224,13 @@ local function writeStencil(value, drawFn)
 end
 
 local function setStencilTest(value)
+  flushQuads()
   GL.glStencilFunc(GL.GREATER, value, 0xFF)
   GL.glStencilOp(GL.KEEP, GL.KEEP, GL.KEEP)
 end
 
 local function clearStencilTest()
+  flushQuads()
   GL.glDisable(GL.STENCIL_TEST)
 end
 
@@ -205,6 +243,7 @@ local function applyTransform(t, c)
   if not (t.translateX or t.translateY or t.rotate or t.scaleX or t.scaleY) then
     return false
   end
+  flushQuads()
   GL.glPushMatrix()
   local ox = c.x + (t.originX or 0.5)*c.w
   local oy = c.y + (t.originY or 0.5)*c.h
@@ -225,6 +264,7 @@ end
 -- ============================================================================
 
 local function drawText(text, x, y, w, align, size, color, op)
+  flushQuads()
   local r,g,b,a = parseColor(color); a=a*op
   local tw = Font.measureWidth(text, size)
   local dx = x
@@ -235,27 +275,7 @@ local function drawText(text, x, y, w, align, size, color, op)
 end
 
 local function wrapText(text, size, maxWidth)
-  local lines = {}
-  local paragraphs = {}
-  for raw in text:gmatch("[^\n]+") do paragraphs[#paragraphs+1] = raw end
-  if #paragraphs==0 then paragraphs[1]=text end
-  for _, raw in ipairs(paragraphs) do
-    local words={}
-    for w in raw:gmatch("%S+") do words[#words+1]=w end
-    local line=""
-    for _, word in ipairs(words) do
-      local cand = line=="" and word or (line.." "..word)
-      if Font.measureWidth(cand,size)<=maxWidth then
-        line=cand
-      else
-        if line~="" then lines[#lines+1]=line end
-        line=word
-      end
-    end
-    if line~="" then lines[#lines+1]=line end
-  end
-  if #lines==0 then lines[1]="" end
-  return lines
+  return Font.wrapText(text, size, maxWidth)
 end
 
 local ELLIPSIS = "..."
@@ -294,6 +314,7 @@ end
 --- @param c     table  Computed rect {x, y, w, h}
 --- @param arc   table  { startAngle, endAngle, innerRadius? }
 local function drawArcSector(c, arc)
+  flushQuads()
   local cx = c.x + c.w * 0.5
   local cy = c.y + c.h * 0.5
   local r  = math.min(c.w, c.h) * 0.5
@@ -333,6 +354,7 @@ end
 --- @param pts  table   Flat array of coordinates
 local function drawPolygon(c, pts)
   if #pts < 6 then return end
+  flushQuads()
   GL.glBegin(GL.TRIANGLE_FAN)
   -- Use centroid as fan center for convex polygons
   local sumX, sumY = 0, 0
@@ -415,6 +437,7 @@ local function filledPerCornerRect(x, y, w, h, tl, tr, bl, br)
     filledRect(x, y, w, h)
     return
   end
+  flushQuads()
   local v = perCornerPoly(x, y, w, h, tl, tr, bl, br)
   GL.glBegin(GL.TRIANGLE_FAN)
     GL.glVertex2f(x + w/2, y + h/2)
@@ -425,6 +448,7 @@ end
 
 --- Draw a stroked rectangle with per-corner border radii using GL LINE_LOOP.
 local function strokedPerCornerRect(x, y, w, h, tl, tr, bl, br, lw)
+  flushQuads()
   GL.glLineWidth(lw or 1)
   if tl <= 0 and tr <= 0 and bl <= 0 and br <= 0 then
     strokedRect(x, y, w, h, lw)
@@ -564,6 +588,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     elseif hasPerSideBorder then
       -- Per-side borders: draw individual lines with per-side colors
+      flushQuads()
       local defaultColor = s.borderColor or {0.5,0.5,0.5,1}
       if bwT > 0 then
         Painter.setColor(s.borderTopColor or defaultColor)
@@ -664,6 +689,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
 
     -- Text decorations (underline, line-through)
     if textDecorationLine and textDecorationLine ~= "none" then
+      flushQuads()
       Painter.setColor(color)
       Painter.applyOpacity(eff)
       local lh = Font.lineHeight(fontSize)
@@ -777,6 +803,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not isHidden and CapabilitiesModule then
     local def = CapabilitiesModule.getDefinition(node.type)
     if def and def.draw then
+      flushQuads()
       local inst = CapabilitiesModule.getInstance(tostring(node.id))
       if inst then
         def.draw(tostring(node.id), inst.state, inst.props or {}, c, eff)
@@ -791,6 +818,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     scrollY = node.scrollState.scrollY or 0
   end
   if isScroll and (scrollX~=0 or scrollY~=0) then
+    flushQuads()
     GL.glPushMatrix()
     GL.glTranslatef(-scrollX, -scrollY, 0)
   end
@@ -804,6 +832,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   end
 
   if isScroll and (scrollX~=0 or scrollY~=0) then
+    flushQuads()
     GL.glPopMatrix()
   end
 
@@ -814,12 +843,13 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     popScissor()
   end
 
-  if didTx then GL.glPopMatrix() end
+  if didTx then flushQuads(); GL.glPopMatrix() end
 end
 
 function Painter.paint(node)
   if not node then return end
   Painter.paintNode(node)
+  flushQuads()
   GL.glColor4f(1,1,1,1)
 end
 

@@ -67,25 +67,7 @@ local function makeFontHandle(size)
       return Font.measureWidth(text, self._size)
     end,
     getWrap = function(self, text, limit)
-      -- Basic word-wrap returning (nothing, lines[])
-      local lines = {}
-      for raw in text:gmatch("[^\n]+") do
-        local words = {}
-        for w in raw:gmatch("%S+") do words[#words+1] = w end
-        local line = ""
-        for _, word in ipairs(words) do
-          local cand = line=="" and word or (line.." "..word)
-          if Font.measureWidth(cand, self._size) <= limit then
-            line = cand
-          else
-            if line~="" then lines[#lines+1] = line end
-            line = word
-          end
-        end
-        if line~="" then lines[#lines+1] = line end
-      end
-      if #lines==0 then lines[1]="" end
-      return nil, lines
+      return nil, Font.wrapText(text, self._size, limit)
     end,
     getDescent = function(self)
       return Font.descent(self._size)
