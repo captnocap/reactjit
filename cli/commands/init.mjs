@@ -21,9 +21,6 @@ const yellow = color('33');
 const OPTIONAL_PACKAGES = [
   // ── UI & Layout ──────────────────────────────────────────
   {
-    default: true,
-  },
-  {
     name: '@reactjit/theme',
     dir: 'theme',
     alias: '@reactjit/theme',
