@@ -15,4 +15,4 @@ Tested with MultiWindowStory.tsx — changed title text and saved. No hot reload
 
 ## Related
 - SDL2 target is primary renderer for ReactJIT
-- Love2D target HMR status unknown
+- Love2D target HMR status working
