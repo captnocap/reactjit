@@ -82,8 +82,10 @@ export function CoinTickerRow({
           <Box style={{
             backgroundColor: changeColor + '20',
             borderRadius: 3,
-            paddingHorizontal: 5,
-            paddingVertical: 1,
+            paddingLeft: 5,
+            paddingRight: 5,
+            paddingTop: 1,
+            paddingBottom: 1,
           }}>
             <Text style={{ color: changeColor, fontSize: 10, fontWeight: 'bold' }}>
               {up ? '+' : ''}{change24h.toFixed(2)}%

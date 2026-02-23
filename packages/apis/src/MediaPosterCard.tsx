@@ -66,8 +66,10 @@ export function MediaPosterCard({
             right: 6,
             backgroundColor: scoreColor(score) + 'cc',
             borderRadius: 4,
-            paddingHorizontal: 5,
-            paddingVertical: 2,
+            paddingLeft: 5,
+            paddingRight: 5,
+            paddingTop: 2,
+            paddingBottom: 2,
           }}>
             <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'bold' }}>
               {score.toFixed(1)}
