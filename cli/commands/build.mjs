@@ -1010,7 +1010,6 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   const monoRoot = join(CLI_ROOT, '..');
   const distDir = join(cwd, 'dist', 'web');
   const stagingDir = join('/tmp', `reactjit-web-${projectName}`);
-  const loveArchive = join('/tmp', `${projectName}-web.love`);
 
   console.log(`\n  Building web for ${projectName}...\n`);
 
@@ -1096,19 +1095,33 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   let strippedCount = WEB_FFI_EXCLUDES.length + WEB_FFI_EXCLUDE_DIRS.length + WEB_FFI_EXCLUDE_SUBPATHS.length;
   console.log(`  Stripped ${strippedCount} FFI-dependent files/dirs from Lua runtime`);
 
-  // 4. Create .love archive (zip)
-  console.log('  [3/5] Creating .love archive...');
-  execSync(`cd "${loveStaging}" && zip -9 -r "${loveArchive}" .`, { stdio: 'pipe' });
-
-  // 5. Assemble dist/web/
-  console.log('  [4/5] Assembling dist/web/...');
+  // 4. Package with love.js CLI (generates game.js + game.data + love.js + love.wasm)
+  console.log('  [3/5] Packaging with love.js...');
   rmSync(distDir, { recursive: true, force: true });
   mkdirSync(distDir, { recursive: true });
 
-  // Copy bundle.js
+  // Use love.js CLI to package the staging directory → dist/web/
+  // This generates: game.js (Emscripten data loader), game.data, love.js, love.wasm,
+  // love.worker.js, and a default index.html.
+  try {
+    execSync(
+      `npx love.js "${loveStaging}" "${distDir}" -t "${projectName}" -m 67108864`,
+      { cwd, stdio: 'pipe' }
+    );
+  } catch (e) {
+    console.error('  love.js packaging failed. Install it: npm install -g love.js');
+    console.error('  Or: npx love.js');
+    if (e.stderr) console.error(e.stderr.toString());
+    process.exit(1);
+  }
+
+  // 5. Overlay our custom files on top of love.js output
+  console.log('  [4/5] Overlaying custom bridge + bundle...');
+
+  // Copy our React bundle
   cpSync(bundlePath, join(distDir, 'bundle.js'));
 
-  // Copy bridge.js from packaging/web/
+  // Copy our bridge.js
   const bridgeSources = [
     join(cwd, 'packaging', 'web', 'bridge.js'),
     join(monoRoot, 'packaging', 'web', 'bridge.js'),
@@ -1116,7 +1129,7 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   const bridgeJs = bridgeSources.find(p => existsSync(p));
   if (bridgeJs) cpSync(bridgeJs, join(distDir, 'bridge.js'));
 
-  // Copy index.html and template the title
+  // Replace index.html with our custom one (includes bridge.js + bundle.js loading)
   const htmlSources = [
     join(cwd, 'packaging', 'web', 'index.html'),
     join(monoRoot, 'packaging', 'web', 'index.html'),
@@ -1128,40 +1141,24 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
     writeFileSync(join(distDir, 'index.html'), html);
   }
 
-  // Copy .love archive as game.data (Emscripten convention)
-  cpSync(loveArchive, join(distDir, 'game.data'));
-
-  // Copy love.js runtime artifacts if vendored
-  const lovejsDirs = [
-    join(cwd, 'deps', 'lovejs'),
-    join(monoRoot, 'deps', 'lovejs'),
-    join(CLI_ROOT, 'runtime', 'lovejs'),
-  ];
-  const lovejsDir = lovejsDirs.find(p => existsSync(p));
-  if (lovejsDir) {
-    for (const file of ['love.js', 'love.wasm', 'love.worker.js']) {
-      const src = join(lovejsDir, file);
-      if (existsSync(src)) cpSync(src, join(distDir, file));
-    }
-    console.log('  Copied vendored love.js runtime');
-  } else {
-    console.log('  [!] No vendored love.js found — you need to add love.js + love.wasm to dist/web/');
-    console.log('      Download from: https://github.com/nicholasopuni31/love.js');
-  }
-
   // 6. Report
   console.log('  [5/5] Done!');
 
   // Cleanup
   rmSync(stagingDir, { recursive: true, force: true });
   rmSync(loveStaging, { recursive: true, force: true });
-  rmSync(loveArchive, { force: true });
 
   const files = readdirSync(distDir);
-  console.log(`\n  Output: dist/web/ (${files.length} files)`);
+  console.log(`\n  Output: dist/web/ (${files.length} entries)`);
   for (const f of files) {
-    const size = (statSync(join(distDir, f)).size / 1024).toFixed(0);
-    console.log(`    ${f.padEnd(20)} ${size} KB`);
+    const st = statSync(join(distDir, f));
+    if (st.isDirectory()) {
+      console.log(`    ${(f + '/').padEnd(20)} (dir)`);
+    } else {
+      const kb = st.size / 1024;
+      const size = kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb.toFixed(0) + ' KB';
+      console.log(`    ${f.padEnd(20)} ${size}`);
+    }
   }
   console.log(`\n  Serve: cd dist/web && python3 -m http.server\n`);
 }
