@@ -127,7 +127,7 @@ export function Drawer({ drawer, drawerWidth = 240, side = 'left', open = false,
         <Box style={{
           position: 'absolute',
           top: 0,
-          [side]: 0,
+          ...(side === 'left' ? { left: 0 } : { right: 0 }),
           width: drawerWidth,
           height: '100%',
         }}>

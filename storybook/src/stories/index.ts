@@ -42,6 +42,7 @@ import { MultiWindowStory } from './MultiWindowStory';
 import { TslBoidsStory } from './TslBoidsStory';
 import { MasksStory } from './MasksStory';
 import { APIsStory } from './APIsStory';
+import { LayoutsStory } from './LayoutsStory';
 
 
 export const stories: StoryDef[] = [
@@ -69,6 +70,7 @@ export const stories: StoryDef[] = [
   { id: 'local-store', title: 'Local Store', section: 'Packages', component: LocalStoreStory },
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'apis', title: 'APIs', section: 'Packages', component: APIsStory },
+  { id: 'layouts', title: 'Layouts', section: 'Packages', component: LayoutsStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
