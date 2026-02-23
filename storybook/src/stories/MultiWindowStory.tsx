@@ -129,14 +129,15 @@ export function MultiWindowStory() {
   };
 
   const handleSelectItem = (idx: number) => {
-    // Toggle: click selected item to deselect, click unselected to select
-    if (selectedIndex === idx) {
-      setSelectedIndex(null);
-      logEvent('Cleared selection');
-    } else {
-      setSelectedIndex(idx);
+    // Functional update prevents stale closure behavior on delayed/native events.
+    setSelectedIndex((prev) => {
+      if (prev === idx) {
+        logEvent('Cleared selection');
+        return null;
+      }
       logEvent('Selected ' + items[idx]);
-    }
+      return idx;
+    });
   };
 
   return (
@@ -154,16 +155,22 @@ export function MultiWindowStory() {
           <Button
             label={showPanel ? 'Close Panel' : 'Open Panel'}
             onPress={() => {
-              setShowPanel(!showPanel);
-              logEvent(showPanel ? 'Panel closed' : 'Panel opened');
+              setShowPanel((prev) => {
+                const next = !prev;
+                logEvent(next ? 'Panel opened' : 'Panel closed');
+                return next;
+              });
             }}
             active={showPanel}
           />
           <Button
             label={showLog ? 'Close Log' : 'Open Log'}
             onPress={() => {
-              setShowLog(!showLog);
-              logEvent(showLog ? 'Log closed' : 'Log opened');
+              setShowLog((prev) => {
+                const next = !prev;
+                logEvent(next ? 'Log opened' : 'Log closed');
+                return next;
+              });
             }}
             active={showLog}
           />
