@@ -231,6 +231,7 @@ function Capabilities.loadAll()
     "window",
     "boids",
     "image_select",
+    "scene3d",
   }
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)

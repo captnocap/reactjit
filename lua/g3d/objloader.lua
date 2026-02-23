@@ -12,7 +12,10 @@ return function (path, uFlip, vFlip)
     local result = {}
 
     -- go line by line through the file
-    for line in love.filesystem.lines(path) do
+    -- Use love.filesystem.lines if available, fall back to io.lines for SDL2
+    local linesFn = (love and love.filesystem and love.filesystem.lines)
+      and love.filesystem.lines(path) or io.lines(path)
+    for line in linesFn do
         local words = {}
 
         -- split the line into words
