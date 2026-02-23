@@ -163,8 +163,12 @@ export async function buildCommand(args) {
   }
 
   // Auto-update runtime files before building (love + sdl2 + web — all use lua/ runtime)
+  // Skip for storybook — it reads from source via symlinks, no update needed
   const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2', 'web', 'dist:web'].includes(rawTarget);
-  if (!skipUpdate && isLuaTarget) {
+  const isStorybook = existsSync(join(cwd, '..', 'packages', 'core')) &&
+    existsSync(join(cwd, '..', 'lua')) &&
+    existsSync(join(cwd, 'love'));
+  if (!skipUpdate && isLuaTarget && !isStorybook) {
     await updateCommand([]);
   }
 
