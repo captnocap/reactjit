@@ -43,6 +43,8 @@ export { scaleStyle } from './scaleStyle';
 export {
   useWindowDimensions,
   useWindowSize,
+  useWindowPosition,
+  useWindowAlwaysOnTop,
   useLove,
   useLoveEvent,
   useLoveRPC,
@@ -55,6 +57,7 @@ export {
   usePeerServer,
   useHotkey,
   useClipboard,
+  type WindowControlOptions,
   type WebSocketStatus,
   type PeerMessage,
   type Overlay,
@@ -105,6 +108,35 @@ export {
 
 // TextInput
 export { TextInput } from './TextInput';
+
+// Search components (headless, Lua-owned input lifecycle)
+export {
+  SearchBar, SearchResults, SearchResultsSections, SearchCombo, CommandPalette,
+} from './search';
+export type {
+  SearchBarProps,
+  SearchResultsProps, SearchResultItem,
+  SearchResultsSectionsProps, SearchSection,
+  SearchComboProps, ComboItem,
+  CommandPaletteProps, CommandDef,
+} from './search';
+
+// Search hooks
+export {
+  useSearch,
+  useFuzzySearch,
+  useAsyncSearch,
+  useSearchHistory,
+  useSearchHighlight,
+  useCommandSearch,
+  type UseSearchOptions,
+  type FuzzySearchResult,
+  type UseFuzzySearchOptions,
+  type UseAsyncSearchOptions,
+  type UseSearchHistoryOptions,
+  type HighlightPart,
+  type UseCommandSearchOptions,
+} from './useSearch';
 
 // TextEditor (Lua-owned document editor)
 export { TextEditor } from './TextEditor';
