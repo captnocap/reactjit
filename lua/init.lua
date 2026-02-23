@@ -136,7 +136,7 @@ local hmrHasLoaded    = false
 
 -- Helper: does the current mode run the rendering pipeline?
 local function isRendering()
-  return mode == "native" or mode == "canvas"
+  return mode == "native" or mode == "canvas" or mode == "wasm"
 end
 
 -- ============================================================================
@@ -188,7 +188,7 @@ local function pushEvent(evt)
   Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(evt.payload and evt.payload.targetId or "-"))
   if mode == "native" then
     bridge:pushEvent(evt)
-  elseif mode == "canvas" then
+  elseif mode == "canvas" or mode == "wasm" then
     bridge.emit(evt.type, evt)
   end
 end
@@ -570,6 +570,79 @@ function ReactJIT.init(config)
 
     print("[reactjit] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
     -- Push initial viewport dimensions for canvas mode
+    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
+
+  elseif mode == "wasm" then
+    -- WASM mode: FS bridge + native rendering pipeline, NO FFI modules.
+    -- Same as canvas mode but skips videos, emulator, sqlite, crypto, etc.
+    -- Used by love.js (Love2D compiled to WASM via Emscripten with PUC Lua 5.1).
+    bridge = require("lua.bridge_fs")
+    bridge.init(ns)
+
+    measure = require("lua.measure")
+    images  = require("lua.images")
+    -- videos: SKIPPED (libmpv FFI)
+    animate = require("lua.animate")
+    scene3d = require("lua.scene3d")
+    scene3d.init()
+    mapmod = require("lua.map")
+    mapmod.init()
+    gamemod = require("lua.game")
+    gamemod.init()
+    -- emulator: SKIPPED (FFI)
+    effectsmod = require("lua.effects")
+    effectsmod.loadAll()
+    masksmod = require("lua.masks")
+    masksmod.loadAll()
+
+    tree    = require("lua.tree")
+    tree.init({ images = images, videos = nil, animate = animate, scene3d = scene3d })
+
+    animate.init({ tree = tree })
+
+    layout  = require("lua.layout")
+    layout.init({ measure = measure })
+
+    painter = require("lua.painter")
+    painter.init({ measure = measure, images = images, videos = nil, scene3d = scene3d, map = mapmod, game = gamemod, emulator = nil, effects = effectsmod, masks = masksmod })
+
+    events  = require("lua.events")
+    events.setTreeModule(tree)
+
+    texteditor = require("lua.texteditor")
+    texteditor.init({ measure = measure })
+
+    textinput = require("lua.textinput")
+    textinput.init({ measure = measure })
+
+    codeblock = require("lua.codeblock")
+    codeblock.init({ measure = measure })
+
+    -- videoplayer: SKIPPED (depends on videos)
+
+    widgets = require("lua.widgets")
+    widgets.init({ measure = measure, screenToContent = events.screenToContent })
+
+    textselection = require("lua.textselection")
+    textselection.init({ measure = measure, events = events, tree = tree })
+
+    contextmenu = require("lua.contextmenu")
+    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+
+    osk = require("lua.osk")
+    osk.init({ measure = measure })
+
+    -- sqlite/docstore: SKIPPED (FFI)
+    spellcheck = require("lua.spellcheck")
+    spellcheck.init()
+
+    focus.init(tree, pushEvent)
+
+    events.setWidgetsModule(widgets)
+
+    loadThemes()
+
+    print("[reactjit] Initialized in WASM mode (Module.FS bridge + native rendering, no FFI)")
     pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
 
   else
@@ -1099,8 +1172,8 @@ function ReactJIT.update(dt)
     return
   end
 
-  if mode == "canvas" then
-    -- Canvas mode: FS bridge + native rendering pipeline ----------------
+  if mode == "canvas" or mode == "wasm" then
+    -- Canvas/WASM mode: FS bridge + native rendering pipeline -----------
 
     Log.frame()
 
