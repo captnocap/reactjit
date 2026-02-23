@@ -148,6 +148,7 @@ export async function buildCommand(args) {
   const cwd = process.cwd();
   const projectName = basename(cwd);
   const hasDebugFlag = args.includes('--debug');
+  const skipLint = args.includes('--no-lint');
   const skipUpdate = args.includes('--no-update');
   const targetPlatformIdx = args.indexOf('--target');
   const targetPlatform = targetPlatformIdx !== -1 ? args[targetPlatformIdx + 1] : null;
@@ -185,7 +186,7 @@ export async function buildCommand(args) {
 
   // No target → SDL2 dev build (primary target)
   if (!rawTarget) {
-    await buildDevTarget(cwd, projectName, 'sdl2');
+    await buildDevTarget(cwd, projectName, 'sdl2', { skipLint });
     return;
   }
 
@@ -211,16 +212,16 @@ export async function buildCommand(args) {
 
   if (isDist) {
     if (target.kind === 'love') {
-      await buildDistLove(cwd, projectName, { debug: hasDebugFlag });
+      await buildDistLove(cwd, projectName, { debug: hasDebugFlag, skipLint });
     } else if (target.kind === 'sdl2') {
-      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform: resolvedPlatform });
+      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform: resolvedPlatform, skipLint });
     } else if (target.kind === 'web') {
-      await buildDistWeb(cwd, projectName, { debug: hasDebugFlag });
+      await buildDistWeb(cwd, projectName, { debug: hasDebugFlag, skipLint });
     } else {
-      await buildDistGrid(cwd, projectName, targetName);
+      await buildDistGrid(cwd, projectName, targetName, { skipLint });
     }
   } else {
-    await buildDevTarget(cwd, projectName, targetName);
+    await buildDevTarget(cwd, projectName, targetName, { skipLint });
   }
 }
 
@@ -368,16 +369,18 @@ function findTorBinary(cwd) {
 
 // ── reactjit build [target] (dev build) ─────────────────
 
-async function buildDevTarget(cwd, projectName, targetName) {
+async function buildDevTarget(cwd, projectName, targetName, opts = {}) {
   const target = TARGETS[targetName];
   const entryCandidates = target.entries.map(e => `src/${e}`);
   const entry = findEntry(cwd, ...entryCandidates);
 
   // Lint gate
-  const { errors } = await runLint(cwd, { silent: false });
-  if (errors > 0) {
-    console.error(`\n  Build blocked: ${errors} lint error${errors !== 1 ? 's' : ''} must be fixed first.\n`);
-    process.exit(1);
+  if (!opts.skipLint) {
+    const { errors } = await runLint(cwd, { silent: false });
+    if (errors > 0) {
+      console.error(`\n  Build blocked: ${errors} lint error${errors !== 1 ? 's' : ''} must be fixed first.\n`);
+      process.exit(1);
+    }
   }
 
   const outfile = join(cwd, target.output);
@@ -409,7 +412,7 @@ async function buildDevTarget(cwd, projectName, targetName) {
 // Produces a single executable Node.js script with a shebang.
 // Works for terminal, cc, nvim, hs, awesome.
 
-async function buildDistGrid(cwd, projectName, targetName) {
+async function buildDistGrid(cwd, projectName, targetName, opts = {}) {
   const target = TARGETS[targetName];
   const entryCandidates = target.entries.map(e => `src/${e}`);
   const entry = findEntry(cwd, ...entryCandidates);
@@ -421,10 +424,12 @@ async function buildDistGrid(cwd, projectName, targetName) {
   console.log(`\n  Building dist:${targetName} for ${projectName}...\n`);
 
   // Lint gate
-  const { errors } = await runLint(cwd, { silent: false });
-  if (errors > 0) {
-    console.error(`\n  Build blocked: ${errors} lint error${errors !== 1 ? 's' : ''} must be fixed first.\n`);
-    process.exit(1);
+  if (!opts.skipLint) {
+    const { errors } = await runLint(cwd, { silent: false });
+    if (errors > 0) {
+      console.error(`\n  Build blocked: ${errors} lint error${errors !== 1 ? 's' : ''} must be fixed first.\n`);
+      process.exit(1);
+    }
   }
 
   mkdirSync(distDir, { recursive: true });
@@ -792,10 +797,12 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   console.log(`\n  Building dist:sdl2 for ${projectName} (${targetFlag})...\n`);
 
   // 1. Lint gate
-  const { errors } = await runLint(cwd, { silent: false });
-  if (errors > 0) {
-    console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
-    process.exit(1);
+  if (!opts.skipLint) {
+    const { errors } = await runLint(cwd, { silent: false });
+    if (errors > 0) {
+      console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
+      process.exit(1);
+    }
   }
 
   // 2. Ensure zig artifacts exist
@@ -1014,10 +1021,12 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   console.log(`\n  Building web for ${projectName}...\n`);
 
   // 1. Lint gate
-  const { errors } = await runLint(cwd, { silent: false });
-  if (errors > 0) {
-    console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
-    process.exit(1);
+  if (!opts.skipLint) {
+    const { errors } = await runLint(cwd, { silent: false });
+    if (errors > 0) {
+      console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
+      process.exit(1);
+    }
   }
 
   // 2. Bundle JS (IIFE for browser)
