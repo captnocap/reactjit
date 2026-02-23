@@ -25,6 +25,104 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocalStore } from './useLocalStore';
 
+// ─── Field auto-detection ─────────────────────────────────────────────────────
+
+/** Keys that are never useful for text search, even if they are strings. */
+const SKIP_KEYS = new Set(['id', 'key', 'uuid', 'type', 'kind', 'index', 'href', 'url', 'src', 'path', 'color', 'icon']);
+
+/**
+ * Inspect the first item and return all keys whose values are short strings
+ * (i.e. likely human-readable text, not IDs or URLs).
+ *
+ * This is used internally when no `key` is specified, so the search isn't
+ * a blind JSON.stringify but targets only the meaningful text fields.
+ *
+ * @example
+ * detectSearchableFields([{ id: 1, name: 'Alice', role: 'Admin', avatar: '…long url…' }])
+ * // → ['name', 'role']
+ */
+export function detectSearchableFields<T>(items: T[]): (keyof T)[] {
+  const sample = items[0];
+  if (!sample || typeof sample !== 'object') return [];
+
+  const fields: (keyof T)[] = [];
+  for (const key of Object.keys(sample as object) as (keyof T)[]) {
+    if (SKIP_KEYS.has(String(key))) continue;
+    const val = (sample as any)[key];
+    // Only string values, not too long (long strings are likely blobs not labels)
+    if (typeof val === 'string' && val.length <= 200) {
+      fields.push(key);
+    }
+    // Short numbers are ok (e.g. year, count) but skip big ones
+    if (typeof val === 'number' && Math.abs(val) < 1_000_000) {
+      fields.push(key);
+    }
+  }
+  return fields;
+}
+
+// ─── useSearchSchema ──────────────────────────────────────────────────────────
+
+export interface SearchSchema {
+  /** All string/number fields detected on the items. */
+  allFields: string[];
+  /** The fields currently being searched (from key option, or auto-detected). */
+  activeFields: string[];
+  /** Human-readable summary, e.g. "Searching: name, description". */
+  description: string;
+  /** True when fields were auto-detected (no key specified). */
+  isAutoDetected: boolean;
+}
+
+/**
+ * Inspect a data set and return a schema describing what's searchable.
+ * Use this to show users what the search is actually matching against.
+ *
+ * @example
+ * const schema = useSearchSchema(users, { key: 'name' });
+ * // schema.description → "Searching: name"
+ *
+ * @example
+ * const schema = useSearchSchema(products);
+ * // schema.description → "Searching: title, brand, category (auto)"
+ * // schema.allFields   → ['title', 'brand', 'category', 'sku', 'description']
+ */
+export function useSearchSchema<T>(
+  items: T[],
+  options: Pick<UseSearchOptions<T>, 'key'> = {},
+): SearchSchema {
+  return useMemo(() => {
+    const sample = items[0];
+    const allFields = sample
+      ? (Object.keys(sample as object) as (keyof T)[])
+          .filter((k) => {
+            const v = (sample as any)[k];
+            return typeof v === 'string' || typeof v === 'number';
+          })
+          .map(String)
+      : [];
+
+    const { key } = options;
+    let activeFields: string[];
+    let isAutoDetected = false;
+
+    if (key) {
+      activeFields = (Array.isArray(key) ? key : [key]).map(String);
+    } else {
+      activeFields = detectSearchableFields(items).map(String);
+      isAutoDetected = true;
+    }
+
+    const suffix = isAutoDetected ? ' (auto)' : '';
+    const description =
+      activeFields.length > 0
+        ? `Searching: ${activeFields.join(', ')}${suffix}`
+        : 'Nothing searchable detected';
+
+    return { allFields, activeFields, description, isAutoDetected };
+  }, [items, options.key]);
+}
+
 // ─── Fuzzy scoring ────────────────────────────────────────────────────────────
 
 /**
@@ -92,16 +190,21 @@ export function useSearch<T>(
     let filtered: T[];
     if (matcher) {
       filtered = items.filter((item) => matcher(item, lower));
-    } else if (key) {
-      const keys = Array.isArray(key) ? key : [key];
-      filtered = items.filter((item) =>
-        keys.some((k) => String(item[k] ?? '').toLowerCase().includes(lower)),
-      );
     } else {
-      // Fallback: stringify the whole item
-      filtered = items.filter((item) =>
-        JSON.stringify(item).toLowerCase().includes(lower),
-      );
+      // Resolve which keys to search. If none specified, auto-detect string/number fields.
+      const resolvedKeys: (keyof T)[] = key
+        ? (Array.isArray(key) ? key : [key])
+        : detectSearchableFields(items);
+      if (resolvedKeys.length > 0) {
+        filtered = items.filter((item) =>
+          resolvedKeys.some((k) => String(item[k] ?? '').toLowerCase().includes(lower)),
+        );
+      } else {
+        // Absolute fallback when no fields detected (e.g. primitives array)
+        filtered = items.filter((item) =>
+          String(item).toLowerCase().includes(lower),
+        );
+      }
     }
 
     return limit ? filtered.slice(0, limit) : filtered;
@@ -147,15 +250,18 @@ export function useFuzzySearch<T>(
       return { results: r, items: all };
     }
 
+    const resolvedKeys: (keyof T)[] = key
+      ? (Array.isArray(key) ? key : [key])
+      : detectSearchableFields(items);
+
     const scored: FuzzySearchResult<T>[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       let score = 0;
-      if (key) {
-        const keys = Array.isArray(key) ? key : [key];
-        score = Math.max(...keys.map((k) => fuzzyScore(String(item[k] ?? ''), q)));
+      if (resolvedKeys.length > 0) {
+        score = Math.max(...resolvedKeys.map((k) => fuzzyScore(String(item[k] ?? ''), q)));
       } else {
-        score = fuzzyScore(JSON.stringify(item), q);
+        score = fuzzyScore(String(item), q);
       }
       if (score >= minScore) scored.push({ item, score, index: i });
     }

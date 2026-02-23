@@ -20,9 +20,11 @@ import React, { useCallback, useState } from 'react';
 import { Box } from '../primitives';
 import { SearchBar } from './SearchBar';
 import { SearchResults } from './SearchResults';
+import { SearchSchemaHint } from './SearchSchemaHint';
 import type { SearchResultItem } from './SearchResults';
 import type { Style } from '../types';
 import { useHotkey } from '../hooks';
+import { useSearchSchema, detectSearchableFields } from '../useSearch';
 
 export type ComboItem = SearchResultItem;
 
@@ -50,6 +52,12 @@ export interface SearchComboProps<T extends ComboItem = ComboItem> {
   maxResults?: number;
   /** Show dropdown only when query is non-empty. Default: true. */
   showOnlyWhenTyping?: boolean;
+  /**
+   * Show a "Searching: field1, field2" hint below the input.
+   * Useful for non-technical users who need to know what the search looks at.
+   * Default: false.
+   */
+  showSchema?: boolean;
   style?: Style;
   dropdownStyle?: Style;
   autoFocus?: boolean;
@@ -71,6 +79,7 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
   placeholder = 'Search...',
   maxResults = 8,
   showOnlyWhenTyping = true,
+  showSchema = false,
   style,
   dropdownStyle,
   autoFocus,
@@ -88,6 +97,9 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
   const [open, setOpen] = useState(false);
 
   const sharedColors = { activeColor, textColor, mutedColor, backgroundColor, borderColor, borderRadius };
+
+  // Schema: what fields this combo is actually searching
+  const schema = useSearchSchema(staticItems ?? [], { key: searchKey });
 
   const runSearch = useCallback(
     async (q: string) => {
@@ -183,6 +195,13 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
         borderColor={borderColor}
         borderRadius={borderRadius}
       />
+      {showSchema && (
+        <SearchSchemaHint
+          schema={schema}
+          color={mutedColor}
+          fieldColor={textColor}
+        />
+      )}
       {showDropdown && (
         <SearchResults
           items={results}
