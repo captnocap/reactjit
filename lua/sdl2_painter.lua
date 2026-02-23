@@ -7,6 +7,7 @@
 local GL    = require("lua.sdl2_gl")
 local Font  = require("lua.sdl2_font")
 local Color = require("lua.color")
+local ZIndex = require("lua.zindex")
 
 local W, H = 1280, 720
 
@@ -794,10 +795,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     GL.glTranslatef(-scrollX, -scrollY, 0)
   end
 
-  -- ZIndex-aware sort (reuse zindex module if available, else plain order)
+  -- ZIndex-aware sort
   local children = node.children or {}
-  local ok, ZIndex = pcall(require, "lua.zindex")
-  local paintOrder = ok and ZIndex.getSortedChildren(children) or children
+  local paintOrder = ZIndex.getSortedChildren(children)
 
   for _, child in ipairs(paintOrder) do
     Painter.paintNode(child, eff, stencilDepth)
