@@ -101,7 +101,7 @@ export function NavigationStory() {
             }
             width={280}
             contentAlign="center"
-            style={{ borderRadius: 10 }}
+            style={{ height: 180, borderRadius: 10 }}
           />
         </Box>
         <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>

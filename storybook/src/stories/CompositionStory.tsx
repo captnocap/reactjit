@@ -30,7 +30,7 @@ function Badge({ label, color }: { label: string; color?: string }) {
       paddingRight: 8,
       paddingTop: 3,
       paddingBottom: 3,
-      borderRadius: 999,
+      borderRadius: 10,
       backgroundColor: color ?? c.primary,
     }}>
       <Text style={{ fontSize: 10, color: '#fff' }}>{label}</Text>
@@ -61,6 +61,7 @@ export function CompositionStory() {
             flexDirection: 'row',
             gap: 8,
             flexWrap: 'wrap',
+            justifyContent: 'center',
           }}>
             <Badge label="default" />
             <Badge label="success" color="#22c55e" />
@@ -79,26 +80,28 @@ export function CompositionStory() {
         </StorySection>
 
         <StorySection index={4} title="Composed (Card + Badge + Divider)">
-          <Card title="Notification" subtitle="3 unread items">
-            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-              <Badge label="new" color="#22c55e" />
-              <Badge label="urgent" color="#ef4444" />
-            </Box>
-            <Divider />
-            <Box style={{ gap: 6 }}>
-              {['Alert: system ready', 'Update available', 'Build passed'].map((msg, i) => (
-                <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                  <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
-                  <Text style={{ fontSize: 11, color: c.text }}>{msg}</Text>
-                </Box>
-              ))}
-            </Box>
-          </Card>
+          <Box style={{ width: 400 }}>
+            <Card title="Notification" subtitle="3 unread items">
+              <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                <Badge label="new" color="#22c55e" />
+                <Badge label="urgent" color="#ef4444" />
+              </Box>
+              <Divider />
+              <Box style={{ gap: 6 }}>
+                {['Alert: system ready', 'Update available', 'Build passed'].map((msg, i) => (
+                  <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
+                    <Text style={{ fontSize: 11, color: c.text }}>{msg}</Text>
+                  </Box>
+                ))}
+              </Box>
+            </Card>
+          </Box>
         </StorySection>
 
         <StorySection index={5} title="Interactive counter">
           <Card title="Counter">
-            <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Box style={{ width: '100%', flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
               <Pressable
                 onPress={() => setCount(v => v - 1)}
                 style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}

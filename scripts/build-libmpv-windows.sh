@@ -62,32 +62,34 @@ ZIG_RC_WRAP="$BUILD_DIR/zig-rc"
 ZIG_STRIP_WRAP="$BUILD_DIR/zig-strip"
 
 cat > "$ZIG_CC_WRAP" <<'WRAPEOF'
-#!/bin/sh
+#!/bin/bash
 # zig/lld (PE/COFF mode) doesn't support --pic-executable (GNU ld extension).
 # --dynamicbase already enables ASLR; drop --pic-executable, keep -e entry point.
-args=""
+# NOTE: must use bash arrays — -D flags may contain angle brackets
+# (e.g. -DFT_CONFIG_CONFIG_H=<ftconfig.h>) that eval+string would misparse as redirections.
+args=()
 for arg in "$@"; do
     case "$arg" in
-        "-Wl,--pic-executable,-e,mainCRTStartup") args="$args -Wl,-e,mainCRTStartup" ;;
+        "-Wl,--pic-executable,-e,mainCRTStartup") args+=("-Wl,-e,mainCRTStartup") ;;
         "-Wl,--pic-executable")                    ;;  # drop silently
-        *) args="$args $arg" ;;
+        *) args+=("$arg") ;;
     esac
 done
-eval exec zig cc -target TARGET $args
+exec zig cc -target TARGET "${args[@]}"
 WRAPEOF
 sed -i "s/TARGET/$TARGET/" "$ZIG_CC_WRAP"
 
 cat > "$ZIG_CXX_WRAP" <<'WRAPEOF'
-#!/bin/sh
-args=""
+#!/bin/bash
+args=()
 for arg in "$@"; do
     case "$arg" in
-        "-Wl,--pic-executable,-e,mainCRTStartup") args="$args -Wl,-e,mainCRTStartup" ;;
+        "-Wl,--pic-executable,-e,mainCRTStartup") args+=("-Wl,-e,mainCRTStartup") ;;
         "-Wl,--pic-executable")                    ;;
-        *) args="$args $arg" ;;
+        *) args+=("$arg") ;;
     esac
 done
-eval exec zig c++ -target TARGET $args
+exec zig c++ -target TARGET "${args[@]}"
 WRAPEOF
 sed -i "s/TARGET/$TARGET/" "$ZIG_CXX_WRAP"
 cat > "$ZIG_AR_WRAP" <<EOF

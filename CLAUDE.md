@@ -1,10 +1,8 @@
 # CLAUDE.md
 
 This is React stripped of browser magic and rendered as raw geometry.
-If you didn't say how big it is, surfaces take a quarter of their parent.
-If you said grow, it grows exactly.
-If you nested flex containers, you own the consequences.
-If text wraps, it's because you gave it nowhere to go.
+
+STOP MAKING INPUT-BASED BEHAVIORS HAVE ANY REASON TO SEE THE LIGHT OF DAY IN A JAVASCRIPT LIFECYCLE. REACT IS NOT GOOD AT INPUT. INFACT IT SUCKS REALLY BAD. REACT IS HERE TO DECLARE A LAYOUT AND SOME STATE MUTATIONS. OTHERWISE ITS JUST A PRETTY FACE FOR LUA TO DO ALL THE ACTUAL PROGRAMMING HERE. THATS WHY THE TYPESCRIPT SIDE LOOKS LIKE A BUNCH OF ONE LINERS. IF YOU ARE EFFECTIVELY NOT SETTING UP FOR A ONE LINER IN TSX YOU ARE PROBABLY WRONG.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 

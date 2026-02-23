@@ -58,7 +58,6 @@ export function FlexRowStory() {
                 width: '100%',
                 flexDirection: 'row',
                 justifyContent: justify,
-                gap: 6,
                 backgroundColor: c.surface,
                 borderRadius: 6,
                 padding: 6,
@@ -297,7 +296,7 @@ export function FlexRowStory() {
                 alignItems: 'center',
                 overflow: 'hidden',
                 transition: {
-                  width: { duration: 320, easing: 'spring' },
+                  width: { duration: 600, easing: 'spring' },
                 },
               }}>
                 <Text style={{ color: '#fff', fontSize: 12 }}>{expanded ? '260px' : '80px'}</Text>
@@ -324,7 +323,7 @@ export function FlexRowStory() {
                 justifyContent: 'center',
                 alignItems: 'center',
                 transition: {
-                  transform: { duration: 320, easing: 'spring' },
+                  transform: { duration: 600, easing: 'spring' },
                 },
               }}>
                 <Text style={{ color: '#fff', fontSize: 10 }}>{toggled ? '160' : '0'}</Text>

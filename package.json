@@ -24,6 +24,9 @@
     "watch:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js --watch storybook/src/native-main.tsx",
     "build:docs": "npx tsx scripts/docs/build.ts",
     "validate:docs": "npx tsx scripts/docs/build.ts validate",
+    "validate:story-layout": "node scripts/validate-story-layout.mjs",
+    "validate:story-centering": "node scripts/validate-story-centering.mjs",
+    "validate:story-titles": "node scripts/validate-story-title-alignment.mjs",
     "poly:fetch": "node scripts/poly-pizza-fetch.mjs"
   },
   "dependencies": {

@@ -46,6 +46,8 @@ local SwitchModule = nil     -- Lazy-loaded to avoid circular deps
 local CheckboxModule = nil   -- Lazy-loaded to avoid circular deps
 local RadioModule = nil      -- Lazy-loaded to avoid circular deps
 local SelectModule = nil     -- Lazy-loaded to avoid circular deps
+local PianoKeyboardModule = nil  -- Lazy-loaded to avoid circular deps
+local StepSequencerModule = nil  -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -1391,6 +1393,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       SelectModule = require("lua.select")
     end
     SelectModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "PianoKeyboard" then
+    if not PianoKeyboardModule then
+      PianoKeyboardModule = require("lua.piano_keyboard")
+    end
+    PianoKeyboardModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "StepSequencer" then
+    if not StepSequencerModule then
+      StepSequencerModule = require("lua.step_sequencer")
+    end
+    StepSequencerModule.draw(node, effectiveOpacity)
   end
 
   -- Determine paint order: sort children by zIndex (stable, ascending)

@@ -500,6 +500,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   local prevSD = stencilDepth
 
   if useStencil then
+    if c.w < 1 or c.h < 1 then
+      io.write("[painter] STENCIL skip 0-size id=" .. tostring(node.id) .. " " .. c.w .. "x" .. c.h .. "\n"); io.flush()
+    end
     local sv = stencilDepth+1
     writeStencil(sv, function()
       if isPerCorner then

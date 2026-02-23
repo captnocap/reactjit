@@ -8,9 +8,9 @@ export function GradientStory() {
   return (
     <StoryPage>
         <StorySection index={1} title="Gradients">
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          <Box style={{ width: '100%', flexDirection: 'row', gap: 8 }}>
             <Box style={{
-              width: 170,
+              flexGrow: 1,
               height: 60,
               borderRadius: 8,
               justifyContent: 'center',
@@ -20,7 +20,7 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 11 }}>Horizontal</Text>
             </Box>
             <Box style={{
-              width: 170,
+              flexGrow: 1,
               height: 60,
               borderRadius: 8,
               justifyContent: 'center',
@@ -30,7 +30,7 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 11 }}>Vertical</Text>
             </Box>
             <Box style={{
-              width: 170,
+              flexGrow: 1,
               height: 60,
               borderRadius: 8,
               justifyContent: 'center',
@@ -40,7 +40,7 @@ export function GradientStory() {
               <Text style={{ color: '#fff', fontSize: 11 }}>Diagonal</Text>
             </Box>
             <Box style={{
-              width: 170,
+              flexGrow: 1,
               height: 60,
               borderRadius: 8,
               justifyContent: 'center',

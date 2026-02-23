@@ -246,10 +246,10 @@ function Knob.handleMouseMoved(node, mx, my)
 
   local p = getProps(node)
 
-  -- Vertical drag: up = increase, down = decrease
+  -- Vertical drag: down = increase, up = decrease (natural knob feel)
   -- Sensitivity: full knob diameter drag = full value range
   local sensitivity = (p.max - p.min) / (p.size * 2)
-  local deltaY = state.dragStartY - my  -- invert: up is positive
+  local deltaY = my - state.dragStartY
   local newValue = state.dragStartValue + deltaY * sensitivity
   newValue = clamp(newValue, p.min, p.max)
   newValue = snapToStep(newValue, p.step, p.min, p.max)
