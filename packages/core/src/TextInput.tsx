@@ -146,6 +146,8 @@ function NativeTextInput({
   onSubmit,
   onFocus,
   onBlur,
+  onLiveChange,
+  liveChangeDebounce,
   placeholder,
   placeholderColor,
   maxLength,
@@ -209,6 +211,14 @@ function NativeTextInput({
     [onSubmit, onChangeText],
   );
 
+  const handleLiveChange = useCallback(
+    (event: LoveEvent) => {
+      const text = (event as any).value ?? '';
+      onLiveChange?.(text);
+    },
+    [onLiveChange],
+  );
+
   // Scale style for viewport-proportional rendering
   const scaledMergedStyle = useScaledStyle(mergedStyle);
 
@@ -236,11 +246,18 @@ function NativeTextInput({
   if (playgroundLine !== undefined) props.__ilrPlaygroundLine = playgroundLine;
   if (playgroundTag !== undefined) props.__ilrPlaygroundTag = playgroundTag;
 
+  // Enable per-keystroke liveChange in Lua when onLiveChange is provided
+  if (onLiveChange) {
+    props.liveChange = true;
+    if (liveChangeDebounce !== undefined) props.liveChangeDebounce = liveChangeDebounce;
+  }
+
   // Handlers -- these are extracted by the reconciler's extractHandlers()
   // and stored in handlerRegistry, NOT sent to Lua
   if (onFocus) props['onTextInputFocus'] = handleFocus;
   if (onBlur || onChangeText) props['onTextInputBlur'] = handleBlur;
   if (onSubmit) props['onTextInputSubmit'] = handleSubmit;
+  if (onLiveChange) props['onTextInputChange'] = handleLiveChange;
 
   return React.createElement('TextInput', props);
 }

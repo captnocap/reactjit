@@ -349,8 +349,18 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
       local letterSpacing = resolveLetterSpacing(node)
       local numberOfLines = resolveNumberOfLines(node)
 
-      -- Measure with no width constraint (natural width)
-      local result = Measure.measureText(text, fontSize, nil, fontFamily,
+      -- When measuring height (not isRow), use pw as wrap constraint so
+      -- multi-line text produces the correct wrapped height instead of
+      -- being measured as a single line.
+      local wrapWidth = nil
+      if not isRow and pw then
+        local hPad = ru(s.padding, pw) or 0
+        local hPadL = ru(s.paddingLeft, pw) or hPad
+        local hPadR = ru(s.paddingRight, pw) or hPad
+        wrapWidth = pw - hPadL - hPadR
+        if wrapWidth < 0 then wrapWidth = nil end
+      end
+      local result = Measure.measureText(text, fontSize, wrapWidth, fontFamily,
                                         lineHeight, letterSpacing, numberOfLines, fontWeight)
       return (isRow and result.width or result.height) + padMain
     end
@@ -378,6 +388,17 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
   local direction = s.flexDirection or "column"
   local containerIsRow = (direction == "row")
 
+  -- When measuring height, children need the container's inner width
+  -- (after horizontal padding) so text nodes wrap at the correct width.
+  local childPw = pw
+  if not isRow and pw then
+    local hPad = ru(s.padding, pw) or 0
+    local hPadL = ru(s.paddingLeft, pw) or hPad
+    local hPadR = ru(s.paddingRight, pw) or hPad
+    childPw = pw - hPadL - hPadR
+    if childPw < 0 then childPw = 0 end
+  end
+
   -- 4. Sum (main axis) or max (cross axis) children, skipping hidden and absolute nodes
   local visibleCount = 0
 
@@ -400,7 +421,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
         if explicitMain then
           sum = sum + explicitMain + marStart + marEnd
         else
-          sum = sum + estimateIntrinsicMain(child, isRow, pw, ph) + marStart + marEnd
+          sum = sum + estimateIntrinsicMain(child, isRow, childPw, ph) + marStart + marEnd
         end
       end
     end
@@ -427,7 +448,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
         if explicitCross then
           size = explicitCross + marStart + marEnd
         else
-          size = estimateIntrinsicMain(child, isRow, pw, ph) + marStart + marEnd
+          size = estimateIntrinsicMain(child, isRow, childPw, ph) + marStart + marEnd
         end
         if size > max then max = size end
       end
@@ -650,7 +671,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
     if CapabilitiesModule then
       local capDef = CapabilitiesModule.getDefinition(node.type)
       if capDef and capDef.visual and capDef.measure then
-        if not explicitH then
+        if not h then
           local measured = capDef.measure(node)
           if measured then
             h = measured.height
@@ -1016,6 +1037,30 @@ function Layout.layoutNode(node, px, py, pw, ph)
             if not isRow then
               ci.basis = newH
             end
+          end
+        end
+      end
+    end
+
+    -- ----------------------------------------------------------------
+    -- Re-estimate container heights after flex distribution (row only).
+    -- Flex-grow/shrink changes a container's width, which affects how
+    -- text wraps inside it. Re-estimate height with the new width so
+    -- lineCrossSize (computed next) reflects the correct content height.
+    -- ----------------------------------------------------------------
+    if isRow then
+      for _, idx in ipairs(line) do
+        local child = allChildren[idx]
+        local ci = childInfos[idx]
+        if not ci.isText and not ci.explicitH then
+          local finalW = ci.basis
+          finalW = clampDim(finalW, ci.minW, ci.maxW)
+          local prevW = ci.w or 0
+          if math.abs(finalW - prevW) > 0.5 then
+            local newH = estimateIntrinsicMain(child, false, finalW, innerH)
+            newH = clampDim(newH, ci.minH, ci.maxH)
+            ci.h = newH
+            ci.w = finalW
           end
         end
       end

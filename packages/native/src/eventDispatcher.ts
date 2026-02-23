@@ -229,6 +229,10 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onTextInputSubmit');
   });
 
+  bridge.subscribe('textinput:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onTextInputChange');
+  });
+
   // ── Video events (target-only) ────────────────────────
 
   bridge.subscribe('video:ready', (event: LoveEvent) => {

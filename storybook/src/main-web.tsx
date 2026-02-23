@@ -5,7 +5,7 @@
  * React communicates via Module.FS bridge (bridge_fs.lua <-> bridge.js).
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createWasmApp } from '../../packages/native/src/WasmApp';
 import { BridgeProvider, RendererProvider, useBridge } from '../../packages/core/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey } from '../../packages/core/src';
@@ -27,8 +27,26 @@ function groupBySection(list: StoryDef[]): Map<StorySection, StoryDef[]> {
   return map;
 }
 
+function getInitialStoryIdx(): number {
+  try {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+      const idx = stories.findIndex(s => s.id === hash);
+      if (idx >= 0) return idx;
+    }
+  } catch { /* not in browser */ }
+  return 0;
+}
+
 function StorybookPanel() {
-  const [activeIdx, setActiveIdx] = useState(0);
+  const [activeIdx, _setActiveIdx] = useState(getInitialStoryIdx);
+  const setActiveIdx = useCallback((v: number | ((i: number) => number)) => {
+    _setActiveIdx(prev => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      try { window.history.replaceState(null, '', '#' + stories[next]?.id); } catch {}
+      return next;
+    });
+  }, []);
   const groups = groupBySection(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;

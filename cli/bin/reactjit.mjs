@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { argv, exit } from 'node:process';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initCommand } from '../commands/init.mjs';
 import { devCommand } from '../commands/dev.mjs';
 import { buildCommand } from '../commands/build.mjs';
@@ -10,8 +13,23 @@ import { updateCommand } from '../commands/update.mjs';
 import { manifestCommand } from '../commands/manifest.mjs';
 import { tslCommand } from '../commands/tsl.mjs';
 import { diagnoseCommand } from '../commands/diagnose.mjs';
+import { fontsCommand } from '../commands/fonts.mjs';
+import { storybookCommand } from '../commands/storybook.mjs';
 
 const [,, command, ...args] = argv;
+
+// Version: stamped by esbuild define at dist build time, or read from package.json in dev.
+function getVersion() {
+  try {
+    // Dist builds: esbuild replaces this with a string literal
+    if (typeof __REACTJIT_VERSION__ !== 'undefined') return __REACTJIT_VERSION__;
+  } catch {}
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+    return pkg.version || 'unknown';
+  } catch { return 'unknown'; }
+}
 
 const HELP = `
   reactjit (rjit) — CLI for ReactJIT
@@ -29,6 +47,9 @@ const HELP = `
     rjit build web                WASM bundle for browsers (love.js)
     rjit build dist:love          Self-extracting Linux binary (Love2D + glibc)
 
+  Apps:
+    rjit storybook                Open the storybook
+
   Project management:
     rjit init <name>              Create a new project (interactive)
     rjit init <name> --all        Include all optional packages
@@ -36,6 +57,11 @@ const HELP = `
     rjit update                   Sync runtime files (lua/, lib/, reactjit/)
     rjit lint                     Check src/ for layout mistakes
     rjit manifest                 Generate or update manifest.json
+
+  Fonts:
+    rjit fonts                    List available font packs
+    rjit fonts add <pack>         Add a font pack (e.g. cjk, arabic)
+    rjit fonts remove <pack>      Remove a font pack
 
   Tools:
     rjit tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
@@ -77,6 +103,16 @@ switch (command) {
     break;
   case 'diagnose':
     await diagnoseCommand(args);
+    break;
+  case 'fonts':
+    await fontsCommand(args);
+    break;
+  case 'storybook':
+    await storybookCommand(args);
+    break;
+  case '--version':
+  case '-v':
+    console.log(`reactjit ${getVersion()}`);
     break;
   case 'help':
   case '--help':

@@ -139,7 +139,23 @@ export function createWasmApp(): WasmAppHandle {
     }
 
     try {
-      getFS().writeFile(saveDir + '__reconciler_in.json', data);
+      const fs = getFS();
+      const path = saveDir + '__reconciler_in.json';
+      // Append to existing commands if Lua hasn't consumed them yet.
+      // Multiple React commits can happen between Lua frames — merging
+      // prevents earlier commands from being overwritten and lost.
+      let merged = JSON.parse(data);
+      try {
+        fs.stat(path);
+        const existing = fs.readFile(path, { encoding: 'utf8' });
+        if (existing) {
+          const prev = JSON.parse(existing);
+          if (Array.isArray(prev)) {
+            merged = prev.concat(merged);
+          }
+        }
+      } catch { /* file doesn't exist yet — use data as-is */ }
+      fs.writeFile(path, JSON.stringify(merged));
     } catch (e) {
       console.error('[WasmApp] Failed to write reconciler commands:', e);
     }

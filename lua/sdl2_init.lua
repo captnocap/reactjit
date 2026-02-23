@@ -1405,6 +1405,9 @@ function SDL2Init.run(config)
     Shim.setDelta(dt)
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
 
+    -- ---- Window animations (animated resize) ----
+    WM.tick(dt)
+
     -- ---- Per-window layout + paint ----
     local allWindows = WM.getAll()
 

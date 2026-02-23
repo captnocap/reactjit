@@ -1,13 +1,9 @@
 import React from 'react';
-import { Box, Native, ScrollView } from '@reactjit/core';
-
-// ── Colors ────────────────────────────────────────────────────────────
+import { Box, Native } from '@reactjit/core';
 
 const C = {
   bg: '#0f172a',
 };
-
-// ── App ──────────────────────────────────────────────────────────────
 
 export function App() {
   return (
@@ -22,10 +18,12 @@ export function App() {
         sessionId="default"
       />
 
-      {/* Terminal canvas — Lua paints everything */}
-      <ScrollView style={{ flexGrow: 1 }}>
-        <Native type="ClaudeCanvas" sessionId="default" />
-      </ScrollView>
+      {/* Terminal canvas — fills viewport, Lua owns everything */}
+      <Native
+        type="ClaudeCanvas"
+        sessionId="default"
+        style={{ flexGrow: 1 }}
+      />
 
     </Box>
   );

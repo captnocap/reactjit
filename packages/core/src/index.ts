@@ -42,6 +42,7 @@ export { scaleStyle } from './scaleStyle';
 // Hooks
 export {
   useWindowDimensions,
+  useWindowSize,
   useLove,
   useLoveEvent,
   useLoveRPC,

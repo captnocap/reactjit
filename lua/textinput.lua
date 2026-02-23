@@ -53,6 +53,10 @@ function TextInput.initState(node)
     blinkOn = true,
     isDragging = false,
     lastValue = initialText, -- track for controlled value changes
+    -- liveChange: debounced per-keystroke change event support
+    changeDebounce = 0,     -- seconds remaining in debounce window
+    changePending = false,  -- true when text changed and event not yet emitted
+    lastEmittedText = initialText, -- last text sent via textinput:change
   }
 end
 
@@ -763,6 +767,58 @@ function TextInput.draw(node, effectiveOpacity)
     setColorWithOpacity(borderColor, effectiveOpacity)
     love.graphics.setLineWidth(bw)
     love.graphics.rectangle("line", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+  end
+end
+
+-- ============================================================================
+-- Public API: liveChange (debounced per-keystroke events for search inputs)
+-- ============================================================================
+
+--- Check if a node has liveChange enabled (via props.liveChange = true).
+function TextInput.isLiveChange(node)
+  local props = node.props or {}
+  return props.liveChange == true
+end
+
+--- Mark text as changed. If liveChange is enabled, starts/resets the debounce
+--- timer. If the text hasn't actually changed since last emission, does nothing.
+function TextInput.markChanged(node)
+  local is = ensureState(node)
+  local props = node.props or {}
+  if not props.liveChange then return end
+  -- Only mark if text actually differs from last emission
+  if is.text == is.lastEmittedText then return end
+  local debounceMs = (type(props.liveChangeDebounce) == "number") and props.liveChangeDebounce or 300
+  is.changeDebounce = debounceMs / 1000
+  is.changePending = true
+end
+
+--- Cancel any pending liveChange emission (e.g. on blur or submit).
+function TextInput.cancelChange(node)
+  local is = ensureState(node)
+  is.changePending = false
+  is.changeDebounce = 0
+end
+
+--- Tick the liveChange debounce. Call from init.lua's update loop alongside
+--- TextInput.update(). Fires textinput:change when the debounce expires.
+function TextInput.tickChange(node, dt, pushEvent)
+  local is = ensureState(node)
+  if not is.changePending then return end
+  is.changeDebounce = is.changeDebounce - dt
+  if is.changeDebounce <= 0 then
+    is.changePending = false
+    is.lastEmittedText = is.text
+    if pushEvent then
+      pushEvent({
+        type = "textinput:change",
+        payload = {
+          type = "textinput:change",
+          targetId = node.id,
+          value = is.text,
+        }
+      })
+    end
   end
 end
 

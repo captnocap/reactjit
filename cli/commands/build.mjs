@@ -1186,12 +1186,19 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   if (bridgeJs) cpSync(bridgeJs, join(distDir, 'bridge.js'));
 
   // Replace index.html with our custom one (includes bridge.js + bundle.js loading)
-  const htmlSources = [
-    join(cwd, 'packaging', 'web', 'index.html'),
-    join(monoRoot, 'packaging', 'web', 'index.html'),
-  ];
-  const htmlSource = htmlSources.find(p => existsSync(p));
-  if (htmlSource) {
+  const localHtml = join(cwd, 'packaging', 'web', 'index.html');
+  const defaultHtml = join(monoRoot, 'packaging', 'web', 'index.html');
+
+  // Scaffold the template into the project on first web build so users
+  // can customize their loading screen.
+  if (!existsSync(localHtml) && existsSync(defaultHtml)) {
+    mkdirSync(join(cwd, 'packaging', 'web'), { recursive: true });
+    cpSync(defaultHtml, localHtml);
+    console.log('  Created packaging/web/index.html — customize your loading screen here');
+  }
+
+  const htmlSource = existsSync(localHtml) ? localHtml : defaultHtml;
+  if (htmlSource && existsSync(htmlSource)) {
     let html = readFileSync(htmlSource, 'utf-8');
     html = html.replace(/\{\{TITLE\}\}/g, projectName);
     writeFileSync(join(distDir, 'index.html'), html);

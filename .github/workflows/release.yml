@@ -1,0 +1,289 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ── Storybook tier (standalone app, no CLI) ─────────────
+  # Reuses existing Makefile targets — these already produce
+  # self-extracting binaries / Windows exe.
+
+  storybook-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install
+      - run: sudo apt-get install -y love
+      - run: make setup
+      - run: make dist-storybook
+      - run: mv dist/reactjit-demo dist/reactjit-storybook-linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storybook-linux-x64
+          path: dist/reactjit-storybook-linux-x64
+
+  storybook-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: mlugg/setup-zig@v1
+      - run: npm install
+      - run: make setup
+      - run: make dist-storybook-windows
+      - run: mv dist/reactjit-demo.exe dist/reactjit-storybook-windows-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storybook-windows-x64
+          path: dist/reactjit-storybook-windows-x64.exe
+
+  storybook-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: brew install love
+      - run: npm install
+      - run: make setup
+      - run: make dist-storybook
+      - run: mv dist/reactjit-demo dist/reactjit-storybook-macos-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storybook-macos-x64
+          path: dist/reactjit-storybook-macos-x64
+
+  storybook-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: brew install love
+      - run: npm install
+      - run: make setup
+      - run: make dist-storybook
+      - run: mv dist/reactjit-demo dist/reactjit-storybook-macos-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storybook-macos-arm64
+          path: dist/reactjit-storybook-macos-arm64
+
+  # ── Full tier (CLI + Storybook + Node.js) ───────────────
+
+  full-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: sudo apt-get install -y love
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-linux-x64
+          path: dist/reactjit-full-linux-x64
+
+  full-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: brew install love
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh macos-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-macos-x64
+          path: dist/reactjit-full-macos-x64
+
+  full-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: brew install love
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh macos-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-macos-arm64
+          path: dist/reactjit-full-macos-arm64
+
+  full-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh windows-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-windows-x64
+          path: dist/reactjit-full-windows-x64*
+
+  # ── Light tier (CLI + Storybook, no Node.js) ────────────
+
+  light-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: sudo apt-get install -y love
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh linux-x64 --no-node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: light-linux-x64
+          path: dist/reactjit-light-linux-x64
+
+  light-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: brew install love
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh macos-x64 --no-node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: light-macos-x64
+          path: dist/reactjit-light-macos-x64
+
+  light-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: brew install love
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh macos-arm64 --no-node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: light-macos-arm64
+          path: dist/reactjit-light-macos-arm64
+
+  light-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install
+      - run: make cli-setup
+      - run: make build-storybook-native
+      - run: bash scripts/build-cli-dist.sh windows-x64 --no-node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: light-windows-x64
+          path: dist/reactjit-light-windows-x64*
+
+  # ── Create GitHub Release ───────────────────────────────
+
+  release:
+    needs:
+      - storybook-linux
+      - storybook-windows
+      - storybook-macos-x64
+      - storybook-macos-arm64
+      - full-linux
+      - full-macos-x64
+      - full-macos-arm64
+      - full-windows
+      - light-linux
+      - light-macos-x64
+      - light-macos-arm64
+      - light-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          # Flatten artifacts into release dir
+          mkdir -p release
+          find artifacts/ -type f -exec cp {} release/ \;
+
+          # List what we're releasing
+          echo "=== Release artifacts ==="
+          ls -lh release/
+
+          # Create the release with all artifacts
+          gh release create "$TAG" release/* \
+            --title "ReactJIT $TAG" \
+            --generate-notes

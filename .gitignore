@@ -17,6 +17,16 @@ examples/*/fonts/
 examples/*/bin/
 examples/*/data/
 
+# Web landing page runtime copies (same pattern as examples)
+web/reactjit/
+web/lua
+web/lib/
+web/fonts/
+web/bin/
+web/love/
+web/node_modules/
+web/logo.png
+
 # Storybook runtime copies (reads from source-of-truth directly)
 storybook/lua/
 storybook/reactjit/
@@ -105,3 +115,6 @@ storybook/t.md
 vendor/
 zig-out-win/
 vendor/mpv-win64/
+
+# Local Netlify folder
+.netlify

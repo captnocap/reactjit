@@ -9,7 +9,7 @@ STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 STORYBOOK_SDL2 = storybook/sdl2
 STORYBOOK_SDL2_LIB = $(STORYBOOK_SDL2)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows cli-setup build-blake3 build-natives build-luajit build-all-platforms
+.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-natives build-luajit build-all-platforms
 
 all: setup build
 
@@ -439,10 +439,11 @@ cli-setup: setup
 	cp -r packages/theme cli/runtime/reactjit/theme
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
-	@if [ -d fonts ]; then \
+	@if [ -d fonts/base ]; then \
 		mkdir -p cli/runtime/fonts; \
-		cp -r fonts/* cli/runtime/fonts/; \
-		echo "  Bundled fonts ($$(du -sh fonts | cut -f1))"; \
+		cp -r fonts/base cli/runtime/fonts/; \
+		if [ -f fonts/manifest.json ]; then cp fonts/manifest.json cli/runtime/fonts/; fi; \
+		echo "  Bundled fonts: base only ($$(du -sh fonts/base | cut -f1)) — use 'reactjit fonts add <pack>' for i18n"; \
 	fi
 	@if [ -d data ]; then \
 		mkdir -p cli/runtime/data; \
@@ -477,6 +478,33 @@ build-all-platforms:
 	zig build all -Dtarget=aarch64-linux-gnu
 	bash scripts/build-luajit-cross.sh aarch64-linux-gnu
 	@echo "=== All platforms built ==="
+
+# ── CLI distribution (Full / Light / Storybook tiers) ────
+# Usage:
+#   make dist-cli                         Build all 3 tiers (linux-x64 default)
+#   make dist-cli-full PLATFORM=macos-arm64
+#   make dist-cli-light PLATFORM=linux-x64
+
+dist-cli-full: cli-setup build-storybook-native
+	bash scripts/build-cli-dist.sh $(or $(PLATFORM),linux-x64)
+
+dist-cli-light: cli-setup build-storybook-native
+	bash scripts/build-cli-dist.sh $(or $(PLATFORM),linux-x64) --no-node
+
+dist-cli: dist-cli-full dist-cli-light dist-storybook ## Build all 3 tier artifacts
+
+# ── Release ──────────────────────────────────────────────
+# Usage: make release VERSION=0.2.0
+# Bumps package.json, commits, tags, pushes. GitHub Actions handles the rest.
+
+release:
+	@test -n "$(VERSION)" || { echo "Usage: make release VERSION=x.y.z"; exit 1; }
+	@echo "=== Releasing v$(VERSION) ==="
+	node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('package.json','utf-8')); p.version='$(VERSION)'; fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
+	git add package.json
+	git commit -m "release: v$(VERSION)"
+	git tag "v$(VERSION)"
+	@echo "=== Tagged v$(VERSION). Push with: git push && git push --tags ==="
 
 # ── Clean ───────────────────────────────────────────────
 

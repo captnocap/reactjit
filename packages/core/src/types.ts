@@ -440,6 +440,15 @@ export interface TextInputProps {
   onSubmit?: (text: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /**
+   * Fired per-keystroke after a debounce delay (default 300ms). The entire
+   * debounce runs in Lua — no per-keystroke bridge traffic. Use this for
+   * live search, preview, or validation. For the final value on blur/submit,
+   * use onChangeText or onSubmit instead.
+   */
+  onLiveChange?: (text: string) => void;
+  /** Debounce delay in ms for onLiveChange. Default: 300. */
+  liveChangeDebounce?: number;
   placeholder?: string;
   placeholderColor?: Color;
   maxLength?: number;

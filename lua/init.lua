@@ -452,6 +452,7 @@ function ReactJIT.init(config)
 
   -- Inspector/console can be disabled for production builds
   M.inspectorEnabled = config.inspector ~= false
+  M.screenshotEnabled = config.screenshot ~= false
 
   -- Settings overlay can be disabled or configured
   M.settingsEnabled = config.settings ~= false
@@ -490,12 +491,16 @@ function ReactJIT.init(config)
     })
   end
 
-  -- System panel: ALWAYS initialized, no config flag can suppress it
-  systemPanel.init({
-    permit = require("lua.permit"),
-    audit = pcall(require, "lua.audit") and require("lua.audit") or nil,
-    midi = pcall(require, "lua.audio.midi") and require("lua.audio.midi") or nil,
-  })
+  -- System panel: always initialized by default. Can be suppressed for
+  -- public-facing builds (landing pages, demos) via config.systemPanel = false.
+  M.systemPanelEnabled = config.systemPanel ~= false
+  if M.systemPanelEnabled then
+    systemPanel.init({
+      permit = require("lua.permit"),
+      audit = pcall(require, "lua.audit") and require("lua.audit") or nil,
+      midi = pcall(require, "lua.audio.midi") and require("lua.audio.midi") or nil,
+    })
+  end
 
   mode = detectMode(config)
   local ns = config.namespace or "default"
@@ -1074,6 +1079,20 @@ function ReactJIT.init(config)
     wmMod.init()  -- auto-detects Love2D backend
     wmMod.registerMain()
     io.write("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")\n"); io.flush()
+
+    -- Declarative window resize from React: useWindowSize(w, h, { animate })
+    rpcHandlers["window:setSize"] = function(args)
+      local main = wmMod.getMain()
+      if not main then return false end
+      local w = args.width or main.width
+      local h = args.height or main.height
+      if args.animate then
+        wmMod.animateTo(main, w, h, args.duration or 300)
+      else
+        wmMod.setSize(main, w, h)
+      end
+      return { width = w, height = h }
+    end
   end
 
   -- Load declarative capabilities (Audio, Timer, etc.)
@@ -1181,7 +1200,7 @@ end
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
   -- System panel update runs regardless of mode (debounced save, device rescan)
-  systemPanel.update(dt)
+  if M.systemPanelEnabled then systemPanel.update(dt) end
 
   if mode == "web" then
     -- Web mode: poll the Module.FS inbox and flush the outbox
@@ -1246,6 +1265,7 @@ function ReactJIT.update(dt)
       end
     elseif canvasFocusedNode and canvasFocusedNode.type == "TextInput" then
       M.textinput.update(canvasFocusedNode, dt)
+      M.textinput.tickChange(canvasFocusedNode, dt, pushEvent)
     end
 
     -- Sync playground editor hover -> preview overlay link
@@ -1680,6 +1700,10 @@ function ReactJIT.update(dt)
     M.capabilities.syncWithTree(M.tree.getNodes(), pushEvent, dt)
   end
 
+  -- 8f. Tick window animations (animated resize)
+  local wmMod = package.loaded["lua.window_manager"]
+  if wmMod then wmMod.tick(dt) end
+
   -- 9. Poll video status and playback events, emit to JS
   if M.videos then
     local videoEvents = M.videos.poll()
@@ -1869,6 +1893,7 @@ function ReactJIT.update(dt)
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
     M.textinput.update(focusedNode, dt)
+    M.textinput.tickChange(focusedNode, dt, pushEvent)
   end
 
   -- Sync playground editor hover -> preview overlay link
@@ -2045,8 +2070,8 @@ function ReactJIT.draw()
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   if M.inspectorEnabled then devtools.draw(root) end
 
-  -- System panel (NON-NEGOTIABLE — draws over devtools, no guard)
-  if systemPanel.isOpen() then systemPanel.draw() end
+  -- System panel (draws over devtools)
+  if M.systemPanelEnabled and systemPanel.isOpen() then systemPanel.draw() end
 
   -- Settings overlay (after devtools, before context menu/errors)
   if M.settingsEnabled and settings.isOpen() then settings.draw() end
@@ -2250,7 +2275,7 @@ end
 function ReactJIT.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
-  if systemPanel.mousepressed(x, y, button) then return end  -- NON-NEGOTIABLE
+  if M.systemPanelEnabled and systemPanel.mousepressed(x, y, button) then return end
   if M.settingsEnabled and settings.mousepressed(x, y, button) then return end
   if M.themeMenuEnabled and themeMenu.mousepressed(x, y, button) then return end
   if M.inspectorEnabled and devtools.mousepressed(x, y, button) then return end
@@ -2446,7 +2471,7 @@ end
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactJIT.mousereleased(x, y, button)
-  if systemPanel.mousereleased(x, y, button) then return end  -- NON-NEGOTIABLE
+  if M.systemPanelEnabled and systemPanel.mousereleased(x, y, button) then return end
   if M.inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if M.settingsEnabled and settings.mousereleased(x, y, button) then return end
   if M.themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
@@ -2529,7 +2554,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
-  systemPanel.mousemoved(x, y)  -- NON-NEGOTIABLE
+  if M.systemPanelEnabled then systemPanel.mousemoved(x, y) end
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
   if M.inspectorEnabled then devtools.mousemoved(x, y) end
@@ -2675,7 +2700,7 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
-  if systemPanel.keypressed(key) then return end  -- NON-NEGOTIABLE: always first, no guard
+  if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
   if M.inspectorEnabled and devtools.keypressed(key) then return end
@@ -2717,7 +2742,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   end
 
   -- PrintScreen / F2: capture screenshot to file
-  if key == "printscreen" or key == "f2" then
+  if M.screenshotEnabled and (key == "printscreen" or key == "f2") then
     love.graphics.captureScreenshot(function(imageData)
       local t = os.date("*t")
       local filename = string.format("screenshot_%04d%02d%02d_%02d%02d%02d.png",
@@ -2773,6 +2798,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     local result = M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
     if result == "blur" then
       local value = M.textinput.blur(focusedNode)
+      M.textinput.cancelChange(focusedNode)
       focus.clear()
       pushEvent({
         type = "textinput:blur",
@@ -2784,6 +2810,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       })
     elseif result == "submit" then
       local value = M.textinput.getValue(focusedNode)
+      M.textinput.cancelChange(focusedNode)
       pushEvent({
         type = "textinput:submit",
         payload = {
@@ -2796,6 +2823,8 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     elseif result == false then
       -- TextInput didn't handle this key combo, let it through to bridge
     else
+      -- Key was consumed. Check if text may have changed (backspace, delete, paste, etc.)
+      M.textinput.markChanged(focusedNode)
       return  -- consumed by TextInput
     end
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
@@ -2882,8 +2911,8 @@ end
 --- Call from love.textinput(text).
 --- Routes text input to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.textinput(text)
-  -- System panel captures text input when open (NON-NEGOTIABLE)
-  if systemPanel.textinput(text) then return end
+  -- System panel captures text input when open
+  if M.systemPanelEnabled and systemPanel.textinput(text) then return end
   -- Settings overlay captures text input when active
   if M.settingsEnabled and settings.textinput(text) then return end
   -- Theme menu captures text input when active
@@ -2899,6 +2928,7 @@ function ReactJIT.textinput(text)
     return  -- consumed, no bridge traffic
   elseif focusedNode and focusedNode.type == "TextInput" then
     M.textinput.handleTextInput(focusedNode, text)
+    M.textinput.markChanged(focusedNode)  -- start liveChange debounce
     return  -- consumed, no bridge traffic
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with text input handling
@@ -2924,7 +2954,13 @@ end
 --- directly in Lua for immediate visual response AND send the event to JS.
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactJIT.wheelmoved(x, y)
-  if systemPanel.wheelmoved(x, y) then return end  -- NON-NEGOTIABLE
+  -- love.js passes raw browser wheel deltas (can be 100+) instead of
+  -- Love2D's normalized ±1. Clamp to ±1 so scrollSpeed stays sane.
+  if mode == "wasm" or mode == "canvas" then
+    x = x > 0 and 1 or (x < 0 and -1 or 0)
+    y = y > 0 and 1 or (y < 0 and -1 or 0)
+  end
+  if M.systemPanelEnabled and systemPanel.wheelmoved(x, y) then return end
   if M.settingsEnabled and settings.wheelmoved(x, y) then return end
   if M.themeMenuEnabled and themeMenu.wheelmoved(x, y) then return end
   if M.inspectorEnabled and devtools.wheelmoved(x, y) then return end
@@ -3026,7 +3062,7 @@ end
 function ReactJIT.joystickadded(joystick)
   M.controllerToast.timer = 3.0
   M.controllerToast.text = "Controller connected"
-  systemPanel.notifyDeviceAdded("controllers", joystick:getID(), joystick:getName())
+  if M.systemPanelEnabled then systemPanel.notifyDeviceAdded("controllers", joystick:getID(), joystick:getName()) end
   if M.bridge then
     pushEvent({
       type = "joystickadded",
@@ -3040,7 +3076,7 @@ end
 function ReactJIT.joystickremoved(joystick)
   M.controllerToast.timer = 3.0
   M.controllerToast.text = "Controller disconnected"
-  systemPanel.notifyDeviceRemoved("controllers", joystick:getID())
+  if M.systemPanelEnabled then systemPanel.notifyDeviceRemoved("controllers", joystick:getID()) end
   -- If no joysticks remain, switch back to mouse mode
   local joysticks = love.joystick.getJoysticks()
   if #joysticks == 0 then
@@ -3060,7 +3096,7 @@ end
 function ReactJIT.gamepadpressed(joystick, button)
   if not isRendering() then return end
   if not M.bridge then return end
-  if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
+  if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
@@ -3126,7 +3162,7 @@ end
 function ReactJIT.gamepadreleased(joystick, button)
   if not isRendering() then return end
   if not M.bridge then return end
-  if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
+  if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
 
@@ -3161,7 +3197,7 @@ end
 function ReactJIT.gamepadaxis(joystick, axis, value)
   if not isRendering() then return end
   if not M.bridge then return end
-  if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
+  if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
   focus.setControllerMode()

@@ -19,6 +19,8 @@ local Capabilities = require("lua.capabilities")
 local Renderer     = require("lua.claude_renderer")
 local Session      = require("lua.claude_session")
 local Color        = require("lua.color")
+local Focus        = require("lua.focus")
+local Tree         = require("lua.tree")
 
 local Measure = nil
 
@@ -96,6 +98,16 @@ Capabilities.register("ClaudeCanvas", {
   end,
 
   tick = function(nodeId, state, dt, pushEvent, props)
+    -- Auto-focus on first tick so keyboard events route here immediately
+    if not state._focusGrabbed then
+      local nodes = Tree.getNodes()
+      local node = nodes[nodeId]
+      if node then
+        Focus.set(node)
+        state._focusGrabbed = true
+      end
+    end
+
     local inputState = getInputState(nodeId)
     inputState.blinkTimer = inputState.blinkTimer + dt
     if inputState.blinkTimer >= 0.53 then

@@ -35,6 +35,47 @@ export function useWindowDimensions(): { width: number; height: number } {
 }
 
 /**
+ * Declaratively set the main window size from a component.
+ * When the component mounts (or width/height change), the window resizes.
+ *
+ * @example
+ * useWindowSize(800, 600);
+ * useWindowSize(800, 600, { animate: true });
+ * useWindowSize(800, 600, { animate: true, duration: 500 });
+ * useWindowSize(800, 600, { revert: true });
+ */
+export function useWindowSize(
+  width: number,
+  height: number,
+  options?: { animate?: boolean; duration?: number; revert?: boolean },
+): void {
+  const bridge = useBridge();
+  const animate = options?.animate ?? false;
+  const duration = options?.duration;
+  const revert = options?.revert ?? false;
+
+  useEffect(() => {
+    let prevSize: { width: number; height: number } | null = null;
+    if (revert) {
+      prevSize = { ..._lastViewport };
+    }
+
+    bridge.rpc('window:setSize', { width, height, animate, duration });
+
+    return () => {
+      if (revert && prevSize) {
+        bridge.rpc('window:setSize', {
+          width: prevSize.width,
+          height: prevSize.height,
+          animate,
+          duration,
+        });
+      }
+    };
+  }, [bridge, width, height, animate, duration, revert]);
+}
+
+/**
  * Subscribe to a Love2D event and get a send function.
  *
  * @example

@@ -402,8 +402,14 @@ end
 
 --- Set a window's size.
 function WindowManager.setSize(entry, w, h)
+  -- No-op guard: prevent resize loops when the size hasn't actually changed
+  w, h = math.floor(w), math.floor(h)
+  if w == entry.width and h == entry.height then return end
+
   if backend == "sdl2" and entry.sdlWindow then
     sdl.SDL_SetWindowSize(entry.sdlWindow, w, h)
+  elseif backend == "love" and entry.isMain then
+    love.window.updateMode(w, h, { resizable = true })
   end
   -- Love2D secondary windows: no resize API yet
   WindowManager.handleResize(entry)
@@ -448,6 +454,62 @@ function WindowManager.count()
   local n = 0
   for _ in pairs(windows) do n = n + 1 end
   return n
+end
+
+-- ============================================================================
+-- Animated resize
+-- ============================================================================
+
+local activeAnimations = 0
+
+local function easeOutCubic(t)
+  t = t - 1
+  return t * t * t + 1
+end
+
+--- Animate a window to a target size over `durationMs` milliseconds.
+function WindowManager.animateTo(entry, w, h, durationMs)
+  w, h = math.floor(w), math.floor(h)
+  if w == entry.width and h == entry.height then return end
+  -- Cancel any in-flight animation on this entry
+  if not entry.anim then
+    activeAnimations = activeAnimations + 1
+  end
+  entry.anim = {
+    startW   = entry.width,
+    startH   = entry.height,
+    targetW  = w,
+    targetH  = h,
+    duration = (durationMs or 300) / 1000, -- convert to seconds
+    elapsed  = 0,
+  }
+end
+
+--- Tick all active window animations. Call once per frame.
+--- Returns true if any animation is still in progress.
+function WindowManager.tick(dt)
+  if activeAnimations == 0 then return false end
+
+  local still = false
+  for _, entry in pairs(windows) do
+    local a = entry.anim
+    if a then
+      a.elapsed = a.elapsed + dt
+      if a.elapsed >= a.duration then
+        -- Snap to final size and clear animation
+        WindowManager.setSize(entry, a.targetW, a.targetH)
+        entry.anim = nil
+        activeAnimations = activeAnimations - 1
+      else
+        local t = easeOutCubic(a.elapsed / a.duration)
+        local cw = a.startW + (a.targetW - a.startW) * t
+        local ch = a.startH + (a.targetH - a.startH) * t
+        WindowManager.setSize(entry, cw, ch)
+        still = true
+      end
+    end
+  end
+  return still
 end
 
 return WindowManager
