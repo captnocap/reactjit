@@ -320,7 +320,7 @@ function SDL2Init.run(config)
   -- 3a. Window manager (multi-window support)
   -- ------------------------------------------------------------------
   local WM = require("lua.window_manager")
-  WM.init(sdl)
+  WM.init({ sdl = sdl })
   local mainWin = WM.registerMain(window, ctx, W, H)
 
   -- ------------------------------------------------------------------
