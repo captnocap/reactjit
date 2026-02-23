@@ -25,6 +25,8 @@ ffi.cdef[[
   int  ft_get_line_height(void);
   int  ft_get_ascender(void);
   int  ft_measure_text_utf8(const char *text, int byte_len);
+  int  ft_wrap_text_utf8(const char *text, int byte_len, int max_width,
+                         char **out_buf, int *out_buf_len);
 ]]
 
 local loader = require("lua.lib_loader")
@@ -233,6 +235,31 @@ function Font.draw(text, x, y, size, r, g, b, a)
   GL.glEnd()
   GL.glBindTexture(GL.TEXTURE_2D, 0)
   GL.glDisable(GL.TEXTURE_2D)
+end
+
+-- Reusable FFI buffers for ft_wrap_text_utf8
+local _wrapBuf = ffi.new("char*[1]")
+local _wrapLen = ffi.new("int[1]")
+
+function Font.wrapText(text, size, maxWidth)
+  ensureSize(size)
+  local numLines = ft.ft_wrap_text_utf8(text, #text, maxWidth, _wrapBuf, _wrapLen)
+  if numLines <= 0 or _wrapBuf[0] == nil then
+    return { "" }
+  end
+  local lines = {}
+  local buf = _wrapBuf[0]
+  local bufLen = _wrapLen[0]
+  local start = 0
+  for i = 0, bufLen - 1 do
+    if buf[i] == 0 then
+      lines[#lines + 1] = ffi.string(buf + start, i - start)
+      start = i + 1
+    end
+  end
+  ft.ft_free_buffer(ffi.cast("unsigned char*", buf))
+  if #lines == 0 then lines[1] = "" end
+  return lines
 end
 
 function Font.measureWidth(text, size)
