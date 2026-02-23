@@ -161,8 +161,8 @@ export async function buildCommand(args) {
     resolvedPlatform = resolvedPlatform || alias.platform;
   }
 
-  // Auto-update runtime files before building (love + sdl2 — both use lua/ runtime; grid/web don't)
-  const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2'].includes(rawTarget);
+  // Auto-update runtime files before building (love + sdl2 + web — all use lua/ runtime)
+  const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2', 'web', 'dist:web'].includes(rawTarget);
   if (!skipUpdate && isLuaTarget) {
     await updateCommand([]);
   }
@@ -198,6 +198,7 @@ export async function buildCommand(args) {
     console.error('    rjit build macos                 macOS bundle (Intel x64)');
     console.error('    rjit build macmseries            macOS bundle (Apple Silicon arm64)');
     console.error('    rjit build windows               Windows archive (x64)');
+    console.error('    rjit build web                   WASM bundle (love.js)');
     console.error('    rjit build dist:love             Self-extracting Love2D binary');
     console.error('');
     console.error('  Dev builds:');
@@ -214,8 +215,7 @@ export async function buildCommand(args) {
     } else if (target.kind === 'sdl2') {
       await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform: resolvedPlatform });
     } else if (target.kind === 'web') {
-      // Web dist is just the ESM bundle (no shebang — not a Node.js executable)
-      await buildDevTarget(cwd, projectName, targetName);
+      await buildDistWeb(cwd, projectName, { debug: hasDebugFlag });
     } else {
       await buildDistGrid(cwd, projectName, targetName);
     }
@@ -936,6 +936,234 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
 
   const sizeMb = (statSync(outFile).size / (1024 * 1024)).toFixed(1);
   console.log(`\n  Done! ${sizeMb} MB → ${outFile}`);
+}
+
+// ── reactjit build web / dist:web ───────────────────────────────────
+//
+// Produces a dist/web/ directory containing:
+//   index.html     – HTML shell with <canvas>
+//   love.js        – Emscripten glue (from vendored love.js)
+//   love.wasm      – Compiled Love2D engine (from vendored love.js)
+//   game.data      – .love archive (Lua runtime + rendering pipeline, FFI files stripped)
+//   bridge.js      – Browser-side Module.FS bridge
+//   bundle.js      – React IIFE bundle
+//
+// The .love archive excludes all FFI-dependent Lua files since love.js
+// uses PUC Lua 5.1 (no LuaJIT FFI). The core rendering pipeline
+// (painter, layout, tree, events, measure, images) is pure Lua + Love2D APIs.
+
+const WEB_FFI_EXCLUDES = [
+  'bridge_quickjs.lua',
+  'sdl2_init.lua',
+  'sdl2_painter.lua',
+  'sdl2_measure.lua',
+  'sdl2_font.lua',
+  'sdl2_gl.lua',
+  'sdl2_images.lua',
+  'sdl2_love_shim.lua',
+  'lib_loader.lua',
+  'videos.lua',
+  'sqlite.lua',
+  'archive.lua',
+  'crypto.lua',
+  'dragdrop.lua',
+  'emulator.lua',
+  'quarantine.lua',
+  'image_select.lua',
+  'miner_signatures.lua',
+  'window_manager.lua',
+];
+
+const WEB_FFI_EXCLUDE_DIRS = [
+  'gpio',
+];
+
+const WEB_FFI_EXCLUDE_SUBPATHS = [
+  join('audio', 'midi.lua'),
+  join('capabilities', 'image_select.lua'),
+];
+
+function copyLuaDirStripped(srcDir, destDir) {
+  if (!existsSync(srcDir)) return;
+  mkdirSync(destDir, { recursive: true });
+
+  for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+    const srcPath = join(srcDir, entry.name);
+    const destPath = join(destDir, entry.name);
+
+    if (entry.isDirectory()) {
+      if (WEB_FFI_EXCLUDE_DIRS.includes(entry.name)) continue;
+      copyLuaDirStripped(srcPath, destPath);
+    } else {
+      if (WEB_FFI_EXCLUDES.includes(entry.name)) continue;
+      cpSync(srcPath, destPath);
+    }
+  }
+}
+
+async function buildDistWeb(cwd, projectName, opts = {}) {
+  const target = TARGETS.web;
+  const entryCandidates = target.entries.map(e => `src/${e}`);
+  const entry = findEntry(cwd, ...entryCandidates);
+  const luaDir = findLuaRuntime(cwd);
+
+  const monoRoot = join(CLI_ROOT, '..');
+  const distDir = join(cwd, 'dist', 'web');
+  const stagingDir = join('/tmp', `reactjit-web-${projectName}`);
+  const loveArchive = join('/tmp', `${projectName}-web.love`);
+
+  console.log(`\n  Building web for ${projectName}...\n`);
+
+  // 1. Lint gate
+  const { errors } = await runLint(cwd, { silent: false });
+  if (errors > 0) {
+    console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
+    process.exit(1);
+  }
+
+  // 2. Bundle JS (IIFE for browser)
+  console.log('  [1/5] Bundling JS...');
+  rmSync(stagingDir, { recursive: true, force: true });
+  mkdirSync(stagingDir, { recursive: true });
+
+  const bundlePath = join(stagingDir, 'bundle.js');
+  execSync([
+    'npx', 'esbuild',
+    ...esbuildArgs(target),
+    `--outfile=${bundlePath}`,
+    ...getEsbuildAliases(cwd),
+    entry,
+  ].join(' '), { cwd, stdio: 'pipe' });
+
+  const bundleCheck = runBundleChecks(bundlePath);
+  if (bundleCheck.errors > 0) {
+    console.error(`\n  Build blocked: ${bundleCheck.errors} bundle error(s).\n`);
+    rmSync(stagingDir, { recursive: true, force: true });
+    process.exit(1);
+  }
+
+  // 3. Stage .love archive contents (Lua runtime with FFI files stripped)
+  console.log('  [2/5] Staging Lua runtime (stripping FFI files)...');
+  const loveStaging = join('/tmp', `reactjit-web-love-${projectName}`);
+  rmSync(loveStaging, { recursive: true, force: true });
+  mkdirSync(loveStaging, { recursive: true });
+
+  // Copy lua/ with FFI exclusions
+  copyLuaDirStripped(luaDir, join(loveStaging, 'lua'));
+
+  // Remove sub-path exclusions
+  for (const subpath of WEB_FFI_EXCLUDE_SUBPATHS) {
+    const target_ = join(loveStaging, 'lua', subpath);
+    if (existsSync(target_)) rmSync(target_, { force: true });
+  }
+
+  // main.lua and conf.lua for web — check packaging/web/ first, then project
+  const webMainSources = [
+    join(cwd, 'packaging', 'web', 'main.lua'),
+    join(monoRoot, 'packaging', 'web', 'main.lua'),
+  ];
+  const webConfSources = [
+    join(cwd, 'packaging', 'web', 'conf.lua'),
+    join(monoRoot, 'packaging', 'web', 'conf.lua'),
+  ];
+
+  const mainLua = webMainSources.find(p => existsSync(p));
+  const confLua = webConfSources.find(p => existsSync(p));
+
+  if (!mainLua) {
+    console.error('  No web main.lua found (checked packaging/web/main.lua)');
+    process.exit(1);
+  }
+  if (!confLua) {
+    console.error('  No web conf.lua found (checked packaging/web/conf.lua)');
+    process.exit(1);
+  }
+
+  cpSync(mainLua, join(loveStaging, 'main.lua'));
+  cpSync(confLua, join(loveStaging, 'conf.lua'));
+
+  // Copy fonts if available
+  const fontsDirs = [join(cwd, 'fonts'), join(cwd, 'love', 'fonts')];
+  const fontsDir = fontsDirs.find(p => existsSync(p));
+  if (fontsDir) cpSync(fontsDir, join(loveStaging, 'fonts'), { recursive: true });
+
+  // Copy data if available
+  const dataDirs = [join(cwd, 'data'), join(cwd, 'love', 'data')];
+  const dataDir = dataDirs.find(p => existsSync(p));
+  if (dataDir) cpSync(dataDir, join(loveStaging, 'data'), { recursive: true });
+
+  // Count stripped files for reporting
+  let strippedCount = WEB_FFI_EXCLUDES.length + WEB_FFI_EXCLUDE_DIRS.length + WEB_FFI_EXCLUDE_SUBPATHS.length;
+  console.log(`  Stripped ${strippedCount} FFI-dependent files/dirs from Lua runtime`);
+
+  // 4. Create .love archive (zip)
+  console.log('  [3/5] Creating .love archive...');
+  execSync(`cd "${loveStaging}" && zip -9 -r "${loveArchive}" .`, { stdio: 'pipe' });
+
+  // 5. Assemble dist/web/
+  console.log('  [4/5] Assembling dist/web/...');
+  rmSync(distDir, { recursive: true, force: true });
+  mkdirSync(distDir, { recursive: true });
+
+  // Copy bundle.js
+  cpSync(bundlePath, join(distDir, 'bundle.js'));
+
+  // Copy bridge.js from packaging/web/
+  const bridgeSources = [
+    join(cwd, 'packaging', 'web', 'bridge.js'),
+    join(monoRoot, 'packaging', 'web', 'bridge.js'),
+  ];
+  const bridgeJs = bridgeSources.find(p => existsSync(p));
+  if (bridgeJs) cpSync(bridgeJs, join(distDir, 'bridge.js'));
+
+  // Copy index.html and template the title
+  const htmlSources = [
+    join(cwd, 'packaging', 'web', 'index.html'),
+    join(monoRoot, 'packaging', 'web', 'index.html'),
+  ];
+  const htmlSource = htmlSources.find(p => existsSync(p));
+  if (htmlSource) {
+    let html = readFileSync(htmlSource, 'utf-8');
+    html = html.replace(/\{\{TITLE\}\}/g, projectName);
+    writeFileSync(join(distDir, 'index.html'), html);
+  }
+
+  // Copy .love archive as game.data (Emscripten convention)
+  cpSync(loveArchive, join(distDir, 'game.data'));
+
+  // Copy love.js runtime artifacts if vendored
+  const lovejsDirs = [
+    join(cwd, 'deps', 'lovejs'),
+    join(monoRoot, 'deps', 'lovejs'),
+    join(CLI_ROOT, 'runtime', 'lovejs'),
+  ];
+  const lovejsDir = lovejsDirs.find(p => existsSync(p));
+  if (lovejsDir) {
+    for (const file of ['love.js', 'love.wasm', 'love.worker.js']) {
+      const src = join(lovejsDir, file);
+      if (existsSync(src)) cpSync(src, join(distDir, file));
+    }
+    console.log('  Copied vendored love.js runtime');
+  } else {
+    console.log('  [!] No vendored love.js found — you need to add love.js + love.wasm to dist/web/');
+    console.log('      Download from: https://github.com/nicholasopuni31/love.js');
+  }
+
+  // 6. Report
+  console.log('  [5/5] Done!');
+
+  // Cleanup
+  rmSync(stagingDir, { recursive: true, force: true });
+  rmSync(loveStaging, { recursive: true, force: true });
+  rmSync(loveArchive, { force: true });
+
+  const files = readdirSync(distDir);
+  console.log(`\n  Output: dist/web/ (${files.length} files)`);
+  for (const f of files) {
+    const size = (statSync(join(distDir, f)).size / 1024).toFixed(0);
+    console.log(`    ${f.padEnd(20)} ${size} KB`);
+  }
+  console.log(`\n  Serve: cd dist/web && python3 -m http.server\n`);
 }
 
 // ── Per-platform packaging helpers ──────────────────────────────────────

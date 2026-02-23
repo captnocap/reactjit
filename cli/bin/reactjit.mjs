@@ -26,6 +26,7 @@ const HELP = `
     rjit build macos              macOS bundle (Intel x64)
     rjit build macmseries         macOS bundle (Apple Silicon arm64)
     rjit build windows            Windows archive (x64)
+    rjit build web                WASM bundle for browsers (love.js)
     rjit build dist:love          Self-extracting Linux binary (Love2D + glibc)
 
   Project management:
