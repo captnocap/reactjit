@@ -58,6 +58,9 @@ ffi.cdef[[
   void glTexImage2D(unsigned int target, int level, int internalformat,
                     int width, int height, int border,
                     unsigned int format, unsigned int type, const void *data);
+  void glTexSubImage2D(unsigned int target, int level,
+                       int xoffset, int yoffset, int width, int height,
+                       unsigned int format, unsigned int type, const void *data);
   void glTexParameteri(unsigned int target, int pname, int param);
 
   /* Stencil */
