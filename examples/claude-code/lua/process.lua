@@ -329,8 +329,16 @@ function M.spawn(cmd, args, opts)
   ffi.C.close(stdout_pipe[1])  -- child writes to this
 
   -- Set stdout to non-blocking
+  -- NOTE: fcntl is variadic — LuaJIT passes Lua numbers as doubles in vararg
+  -- positions, but fcntl expects int. Must cast explicitly or O_NONBLOCK is lost.
   local flags = ffi.C.fcntl(stdout_pipe[0], F_GETFL)
-  ffi.C.fcntl(stdout_pipe[0], F_SETFL, bit.bor(flags, O_NONBLOCK))
+  if flags < 0 then
+    io.write("[process] fcntl(F_GETFL) failed: " .. strerror(errno()) .. "\n"); io.flush()
+  end
+  local ret = ffi.C.fcntl(stdout_pipe[0], F_SETFL, ffi.cast("int", bit.bor(flags, O_NONBLOCK)))
+  if ret < 0 then
+    io.write("[process] fcntl(F_SETFL) failed: " .. strerror(errno()) .. "\n"); io.flush()
+  end
 
   -- Create process object
   local proc = setmetatable({
