@@ -1,5 +1,5 @@
-import { existsSync, cpSync, rmSync, lstatSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -11,19 +11,37 @@ function isSymlink(p) {
 }
 
 /**
- * Sync a runtime directory into the project, unless the destination is a
- * symlink (meaning the project reads from source-of-truth directly).
+ * Merge a runtime directory into the project — overwrites framework files
+ * but preserves any user-created files that don't exist in the source.
+ * Skips if the destination is a symlink.
  */
 function syncDir(src, dest, label) {
   if (isSymlink(dest)) {
     console.log(`  Skipped ${label} (symlink — reading from source directly)`);
     return;
   }
-  if (existsSync(dest)) {
-    rmSync(dest, { recursive: true });
+  if (!existsSync(dest)) {
+    cpSync(src, dest, { recursive: true });
+    console.log(`  Updated ${label}`);
+    return;
   }
-  cpSync(src, dest, { recursive: true });
-  console.log(`  Updated ${label}`);
+  // Merge: walk source tree and copy each file, creating dirs as needed
+  let count = 0;
+  function mergeRecursive(srcDir, destDir) {
+    mkdirSync(destDir, { recursive: true });
+    for (const entry of readdirSync(srcDir)) {
+      const srcPath = join(srcDir, entry);
+      const destPath = join(destDir, entry);
+      if (statSync(srcPath).isDirectory()) {
+        mergeRecursive(srcPath, destPath);
+      } else {
+        cpSync(srcPath, destPath);
+        count++;
+      }
+    }
+  }
+  mergeRecursive(src, dest);
+  console.log(`  Updated ${label} (${count} files merged, user files preserved)`);
 }
 
 export async function updateCommand(args) {
