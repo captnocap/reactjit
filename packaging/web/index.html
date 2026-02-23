@@ -7,11 +7,18 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0f; }
+    #loadingCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+    }
     #canvas {
       display: block;
       width: 100%;
       height: 100%;
       cursor: default;
+      visibility: hidden;
     }
     #loading {
       position: absolute;
@@ -21,6 +28,7 @@
       font-family: monospace;
       font-size: 14px;
       text-align: center;
+      z-index: 10;
     }
     #loading.hidden { display: none; }
     #loading .bar {
@@ -40,6 +48,7 @@
   </style>
 </head>
 <body>
+  <canvas id="loadingCanvas" oncontextmenu="event.preventDefault()" width="800" height="600"></canvas>
   <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
   <div id="loading">
@@ -48,43 +57,71 @@
   </div>
 
   <script>
-    // love.js Module configuration — must be defined before love.js loads
+    // Prevent arrow keys and space from scrolling the page
+    window.addEventListener('keydown', function (e) {
+      if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) e.preventDefault();
+    }, false);
+    window.onload = function () { window.focus(); };
+    window.onclick = function () { window.focus(); };
+
+    // love.js Module configuration — must be defined before game.js + love.js load.
+    // love.js exports a factory function `Love(Module)` that initializes the runtime.
     var Module = {
-      canvas: document.getElementById('canvas'),
-
-      // Print/error forwarding
-      print: function (text) { console.log(text); },
-      printErr: function (text) { console.error(text); },
-
-      // Progress tracking
+      arguments: ['./'],
+      INITIAL_MEMORY: 67108864,
+      printErr: console.error.bind(console),
+      canvas: (function () {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener('webglcontextlost', function (e) {
+          alert('WebGL context lost. Reload the page.');
+          e.preventDefault();
+        }, false);
+        return canvas;
+      })(),
       setStatus: function (text) {
-        var m = text.match(/Downloading data\.\.\. \((\d+)\/(\d+)\)/);
-        if (m) {
-          var pct = Math.round((parseInt(m[1]) / parseInt(m[2])) * 100);
-          document.getElementById('progress').style.width = pct + '%';
-        }
-        if (text === '') {
+        if (text) {
+          // Update progress bar
+          var m = text.match(/\((\d+)\/(\d+)\)/);
+          if (m) {
+            var pct = Math.round((parseInt(m[1]) / parseInt(m[2])) * 100);
+            var bar = document.getElementById('progress');
+            if (bar) bar.style.width = pct + '%';
+          }
+        } else if (Module.remainingDependencies === 0) {
+          // All loaded — hide loading, show game canvas
+          document.getElementById('loadingCanvas').style.display = 'none';
           document.getElementById('loading').classList.add('hidden');
+          document.getElementById('canvas').style.visibility = 'visible';
         }
       },
-
-      // love.js callback when the runtime is initialized
+      totalDependencies: 0,
+      remainingDependencies: 0,
+      monitorRunDependencies: function (left) {
+        this.remainingDependencies = left;
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left
+          ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+          : 'All downloads complete.');
+      },
       postRun: [function () {
         console.log('[ReactJIT] WASM runtime initialized');
-        document.getElementById('loading').classList.add('hidden');
       }],
+    };
+    Module.setStatus('Downloading...');
 
-      // Ensure canvas gets focus for keyboard events
-      onRuntimeInitialized: function () {
-        document.getElementById('canvas').focus();
-      },
+    // Start love.js after it loads
+    var applicationLoad = function () {
+      Love(Module);
     };
   </script>
 
-  <!-- love.js WASM runtime (Emscripten-compiled Love2D) -->
-  <script src="love.js"></script>
+  <!-- Emscripten data loader (packages .love contents into Module.FS) -->
+  <script type="text/javascript" src="game.js"></script>
 
-  <!-- Browser-side bridge (Module.FS polling) -->
+  <!-- love.js WASM runtime (Emscripten-compiled Love2D) -->
+  <script async type="text/javascript" src="love.js" onload="applicationLoad()"></script>
+
+  <!-- Browser-side bridge (Module.FS polling for Lua <-> JS communication) -->
   <script src="bridge.js"></script>
 
   <!-- React application bundle (IIFE) -->
