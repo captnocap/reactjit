@@ -64,4 +64,4 @@ export {
   FocusGroup,
   styleToCSS,
   colorToCSS,
-} from '../../shared/src';
+} from '@reactjit/core';
