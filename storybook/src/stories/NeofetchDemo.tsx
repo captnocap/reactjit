@@ -373,7 +373,7 @@ export function NeofetchDemoStory() {
 
               {/* GPU + Memory stacked */}
               <Box style={{
-                flex: 1,
+                flexGrow: 1,
                 minWidth: 240,
                 backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
                 borderWidth: 1, borderColor: BORDER,
@@ -385,7 +385,7 @@ export function NeofetchDemoStory() {
 
               {/* Network + Disk stacked */}
               <Box style={{
-                flex: 1,
+                flexGrow: 1,
                 minWidth: 200,
                 backgroundColor: CARD_BG, borderRadius: 8, padding: 10,
                 borderWidth: 1, borderColor: BORDER,

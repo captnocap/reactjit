@@ -120,7 +120,7 @@ export function MasksStory() {
         {/* Left: Standalone mask demo */}
         <Box style={{ flexGrow: 1, flexBasis: 0, gap: 4, minHeight: 0 }}>
           <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
-            {selectedMask.name} Mask
+            {`${selectedMask.name} Mask`}
           </Text>
           <Box style={{
             flexGrow: 1,

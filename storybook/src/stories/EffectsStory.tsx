@@ -315,7 +315,7 @@ export function EffectsStory() {
                   }}
                 >
                   <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
-                    Next: {nextEffectName}
+                    {`Next: ${nextEffectName}`}
                   </Text>
                 </Pressable>
               </Box>
