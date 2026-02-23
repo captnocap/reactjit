@@ -40,6 +40,7 @@ import { StressTestStory } from './StressTestStory';
 import { CompositionStory } from './CompositionStory';
 import { MultiWindowStory } from './MultiWindowStory';
 import { TslBoidsStory } from './TslBoidsStory';
+import { MasksStory } from './MasksStory';
 
 
 export const stories: StoryDef[] = [
@@ -63,6 +64,7 @@ export const stories: StoryDef[] = [
   { id: 'controls', title: 'Controls', section: 'Packages', component: ControlsStory },
   { id: 'theme', title: 'Theme System', section: 'Packages', component: ThemeStory },
   { id: 'effects', title: 'Effects', section: 'Packages', component: EffectsStory },
+  { id: 'masks', title: 'Masks', section: 'Packages', component: MasksStory },
   { id: 'local-store', title: 'Local Store', section: 'Packages', component: LocalStoreStory },
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
 
