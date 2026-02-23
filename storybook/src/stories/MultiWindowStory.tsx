@@ -81,7 +81,7 @@ function DetachedPanel({
 }: {
   title: string;
   items: string[];
-  selectedIndex: number;
+  selectedIndex: number | null;
   onSelect: (idx: number) => void;
 }) {
   const c = useThemeColors();
@@ -107,7 +107,7 @@ function DetachedPanel({
         ))}
       </Box>
       <Text style={{ fontSize: 10, color: c.textDim }}>
-        {'Selected: ' + items[selectedIndex]}
+        {selectedIndex === null ? 'Selected: (none)' : 'Selected: ' + items[selectedIndex]}
       </Text>
     </Box>
   );
@@ -117,7 +117,7 @@ export function MultiWindowStory() {
   const c = useThemeColors();
 
   // Shared state — flows to all windows
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [events, setEvents] = useState<string[]>([]);
   const [showPanel, setShowPanel] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -126,6 +126,17 @@ export function MultiWindowStory() {
 
   const logEvent = (msg: string) => {
     setEvents(prev => [...prev.slice(-20), new Date().toLocaleTimeString() + ' ' + msg]);
+  };
+
+  const handleSelectItem = (idx: number) => {
+    // Toggle: click selected item to deselect, click unselected to select
+    if (selectedIndex === idx) {
+      setSelectedIndex(null);
+      logEvent('Cleared selection');
+    } else {
+      setSelectedIndex(idx);
+      logEvent('Selected ' + items[idx]);
+    }
   };
 
   return (
@@ -162,7 +173,9 @@ export function MultiWindowStory() {
       {/* Shared state display */}
       <SectionCard title="Shared State (main window)">
         <Text style={{ fontSize: 11, color: c.text }}>
-          {'Selected: ' + items[selectedIndex] + ' (index ' + selectedIndex + ')'}
+          {selectedIndex === null
+            ? 'Selected: (none)'
+            : 'Selected: ' + items[selectedIndex] + ' (index ' + selectedIndex + ')'}
         </Text>
         <Box style={{ flexDirection: 'row', gap: 4 }}>
           {items.map((item, i) => (
@@ -171,8 +184,7 @@ export function MultiWindowStory() {
               label={item}
               active={i === selectedIndex}
               onPress={() => {
-                setSelectedIndex(i);
-                logEvent('Selected ' + item + ' from main window');
+                handleSelectItem(i);
               }}
             />
           ))}
@@ -202,8 +214,7 @@ export function MultiWindowStory() {
             items={items}
             selectedIndex={selectedIndex}
             onSelect={(i) => {
-              setSelectedIndex(i);
-              logEvent('Selected ' + items[i] + ' from panel window');
+              handleSelectItem(i);
             }}
           />
         </Window>
