@@ -26,10 +26,21 @@ function CodeBlock.init(config)
 end
 
 -- ============================================================================
--- Syntax highlighting (shared tokenizer from lua/syntax.lua)
+-- Syntax highlighting (dispatches to per-language tokenizer)
 -- ============================================================================
 
-local tokenizeLine = Syntax.tokenizeLine
+--- Resolve the language string, running auto-detect if needed.
+local function resolveLanguage(lang, code)
+  if not lang or lang == "" or lang == "auto" then
+    -- Split into lines for detection
+    local lines = {}
+    for line in (code .. "\n"):gmatch("([^\n]*)\n") do
+      lines[#lines + 1] = line
+    end
+    return Syntax.detectLanguage(lines)
+  end
+  return lang
+end
 
 -- ============================================================================
 -- Measurement
@@ -136,6 +147,7 @@ end
 function CodeBlock.render(node, c, effectiveOpacity)
   local props = node.props or {}
   local code = props.code or ""
+  local lang = resolveLanguage(props.language, code)
   local fontSize = Measure.scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
@@ -187,7 +199,7 @@ function CodeBlock.render(node, c, effectiveOpacity)
   -- Render each line with token-based syntax highlighting
   for i, line in ipairs(lines) do
     local y = c.y + padding + (i - 1) * lineHeight
-    local tokens = tokenizeLine(line)
+    local tokens = Syntax.tokenizeLine(line, lang)
     local x = c.x + padding
     for _, tok in ipairs(tokens) do
       setColorWithOpacity(tok.color, effectiveOpacity)
