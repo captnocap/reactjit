@@ -1,3 +1,11 @@
+// ── Display Components ────────────────────────────────────
+export { NowPlayingCard, type NowPlayingCardProps } from './NowPlayingCard';
+export { MediaPosterCard, type MediaPosterCardProps } from './MediaPosterCard';
+export { CoinTickerRow, type CoinTickerRowProps } from './CoinTickerRow';
+export { StatCard, type StatCardProps } from './StatCard';
+export { ActivityRow, type ActivityRowProps } from './ActivityRow';
+export { HueLightBadge, type HueLightBadgeProps } from './HueLightBadge';
+
 // ── Base Utilities ──────────────────────────────────────
 export { useAPI, useAPIMutation, bearer, qs } from './base';
 export type { APIResult, APIOptions, RateLimitConfig } from './base';
@@ -350,3 +358,45 @@ export type {
   TelegramUpdate,
   TelegramBotInfo,
 } from './telegram';
+
+// ── Display Components (components.tsx) ─────────────────────────────────────
+export {
+  NowPlayingBar,
+  TrackRow,
+  MovieCard,
+  RepoCard,
+  CoinRow,
+  ArtistRow,
+  APODCard,
+  GitHubUserCard,
+  SpotifyNowPlaying,
+  SpotifyRecentTracks,
+  LastFMNowPlaying,
+  LastFMRecentTracks,
+  LastFMTopArtists,
+  TMDBTrending,
+  CoinMarkets,
+  GitHubProfile,
+  GitHubRepos,
+  APOD,
+} from './components';
+export type {
+  NowPlayingBarProps,
+  TrackRowProps,
+  MovieCardProps,
+  RepoCardProps,
+  CoinRowProps,
+  ArtistRowProps,
+  APODCardProps,
+  GitHubUserCardProps,
+  SpotifyNowPlayingProps,
+  SpotifyRecentTracksProps,
+  LastFMNowPlayingProps,
+  LastFMRecentTracksProps,
+  LastFMTopArtistsProps,
+  TMDBTrendingProps,
+  CoinMarketsProps,
+  GitHubProfileProps,
+  GitHubReposProps,
+  APODProps,
+} from './components';
