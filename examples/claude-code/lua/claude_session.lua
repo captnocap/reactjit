@@ -44,10 +44,10 @@ end
 
 local Session = {}
 
--- ── Module-level state (for RPC access) ──────────────────────────────
+-- ── Module-level state (multi-session registry) ─────────────────────
 
-local _activeNodeId = nil
-local _activeState  = nil
+local _sessions = {}   -- nodeId -> state
+local _focusedId = nil -- which session has UI focus
 
 -- ── Helpers ──────────────────────────────────────────────────────────
 
@@ -333,31 +333,55 @@ end
 
 -- ── Module API (for claude_canvas.lua) ───────────────────────────────
 
---- Send a message to the active session. Called by canvas on Enter press.
-function Session.send(message)
-  if not _activeState then return false, "No session" end
-  _activeState.pendingMessage = message
+--- Send a message to a session. Defaults to focused session.
+function Session.send(message, sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state then return false, "No session" end
+  state.pendingMessage = message
   return true
 end
 
---- Stop the active session. Called by canvas on Ctrl+C.
-function Session.stop()
-  if not _activeState then return false end
-  if _activeState.proc then
-    _activeState.proc:kill()
-    _activeState.proc:close()
-    _activeState.proc = nil
-    _activeState.running = false
+--- Stop a session. Defaults to focused session.
+function Session.stop(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state then return false end
+  if state.proc then
+    state.proc:kill()
+    state.proc:close()
+    state.proc = nil
+    state.running = false
   end
   return true
 end
 
---- Get the renderer session ID for the active session.
-function Session.getRendererSessionId()
-  if _activeState then
-    return _activeState.rendererSessionId
-  end
+--- Get the renderer session ID for a session. Defaults to focused.
+function Session.getRendererSessionId(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state.rendererSessionId end
   return nil
+end
+
+--- Get the focused session ID.
+function Session.getFocusedId()
+  return _focusedId
+end
+
+--- List all sessions with their status.
+function Session.list()
+  local result = {}
+  for id, state in pairs(_sessions) do
+    result[#result + 1] = {
+      id = id,
+      status = state.running and "running" or "idle",
+      model = state.model,
+      sessionId = state.sessionId,
+      rendererSessionId = state.rendererSessionId,
+    }
+  end
+  return result, _focusedId
 end
 
 -- ── Capability registration ──────────────────────────────────────────
@@ -397,8 +421,8 @@ Capabilities.register("ClaudeCode", {
       rendererSessionId = props.sessionId or "default",  -- link to renderer session
     }
 
-    _activeNodeId = nodeId
-    _activeState = state
+    _sessions[nodeId] = state
+    if not _focusedId then _focusedId = nodeId end
 
     -- Ensure renderer has a session for us
     local R = getRenderer()
@@ -488,8 +512,10 @@ Capabilities.register("ClaudeCode", {
   end,
 
   destroy = function(nodeId, state)
-    _activeNodeId = nil
-    _activeState = nil
+    _sessions[nodeId] = nil
+    if _focusedId == nodeId then
+      _focusedId = next(_sessions)  -- pick any remaining, or nil
+    end
     if state.proc then
       state.proc:kill()
       state.proc:close()
@@ -503,39 +529,78 @@ Capabilities.register("ClaudeCode", {
 local rpcHandlers = {}
 
 rpcHandlers["claude:send"] = function(args)
-  if not _activeState then
-    return { error = "No ClaudeCode instance active" }
+  local id = (args and args.session) or _focusedId
+  local state = _sessions[id]
+  if not state then
+    return { error = "No session: " .. tostring(id) }
   end
   if not args or not args.message then
     return { error = "Missing 'message' argument" }
   end
-  _activeState.pendingMessage = args.message
-  return { ok = true, status = "queued" }
+  state.pendingMessage = args.message
+  return { ok = true, status = "queued", session = id }
 end
 
-rpcHandlers["claude:stop"] = function()
-  if not _activeState then
-    return { error = "No ClaudeCode instance active" }
+rpcHandlers["claude:stop"] = function(args)
+  local id = (args and args.session) or _focusedId
+  local state = _sessions[id]
+  if not state then
+    return { error = "No session" }
   end
-  if _activeState.proc then
-    _activeState.proc:kill()
-    _activeState.proc:close()
-    _activeState.proc = nil
-    _activeState.running = false
+  if state.proc then
+    state.proc:kill()
+    state.proc:close()
+    state.proc = nil
+    state.running = false
   end
   return { ok = true }
 end
 
-rpcHandlers["claude:status"] = function()
-  if not _activeState then
-    return { status = "no_instance" }
+rpcHandlers["claude:status"] = function(args)
+  if args and args.session then
+    local state = _sessions[args.session]
+    if not state then return { status = "not_found" } end
+    return {
+      status = state.running and "running" or "idle",
+      model = state.model,
+      sessionId = state.sessionId,
+      running = state.running,
+    }
   end
-  return {
-    status = _activeState.running and "running" or "idle",
-    model = _activeState.model,
-    sessionId = _activeState.sessionId,
-    running = _activeState.running,
-  }
+  -- Return all sessions
+  local all = {}
+  for id, state in pairs(_sessions) do
+    all[id] = {
+      status = state.running and "running" or "idle",
+      model = state.model,
+    }
+  end
+  return { sessions = all, focused = _focusedId }
+end
+
+rpcHandlers["claude:focus"] = function(args)
+  if not args or not args.session then
+    return { error = "Missing 'session' argument" }
+  end
+  if _sessions[args.session] then
+    _focusedId = args.session
+    return { ok = true }
+  end
+  return { error = "Unknown session: " .. tostring(args.session) }
+end
+
+rpcHandlers["claude:list"] = function()
+  local list = {}
+  for id, state in pairs(_sessions) do
+    list[#list + 1] = {
+      id = id,
+      status = state.running and "running" or "idle",
+      model = state.model,
+      sessionId = state.sessionId,
+      rendererSessionId = state.rendererSessionId,
+    }
+  end
+  return { sessions = list, focused = _focusedId }
 end
 
 -- Extend Capabilities.getHandlers to include our RPC methods
