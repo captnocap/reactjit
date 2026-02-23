@@ -1432,6 +1432,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       StepSequencerModule = require("lua.step_sequencer")
     end
     StepSequencerModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden then
+    -- Generic visual capability dispatch: any registered capability with
+    -- visual=true and a render method gets painted here automatically.
+    if CapabilitiesModule then
+      local capDef = CapabilitiesModule.getDefinition(node.type)
+      if capDef and capDef.visual and capDef.render then
+        if c.w > 0 and c.h > 0 then
+          capDef.render(node, c, effectiveOpacity)
+        end
+      end
+    end
   end
 
   -- Determine paint order: sort children by zIndex (stable, ascending)

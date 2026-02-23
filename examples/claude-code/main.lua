@@ -2,6 +2,7 @@ local ReactJIT = require("lua.init")
 
 -- Load custom capabilities before init so they register in time
 require("lua.claude_session")
+require("lua.claude_canvas")
 
 function love.load()
   love.graphics.setBackgroundColor(0.04, 0.04, 0.06)

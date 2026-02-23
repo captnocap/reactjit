@@ -17,6 +17,7 @@ local Events = {}
 
 local treeModule = nil
 local widgetsModule = nil
+local capabilitiesModule = nil
 
 -- Non-widget Lua-owned types that are always hittable.
 -- Widget types (Slider, Fader, etc.) are checked dynamically via widgetsModule.
@@ -32,6 +33,10 @@ end
 
 function Events.setWidgetsModule(w)
   widgetsModule = w
+end
+
+function Events.setCapabilitiesModule(c)
+  capabilitiesModule = c
 end
 
 -- ============================================================================
@@ -115,6 +120,8 @@ function Events.hitTest(node, mx, my)
   -- Lua-owned interactive nodes are always hittable
   if LUA_HITTABLE[node.type] then return node end
   if widgetsModule and widgetsModule.isLuaInteractive(node.type) then return node end
+  -- Visual capabilities with hittable=true are interactive (can receive focus)
+  if capabilitiesModule and capabilitiesModule.isHittable(node.type) then return node end
   return nil
 end
 

@@ -293,6 +293,43 @@ Values cross the bridge via direct QuickJS C API traversal — no JSON serializa
 
 **Never edit copies.** Always edit `lua/`, `packages/core/`, `packages/native/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
 
+## Contributing
+
+### Source-of-truth rules
+
+This is the #1 source of "it builds but doesn't work" bugs. There are two kinds of files:
+
+- **Framework files** (`lua/`, `packages/*/src/`) — edit these at the monorepo root, then run `make cli-setup` to propagate to `cli/runtime/`. Consumer projects pull updates via `reactjit update`.
+- **Project files** (`src/`, `main.lua`, `conf.lua`) — unique to each project, safe to edit directly.
+
+**Never edit copies.** `cli/runtime/`, `<project>/lua/`, and `<project>/reactjit/` are generated — edits there get overwritten silently.
+
+### The storybook is special
+
+`storybook/lua` is a **symlink** to `../lua`. It reads framework source directly. Do not:
+- Run `reactjit update` from the storybook directory (the CLI blocks this)
+- Replace the symlink with a real directory
+- Create `storybook/lua/` or `storybook/reactjit/` as real directories
+
+### Build commands
+
+Always use the CLI (`rjit build`, `rjit dev`, `rjit lint`). Never run raw esbuild commands — the CLI encodes correct flags, enforces lint gates, and handles runtime file placement.
+
+`reactjit update` **merges** framework files into your project's `lua/` — it overwrites framework files but preserves any custom Lua modules you created.
+
+### Layout rules that cause bugs
+
+- Every `<Text>` must have `fontSize` in its `style` prop
+- Use `flexGrow: 1` to fill space, not hardcoded pixel heights
+- No `paddingHorizontal`/`paddingVertical` — use `paddingLeft`/`paddingRight`/`paddingTop`/`paddingBottom`
+- No `flex: 1` shorthand — use `flexGrow: 1`
+- No Unicode symbols in `<Text>` — they won't render in the default font
+- Row Boxes need explicit `width` for `justifyContent` to work
+
+### AI agents
+
+See `CLAUDE.md` for Claude Code instructions and `AGENTS.md` for sandboxed agents (Codex, etc.). Key rule for sandboxed agents: **do not build** — you don't have the toolchain. Edit source files, run `rjit lint` to verify, and let the maintainer build.
+
 ### Project Structure
 
 ```

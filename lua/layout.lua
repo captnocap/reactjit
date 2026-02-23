@@ -28,6 +28,7 @@ local Log = require("lua.debug_log")
 
 local Measure = nil  -- Injected at init time via Layout.init()
 local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
+local CapabilitiesModule = nil  -- Lazy-loaded for visual capability measurement
 
 local Layout = {}
 
@@ -638,6 +639,25 @@ function Layout.layoutNode(node, px, py, pw, ph)
       local font = Measure.getFont(fontSize, s.fontFamily or nil, s.fontWeight or nil)
       h = font:getHeight() + padT + padB
       hSource = "text"
+    end
+  else
+    -- Generic visual capability measurement: capabilities with visual=true
+    -- and a measure method get auto-sized here.
+    if not CapabilitiesModule then
+      local ok, mod = pcall(require, "lua.capabilities")
+      if ok then CapabilitiesModule = mod end
+    end
+    if CapabilitiesModule then
+      local capDef = CapabilitiesModule.getDefinition(node.type)
+      if capDef and capDef.visual and capDef.measure then
+        if not explicitH then
+          local measured = capDef.measure(node)
+          if measured then
+            h = measured.height
+            hSource = "text"
+          end
+        end
+      end
     end
   end
 

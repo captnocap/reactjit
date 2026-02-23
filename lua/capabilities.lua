@@ -76,6 +76,16 @@ function Capabilities.rendersInOwnSurface(typeName)
   return cap ~= nil and cap.rendersInOwnSurface == true
 end
 
+--- Check if a visual capability is hittable (can receive focus and keyboard events).
+--- Capabilities with hittable=true and handleKeyPressed/handleTextInput methods
+--- will receive keyboard events when focused.
+--- @param typeName string
+--- @return boolean
+function Capabilities.isHittable(typeName)
+  local cap = registry[typeName]
+  return cap ~= nil and cap.visual and cap.hittable == true
+end
+
 -- ============================================================================
 -- Tree sync (called per-frame from init.lua)
 -- ============================================================================
