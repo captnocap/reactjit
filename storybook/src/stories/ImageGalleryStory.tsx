@@ -39,7 +39,7 @@ function HoverPreviewRows({ images }: { images: ImageGalleryItem[] }) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const preview = images[previewIndex] || images[0];
-  const thumbsPerRow = 6;
+  const thumbsPerRow = 5;
   const thumbRows = useMemo(() => {
     const rows: Array<Array<{ item: ImageGalleryItem; index: number }>> = [];
     const end = Math.min(images.length, thumbsPerRow * 3);
@@ -97,7 +97,7 @@ function HoverPreviewRows({ images }: { images: ImageGalleryItem[] }) {
                   setViewerOpen(true);
                 }}
                 style={({ hovered, pressed }) => ({
-                  width: 132,
+                  flexGrow: 1,
                   borderRadius: 8,
                   overflow: 'hidden',
                   borderWidth: 1,
@@ -138,7 +138,7 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
   if (!preview) return null;
 
   return (
-    <Box style={{ width: '100%', flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+    <Box style={{ width: '100%', flexDirection: 'row', gap: 10 }}>
       <Pressable
         onPress={() => {
           setViewerIndex(previewIndex);
@@ -146,8 +146,6 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
         }}
         style={({ hovered, pressed }) => ({
           flexGrow: 1,
-          flexBasis: 0,
-          minWidth: 440,
           borderRadius: 10,
           overflow: 'hidden',
           borderWidth: 1,
@@ -431,11 +429,7 @@ export function ImageGalleryStory() {
         <HoverPreviewSplit images={images.slice(0, 18)} />
       </StorySection>
 
-      <StorySection index={4} title="Stacked Columns">
-        <StackedColumnsGallery images={images.slice(0, 15)} />
-      </StorySection>
-
-      <StorySection index={5} title="Bento Grid">
+      <StorySection index={4} title="Bento Grid">
         <BentoGallery images={images.slice(0, 8)} />
       </StorySection>
     </StoryPage>

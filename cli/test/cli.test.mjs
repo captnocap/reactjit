@@ -87,9 +87,9 @@ describe('reactjit help', () => {
     assert.ok(stdout.includes('--minimal'), 'Should mention --minimal flag');
   });
 
-  it('help mentions ilr shorthand', () => {
+  it('help mentions rjit shorthand', () => {
     const { stdout } = cli(['help']);
-    assert.ok(stdout.includes('ilr'), 'Should mention ilr shorthand');
+    assert.ok(stdout.includes('rjit'), 'Should mention rjit shorthand');
   });
 });
 
@@ -411,7 +411,7 @@ export function BlockChar() {
     rmSync(testFile);
   });
 
-  it('respects ilr-ignore-next-line', async () => {
+  it('respects rjit-ignore-next-line', async () => {
     const { writeFileSync } = await import('node:fs');
     const testFile = join(projectDir, 'src', 'Ignored.tsx');
     writeFileSync(testFile, `
@@ -419,7 +419,7 @@ import React from 'react';
 import { Text } from '@reactjit/core';
 export function Ignored() {
   return (
-    // ilr-ignore-next-line
+    // rjit-ignore-next-line
     <Text style={{ color: 'red' }}>hello</Text>
   );
 }

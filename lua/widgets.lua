@@ -21,14 +21,18 @@ local registry = {}
 -- Ordered list of registered type names (for deterministic drain order)
 local widgetTypes = {}
 
+-- Injected screen→content coordinate converter (from events.lua)
+local screenToContent = nil
+
 -- ============================================================================
 -- Initialization
 -- ============================================================================
 
 --- Require, init, and register all widget modules.
---- @param deps table  { measure = <measure module> }
+--- @param deps table  { measure = <measure module>, screenToContent = function }
 function Widgets.init(deps)
   local measure = deps.measure
+  screenToContent = deps.screenToContent
 
   local entries = {
     { type = "Slider",   mod = "lua.slider",   stateKey = "_slider",  dragField = "isDragging" },
@@ -37,7 +41,9 @@ function Widgets.init(deps)
     { type = "Switch",   mod = "lua.switch"     },
     { type = "Checkbox", mod = "lua.checkbox"   },
     { type = "Radio",    mod = "lua.radio"      },
-    { type = "Select",   mod = "lua.select",    stateKey = "_select",  dragField = "isOpen" },
+    { type = "Select",        mod = "lua.select",          stateKey = "_select",        dragField = "isOpen" },
+    { type = "PianoKeyboard", mod = "lua.piano_keyboard",  stateKey = "_pianokeyboard", dragField = "isDragging" },
+    { type = "StepSequencer", mod = "lua.step_sequencer",  stateKey = "_stepsequencer", dragField = "isDragging" },
   }
 
   for _, entry in ipairs(entries) do
@@ -122,9 +128,10 @@ end
 
 --- Dispatch mouseReleased to all widgets with active state.
 --- Scans the full node tree once (mouse may have left widget bounds during drag).
+--- Converts screen coordinates to content-space per-node (scroll ancestor offsets).
 --- @param treeModule table  The tree.lua module
---- @param x number
---- @param y number
+--- @param x number  Screen-space X
+--- @param y number  Screen-space Y
 --- @param button number
 function Widgets.handleMouseReleased(treeModule, x, y, button)
   if not treeModule then return end
@@ -133,16 +140,19 @@ function Widgets.handleMouseReleased(treeModule, x, y, button)
   for _, node in pairs(nodes) do
     local entry = registry[node.type]
     if entry and entry.stateKey and node[entry.stateKey] and entry.mod.handleMouseReleased then
-      entry.mod.handleMouseReleased(node, x, y, button)
+      local cx, cy = x, y
+      if screenToContent then cx, cy = screenToContent(node, x, y) end
+      entry.mod.handleMouseReleased(node, cx, cy, button)
     end
   end
 end
 
 --- Dispatch mouseMoved to all widgets with active drag/open state.
 --- Scans the full node tree once (drag may extend outside widget bounds).
+--- Converts screen coordinates to content-space per-node (scroll ancestor offsets).
 --- @param treeModule table  The tree.lua module
---- @param x number
---- @param y number
+--- @param x number  Screen-space X
+--- @param y number  Screen-space Y
 function Widgets.handleMouseMoved(treeModule, x, y)
   if not treeModule then return end
   local nodes = treeModule.getNodes()
@@ -152,7 +162,9 @@ function Widgets.handleMouseMoved(treeModule, x, y)
     if entry and entry.stateKey and entry.dragField and entry.mod.handleMouseMoved then
       local state = node[entry.stateKey]
       if state and state[entry.dragField] then
-        entry.mod.handleMouseMoved(node, x, y)
+        local cx, cy = x, y
+        if screenToContent then cx, cy = screenToContent(node, x, y) end
+        entry.mod.handleMouseMoved(node, cx, cy)
       end
     end
   end

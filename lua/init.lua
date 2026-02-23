@@ -539,7 +539,7 @@ function ReactJIT.init(config)
     videoplayer.init({ measure = measure, videos = videos })
 
     widgets = require("lua.widgets")
-    widgets.init({ measure = measure })
+    widgets.init({ measure = measure, screenToContent = events.screenToContent })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events, tree = tree })
@@ -632,7 +632,7 @@ function ReactJIT.init(config)
     videoplayer.init({ measure = measure, videos = videos })
 
     widgets = require("lua.widgets")
-    widgets.init({ measure = measure })
+    widgets.init({ measure = measure, screenToContent = events.screenToContent })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events, tree = tree })
@@ -1676,6 +1676,31 @@ function ReactJIT.update(dt)
       if inspectorEnabled then inspector.endLayout(root) end
     end
     tree.clearDirty()
+
+    -- Per-window layout: lay out each child window's subtree with its own dimensions.
+    -- The main layout pass above doesn't know about secondary window sizes, so
+    -- Window capability subtrees need their own layout pass.
+    if wmOk and wmMod then
+      local allWins = wmMod.getAll()
+      for _, win in ipairs(allWins) do
+        if not win.isMain and win.rootNodeId then
+          local allNodes = tree.getNodes()
+          local winRoot = allNodes[win.rootNodeId]
+          if winRoot then
+            winRoot._isWindowRoot = true
+            local lok, lerr = pcall(layout.layout, winRoot, 0, 0, win.width, win.height)
+            winRoot._isWindowRoot = nil
+            if not lok then
+              errors.push({
+                source = "lua",
+                message = tostring(lerr),
+                context = "layout (window #" .. win.id .. ")",
+              })
+            end
+          end
+        end
+      end
+    end
   end
 
   -- Rebuild focusable node list and process stick navigation
@@ -1828,6 +1853,26 @@ function ReactJIT.draw()
           local allNodes = tree.getNodes()
           local winRoot = allNodes[win.rootNodeId]
           if winRoot then
+            -- Debug: log once per window
+            if not win._debugLogged then
+              win._debugLogged = true
+              local c = winRoot.computed
+              local nc = winRoot.children and #winRoot.children or 0
+              io.write("[multiwin] window #" .. win.id .. " rootNode=" .. tostring(win.rootNodeId)
+                .. " type=" .. tostring(winRoot.type)
+                .. " computed=" .. (c and (c.w .. "x" .. c.h .. "@" .. c.x .. "," .. c.y) or "nil")
+                .. " children=" .. nc .. "\n")
+              if winRoot.children then
+                for i = 1, math.min(3, nc) do
+                  local ch = winRoot.children[i]
+                  local cc = ch.computed
+                  io.write("[multiwin]   child[" .. i .. "] type=" .. tostring(ch.type)
+                    .. " computed=" .. (cc and (cc.w .. "x" .. cc.h .. "@" .. cc.x .. "," .. cc.y) or "nil") .. "\n")
+                end
+              end
+              io.flush()
+            end
+
             wmMod.activate(win)
 
             -- Re-bind Love2D's graphics state for this context.
@@ -1844,6 +1889,8 @@ function ReactJIT.draw()
             local wok, werr = pcall(painter.paint, winRoot)
             winRoot._isWindowRoot = nil
             if not wok then
+              io.write("[multiwin] PAINT ERROR window #" .. win.id .. ": " .. tostring(werr) .. "\n")
+              io.flush()
               errors.push({
                 source = "lua",
                 message = tostring(werr),
@@ -2251,9 +2298,13 @@ function ReactJIT.mousepressed(x, y, button)
       if mapmod then
         mapmod.handleMousePressed(hit, x, y, button)
       end
-    elseif widgets and widgets.handleMousePressed(hit, x, y, button) then
-      -- Handled by unified widget dispatch (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
-      do end  -- no-op body; dispatch already happened in the condition
+    elseif widgets then
+      -- Convert screen coords to content-space (account for scroll ancestors)
+      local cx, cy = events.screenToContent(hit, x, y)
+      if widgets.handleMousePressed(hit, cx, cy, button) then
+        -- Handled by unified widget dispatch (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
+        do end  -- no-op body; dispatch already happened in the condition
+      end
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)

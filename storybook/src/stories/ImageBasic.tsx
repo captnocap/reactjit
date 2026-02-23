@@ -80,14 +80,12 @@ export function ImageBasicStory() {
         </StorySection>
 
         <StorySection index={2} title="Object Fit Variants">
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
             {variants.map((variant) => (
               <Box
                 key={variant.id}
                 style={{
-                  flexBasis: 240,
                   flexGrow: 1,
-                  minWidth: 180,
                   backgroundColor: c.surface,
                   borderRadius: 10,
                   borderWidth: 1,

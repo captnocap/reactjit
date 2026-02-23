@@ -339,6 +339,22 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onValueChange');
   });
 
+  // ── PianoKeyboard events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('pianokeyboard:keydown', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onKeyDown');
+  });
+
+  bridge.subscribe('pianokeyboard:keyup', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onKeyUp');
+  });
+
+  // ── StepSequencer events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('stepsequencer:toggle', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onStepToggle');
+  });
+
   // ── Capability events (Audio, Timer, etc.) ───────────
   //
   // Single subscription handles ALL capabilities. The Lua side specifies
