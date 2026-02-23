@@ -14,7 +14,9 @@
  */
 
 import React from 'react';
-import { Box, Text, Pressable, ScrollView } from '../primitives';
+import { Box, Text } from '../primitives';
+import { Pressable, type PressableState } from '../Pressable';
+import { ScrollView } from '../ScrollView';
 import type { Style } from '../types';
 
 export interface SearchResultItem {
@@ -136,7 +138,7 @@ export function SearchResults<T extends SearchResultItem = SearchResultItem>({
             <Pressable
               key={item.id}
               onPress={() => !item.disabled && onSelect?.(item, index)}
-              style={({ hovered }) => ({
+              style={({ hovered }: PressableState) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
                 paddingLeft: 10,

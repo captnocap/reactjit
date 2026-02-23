@@ -1080,18 +1080,64 @@ function ReactJIT.init(config)
     wmMod.registerMain()
     io.write("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")\n"); io.flush()
 
-    -- Declarative window resize from React: useWindowSize(w, h, { animate })
+    -- Helper: resolve window entry from optional windowId (defaults to main)
+    local function resolveWindow(args)
+      if args and args.windowId then
+        return wmMod.get(args.windowId)
+      end
+      return wmMod.getMain()
+    end
+
+    -- Declarative window resize: useWindowSize(w, h, { animate, windowId })
     rpcHandlers["window:setSize"] = function(args)
-      local main = wmMod.getMain()
-      if not main then return false end
-      local w = args.width or main.width
-      local h = args.height or main.height
+      local win = resolveWindow(args)
+      if not win then return false end
+      local w = args.width or win.width
+      local h = args.height or win.height
       if args.animate then
-        wmMod.animateTo(main, w, h, args.duration or 300)
+        wmMod.animateTo(win, w, h, args.duration or 300)
       else
-        wmMod.setSize(main, w, h)
+        wmMod.setSize(win, w, h)
       end
       return { width = w, height = h }
+    end
+
+    -- Declarative window position: useWindowPosition(x, y, { animate, windowId })
+    rpcHandlers["window:setPosition"] = function(args)
+      local win = resolveWindow(args)
+      if not win then return false end
+      local x = args.x or 0
+      local y = args.y or 0
+      if args.animate then
+        wmMod.animatePositionTo(win, x, y, args.duration or 300)
+      else
+        wmMod.setPosition(win, x, y)
+      end
+      return { x = x, y = y }
+    end
+
+    -- Query current window position (for revert support in hooks)
+    rpcHandlers["window:getPosition"] = function(args)
+      local win = resolveWindow(args)
+      if not win then return false end
+      local x, y = wmMod.getPosition(win)
+      return { x = x, y = y }
+    end
+
+    -- Toggle always-on-top: useWindowAlwaysOnTop(true, { windowId })
+    rpcHandlers["window:setAlwaysOnTop"] = function(args)
+      local win = resolveWindow(args)
+      if not win then return false end
+      wmMod.setAlwaysOnTop(win, args.onTop)
+      return { onTop = args.onTop }
+    end
+
+    -- Raise window to front
+    rpcHandlers["window:raise"] = function(args)
+      local win = resolveWindow(args)
+      if not win then return false end
+      wmMod.raise(win)
+      return true
     end
   end
 

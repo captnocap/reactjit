@@ -14,7 +14,8 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { Box, Text, Pressable } from '../primitives';
+import { Box, Text } from '../primitives';
+import { Pressable, type PressableState } from '../Pressable';
 import { TextInput } from '../TextInput';
 import type { Style } from '../types';
 
@@ -176,7 +177,7 @@ export function SearchBar({
       {hasQuery && (
         <Pressable
           onPress={handleClear}
-          style={({ hovered }) => ({
+          style={({ hovered }: PressableState) => ({
             width: 20,
             height: 20,
             borderRadius: 10,
