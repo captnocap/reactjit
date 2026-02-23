@@ -31,8 +31,8 @@ export const TARGETS = {
   web: {
     format: 'iife',
     globalName: 'ReactJIT',
-    external: ['react-dom', 'child_process'],
-    entries: ['main-web.tsx', 'main.tsx'],
+    external: ['child_process'],
+    entries: ['main-web.tsx'],
     output: 'web/bundle.js',
     kind: 'web',
   },
