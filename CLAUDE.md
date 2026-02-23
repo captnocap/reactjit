@@ -50,23 +50,21 @@ placement, and produces correct distribution packages. Running raw esbuild comma
 directly will use wrong flags, skip linting, and produce broken builds.
 
 ```bash
-reactjit init <name>            # Scaffold new project (do NOT mkdir + copy manually)
-reactjit dev [target]           # Watch mode (default: love). Do NOT run esbuild --watch manually.
-reactjit build [target]         # Lint gate + dev build (default: love). Do NOT run esbuild manually.
-reactjit build dist:<target>    # Production build for any target
-reactjit lint                   # Static layout linter — run after ANY component change
-reactjit screenshot [--output]  # Headless capture — verify layouts visually
+rjit dev                        # Watch + HMR (SDL2, default). Do NOT run esbuild --watch manually.
+rjit dev love                   # Watch + HMR (Love2D)
+rjit build                      # Dev build (SDL2, default). Do NOT run esbuild manually.
+rjit build linux                # Production: self-extracting Linux binary (x64)
+rjit build macos                # Production: macOS bundle (Intel x64)
+rjit build macmseries           # Production: macOS bundle (Apple Silicon arm64)
+rjit build windows              # Production: Windows archive (x64)
+rjit build dist:love            # Production: self-extracting Linux binary (Love2D + glibc)
+rjit init <name>                # Scaffold new project (do NOT mkdir + copy manually)
+rjit lint                       # Static layout linter — run after ANY component change
+rjit screenshot [--output]      # Headless capture — verify layouts visually
 ```
 
-**Targets:** `love`, `sdl2`
-
-**Dist formats:**
-- `dist:love` — Self-extracting Linux binary (Love2D fork + bundled glibc)
-- `dist:sdl2` — Native binary (SDL2 + OpenGL + LuaJIT)
-- `dist:web` — WASM + WebGL bundle (planned — Emscripten compilation of SDL2 renderer)
-
-**After writing or modifying any component:** run `reactjit lint`, then
-`reactjit screenshot --output /tmp/preview.png` and inspect the result.
+**After writing or modifying any component:** run `rjit lint`, then
+`rjit screenshot --output /tmp/preview.png` and inspect the result.
 
 The CLI handles all targets. The npm scripts in root package.json are for monorepo
 development convenience only — never use raw esbuild commands for project builds.
