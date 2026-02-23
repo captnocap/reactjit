@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ChartTooltip, useScale } from '../../../packages/core/src';
+import { Box, Text, ChartTooltip, useScale, Typography } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StorySection } from './_shared/StoryScaffold';
 
@@ -84,9 +84,6 @@ export function TextStylesStory() {
 
         <Box style={{
           width: 260,
-          padding: 8,
-          backgroundColor: c.surface,
-          borderRadius: 6,
           gap: 4,
         }}>
           <Text style={{ color: c.text, fontSize: 12, textAlign: 'left' }}>
@@ -105,7 +102,44 @@ export function TextStylesStory() {
         </Text>
       </StorySection>
 
-      <StorySection index={2} title="Text truncation">
+      <StorySection index={2} title="Typography variants (inline)">
+        <Box style={{ gap: 8 }}>
+          <Typography.Heading style={{ color: c.text }}>
+            The quick brown fox jumps over the lazy dog
+          </Typography.Heading>
+          <Typography.SubHeading style={{ color: c.primary }}>
+            Secondary heading: all things in motion
+          </Typography.SubHeading>
+          <Box style={{ gap: 4 }}>
+            <Typography.Bold style={{ color: c.text }}>
+              Bold text stands out
+            </Typography.Bold>
+            <Typography.Italic style={{ color: c.text }}>
+              Italic text leans
+            </Typography.Italic>
+            <Typography.Underline style={{ color: c.text }}>
+              Underlined emphasizes
+            </Typography.Underline>
+            <Typography.Strike style={{ color: c.textDim }}>
+              Strikethrough removes
+            </Typography.Strike>
+          </Box>
+          <Typography.Label style={{ color: c.primary }}>
+            LABEL TEXT
+          </Typography.Label>
+          <Typography.Caption style={{ color: c.textDim }}>
+            Small caption: supporting details at the margins
+          </Typography.Caption>
+          <Typography.Muted style={{ color: c.text }}>
+            Muted content: secondary, steps back into the background
+          </Typography.Muted>
+          <Typography.Mono style={{ color: c.text }}>
+            Monospace: const x = "code";
+          </Typography.Mono>
+        </Box>
+      </StorySection>
+
+      <StorySection index={4} title="Text truncation">
         <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
           <Text style={{ color: c.textDim, fontSize: 10 }}>numberOfLines: 1</Text>
           <Text style={{ color: c.text, fontSize: 13 }} numberOfLines={1}>
@@ -128,7 +162,7 @@ export function TextStylesStory() {
         </Box>
       </StorySection>
 
-      <StorySection index={3} title="Text decoration">
+      <StorySection index={5} title="Text decoration">
         <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
           <Text style={{ color: c.textDim, fontSize: 10 }}>textDecorationLine</Text>
           <Text style={{ color: c.text, fontSize: 15, textDecorationLine: 'underline' }}>

@@ -46,6 +46,16 @@ export const PLATFORMS = {
 
 export const PLATFORM_NAMES = Object.keys(PLATFORMS);
 
+// ── Friendly build aliases ───────────────────────────────────────────────
+// Maps short names (rjit build linux) to dist:sdl2 + platform combos.
+
+export const BUILD_ALIASES = {
+  'linux':      { target: 'sdl2', platform: 'linux-x64',  dist: true },
+  'macos':      { target: 'sdl2', platform: 'macos-x64',  dist: true },
+  'macmseries': { target: 'sdl2', platform: 'macos-arm64', dist: true },
+  'windows':    { target: 'sdl2', platform: 'windows-x64', dist: true },
+};
+
 /** Detect the host platform as a PLATFORMS key. */
 export function detectHostPlatform() {
   const { platform, arch } = process;

@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runLint, runBundleChecks } from './lint.mjs';
 import { updateCommand } from './update.mjs';
-import { TARGETS, TARGET_NAMES, esbuildArgs, PLATFORMS, PLATFORM_NAMES, detectHostPlatform } from '../targets.mjs';
+import { TARGETS, TARGET_NAMES, esbuildArgs, PLATFORMS, PLATFORM_NAMES, BUILD_ALIASES, detectHostPlatform } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
 import { transpile } from '../lib/tsl.mjs';
 
@@ -151,7 +151,15 @@ export async function buildCommand(args) {
   const skipUpdate = args.includes('--no-update');
   const targetPlatformIdx = args.indexOf('--target');
   const targetPlatform = targetPlatformIdx !== -1 ? args[targetPlatformIdx + 1] : null;
-  const rawTarget = args.filter(a => !a.startsWith('--') && a !== targetPlatform)[0]; // e.g. "dist:love", "terminal", or undefined
+  let rawTarget = args.filter(a => !a.startsWith('--') && a !== targetPlatform)[0]; // e.g. "dist:love", "linux", or undefined
+
+  // Resolve friendly build aliases (e.g. "linux" → dist:sdl2 --target linux-x64)
+  const alias = rawTarget && BUILD_ALIASES[rawTarget];
+  let resolvedPlatform = targetPlatform;
+  if (alias) {
+    rawTarget = `dist:${alias.target}`;
+    resolvedPlatform = resolvedPlatform || alias.platform;
+  }
 
   // Auto-update runtime files before building (love + sdl2 — both use lua/ runtime; grid/web don't)
   const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2'].includes(rawTarget);
@@ -206,7 +214,7 @@ export async function buildCommand(args) {
     if (target.kind === 'love') {
       await buildDistLove(cwd, projectName, { debug: hasDebugFlag });
     } else if (target.kind === 'sdl2') {
-      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform });
+      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform: resolvedPlatform });
     } else if (target.kind === 'web') {
       // Web dist is just the ESM bundle (no shebang — not a Node.js executable)
       await buildDevTarget(cwd, projectName, targetName);

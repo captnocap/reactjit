@@ -7,6 +7,8 @@ import {
   Pressable,
   ImageGallery,
   ImageViewerModal,
+  HoverPreviewRowsGallery,
+  BentoImageGallery,
   useRendererMode,
   type ImageGalleryItem,
 } from '../../../packages/core/src';
@@ -29,101 +31,6 @@ function StatusPill({ label }: { label: string }) {
       }}
     >
       <Text style={{ fontSize: 10, color: c.textSecondary }}>{label}</Text>
-    </Box>
-  );
-}
-
-function HoverPreviewRows({ images }: { images: ImageGalleryItem[] }) {
-  const c = useThemeColors();
-  const [previewIndex, setPreviewIndex] = useState(0);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
-  const preview = images[previewIndex] || images[0];
-  const thumbsPerRow = 5;
-  const thumbRows = useMemo(() => {
-    const rows: Array<Array<{ item: ImageGalleryItem; index: number }>> = [];
-    const end = Math.min(images.length, thumbsPerRow * 3);
-    for (let start = 0; start < end; start += thumbsPerRow) {
-      rows.push(
-        images
-          .slice(start, start + thumbsPerRow)
-          .map((item, offset) => ({ item, index: start + offset }))
-      );
-    }
-    return rows;
-  }, [images]);
-
-  if (!preview) return null;
-
-  return (
-    <Box style={{ width: '100%', gap: 10 }}>
-      <Pressable
-        onPress={() => {
-          setViewerIndex(previewIndex);
-          setViewerOpen(true);
-        }}
-        style={({ hovered, pressed }) => ({
-          width: '100%',
-          borderRadius: 10,
-          overflow: 'hidden',
-          borderWidth: 1,
-          borderColor: hovered ? c.primary : c.border,
-          backgroundColor: c.bgAlt,
-          opacity: pressed ? 0.9 : 1,
-        })}
-      >
-        <Image src={preview.src} style={{ width: '100%', height: 300, objectFit: 'cover' }} />
-        <Box style={{ padding: 8, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: c.text, fontWeight: '700' }}>{preview.title || 'Preview'}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>
-            Hover a tile below to swap preview, click to open viewer
-          </Text>
-        </Box>
-      </Pressable>
-
-      <Box style={{ width: '100%', gap: 8 }}>
-        {thumbRows.map((row, rowIndex) => (
-          <Box
-            key={`thumb-row-${rowIndex}`}
-            style={{ width: '100%', flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}
-          >
-            {row.map(({ item, index }) => (
-              <Pressable
-                key={item.id ?? `${item.src}-${index}`}
-                onHoverIn={() => setPreviewIndex(index)}
-                onPressIn={() => setPreviewIndex(index)}
-                onPress={() => {
-                  setViewerIndex(index);
-                  setViewerOpen(true);
-                }}
-                style={({ hovered, pressed }) => ({
-                  flexGrow: 1,
-                  borderRadius: 8,
-                  overflow: 'hidden',
-                  borderWidth: 1,
-                  borderColor: index === previewIndex ? c.primary : hovered ? c.textSecondary : c.border,
-                  backgroundColor: c.bg,
-                  opacity: pressed ? 0.9 : 1,
-                })}
-              >
-                <Image src={item.thumbnailSrc || item.src} style={{ width: '100%', height: 88, objectFit: 'cover' }} />
-              </Pressable>
-            ))}
-          </Box>
-        ))}
-      </Box>
-
-      <ImageViewerModal
-        visible={viewerOpen}
-        images={images}
-        index={viewerIndex}
-        onIndexChange={(idx) => {
-          setViewerIndex(idx);
-          setPreviewIndex(idx);
-        }}
-        onRequestClose={() => setViewerOpen(false)}
-        showFilmstrip
-      />
     </Box>
   );
 }
@@ -222,146 +129,6 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
   );
 }
 
-function StackedColumnsGallery({ images }: { images: ImageGalleryItem[] }) {
-  const c = useThemeColors();
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
-  const columns = useMemo(() => {
-    const out: Array<Array<{ item: ImageGalleryItem; index: number }>> = [[], [], []];
-    images.slice(0, 15).forEach((item, index) => {
-      out[index % 3].push({ item, index });
-    });
-    return out;
-  }, [images]);
-
-  return (
-    <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
-      {columns.map((col, colIndex) => (
-        <Box key={`col-${colIndex}`} style={{ width: 240, gap: 10 }}>
-          {col.map(({ item, index }, tileIndex) => (
-            <Pressable
-              key={item.id ?? `${item.src}-${index}`}
-              onPress={() => {
-                setViewerIndex(index);
-                setViewerOpen(true);
-              }}
-              style={({ hovered, pressed }) => ({
-                width: '100%',
-                borderRadius: 8,
-                overflow: 'hidden',
-                borderWidth: 1,
-                borderColor: hovered ? c.primary : c.border,
-                opacity: pressed ? 0.9 : 1,
-              })}
-            >
-              <Image
-                src={item.thumbnailSrc || item.src}
-                style={{
-                  width: '100%',
-                  height: tileIndex % 2 === 0 ? 200 : 130,
-                  objectFit: 'cover',
-                }}
-              />
-            </Pressable>
-          ))}
-        </Box>
-      ))}
-
-      <ImageViewerModal
-        visible={viewerOpen}
-        images={images}
-        index={viewerIndex}
-        onIndexChange={setViewerIndex}
-        onRequestClose={() => setViewerOpen(false)}
-        showFilmstrip
-      />
-    </Box>
-  );
-}
-
-function BentoGallery({ images }: { images: ImageGalleryItem[] }) {
-  const c = useThemeColors();
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
-
-  if (images.length === 0) return null;
-
-  const renderTile = (slot: number, style: any) => {
-    const index = slot % images.length;
-    const item = images[index];
-    return (
-      <Pressable
-        key={`bento-${slot}`}
-        onPress={() => {
-          setViewerIndex(index);
-          setViewerOpen(true);
-        }}
-        style={({ hovered, pressed }) => ({
-          borderRadius: 10,
-          overflow: 'hidden',
-          borderWidth: 1,
-          borderColor: hovered ? c.primary : c.border,
-          opacity: pressed ? 0.9 : 1,
-          backgroundColor: c.bgAlt,
-          ...style,
-        })}
-      >
-        <Image
-          src={item.thumbnailSrc || item.src}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-      </Pressable>
-    );
-  };
-
-  return (
-    <Box style={{ width: '100%', alignItems: 'center' }}>
-      <Box
-        style={{
-          width: '100%',
-          maxWidth: 1140,
-          height: 420,
-          flexDirection: 'row',
-          gap: 10,
-          flexWrap: 'nowrap',
-          justifyContent: 'center',
-          alignItems: 'flex-start',
-        }}
-      >
-        <Box style={{ flexBasis: 0, flexGrow: 1.45, minWidth: 0, gap: 10 }}>
-          {renderTile(0, { width: '100%', height: 280 })}
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 10 }}>
-            {renderTile(1, { flexBasis: 0, flexGrow: 1, minWidth: 0, height: 130 })}
-            {renderTile(2, { flexBasis: 0, flexGrow: 1, minWidth: 0, height: 130 })}
-          </Box>
-        </Box>
-
-        <Box style={{ flexBasis: 0, flexGrow: 1.25, minWidth: 0, gap: 10 }}>
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 10 }}>
-            {renderTile(3, { flexBasis: 0, flexGrow: 1, minWidth: 0, height: 130 })}
-            {renderTile(4, { flexBasis: 0, flexGrow: 1, minWidth: 0, height: 130 })}
-          </Box>
-          {renderTile(5, { width: '100%', height: 280 })}
-        </Box>
-
-        <Box style={{ flexBasis: 0, flexGrow: 1.1, minWidth: 0, gap: 10 }}>
-          {renderTile(6, { width: '100%', height: 205 })}
-          {renderTile(7, { width: '100%', height: 205 })}
-        </Box>
-      </Box>
-
-      <ImageViewerModal
-        visible={viewerOpen}
-        images={images}
-        index={viewerIndex}
-        onIndexChange={setViewerIndex}
-        onRequestClose={() => setViewerOpen(false)}
-        showFilmstrip
-      />
-    </Box>
-  );
-}
-
 export function ImageGalleryStory() {
   const c = useThemeColors();
   const mode = useRendererMode();
@@ -422,7 +189,7 @@ export function ImageGalleryStory() {
       </StorySection>
 
       <StorySection index={2} title="Nested Rows + Hover Preview">
-        <HoverPreviewRows images={images.slice(0, 18)} />
+        <HoverPreviewRowsGallery images={images.slice(0, 18)} />
       </StorySection>
 
       <StorySection index={3} title="Side-by-Side Hover Preview">
@@ -430,7 +197,7 @@ export function ImageGalleryStory() {
       </StorySection>
 
       <StorySection index={4} title="Bento Grid">
-        <BentoGallery images={images.slice(0, 8)} />
+        <BentoImageGallery images={images.slice(0, 8)} />
       </StorySection>
     </StoryPage>
   );
