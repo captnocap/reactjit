@@ -206,7 +206,7 @@ local function pushEvent(evt)
   if mode == "native" then
     M.bridge:pushEvent(evt)
   elseif mode == "canvas" or mode == "wasm" then
-    M.bridge.emit(evt.type, evt)
+    M.bridge.emit(evt.type, evt.payload)
   end
 end
 
