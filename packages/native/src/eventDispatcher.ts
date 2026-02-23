@@ -11,7 +11,7 @@
  * For focus events: dispatches to the specific targetId
  */
 
-import type { LoveEvent } from '../../shared/src/types';
+import type { LoveEvent } from '@reactjit/core';
 import { handlerRegistry } from './hostConfig';
 import { reportError } from './errorReporter';
 import { debugLog } from './debugLog';

@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useBridgeOptional } from '../../core/src/context';
+import { useBridgeOptional } from '@reactjit/core';
 
 export interface ServiceKeyResult {
   /** The stored key value, or null if not configured. */

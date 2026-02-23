@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useBridgeOptional } from '../../core/src/context';
+import { useBridgeOptional } from '@reactjit/core';
 import { builtinServices, type ServiceDefinition } from './registry';
 
 let registrySent = false;

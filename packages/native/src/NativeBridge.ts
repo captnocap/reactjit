@@ -8,7 +8,7 @@
  * Events from Lua are polled via globalThis.__hostGetEvents and dispatched to listeners.
  */
 
-import type { IBridge, Listener, Unsubscribe, BridgeEvent } from '../../shared/src/bridge';
+import type { IBridge, Listener, Unsubscribe, BridgeEvent } from '@reactjit/core';
 import { initEventDispatching } from './eventDispatcher';
 import { reportError } from './errorReporter';
 import { setTransportFlush } from './hostConfig';

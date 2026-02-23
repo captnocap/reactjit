@@ -15,8 +15,8 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { NativeBridge } from './NativeBridge';
 import { createRoot } from './NativeRenderer';
-import { BridgeProvider, RendererProvider } from '../../shared/src/context';
-import { setCryptoBridge } from '../../crypto/src/rpc';
+import { BridgeProvider, RendererProvider } from '@reactjit/core';
+import { setCryptoBridge } from '@reactjit/crypto';
 
 export interface Love2DAppHandle {
   render(element: ReactNode): void;
