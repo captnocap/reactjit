@@ -1114,7 +1114,7 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   // love.worker.js, and a default index.html.
   try {
     execSync(
-      `npx love.js "${loveStaging}" "${distDir}" -t "${projectName}" -m 67108864`,
+      `npx love.js "${loveStaging}" "${distDir}" -t "${projectName}" -m 67108864 -c`,
       { cwd, stdio: 'pipe' }
     );
   } catch (e) {
