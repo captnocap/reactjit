@@ -202,7 +202,7 @@ function StatChip({ label, value, tone }: { label: string; value: string; tone: 
         borderColor: '#ffffff20',
       }}
     >
-      <Text fontSize={11} style={{ color: tone.fg, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 11, color: tone.fg, fontWeight: 'bold' }}>
         {`${label} ${value}`}
       </Text>
     </Box>
@@ -230,11 +230,11 @@ function Section({
       }}
     >
       <Box style={{ gap: 2 }}>
-        <Text fontSize={12} style={{ color: '#e4edff', fontWeight: 'bold' }}>
+        <Text style={{ fontSize: 12, color: '#e4edff', fontWeight: 'bold' }}>
           {title}
         </Text>
         {subtitle && (
-          <Text fontSize={10} style={{ color: '#8ea0c8' }}>
+          <Text style={{ fontSize: 10, color: '#8ea0c8' }}>
             {subtitle}
           </Text>
         )}
@@ -267,7 +267,7 @@ function ToggleButton({
         paddingBottom: 6,
       }}
     >
-      <Text fontSize={10} style={{ color: '#f8fbff' }}>
+      <Text style={{ fontSize: 10, color: '#f8fbff' }}>
         {label}
       </Text>
     </Pressable>
@@ -437,10 +437,10 @@ export function MapBasicStory() {
           }}
         >
           <Box style={{ gap: 2 }}>
-            <Text fontSize={16} style={{ color: '#eef4ff', fontWeight: 'bold' }}>
+            <Text style={{ fontSize: 16, color: '#eef4ff', fontWeight: 'bold' }}>
               Mission Map Console
             </Text>
-            <Text fontSize={11} style={{ color: '#90a4cf' }}>
+            <Text style={{ fontSize: 11, color: '#90a4cf' }}>
               Dispatch planning with route shaping, scene overlays, and 3D context.
             </Text>
           </Box>
@@ -510,7 +510,7 @@ export function MapBasicStory() {
                   }}
                 >
                   <Pressable onPress={() => setSelectedStop(i)}>
-                    <Text fontSize={10} style={{ color: '#cddafd' }}>
+                    <Text style={{ fontSize: 10, color: '#cddafd' }}>
                       {`Stop ${i + 1}  ${stop[0].toFixed(4)}, ${stop[1].toFixed(4)}`}
                     </Text>
                   </Pressable>
@@ -523,7 +523,7 @@ export function MapBasicStory() {
                 </Box>
               ))}
               {waypoints.length > 4 && (
-                <Text fontSize={10} style={{ color: '#8ea0c8' }}>
+                <Text style={{ fontSize: 10, color: '#8ea0c8' }}>
                   {`+${waypoints.length - 4} additional stops`}
                 </Text>
               )}
@@ -600,18 +600,18 @@ export function MapBasicStory() {
           >
             <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box>
-                <Text fontSize={22} style={{ color: '#eff6ff', fontWeight: 'bold' }}>
+                <Text style={{ fontSize: 22, color: '#eff6ff', fontWeight: 'bold' }}>
                   Geo Operations Workspace
                 </Text>
-                <Text fontSize={12} style={{ color: '#93a7d4' }}>
+                <Text style={{ fontSize: 12, color: '#93a7d4' }}>
                   {`${preset.label} · ${tileSource === 'osm' ? 'Streets' : 'Cycle'} tiles · ${modeText} mode`}
                 </Text>
               </Box>
               <Box style={{ alignItems: 'flex-end' }}>
-                <Text fontSize={11} style={{ color: '#dce8ff' }}>
+                <Text style={{ fontSize: 11, color: '#dce8ff' }}>
                   {`Center ${view.center[0].toFixed(4)}, ${view.center[1].toFixed(4)}`}
                 </Text>
-                <Text fontSize={10} style={{ color: '#97acd8' }}>
+                <Text style={{ fontSize: 10, color: '#97acd8' }}>
                   {`Zoom ${view.zoom.toFixed(2)} · Bearing ${Math.round(view.bearing)}° · Pitch ${Math.round(view.pitch)}°`}
                 </Text>
               </Box>
@@ -639,13 +639,13 @@ export function MapBasicStory() {
               gap: 4,
             }}
           >
-            <Text fontSize={11} style={{ color: '#dbeafe', fontWeight: 'bold' }}>
+            <Text style={{ fontSize: 11, color: '#dbeafe', fontWeight: 'bold' }}>
               Operator Notes
             </Text>
-            <Text fontSize={10} style={{ color: '#9eb4de' }}>
+            <Text style={{ fontSize: 10, color: '#9eb4de' }}>
               Pan and zoom directly on the map. Use presets to switch cities, then use route controls to reshape paths in place.
             </Text>
-            <Text fontSize={10} style={{ color: '#9eb4de' }}>
+            <Text style={{ fontSize: 10, color: '#9eb4de' }}>
               Toggle loop mode to simulate patrol circuits and switch to cycle tiles for terrain-aware lane planning.
             </Text>
           </Box>

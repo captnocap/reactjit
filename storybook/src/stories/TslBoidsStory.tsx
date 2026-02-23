@@ -89,13 +89,13 @@ function CodePane({ label, badge, code, badgeColor }: { label: string; badge: st
         alignItems: 'center',
         gap: 10,
         backgroundColor: c.surface0,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
+        paddingLeft: 14, paddingRight: 14,
+        paddingTop: 10, paddingBottom: 10,
         borderBottomWidth: 1,
         borderColor: c.overlay0,
       }}>
         <Text style={{ fontSize: 12, color: c.subtext1, fontWeight: 'bold' }}>{label}</Text>
-        <Box style={{ backgroundColor: badgeColor, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 }}>
+        <Box style={{ backgroundColor: badgeColor, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2 }}>
           <Text style={{ fontSize: 10, color: c.base, fontWeight: 'bold' }}>{badge}</Text>
         </Box>
       </Box>
@@ -117,8 +117,8 @@ export function TslBoidsStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.base, flexDirection: 'column', gap: 0 }}>
       {/* Header */}
-      <Box style={{ backgroundColor: c.mantle, borderBottomWidth: 1, borderColor: c.overlay0, paddingHorizontal: 20, paddingVertical: 14 }}>
-        <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold' }}>{'TSL → Lua Transpilation'}</Text>
+      <Box style={{ backgroundColor: c.mantle, borderBottomWidth: 1, borderColor: c.overlay0, paddingLeft: 20, paddingRight: 20, paddingTop: 14, paddingBottom: 14 }}>
+        <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold' }}>{'TSL to Lua Transpilation'}</Text>
         <Text style={{ fontSize: 12, color: c.subtext1, marginTop: 4 }}>
           {'TypeScript-like source (left) becomes LuaJIT-native code (right)'}
         </Text>

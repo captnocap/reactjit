@@ -66,7 +66,7 @@ export function TextEffectsStory() {
       <Box style={{ width: '100%', gap: 6 }}>
         <Text style={{ color: c.text, fontSize: 11 }}>Inline-capable (no frame)</Text>
         {inlineVariants.map((v) => (
-          <Box key={v.id} style={{ width: '100%', paddingVertical: 2, gap: 3 }}>
+          <Box key={v.id} style={{ width: '100%', paddingTop: 2, paddingBottom: 2, gap: 3 }}>
             <Text style={{ color: c.textDim, fontSize: 11 }}>
               {v.label}
             </Text>
