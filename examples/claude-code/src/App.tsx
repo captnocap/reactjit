@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Box, Text, Pressable, ScrollView, Native,
   MessageList, MessageBubble, ChatInput, CodeBlock, LoadingDots,
@@ -11,8 +11,7 @@ interface Msg {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
-  toolName?: string;
-  toolInput?: string;
+  tools?: { name: string; input: string }[];
 }
 
 // ── Colors (one place, no naked hex in styles) ───────────────────────
@@ -31,6 +30,7 @@ const C = {
   error:       '#ef4444',
   success:     '#22c55e',
   tool:        '#0d9488',
+  toolBg:      '#0d948815',
   userBubble:  '#2563eb',
   aiBubble:    '#1e293b',
   systemBg:    '#1a1a2e',
@@ -54,43 +54,80 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-// ── Tool call display ────────────────────────────────────────────────
+// ── Tool chip (inline, compact) ──────────────────────────────────────
 
-function ToolMessage({ msg }: { msg: Msg }) {
+function ToolChip({ name, input }: { name: string; input: string }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Box style={{ alignSelf: 'start', maxWidth: '90%', gap: 2 }}>
+    <Box style={{ width: '100%', gap: 2 }}>
       <Pressable onPress={() => setExpanded(!expanded)}>
         {({ hovered }) => (
           <Box style={{
             flexDirection: 'row',
+            width: '100%',
             alignItems: 'center',
             gap: 6,
             paddingLeft: 10,
             paddingRight: 10,
             paddingTop: 4,
             paddingBottom: 4,
-            backgroundColor: hovered ? C.surfaceAlt : 'transparent',
-            borderRadius: 4,
+            backgroundColor: hovered ? C.surfaceAlt : C.surface,
+            borderRadius: 6,
+            borderLeftWidth: 2,
+            borderColor: C.tool,
           }}>
-            <Text style={{ fontSize: 11, color: C.tool, fontWeight: 'bold' }}>
-              {msg.toolName || 'tool'}
+            <Text style={{ fontSize: 12, color: C.tool, fontWeight: 'bold' }}>
+              {name}
             </Text>
-            <Text style={{ fontSize: 11, color: C.textMuted }}>
-              {expanded ? 'v' : '>'}
-            </Text>
+            {input ? (
+              <Text style={{ fontSize: 11, color: C.textMuted }}>
+                {expanded ? 'v' : '>'}
+              </Text>
+            ) : null}
           </Box>
         )}
       </Pressable>
-      {expanded && msg.toolInput ? (
-        <Box style={{ paddingLeft: 10 }}>
+      {expanded && input ? (
+        <Box style={{ paddingLeft: 12 }}>
           <CodeBlock
-            code={msg.toolInput}
+            code={input}
             language="json"
             fontSize={10}
             style={{ maxHeight: 200 }}
           />
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+// ── Assistant message with attached tool calls ───────────────────────
+
+function AssistantMessage({ msg }: { msg: Msg }) {
+  return (
+    <Box style={{ alignSelf: 'start', maxWidth: '80%', gap: 4 }}>
+      {msg.content ? (
+        <Box style={{
+          backgroundColor: C.aiBubble,
+          padding: 10,
+          paddingLeft: 14,
+          paddingRight: 14,
+          borderTopLeftRadius: 4,
+          borderTopRightRadius: 16,
+          borderBottomLeftRadius: 16,
+          borderBottomRightRadius: 16,
+        }}>
+          <Text style={{ fontSize: 13, color: C.text }}>
+            {msg.content}
+          </Text>
+        </Box>
+      ) : null}
+      {msg.tools && msg.tools.length > 0 ? (
+        <Box style={{ width: '100%', gap: 2, paddingLeft: 4 }}>
+          {msg.tools.map((t, i) => (
+            <ToolChip key={`${msg.id}-tool-${i}`} name={t.name} input={t.input} />
+          ))}
         </Box>
       ) : null}
     </Box>
@@ -106,19 +143,22 @@ export function App() {
   const [streaming, setStreaming] = useState('');
   const [status, setStatus] = useState('idle');
   const [model, setModel] = useState('');
-  const [sessionId, setSessionId] = useState('');
   const [error, setError] = useState('');
+  const systemInitRef = useRef(false);
 
   // ── Event handlers from Lua capability ───────────────────────────
 
   const onSystemInit = useCallback((e: any) => {
     setModel(e.model || '');
-    setSessionId(e.sessionId || '');
-    setMessages(prev => [...prev, {
-      id: `sys-${Date.now()}`,
-      role: 'system',
-      content: `Connected to ${e.model || 'claude'}`,
-    }]);
+    // Only show "Connected" once
+    if (!systemInitRef.current) {
+      systemInitRef.current = true;
+      setMessages(prev => [...prev, {
+        id: `sys-${Date.now()}`,
+        role: 'system',
+        content: `Connected to ${e.model || 'claude'}`,
+      }]);
+    }
   }, []);
 
   const onTextDelta = useCallback((e: any) => {
@@ -140,13 +180,21 @@ export function App() {
       try { inputStr = JSON.stringify(e.input, null, 2); }
       catch { inputStr = String(e.input); }
     }
-    setMessages(prev => [...prev, {
-      id: `tool-${Date.now()}-${Math.random()}`,
-      role: 'tool',
-      content: e.name || 'tool',
-      toolName: e.name,
-      toolInput: inputStr,
-    }]);
+    // Attach tool to the last assistant message, or create a standalone tool entry
+    setMessages(prev => {
+      const last = prev.length > 0 ? prev[prev.length - 1] : null;
+      if (last && last.role === 'assistant') {
+        const updated = { ...last, tools: [...(last.tools || []), { name: e.name || 'tool', input: inputStr }] };
+        return [...prev.slice(0, -1), updated];
+      }
+      // No assistant message yet — create one with just the tool
+      return [...prev, {
+        id: `ai-${Date.now()}-${Math.random()}`,
+        role: 'assistant',
+        content: '',
+        tools: [{ name: e.name || 'tool', input: inputStr }],
+      }];
+    });
   }, []);
 
   const onError = useCallback((e: any) => {
@@ -165,7 +213,6 @@ export function App() {
   // ── Send message ─────────────────────────────────────────────────
 
   const handleSend = useCallback(async (text: string) => {
-    // Add user message to chat
     setMessages(prev => [...prev, {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -173,7 +220,6 @@ export function App() {
     }]);
     setError('');
 
-    // Send to Lua via RPC
     try {
       await bridge.rpc('claude:send', { message: text });
     } catch (err: any) {
@@ -199,6 +245,7 @@ export function App() {
         type="ClaudeCode"
         workingDir="/home/siah/creative/reactjit"
         model="sonnet"
+        permissionMode="plan"
         onSystemInit={onSystemInit}
         onTextDelta={onTextDelta}
         onTextDone={onTextDone}
@@ -258,7 +305,7 @@ export function App() {
       {/* rjit-ignore-next-line */}
       <MessageList
         padding={12}
-        gap={6}
+        gap={8}
         style={{ flexGrow: 1 }}
         emptyContent={
           <Box style={{ alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>
@@ -269,9 +316,6 @@ export function App() {
         }
       >
         {messages.map((msg) => {
-          if (msg.role === 'tool') {
-            return <ToolMessage key={msg.id} msg={msg} />;
-          }
           if (msg.role === 'system') {
             return (
               <MessageBubble
@@ -285,11 +329,14 @@ export function App() {
               </MessageBubble>
             );
           }
+          if (msg.role === 'assistant') {
+            return <AssistantMessage key={msg.id} msg={msg} />;
+          }
           return (
             <MessageBubble
               key={msg.id}
-              variant={msg.role === 'user' ? 'right' : 'left'}
-              bg={msg.role === 'user' ? C.userBubble : C.aiBubble}
+              variant="right"
+              bg={C.userBubble}
               color={C.text}
               fontSize={13}
             >
