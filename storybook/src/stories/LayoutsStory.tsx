@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
@@ -317,14 +317,14 @@ export function LayoutsStory() {
             >
               <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
                 <Slab label="Content behind drawer" color={P.main} h={60} />
-                <Box
+                <Pressable
                   style={{ backgroundColor: P.nav, padding: 8, borderRadius: 4 }}
                   onPress={() => setDrawerOpen(v => !v)}
                 >
                   <Text style={{ color: '#fff', fontSize: 10 }}>
                     {drawerOpen ? 'Close Drawer' : 'Open Drawer'}
                   </Text>
-                </Box>
+                </Pressable>
               </Box>
             </Drawer>
           </Box>
