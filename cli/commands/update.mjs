@@ -29,6 +29,17 @@ function syncDir(src, dest, label) {
 export async function updateCommand(args) {
   const cwd = process.cwd();
 
+  // Block running from the storybook directory — it reads from source via symlinks
+  const isStorybook = existsSync(join(cwd, '..', 'packages', 'core')) &&
+    existsSync(join(cwd, '..', 'lua')) &&
+    existsSync(join(cwd, 'love'));
+  if (isStorybook) {
+    console.error('  ERROR: Cannot run `reactjit update` from the storybook directory.');
+    console.error('  The storybook reads from source-of-truth via symlinks.');
+    console.error('  Running update here would replace symlinks with stale copies.');
+    process.exit(1);
+  }
+
   // Sanity check: are we inside an ReactJIT project?
   const hasMain = existsSync(join(cwd, 'main.lua')) || existsSync(join(cwd, 'src'));
   if (!hasMain) {
