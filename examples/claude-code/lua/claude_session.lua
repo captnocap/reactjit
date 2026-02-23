@@ -40,6 +40,74 @@ local function getRenderer()
   return Renderer
 end
 
+-- ── DocStore persistence ─────────────────────────────────────────
+
+local _store = nil
+local function getStore()
+  if _store then return _store end
+  local ok, docstore = pcall(require, "lua.docstore")
+  if ok and docstore.available then
+    _store = docstore.open("claude_history.db")
+    if _store then
+      io.write("[claude_session] DocStore opened: claude_history.db\n"); io.flush()
+    end
+  end
+  return _store
+end
+
+local function timestamp()
+  return os.date("!%Y-%m-%dT%H:%M:%SZ")
+end
+
+local function persistConversation(state)
+  local store = getStore()
+  if not store then return end
+  if not state.conversationId then
+    state.conversationId = state.rendererSessionId .. "-" .. tostring(os.clock()):gsub("%.", "")
+    store:save("conversations", {
+      _id = state.conversationId,
+      agentId = state.rendererSessionId,
+      workingDir = state._workingDir or ".",
+      model = state.model,
+      title = nil,  -- auto-generated later from first message
+      startedAt = timestamp(),
+      updatedAt = timestamp(),
+    })
+  end
+end
+
+local function persistMessage(state, role, content, toolName, toolInput, filePath)
+  local store = getStore()
+  if not store or not state.conversationId then return end
+  local msgId = state.conversationId .. "-" .. tostring(os.clock()):gsub("%.", "")
+  store:save("messages", {
+    _id = msgId,
+    conversationId = state.conversationId,
+    role = role,
+    content = content or "",
+    timestamp = timestamp(),
+  })
+  -- Update conversation timestamp
+  store:update("conversations", state.conversationId, { updatedAt = timestamp() })
+  -- Auto-title from first user message
+  if role == "user" and not state._titled then
+    local title = (content or ""):sub(1, 80)
+    store:update("conversations", state.conversationId, { title = title })
+    state._titled = true
+  end
+  -- Track tool uses separately
+  if toolName then
+    store:save("tool_uses", {
+      conversationId = state.conversationId,
+      messageId = msgId,
+      toolName = toolName,
+      filePath = filePath,
+      summary = toolInput and tostring(toolInput):sub(1, 200) or nil,
+      timestamp = timestamp(),
+    })
+  end
+end
+
 -- ── Module table (exported for claude_canvas.lua to call) ────────
 
 local Session = {}
@@ -116,6 +184,12 @@ local function handleStreamEvent(state, event, pushEvent, nodeId)
         if R and state.rendererSessionId then
           R.addToolStart(state.rendererSessionId, block.name or "unknown", block.id, block.input)
         end
+        -- Persist tool use
+        local filePath = nil
+        if type(block.input) == "table" then
+          filePath = block.input.file_path or block.input.path or block.input.command
+        end
+        persistMessage(state, "assistant", nil, block.name or "unknown", block.input, filePath)
       elseif block.type == "text" and block.text and #block.text > 0 then
         state.streamingText = (state.streamingText or "") .. block.text
       end
@@ -162,6 +236,8 @@ local function handleStreamEvent(state, event, pushEvent, nodeId)
         R.addText(state.rendererSessionId, state.streamingText)
         R.setStreaming(state.rendererSessionId, nil)
       end
+      -- Persist assistant message
+      persistMessage(state, "assistant", state.streamingText)
     end
     state.streamingText = nil
     state.streamingMessageId = nil
@@ -312,6 +388,10 @@ end
 local function sendMessage(state, message)
   if not state.proc then return false, "No process" end
 
+  -- Persist user message
+  persistConversation(state)
+  persistMessage(state, "user", message)
+
   local payload = json.encode({
     type = "user",
     message = {
@@ -384,6 +464,28 @@ function Session.list()
   return result, _focusedId
 end
 
+--- Get recent conversations from persistence (for sidebar).
+function Session.getConversations(limit)
+  local store = getStore()
+  if not store then return {} end
+  return store:find("conversations", nil, {
+    sort = { updatedAt = "desc" },
+    limit = limit or 20,
+  })
+end
+
+--- Search messages across all conversations.
+function Session.searchMessages(query, limit)
+  local store = getStore()
+  if not store then return {} end
+  return store:find("messages", {
+    content = { like = "%" .. query .. "%" },
+  }, {
+    sort = { timestamp = "desc" },
+    limit = limit or 20,
+  })
+end
+
 -- ── Capability registration ──────────────────────────────────────────
 
 Capabilities.register("ClaudeCode", {
@@ -419,6 +521,9 @@ Capabilities.register("ClaudeCode", {
       streamingMessageId = nil,
       pendingMessage = nil,
       rendererSessionId = props.sessionId or "default",  -- link to renderer session
+      _workingDir = props.workingDir or ".",
+      conversationId = nil,
+      _titled = false,
     }
 
     _sessions[nodeId] = state
