@@ -211,6 +211,59 @@ Capabilities.register("ClaudeCanvas", {
       return true
     end
 
+    -- Ctrl+R: expand/collapse the last tool block
+    if key == "r" and love.keyboard.isDown("lctrl", "rctrl") then
+      local session = Renderer.getSession(sessionId)
+      -- Find the last collapsible block and toggle it
+      for i = #session.blocks, 1, -1 do
+        local block = session.blocks[i]
+        if block.type == "tool_start" or block.type == "diff" then
+          Renderer.toggleCollapse(sessionId, i)
+          break
+        end
+      end
+      return true
+    end
+
+    -- Ctrl+N: new agent session (placeholder — needs multi-agent UI)
+    if key == "n" and love.keyboard.isDown("lctrl", "rctrl") then
+      -- TODO: spawn new ClaudeCode + ClaudeCanvas instance
+      Renderer.addSystem(sessionId, "Ctrl+N: multi-agent not yet wired")
+      return true
+    end
+
+    -- Ctrl+Tab / Ctrl+Shift+Tab: cycle agent tabs
+    if key == "tab" and love.keyboard.isDown("lctrl", "rctrl") then
+      -- TODO: cycle through sessions when sidebar exists
+      return true
+    end
+
+    -- Ctrl+E: toggle right panel (placeholder)
+    if key == "e" and love.keyboard.isDown("lctrl", "rctrl") then
+      -- TODO: toggle right panel when it exists
+      return true
+    end
+
+    -- Ctrl+B: toggle left sidebar (placeholder)
+    if key == "b" and love.keyboard.isDown("lctrl", "rctrl") then
+      -- TODO: toggle left sidebar when it exists
+      return true
+    end
+
+    -- Ctrl+K: search (placeholder)
+    if key == "k" and love.keyboard.isDown("lctrl", "rctrl") then
+      -- TODO: focus search when sidebar exists
+      return true
+    end
+
+    -- Escape: just clear input (focus is always on canvas)
+    if key == "escape" then
+      inputState.text = ""
+      inputState.cursorPos = 0
+      inputState.historyIdx = 0
+      return true
+    end
+
     -- Cursor movement
     if key == "backspace" then
       if inputState.cursorPos > 0 then
