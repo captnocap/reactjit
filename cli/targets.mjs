@@ -8,7 +8,7 @@
  *   external   – esbuild --external:X packages
  *   entries    – entry point candidates in priority order (resolved under src/)
  *   output     – dev build output path (relative to project root)
- *   kind       – 'sdl2' | 'love' (determines dist strategy)
+ *   kind       – 'sdl2' | 'love' | 'web' (determines dist strategy)
  */
 
 export const TARGETS = {
@@ -27,6 +27,14 @@ export const TARGETS = {
     entries: ['main-love.tsx', 'native-main.tsx', 'main.tsx'],
     output: 'love/bundle.js',
     kind: 'love',
+  },
+  web: {
+    format: 'iife',
+    globalName: 'ReactJIT',
+    external: ['react-dom', 'child_process'],
+    entries: ['main-web.tsx', 'main.tsx'],
+    output: 'web/bundle.js',
+    kind: 'web',
   },
 };
 
@@ -54,6 +62,7 @@ export const BUILD_ALIASES = {
   'macos':      { target: 'sdl2', platform: 'macos-x64',  dist: true },
   'macmseries': { target: 'sdl2', platform: 'macos-arm64', dist: true },
   'windows':    { target: 'sdl2', platform: 'windows-x64', dist: true },
+  'web':        { target: 'web',  platform: null,           dist: true },
 };
 
 /** Detect the host platform as a PLATFORMS key. */
