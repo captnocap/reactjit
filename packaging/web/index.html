@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>{{TITLE}}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0f; }
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: default;
+    }
+    #loading {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #888;
+      font-family: monospace;
+      font-size: 14px;
+      text-align: center;
+    }
+    #loading.hidden { display: none; }
+    #loading .bar {
+      width: 200px;
+      height: 4px;
+      background: #222;
+      margin: 12px auto 0;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #loading .bar-fill {
+      width: 0%;
+      height: 100%;
+      background: #5588ff;
+      transition: width 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+
+  <div id="loading">
+    <div>Loading...</div>
+    <div class="bar"><div class="bar-fill" id="progress"></div></div>
+  </div>
+
+  <script>
+    // love.js Module configuration — must be defined before love.js loads
+    var Module = {
+      canvas: document.getElementById('canvas'),
+
+      // Print/error forwarding
+      print: function (text) { console.log(text); },
+      printErr: function (text) { console.error(text); },
+
+      // Progress tracking
+      setStatus: function (text) {
+        var m = text.match(/Downloading data\.\.\. \((\d+)\/(\d+)\)/);
+        if (m) {
+          var pct = Math.round((parseInt(m[1]) / parseInt(m[2])) * 100);
+          document.getElementById('progress').style.width = pct + '%';
+        }
+        if (text === '') {
+          document.getElementById('loading').classList.add('hidden');
+        }
+      },
+
+      // love.js callback when the runtime is initialized
+      postRun: [function () {
+        console.log('[ReactJIT] WASM runtime initialized');
+        document.getElementById('loading').classList.add('hidden');
+      }],
+
+      // Ensure canvas gets focus for keyboard events
+      onRuntimeInitialized: function () {
+        document.getElementById('canvas').focus();
+      },
+    };
+  </script>
+
+  <!-- love.js WASM runtime (Emscripten-compiled Love2D) -->
+  <script src="love.js"></script>
+
+  <!-- Browser-side bridge (Module.FS polling) -->
+  <script src="bridge.js"></script>
+
+  <!-- React application bundle (IIFE) -->
+  <script src="bundle.js"></script>
+</body>
+</html>

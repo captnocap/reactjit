@@ -23,6 +23,9 @@ export { createRoot, render, unmountAll } from './NativeRenderer';
 // Love2D app factory
 export { createLove2DApp, type Love2DAppHandle } from './Love2DApp';
 
+// WASM app factory (love.js web builds)
+export { createWasmApp, type WasmAppHandle } from './WasmApp';
+
 // Text measurement
 export {
   measureText,
