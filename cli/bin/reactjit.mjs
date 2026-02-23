@@ -14,45 +14,39 @@ import { diagnoseCommand } from '../commands/diagnose.mjs';
 const [,, command, ...args] = argv;
 
 const HELP = `
-  reactjit (rjit) - CLI for ReactJIT
+  reactjit (rjit) — CLI for ReactJIT
 
-  Usage:
+  Development:
+    rjit dev                      Watch + HMR (SDL2, default)
+    rjit dev love                 Watch + HMR (Love2D)
+    rjit build                    Dev build (SDL2, default)
+
+  Production builds:
+    rjit build linux              Self-extracting Linux binary (x64)
+    rjit build macos              macOS bundle (Intel x64)
+    rjit build macmseries         macOS bundle (Apple Silicon arm64)
+    rjit build windows            Windows archive (x64)
+    rjit build dist:love          Self-extracting Linux binary (Love2D + glibc)
+
+  Project management:
     rjit init <name>              Create a new project (interactive)
     rjit init <name> --all        Include all optional packages
     rjit init <name> --minimal    Core only, no optional packages
-    rjit dev [target]             Watch mode (default: sdl2)
-    rjit build [target]           Dev build (default: sdl2)
-    rjit build dist:<target>      Production build
     rjit update                   Sync runtime files (lua/, lib/, reactjit/)
     rjit lint                     Check src/ for layout mistakes
+    rjit manifest                 Generate or update manifest.json
+
+  Tools:
     rjit tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
     rjit tsl --test               Run TSL transpiler test suite
     rjit screenshot [--output]    Lint + build + headless screenshot
     rjit diagnose                 Find ghost nodes (in tree, not painting)
-    rjit manifest                 Generate or update manifest.json
     rjit help                     Show this help message
-
-  Targets:
-    love        Love2D (IIFE, QuickJS)      → bundle.js
-    terminal    Terminal (ESM, Node.js)      → dist/main.js
-    cc          ComputerCraft (ESM, WS)      → dist/main.js
-    nvim        Neovim (ESM, stdio)          → dist/main.js
-    hs          Hammerspoon (ESM, WS)        → dist/main.js
-    awesome     AwesomeWM (ESM, stdio)       → dist/main.js
-    web         Browser (ESM)                → dist/app.js
-
-  Dist formats:
-    dist:love       Self-extracting Linux binary (Love2D + glibc)
-    dist:terminal   Single-file Node.js executable (shebang + CJS)
-    dist:cc         Single-file Node.js executable (shebang + CJS)
-    dist:nvim       Single-file Node.js executable (shebang + CJS)
-    dist:hs         Single-file Node.js executable (shebang + CJS)
-    dist:awesome    Single-file Node.js executable (shebang + CJS)
-    dist:web        Production ESM bundle
 
   Flags:
     --no-update     Skip auto-updating runtime files
-    --debug         Enable inspector in dist:love builds
+    --debug         Enable inspector in dist builds
+    --target <plat> Override platform (linux-x64, linux-arm64, macos-x64, macos-arm64, windows-x64)
 `;
 
 switch (command) {

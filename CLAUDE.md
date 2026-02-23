@@ -328,3 +328,34 @@ Commit early and often. This project has no test suite, so git history IS the sa
 - Target: ES2020, JSX: react-jsx (automatic), Module resolution: bundler
 - React 18.3+, react-reconciler 0.29
 - No test framework configured
+
+## Domain-Specific Invariants
+
+### CLI (`cli/`)
+
+**Three non-negotiable rules:**
+1. **Lint gates compilation** — every build path (`buildDevTarget`, `buildDistLove`, `buildDistSdl2`) runs `runLint()` before esbuild. Lint errors exit(1) before the bundle runs. If you add a new build command, it must call `runLint()` first.
+2. **Symlinks are protected, not clobbered** — `commands/update.mjs` checks if a destination is a symlink before copying. If it is, it skips and prints a message. Never remove this check. This protects the storybook's Lua symlink.
+3. **`targets.mjs` is the single source of truth** — esbuild flags, output paths, entry point priority, and platform metadata live there. Never hardcode these in commands. Always call `buildAliases()` for path resolution.
+
+### Packages (`packages/`)
+
+- **`core` and `native` are load-bearing** — they form the rendering pipeline. Everything else is domain-specific (audio, 3d, storage, etc.).
+- **Edit source-of-truth, run `make cli-setup`** — never edit `cli/runtime/` directly. It gets overwritten on the next `make cli-setup`.
+- **Box event handlers use explicit whitelist** — to add a new event type (e.g. `onFileDrop`): (1) add type to `BoxProps` in types.ts, (2) add to destructure in `Box()` in primitives.tsx, (3) add to createElement props in native branch, (4) subscribe in eventDispatcher.ts. Skipping steps 2-3 means the handler silently disappears.
+- **Capabilities are the right place for new features** — if you need users to call `bridge.rpc()` or understand transport, wrap it in a capability. Pattern: register on Lua side, consume as component on React side, schema auto-discovered via `useCapabilities()`.
+
+### Examples (`examples/`)
+
+- **Never edit local copies** — always fix at source (`lua/`, `packages/`), then `make cli-setup` and `reactjit update`. Local copies are disposable.
+- **Use `flexGrow: 1` not hardcoded heights** — `flexGrow` adapts to any window size. Pixel heights leave dead air or clip content.
+- **No Unicode symbols in `<Text>`** — ▶ ⏸ ● ✓ arrows etc. won't render. Convert to Box geometry or use `usePixelArt()`.
+- **Color palette in one place** — define it as `const C = { ... }` at the top of the file, use `C.accent` throughout. Never naked hex strings in style props.
+
+### Storybook (`storybook/`)
+
+- **IS the framework, not a demo** — every user-facing feature gets a story here. Stories prove it works and teach how to use it.
+- **Use the scaffolds** — content stories (with sections) use `StoryPage` and `StorySection` from `_shared/StoryScaffold.tsx`. Full-viewport stories (dashboards, games) fill the viewport directly without scaffolds.
+- **Always `useThemeColors()`** — never hardcode colors. Tokens: `c.text`, `c.bg`, `c.bgElevated`, `c.surface`, `c.primary`, `c.border`, `c.muted`.
+- **Register in `src/stories/index.ts`** — unregistered stories are invisible. Section categories: `'Core'` | `'Packages'` | `'Demos'` | `'Stress Test'` | `'Dev'`.
+- **Never create `storybook/lua/` or `storybook/reactjit/`** — both are gitignored. Lua reads via symlink from monorepo root, TS via relative imports from source.

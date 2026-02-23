@@ -193,18 +193,16 @@ export async function buildCommand(args) {
   if (!TARGETS[targetName]) {
     console.error(`Unknown target: ${targetName}`);
     console.error('');
-    console.error('  Available targets:');
-    console.error(`    ${TARGET_NAMES.join(', ')}`);
+    console.error('  Production builds:');
+    console.error('    rjit build linux                 Self-extracting Linux binary (x64)');
+    console.error('    rjit build macos                 macOS bundle (Intel x64)');
+    console.error('    rjit build macmseries            macOS bundle (Apple Silicon arm64)');
+    console.error('    rjit build windows               Windows archive (x64)');
+    console.error('    rjit build dist:love             Self-extracting Love2D binary');
     console.error('');
-    console.error('  Usage:');
-    console.error('    reactjit build                   Bundle JS for dev (SDL2, default)');
-    console.error('    reactjit build <target>          Dev build for any target');
-    console.error('    reactjit build dist:<target>     Production executable');
-    console.error('');
-    console.error('  Examples:');
-    console.error('    reactjit build terminal          Dev build → dist/main.js');
-    console.error('    reactjit build dist:love         Self-extracting Love2D binary');
-    console.error('    reactjit build dist:terminal     Single-file Node.js executable');
+    console.error('  Dev builds:');
+    console.error('    rjit build                       SDL2 dev build (default)');
+    console.error('    rjit build love                  Love2D dev build');
     process.exit(1);
   }
 
