@@ -1,7 +1,11 @@
 --[[
-  sdl2_font.lua -- FreeType glyph rasterizer + per-glyph GL texture cache
+  sdl2_font.lua -- FreeType glyph rasterizer + texture atlas
   Framework version of experiments/sdl2-painter/font.lua.
   Loads ft_helper.so from lib/ (placed there by reactjit update / make cli-setup).
+
+  Performance: All glyphs for a given font size are packed into a single GL
+  texture atlas. Font.draw() issues one glEnable + glBindTexture + glBegin/glEnd
+  per call instead of per-glyph, cutting GL state changes by ~6x per character.
 ]]
 local ffi = require("ffi")
 local GL  = require("lua.sdl2_gl")
@@ -28,8 +32,12 @@ local ft = loader.load("ft_helper")
 
 local Font = {}
 
-local cache       = {}
+-- Per-size atlas: { texId, width, height, cursorX, cursorY, rowHeight, glyphs={} }
+-- glyphs[codepoint] = { u0,v0,u1,v1, w,h, left,top, advance }
+local atlases     = {}
 local currentSize = nil
+
+local ATLAS_SIZE = 1024  -- 1024x1024 atlas texture
 
 local FONT_CANDIDATES = {
   -- Debian/Ubuntu paths
@@ -73,8 +81,41 @@ local function ensureSize(size)
   if currentSize == size then return end
   ft.ft_set_size(size)
   currentSize = size
-  if not cache[size] then cache[size] = {} end
 end
+
+-- Create a new atlas page for a given font size
+local function createAtlas(size)
+  local ids = ffi.new("unsigned int[1]")
+  GL.glGenTextures(1, ids)
+  local texId = ids[0]
+  GL.glBindTexture(GL.TEXTURE_2D, texId)
+  GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 1)
+  -- Allocate empty ALPHA texture
+  GL.glTexImage2D(GL.TEXTURE_2D, 0, GL.ALPHA,
+                  ATLAS_SIZE, ATLAS_SIZE, 0, GL.ALPHA, GL.UNSIGNED_BYTE, nil)
+  GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR)
+  GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR)
+  GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE)
+  GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE)
+  GL.glBindTexture(GL.TEXTURE_2D, 0)
+  local atlas = {
+    texId     = texId,
+    cursorX   = 1,  -- 1px padding from edge to avoid bleed
+    cursorY   = 1,
+    rowHeight = 0,
+    glyphs    = {},
+  }
+  return atlas
+end
+
+local function getAtlas(size)
+  if not atlases[size] then
+    atlases[size] = createAtlas(size)
+  end
+  return atlases[size]
+end
+
+local PAD = 1  -- 1px padding between glyphs to prevent bleed
 
 local function utf8next(s, i)
   local c = s:byte(i)
@@ -92,77 +133,106 @@ local function utf8next(s, i)
   return cp, len
 end
 
+-- Reusable FFI buffers for ft_render_char to avoid per-call allocations
+local _ow   = ffi.new("int[1]")
+local _oh   = ffi.new("int[1]")
+local _ol   = ffi.new("int[1]")
+local _ot   = ffi.new("int[1]")
+local _oa   = ffi.new("int[1]")
+local _obl  = ffi.new("int[1]")
+local _obuf = ffi.new("unsigned char*[1]")
+
 local function loadGlyph(size, cp)
-  local sc = cache[size]
-  if sc[cp] then return sc[cp] end
+  local atlas = getAtlas(size)
+  local g = atlas.glyphs[cp]
+  if g then return g end
 
-  local ow   = ffi.new("int[1]")
-  local oh   = ffi.new("int[1]")
-  local ol   = ffi.new("int[1]")
-  local ot   = ffi.new("int[1]")
-  local oa   = ffi.new("int[1]")
-  local obl  = ffi.new("int[1]")
-  local obuf = ffi.new("unsigned char*[1]")
+  ensureSize(size)
+  local ok = ft.ft_render_char(cp, _ow, _oh, _ol, _ot, _oa, _obl, _obuf)
 
-  local ok = ft.ft_render_char(cp, ow, oh, ol, ot, oa, obl, obuf)
-
-  local g = { texId = 0, w = 0, h = 0, left = 0, top = 0, advance = 0 }
+  g = { u0=0, v0=0, u1=0, v1=0, w=0, h=0, left=0, top=0, advance=0, hasPixels=false }
 
   if ok ~= 0 then
-    g.left    = ol[0]
-    g.top     = ot[0]
-    g.advance = oa[0]
-    g.w       = ow[0]
-    g.h       = oh[0]
+    g.left    = _ol[0]
+    g.top     = _ot[0]
+    g.advance = _oa[0]
+    g.w       = _ow[0]
+    g.h       = _oh[0]
 
     if g.w > 0 and g.h > 0 then
-      local ids = ffi.new("unsigned int[1]")
-      GL.glGenTextures(1, ids)
-      g.texId = ids[0]
-      GL.glBindTexture(GL.TEXTURE_2D, g.texId)
-      GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 1)
-      GL.glTexImage2D(GL.TEXTURE_2D, 0, GL.ALPHA,
-                      g.w, g.h, 0, GL.ALPHA, GL.UNSIGNED_BYTE, obuf[0])
-      GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR)
-      GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR)
-      GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE)
-      GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE)
-      GL.glBindTexture(GL.TEXTURE_2D, 0)
-      ft.ft_free_buffer(obuf[0])
+      -- Check if glyph fits in current row
+      if atlas.cursorX + g.w + PAD > ATLAS_SIZE then
+        -- Move to next row
+        atlas.cursorX = 1
+        atlas.cursorY = atlas.cursorY + atlas.rowHeight + PAD
+        atlas.rowHeight = 0
+      end
+
+      if atlas.cursorY + g.h + PAD <= ATLAS_SIZE then
+        -- Upload glyph bitmap into atlas
+        GL.glBindTexture(GL.TEXTURE_2D, atlas.texId)
+        GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 1)
+        GL.glTexSubImage2D(GL.TEXTURE_2D, 0,
+                           atlas.cursorX, atlas.cursorY,
+                           g.w, g.h,
+                           GL.ALPHA, GL.UNSIGNED_BYTE, _obuf[0])
+        GL.glBindTexture(GL.TEXTURE_2D, 0)
+
+        -- Compute UV coordinates
+        local invW = 1 / ATLAS_SIZE
+        local invH = 1 / ATLAS_SIZE
+        g.u0 = atlas.cursorX * invW
+        g.v0 = atlas.cursorY * invH
+        g.u1 = (atlas.cursorX + g.w) * invW
+        g.v1 = (atlas.cursorY + g.h) * invH
+        g.hasPixels = true
+
+        -- Advance cursor
+        atlas.cursorX = atlas.cursorX + g.w + PAD
+        if g.h > atlas.rowHeight then atlas.rowHeight = g.h end
+      end
+
+      ft.ft_free_buffer(_obuf[0])
     end
   end
 
-  sc[cp] = g
+  atlas.glyphs[cp] = g
   return g
 end
 
 function Font.draw(text, x, y, size, r, g, b, a)
   ensureSize(size)
+  local atlas = getAtlas(size)
   local ascender  = ft.ft_get_ascender()
   local baselineY = y + ascender
+
+  -- Single bind for the entire text string
+  GL.glEnable(GL.TEXTURE_2D)
+  GL.glBindTexture(GL.TEXTURE_2D, atlas.texId)
+  GL.glColor4f(r, g, b, a)
+  GL.glBegin(GL.QUADS)
+
   local cx = x
   local i  = 1
   while i <= #text do
     local cp, len = utf8next(text, i)
     if not cp then break end
     local gi = loadGlyph(size, cp)
-    if gi.texId ~= 0 then
-      local gx, gy = cx + gi.left, baselineY - gi.top
-      GL.glEnable(GL.TEXTURE_2D)
-      GL.glBindTexture(GL.TEXTURE_2D, gi.texId)
-      GL.glColor4f(r, g, b, a)
-      GL.glBegin(GL.TRIANGLE_STRIP)
-        GL.glTexCoord2f(0,0); GL.glVertex2f(gx,         gy)
-        GL.glTexCoord2f(1,0); GL.glVertex2f(gx + gi.w,  gy)
-        GL.glTexCoord2f(0,1); GL.glVertex2f(gx,         gy + gi.h)
-        GL.glTexCoord2f(1,1); GL.glVertex2f(gx + gi.w,  gy + gi.h)
-      GL.glEnd()
-      GL.glBindTexture(GL.TEXTURE_2D, 0)
-      GL.glDisable(GL.TEXTURE_2D)
+    if gi.hasPixels then
+      local gx = cx + gi.left
+      local gy = baselineY - gi.top
+      GL.glTexCoord2f(gi.u0, gi.v0); GL.glVertex2f(gx,        gy)
+      GL.glTexCoord2f(gi.u1, gi.v0); GL.glVertex2f(gx + gi.w, gy)
+      GL.glTexCoord2f(gi.u1, gi.v1); GL.glVertex2f(gx + gi.w, gy + gi.h)
+      GL.glTexCoord2f(gi.u0, gi.v1); GL.glVertex2f(gx,        gy + gi.h)
     end
     cx = cx + gi.advance
     i  = i + len
   end
+
+  GL.glEnd()
+  GL.glBindTexture(GL.TEXTURE_2D, 0)
+  GL.glDisable(GL.TEXTURE_2D)
 end
 
 function Font.measureWidth(text, size)
