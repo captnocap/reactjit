@@ -173,6 +173,7 @@ local SAVE_PATH = "save"
 local SAVE_FILE = "save/system_panel.json"
 
 local function loadPrefs()
+  if love.filesystem.getInfo and not love.filesystem.getInfo(SAVE_FILE) then return end
   local content = love.filesystem.read(SAVE_FILE)
   if not content then return end
   local ok, data = pcall(json.decode, content)

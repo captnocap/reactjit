@@ -150,6 +150,7 @@ function Storage.get(args)
   local ext = getExtension(format)
   local path = "save/" .. args.collection .. "/" .. args.id .. ext
 
+  if love.filesystem.getInfo and not love.filesystem.getInfo(path) then return nil end
   local content = love.filesystem.read(path)
   if not content then return nil end
 

@@ -1,12 +1,12 @@
 /**
  * bridge.js — Browser-side bridge for love.js WASM builds
  *
- * Mirrors bridge_fs.lua: polls __bridge_out.json from Module.FS each frame,
+ * Mirrors bridge_fs.lua: polls __bridge_out.json from window.Module.FS each frame,
  * dispatches events to React, and writes React commands to __bridge_in.json.
  *
  * Protocol:
- *   Lua -> JS:  Lua writes __bridge_out.json via love.filesystem, JS reads via Module.FS
- *   JS -> Lua:  JS writes __bridge_in.json via Module.FS, Lua reads via love.filesystem
+ *   Lua -> JS:  Lua writes __bridge_out.json via love.filesystem, JS reads via window.Module.FS
+ *   JS -> Lua:  JS writes __bridge_in.json via window.Module.FS, Lua reads via love.filesystem
  *
  * Both sides batch messages and flush once per frame.
  */
@@ -17,7 +17,7 @@
   // ── Config ──────────────────────────────────────────────
   var namespace = 'default';
   var OUTBOX_PATH, INBOX_PATH, READY_PATH;
-  var SAVE_DIR; // love.filesystem save directory within Module.FS
+  var SAVE_DIR; // love.filesystem save directory within window.Module.FS
 
   function setPaths(ns) {
     namespace = ns || 'default';
@@ -61,7 +61,7 @@
     },
 
     /**
-     * Flush all queued commands to Lua via Module.FS.
+     * Flush all queued commands to Lua via window.Module.FS.
      */
     flush: function () {
       if (commandQueue.length === 0 || !ready) return;
@@ -118,27 +118,34 @@
     },
 
     /**
-     * Get the discovered Module.FS save directory path.
+     * Get the discovered window.Module.FS save directory path.
      */
     getSaveDir: function () {
       return SAVE_DIR;
     },
   };
 
-  // ── Module.FS helpers ──────────────────────────────────
+  // ── Emscripten FS helpers ──────────────────────────────────
+  // love.js compat build doesn't expose Module.FS directly.
+  // postRun in index.html captures it as Module._FS.
+
+  function getFS() {
+    return (Module && Module.FS) || null;
+  }
 
   function findSaveDir() {
-    // love.js uses /home/web_user/.local/share/love/<identity>/ as the save dir.
-    // The identity is set in conf.lua (t.identity).
-    // We probe for common identities, or fall back to searching.
+    var fs = getFS();
+    if (!fs) return null;
     var candidates = [
+      '/home/web_user/love/reactjit-web/',
+      '/home/web_user/love/',
       '/home/web_user/.local/share/love/reactjit-web/',
       '/home/web_user/.local/share/love/reactjit/',
       '/home/web_user/.local/share/love/',
     ];
     for (var i = 0; i < candidates.length; i++) {
       try {
-        Module.FS.stat(candidates[i]);
+        fs.stat(candidates[i]);
         return candidates[i];
       } catch (e) { /* not found, try next */ }
     }
@@ -146,12 +153,13 @@
   }
 
   function readFS(filename) {
-    if (!SAVE_DIR) return null;
+    var fs = getFS();
+    if (!SAVE_DIR || !fs) return null;
     var path = SAVE_DIR + filename;
     try {
-      Module.FS.stat(path);
-      var data = Module.FS.readFile(path, { encoding: 'utf8' });
-      Module.FS.unlink(path);
+      fs.stat(path);
+      var data = fs.readFile(path, { encoding: 'utf8' });
+      fs.unlink(path);
       return data;
     } catch (e) {
       return null;
@@ -159,18 +167,21 @@
   }
 
   function writeFS(filename, data) {
-    if (!SAVE_DIR) return;
+    var fs = getFS();
+    if (!SAVE_DIR || !fs) return;
     var path = SAVE_DIR + filename;
-    Module.FS.writeFile(path, data);
+    fs.writeFile(path, data);
   }
 
   function checkReady() {
+    var fs = getFS();
+    if (!fs) return false;
     if (!SAVE_DIR) {
       SAVE_DIR = findSaveDir();
       if (!SAVE_DIR) return false;
     }
     try {
-      Module.FS.stat(SAVE_DIR + READY_PATH);
+      fs.stat(SAVE_DIR + READY_PATH);
       return true;
     } catch (e) {
       return false;
@@ -208,11 +219,16 @@
     }
   }
 
+  var tickCount = 0;
   function tick() {
+    tickCount++;
     if (!ready) {
-      if (typeof Module !== 'undefined' && Module.FS && checkReady()) {
+      if (tickCount % 60 === 1) {
+        console.log('[Bridge] tick #' + tickCount + ' waiting for ready... window.Module.FS=' + !!(typeof Module !== 'undefined' && window.Module.FS) + ' SAVE_DIR=' + SAVE_DIR);
+      }
+      if (typeof Module !== 'undefined' && getFS() && checkReady()) {
         ready = true;
-        console.log('[Bridge] Lua side ready — starting bridge polling');
+        console.log('[Bridge] Lua side ready — starting bridge polling (SAVE_DIR=' + SAVE_DIR + ')');
         // Dispatch ready event
         var fns = listeners['bridge:ready'];
         if (fns) {
@@ -235,16 +251,22 @@
 
   window.ReactJITBridge = Bridge;
 
-  // Start polling after love.js has had time to initialize Module.FS
-  if (typeof Module !== 'undefined' && Module.FS) {
+  // Start polling after love.js has had time to initialize window.Module.FS.
+  // We try multiple strategies because the compat build may init async.
+  function startPolling() {
+    console.log('[Bridge] Starting poll loop (window.Module.FS available)');
     requestAnimationFrame(tick);
+  }
+
+  if (getFS()) {
+    startPolling();
   } else {
-    // Wait for Module to be defined
-    var waitForModule = setInterval(function () {
-      if (typeof Module !== 'undefined' && Module.FS) {
-        clearInterval(waitForModule);
-        requestAnimationFrame(tick);
+    // Poll until FS is available (postRun captures it as Module._FS)
+    var waitForFS = setInterval(function () {
+      if (getFS()) {
+        clearInterval(waitForFS);
+        startPolling();
       }
-    }, 50);
+    }, 100);
   }
 })();

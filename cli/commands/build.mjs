@@ -983,6 +983,13 @@ const WEB_FFI_EXCLUDES = [
   'image_select.lua',
   'miner_signatures.lua',
   'window_manager.lua',
+  // PUC Lua 5.1 incompatible (uses goto, a LuaJIT/5.2+ feature)
+  'map.lua',
+  'tilecache.lua',
+  'browse.lua',
+  'docstore.lua',
+  'websocket.lua',
+  'wsserver.lua',
 ];
 
 const WEB_FFI_EXCLUDE_DIRS = [
@@ -991,7 +998,9 @@ const WEB_FFI_EXCLUDE_DIRS = [
 
 const WEB_FFI_EXCLUDE_SUBPATHS = [
   join('audio', 'midi.lua'),
+  join('audio', 'modules', 'lfo.lua'),
   join('capabilities', 'image_select.lua'),
+  join('capabilities', 'step_sequencer.lua'),
 ];
 
 function copyLuaDirStripped(srcDir, destDir) {
@@ -1094,6 +1103,19 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   cpSync(mainLua, join(loveStaging, 'main.lua'));
   cpSync(confLua, join(loveStaging, 'conf.lua'));
 
+  // Write a minimal manifest.json — manifest.lua requires it at load time and
+  // love.js turns missing-file into a hard error on the canvas.
+  const manifestPath = join(cwd, 'manifest.json');
+  if (existsSync(manifestPath)) {
+    cpSync(manifestPath, join(loveStaging, 'manifest.json'));
+  } else {
+    writeFileSync(join(loveStaging, 'manifest.json'), JSON.stringify({
+      name: projectName,
+      version: '0.1.0',
+      capabilities: {},
+    }, null, 2));
+  }
+
   // Copy fonts if available
   const fontsDirs = [join(cwd, 'fonts'), join(cwd, 'love', 'fonts')];
   const fontsDir = fontsDirs.find(p => existsSync(p));
@@ -1126,6 +1148,27 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
     console.error('  Or: npx love.js');
     if (e.stderr) console.error(e.stderr.toString());
     process.exit(1);
+  }
+
+  // 4b. Patch love.js to expose Emscripten FS on Module.
+  // The compat build keeps FS internal to the closure — we need it for bridge I/O.
+  const lovejsPath = join(distDir, 'love.js');
+  if (existsSync(lovejsPath)) {
+    let lovejs = readFileSync(lovejsPath, 'utf-8');
+    // Insert Module["FS"]=FS right after the FS object definition
+    const fsInit = 'var FS={root:null,mounts:[],devices:{';
+    if (lovejs.includes(fsInit)) {
+      // Find the end of the FS object literal — look for the matching closing brace
+      // Instead, inject after a known stable point: after FS.staticInit() call
+      const staticInit = 'FS.staticInit()';
+      const idx = lovejs.indexOf(staticInit);
+      if (idx >= 0) {
+        const insertAt = lovejs.indexOf(';', idx) + 1;
+        lovejs = lovejs.slice(0, insertAt) + 'Module["FS"]=FS;' + lovejs.slice(insertAt);
+        writeFileSync(lovejsPath, lovejs);
+        console.log('  Patched love.js to expose Module.FS');
+      }
+    }
   }
 
   // 5. Overlay our custom files on top of love.js output

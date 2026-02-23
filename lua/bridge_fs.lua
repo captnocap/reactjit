@@ -15,7 +15,11 @@
 
 local Bridge = {}
 
-local json = require("lib.json")
+local ok, json = pcall(require, "lib.json")
+if not ok then ok, json = pcall(require, "lua.lib.json") end
+if not ok then ok, json = pcall(require, "lua.json") end
+if not ok then ok, json = pcall(require, "json") end
+if not ok then error("[bridge_fs] JSON library required but not found") end
 
 -- ============================================================================
 -- State

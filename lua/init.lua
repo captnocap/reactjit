@@ -14,78 +14,95 @@ local ReactJIT = {}
 
 -- ============================================================================
 -- Submodule references (populated in init)
+--
+-- All lazy-loaded modules live in M{} so that functions referencing them
+-- consume a single upvalue instead of 60+. PUC Lua 5.1 (used by love.js)
+-- has a hard 60-upvalue limit per function; LuaJIT doesn't, but this keeps
+-- both happy.
 -- ============================================================================
 
-local bridge   = nil   -- bridge_fs or bridge_quickjs instance
-local tree     = nil   -- tree.lua module
-local layout   = nil   -- layout.lua module
-local painter  = nil   -- painter.lua module
-local events   = nil   -- events.lua module
-local measure  = nil   -- measure.lua module (text measurement + font cache)
-local errors     = require("lua.errors")      -- error overlay (always loaded, self-contained)
-local Log        = require("lua.debug_log")   -- channel-based debug logging (:log toggle)
-local inspector  = require("lua.inspector")   -- debug inspector (F12 toggle, self-contained)
-local console    = require("lua.console")     -- interactive eval console (` toggle, self-contained)
-local devtools   = require("lua.devtools")    -- unified bottom panel with tabs (Elements + Console)
-local settings    = require("lua.settings")      -- API key management overlay (F10 toggle)
-local themeMenu   = require("lua.theme_menu")    -- theme browser overlay (F9 toggle)
-local systemPanel = require("lua.system_panel")  -- user-owned device & permissions (F11 — NON-NEGOTIABLE)
-local screenshot = nil                           -- screenshot.lua (loaded on demand)
-local inspectorEnabled = true                    -- can be disabled via config.inspector = false
-local settingsEnabled  = true                    -- can be disabled via config.settings = false
-local themeMenuEnabled = true                    -- can be disabled via config.themeMenu = false
--- NOTE: There is NO systemPanelEnabled flag. The system panel cannot be disabled.
--- It protects the user FROM the developer, not the other way around.
-
-local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
-local images   = nil   -- images.lua module (image cache)
-local videos   = nil   -- videos.lua module (libmpv cache + frame rendering)
-local scene3d  = nil   -- scene3d.lua module (3D scene rendering via g3d)
-local mapmod   = nil   -- map.lua module (geo/tile map rendering)
-local gamemod  = nil   -- game.lua module (game canvas rendering + module system)
-local emumod   = nil   -- emulator.lua module (NES emulation via agnes)
-local effectsmod = nil -- effects.lua module (generative canvas effects)
-local masksmod   = nil -- masks.lua module (foreground post-processing masks)
-local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
-local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
-local texteditor = nil                        -- texteditor.lua (loaded on demand)
-local textinput  = nil                        -- textinput.lua (loaded on demand)
-local codeblock  = nil                        -- codeblock.lua (loaded on demand)
-local textselection = nil                    -- textselection.lua (text highlight + copy)
-local widgets    = nil                        -- widgets.lua (unified widget dispatch for Slider/Fader/Knob/Switch/Checkbox/Radio/Select)
-local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
-local osk      = nil                          -- osk.lua (on-screen keyboard for gamepad)
-local http     = nil                          -- http.lua (async HTTP + local file fetch)
-local network  = nil                          -- network.lua (WebSocket connections)
-local tor      = nil                          -- tor.lua (Tor subprocess, loaded if config.tor)
-local torHostnameEmitted = false              -- true once tor:ready event sent to JS
-local sqlite   = nil                          -- sqlite.lua (SQLite3 via LuaJIT FFI)
-local docstore = nil                          -- docstore.lua (schema-free document store over SQLite)
-local spellcheck = nil                        -- spellcheck.lua (dictionary-based spell checker)
-local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
-local lastDragHoverId = nil                   -- node ID of current drag-hover target
-local audioEngine = nil                       -- audio/engine.lua (modular audio framework)
-local capabilities = nil                      -- capabilities.lua (declarative capability registry)
-local httpserver = nil                        -- httpserver.lua (HTTP server for static files + API routes)
-local browse   = nil                          -- browse.lua (TCP client for stealth browse session)
-local sysmon   = nil                          -- sysmon.lua (system monitoring: CPU, memory, processes, GPU, etc.)
-local permit   = require("lua.permit")       -- permit.lua (capability enforcement: mint/check/freeze)
-local audit    = require("lua.audit")        -- audit.lua (structured audit logger for permit system)
-local quarantine = nil                       -- quarantine.lua (crypto miner detection + silent blocking)
-local manifestMod = require("lua.manifest")  -- manifest.lua (cartridge manifest loader + validator)
-local cartReader  = require("lua.cart_reader") -- cart_reader.lua (file reader for dropped cartridges)
-
--- Theme system
-local themes   = nil                          -- lua/themes/init.lua (theme registry)
-local currentThemeName = 'catppuccin-mocha'   -- active theme ID
-local currentTheme     = nil                  -- active theme table reference
-
--- Controller connection toast (auto-dismiss notification)
-local controllerToast = {
-  timer = nil,         -- seconds remaining, nil = not showing
-  text = nil,          -- "Controller connected" or "Controller disconnected"
-  fadeStart = 0.5,     -- start fading when timer < this value
+local M = {
+  bridge   = nil,   -- bridge_fs or bridge_quickjs instance
+  tree     = nil,   -- tree.lua module
+  layout   = nil,   -- layout.lua module
+  painter  = nil,   -- painter.lua module
+  events   = nil,   -- events.lua module
+  measure  = nil,   -- measure.lua module (text measurement + font cache)
+  errors     = require("lua.errors"),
+  Log        = require("lua.debug_log"),
+  inspector  = require("lua.inspector"),
+  console    = require("lua.console"),
+  devtools   = require("lua.devtools"),
+  settings    = require("lua.settings"),
+  themeMenu   = require("lua.theme_menu"),
+  systemPanel = require("lua.system_panel"),
+  screenshot = nil,
+  inspectorEnabled = true,
+  settingsEnabled  = true,
+  themeMenuEnabled = true,
+  animate  = nil,
+  images   = nil,
+  videos   = nil,
+  scene3d  = nil,
+  mapmod   = nil,
+  gamemod  = nil,
+  emumod   = nil,
+  effectsmod = nil,
+  masksmod   = nil,
+  videoplayer = nil,
+  focus    = require("lua.focus"),
+  texteditor = nil,
+  textinput  = nil,
+  codeblock  = nil,
+  textselection = nil,
+  widgets    = nil,
+  contextmenu = nil,
+  osk      = nil,
+  http     = nil,
+  network  = nil,
+  tor      = nil,
+  torHostnameEmitted = false,
+  sqlite   = nil,
+  docstore = nil,
+  spellcheck = nil,
+  dragdrop = nil,
+  lastDragHoverId = nil,
+  audioEngine = nil,
+  capabilities = nil,
+  httpserver = nil,
+  browse   = nil,
+  sysmon   = nil,
+  permit   = require("lua.permit"),
+  audit    = require("lua.audit"),
+  quarantine = nil,
+  manifestMod = require("lua.manifest"),
+  cartReader  = require("lua.cart_reader"),
+  themes   = nil,
+  currentThemeName = 'catppuccin-mocha',
+  currentTheme     = nil,
+  controllerToast = {
+    timer = nil,
+    text = nil,
+    fadeStart = 0.5,
+  },
 }
+
+-- Convenience aliases for the most frequently accessed modules.
+-- These are used in tight loops (update/draw) where M.xxx would add noise.
+-- Everything else should go through M.
+local errors     = M.errors
+local Log        = M.Log
+local inspector  = M.inspector
+local console    = M.console
+local devtools   = M.devtools
+local settings   = M.settings
+local themeMenu  = M.themeMenu
+local systemPanel = M.systemPanel
+local focus      = M.focus
+local permit     = M.permit
+local audit      = M.audit
+local manifestMod = M.manifestMod
+local cartReader  = M.cartReader
 
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
@@ -187,20 +204,20 @@ end
 local function pushEvent(evt)
   Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(evt.payload and evt.payload.targetId or "-"))
   if mode == "native" then
-    bridge:pushEvent(evt)
+    M.bridge:pushEvent(evt)
   elseif mode == "canvas" or mode == "wasm" then
-    bridge.emit(evt.type, evt)
+    M.bridge.emit(evt.type, evt)
   end
 end
 
 --- Emit a synthetic scroll event after Lua updates a scroll container.
 --- This keeps JS-side ScrollView callbacks in sync with native scroll state.
 local function emitScrollEvent(node)
-  if not node or not node.scrollState or not events then return end
+  if not node or not node.scrollState or not M.events then return end
   local c = node.computed or {}
   local ss = node.scrollState
-  local bubblePath = events.buildBubblePath(node)
-  pushEvent(events.createScrollEvent(
+  local bubblePath = M.events.buildBubblePath(node)
+  pushEvent(M.events.createScrollEvent(
     node.id,
     ss.scrollX or 0,
     ss.scrollY or 0,
@@ -215,7 +232,7 @@ end
 --- Emit layout events for nodes that registered onLayout handlers.
 --- Only emits when computed geometry changes to avoid per-frame spam.
 local function emitLayoutEvents(root)
-  if not root or not events then return end
+  if not root or not M.events then return end
   local stack = { root }
   while #stack > 0 do
     local node = table.remove(stack)
@@ -230,7 +247,7 @@ local function emitLayoutEvents(root)
         or last.h ~= c.h
       then
         node.__layoutLast = { x = c.x, y = c.y, w = c.w, h = c.h }
-        pushEvent(events.createLayoutEvent(node.id, c.x, c.y, c.w, c.h))
+        pushEvent(M.events.createLayoutEvent(node.id, c.x, c.y, c.w, c.h))
       end
     end
     for _, child in ipairs(node.children or {}) do
@@ -262,16 +279,16 @@ end
 local function loadThemes()
   local thOk, thMod = pcall(require, "lua.themes")
   if thOk and type(thMod) == "table" then
-    themes = thMod
-    if themeMenuEnabled then themeMenu.setThemes(themes) end
+    M.themes = thMod
+    if M.themeMenuEnabled then themeMenu.setThemes(M.themes) end
     local resolvedTheme = nil
-    if themeMenuEnabled and themeMenu.getResolvedTheme then
-      resolvedTheme = themeMenu.getResolvedTheme(currentThemeName)
+    if M.themeMenuEnabled and themeMenu.getResolvedTheme then
+      resolvedTheme = themeMenu.getResolvedTheme(M.currentThemeName)
     end
-    currentTheme = resolvedTheme or themes[currentThemeName]
-    if painter then painter.setTheme(currentTheme) end
-    if themeMenuEnabled then
-      themeMenu.setCurrentTheme(currentThemeName, currentTheme)
+    M.currentTheme = resolvedTheme or M.themes[M.currentThemeName]
+    if M.painter then M.painter.setTheme(M.currentTheme) end
+    if M.themeMenuEnabled then
+      themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
   end
 end
@@ -292,8 +309,8 @@ local function applyInteractionStyle(node)
   local focusStyle = node.props.focusStyle
   if not hoverStyle and not activeStyle and not focusStyle then return end
 
-  local isHovered = events and events.getHoveredNode() == node
-  local isPressed = events and events.getPressedNode() == node
+  local isHovered = M.events and M.events.getHoveredNode() == node
+  local isPressed = M.events and M.events.getPressedNode() == node
   local isFocused = focus.getInputMode() == "controller" and focus.isFocused(node)
 
   -- Get or create base style tracking for this node
@@ -350,13 +367,13 @@ local function applyInteractionStyle(node)
   end
 
   -- Trigger transitions if configured
-  if anyChange and animate and node.style.transition then
-    animate.processStyleUpdate(node, oldValues, newValues)
+  if anyChange and M.animate and node.style.transition then
+    M.animate.processStyleUpdate(node, oldValues, newValues)
   end
 
   -- Mark tree dirty if anything changed (layout or visual)
-  if anyChange and tree then
-    tree.markDirty()
+  if anyChange and M.tree then
+    M.tree.markDirty()
   end
 end
 
@@ -434,11 +451,11 @@ function ReactJIT.init(config)
   love.keyboard.setKeyRepeat(true)
 
   -- Inspector/console can be disabled for production builds
-  inspectorEnabled = config.inspector ~= false
+  M.inspectorEnabled = config.inspector ~= false
 
   -- Settings overlay can be disabled or configured
-  settingsEnabled = config.settings ~= false
-  if settingsEnabled then
+  M.settingsEnabled = config.settings ~= false
+  if M.settingsEnabled then
     local settingsKey = "f10"
     if type(config.settings) == "table" and config.settings.key then
       settingsKey = config.settings.key
@@ -449,17 +466,17 @@ function ReactJIT.init(config)
   end
 
   -- Theme menu overlay can be disabled or configured
-  themeMenuEnabled = config.themeMenu ~= false
-  if themeMenuEnabled then
+  M.themeMenuEnabled = config.themeMenu ~= false
+  if M.themeMenuEnabled then
     themeMenu.init({
       key = "f9",
       onSwitch = function(name, resolvedTheme, overrides)
-        if themes and themes[name] then
-          currentThemeName = name
-          currentTheme = resolvedTheme or themes[name]
-          if painter then painter.setTheme(currentTheme) end
-          if tree then tree.markDirty() end
-          themeMenu.setCurrentTheme(name, currentTheme)
+        if M.themes and M.themes[name] then
+          M.currentThemeName = name
+          M.currentTheme = resolvedTheme or M.themes[name]
+          if M.painter then M.painter.setTheme(M.currentTheme) end
+          if M.tree then M.tree.markDirty() end
+          themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
             type = "theme:switch",
             payload = {
@@ -486,85 +503,85 @@ function ReactJIT.init(config)
   if mode == "web" then
     -- Web mode: use Module.FS bridge.
     -- In web mode the DOM/browser handles rendering; Lua only bridges data.
-    bridge = require("lua.bridge_fs")
-    bridge.init(ns)
+    M.bridge = require("lua.bridge_fs")
+    M.bridge.init(ns)
     print("[reactjit] Initialized in WEB mode (Module.FS bridge)")
 
   elseif mode == "canvas" then
     -- Canvas mode: FS bridge + native rendering pipeline.
     -- React runs in the browser, reconciler commands come via /__reconciler_in.json,
     -- and Lua handles tree/layout/painter. Events go back via bridge_fs outbox.
-    bridge = require("lua.bridge_fs")
-    bridge.init(ns)
+    M.bridge = require("lua.bridge_fs")
+    M.bridge.init(ns)
 
-    measure = require("lua.measure")
-    images  = require("lua.images")
-    videos  = require("lua.videos")
-    videos.initBackend()
-    animate = require("lua.animate")
-    scene3d = require("lua.scene3d")
-    scene3d.init()
-    mapmod = require("lua.map")
-    mapmod.init()
-    gamemod = require("lua.game")
-    gamemod.init()
-    emumod = require("lua.emulator")
-    emumod.init()
-    effectsmod = require("lua.effects")
-    effectsmod.loadAll()
-    masksmod = require("lua.masks")
-    masksmod.loadAll()
+    M.measure = require("lua.measure")
+    M.images  = require("lua.images")
+    M.videos  = require("lua.videos")
+    M.videos.initBackend()
+    M.animate = require("lua.animate")
+    M.scene3d = require("lua.scene3d")
+    M.scene3d.init()
+    M.mapmod = require("lua.map")
+    M.mapmod.init()
+    M.gamemod = require("lua.game")
+    M.gamemod.init()
+    M.emumod = require("lua.emulator")
+    M.emumod.init()
+    M.effectsmod = require("lua.effects")
+    M.effectsmod.loadAll()
+    M.masksmod = require("lua.masks")
+    M.masksmod.loadAll()
 
-    tree    = require("lua.tree")
-    tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
+    M.tree    = require("lua.tree")
+    M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
 
-    animate.init({ tree = tree })
+    M.animate.init({ tree = M.tree })
 
-    layout  = require("lua.layout")
-    layout.init({ measure = measure })
+    M.layout  = require("lua.layout")
+    M.layout.init({ measure = M.measure })
 
-    painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod, masks = masksmod })
+    M.painter = require("lua.painter")
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = M.gamemod, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
 
-    events  = require("lua.events")
-    events.setTreeModule(tree)
+    M.events  = require("lua.events")
+    M.events.setTreeModule(M.tree)
 
-    texteditor = require("lua.texteditor")
-    texteditor.init({ measure = measure })
+    M.texteditor = require("lua.texteditor")
+    M.texteditor.init({ measure = M.measure })
 
-    textinput = require("lua.textinput")
-    textinput.init({ measure = measure })
+    M.textinput = require("lua.textinput")
+    M.textinput.init({ measure = M.measure })
 
-    codeblock = require("lua.codeblock")
-    codeblock.init({ measure = measure })
+    M.codeblock = require("lua.codeblock")
+    M.codeblock.init({ measure = M.measure })
 
-    videoplayer = require("lua.videoplayer")
-    videoplayer.init({ measure = measure, videos = videos })
+    M.videoplayer = require("lua.videoplayer")
+    M.videoplayer.init({ measure = M.measure, videos = M.videos })
 
-    widgets = require("lua.widgets")
-    widgets.init({ measure = measure, screenToContent = events.screenToContent })
+    M.widgets = require("lua.widgets")
+    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
 
-    textselection = require("lua.textselection")
-    textselection.init({ measure = measure, events = events, tree = tree })
+    M.textselection = require("lua.textselection")
+    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
 
-    contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+    M.contextmenu = require("lua.contextmenu")
+    M.contextmenu.init({ measure = M.measure, events = M.events, textselection = M.textselection, inspector = inspector, devtools = devtools })
 
-    osk = require("lua.osk")
-    osk.init({ measure = measure })
+    M.osk = require("lua.osk")
+    M.osk.init({ measure = M.measure })
 
     if permit.check("storage") then
-      sqlite = require("lua.sqlite")
-      docstore = require("lua.docstore")
+      M.sqlite = require("lua.sqlite")
+      M.docstore = require("lua.docstore")
     else
       io.write("[PERMIT] storage not declared — sqlite and docstore not loaded\n"); io.flush()
     end
-    spellcheck = require("lua.spellcheck")
-    spellcheck.init()
+    M.spellcheck = require("lua.spellcheck")
+    M.spellcheck.init()
 
-    focus.init(tree, pushEvent)
+    focus.init(M.tree, pushEvent)
 
-    events.setWidgetsModule(widgets)
+    M.events.setWidgetsModule(M.widgets)
 
     loadThemes()
 
@@ -576,69 +593,68 @@ function ReactJIT.init(config)
     -- WASM mode: FS bridge + native rendering pipeline, NO FFI modules.
     -- Same as canvas mode but skips videos, emulator, sqlite, crypto, etc.
     -- Used by love.js (Love2D compiled to WASM via Emscripten with PUC Lua 5.1).
-    bridge = require("lua.bridge_fs")
-    bridge.init(ns)
+    M.bridge = require("lua.bridge_fs")
+    M.bridge.init(ns)
 
-    measure = require("lua.measure")
-    images  = require("lua.images")
+    M.measure = require("lua.measure")
+    M.images  = require("lua.images")
     -- videos: SKIPPED (libmpv FFI)
-    animate = require("lua.animate")
-    scene3d = require("lua.scene3d")
-    scene3d.init()
-    mapmod = require("lua.map")
-    mapmod.init()
-    gamemod = require("lua.game")
-    gamemod.init()
+    M.animate = require("lua.animate")
+    M.scene3d = require("lua.scene3d")
+    M.scene3d.init()
+    -- map/browse/docstore/websocket/wsserver: stripped from WASM builds (use goto / PUC 5.1 incompatible)
+    local ok_map, map_ = pcall(require, "lua.map")
+    if ok_map then M.mapmod = map_; M.mapmod.init() end
+    M.gamemod = require("lua.game")
+    M.gamemod.init()
     -- emulator: SKIPPED (FFI)
-    effectsmod = require("lua.effects")
-    effectsmod.loadAll()
-    masksmod = require("lua.masks")
-    masksmod.loadAll()
+    M.effectsmod = require("lua.effects")
+    M.effectsmod.loadAll()
+    M.masksmod = require("lua.masks")
+    M.masksmod.loadAll()
 
-    tree    = require("lua.tree")
-    tree.init({ images = images, videos = nil, animate = animate, scene3d = scene3d })
+    M.tree    = require("lua.tree")
+    M.tree.init({ images = M.images, videos = nil, animate = M.animate, scene3d = M.scene3d })
 
-    animate.init({ tree = tree })
+    M.animate.init({ tree = M.tree })
 
-    layout  = require("lua.layout")
-    layout.init({ measure = measure })
+    M.layout  = require("lua.layout")
+    M.layout.init({ measure = M.measure })
 
-    painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = nil, scene3d = scene3d, map = mapmod, game = gamemod, emulator = nil, effects = effectsmod, masks = masksmod })
+    M.painter = require("lua.painter")
+    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = M.gamemod, emulator = nil, effects = M.effectsmod, masks = M.masksmod })
 
-    events  = require("lua.events")
-    events.setTreeModule(tree)
+    M.events  = require("lua.events")
+    M.events.setTreeModule(M.tree)
 
-    texteditor = require("lua.texteditor")
-    texteditor.init({ measure = measure })
+    M.texteditor = require("lua.texteditor")
+    M.texteditor.init({ measure = M.measure })
 
-    textinput = require("lua.textinput")
-    textinput.init({ measure = measure })
+    M.textinput = require("lua.textinput")
+    M.textinput.init({ measure = M.measure })
 
-    codeblock = require("lua.codeblock")
-    codeblock.init({ measure = measure })
+    M.codeblock = require("lua.codeblock")
+    M.codeblock.init({ measure = M.measure })
 
     -- videoplayer: SKIPPED (depends on videos)
 
-    widgets = require("lua.widgets")
-    widgets.init({ measure = measure, screenToContent = events.screenToContent })
+    M.widgets = require("lua.widgets")
+    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
 
-    textselection = require("lua.textselection")
-    textselection.init({ measure = measure, events = events, tree = tree })
+    M.textselection = require("lua.textselection")
+    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
 
-    contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+    M.contextmenu = require("lua.contextmenu")
+    M.contextmenu.init({ measure = M.measure, events = M.events, textselection = M.textselection, inspector = inspector, devtools = devtools })
 
-    osk = require("lua.osk")
-    osk.init({ measure = measure })
+    M.osk = require("lua.osk")
+    M.osk.init({ measure = M.measure })
 
-    -- sqlite/docstore: SKIPPED (FFI)
-    spellcheck = require("lua.spellcheck")
-    spellcheck.init()
+    -- sqlite/docstore/spellcheck: SKIPPED (sqlite is FFI, spellcheck depends on sqlite)
 
-    focus.init(tree, pushEvent)
+    focus.init(M.tree, pushEvent)
 
-    events.setWidgetsModule(widgets)
+    M.events.setWidgetsModule(M.widgets)
 
     loadThemes()
 
@@ -653,105 +669,105 @@ function ReactJIT.init(config)
     }
 
     -- Init mpv BEFORE QuickJS — libquickjs dlopen can interfere with mpv's GL setup
-    videos  = require("lua.videos")
-    videos.initBackend()
+    M.videos  = require("lua.videos")
+    M.videos.initBackend()
 
     local BridgeQJS = require("lua.bridge_quickjs")
-    bridge = BridgeQJS.new(initConfig.libpath)
+    M.bridge = BridgeQJS.new(initConfig.libpath)
 
     -- Initialize crypto miner detection (scans JS at eval time, .so at load time)
     local qOk, qMod = pcall(require, "lua.quarantine")
     if qOk and qMod then
-      quarantine = qMod
-      quarantine.init({ permit = permit, audit = audit })
-      BridgeQJS.setQuarantine(quarantine)
+      M.quarantine = qMod
+      M.quarantine.init({ permit = permit, audit = audit })
+      BridgeQJS.setQuarantine(M.quarantine)
     end
 
-    measure = require("lua.measure")
-    images  = require("lua.images")
-    animate = require("lua.animate")
-    scene3d = require("lua.scene3d")
-    scene3d.init()
-    mapmod = require("lua.map")
-    mapmod.init()
-    gamemod = require("lua.game")
-    gamemod.init()
-    emumod = require("lua.emulator")
-    emumod.init()
-    effectsmod = require("lua.effects")
-    effectsmod.loadAll()
-    masksmod = require("lua.masks")
-    masksmod.loadAll()
+    M.measure = require("lua.measure")
+    M.images  = require("lua.images")
+    M.animate = require("lua.animate")
+    M.scene3d = require("lua.scene3d")
+    M.scene3d.init()
+    M.mapmod = require("lua.map")
+    M.mapmod.init()
+    M.gamemod = require("lua.game")
+    M.gamemod.init()
+    M.emumod = require("lua.emulator")
+    M.emumod.init()
+    M.effectsmod = require("lua.effects")
+    M.effectsmod.loadAll()
+    M.masksmod = require("lua.masks")
+    M.masksmod.loadAll()
 
-    tree    = require("lua.tree")
-    tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
+    M.tree    = require("lua.tree")
+    M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
 
-    animate.init({ tree = tree })
+    M.animate.init({ tree = M.tree })
 
-    layout  = require("lua.layout")
-    layout.init({ measure = measure })
+    M.layout  = require("lua.layout")
+    M.layout.init({ measure = M.measure })
 
-    painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod, masks = masksmod })
+    M.painter = require("lua.painter")
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = M.gamemod, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
 
-    events  = require("lua.events")
-    events.setTreeModule(tree)
+    M.events  = require("lua.events")
+    M.events.setTreeModule(M.tree)
 
-    texteditor = require("lua.texteditor")
-    texteditor.init({ measure = measure })
+    M.texteditor = require("lua.texteditor")
+    M.texteditor.init({ measure = M.measure })
 
-    textinput = require("lua.textinput")
-    textinput.init({ measure = measure })
+    M.textinput = require("lua.textinput")
+    M.textinput.init({ measure = M.measure })
 
-    codeblock = require("lua.codeblock")
-    codeblock.init({ measure = measure })
+    M.codeblock = require("lua.codeblock")
+    M.codeblock.init({ measure = M.measure })
 
-    videoplayer = require("lua.videoplayer")
-    videoplayer.init({ measure = measure, videos = videos })
+    M.videoplayer = require("lua.videoplayer")
+    M.videoplayer.init({ measure = M.measure, videos = M.videos })
 
-    widgets = require("lua.widgets")
-    widgets.init({ measure = measure, screenToContent = events.screenToContent })
+    M.widgets = require("lua.widgets")
+    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
 
-    textselection = require("lua.textselection")
-    textselection.init({ measure = measure, events = events, tree = tree })
+    M.textselection = require("lua.textselection")
+    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
 
-    contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+    M.contextmenu = require("lua.contextmenu")
+    M.contextmenu.init({ measure = M.measure, events = M.events, textselection = M.textselection, inspector = inspector, devtools = devtools })
 
-    osk = require("lua.osk")
-    osk.init({ measure = measure })
+    M.osk = require("lua.osk")
+    M.osk.init({ measure = M.measure })
 
     if permit.check("storage") then
-      sqlite = require("lua.sqlite")
-      docstore = require("lua.docstore")
+      M.sqlite = require("lua.sqlite")
+      M.docstore = require("lua.docstore")
     else
       io.write("[PERMIT] storage not declared — sqlite and docstore not loaded\n"); io.flush()
     end
-    spellcheck = require("lua.spellcheck")
-    spellcheck.init()
+    M.spellcheck = require("lua.spellcheck")
+    M.spellcheck.init()
 
-    focus.init(tree, pushEvent)
+    focus.init(M.tree, pushEvent)
 
-    events.setWidgetsModule(widgets)
+    M.events.setWidgetsModule(M.widgets)
 
     -- Initialize async HTTP (love.thread + LuaSocket) — gated by network permit
     if permit.check("network") then
-      http = require("lua.http")
-      http.init()
+      M.http = require("lua.http")
+      M.http.init()
 
       -- Initialize WebSocket network manager
-      network = require("lua.network")
-      network.init()
+      M.network = require("lua.network")
+      M.network.init()
     else
       io.write("[PERMIT] network not declared — http and network modules not loaded\n"); io.flush()
     end
 
     -- Initialize Tor if enabled (opt-in via config.tor) — gated by process permit
     if config.tor and permit.check("process", "tor") then
-      tor = require("lua.tor")
-      torHostnameEmitted = false
+      M.tor = require("lua.tor")
+      M.torHostnameEmitted = false
       if config.tor.autoStart ~= false then
-        local ok, err = tor.start({
+        local ok, err = M.tor.start({
           hsPort = config.tor.hsPort or 8080,
           identity = love.filesystem.getIdentity() or "default",
         })
@@ -766,8 +782,8 @@ function ReactJIT.init(config)
     -- Initialize drag-hover detection (X11 + SDL2, Linux only)
     local ddOk, ddMod = pcall(require, "lua.dragdrop")
     if ddOk then
-      dragdrop = ddMod
-      dragdrop.init()
+      M.dragdrop = ddMod
+      M.dragdrop.init()
     end
 
     -- Load the bundled React app into QuickJS
@@ -778,10 +794,10 @@ function ReactJIT.init(config)
 
     -- Tell the bundle to defer root.render() so JS_Eval returns immediately.
     -- React's synchronous LegacyRoot render would otherwise block inside JS_Eval.
-    bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
+    M.bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
 
     print("[reactjit] Evaluating bundle (" .. #bundleJS .. " bytes)...")
-    bridge:eval(bundleJS, initConfig.bundlePath)
+    M.bridge:eval(bundleJS, initConfig.bundlePath)
     print("[reactjit] Bundle loaded OK")
 
     -- Don't mount yet — that happens in the first update() call so the
@@ -804,7 +820,7 @@ function ReactJIT.init(config)
   end
 
   -- Register local store RPC handlers (SQLite-backed key-value persistence)
-  if sqlite and sqlite.available then
+  if M.sqlite and M.sqlite.available then
     local lsOk, localstore = pcall(require, "lua.localstore")
     if lsOk then
       localstore.init()
@@ -817,7 +833,7 @@ function ReactJIT.init(config)
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
-    if gamemod then return gamemod.handleCommand(args) end
+    if M.gamemod then return M.gamemod.handleCommand(args) end
   end
 
   -- Expose current inspector perf counters for stress-test dashboards.
@@ -834,7 +850,7 @@ function ReactJIT.init(config)
   end
 
   -- Register settings RPC handlers (API key management)
-  if settingsEnabled then
+  if M.settingsEnabled then
     rpcHandlers["settings:getKeys"] = function()
       return settings.getKeys()
     end
@@ -847,12 +863,12 @@ function ReactJIT.init(config)
   end
 
   -- Register SQLite RPC handlers (available when libsqlite3 is loaded)
-  if sqlite and sqlite.available then
+  if M.sqlite and M.sqlite.available then
     local sqliteDbs = {}  -- id -> Database
     local sqliteNextId = 1
 
     rpcHandlers["sqlite:open"] = function(args)
-      local db = sqlite.open(args.path)  -- nil = in-memory
+      local db = M.sqlite.open(args.path)  -- nil = in-memory
       local id = sqliteNextId
       sqliteNextId = sqliteNextId + 1
       sqliteDbs[id] = db
@@ -892,12 +908,12 @@ function ReactJIT.init(config)
   end
 
   -- Register docstore RPC handlers (schema-free document API)
-  if docstore and docstore.available then
+  if M.docstore and M.docstore.available then
     local stores = {}  -- id -> Store
     local storeNextId = 1
 
     rpcHandlers["doc:open"] = function(args)
-      local store = docstore.open(args.path)
+      local store = M.docstore.open(args.path)
       local id = storeNextId
       storeNextId = storeNextId + 1
       stores[id] = store
@@ -966,21 +982,21 @@ function ReactJIT.init(config)
   end
 
   -- Register spell check RPC handlers
-  if spellcheck and spellcheck.available then
+  if M.spellcheck and M.spellcheck.available then
     rpcHandlers["spell:check"] = function(args)
-      return spellcheck.check(args.word)
+      return M.spellcheck.check(args.word)
     end
 
     rpcHandlers["spell:checkText"] = function(args)
-      return spellcheck.checkText(args.text)
+      return M.spellcheck.checkText(args.text)
     end
 
     rpcHandlers["spell:suggest"] = function(args)
-      return spellcheck.suggest(args.word, args.limit)
+      return M.spellcheck.suggest(args.word, args.limit)
     end
 
     rpcHandlers["spell:setLang"] = function(args)
-      spellcheck.setLang(args.lang)
+      M.spellcheck.setLang(args.lang)
       return true
     end
   end
@@ -1012,40 +1028,40 @@ function ReactJIT.init(config)
   if permit.check("sysmon") then
     local smOk, smMod = pcall(require, "lua.sysmon")
     if smOk then
-      sysmon = smMod
-      for method, handler in pairs(sysmon.getHandlers()) do
+      M.sysmon = smMod
+      for method, handler in pairs(M.sysmon.getHandlers()) do
         rpcHandlers[method] = gated("sysmon", handler)
       end
     end
   end
 
   -- Register Tor RPC handlers — already gated at module load (process permit)
-  if tor then
+  if M.tor then
     rpcHandlers["tor:getHostname"] = gated("process", function()
-      local hostname = tor.getHostname()
+      local hostname = M.tor.getHostname()
       return hostname
     end)
     rpcHandlers["tor:getProxyPort"] = gated("process", function()
-      return tor.getProxyPort()
+      return M.tor.getProxyPort()
     end)
     rpcHandlers["tor:getLocalPort"] = gated("process", function()
-      return tor.getLocalPort()
+      return M.tor.getLocalPort()
     end)
   end
 
   -- Load audio engine (optional — graceful degradation if not available)
   local aeOk, aeMod = pcall(require, "lua.audio.engine")
   if aeOk and aeMod then
-    audioEngine = aeMod
+    M.audioEngine = aeMod
     -- Register all audio RPC handlers
-    for method, handler in pairs(audioEngine.getHandlers()) do
+    for method, handler in pairs(M.audioEngine.getHandlers()) do
       rpcHandlers[method] = handler
     end
     -- Override audio:init to inject the bridge reference automatically
     rpcHandlers["audio:init"] = function(args)
       args = args or {}
-      args.bridge = bridge
-      audioEngine.init(args)
+      args.bridge = M.bridge
+      M.audioEngine.init(args)
       return true
     end
     io.write("[reactjit] Audio engine loaded\n"); io.flush()
@@ -1063,11 +1079,13 @@ function ReactJIT.init(config)
   -- Load declarative capabilities (Audio, Timer, etc.)
   local capOk, capMod = pcall(require, "lua.capabilities")
   if capOk and capMod then
-    capabilities = capMod
-    capabilities.loadAll()
-    for method, handler in pairs(capabilities.getHandlers()) do
+    M.capabilities = capMod
+    M.capabilities.loadAll()
+    for method, handler in pairs(M.capabilities.getHandlers()) do
       rpcHandlers[method] = handler
     end
+    -- Wire capabilities into events.lua for visual capability hit testing
+    if M.events then M.events.setCapabilitiesModule(capMod) end
     io.write("[reactjit] Capabilities registry loaded\n"); io.flush()
   end
 
@@ -1075,8 +1093,8 @@ function ReactJIT.init(config)
   if permit.check("network") then
     local hsOk, hsMod = pcall(require, "lua.httpserver")
     if hsOk and hsMod then
-      httpserver = hsMod
-      for method, handler in pairs(httpserver.getHandlers()) do
+      M.httpserver = hsMod
+      for method, handler in pairs(M.httpserver.getHandlers()) do
         rpcHandlers[method] = gated("network", handler)
       end
       io.write("[reactjit] HTTP server loaded\n"); io.flush()
@@ -1087,8 +1105,8 @@ function ReactJIT.init(config)
   if permit.check("browse") then
     local brOk, brMod = pcall(require, "lua.browse")
     if brOk and brMod then
-      browse = brMod
-      browse.init()
+      M.browse = brMod
+      M.browse.init()
       io.write("[reactjit] Browse module loaded\n"); io.flush()
     end
   end
@@ -1112,14 +1130,14 @@ function ReactJIT.init(config)
   end
 
   -- Register map RPC handlers (panTo, zoomTo, flyTo, fitBounds, etc.)
-  if mapmod then
+  if M.mapmod then
     local mapRpcMethods = {
       "map:panTo", "map:zoomTo", "map:flyTo", "map:fitBounds",
       "map:setBearing", "map:setPitch", "map:getView",
       "map:downloadRegion", "map:downloadProgress", "map:cacheStats",
     }
     for _, method in ipairs(mapRpcMethods) do
-      rpcHandlers[method] = function(args) return mapmod.handleRPC(method, args) end
+      rpcHandlers[method] = function(args) return M.mapmod.handleRPC(method, args) end
     end
     io.write("[reactjit] Map module loaded\n"); io.flush()
   end
@@ -1131,8 +1149,8 @@ function ReactJIT.init(config)
   for method, handler in pairs(audit.getHandlers()) do
     rpcHandlers[method] = handler
   end
-  if quarantine then
-    for method, handler in pairs(quarantine.getHandlers()) do
+  if M.quarantine then
+    for method, handler in pairs(M.quarantine.getHandlers()) do
       rpcHandlers[method] = handler
     end
   end
@@ -1144,16 +1162,16 @@ function ReactJIT.init(config)
   end
 
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
-  if isRendering() and inspectorEnabled then
-    console.init({ bridge = bridge, tree = tree, inspector = inspector })
+  if isRendering() and M.inspectorEnabled then
+    console.init({ bridge = M.bridge, tree = M.tree, inspector = inspector })
     inspector.setConsole(console)
-    devtools.init({ inspector = inspector, console = console, tree = tree, bridge = bridge, pushEvent = pushEvent })
+    devtools.init({ inspector = inspector, console = console, tree = M.tree, bridge = M.bridge, pushEvent = pushEvent })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
   if os.getenv("ILOVEREACT_SCREENSHOT") == "1" then
-    screenshot = require("lua.screenshot")
-    screenshot.init({
+    M.screenshot = require("lua.screenshot")
+    M.screenshot.init({
       outputPath = os.getenv("ILOVEREACT_SCREENSHOT_OUTPUT") or "screenshot.png",
     })
   end
@@ -1167,8 +1185,8 @@ function ReactJIT.update(dt)
 
   if mode == "web" then
     -- Web mode: poll the Module.FS inbox and flush the outbox
-    bridge.poll()
-    bridge.flush()
+    M.bridge.poll()
+    M.bridge.flush()
     return
   end
 
@@ -1178,10 +1196,10 @@ function ReactJIT.update(dt)
     Log.frame()
 
     -- Audio engine update (fill QueueableSource buffers — run early to avoid underruns)
-    if audioEngine then audioEngine.update(dt) end
+    if M.audioEngine then M.audioEngine.update(dt) end
 
     -- 1. Poll the standard bridge inbox for user/state commands
-    bridge.poll()
+    M.bridge.poll()
 
     -- 2. Poll the dedicated reconciler command inbox (/__reconciler_in.json)
     local reconPath = "__reconciler_in.json"
@@ -1189,70 +1207,69 @@ function ReactJIT.update(dt)
       local raw = love.filesystem.read(reconPath)
       love.filesystem.remove(reconPath)
       if raw and raw ~= "" then
-        local json = require("lib.json")
         local ok, commands = pcall(json.decode, raw)
         if ok and type(commands) == "table" then
-          tree.applyCommands(commands)
+          M.tree.applyCommands(commands)
         end
       end
     end
 
     -- 3. Tick Lua-side transitions and animations (before layout)
-    if animate then animate.tick(dt) end
+    if M.animate then M.animate.tick(dt) end
 
     -- 4. Relayout if tree changed
-    if tree.isDirty() then
-      local root = tree.getTree()
+    if M.tree.isDirty() then
+      local root = M.tree.getTree()
       if root then
-        if inspectorEnabled then inspector.beginLayout() end
-        local vh = inspectorEnabled and devtools.getViewportHeight() or nil
-        layout.layout(root, nil, nil, nil, vh)
+        if M.inspectorEnabled then inspector.beginLayout() end
+        local vh = M.inspectorEnabled and devtools.getViewportHeight() or nil
+        M.layout.layout(root, nil, nil, nil, vh)
         emitLayoutEvents(root)
-        if inspectorEnabled then inspector.endLayout(root) end
+        if M.inspectorEnabled then inspector.endLayout(root) end
       end
-      tree.clearDirty()
+      M.tree.clearDirty()
     end
 
     -- Update TextEditor/TextInput blink timer if one has focus (canvas mode)
     local canvasFocusedNode = focus.get()
     if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" then
-      local result = texteditor.update(canvasFocusedNode, dt)
+      local result = M.texteditor.update(canvasFocusedNode, dt)
       if result == "change" then
         pushEvent({
           type = "texteditor:change",
           payload = {
             type = "texteditor:change",
             targetId = canvasFocusedNode.id,
-            value = texteditor.getValue(canvasFocusedNode),
+            value = M.texteditor.getValue(canvasFocusedNode),
           }
         })
       end
     elseif canvasFocusedNode and canvasFocusedNode.type == "TextInput" then
-      textinput.update(canvasFocusedNode, dt)
+      M.textinput.update(canvasFocusedNode, dt)
     end
 
     -- Sync playground editor hover -> preview overlay link
-    if inspectorEnabled and inspector and inspector.setPlaygroundLink then
-      if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" and texteditor and texteditor.getHoverContext then
-        inspector.setPlaygroundLink(texteditor.getHoverContext(canvasFocusedNode))
+    if M.inspectorEnabled and inspector and inspector.setPlaygroundLink then
+      if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" and M.texteditor and M.texteditor.getHoverContext then
+        inspector.setPlaygroundLink(M.texteditor.getHoverContext(canvasFocusedNode))
       else
         inspector.setPlaygroundLink(nil)
       end
     end
 
-    if codeblock then codeblock.update(dt) end
+    if M.codeblock then M.codeblock.update(dt) end
 
     -- Update VideoPlayer controls (auto-hide timer, canvas mode)
-    if videoplayer and tree then
-      videoplayer.update(dt, tree.getNodes())
+    if M.videoplayer and M.tree then
+      M.videoplayer.update(dt, M.tree.getNodes())
     end
 
-    if inspectorEnabled then inspector.update(dt) end
-    if inspectorEnabled then console.update(dt) end
-    if screenshot then screenshot.update() end
+    if M.inspectorEnabled then inspector.update(dt) end
+    if M.inspectorEnabled then console.update(dt) end
+    if M.screenshot then M.screenshot.update() end
 
     -- 5. Flush bridge outbox (events back to JS)
-    bridge.flush()
+    M.bridge.flush()
     return
   end
 
@@ -1261,7 +1278,7 @@ function ReactJIT.update(dt)
   Log.frame()
 
   -- Audio engine update (fill QueueableSource buffers — run early to avoid underruns)
-  if audioEngine then audioEngine.update(dt) end
+  if M.audioEngine then M.audioEngine.update(dt) end
 
   -- HMR: poll bundle.js mtime every ~1 second for changes
   hmrFrameCounter = hmrFrameCounter + 1
@@ -1287,19 +1304,19 @@ function ReactJIT.update(dt)
   if ReactJIT._needsMount then
     ReactJIT._needsMount = nil
     io.write("[reactjit] Triggering deferred mount...\n"); io.flush()
-    bridge:callGlobal("__mount")
+    M.bridge:callGlobal("__mount")
     io.write("[reactjit] Mount call returned\n"); io.flush()
     -- Tick immediately to drain any scheduled microtasks/timers
-    bridge:tick()
+    M.bridge:tick()
     -- Push initial viewport dimensions so useWindowDimensions can pick them up
     pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
   end
 
   -- 1. Tick JS timers + microtasks
-  bridge:tick()
+  M.bridge:tick()
 
   -- 2. Tell JS to process any pending input events
-  local ok, err = pcall(function() bridge:callGlobal("_pollAndDispatchEvents") end)
+  local ok, err = pcall(function() M.bridge:callGlobal("_pollAndDispatchEvents") end)
   if not ok then
     errors.push({
       source = "bridge",
@@ -1313,7 +1330,7 @@ function ReactJIT.update(dt)
   -- The double-tick was halving JS throughput at high framerates.
 
   -- 4. Drain mutation commands from JS and apply to retained tree
-  local commands = bridge:drainCommands()
+  local commands = M.bridge:drainCommands()
   Log.log("bridge", "drainCommands: %d commands", #commands)
   if #commands > 0 then
     -- Filter out RPC calls and route them to registered handlers
@@ -1354,15 +1371,15 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "http:request" then
           -- HTTP fetch request: scan URL for mining pool indicators
           local payload = cmd.payload
-          if payload and payload.url and quarantine and not quarantine.isActive() then
-            local urlResult = quarantine.scanURL(payload.url)
+          if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
+            local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
-              quarantine.activate("mining_pool_connection", urlResult.matches)
+              M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url then
-            if http then
-              local immediate = http.request(payload.id, {
+            if M.http then
+              local immediate = M.http.request(payload.id, {
                 url = payload.url,
                 method = payload.method,
                 headers = payload.headers,
@@ -1392,15 +1409,15 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "http:stream" then
           -- HTTP streaming request: scan URL for mining pool indicators
           local payload = cmd.payload
-          if payload and payload.url and quarantine and not quarantine.isActive() then
-            local urlResult = quarantine.scanURL(payload.url)
+          if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
+            local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
-              quarantine.activate("mining_pool_connection", urlResult.matches)
+              M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url then
-            if http then
-              local immediate = http.streamRequest(payload.id, {
+            if M.http then
+              local immediate = M.http.streamRequest(payload.id, {
                 url = payload.url,
                 method = payload.method,
                 headers = payload.headers,
@@ -1425,8 +1442,8 @@ function ReactJIT.update(dt)
           -- Browse session command: dispatch to browse TCP client
           local payload = cmd.payload
           if payload and payload.id and payload.cmd then
-            if browse then
-              browse.request(payload.id, payload.cmd, payload.host, payload.port)
+            if M.browse then
+              M.browse.request(payload.id, payload.cmd, payload.host, payload.port)
             else
               pushEvent({
                 type = "browse:response",
@@ -1437,72 +1454,72 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "ws:connect" then
           -- WebSocket connect — scan URL for mining pool indicators
           local payload = cmd.payload
-          if payload and payload.url and quarantine and not quarantine.isActive() then
-            local urlResult = quarantine.scanURL(payload.url)
+          if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
+            local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
-              quarantine.activate("mining_pool_connection", urlResult.matches)
+              M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
-          if payload and payload.id and payload.url and network then
-            network.connect(payload.id, payload.url)
+          if payload and payload.id and payload.url and M.network then
+            M.network.connect(payload.id, payload.url)
           end
         elseif type(cmd) == "table" and cmd.type == "ws:send" then
           -- WebSocket send
           local payload = cmd.payload
-          if payload and payload.id and network then
-            network.send(payload.id, payload.data or "")
+          if payload and payload.id and M.network then
+            M.network.send(payload.id, payload.data or "")
           end
         elseif type(cmd) == "table" and cmd.type == "ws:close" then
           -- WebSocket close
           local payload = cmd.payload
-          if payload and payload.id and network then
-            network.close(payload.id, payload.code, payload.reason)
+          if payload and payload.id and M.network then
+            M.network.close(payload.id, payload.code, payload.reason)
           end
         elseif type(cmd) == "table" and cmd.type == "ws:listen" then
           -- Start WebSocket server
           local payload = cmd.payload
-          if payload and payload.serverId and payload.port and network then
-            network.listen(payload.serverId, payload.port, payload.host)
+          if payload and payload.serverId and payload.port and M.network then
+            M.network.listen(payload.serverId, payload.port, payload.host)
           end
         elseif type(cmd) == "table" and cmd.type == "ws:broadcast" then
           -- Broadcast to all server clients
           local payload = cmd.payload
-          if payload and payload.serverId and network then
-            network.broadcast(payload.serverId, payload.data or "")
+          if payload and payload.serverId and M.network then
+            M.network.broadcast(payload.serverId, payload.data or "")
           end
         elseif type(cmd) == "table" and cmd.type == "ws:peer:send" then
           -- Send to specific client on server
           local payload = cmd.payload
-          if payload and payload.serverId and payload.clientId and network then
-            network.sendToClient(payload.serverId, payload.clientId, payload.data or "")
+          if payload and payload.serverId and payload.clientId and M.network then
+            M.network.sendToClient(payload.serverId, payload.clientId, payload.data or "")
           end
         elseif type(cmd) == "table" and cmd.type == "ws:server:stop" then
           -- Stop a server
           local payload = cmd.payload
-          if payload and payload.serverId and network then
-            network.stopServer(payload.serverId)
+          if payload and payload.serverId and M.network then
+            M.network.stopServer(payload.serverId)
           end
         elseif type(cmd) == "table" and cmd.type == "theme:set" then
           -- Switch active theme
           local payload = cmd.payload
           local name = payload and payload.name
-          if name and themes and themes[name] then
-            currentThemeName = name
+          if name and M.themes and M.themes[name] then
+            M.currentThemeName = name
             local resolvedTheme = nil
-            if themeMenuEnabled and themeMenu.getResolvedTheme then
+            if M.themeMenuEnabled and themeMenu.getResolvedTheme then
               resolvedTheme = themeMenu.getResolvedTheme(name)
             end
-            currentTheme = resolvedTheme or themes[name]
-            if painter then painter.setTheme(currentTheme) end
-            if tree then tree.markDirty() end
-            if themeMenuEnabled then themeMenu.setCurrentTheme(name, currentTheme) end
+            M.currentTheme = resolvedTheme or M.themes[name]
+            if M.painter then M.painter.setTheme(M.currentTheme) end
+            if M.tree then M.tree.markDirty() end
+            if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
             io.write("[reactjit] Theme switched to: " .. name .. "\n"); io.flush()
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:registry" then
           -- Receive service definitions from React
           local payload = cmd.payload
-          if payload and payload.services and settingsEnabled then
+          if payload and payload.services and M.settingsEnabled then
             settings.setServices(payload.services)
             io.write("[reactjit] Settings: registered " .. #payload.services .. " services\n"); io.flush()
           end
@@ -1510,7 +1527,7 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "settings:keys:set" then
           -- React-side programmatic key update
           local payload = cmd.payload
-          if payload and payload.serviceId and payload.fieldKey and settingsEnabled then
+          if payload and payload.serviceId and payload.fieldKey and M.settingsEnabled then
             settings.setKey(payload.serviceId, payload.fieldKey, payload.value)
           end
 
@@ -1525,7 +1542,7 @@ function ReactJIT.update(dt)
         ReactJIT._loggedCommands = true
         io.write("[reactjit] First batch: " .. #treeCommands .. " commands\n"); io.flush()
       end
-      tree.applyCommands(treeCommands)
+      M.tree.applyCommands(treeCommands)
     end
   end
 
@@ -1533,8 +1550,8 @@ function ReactJIT.update(dt)
   -- Payload is JSON-encoded into a single string to avoid the QuickJS GC race
   -- that silently drops large string properties during recursive FFI traversal.
   -- Streaming responses have a `type` field (chunk/done/error); regular responses don't.
-  if http then
-    local responses = http.poll()
+  if M.http then
+    local responses = M.http.poll()
     for _, resp in ipairs(responses) do
       if resp.type == "chunk" then
         pushEvent({
@@ -1566,15 +1583,15 @@ function ReactJIT.update(dt)
   -- The bridge dispatcher passes event.payload to listeners, so we must
   -- wrap the event data in a payload field.
   -- Scan ws:message payloads for Stratum JSON-RPC mining traffic.
-  if network then
-    local wsEvents = network.poll()
+  if M.network then
+    local wsEvents = M.network.poll()
     for _, evt in ipairs(wsEvents) do
       local evtType = evt.type
       -- Scan incoming WebSocket messages for mining protocol patterns
-      if evtType == "ws:message" and evt.data and quarantine and not quarantine.isActive() then
-        local frameResult = quarantine.scanWSFrame(evt.data)
+      if evtType == "ws:message" and evt.data and M.quarantine and not M.quarantine.isActive() then
+        local frameResult = M.quarantine.scanWSFrame(evt.data)
         if frameResult.detected then
-          quarantine.activate("stratum_traffic_detected", frameResult.matches)
+          M.quarantine.activate("stratum_traffic_detected", frameResult.matches)
         end
       end
       evt.type = nil  -- remove type from payload
@@ -1583,8 +1600,8 @@ function ReactJIT.update(dt)
   end
 
   -- 7. Poll HTTP servers and deliver incoming request events to JS
-  if httpserver then
-    local httpEvents = httpserver.pollAll()
+  if M.httpserver then
+    local httpEvents = M.httpserver.pollAll()
     for _, evt in ipairs(httpEvents) do
       local evtType = evt.type
       evt.type = nil
@@ -1593,8 +1610,8 @@ function ReactJIT.update(dt)
   end
 
   -- 8. Poll browse session for completed responses
-  if browse then
-    local browseResponses = browse.poll()
+  if M.browse then
+    local browseResponses = M.browse.poll()
     for _, resp in ipairs(browseResponses) do
       pushEvent({
         type = "browse:response",
@@ -1604,68 +1621,68 @@ function ReactJIT.update(dt)
   end
 
   -- 9a. Poll for Tor hostname (async — Tor takes 5-30s to bootstrap)
-  if tor and not torHostnameEmitted then
-    local onion = tor.getHostname()
+  if M.tor and not M.torHostnameEmitted then
+    local onion = M.tor.getHostname()
     if onion then
       pushEvent({ type = "tor:ready", payload = { hostname = onion } })
-      torHostnameEmitted = true
+      M.torHostnameEmitted = true
       io.write("[tor] Hidden service ready: " .. onion .. "\n"); io.flush()
     end
   end
 
   -- 8b. Sync video lifecycle with tree, then render frames into Canvases
-  if videos then
-    videos.syncWithTree(tree.getNodes())
-    videos.renderAll()
+  if M.videos then
+    M.videos.syncWithTree(M.tree.getNodes())
+    M.videos.renderAll()
   end
 
   -- 8c. Sync 3D scenes with tree, then render to off-screen Canvases
-  if scene3d then
-    scene3d.syncWithTree(tree.getNodes())
-    scene3d.renderAll()
+  if M.scene3d then
+    M.scene3d.syncWithTree(M.tree.getNodes())
+    M.scene3d.renderAll()
   end
 
   -- 8c2. Sync map viewports with tree, then render to off-screen Canvases
-  if mapmod then
-    mapmod.syncWithTree(tree.getNodes())
-    mapmod.renderAll()
+  if M.mapmod then
+    M.mapmod.syncWithTree(M.tree.getNodes())
+    M.mapmod.renderAll()
   end
 
   -- 8d. Sync game modules with tree, update game logic, render to off-screen Canvases
-  if gamemod then
-    gamemod.syncWithTree(tree.getNodes())
-    gamemod.updateAll(dt, pushEvent)
-    gamemod.renderAll()
+  if M.gamemod then
+    M.gamemod.syncWithTree(M.tree.getNodes())
+    M.gamemod.updateAll(dt, pushEvent)
+    M.gamemod.renderAll()
   end
 
   -- 8d2. Sync emulator instances with tree, advance frames, render to off-screen Canvases
-  if emumod then
-    emumod.syncWithTree(tree.getNodes())
-    emumod.updateAll(dt, pushEvent)
-    emumod.renderAll()
+  if M.emumod then
+    M.emumod.syncWithTree(M.tree.getNodes())
+    M.emumod.updateAll(dt, pushEvent)
+    M.emumod.renderAll()
   end
 
   -- 8d3. Sync generative effects with tree, update animations, render to off-screen Canvases
-  if effectsmod then
-    effectsmod.syncWithTree(tree.getNodes())
-    effectsmod.updateAll(dt)
-    effectsmod.renderAll()
+  if M.effectsmod then
+    M.effectsmod.syncWithTree(M.tree.getNodes())
+    M.effectsmod.updateAll(dt)
+    M.effectsmod.renderAll()
   end
 
   -- 8d4. Sync foreground masks with tree, update animations (render is on-demand in painter)
-  if masksmod then
-    masksmod.syncWithTree(tree.getNodes())
-    masksmod.updateAll(dt)
+  if M.masksmod then
+    M.masksmod.syncWithTree(M.tree.getNodes())
+    M.masksmod.updateAll(dt)
   end
 
   -- 8e. Sync declarative capabilities (Audio, Timer, etc.) with tree
-  if capabilities then
-    capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
+  if M.capabilities then
+    M.capabilities.syncWithTree(M.tree.getNodes(), pushEvent, dt)
   end
 
   -- 9. Poll video status and playback events, emit to JS
-  if videos then
-    local videoEvents = videos.poll()
+  if M.videos then
+    local videoEvents = M.videos.poll()
     for _, evt in ipairs(videoEvents) do
       -- poll() can provide a direct nodeId for per-node errors; otherwise
       -- resolve src → tracked nodeIds.
@@ -1675,7 +1692,7 @@ function ReactJIT.update(dt)
           payload = { src = evt.src, message = evt.message, targetId = evt.nodeId },
         })
       else
-        local nodes = videos.getNodesForSrc(evt.src)
+        local nodes = M.videos.getNodesForSrc(evt.src)
         for _, nodeId in ipairs(nodes) do
           pushEvent({
             type = "video:" .. evt.status,
@@ -1686,7 +1703,7 @@ function ReactJIT.update(dt)
     end
 
     -- Poll active video playback state for onTimeUpdate/onEnded/onPlay/onPause
-    local playbackEvents = videos.pollPlayback()
+    local playbackEvents = M.videos.pollPlayback()
     for _, evt in ipairs(playbackEvents) do
       pushEvent({
         type = evt.type,
@@ -1701,13 +1718,13 @@ function ReactJIT.update(dt)
   end
 
   -- 10. Drain Lua-owned widget events (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
-  if widgets then
-    widgets.drainAllEvents(pushEvent)
+  if M.widgets then
+    M.widgets.drainAllEvents(pushEvent)
   end
 
   -- 10b. Drain Lua-owned map events (different payload shape)
-  if mapmod then
-    local mapEvents = mapmod.drainEvents()
+  if M.mapmod then
+    local mapEvents = M.mapmod.drainEvents()
     if mapEvents then
       for _, evt in ipairs(mapEvents) do
         pushEvent({
@@ -1719,47 +1736,47 @@ function ReactJIT.update(dt)
   end
 
   -- 11. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
-  if dragdrop then
-    dragdrop.poll()
-    if dragdrop.isDragHovering() then
-      local root = tree.getTree()
+  if M.dragdrop then
+    M.dragdrop.poll()
+    if M.dragdrop.isDragHovering() then
+      local root = M.tree.getTree()
       if root then
-        local dx, dy = dragdrop.getPosition()
-        local hit = events.hitTest(root, dx, dy)
+        local dx, dy = M.dragdrop.getPosition()
+        local hit = M.events.hitTest(root, dx, dy)
         local hitId = hit and hit.id or nil
 
-        if hitId ~= lastDragHoverId then
-          if lastDragHoverId then
-            pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, dx, dy, nil, nil, nil))
+        if hitId ~= M.lastDragHoverId then
+          if M.lastDragHoverId then
+            pushEvent(M.events.createFileDropEvent("filedragleave", M.lastDragHoverId, dx, dy, nil, nil, nil))
           end
           if hit then
-            local bubblePath = events.buildBubblePath(hit)
-            pushEvent(events.createFileDropEvent("filedragenter", hit.id, dx, dy, nil, nil, bubblePath))
+            local bubblePath = M.events.buildBubblePath(hit)
+            pushEvent(M.events.createFileDropEvent("filedragenter", hit.id, dx, dy, nil, nil, bubblePath))
           end
-          lastDragHoverId = hitId
+          M.lastDragHoverId = hitId
         end
       end
-    elseif lastDragHoverId then
-      pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, 0, 0, nil, nil, nil))
-      lastDragHoverId = nil
+    elseif M.lastDragHoverId then
+      pushEvent(M.events.createFileDropEvent("filedragleave", M.lastDragHoverId, 0, 0, nil, nil, nil))
+      M.lastDragHoverId = nil
     end
   end
 
   -- 11. Tick Lua-side transitions and animations (before layout)
-  if animate then animate.tick(dt) end
+  if M.animate then M.animate.tick(dt) end
 
   -- 11. Relayout if tree changed
-  if tree.isDirty() then
+  if M.tree.isDirty() then
     Log.log("bridge", "tree dirty — triggering relayout")
-    local root = tree.getTree()
+    local root = M.tree.getTree()
     if root then
-      if inspectorEnabled then inspector.beginLayout() end
-      local vh = inspectorEnabled and devtools.getViewportHeight() or nil
-      layout.layout(root, nil, nil, nil, vh)
+      if M.inspectorEnabled then inspector.beginLayout() end
+      local vh = M.inspectorEnabled and devtools.getViewportHeight() or nil
+      M.layout.layout(root, nil, nil, nil, vh)
       emitLayoutEvents(root)
-      if inspectorEnabled then inspector.endLayout(root) end
+      if M.inspectorEnabled then inspector.endLayout(root) end
     end
-    tree.clearDirty()
+    M.tree.clearDirty()
 
     -- Per-window layout: lay out each child window's subtree with its own dimensions.
     -- The main layout pass above doesn't know about secondary window sizes, so
@@ -1768,11 +1785,11 @@ function ReactJIT.update(dt)
       local allWins = wmMod.getAll()
       for _, win in ipairs(allWins) do
         if not win.isMain and win.rootNodeId then
-          local allNodes = tree.getNodes()
+          local allNodes = M.tree.getNodes()
           local winRoot = allNodes[win.rootNodeId]
           if winRoot then
             winRoot._isWindowRoot = true
-            local lok, lerr = pcall(layout.layout, winRoot, 0, 0, win.width, win.height)
+            local lok, lerr = pcall(M.layout.layout, winRoot, 0, 0, win.width, win.height)
             winRoot._isWindowRoot = nil
             if not lok then
               errors.push({
@@ -1788,7 +1805,7 @@ function ReactJIT.update(dt)
   end
 
   -- Rebuild focusable node list and process stick navigation
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if root then
     focus.rebuildFocusableList(root)
   end
@@ -1796,7 +1813,7 @@ function ReactJIT.update(dt)
   focus.updateRings(dt)
 
   -- On-screen keyboard update (stick repeat timer)
-  if osk then osk.update(dt) end
+  if M.osk then M.osk.update(dt) end
 
   -- Update focusStyle overlays when focus changes
   do
@@ -1813,7 +1830,7 @@ function ReactJIT.update(dt)
     -- Remove focusStyle from nodes that lost focus
     for id in pairs(prevFocusedNodeIds) do
       if not currentFocusedIds[id] then
-        local nodes = tree.getNodes()
+        local nodes = M.tree.getNodes()
         local node = nodes and nodes[id]
         if node then
           applyInteractionStyle(node)
@@ -1828,51 +1845,51 @@ function ReactJIT.update(dt)
   end
 
   -- Controller toast countdown
-  if controllerToast.timer then
-    controllerToast.timer = controllerToast.timer - dt
-    if controllerToast.timer <= 0 then
-      controllerToast.timer = nil
-      controllerToast.text = nil
+  if M.controllerToast.timer then
+    M.controllerToast.timer = M.controllerToast.timer - dt
+    if M.controllerToast.timer <= 0 then
+      M.controllerToast.timer = nil
+      M.controllerToast.text = nil
     end
   end
 
   -- Update TextEditor/TextInput blink timer if one has focus
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    local result = texteditor.update(focusedNode, dt)
+    local result = M.texteditor.update(focusedNode, dt)
     if result == "change" then
       pushEvent({
         type = "texteditor:change",
         payload = {
           type = "texteditor:change",
           targetId = focusedNode.id,
-          value = texteditor.getValue(focusedNode),
+          value = M.texteditor.getValue(focusedNode),
         }
       })
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
-    textinput.update(focusedNode, dt)
+    M.textinput.update(focusedNode, dt)
   end
 
   -- Sync playground editor hover -> preview overlay link
-  if inspectorEnabled and inspector and inspector.setPlaygroundLink then
-    if focusedNode and focusedNode.type == "TextEditor" and texteditor and texteditor.getHoverContext then
-      inspector.setPlaygroundLink(texteditor.getHoverContext(focusedNode))
+  if M.inspectorEnabled and inspector and inspector.setPlaygroundLink then
+    if focusedNode and focusedNode.type == "TextEditor" and M.texteditor and M.texteditor.getHoverContext then
+      inspector.setPlaygroundLink(M.texteditor.getHoverContext(focusedNode))
     else
       inspector.setPlaygroundLink(nil)
     end
   end
 
-  if codeblock then codeblock.update(dt) end
+  if M.codeblock then M.codeblock.update(dt) end
 
   -- Update VideoPlayer controls (auto-hide timer)
-  if videoplayer and tree then
-    videoplayer.update(dt, tree.getNodes())
+  if M.videoplayer and M.tree then
+    M.videoplayer.update(dt, M.tree.getNodes())
   end
 
-  if inspectorEnabled then inspector.update(dt) end
-  if inspectorEnabled then console.update(dt) end
-  if screenshot then screenshot.update() end
+  if M.inspectorEnabled then inspector.update(dt) end
+  if M.inspectorEnabled then console.update(dt) end
+  if M.screenshot then M.screenshot.update() end
 end
 
 --- Call once per frame from love.draw().
@@ -1883,13 +1900,13 @@ function ReactJIT.draw()
   -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
   -- mpv can dirty this during mpv_render_context_create or render calls.
   -- Love2D needs alignment=1 for single-byte glyph atlas uploads.
-  if videos then videos.ensurePixelStore() end
+  if M.videos then M.videos.ensurePixelStore() end
 
   -- Theme menu: capture app frame to canvas for live preview
-  local themeCapturing = themeMenuEnabled and themeMenu.isOpen()
+  local themeCapturing = M.themeMenuEnabled and themeMenu.isOpen()
   if themeCapturing then themeMenu.beginCapture() end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if root then
     if not ReactJIT._loggedDraw then
       ReactJIT._loggedDraw = true
@@ -1909,9 +1926,9 @@ function ReactJIT.draw()
         end
       end
     end
-    if inspectorEnabled then inspector.beginPaint() end
-    local ok, paintErr = pcall(painter.paint, root)
-    if inspectorEnabled then inspector.endPaint() end
+    if M.inspectorEnabled then inspector.beginPaint() end
+    local ok, paintErr = pcall(M.painter.paint, root)
+    if M.inspectorEnabled then inspector.endPaint() end
     if not ok then
       errors.push({
         source = "lua",
@@ -1921,10 +1938,10 @@ function ReactJIT.draw()
     end
 
     -- Fullscreen VideoPlayer: redraw on top of everything so no UI bleeds through
-    if videoplayer then
-      local fsNode = videoplayer.getFullscreenNode()
+    if M.videoplayer then
+      local fsNode = M.videoplayer.getFullscreenNode()
       if fsNode then
-        videoplayer.draw(fsNode, 1.0)
+        M.videoplayer.draw(fsNode, 1.0)
       end
     end
 
@@ -1934,7 +1951,7 @@ function ReactJIT.draw()
       for _, win in ipairs(allWins) do
         if not win.isMain and win.rootNodeId then
           -- Find the root node for this window's subtree
-          local allNodes = tree.getNodes()
+          local allNodes = M.tree.getNodes()
           local winRoot = allNodes[win.rootNodeId]
           if winRoot then
             -- Debug: log once per window
@@ -1970,7 +1987,7 @@ function ReactJIT.draw()
             love.graphics.origin()
 
             winRoot._isWindowRoot = true
-            local wok, werr = pcall(painter.paint, winRoot)
+            local wok, werr = pcall(M.painter.paint, winRoot)
             winRoot._isWindowRoot = nil
             if not wok then
               io.write("[multiwin] PAINT ERROR window #" .. win.id .. ": " .. tostring(werr) .. "\n")
@@ -2008,45 +2025,45 @@ function ReactJIT.draw()
   if focus.getInputMode() == "controller" then
     local rings = focus.getAllRings()
     for _, ring in ipairs(rings) do
-      painter.drawFocusRing(ring)
+      M.painter.drawFocusRing(ring)
     end
   end
 
   -- Controller toast (after focus rings, before overlays)
-  if controllerToast.timer and controllerToast.text then
-    painter.drawControllerToast(controllerToast.text, controllerToast.timer, controllerToast.fadeStart)
+  if M.controllerToast.timer and M.controllerToast.text then
+    M.painter.drawControllerToast(M.controllerToast.text, M.controllerToast.timer, M.controllerToast.fadeStart)
   end
 
   -- On-screen keyboard (after toast, before overlays)
-  if osk and osk.isOpen() then
-    osk.draw()
+  if M.osk and M.osk.isOpen() then
+    M.osk.draw()
   end
 
   -- Theme menu: end canvas capture (draws captured frame to screen at full size)
   if themeCapturing then themeMenu.endCapture() end
 
   -- DevTools panel (inspector overlays + bottom panel with tabs)
-  if inspectorEnabled then devtools.draw(root) end
+  if M.inspectorEnabled then devtools.draw(root) end
 
   -- System panel (NON-NEGOTIABLE — draws over devtools, no guard)
   if systemPanel.isOpen() then systemPanel.draw() end
 
   -- Settings overlay (after devtools, before context menu/errors)
-  if settingsEnabled and settings.isOpen() then settings.draw() end
+  if M.settingsEnabled and settings.isOpen() then settings.draw() end
 
   -- Theme menu overlay (after settings, before context menu/errors)
-  if themeMenuEnabled and themeMenu.isOpen() then themeMenu.draw() end
+  if M.themeMenuEnabled and themeMenu.isOpen() then themeMenu.draw() end
 
   -- Context menu overlay (after inspector, before errors)
-  if contextmenu and contextmenu.isOpen() then
-    contextmenu.draw()
+  if M.contextmenu and M.contextmenu.isOpen() then
+    M.contextmenu.draw()
   end
 
   -- Error overlay renders on top of everything, using raw Love2D calls
   errors.draw()
 
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
-  if screenshot then screenshot.captureIfReady() end
+  if M.screenshot then M.screenshot.captureIfReady() end
 end
 
 -- ============================================================================
@@ -2149,7 +2166,7 @@ local function scrollbarMousePressed(root, mx, my, button)
       -- Click on track: jump to position
       local ratio = (my - hit.trackStart) / hit.trackSize
       local newScroll = ratio * hit.maxScroll
-      tree.setScroll(node.id, ss.scrollX or 0, newScroll)
+      M.tree.setScroll(node.id, ss.scrollX or 0, newScroll)
       emitScrollEvent(node)
       -- Start drag from new position
       local thumbH = math.max(20, (node.computed.h / (ss.contentH or 1)) * hit.trackSize)
@@ -2163,7 +2180,7 @@ local function scrollbarMousePressed(root, mx, my, button)
     else
       local ratio = (mx - hit.trackStart) / hit.trackSize
       local newScroll = ratio * hit.maxScroll
-      tree.setScroll(node.id, newScroll, ss.scrollY or 0)
+      M.tree.setScroll(node.id, newScroll, ss.scrollY or 0)
       emitScrollEvent(node)
       scrollbarDrag = { node = node, axis = "h", startMouse = mx,
                         startScroll = newScroll }
@@ -2191,13 +2208,13 @@ local function scrollbarMouseMoved(mx, my)
     local delta = my - d.startMouse
     local thumbTravel = trackH - thumbH
     if maxScroll <= 0 or thumbTravel <= 0 then
-      tree.setScroll(d.node.id, ss.scrollX or 0, ss.scrollY or 0)
+      M.tree.setScroll(d.node.id, ss.scrollX or 0, ss.scrollY or 0)
       emitScrollEvent(d.node)
       return true
     end
     local scrollDelta = (delta / thumbTravel) * maxScroll
     local newScroll = d.startScroll + scrollDelta
-    tree.setScroll(d.node.id, ss.scrollX or 0, newScroll)
+    M.tree.setScroll(d.node.id, ss.scrollX or 0, newScroll)
     emitScrollEvent(d.node)
   else
     local viewW = c.w
@@ -2208,13 +2225,13 @@ local function scrollbarMouseMoved(mx, my)
     local delta = mx - d.startMouse
     local thumbTravel = trackW - thumbW
     if maxScroll <= 0 or thumbTravel <= 0 then
-      tree.setScroll(d.node.id, ss.scrollX or 0, ss.scrollY or 0)
+      M.tree.setScroll(d.node.id, ss.scrollX or 0, ss.scrollY or 0)
       emitScrollEvent(d.node)
       return true
     end
     local scrollDelta = (delta / thumbTravel) * maxScroll
     local newScroll = d.startScroll + scrollDelta
-    tree.setScroll(d.node.id, newScroll, ss.scrollY or 0)
+    M.tree.setScroll(d.node.id, newScroll, ss.scrollY or 0)
     emitScrollEvent(d.node)
   end
   return true
@@ -2234,40 +2251,40 @@ function ReactJIT.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
   if systemPanel.mousepressed(x, y, button) then return end  -- NON-NEGOTIABLE
-  if settingsEnabled and settings.mousepressed(x, y, button) then return end
-  if themeMenuEnabled and themeMenu.mousepressed(x, y, button) then return end
-  if inspectorEnabled and devtools.mousepressed(x, y, button) then return end
+  if M.settingsEnabled and settings.mousepressed(x, y, button) then return end
+  if M.themeMenuEnabled and themeMenu.mousepressed(x, y, button) then return end
+  if M.inspectorEnabled and devtools.mousepressed(x, y, button) then return end
 
   if not isRendering() then return end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
   -- Fullscreen VideoPlayer gets ALL mouse input (bypass normal hit-test)
-  if videoplayer then
-    local fsNode = videoplayer.getFullscreenNode()
+  if M.videoplayer then
+    local fsNode = M.videoplayer.getFullscreenNode()
     if fsNode and button == 1 then
-      videoplayer.handleMousePressed(fsNode, x, y, button)
+      M.videoplayer.handleMousePressed(fsNode, x, y, button)
       return
     end
   end
 
   -- Context menu: consume clicks when open (close on outside click, select on item)
-  if contextmenu and contextmenu.isOpen() then
-    contextmenu.handleMousePressed(x, y, button)
+  if M.contextmenu and M.contextmenu.isOpen() then
+    M.contextmenu.handleMousePressed(x, y, button)
     return
   end
 
   -- Right-click: open context menu instead of normal click handling
-  if button == 2 and contextmenu then
-    contextmenu.open(x, y, root, pushEvent)
+  if button == 2 and M.contextmenu then
+    M.contextmenu.open(x, y, root, pushEvent)
     return
   end
 
   -- Scrollbar click/drag gets priority over normal hit testing
   if scrollbarMousePressed(root, x, y, button) then return end
 
-  local hit = events.hitTest(root, x, y)
+  local hit = M.events.hitTest(root, x, y)
 
   -- Diagnostic: show what React found vs what the game module would claim
   if hit then
@@ -2287,18 +2304,18 @@ function ReactJIT.mousepressed(x, y, button)
   end
 
   -- Route to game module if click is on a GameCanvas or missed React entirely
-  if gamemod then
+  if M.gamemod then
     local hitIsGame = hit and hit.type == "GameCanvas"
     if not hit or hitIsGame then
       io.write("[click] -> routing to game module (React had " .. (hitIsGame and "GameCanvas" or "nothing") .. ")\n"); io.flush()
-      gamemod.mousepressed(x, y, button)
+      M.gamemod.mousepressed(x, y, button)
     else
       io.write("[click] -> React claims this click (game module skipped)\n"); io.flush()
     end
   end
 
   -- Route clicks to emulator — it does its own bounds-based hit testing
-  if emumod and emumod.mousepressed(x, y, button) then
+  if M.emumod and M.emumod.mousepressed(x, y, button) then
     hit = nil  -- consumed by emulator, don't dispatch to JS
   end
 
@@ -2311,7 +2328,7 @@ function ReactJIT.mousepressed(x, y, button)
   if focusedNode and focusedNode.type == "TextEditor" then
     if hit ~= focusedNode then
       -- Clicking away from a focused TextEditor: blur it
-      local value = texteditor.blur(focusedNode)
+      local value = M.texteditor.blur(focusedNode)
       focus.clear()
       pushEvent({
         type = "texteditor:blur",
@@ -2325,7 +2342,7 @@ function ReactJIT.mousepressed(x, y, button)
   elseif focusedNode and focusedNode.type == "TextInput" then
     if hit ~= focusedNode then
       -- Clicking away from a focused TextInput: blur it
-      local value = textinput.blur(focusedNode)
+      local value = M.textinput.blur(focusedNode)
       focus.clear()
       pushEvent({
         type = "textinput:blur",
@@ -2341,8 +2358,8 @@ function ReactJIT.mousepressed(x, y, button)
   if hit then
     if hit.type == "TextEditor" then
       -- Clicked a TextEditor: handle internally (convert screen -> content coords)
-      local cx, cy = events.screenToContent(hit, x, y)
-      if texteditor.handleMousePressed(hit, cx, cy, button) then
+      local cx, cy = M.events.screenToContent(hit, x, y)
+      if M.texteditor.handleMousePressed(hit, cx, cy, button) then
         if not focus.isFocused(hit) then
           focus.set(hit)
           pushEvent({
@@ -2350,7 +2367,7 @@ function ReactJIT.mousepressed(x, y, button)
             payload = {
               type = "texteditor:focus",
               targetId = hit.id,
-              value = texteditor.getValue(hit),
+              value = M.texteditor.getValue(hit),
             }
           })
         end
@@ -2360,50 +2377,50 @@ function ReactJIT.mousepressed(x, y, button)
       -- then position cursor within the text (best-effort coordinate mapping)
       if not focus.isFocused(hit) then
         focus.set(hit)
-        textinput.focus(hit)  -- reset blink so cursor is immediately visible
+        M.textinput.focus(hit)  -- reset blink so cursor is immediately visible
         pushEvent({
           type = "textinput:focus",
           payload = {
             type = "textinput:focus",
             targetId = hit.id,
-            value = textinput.getValue(hit),
+            value = M.textinput.getValue(hit),
           }
         })
       end
-      local cx, cy = events.screenToContent(hit, x, y)
-      textinput.handleMousePressed(hit, cx, cy, button)
+      local cx, cy = M.events.screenToContent(hit, x, y)
+      M.textinput.handleMousePressed(hit, cx, cy, button)
     elseif hit.type == "CodeBlock" then
       -- Clicked a CodeBlock: check copy button
       -- Convert screen coords to content-space (account for scroll ancestors)
-      if codeblock and codeblock.handleMousePressed then
-        local cx, cy = events.screenToContent(hit, x, y)
-        codeblock.handleMousePressed(hit, cx, cy, button)
+      if M.codeblock and M.codeblock.handleMousePressed then
+        local cx, cy = M.events.screenToContent(hit, x, y)
+        M.codeblock.handleMousePressed(hit, cx, cy, button)
       end
     elseif hit.type == "VideoPlayer" then
       -- Clicked a VideoPlayer: handle internally in Lua
-      if videoplayer then
-        videoplayer.handleMousePressed(hit, x, y, button)
+      if M.videoplayer then
+        M.videoplayer.handleMousePressed(hit, x, y, button)
       end
     elseif hit.type == "Map2D" then
       -- Clicked a Map: handle pan interaction in Lua
-      if mapmod then
-        mapmod.handleMousePressed(hit, x, y, button)
+      if M.mapmod then
+        M.mapmod.handleMousePressed(hit, x, y, button)
       end
-    elseif widgets then
+    elseif M.widgets then
       -- Convert screen coords to content-space (account for scroll ancestors)
-      local cx, cy = events.screenToContent(hit, x, y)
-      if widgets.handleMousePressed(hit, cx, cy, button) then
+      local cx, cy = M.events.screenToContent(hit, x, y)
+      if M.widgets.handleMousePressed(hit, cx, cy, button) then
         -- Handled by unified widget dispatch (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
         do end  -- no-op body; dispatch already happened in the condition
       end
     else
       -- Normal node: standard drag + click handling
-      events.startDrag(hit.id, x, y)
-      local bubblePath = events.buildBubblePath(hit)
-      pushEvent(events.createEvent("click", hit.id, x, y, button, bubblePath))
+      M.events.startDrag(hit.id, x, y)
+      local bubblePath = M.events.buildBubblePath(hit)
+      pushEvent(M.events.createEvent("click", hit.id, x, y, button, bubblePath))
 
       -- Apply active (pressed) interaction style (0-frame latency)
-      events.setPressedNode(hit)
+      M.events.setPressedNode(hit)
       applyInteractionStyle(hit)
     end
   end
@@ -2412,14 +2429,14 @@ function ReactJIT.mousepressed(x, y, button)
   -- If the user drags past the threshold, this becomes an active text selection.
   -- This works regardless of whether an interactive node was also hit.
   textSelectPending = nil
-  if textselection then
+  if M.textselection then
     -- Clear any existing selection on new mousedown
-    textselection.clear()
+    M.textselection.clear()
 
-    local textHit = events.textHitTest(root, x, y)
+    local textHit = M.events.textHitTest(root, x, y)
     if textHit then
-      local selNode, line, col = textselection.screenToSelectionPos(root, x, y, textHit)
-      if selNode and textselection.isSelectable(selNode) then
+      local selNode, line, col = M.textselection.screenToSelectionPos(root, x, y, textHit)
+      if selNode and M.textselection.isSelectable(selNode) then
         textSelectPending = { node = selNode, startX = x, startY = y, line = line, col = col }
       end
     end
@@ -2430,18 +2447,18 @@ end
 --- Ends any active drag operation and dispatches release event.
 function ReactJIT.mousereleased(x, y, button)
   if systemPanel.mousereleased(x, y, button) then return end  -- NON-NEGOTIABLE
-  if inspectorEnabled and devtools.mousereleased(x, y, button) then return end
-  if settingsEnabled and settings.mousereleased(x, y, button) then return end
-  if themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
+  if M.inspectorEnabled and devtools.mousereleased(x, y, button) then return end
+  if M.settingsEnabled and settings.mousereleased(x, y, button) then return end
+  if M.themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
 
   -- Text selection: finalize on mouse release, clear pending
   textSelectPending = nil
-  if textselection then
-    local sel = textselection.get()
+  if M.textselection then
+    local sel = M.textselection.get()
     if sel and sel.isDragging then
-      textselection.finalize()
+      M.textselection.finalize()
       return  -- Consumed by text selection
     end
   end
@@ -2449,62 +2466,62 @@ function ReactJIT.mousereleased(x, y, button)
   -- TextEditor/TextInput drag selection release
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    texteditor.handleMouseReleased(focusedNode)
+    M.texteditor.handleMouseReleased(focusedNode)
   elseif focusedNode and focusedNode.type == "TextInput" then
-    textinput.handleMouseReleased(focusedNode)
+    M.textinput.handleMouseReleased(focusedNode)
   end
 
   -- VideoPlayer seek/volume drag release (check all VideoPlayer nodes since
   -- the mouse may have moved outside the node during a drag)
-  if videoplayer and tree then
-    local nodes = tree.getNodes()
+  if M.videoplayer and M.tree then
+    local nodes = M.tree.getNodes()
     if nodes then
       for _, node in pairs(nodes) do
         if node.type == "VideoPlayer" and node._vp then
-          videoplayer.handleMouseReleased(node, x, y, button)
+          M.videoplayer.handleMouseReleased(node, x, y, button)
         end
       end
     end
   end
 
   -- Map pan release (check all Map2D nodes — mouse may have left bounds)
-  if mapmod and tree then
-    local nodes = tree.getNodes()
+  if M.mapmod and M.tree then
+    local nodes = M.tree.getNodes()
     if nodes then
       for _, node in pairs(nodes) do
         if node.type == "Map2D" then
-          mapmod.handleMouseReleased(node, x, y, button)
+          M.mapmod.handleMouseReleased(node, x, y, button)
         end
       end
     end
   end
 
   -- Widget drag release (Slider, Fader, Knob — mouse may have left bounds)
-  if widgets then
-    widgets.handleMouseReleased(tree, x, y, button)
+  if M.widgets then
+    M.widgets.handleMouseReleased(M.tree, x, y, button)
   end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
   -- End drag if active
-  local dragEndEvent = events.endDrag(x, y)
+  local dragEndEvent = M.events.endDrag(x, y)
   if dragEndEvent then
     pushEvent(dragEndEvent)
   end
 
   -- Clear pressed (active) state and revert active style (0-frame latency)
-  local prevPressed = events.getPressedNode()
-  events.clearPressedNode()
+  local prevPressed = M.events.getPressedNode()
+  M.events.clearPressedNode()
   if prevPressed then
     applyInteractionStyle(prevPressed)
   end
 
   -- Dispatch normal release event with bubblePath
-  local hit = events.hitTest(root, x, y)
+  local hit = M.events.hitTest(root, x, y)
   if hit then
-    local bubblePath = events.buildBubblePath(hit)
-    pushEvent(events.createEvent("release", hit.id, x, y, button, bubblePath))
+    local bubblePath = M.events.buildBubblePath(hit)
+    pushEvent(M.events.createEvent("release", hit.id, x, y, button, bubblePath))
   end
 end
 
@@ -2513,32 +2530,32 @@ end
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
   systemPanel.mousemoved(x, y)  -- NON-NEGOTIABLE
-  if settingsEnabled then settings.mousemoved(x, y) end
-  if themeMenuEnabled then themeMenu.mousemoved(x, y) end
-  if inspectorEnabled then devtools.mousemoved(x, y) end
+  if M.settingsEnabled then settings.mousemoved(x, y) end
+  if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
+  if M.inspectorEnabled then devtools.mousemoved(x, y) end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
-  if gamemod then gamemod.mousemoved(x, y, 0, 0) end
+  if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
 
   focus.setMouseMode()
 
   -- Context menu hover tracking
-  if contextmenu and contextmenu.isOpen() then
-    contextmenu.handleMouseMoved(x, y)
+  if M.contextmenu and M.contextmenu.isOpen() then
+    M.contextmenu.handleMouseMoved(x, y)
     return
   end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
   -- Text selection: check pending → promote on threshold, or update active drag
-  if textselection then
-    local sel = textselection.get()
+  if M.textselection then
+    local sel = M.textselection.get()
     if sel and sel.isDragging then
       -- Active selection: update end position
-      local endNode, line, col = textselection.screenToSelectionPos(root, x, y, sel.endNode or sel.startNode or sel.node)
+      local endNode, line, col = M.textselection.screenToSelectionPos(root, x, y, sel.endNode or sel.startNode or sel.node)
       if endNode then
-        textselection.update(endNode, line, col)
+        M.textselection.update(endNode, line, col)
       end
       return  -- Consumed by text selection
     elseif textSelectPending then
@@ -2547,20 +2564,20 @@ function ReactJIT.mousemoved(x, y)
       local dy = y - textSelectPending.startY
       if dx * dx + dy * dy > TEXT_SELECT_THRESHOLD * TEXT_SELECT_THRESHOLD then
         -- Promote to active selection — cancel any normal drag/press in progress
-        events.cancelDrag()
-        local prevPressed = events.getPressedNode()
-        events.clearPressedNode()
+        M.events.cancelDrag()
+        local prevPressed = M.events.getPressedNode()
+        M.events.clearPressedNode()
         if prevPressed then applyInteractionStyle(prevPressed) end
 
         -- Start text selection from the original mousedown position
         local p = textSelectPending
-        textselection.start(p.node, p.line, p.col)
+        M.textselection.start(p.node, p.line, p.col)
         textSelectPending = nil
 
         -- Update to current mouse position
-        local endNode, line, col = textselection.screenToSelectionPos(root, x, y, p.node)
+        local endNode, line, col = M.textselection.screenToSelectionPos(root, x, y, p.node)
         if endNode then
-          textselection.update(endNode, line, col)
+          M.textselection.update(endNode, line, col)
         end
         return  -- Consumed
       end
@@ -2570,49 +2587,49 @@ function ReactJIT.mousemoved(x, y)
   -- TextEditor/TextInput drag selection
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    local cx, cy = events.screenToContent(focusedNode, x, y)
-    if texteditor.handleMouseMoved(focusedNode, cx, cy) then
+    local cx, cy = M.events.screenToContent(focusedNode, x, y)
+    if M.texteditor.handleMouseMoved(focusedNode, cx, cy) then
       return  -- TextEditor consumed the mouse move
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
-    local cx, cy = events.screenToContent(focusedNode, x, y)
-    if textinput.handleMouseMoved(focusedNode, cx, cy) then
+    local cx, cy = M.events.screenToContent(focusedNode, x, y)
+    if M.textinput.handleMouseMoved(focusedNode, cx, cy) then
       return  -- TextInput consumed the mouse move
     end
   end
 
   -- VideoPlayer: update hover target and handle seek/volume drag
-  if videoplayer and tree then
-    local nodes = tree.getNodes()
+  if M.videoplayer and M.tree then
+    local nodes = M.tree.getNodes()
     if nodes then
       for _, node in pairs(nodes) do
         if node.type == "VideoPlayer" and node._vp then
-          videoplayer.handleMouseMoved(node, x, y)
+          M.videoplayer.handleMouseMoved(node, x, y)
         end
       end
     end
   end
 
   -- Map: handle active pan drag (mouse may be outside the node)
-  if mapmod and tree then
-    local nodes = tree.getNodes()
+  if M.mapmod and M.tree then
+    local nodes = M.tree.getNodes()
     if nodes then
       for _, node in pairs(nodes) do
         if node.type == "Map2D" then
-          mapmod.handleMouseMoved(node, x, y)
+          M.mapmod.handleMouseMoved(node, x, y)
         end
       end
     end
   end
 
   -- Widget active drag / open dropdown tracking (Slider, Fader, Knob, Select)
-  if widgets then
-    widgets.handleMouseMoved(tree, x, y)
+  if M.widgets then
+    M.widgets.handleMouseMoved(M.tree, x, y)
   end
 
   -- Update drag if active
-  if events.isDragging() then
-    local dragEvents = events.updateDrag(x, y)
+  if M.events.isDragging() then
+    local dragEvents = M.events.updateDrag(x, y)
     if dragEvents then
       for _, evt in ipairs(dragEvents) do
         pushEvent(evt)
@@ -2620,20 +2637,20 @@ function ReactJIT.mousemoved(x, y)
     end
 
     -- Don't update hover while dragging (unless threshold not crossed)
-    if events.isDragThresholdCrossed() then
+    if M.events.isDragThresholdCrossed() then
       return
     end
   end
 
   -- Normal hover tracking when not dragging
-  local prevHovered = events.getHoveredNode()
-  local hoverEvents = events.updateHover(root, x, y)
+  local prevHovered = M.events.getHoveredNode()
+  local hoverEvents = M.events.updateHover(root, x, y)
   for _, evt in ipairs(hoverEvents) do
     pushEvent(evt)
   end
 
   -- Apply interaction style overlays for hover state changes (0-frame latency)
-  local currHovered = events.getHoveredNode()
+  local currHovered = M.events.getHoveredNode()
   if prevHovered ~= currHovered then
     if prevHovered then applyInteractionStyle(prevHovered) end
     if currHovered then applyInteractionStyle(currHovered) end
@@ -2644,13 +2661,13 @@ end
 --- Marks the tree dirty so layout is recomputed next frame.
 function ReactJIT.resize(w, h)
   if not isRendering() then return end
-  if measure then
-    measure.clearCache()
+  if M.measure then
+    M.measure.clearCache()
   end
-  if tree then
-    tree.markDirty()
+  if M.tree then
+    M.tree.markDirty()
   end
-  if bridge then
+  if M.bridge then
     pushEvent({ type = "viewport", payload = { width = w, height = h } })
   end
 end
@@ -2659,42 +2676,42 @@ end
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
   if systemPanel.keypressed(key) then return end  -- NON-NEGOTIABLE: always first, no guard
-  if settingsEnabled and settings.keypressed(key) then return end
-  if themeMenuEnabled and themeMenu.keypressed(key) then return end
-  if inspectorEnabled and devtools.keypressed(key) then return end
+  if M.settingsEnabled and settings.keypressed(key) then return end
+  if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
+  if M.inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
 
   -- Context menu keyboard handling
-  if contextmenu and contextmenu.isOpen() then
-    contextmenu.handleKeyPressed(key)
+  if M.contextmenu and M.contextmenu.isOpen() then
+    M.contextmenu.handleKeyPressed(key)
     return
   end
 
   -- Ctrl+C / Cmd+C: copy text selection to clipboard
-  if textselection and key == "c" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
-    if textselection.copyToClipboard() then
+  if M.textselection and key == "c" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
+    if M.textselection.copyToClipboard() then
       return  -- Consumed
     end
   end
 
   -- Ctrl+= / Ctrl+- / Ctrl+0: global text scale
-  if measure and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
+  if M.measure and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
     local scaled = false
     if key == "=" or key == "kp+" then
-      measure.setTextScale(measure.getTextScale() + 0.1)
+      M.measure.setTextScale(M.measure.getTextScale() + 0.1)
       scaled = true
     elseif key == "-" or key == "kp-" then
-      measure.setTextScale(measure.getTextScale() - 0.1)
+      M.measure.setTextScale(M.measure.getTextScale() - 0.1)
       scaled = true
     elseif key == "0" or key == "kp0" then
-      measure.setTextScale(1.0)
+      M.measure.setTextScale(1.0)
       scaled = true
     end
     if scaled then
-      if tree then tree.markDirty() end
-      local pct = math.floor(measure.getTextScale() * 100 + 0.5)
-      controllerToast.timer = 1.5
-      controllerToast.text = "Text " .. pct .. "%"
+      if M.tree then M.tree.markDirty() end
+      local pct = math.floor(M.measure.getTextScale() * 100 + 0.5)
+      M.controllerToast.timer = 1.5
+      M.controllerToast.text = "Text " .. pct .. "%"
       return
     end
   end
@@ -2710,11 +2727,11 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       if f then
         f:write(fileData:getString())
         f:close()
-        controllerToast.timer = 2.0
-        controllerToast.text = "Saved " .. filename
+        M.controllerToast.timer = 2.0
+        M.controllerToast.text = "Saved " .. filename
       else
-        controllerToast.timer = 2.0
-        controllerToast.text = "Screenshot failed"
+        M.controllerToast.timer = 2.0
+        M.controllerToast.text = "Screenshot failed"
       end
     end)
     return
@@ -2723,9 +2740,9 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   -- Route to focused TextEditor if any
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    local result = texteditor.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+    local result = M.texteditor.handleKeyPressed(focusedNode, key, scancode, isrepeat)
     if result == "blur" then
-      local value = texteditor.blur(focusedNode)
+      local value = M.texteditor.blur(focusedNode)
       focus.clear()
       pushEvent({
         type = "texteditor:blur",
@@ -2736,7 +2753,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
         }
       })
     elseif result == "submit" then
-      local value = texteditor.getValue(focusedNode)
+      local value = M.texteditor.getValue(focusedNode)
       pushEvent({
         type = "texteditor:submit",
         payload = {
@@ -2753,9 +2770,9 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       return  -- consumed by TextEditor
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
-    local result = textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+    local result = M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
     if result == "blur" then
-      local value = textinput.blur(focusedNode)
+      local value = M.textinput.blur(focusedNode)
       focus.clear()
       pushEvent({
         type = "textinput:blur",
@@ -2766,7 +2783,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
         }
       })
     elseif result == "submit" then
-      local value = textinput.getValue(focusedNode)
+      local value = M.textinput.getValue(focusedNode)
       pushEvent({
         type = "textinput:submit",
         payload = {
@@ -2781,19 +2798,28 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     else
       return  -- consumed by TextInput
     end
+  elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
+    -- Route to focused visual capability with keyboard handling
+    local capDef = M.capabilities.getDefinition(focusedNode.type)
+    if capDef and capDef.handleKeyPressed then
+      local result = capDef.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+      if result ~= false then
+        return  -- consumed by visual capability
+      end
+    end
   end
 
   -- Route to fullscreen or hovered VideoPlayer (keyboard: space, arrows, m, f, l)
-  if videoplayer then
-    local fsNode = videoplayer.getFullscreenNode()
+  if M.videoplayer then
+    local fsNode = M.videoplayer.getFullscreenNode()
     if fsNode then
-      if videoplayer.handleKeyPressed(fsNode, key) then
+      if M.videoplayer.handleKeyPressed(fsNode, key) then
         return  -- consumed by fullscreen VideoPlayer
       end
-    elseif events then
-      local hoveredNode = events.getHoveredNode()
+    elseif M.events then
+      local hoveredNode = M.events.getHoveredNode()
       if hoveredNode and hoveredNode.type == "VideoPlayer" then
-        if videoplayer.handleKeyPressed(hoveredNode, key) then
+        if M.videoplayer.handleKeyPressed(hoveredNode, key) then
           return  -- consumed by VideoPlayer
         end
       end
@@ -2812,18 +2838,18 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   end
 
   -- Route to focused GameCanvas (game input stays in Lua, zero latency)
-  if gamemod then gamemod.keypressed(key, scancode, isrepeat) end
-  if emumod and emumod.keypressed(key, scancode, isrepeat) then
+  if M.gamemod then M.gamemod.keypressed(key, scancode, isrepeat) end
+  if M.emumod and M.emumod.keypressed(key, scancode, isrepeat) then
     return  -- consumed by emulator (NES controller keys don't propagate to React)
   end
 
-  if not bridge then return end
+  if not M.bridge then return end
   -- Route keyboard events to focused node when in focus mode
-  local evt = events.createKeyEvent("keydown", key, scancode, isrepeat)
+  local evt = M.events.createKeyEvent("keydown", key, scancode, isrepeat)
   local focusTarget = focus.get()
   if focusTarget and focus.getInputMode() == "controller" then
     evt.payload.targetId = focusTarget.id
-    evt.payload.bubblePath = events.buildBubblePath(focusTarget)
+    evt.payload.bubblePath = M.events.buildBubblePath(focusTarget)
   end
   pushEvent(evt)
 end
@@ -2832,8 +2858,8 @@ end
 --- Routes keyup to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keyreleased(key, scancode)
   if not isRendering() then return end
-  if gamemod then gamemod.keyreleased(key, scancode) end
-  if emumod and emumod.keyreleased(key, scancode) then
+  if M.gamemod then M.gamemod.keyreleased(key, scancode) end
+  if M.emumod and M.emumod.keyreleased(key, scancode) then
     return  -- consumed by emulator
   end
 
@@ -2843,12 +2869,12 @@ function ReactJIT.keyreleased(key, scancode)
     return
   end
 
-  if not bridge then return end
-  local evt = events.createKeyEvent("keyup", key, scancode, false)
+  if not M.bridge then return end
+  local evt = M.events.createKeyEvent("keyup", key, scancode, false)
   local focusTarget = focus.get()
   if focusTarget and focus.getInputMode() == "controller" then
     evt.payload.targetId = focusTarget.id
-    evt.payload.bubblePath = events.buildBubblePath(focusTarget)
+    evt.payload.bubblePath = M.events.buildBubblePath(focusTarget)
   end
   pushEvent(evt)
 end
@@ -2859,29 +2885,36 @@ function ReactJIT.textinput(text)
   -- System panel captures text input when open (NON-NEGOTIABLE)
   if systemPanel.textinput(text) then return end
   -- Settings overlay captures text input when active
-  if settingsEnabled and settings.textinput(text) then return end
+  if M.settingsEnabled and settings.textinput(text) then return end
   -- Theme menu captures text input when active
-  if themeMenuEnabled and themeMenu.textinput(text) then return end
+  if M.themeMenuEnabled and themeMenu.textinput(text) then return end
   -- Inspector/console captures text input when active
-  if inspectorEnabled and devtools.textinput(text) then return end
+  if M.inspectorEnabled and devtools.textinput(text) then return end
   if not isRendering() then return end
 
   -- Route to focused TextEditor or TextInput if any
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    texteditor.handleTextInput(focusedNode, text)
+    M.texteditor.handleTextInput(focusedNode, text)
     return  -- consumed, no bridge traffic
   elseif focusedNode and focusedNode.type == "TextInput" then
-    textinput.handleTextInput(focusedNode, text)
+    M.textinput.handleTextInput(focusedNode, text)
     return  -- consumed, no bridge traffic
+  elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
+    -- Route to focused visual capability with text input handling
+    local capDef = M.capabilities.getDefinition(focusedNode.type)
+    if capDef and capDef.handleTextInput then
+      capDef.handleTextInput(focusedNode, text)
+      return  -- consumed by visual capability
+    end
   end
 
-  if not bridge then return end
-  local evt = events.createTextInputEvent(text)
+  if not M.bridge then return end
+  local evt = M.events.createTextInputEvent(text)
   local focusTarget = focus.get()
   if focusTarget and focus.getInputMode() == "controller" then
     evt.payload.targetId = focusTarget.id
-    evt.payload.bubblePath = events.buildBubblePath(focusTarget)
+    evt.payload.bubblePath = M.events.buildBubblePath(focusTarget)
   end
   pushEvent(evt)
 end
@@ -2892,41 +2925,41 @@ end
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactJIT.wheelmoved(x, y)
   if systemPanel.wheelmoved(x, y) then return end  -- NON-NEGOTIABLE
-  if settingsEnabled and settings.wheelmoved(x, y) then return end
-  if themeMenuEnabled and themeMenu.wheelmoved(x, y) then return end
-  if inspectorEnabled and devtools.wheelmoved(x, y) then return end
+  if M.settingsEnabled and settings.wheelmoved(x, y) then return end
+  if M.themeMenuEnabled and themeMenu.wheelmoved(x, y) then return end
+  if M.inspectorEnabled and devtools.wheelmoved(x, y) then return end
   if not isRendering() then return end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
   -- Get current mouse position
   local mx, my = love.mouse.getPosition()
-  local hit = events.hitTest(root, mx, my)
+  local hit = M.events.hitTest(root, mx, my)
   if not hit then return end
 
   -- TextEditor handles its own scroll entirely in Lua
   if hit.type == "TextEditor" then
-    texteditor.handleWheel(hit, x, y)
+    M.texteditor.handleWheel(hit, x, y)
     return  -- no bridge traffic
   end
 
   -- Map2D handles zoom via wheel entirely in Lua
-  if hit.type == "Map2D" and mapmod then
-    mapmod.handleWheel(hit, x, y)
+  if hit.type == "Map2D" and M.mapmod then
+    M.mapmod.handleWheel(hit, x, y)
     return  -- no bridge traffic (map emits viewchange events)
   end
 
   -- Find the nearest ancestor scroll container that can consume this wheel
   -- delta. If a child is saturated, wheel input chains to its parent.
-  local scrollContainer = events.findScrollableContainer(hit, x, y)
+  local scrollContainer = M.events.findScrollableContainer(hit, x, y)
   if scrollContainer and scrollContainer.scrollState then
     -- Update scroll position directly in Lua for immediate response
     local ss = scrollContainer.scrollState
     local scrollSpeed = 40  -- pixels per wheel tick
     local wheelX, wheelY = x, y
-    if events.resolveScrollWheelDeltas then
-      wheelX, wheelY = events.resolveScrollWheelDeltas(scrollContainer, x, y)
+    if M.events.resolveScrollWheelDeltas then
+      wheelX, wheelY = M.events.resolveScrollWheelDeltas(scrollContainer, x, y)
     else
       local allowX, allowY = getScrollAxisFlags(scrollContainer)
       if allowX and not allowY and wheelX == 0 and wheelY ~= 0 then
@@ -2940,13 +2973,13 @@ function ReactJIT.wheelmoved(x, y)
     local newScrollX = (ss.scrollX or 0) - wheelX * scrollSpeed
     local newScrollY = (ss.scrollY or 0) - wheelY * scrollSpeed
 
-    tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
+    M.tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
     emitScrollEvent(scrollContainer)
   end
 
   -- Always send the wheel event to JS regardless of scroll handling
-  local bubblePath = events.buildBubblePath(hit)
-  pushEvent(events.createWheelEvent(hit.id, mx, my, x, y, bubblePath))
+  local bubblePath = M.events.buildBubblePath(hit)
+  pushEvent(M.events.createWheelEvent(hit.id, mx, my, x, y, bubblePath))
 end
 
 --- Call from love.touchpressed(id, x, y, dx, dy, pressure).
@@ -2954,13 +2987,13 @@ end
 function ReactJIT.touchpressed(id, x, y, dx, dy, pressure)
   if not isRendering() then return end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
-  local hit = events.hitTest(root, x, y)
+  local hit = M.events.hitTest(root, x, y)
   if hit then
-    local bubblePath = events.buildBubblePath(hit)
-    pushEvent(events.createTouchEvent("touchstart", hit.id, id, x, y, dx, dy, pressure, bubblePath))
+    local bubblePath = M.events.buildBubblePath(hit)
+    pushEvent(M.events.createTouchEvent("touchstart", hit.id, id, x, y, dx, dy, pressure, bubblePath))
   end
 end
 
@@ -2969,13 +3002,13 @@ end
 function ReactJIT.touchreleased(id, x, y, dx, dy, pressure)
   if not isRendering() then return end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
-  local hit = events.hitTest(root, x, y)
+  local hit = M.events.hitTest(root, x, y)
   if hit then
-    local bubblePath = events.buildBubblePath(hit)
-    pushEvent(events.createTouchEvent("touchend", hit.id, id, x, y, dx, dy, pressure, bubblePath))
+    local bubblePath = M.events.buildBubblePath(hit)
+    pushEvent(M.events.createTouchEvent("touchend", hit.id, id, x, y, dx, dy, pressure, bubblePath))
   end
 end
 
@@ -2983,18 +3016,18 @@ end
 --- Dispatches a touchmove event (broadcast globally, finger may have moved off element).
 function ReactJIT.touchmoved(id, x, y, dx, dy, pressure)
   if not isRendering() then return end
-  if not bridge then return end
+  if not M.bridge then return end
 
-  pushEvent(events.createTouchEvent("touchmove", nil, id, x, y, dx, dy, pressure))
+  pushEvent(M.events.createTouchEvent("touchmove", nil, id, x, y, dx, dy, pressure))
 end
 
 --- Call from love.joystickadded(joystick).
 --- Shows a toast notification and emits event to JS.
 function ReactJIT.joystickadded(joystick)
-  controllerToast.timer = 3.0
-  controllerToast.text = "Controller connected"
+  M.controllerToast.timer = 3.0
+  M.controllerToast.text = "Controller connected"
   systemPanel.notifyDeviceAdded("controllers", joystick:getID(), joystick:getName())
-  if bridge then
+  if M.bridge then
     pushEvent({
       type = "joystickadded",
       payload = { joystickId = joystick:getID(), name = joystick:getName() },
@@ -3005,15 +3038,15 @@ end
 --- Call from love.joystickremoved(joystick).
 --- Shows a toast, switches to mouse mode if no controllers remain.
 function ReactJIT.joystickremoved(joystick)
-  controllerToast.timer = 3.0
-  controllerToast.text = "Controller disconnected"
+  M.controllerToast.timer = 3.0
+  M.controllerToast.text = "Controller disconnected"
   systemPanel.notifyDeviceRemoved("controllers", joystick:getID())
   -- If no joysticks remain, switch back to mouse mode
   local joysticks = love.joystick.getJoysticks()
   if #joysticks == 0 then
     focus.setMouseMode()
   end
-  if bridge then
+  if M.bridge then
     pushEvent({
       type = "joystickremoved",
       payload = { joystickId = joystick:getID() },
@@ -3026,15 +3059,15 @@ end
 --- Other buttons pass through as gamepad events for custom handling.
 function ReactJIT.gamepadpressed(joystick, button)
   if not isRendering() then return end
-  if not bridge then return end
+  if not M.bridge then return end
   if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
 
   -- On-screen keyboard intercepts ALL input while open
-  if osk and osk.isOpen() then
-    osk.handleGamepadPressed(button, joystickId)
+  if M.osk and M.osk.isOpen() then
+    M.osk.handleGamepadPressed(button, joystickId)
     return
   end
 
@@ -3048,7 +3081,7 @@ function ReactJIT.gamepadpressed(joystick, button)
   if button == "a" then
     local node = focus.getForController(joystickId)
     if node then
-      local bubblePath = events.buildBubblePath(node)
+      local bubblePath = M.events.buildBubblePath(node)
       pushEvent({
         type = "mousedown",
         payload = {
@@ -3062,11 +3095,11 @@ function ReactJIT.gamepadpressed(joystick, button)
           joystickId = joystickId,
         }
       })
-      if events then events.setPressedNode(node) end
+      if M.events then M.events.setPressedNode(node) end
 
       -- Auto-open OSK for TextInput nodes
-      if osk and (node.type == "TextInput" or node.type == "text-input") then
-        osk.open(node, joystickId, pushEvent)
+      if M.osk and (node.type == "TextInput" or node.type == "text-input") then
+        M.osk.open(node, joystickId, pushEvent)
       end
     end
     return
@@ -3074,25 +3107,25 @@ function ReactJIT.gamepadpressed(joystick, button)
 
   -- B button → synthesize Escape keydown
   if button == "b" then
-    pushEvent(events.createKeyEvent("keydown", "escape", "escape", false))
+    pushEvent(M.events.createKeyEvent("keydown", "escape", "escape", false))
     return
   end
 
   -- Start button → synthesize Escape (pause menu pattern)
   if button == "start" then
-    pushEvent(events.createKeyEvent("keydown", "escape", "escape", false))
+    pushEvent(M.events.createKeyEvent("keydown", "escape", "escape", false))
     return
   end
 
   -- Other buttons: pass through as gamepad events for custom handling
-  pushEvent(events.createGamepadButtonEvent("gamepadpressed", button, joystickId))
+  pushEvent(M.events.createGamepadButtonEvent("gamepadpressed", button, joystickId))
 end
 
 --- Call from love.gamepadreleased(joystick, button).
 --- A release synthesizes mouseup on focused node.
 function ReactJIT.gamepadreleased(joystick, button)
   if not isRendering() then return end
-  if not bridge then return end
+  if not M.bridge then return end
   if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
@@ -3100,7 +3133,7 @@ function ReactJIT.gamepadreleased(joystick, button)
   if button == "a" then
     local node = focus.getForController(joystickId)
     if node then
-      local bubblePath = events.buildBubblePath(node)
+      local bubblePath = M.events.buildBubblePath(node)
       pushEvent({
         type = "mouseup",
         payload = {
@@ -3114,12 +3147,12 @@ function ReactJIT.gamepadreleased(joystick, button)
           joystickId = joystickId,
         }
       })
-      if events then events.clearPressedNode() end
+      if M.events then M.events.clearPressedNode() end
     end
     return
   end
 
-  pushEvent(events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
+  pushEvent(M.events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
 end
 
 --- Call from love.gamepadaxis(joystick, axis, value).
@@ -3127,15 +3160,15 @@ end
 --- Right stick scrolls the nearest scroll ancestor of the focused node.
 function ReactJIT.gamepadaxis(joystick, axis, value)
   if not isRendering() then return end
-  if not bridge then return end
+  if not M.bridge then return end
   if systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
 
   -- On-screen keyboard intercepts stick input while open
-  if osk and osk.isOpen() then
-    osk.handleGamepadAxis(axis, value, joystickId)
+  if M.osk and M.osk.isOpen() then
+    M.osk.handleGamepadAxis(axis, value, joystickId)
     return
   end
 
@@ -3154,10 +3187,10 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
         local SCROLL_SPEED = 8
         local ss = scrollNode.scrollState
         if axis == "rightx" and math.abs(value) > 0.3 then
-          tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
+          M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
           emitScrollEvent(scrollNode)
         elseif axis == "righty" and math.abs(value) > 0.3 then
-          tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
+          M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
           emitScrollEvent(scrollNode)
         end
       end
@@ -3166,7 +3199,7 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
   end
 
   -- Triggers and other axes: pass through
-  pushEvent(events.createGamepadAxisEvent(axis, value, joystickId))
+  pushEvent(M.events.createGamepadAxisEvent(axis, value, joystickId))
 end
 
 local FILE_DROP_PREVIEW_MAX_BYTES = 128 * 1024
@@ -3306,8 +3339,8 @@ function ReactJIT.filedropped(file)
   -- love.mouse.getPosition() is stale during OS file drags.
   -- Use SDL_GetGlobalMouseState via dragdrop module for the real position.
   local mx, my
-  if dragdrop then
-    mx, my = dragdrop.getMousePosition()
+  if M.dragdrop then
+    mx, my = M.dragdrop.getMousePosition()
   end
   if not mx then
     mx, my = love.mouse.getPosition()
@@ -3315,16 +3348,16 @@ function ReactJIT.filedropped(file)
 
   -- Let Lua modules consume the drop before React sees it.
   -- Emulator handles .nes files directly — no bridge round-trip needed.
-  if emumod and emumod.filedropped(file, mx, my, pushEvent) then
+  if M.emumod and M.emumod.filedropped(file, mx, my, pushEvent) then
     return  -- consumed by emulator
   end
 
   -- Fall through to React dispatch
-  if not bridge then return end
-  local root = tree.getTree()
+  if not M.bridge then return end
+  local root = M.tree.getTree()
   if not root then return end
 
-  local hit = events.hitTest(root, mx, my)
+  local hit = M.events.hitTest(root, mx, my)
   if not hit then return end
 
   local path = file:getFilename()
@@ -3373,38 +3406,38 @@ function ReactJIT.filedropped(file)
     dropMeta.filePreviewError = "preview_io_error"
   end
 
-  local bubblePath = events.buildBubblePath(hit)
-  pushEvent(events.createFileDropEvent("filedrop", hit.id, mx, my, path, size, bubblePath, dropMeta))
+  local bubblePath = M.events.buildBubblePath(hit)
+  pushEvent(M.events.createFileDropEvent("filedrop", hit.id, mx, my, path, size, bubblePath, dropMeta))
 end
 
 --- Call from love.directorydropped(path).
 --- Hit-tests at current mouse position and dispatches a directorydrop event to JS.
 function ReactJIT.directorydropped(dir)
   if not isRendering() then return end
-  if not bridge then return end
+  if not M.bridge then return end
 
-  local root = tree.getTree()
+  local root = M.tree.getTree()
   if not root then return end
 
   local mx, my
-  if dragdrop then
-    mx, my = dragdrop.getMousePosition()
+  if M.dragdrop then
+    mx, my = M.dragdrop.getMousePosition()
   end
   if not mx then
     mx, my = love.mouse.getPosition()
   end
-  local hit = events.hitTest(root, mx, my)
+  local hit = M.events.hitTest(root, mx, my)
   if not hit then return end
 
-  local bubblePath = events.buildBubblePath(hit)
-  pushEvent(events.createFileDropEvent("directorydrop", hit.id, mx, my, dir, nil, bubblePath))
+  local bubblePath = M.events.buildBubblePath(hit)
+  pushEvent(M.events.createFileDropEvent("directorydrop", hit.id, mx, my, dir, nil, bubblePath))
 end
 
 --- Hot-reload the JS bundle without restarting Love2D.
 --- Destroys the QuickJS context, clears all Lua-side state, recreates
 --- the bridge with the new bundle, and restores dev state if available.
 function ReactJIT.reload()
-  if mode ~= "native" or not bridge or not initConfig then
+  if mode ~= "native" or not M.bridge or not initConfig then
     print("[reactjit] reload() only works in native mode")
     return
   end
@@ -3413,47 +3446,47 @@ function ReactJIT.reload()
 
   -- 1. Read dev state from JS before teardown (pcall'd — safe if missing)
   local devStateCache = nil
-  local sok, sval = pcall(function() return bridge:callGlobalReturn("__getDevState") end)
+  local sok, sval = pcall(function() return M.bridge:callGlobalReturn("__getDevState") end)
   if sok and sval then
     devStateCache = sval
   end
 
   -- 2. Teardown
-  bridge:destroy()
-  if network then network.destroy() end
-  if http then http.destroy() end
-  if browse then browse.destroy() end
+  M.bridge:destroy()
+  if M.network then M.network.destroy() end
+  if M.http then M.http.destroy() end
+  if M.browse then M.browse.destroy() end
   -- Note: Tor is NOT restarted on reload — it stays running across hot reloads
-  torHostnameEmitted = false  -- Re-emit tor:ready to new JS context
-  if images then images.clearCache() end
-  if videos then videos.clearCache() end
-  if animate then animate.clear() end
-  tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
-  if animate then animate.init({ tree = tree }) end
-  events.clearHover()
-  events.clearPressedNode()
+  M.torHostnameEmitted = false  -- Re-emit tor:ready to new JS context
+  if M.images then M.images.clearCache() end
+  if M.videos then M.videos.clearCache() end
+  if M.animate then M.animate.clear() end
+  M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
+  if M.animate then M.animate.init({ tree = M.tree }) end
+  M.events.clearHover()
+  M.events.clearPressedNode()
   interactionBase = {}
   focus.clear()
-  if contextmenu then contextmenu.close() end
-  pcall(function() events.endDrag(0, 0) end)
-  measure.clearCache()
+  if M.contextmenu then M.contextmenu.close() end
+  pcall(function() M.events.endDrag(0, 0) end)
+  M.measure.clearCache()
 
   -- 3. Recreate bridge
   local BridgeQJS = require("lua.bridge_quickjs")
-  bridge = BridgeQJS.new(initConfig.libpath)
-  if quarantine then
-    BridgeQJS.setQuarantine(quarantine)
+  M.bridge = BridgeQJS.new(initConfig.libpath)
+  if M.quarantine then
+    BridgeQJS.setQuarantine(M.quarantine)
   end
 
   -- 4. Re-init HTTP workers, network, and browse
-  http = require("lua.http")
-  http.init()
-  network = require("lua.network")
-  network.init()
+  M.http = require("lua.http")
+  M.http.init()
+  M.network = require("lua.network")
+  M.network.init()
   local brOk2, brMod2 = pcall(require, "lua.browse")
   if brOk2 and brMod2 then
-    browse = brMod2
-    browse.init()
+    M.browse = brMod2
+    M.browse.init()
   end
 
   -- 5. Re-read bundle from disk
@@ -3468,15 +3501,15 @@ function ReactJIT.reload()
   end
 
   -- 5. Set up deferred mount + inject cached dev state
-  bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
+  M.bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
   if devStateCache then
     local jsLiteral = luaTableToJSLiteral(devStateCache)
-    bridge:eval("globalThis.__devState = " .. jsLiteral .. ";", "<hmr-state>")
+    M.bridge:eval("globalThis.__devState = " .. jsLiteral .. ";", "<hmr-state>")
   end
 
   -- 6. Evaluate new bundle
   local eok, eerr = pcall(function()
-    bridge:eval(bundleJS, initConfig.bundlePath)
+    M.bridge:eval(bundleJS, initConfig.bundlePath)
   end)
   if not eok then
     errors.push({
@@ -3488,8 +3521,8 @@ function ReactJIT.reload()
   end
 
   -- 7. Update console refs (bridge was recreated)
-  if inspectorEnabled then
-    console.updateRefs({ bridge = bridge, tree = tree })
+  if M.inspectorEnabled then
+    console.updateRefs({ bridge = M.bridge, tree = M.tree })
   end
 
   -- 8. Trigger mount on next update
@@ -3503,23 +3536,23 @@ end
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
 function ReactJIT.quit()
-  if dragdrop then dragdrop.cleanup() end
-  if videos then videos.shutdown() end
-  if tor then tor.stop() end
-  if network then network.destroy() end
-  if http then http.destroy() end
-  if browse then browse.destroy() end
-  if mode == "native" and bridge then
-    bridge:destroy()
+  if M.dragdrop then M.dragdrop.cleanup() end
+  if M.videos then M.videos.shutdown() end
+  if M.tor then M.tor.stop() end
+  if M.network then M.network.destroy() end
+  if M.http then M.http.destroy() end
+  if M.browse then M.browse.destroy() end
+  if mode == "native" and M.bridge then
+    M.bridge:destroy()
   end
   -- canvas mode uses bridge_fs which has no destroy method
-  bridge = nil
+  M.bridge = nil
 end
 
 --- Return the active bridge instance.
 --- Useful for game code that needs to push custom events or call bridge APIs.
 function ReactJIT.getBridge()
-  return bridge
+  return M.bridge
 end
 
 --- Return the current mode ("web", "native", or "canvas").
@@ -3529,42 +3562,42 @@ end
 
 --- Return the tree module (native/canvas mode only).
 function ReactJIT.getTree()
-  return tree
+  return M.tree
 end
 
 --- Return the measure module (native/canvas mode only).
 --- Useful for game code that needs to measure text outside the layout pass.
 function ReactJIT.getMeasure()
-  return measure
+  return M.measure
 end
 
 --- Return the SQLite module.
 --- Use sqlite.open(path) to create/open databases.
 --- Returns a stub with .available = false if libsqlite3 not found.
 function ReactJIT.getSqlite()
-  return sqlite
+  return M.sqlite
 end
 
 --- Return the document store module.
 --- Use docstore.open(path) for a schema-free Mongo-like API over SQLite.
 --- Returns a stub with .available = false if libsqlite3 not found.
 function ReactJIT.getDocStore()
-  return docstore
+  return M.docstore
 end
 
 --- Return the current theme table (colors, etc.).
 function ReactJIT.getTheme()
-  return currentTheme
+  return M.currentTheme
 end
 
 --- Return the current theme name (e.g. "catppuccin-mocha").
 function ReactJIT.getThemeName()
-  return currentThemeName
+  return M.currentThemeName
 end
 
 --- Return the full themes registry table.
 function ReactJIT.getThemes()
-  return themes
+  return M.themes
 end
 
 --- Register an RPC handler for a given method name.
@@ -3581,9 +3614,9 @@ end
 --- @param scrollY number Desired vertical scroll position in pixels
 function ReactJIT.setScroll(nodeId, scrollX, scrollY)
   if not isRendering() then return end
-  if not tree then return end
-  tree.setScroll(nodeId, scrollX or 0, scrollY or 0)
-  local nodes = tree.getNodes and tree.getNodes() or nil
+  if not M.tree then return end
+  M.tree.setScroll(nodeId, scrollX or 0, scrollY or 0)
+  local nodes = M.tree.getNodes and M.tree.getNodes() or nil
   if nodes then
     emitScrollEvent(nodes[nodeId])
   end

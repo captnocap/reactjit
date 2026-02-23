@@ -107,7 +107,7 @@ function Syntax.tokenizeLine(line)
   local inJSXTag = false
   local sc = Syntax.colors
 
-  while i <= len do
+  while i <= len do repeat
     local ch = line:sub(i, i)
 
     -- Single-line comment
@@ -126,7 +126,7 @@ function Syntax.tokenizeLine(line)
         tokens[#tokens+1] = { text = line:sub(i), color = sc.comment }
         break
       end
-      goto continue
+      break
     end
 
     -- Strings
@@ -140,7 +140,7 @@ function Syntax.tokenizeLine(line)
       if j <= len then j = j + 1 end
       tokens[#tokens+1] = { text = line:sub(i, j - 1), color = sc.string }
       i = j
-      goto continue
+      break
     end
 
     -- Closing JSX tag </
@@ -155,14 +155,14 @@ function Syntax.tokenizeLine(line)
         local first = name:sub(1,1)
         tokens[#tokens+1] = { text = name, color = (first >= 'A' and first <= 'Z') and sc.component or sc.tag }
       end
-      goto continue
+      break
     end
 
     -- Fragment <>
     if ch == '<' and line:sub(i+1, i+1) == '>' then
       tokens[#tokens+1] = { text = '<>', color = sc.tag }
       i = i + 2
-      goto continue
+      break
     end
 
     -- Opening JSX tag
@@ -177,7 +177,7 @@ function Syntax.tokenizeLine(line)
         local first = name:sub(1,1)
         tokens[#tokens+1] = { text = name, color = (first >= 'A' and first <= 'Z') and sc.component or sc.tag }
       end
-      goto continue
+      break
     end
 
     -- Self-closing />
@@ -185,7 +185,7 @@ function Syntax.tokenizeLine(line)
       tokens[#tokens+1] = { text = '/>', color = sc.tag }
       i = i + 2
       inJSXTag = false
-      goto continue
+      break
     end
 
     -- Closing >
@@ -193,7 +193,7 @@ function Syntax.tokenizeLine(line)
       tokens[#tokens+1] = { text = '>', color = sc.tag }
       i = i + 1
       inJSXTag = false
-      goto continue
+      break
     end
 
     -- Numbers
@@ -206,7 +206,7 @@ function Syntax.tokenizeLine(line)
         while i <= len and line:sub(i,i):match("[0-9.]") do i = i + 1 end
       end
       tokens[#tokens+1] = { text = line:sub(s, i - 1), color = sc.number }
-      goto continue
+      break
     end
 
     -- Identifiers and keywords
@@ -242,7 +242,7 @@ function Syntax.tokenizeLine(line)
         color = sc.identifier
       end
       tokens[#tokens+1] = { text = word, color = color }
-      goto continue
+      break
     end
 
     -- Whitespace
@@ -250,7 +250,7 @@ function Syntax.tokenizeLine(line)
       local s = i
       while i <= len and line:sub(i,i):match("%s") do i = i + 1 end
       tokens[#tokens+1] = { text = line:sub(s, i - 1), color = sc.text }
-      goto continue
+      break
     end
 
     -- Dot accessor
@@ -267,7 +267,7 @@ function Syntax.tokenizeLine(line)
         end
         i = i + 1
       end
-      goto continue
+      break
     end
 
     -- Operators (teal)
@@ -284,22 +284,21 @@ function Syntax.tokenizeLine(line)
         tokens[#tokens+1] = { text = ch, color = sc.operator }
         i = i + 1
       end
-      goto continue
+      break
     end
 
     -- Punctuation (overlay2)
     if PUNCT_SET[ch] then
       tokens[#tokens+1] = { text = ch, color = sc.punctuation }
       i = i + 1
-      goto continue
+      break
     end
 
     -- Fallback
     tokens[#tokens+1] = { text = ch, color = sc.text }
     i = i + 1
 
-    ::continue::
-  end
+  until true end
   return tokens
 end
 

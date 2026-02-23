@@ -92,19 +92,31 @@ export interface WasmAppHandle {
   bridge: WasmBridge;
 }
 
+/** Get the Emscripten FS object from Module (patched into love.js at build time). */
+function getFS(): any {
+  const M = (window as any).Module;
+  return (M && M.FS) || null;
+}
+
 // Find the love.filesystem save directory in Module.FS
 function findSaveDir(): string | null {
+  const fs = getFS();
+  if (!fs) return null;
+
   const candidates = [
+    '/home/web_user/love/reactjit-web/',
+    '/home/web_user/love/',
     '/home/web_user/.local/share/love/reactjit-web/',
     '/home/web_user/.local/share/love/reactjit/',
     '/home/web_user/.local/share/love/',
   ];
   for (const dir of candidates) {
     try {
-      Module.FS.stat(dir);
+      fs.stat(dir);
       return dir;
     } catch { /* not found */ }
   }
+
   return null;
 }
 
@@ -114,17 +126,48 @@ export function createWasmApp(): WasmAppHandle {
   // Wire reconciler flush to write __reconciler_in.json via Module.FS.
   // The Lua side (init.lua) reads this file each frame in love.update.
   let saveDir: string | null = null;
+  let pendingData: string | null = null; // buffered commands waiting for Module.FS
+
   setTransportFlush((commands) => {
+    const data = typeof commands === 'string' ? commands : JSON.stringify(commands);
+
     if (!saveDir) saveDir = findSaveDir();
-    if (!saveDir) return;
+    if (!saveDir) {
+      // Module.FS not ready yet — buffer and retry via polling
+      pendingData = data;
+      return;
+    }
+
     try {
-      // commands is already JSON-stringified by flushToHost
-      const data = typeof commands === 'string' ? commands : JSON.stringify(commands);
-      Module.FS.writeFile(saveDir + '__reconciler_in.json', data);
+      getFS().writeFile(saveDir + '__reconciler_in.json', data);
     } catch (e) {
       console.error('[WasmApp] Failed to write reconciler commands:', e);
     }
   });
+
+  // Poll until Module.FS is available, then flush any buffered commands
+  let pollCount = 0;
+  const waitForFS = setInterval(() => {
+    pollCount++;
+    const M = (window as any).Module;
+    if (pollCount <= 5 || pollCount % 30 === 0) {
+      console.log(`[WasmApp] poll #${pollCount} FS=${!!(M && M.FS)} saveDir=${saveDir}`);
+    }
+    if (!saveDir) saveDir = findSaveDir();
+    if (saveDir) {
+      clearInterval(waitForFS);
+      console.log('[WasmApp] Module.FS ready, saveDir=' + saveDir);
+      if (pendingData) {
+        try {
+          (window as any).Module.FS.writeFile(saveDir + '__reconciler_in.json', pendingData);
+          console.log('[WasmApp] Flushed buffered commands (' + pendingData.length + ' chars)');
+        } catch (e) {
+          console.error('[WasmApp] Failed to flush buffered commands:', e);
+        }
+        pendingData = null;
+      }
+    }
+  }, 100);
 
   // Connect event dispatching (bridge events -> handlerRegistry)
   initEventDispatching(bridge);
@@ -142,13 +185,9 @@ export function createWasmApp(): WasmAppHandle {
   return {
     bridge,
     render(element: ReactNode) {
-      // In WASM mode, JS runs in the browser — no deferred mount needed.
-      // Wait for the Lua side to be ready before rendering.
-      if (bridge.isReady()) {
-        doRender(element);
-      } else {
-        bridge.onReady(() => doRender(element));
-      }
+      // Render immediately — the reconciler buffers commands.
+      // The transport flush retries until Module.FS save dir is available.
+      doRender(element);
     },
     stop() {
       root.unmount();

@@ -41,9 +41,15 @@ local Manifest = {}
 --- @return string|nil  contents, or nil if not found
 local function readFile(path)
   -- Try Love2D VFS first (works inside .love archives and fused binaries)
-  if love and love.filesystem and love.filesystem.read then
-    local contents, err = love.filesystem.read(path)
-    if contents then return contents end
+  -- Guard with getInfo — love.js (Emscripten) turns read-of-missing-file into
+  -- a hard error on the canvas instead of returning nil.
+  if love and love.filesystem then
+    if love.filesystem.getInfo and not love.filesystem.getInfo(path) then
+      -- file doesn't exist, skip
+    elseif love.filesystem.read then
+      local contents, err = love.filesystem.read(path)
+      if contents then return contents end
+    end
   end
 
   -- Fall back to raw IO (SDL2, LuaJIT standalone, etc.)

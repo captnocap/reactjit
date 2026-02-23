@@ -249,6 +249,7 @@ local KEYS_PATH = "save/settings"
 local KEYS_FILE = "save/settings/api_keys.json"
 
 local function loadKeys()
+  if love.filesystem.getInfo and not love.filesystem.getInfo(KEYS_FILE) then return {} end
   local content = love.filesystem.read(KEYS_FILE)
   if not content then return {} end
   local ok, data = pcall(json.decode, content)

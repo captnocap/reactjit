@@ -327,6 +327,9 @@ function Http.request(id, opts)
 
   -- Local file path: resolve synchronously
   if not url:match("^https?://") then
+    if love.filesystem.getInfo and not love.filesystem.getInfo(url) then
+      return { id = id, status = 404, headers = {}, body = "" }
+    end
     local content = love.filesystem.read(url)
     if content then
       return {
