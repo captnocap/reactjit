@@ -489,6 +489,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
     return
   end
 
+  -- Mask nodes (e.g. <CRT mask />) skip layout — they are post-processing overlays.
+  if not Layout._masks then
+    local ok, mod = pcall(require, "lua.masks")
+    if ok then Layout._masks = mod end
+  end
+  if Layout._masks and Layout._masks.isMask(node) then
+    node.computed = { x = px, y = py, w = 0, h = 0 }
+    return
+  end
+
   local ru = Layout.resolveUnit
 
   -- Resolve min/max constraints

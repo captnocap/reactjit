@@ -65,6 +65,9 @@ export { useLocalStore, type UseLocalStoreOptions } from './useLocalStore';
 // Primitives
 export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from './primitives';
 
+// Typography
+export { Typography } from './Typography';
+
 // Video
 export { Video } from './Video';
 export { VideoPlayer } from './VideoPlayer';
@@ -85,6 +88,14 @@ export {
   ImageGallery,
   type ImageGalleryProps,
 } from './ImageGallery';
+export {
+  HoverPreviewRowsGallery,
+  type HoverPreviewRowsGalleryProps,
+} from './HoverPreviewRowsGallery';
+export {
+  BentoImageGallery,
+  type BentoImageGalleryProps,
+} from './BentoImageGallery';
 export {
   ImageViewerModal,
   type ImageViewerModalProps,
@@ -249,6 +260,12 @@ export {
   Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
   type EffectProps, type SpirographProps, type MirrorProps, type CymaticsProps, type TextEffectProps, type TextEffectType,
 } from './effects';
+
+// Post-processing masks (foreground overlays)
+export {
+  Scanlines, CRT, VHS, Dither, Ascii,
+  type MaskProps, type ScanlinesProps, type CRTProps, type VHSProps, type DitherProps, type AsciiProps,
+} from './masks';
 
 // Cartridge Inspector
 export { CartridgeInspector, type CartridgeInspectorProps } from './CartridgeInspector';
