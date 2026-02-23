@@ -1,6 +1,9 @@
 export { SearchBar } from './SearchBar';
 export type { SearchBarProps } from './SearchBar';
 
+export { SearchSchemaHint } from './SearchSchemaHint';
+export type { SearchSchemaHintProps } from './SearchSchemaHint';
+
 export { SearchResults } from './SearchResults';
 export type { SearchResultsProps, SearchResultItem } from './SearchResults';
 

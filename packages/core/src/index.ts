@@ -112,6 +112,7 @@ export { TextInput } from './TextInput';
 // Search components (headless, Lua-owned input lifecycle)
 export {
   SearchBar, SearchResults, SearchResultsSections, SearchCombo, CommandPalette,
+  SearchSchemaHint,
 } from './search';
 export type {
   SearchBarProps,
@@ -119,6 +120,7 @@ export type {
   SearchResultsSectionsProps, SearchSection,
   SearchComboProps, ComboItem,
   CommandPaletteProps, CommandDef,
+  SearchSchemaHintProps,
 } from './search';
 
 // Search hooks
@@ -129,6 +131,8 @@ export {
   useSearchHistory,
   useSearchHighlight,
   useCommandSearch,
+  useSearchSchema,
+  detectSearchableFields,
   type UseSearchOptions,
   type FuzzySearchResult,
   type UseFuzzySearchOptions,
@@ -136,6 +140,7 @@ export {
   type UseSearchHistoryOptions,
   type HighlightPart,
   type UseCommandSearchOptions,
+  type SearchSchema,
 } from './useSearch';
 
 // TextEditor (Lua-owned document editor)

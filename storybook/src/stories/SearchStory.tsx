@@ -6,11 +6,14 @@ import {
   SearchResultsSections,
   SearchCombo,
   CommandPalette,
+  SearchSchemaHint,
   useSearch,
   useFuzzySearch,
   useSearchHighlight,
   useSearchHistory,
   useCommandSearch,
+  useSearchSchema,
+  detectSearchableFields,
 } from '../../../packages/core/src';
 import type { SearchResultItem, CommandDef } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -72,6 +75,79 @@ function HighlightedText({ text, query, color, matchColor, fontSize = 13 }: {
           {p.text}
         </Text>
       ))}
+    </Box>
+  );
+}
+
+// ── Schema demo subcomponent ──────────────────────────────────────────────────
+
+// An opaque dataset with many fields — a non-technical user would not know
+// which ones are searchable without schema introspection.
+const OPAQUE_DATA = [
+  { id: 'u1', name: 'Alice Nakamura', email: 'alice@example.com', role: 'Engineer', department: 'Platform', joined: 2021, avatar: 'https://cdn.example.com/avatars/alice.png' },
+  { id: 'u2', name: 'Bob Chen',       email: 'bob@example.com',   role: 'Designer', department: 'Product',  joined: 2022, avatar: 'https://cdn.example.com/avatars/bob.png' },
+  { id: 'u3', name: 'Cleo Okafor',    email: 'cleo@example.com',  role: 'Manager',  department: 'Platform', joined: 2019, avatar: 'https://cdn.example.com/avatars/cleo.png' },
+  { id: 'u4', name: 'Diego Flores',   email: 'diego@example.com', role: 'Engineer', department: 'Data',     joined: 2023, avatar: 'https://cdn.example.com/avatars/diego.png' },
+];
+
+function SearchComboSchemaDemo({ c }: { c: ReturnType<typeof useThemeColors> }) {
+  const [selected, setSelected] = useState('');
+
+  // Schema with no key specified — auto-detects string fields, skips id/avatar/url
+  const autoSchema = useSearchSchema(OPAQUE_DATA);
+  // Schema with explicit key
+  const explicitSchema = useSearchSchema(OPAQUE_DATA, { key: 'name' });
+  // Raw field list
+  const allFields = detectSearchableFields(OPAQUE_DATA);
+
+  return (
+    <Box style={{ width: '100%', gap: 12 }}>
+      {/* Show what auto-detection found */}
+      <Box style={{ backgroundColor: c.surface, borderRadius: 8, padding: 10, gap: 6 }}>
+        <Text style={{ fontSize: 11, color: c.textSecondary }}>Auto-detected searchable fields:</Text>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {allFields.map(String).map((f) => (
+            <Box
+              key={f}
+              style={{ backgroundColor: c.bgElevated, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderWidth: 1, borderColor: c.border }}
+            >
+              <Text style={{ fontSize: 10, color: c.primary }}>{f}</Text>
+            </Box>
+          ))}
+        </Box>
+        <Text style={{ fontSize: 10, color: c.textDim }}>
+          (id, email, avatar skipped — not useful for text search)
+        </Text>
+      </Box>
+
+      {/* SearchCombo with auto schema shown */}
+      <Text style={{ fontSize: 11, color: c.textSecondary }}>With showSchema — user sees what they can search:</Text>
+      <SearchCombo
+        items={OPAQUE_DATA.map((u) => ({ id: u.id, label: u.name, description: `${u.role} · ${u.department}`, meta: String(u.joined), data: u }))}
+        onSelect={(item) => setSelected((item.data as any).name)}
+        placeholder="Search users..."
+        showSchema
+        maxResults={4}
+        style={{ width: '100%' }}
+        activeColor={c.primary}
+        textColor={c.text}
+        mutedColor={c.textSecondary}
+        backgroundColor={c.bgElevated}
+        borderColor={c.border}
+      />
+      {selected && <Text style={{ color: c.success, fontSize: 12 }}>{`Selected: ${selected}`}</Text>}
+
+      {/* Side-by-side schema comparison */}
+      <Box style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 8, gap: 4 }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>No key (auto)</Text>
+          <SearchSchemaHint schema={autoSchema} color={c.textDim} fieldColor={c.text} />
+        </Box>
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 8, gap: 4 }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>key=&quot;name&quot;</Text>
+          <SearchSchemaHint schema={explicitSchema} color={c.textDim} fieldColor={c.text} />
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -306,8 +382,18 @@ export function SearchStory() {
         </Box>
       </StorySection>
 
-      {/* 7. useSearchHistory */}
-      <StorySection index={7} title="useSearchHistory">
+      {/* 7. useSearchSchema + discoverability */}
+      <StorySection index={7} title="useSearchSchema (discoverability)">
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
+          Non-technical users can see exactly what the search looks at.
+          SearchCombo with showSchema=true auto-detects and labels all searchable fields.
+        </Text>
+        {/* Auto-detected schema on FILES */}
+        <SearchComboSchemaDemo c={c} />
+      </StorySection>
+
+      {/* 8. useSearchHistory */}
+      <StorySection index={8} title="useSearchHistory">
         <Text style={{ color: c.textDim, fontSize: 10 }}>
           Persistent history backed by SQLite. Type a query and submit to record it.
         </Text>
