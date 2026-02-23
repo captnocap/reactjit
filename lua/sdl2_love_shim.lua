@@ -317,10 +317,18 @@ function graphics.getDimensions() return _W, _H end
 -- ============================================================================
 
 local mouse = {}
+local _mouseButtons = {}  -- button number -> boolean
 
 function mouse.getPosition() return _mx, _my end
 function mouse.getX() return _mx end
 function mouse.getY() return _my end
+function mouse.isDown(...)
+  for i = 1, select("#", ...) do
+    local btn = select(i, ...)
+    if _mouseButtons[btn] then return true end
+  end
+  return false
+end
 function mouse.setCursor() end  -- no-op on SDL2 (no cursor management yet)
 function mouse.getSystemCursor() return nil end
 
@@ -434,6 +442,20 @@ function filesystem.getSaveDirectory()
   return _saveDir
 end
 
+function filesystem.lines(path)
+  -- Try the path directly first (for asset files), then save dir
+  local f = io.open(path, "r")
+  if not f then
+    f = io.open(_saveDir .. "/" .. path, "r")
+  end
+  if not f then return function() return nil end end
+  return function()
+    local line = f:read("*l")
+    if line == nil then f:close() end
+    return line
+  end
+end
+
 -- ============================================================================
 -- love.audio (stub — device enumeration not yet available on SDL2)
 -- ============================================================================
@@ -480,6 +502,10 @@ end
 
 function Shim.setMousePosition(x, y)
   _mx, _my = x, y
+end
+
+function Shim.setMouseButton(button, pressed)
+  _mouseButtons[button] = pressed or nil
 end
 
 function Shim.setKeyDown(key, down)

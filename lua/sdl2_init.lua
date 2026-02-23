@@ -156,6 +156,48 @@ local function sdlKeynameToLove(sym)
 end
 
 -- ============================================================================
+-- HMR helpers
+-- ============================================================================
+
+local function readTextFile(path)
+  local fh, openErr = io.open(path, "rb")
+  if not fh then return nil, openErr end
+  local data = fh:read("*a")
+  fh:close()
+  if not data then return nil, "read failed" end
+  return data
+end
+
+--- Serialize a Lua value to a JavaScript source literal string.
+--- Handles strings, numbers, booleans, nil, and nested tables.
+local function luaTableToJSLiteral(val)
+  local t = type(val)
+  if t == "string" then
+    local escaped = val:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r")
+    return '"' .. escaped .. '"'
+  elseif t == "number" then
+    return tostring(val)
+  elseif t == "boolean" then
+    return val and "true" or "false"
+  elseif t == "nil" then
+    return "null"
+  elseif t == "table" then
+    if val[1] ~= nil then
+      local parts = {}
+      for i, v in ipairs(val) do parts[i] = luaTableToJSLiteral(v) end
+      return "[" .. table.concat(parts, ",") .. "]"
+    else
+      local parts = {}
+      for k, v in pairs(val) do
+        parts[#parts + 1] = '"' .. tostring(k) .. '":' .. luaTableToJSLiteral(v)
+      end
+      return "{" .. table.concat(parts, ",") .. "}"
+    end
+  end
+  return "null"
+end
+
+-- ============================================================================
 -- Module
 -- ============================================================================
 
@@ -182,6 +224,7 @@ function SDL2Init.run(config)
   local H     = config.height or 720
   local title = config.title  or "ReactJIT"
   local bundle = config.bundle or "sdl2/bundle.js"
+  local bridgeLibPath = config.libpath or "lib/libquickjs.so"
 
   -- ------------------------------------------------------------------
   -- 1. SDL2 + OpenGL window
@@ -247,6 +290,7 @@ function SDL2Init.run(config)
   -- ------------------------------------------------------------------
   local Target  = require("lua.target_sdl2")
   local Font    = require("lua.sdl2_font")
+  local Images  = Target.images
   local Painter = Target.painter
   local Measure = Target.measure
 
@@ -259,6 +303,7 @@ function SDL2Init.run(config)
   local tree    = require("lua.tree")
   local layout  = require("lua.layout")
   local events  = require("lua.events")
+  tree.init({ images = Images, videos = Target.videos })
   events.setTreeModule(tree)
   layout.init({ measure = Measure })
 
@@ -298,9 +343,13 @@ function SDL2Init.run(config)
   local devtools  = require("lua.devtools")
 
   local Bridge  = require("lua.bridge_quickjs")
-  local bridge  = Bridge.new("lib/libquickjs.so")
+  local bridge  = Bridge.new(bridgeLibPath)
+  local bundleSource, bundleErr = readTextFile(bundle)
+  if not bundleSource then
+    error("[sdl2_init] Failed to read bundle '" .. tostring(bundle) .. "': " .. tostring(bundleErr))
+  end
   bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
-  bridge:eval(io.open(bundle):read("*a"), bundle)
+  bridge:eval(bundleSource, bundle)
   bridge:callGlobal("__mount")
   bridge:tick()
 
@@ -432,6 +481,120 @@ function SDL2Init.run(config)
   bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
 
   local root
+  local hmrFrameCounter = 0
+  local hmrLastBundle = bundleSource
+  local hmrHasLoaded = bundleSource ~= nil
+
+  local function reloadBundle(nextBundleSource)
+    io.write("[sdl2_init] Hot reload starting...\n"); io.flush()
+
+    -- Read dev state before tearing down the old context.
+    local devStateCache = nil
+    local dsOk, dsValue = pcall(function() return bridge:callGlobalReturn("__getDevState") end)
+    if dsOk and dsValue ~= nil then
+      devStateCache = dsValue
+    end
+
+    if bridge then bridge:destroy() end
+
+    if Images and Images.clearCache then
+      Images.clearCache()
+    end
+    Measure.clearCache()
+    errors.clear()
+
+    tree.init({ images = Images, videos = Target.videos })
+    root = nil
+    focus.clear()
+    if contextmenu and contextmenu.close then contextmenu.close() end
+    events.setActiveWindow(mainWin)
+    events.clearHover()
+    events.clearPressedNode()
+    pcall(function() events.endDrag(mainWin.mx or 0, mainWin.my or 0) end)
+    for _, win in ipairs(WM.getAll()) do
+      win.needsLayout = true
+      win.hoveredNode = nil
+      win.pressedNode = nil
+      if win.dragState then
+        win.dragState.active = false
+        win.dragState.targetId = nil
+        win.dragState.thresholdCrossed = false
+      end
+    end
+
+    local newBridgeOk, newBridgeOrErr = pcall(Bridge.new, bridgeLibPath)
+    if not newBridgeOk then
+      errors.push({
+        source = "lua",
+        message = tostring(newBridgeOrErr),
+        context = "SDL2 HMR (bridge init)",
+      })
+      return false
+    end
+    bridge = newBridgeOrErr
+    console.updateRefs({ bridge = bridge, tree = tree })
+    devtools.init({ inspector = inspector, console = console, tree = tree, bridge = bridge, pushEvent = pushEvent })
+
+    if not nextBundleSource then
+      local readOk, readErr
+      nextBundleSource, readErr = readTextFile(bundle)
+      readOk = nextBundleSource ~= nil
+      if not readOk then
+        errors.push({
+          source = "lua",
+          message = "Failed to read bundle '" .. tostring(bundle) .. "': " .. tostring(readErr),
+          context = "SDL2 HMR (bundle read)",
+        })
+        return false
+      end
+    end
+
+    local preOk, preErr = pcall(function()
+      bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
+      if devStateCache then
+        local jsLiteral = luaTableToJSLiteral(devStateCache)
+        bridge:eval("globalThis.__devState = " .. jsLiteral .. ";", "<hmr-state>")
+      end
+    end)
+    if not preOk then
+      errors.push({
+        source = "js",
+        message = tostring(preErr),
+        context = "SDL2 HMR (pre-bundle setup)",
+      })
+      return false
+    end
+
+    local evalOk, evalErr = pcall(function()
+      bridge:eval(nextBundleSource, bundle)
+    end)
+    if not evalOk then
+      errors.push({
+        source = "js",
+        message = tostring(evalErr),
+        context = "SDL2 HMR (bundle eval)",
+      })
+      return false
+    end
+
+    local mountOk, mountErr = pcall(function()
+      bridge:callGlobal("__mount")
+      bridge:tick()
+    end)
+    if not mountOk then
+      errors.push({
+        source = "js",
+        message = tostring(mountErr),
+        context = "SDL2 HMR (mount)",
+      })
+      return false
+    end
+
+    bridge:pushEvent({ type = "viewport", payload = { width = W, height = H } })
+
+    io.write("[sdl2_init] Hot reload complete (" .. #nextBundleSource .. " bytes)\n"); io.flush()
+    return true
+  end
 
   -- ------------------------------------------------------------------
   -- 4. Run loop
@@ -472,6 +635,30 @@ function SDL2Init.run(config)
     if frameDeltaMs > 100 then frameDeltaMs = 100 end -- clamp spikes
     lastTicks = now
     local frameStart = now
+
+    -- ---- HMR poll (dev mode): check bundle content every ~60 frames ----
+    hmrFrameCounter = hmrFrameCounter + 1
+    if hmrFrameCounter % 60 == 0 then
+      local latestBundle = readTextFile(bundle)
+      if latestBundle then
+        if hmrLastBundle == nil then
+          hmrLastBundle = latestBundle
+        elseif latestBundle ~= hmrLastBundle then
+          hmrLastBundle = latestBundle
+          if hmrHasLoaded then
+            local reloadOk, reloadErr = pcall(reloadBundle, latestBundle)
+            if not reloadOk then
+              errors.push({
+                source = "lua",
+                message = tostring(reloadErr),
+                context = "SDL2 HMR (reload panic)",
+              })
+            end
+          end
+        end
+        hmrHasLoaded = true
+      end
+    end
 
     -- ---- Event pump (pcall-wrapped so crashes show in error overlay) ----
     local _pumpOk, _pumpErr = pcall(function()
@@ -601,6 +788,7 @@ function SDL2Init.run(config)
 
         if evtWin.isMain then
           Shim.setMousePosition(mx, my)
+          Shim.setMouseButton(btn, t == SDL_MOUSEBTNDOWN)
         end
 
         -- Route to devtools first (main window only)
