@@ -45,6 +45,7 @@ local mapmod   = nil   -- map.lua module (geo/tile map rendering)
 local gamemod  = nil   -- game.lua module (game canvas rendering + module system)
 local emumod   = nil   -- emulator.lua module (NES emulation via agnes)
 local effectsmod = nil -- effects.lua module (generative canvas effects)
+local masksmod   = nil -- masks.lua module (foreground post-processing masks)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
@@ -511,6 +512,8 @@ function ReactJIT.init(config)
     emumod.init()
     effectsmod = require("lua.effects")
     effectsmod.loadAll()
+    masksmod = require("lua.masks")
+    masksmod.loadAll()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -521,7 +524,7 @@ function ReactJIT.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod, masks = masksmod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -604,6 +607,8 @@ function ReactJIT.init(config)
     emumod.init()
     effectsmod = require("lua.effects")
     effectsmod.loadAll()
+    masksmod = require("lua.masks")
+    masksmod.loadAll()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -614,7 +619,7 @@ function ReactJIT.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod, masks = masksmod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -1574,6 +1579,12 @@ function ReactJIT.update(dt)
     effectsmod.renderAll()
   end
 
+  -- 8d4. Sync foreground masks with tree, update animations (render is on-demand in painter)
+  if masksmod then
+    masksmod.syncWithTree(tree.getNodes())
+    masksmod.updateAll(dt)
+  end
+
   -- 8e. Sync declarative capabilities (Audio, Timer, etc.) with tree
   if capabilities then
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
@@ -1896,6 +1907,13 @@ function ReactJIT.draw()
                 message = tostring(werr),
                 context = "painter.paint (window #" .. win.id .. ")",
               })
+            end
+
+            -- Flush Love2D's internal draw batch to the GL context before
+            -- swapping. Without this, draws are still in the stream buffer
+            -- and SDL_GL_SwapWindow shows a blank back buffer.
+            if love.graphics.flushBatch then
+              love.graphics.flushBatch()
             end
 
             wmMod.swap(win)

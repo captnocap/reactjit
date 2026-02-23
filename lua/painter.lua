@@ -31,6 +31,7 @@ local MapModule = nil     -- Injected at init time via Painter.init()
 local GameModule = nil    -- Injected at init time via Painter.init()
 local EmulatorModule = nil -- Injected at init time via Painter.init()
 local EffectsModule = nil  -- Injected at init time via Painter.init()
+local MasksModule = nil    -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
@@ -85,6 +86,7 @@ function Painter.init(config)
   GameModule = config.game
   EmulatorModule = config.emulator
   EffectsModule = config.effects
+  MasksModule = config.masks
   getFont = Measure.getFont
 end
 
@@ -697,7 +699,10 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local ok, mod = pcall(require, "lua.capabilities")
     if ok then CapabilitiesModule = mod end
   end
-  if CapabilitiesModule and CapabilitiesModule.isNonVisual(node.type) then return end
+  if CapabilitiesModule and CapabilitiesModule.isNonVisual(node.type)
+     and not CapabilitiesModule.rendersInOwnSurface(node.type) then
+    return
+  end
 
   -- Nodes that render in their own surface (Window capability) are painted in a
   -- separate pass by the multi-window paint loop in init.lua. Skip them here
@@ -770,6 +775,23 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
     local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
     love.graphics.intersectScissor(sx, sy, sw, sh)
+  end
+
+  -- Mask canvas capture: if this node has a mask child, redirect all rendering
+  -- to a temporary canvas so the mask can post-process the full content.
+  local maskTempCanvas = nil
+  local maskPrevCanvas = nil
+  if MasksModule and MasksModule.hasMask(node.id) then
+    local tc, tw, th = MasksModule.getTempCanvas(node.id)
+    if tc and tw > 0 and th > 0 then
+      maskTempCanvas = tc
+      maskPrevCanvas = love.graphics.getCanvas()
+      love.graphics.push()
+      love.graphics.setCanvas(maskTempCanvas)
+      love.graphics.clear(0, 0, 0, 0)
+      -- Translate so content at (c.x, c.y) renders at (0, 0) in the temp canvas
+      love.graphics.translate(-c.x, -c.y)
+    end
   end
 
   if not isHidden and (node.type == "View" or node.type == "box") then
@@ -1343,6 +1365,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
+  elseif MasksModule and MasksModule.isMask(node) then
+    -- Mask nodes don't render standalone — they are applied as post-processing
+    -- by the parent's paintNode via the canvas capture path above.
+    return
+
   elseif not isHidden and EffectsModule and EffectsModule.isEffect(node.type) then
     -- Generative effect viewport: draw the pre-rendered Canvas from effects.lua
     local canvas = EffectsModule.get(node.id)
@@ -1481,6 +1508,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         local fit = node.props.hoverVideoFit or "cover"
         drawVideoFrame(hvCanvas, hvSrc, c, fit, borderRadius, stencilDepth, effectiveOpacity)
       end
+    end
+  end
+
+  -- Apply mask: if we were capturing to a temp canvas, finalize and draw the result
+  if maskTempCanvas then
+    love.graphics.pop()  -- undo the translate(-c.x, -c.y)
+    love.graphics.setCanvas(maskPrevCanvas)
+    local outputCanvas = MasksModule.applyMask(node.id, maskTempCanvas)
+    if outputCanvas then
+      love.graphics.setColor(1, 1, 1, effectiveOpacity)
+      love.graphics.draw(outputCanvas, c.x, c.y)
     end
   end
 
