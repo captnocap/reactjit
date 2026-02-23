@@ -37,7 +37,7 @@ export function ActivityRow({
   const dotColor = dot as string;
 
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, width: '100%', ...style }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'stretch', gap: 10, width: '100%', ...style }}>
       {/* Dot + vertical connector track */}
       <Box style={{ alignItems: 'center', paddingTop: 4, flexShrink: 0 }}>
         <Box style={{
