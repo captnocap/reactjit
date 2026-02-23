@@ -382,7 +382,77 @@ function SDL2Init.run(config)
   local contextmenu = nil
   local textselection = nil
 
-  themeMenu.init({ key = "f9" })
+  local themes = nil
+  local currentThemeName = "catppuccin-mocha"
+  local currentTheme = nil
+
+  local function markAllWindowsForLayout()
+    for _, win in ipairs(WM.getAll()) do
+      win.needsLayout = true
+    end
+  end
+
+  local function applyThemeByName(name, opts)
+    opts = opts or {}
+    if not name or not themes or not themes[name] then return false end
+
+    currentThemeName = name
+
+    local resolvedTheme = opts.resolvedTheme
+    if not resolvedTheme and themeMenu.getResolvedTheme then
+      resolvedTheme = themeMenu.getResolvedTheme(name)
+    end
+    currentTheme = resolvedTheme or themes[name]
+
+    Painter.setTheme(currentTheme)
+    if tree then tree.markDirty() end
+    markAllWindowsForLayout()
+    themeMenu.setCurrentTheme(name, currentTheme)
+
+    if opts.emitSwitch then
+      pushEvent({
+        type = "theme:switch",
+        payload = {
+          type = "theme:switch",
+          name = name,
+          overrides = opts.overrides or {},
+        },
+      })
+    end
+
+    return true
+  end
+
+  local function loadThemes()
+    local thOk, thMod = pcall(require, "lua.themes")
+    if not thOk or type(thMod) ~= "table" then
+      io.write("[sdl2_init] Failed to load lua.themes: " .. tostring(thMod) .. "\n"); io.flush()
+      return
+    end
+
+    themes = thMod
+    themeMenu.setThemes(themes)
+    if not themes[currentThemeName] then
+      for name in pairs(themes) do
+        currentThemeName = name
+        break
+      end
+    end
+
+    applyThemeByName(currentThemeName)
+  end
+
+  themeMenu.init({
+    key = "f9",
+    onSwitch = function(name, resolvedTheme, overrides)
+      applyThemeByName(name, {
+        resolvedTheme = resolvedTheme,
+        overrides = overrides,
+        emitSwitch = true,
+      })
+    end
+  })
+  loadThemes()
   settings.init({ key = "f10" })
   systemPanel.init({
     permit = permit,
@@ -450,6 +520,30 @@ function SDL2Init.run(config)
       return { error = "Failed to load diagnostics: " .. tostring(diagMod) }
     end
     return diagMod.run(tree, capabilities, W, H, true)
+  end
+
+  -- Expose runtime perf counters for dashboards/stress stories.
+  rpcHandlers["dev:perf"] = function()
+    if inspector and inspector.getPerfData then
+      return inspector.getPerfData()
+    end
+    return {
+      fps = 0,
+      layoutMs = 0,
+      paintMs = 0,
+      nodeCount = 0,
+    }
+  end
+
+  -- System monitoring RPC handlers (sys:info/sys:monitor/sys:ports/...).
+  if permit.check("sysmon") then
+    local smOk, smMod = pcall(require, "lua.sysmon")
+    if smOk and smMod then
+      for method, handler in pairs(smMod.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+      io.write("[sdl2_init] sysmon module loaded\n"); io.flush()
+    end
   end
 
   -- HTTP module (optional — graceful degradation)
@@ -635,6 +729,7 @@ function SDL2Init.run(config)
     if frameDeltaMs > 100 then frameDeltaMs = 100 end -- clamp spikes
     lastTicks = now
     local frameStart = now
+    local dt = frameDeltaMs / 1000
 
     -- ---- HMR poll (dev mode): check bundle content every ~60 frames ----
     hmrFrameCounter = hmrFrameCounter + 1
@@ -659,6 +754,11 @@ function SDL2Init.run(config)
         hmrHasLoaded = true
       end
     end
+
+    -- ---- Per-frame overlay/tooling updates ----
+    systemPanel.update(dt)
+    inspector.update(dt)
+    console.update(dt)
 
     -- ---- Event pump (pcall-wrapped so crashes show in error overlay) ----
     local _pumpOk, _pumpErr = pcall(function()
@@ -1236,10 +1336,10 @@ function SDL2Init.run(config)
               end
             end
           elseif type(cmd) == "table" and cmd.type == "theme:set" then
-            -- Theme switching not fully wired on SDL2 yet, but don't crash
             local payload = cmd.payload
-            if payload and payload.name then
-              io.write("[sdl2_init] Theme set request: " .. tostring(payload.name) .. "\n"); io.flush()
+            local name = payload and payload.name
+            if applyThemeByName(name) then
+              io.write("[sdl2_init] Theme switched to: " .. tostring(name) .. "\n"); io.flush()
             end
           else
             treeCommands[#treeCommands + 1] = cmd
@@ -1281,13 +1381,13 @@ function SDL2Init.run(config)
     end
 
     -- ---- Audio engine update ----
-    if audioEngine then audioEngine.update(frameDeltaMs / 1000) end
+    if audioEngine then audioEngine.update(dt) end
 
     -- ---- Text widget blink timers + change events ----
     local focusedNode = focus.get()
     if focusedNode then
       if focusedNode.type == "TextInput" then
-        textinput.update(focusedNode, frameDeltaMs / 1000)
+        textinput.update(focusedNode, dt)
         local is = focusedNode.inputState
         if is and is.text ~= is.lastValue then
           pushEvent({
@@ -1297,12 +1397,11 @@ function SDL2Init.run(config)
           is.lastValue = is.text
         end
       elseif focusedNode.type == "TextEditor" then
-        texteditor.update(focusedNode, frameDeltaMs / 1000)
+        texteditor.update(focusedNode, dt)
       end
     end
 
     -- ---- Capabilities sync ----
-    local dt = frameDeltaMs / 1000
     Shim.setDelta(dt)
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
 
@@ -1312,6 +1411,7 @@ function SDL2Init.run(config)
     for _, win in ipairs(allWindows) do
       local winRoot = getWindowRoot(win, tree)
       if winRoot and win.needsLayout then
+        if win.isMain then inspector.beginLayout() end
         local lOk, lErr
         if win.isMain then
           local vh = devtools.getViewportHeight()
@@ -1328,6 +1428,7 @@ function SDL2Init.run(config)
             context = "layout (window #" .. win.id .. ")",
           })
         end
+        if win.isMain then inspector.endLayout(winRoot) end
         win.needsLayout = false
       end
     end
@@ -1350,7 +1451,9 @@ function SDL2Init.run(config)
       if winRoot then
         -- Mark as window root so painter doesn't skip it via rendersInOwnSurface
         if not win.isMain then winRoot._isWindowRoot = true end
+        if win.isMain then inspector.beginPaint() end
         local ok, err = pcall(Painter.paint, winRoot)
+        if win.isMain then inspector.endPaint() end
         if not win.isMain then winRoot._isWindowRoot = nil end
         if not ok then
           errors.push({
