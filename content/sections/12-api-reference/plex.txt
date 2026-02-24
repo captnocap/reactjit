@@ -8,7 +8,7 @@ related: useTraktHistory, useSpotify
 difficulty: beginner
 
 === OVERVIEW ===
-The @ilovereact/apis package includes hooks for both Plex (token-based) and Jellyfin/Emby (API key-based) self-hosted media servers. All hooks are passive — they fetch on mount and can be polled automatically. Pass null for any credential argument to suppress fetching entirely, which makes it safe to render components before credentials are available.
+The @reactjit/apis package includes hooks for both Plex (token-based) and Jellyfin/Emby (API key-based) self-hosted media servers. All hooks are passive — they fetch on mount and can be polled automatically. Pass null for any credential argument to suppress fetching entirely, which makes it safe to render components before credentials are available.
 
 Plex hooks use the X-Plex-Token header. Jellyfin and Emby hooks use the MediaBrowser Token authorization header. Both server families are covered by a single import.
 
@@ -18,7 +18,7 @@ Plex hooks use the X-Plex-Token header. Jellyfin and Emby hooks use the MediaBro
 
 Fetch all library sections configured on the Plex server.
 
-  import { usePlexLibraries } from '@ilovereact/apis';
+  import { usePlexLibraries } from '@reactjit/apis';
 
   const result: APIResult<{ MediaContainer: { Directory: PlexLibrary[] } }> = usePlexLibraries(
     baseUrl: string | null,
@@ -42,7 +42,7 @@ PlexLibrary fields:
 
 Fetch all items in a specific library section.
 
-  import { usePlexLibrary } from '@ilovereact/apis';
+  import { usePlexLibrary } from '@reactjit/apis';
 
   const result: APIResult<{ MediaContainer: { Metadata: PlexMediaItem[] } }> = usePlexLibrary(
     baseUrl: string | null,
@@ -75,7 +75,7 @@ PlexMediaItem fields:
 
 Fetch the most recently added items across all libraries.
 
-  import { usePlexRecentlyAdded } from '@ilovereact/apis';
+  import { usePlexRecentlyAdded } from '@reactjit/apis';
 
   const result: APIResult<{ MediaContainer: { Metadata: PlexMediaItem[] } }> = usePlexRecentlyAdded(
     baseUrl: string | null,
@@ -95,7 +95,7 @@ Returns: APIResult<{ MediaContainer: { Metadata: PlexMediaItem[] } }>
 
 Fetch currently active playback sessions. Supports automatic polling.
 
-  import { usePlexSessions } from '@ilovereact/apis';
+  import { usePlexSessions } from '@reactjit/apis';
 
   const result: APIResult<{ MediaContainer: { Metadata?: PlexSession[] } }> = usePlexSessions(
     baseUrl: string | null,
@@ -127,7 +127,7 @@ PlexSession fields:
 
 Fetch all virtual library folders from a Jellyfin or Emby server.
 
-  import { useJellyfinLibraries } from '@ilovereact/apis';
+  import { useJellyfinLibraries } from '@reactjit/apis';
 
   const result: APIResult<{ Items: JellyfinLibrary[] }> = useJellyfinLibraries(
     baseUrl: string | null,
@@ -150,7 +150,7 @@ JellyfinLibrary fields:
 
 Query media items with flexible filtering and sorting.
 
-  import { useJellyfinItems } from '@ilovereact/apis';
+  import { useJellyfinItems } from '@reactjit/apis';
 
   const result: APIResult<{ Items: JellyfinItem[]; TotalRecordCount: number }> = useJellyfinItems(
     baseUrl: string | null,
@@ -184,7 +184,7 @@ JellyfinItem fields:
 
 Fetch currently active playback sessions from a Jellyfin/Emby server. Supports polling.
 
-  import { useJellyfinSessions } from '@ilovereact/apis';
+  import { useJellyfinSessions } from '@reactjit/apis';
 
   const result: APIResult<JellyfinSession[]> = useJellyfinSessions(
     baseUrl: string | null,
@@ -212,7 +212,7 @@ JellyfinSession fields:
 
 Fetch the latest items a user has added or accessed. Requires a user ID.
 
-  import { useJellyfinLatest } from '@ilovereact/apis';
+  import { useJellyfinLatest } from '@reactjit/apis';
 
   const result: APIResult<JellyfinItem[]> = useJellyfinLatest(
     baseUrl: string | null,
@@ -234,7 +234,7 @@ Returns: APIResult<JellyfinItem[]>
 
 Build a Jellyfin image URL. Not a hook — call it directly in JSX.
 
-  import { jellyfinImage } from '@ilovereact/apis';
+  import { jellyfinImage } from '@reactjit/apis';
 
   const url: string = jellyfinImage(
     baseUrl: string,
@@ -259,8 +259,8 @@ Returns: string — ready-to-use image URL for use in <Image src={...} />
 
 Poll active sessions every 10 seconds and display who is watching what:
 
-  import { usePlexSessions } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { usePlexSessions } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const PLEX_URL = 'http://192.168.1.10:32400';
   const PLEX_TOKEN = process.env.PLEX_TOKEN;
@@ -297,8 +297,8 @@ Poll active sessions every 10 seconds and display who is watching what:
 
 Show the 10 most recently added movies with poster images:
 
-  import { useJellyfinItems, jellyfinImage } from '@ilovereact/apis';
-  import { Box, Text, Image } from '@ilovereact/core';
+  import { useJellyfinItems, jellyfinImage } from '@reactjit/apis';
+  import { Box, Text, Image } from '@reactjit/core';
 
   const JELLY_URL = 'http://192.168.1.20:8096';
   const JELLY_KEY = process.env.JELLYFIN_API_KEY;

@@ -8,7 +8,7 @@ related: lua-runtime, pipeline, reconciler
 difficulty: advanced
 
 === OVERVIEW ===
-iLoveReact's event system handles mouse clicks, keyboard input, touch gestures, gamepad
+ReactJIT's event system handles mouse clicks, keyboard input, touch gestures, gamepad
 buttons, wheel scrolling, hover tracking, and drag operations. In Love2D native mode,
 Love2D callbacks forward raw input to the Lua runtime, which performs hit testing
 against the computed layout tree, constructs bubble paths, and dispatches events to the

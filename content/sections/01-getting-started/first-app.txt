@@ -17,7 +17,7 @@ spacing.
 === EXAMPLES ===
 Example 1: Step 1 - Create the Project
 ---
-ilovereact init counter-app
+reactjit init counter-app
 cd counter-app
 ---
 Platforms: All
@@ -25,7 +25,7 @@ Platforms: All
 Example 2: Step 2 - Basic Counter (src/App.tsx)
 ---
 import { useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 
 export default function App() {
   const [count, setCount] = useState(0);
@@ -55,7 +55,7 @@ Platforms: All
 Example 3: Step 3 - Add Buttons
 ---
 import { useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 
 function CounterButton({ label, onPress }: { label: string; onPress: () => void }) {
   return (
@@ -116,13 +116,13 @@ Platforms: All
 Example 4: Step 4 - Lint and Screenshot
 ---
 # Run the static linter to catch layout errors
-ilovereact lint
+reactjit lint
 
 # Take a screenshot to verify the visual result
-ilovereact screenshot --output /tmp/counter.png
+reactjit screenshot --output /tmp/counter.png
 
 # Build for distribution
-ilovereact build dist:love
+reactjit build dist:love
 ---
 Platforms: love2d
 
@@ -132,7 +132,7 @@ Platforms: love2d
 - Row Boxes need explicit width for justifyContent to work.
 - Use template literals (backticks) for dynamic text: {`${count}`}, not mixed
   children like {count} which creates multiple text nodes.
-- Always run `ilovereact lint` after modifying components.
+- Always run `reactjit lint` after modifying components.
 
 === SEE ALSO ===
 - quick-start.txt - Abbreviated version of this tutorial

@@ -45,7 +45,7 @@ style
 
 Example 1: Basic Code Display
 ---
-import { CodeBlock } from '@ilovereact/core'
+import { CodeBlock } from '@reactjit/core'
 
 function CodeSnippet() {
   const code = `
@@ -67,7 +67,7 @@ Platforms: love2d, web
 
 Example 2: Custom Styling
 ---
-import { CodeBlock, Box } from '@ilovereact/core'
+import { CodeBlock, Box } from '@reactjit/core'
 
 function StyledCode() {
   const code = `
@@ -100,7 +100,7 @@ Platforms: love2d, web
 
 Example 3: Lua Code with Highlighting
 ---
-import { CodeBlock } from '@ilovereact/core'
+import { CodeBlock } from '@reactjit/core'
 
 function LuaExample() {
   const code = `
@@ -128,7 +128,7 @@ Platforms: love2d, web
 
 Example 4: Error Stack Trace
 ---
-import { CodeBlock, Box, Text } from '@ilovereact/core'
+import { CodeBlock, Box, Text } from '@reactjit/core'
 
 function ErrorDisplay({ error }) {
   return (

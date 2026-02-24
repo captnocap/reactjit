@@ -8,11 +8,11 @@ related: useWebSocket, useLoveRPC
 difficulty: beginner
 
 === OVERVIEW ===
-useFetch wraps the global fetch() API in a React hook that manages loading, data, and error state. It works across all iLoveReact targets: on Love2D the fetch polyfill routes HTTP requests through LuaSocket and local file paths through love.filesystem; on web and Node targets the platform's native fetch is used. Pass null as the URL to clear state and skip any in-flight request, which is useful for conditional fetching. The options argument accepts standard RequestInit and is kept in a ref so changing it does not trigger a re-fetch.
+useFetch wraps the global fetch() API in a React hook that manages loading, data, and error state. It works across all ReactJIT targets: on Love2D the fetch polyfill routes HTTP requests through LuaSocket and local file paths through love.filesystem; on web and Node targets the platform's native fetch is used. Pass null as the URL to clear state and skip any in-flight request, which is useful for conditional fetching. The options argument accepts standard RequestInit and is kept in a ref so changing it does not trigger a re-fetch.
 
 === API / SYNTAX ===
 ```tsx
-import { useFetch } from '@ilovereact/core';
+import { useFetch } from '@reactjit/core';
 ```
 
 Parameters:
@@ -32,7 +32,7 @@ Returns:
 Example 1: Fetch a list of users from an API
 ---
 ```tsx
-import { useFetch, Box, Text } from '@ilovereact/core';
+import { useFetch, Box, Text } from '@reactjit/core';
 
 interface User {
   id: number;
@@ -60,7 +60,7 @@ Platforms: All
 Example 2: Load a local config file bundled with the Love2D project
 ---
 ```tsx
-import { useFetch, Box, Text } from '@ilovereact/core';
+import { useFetch, Box, Text } from '@reactjit/core';
 
 interface Config {
   version: string;
@@ -87,7 +87,7 @@ Example 3: Conditional fetch — only fetch when an ID is selected
 ---
 ```tsx
 import { useState } from 'react';
-import { useFetch, Box, Text, Pressable } from '@ilovereact/core';
+import { useFetch, Box, Text, Pressable } from '@reactjit/core';
 
 interface Item {
   id: number;
@@ -122,7 +122,7 @@ Platforms: All
 Example 4: POST request with custom options
 ---
 ```tsx
-import { useFetch, Text } from '@ilovereact/core';
+import { useFetch, Text } from '@reactjit/core';
 
 interface CreateResponse {
   id: number;

@@ -1,6 +1,6 @@
 === METADATA ===
 title: Hooks
-description: Overview of iLoveReact hooks for Love2D communication, state sharing, and event handling.
+description: Overview of ReactJIT hooks for Love2D communication, state sharing, and event handling.
 category: Hooks
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: hooks, useLove, useLoveEvent, useLoveRPC, useLoveState, useLoveReady, useLoveSend, useLoveOverlays, bridge
@@ -8,7 +8,7 @@ related: uselove.txt, useloveevent.txt, useloverpc.txt, uselovestate.txt, uselov
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact provides a set of React hooks for communicating between the React component tree
+ReactJIT provides a set of React hooks for communicating between the React component tree
 and the Lua runtime (or any target-specific backend). These hooks consume the bridge
 interface (IBridge) via React context, so they work identically regardless of the transport
 layer (Module.FS for web, QuickJS FFI for native Love2D, WebSocket for remote targets).
@@ -19,7 +19,7 @@ detection (useLoveReady), fire-and-forget sending (useLoveSend), and DOM overlay
 (useLoveOverlays, web mode only).
 
 === API / SYNTAX ===
-All hooks are imported from '@ilovereact/core':
+All hooks are imported from '@reactjit/core':
 
   import {
     useLove,
@@ -29,7 +29,7 @@ All hooks are imported from '@ilovereact/core':
     useLoveReady,
     useLoveSend,
     useLoveOverlays,
-  } from '@ilovereact/core';
+  } from '@reactjit/core';
 
 All hooks require a BridgeProvider ancestor in the component tree, which is set up
 automatically by the framework's entry point.
@@ -37,7 +37,7 @@ automatically by the framework's entry point.
 === EXAMPLES ===
 Example 1: Subscribe to events and send commands
 ---
-import { useLove } from '@ilovereact/core';
+import { useLove } from '@reactjit/core';
 
 function GameHUD() {
   const [health, send] = useLove('player:health', 100);
@@ -53,7 +53,7 @@ Platforms: All
 
 Example 2: Bidirectional shared state
 ---
-import { useLoveState } from '@ilovereact/core';
+import { useLoveState } from '@reactjit/core';
 
 function Settings() {
   const [volume, setVolume] = useLoveState('settings.volume', 0.8);

@@ -8,7 +8,7 @@ difficulty: intermediate
 
 === OVERVIEW ===
 This example builds a multi-panel dashboard layout using higher-level components from
-@ilovereact/core. It demonstrates NavPanel for navigation, Tabs for content switching,
+@reactjit/core. It demonstrates NavPanel for navigation, Tabs for content switching,
 Card for content containers, Table for data display, ProgressBar for metrics, and
 Badge for status indicators. This is a realistic application layout that exercises
 the flexbox system with nested containers.
@@ -18,7 +18,7 @@ the flexbox system with nested containers.
 import { useState } from 'react';
 import {
   Box, Text, Card, Badge, Tabs, NavPanel, Table, ProgressBar, Divider,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 
 const NAV_SECTIONS = [
   {

@@ -63,7 +63,7 @@ Example 2: Web Painter (primitives.tsx)
 The web "painter" is not a separate module -- it is built into the primitives.
 When RendererMode is 'web', Box renders as <div>, Text as <span>, Image as <img>.
 
-The styleToCSS() function converts the iLoveReact Style object to React
+The styleToCSS() function converts the ReactJIT Style object to React
 CSSProperties:
 
   - flexDirection, justifyContent, alignItems mapped with flex-start/flex-end
@@ -80,8 +80,8 @@ Platforms: web
 
 Example 3: Terminal Painter
 ---
-The terminal painter (@ilovereact/terminal) uses ANSI truecolor escape sequences.
-The grid layout engine (@ilovereact/grid) computes character-cell positions.
+The terminal painter (@reactjit/terminal) uses ANSI truecolor escape sequences.
+The grid layout engine (@reactjit/grid) computes character-cell positions.
 
 Each cell is a single character with foreground and background colors:
   ESC[38;2;R;G;Bm    -- Set foreground (truecolor)

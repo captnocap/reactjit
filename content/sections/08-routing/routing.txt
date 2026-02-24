@@ -8,7 +8,7 @@ related: State Management, Event Handling, Components
 difficulty: intermediate
 
 === OVERVIEW ===
-The iLoveReact router provides declarative, URL-based navigation across all rendering targets. It uses a history adapter pattern to support both browser-based navigation (web) and in-memory navigation (Love2D, terminal, grid targets). Routes are matched via path patterns with parameter extraction, and the system provides both component-based navigation (Link) and imperative navigation (useNavigate).
+The ReactJIT router provides declarative, URL-based navigation across all rendering targets. It uses a history adapter pattern to support both browser-based navigation (web) and in-memory navigation (Love2D, terminal, grid targets). Routes are matched via path patterns with parameter extraction, and the system provides both component-based navigation (Link) and imperative navigation (useNavigate).
 
 === API / SYNTAX ===
 
@@ -17,7 +17,7 @@ RouterProvider
 Top-level provider that supplies routing state to the component tree.
 
 ```tsx
-import { RouterProvider, createMemoryHistory } from '@ilovereact/router';
+import { RouterProvider, createMemoryHistory } from '@reactjit/router';
 
 <RouterProvider history={createMemoryHistory()}>
   <App />
@@ -37,7 +37,7 @@ Routes
 Container that evaluates all child Route elements and renders the best match based on pattern specificity.
 
 ```tsx
-import { Routes, Route } from '@ilovereact/router';
+import { Routes, Route } from '@reactjit/router';
 
 <Routes>
   <Route path="/" element={<Home />} />
@@ -81,7 +81,7 @@ Link
 Navigable element. Renders as an anchor tag and navigates on click.
 
 ```tsx
-import { Link } from '@ilovereact/router';
+import { Link } from '@reactjit/router';
 
 <Link to="/about">About</Link>
 <Link to="/users/123" replace>View User</Link>
@@ -102,7 +102,7 @@ Navigate
 Declarative redirect component. Triggers navigation when rendered.
 
 ```tsx
-import { Navigate } from '@ilovereact/router';
+import { Navigate } from '@reactjit/router';
 
 <Route path="/old-path" element={<Navigate to="/new-path" replace />} />
 ```
@@ -121,7 +121,7 @@ Outlet
 Renders nested route content. Used in parent route elements to define where child routes appear.
 
 ```tsx
-import { Outlet } from '@ilovereact/router';
+import { Outlet } from '@reactjit/router';
 
 function Layout() {
   return (
@@ -145,7 +145,7 @@ useRouter
 Returns full router state including location, params, and navigation methods.
 
 ```tsx
-import { useRouter } from '@ilovereact/router';
+import { useRouter } from '@reactjit/router';
 
 function Component() {
   const { location, navigate, back, forward } = useRouter();
@@ -184,7 +184,7 @@ useNavigate
 Returns navigation function for imperative navigation.
 
 ```tsx
-import { useNavigate } from '@ilovereact/router';
+import { useNavigate } from '@reactjit/router';
 
 function Component() {
   const navigate = useNavigate();
@@ -212,7 +212,7 @@ useLocation
 Returns current location object.
 
 ```tsx
-import { useLocation } from '@ilovereact/router';
+import { useLocation } from '@reactjit/router';
 
 function Component() {
   const location = useLocation();
@@ -237,7 +237,7 @@ useParams
 Returns route parameters extracted from the current path.
 
 ```tsx
-import { useParams } from '@ilovereact/router';
+import { useParams } from '@reactjit/router';
 
 function UserPage() {
   const params = useParams<{ id: string }>();
@@ -261,7 +261,7 @@ useRoute
 Matches current location against a pattern. Returns [matched, params] tuple.
 
 ```tsx
-import { useRoute } from '@ilovereact/router';
+import { useRoute } from '@reactjit/router';
 
 function Component() {
   const [isUserPage, params] = useRoute('/users/:id');
@@ -283,7 +283,7 @@ createMemoryHistory
 Creates an in-memory history adapter for non-browser environments.
 
 ```tsx
-import { createMemoryHistory } from '@ilovereact/router';
+import { createMemoryHistory } from '@reactjit/router';
 
 const history = createMemoryHistory({
   initialEntries: ['/home', '/about'],
@@ -306,7 +306,7 @@ createBrowserHistory
 Creates a browser history adapter using pushState/replaceState (web only).
 
 ```tsx
-import { createBrowserHistory } from '@ilovereact/router';
+import { createBrowserHistory } from '@reactjit/router';
 
 const history = createBrowserHistory();
 ```
@@ -337,14 +337,14 @@ Example 1: Basic routing setup
 -------------------------------
 ```tsx
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import {
   RouterProvider,
   Routes,
   Route,
   Link,
   createMemoryHistory
-} from '@ilovereact/router';
+} from '@reactjit/router';
 
 function Home() {
   return (
@@ -402,7 +402,7 @@ Example 2: Navigation with params
 ----------------------------------
 ```tsx
 import React from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 import {
   RouterProvider,
   Routes,
@@ -411,7 +411,7 @@ import {
   useParams,
   useNavigate,
   createMemoryHistory
-} from '@ilovereact/router';
+} from '@reactjit/router';
 
 const users = [
   { id: '1', name: 'Alice', email: 'alice@example.com' },
@@ -495,7 +495,7 @@ Example 3: Nested routes with Outlet
 -------------------------------------
 ```tsx
 import React from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 import {
   RouterProvider,
   Routes,
@@ -504,7 +504,7 @@ import {
   Outlet,
   useLocation,
   createMemoryHistory
-} from '@ilovereact/router';
+} from '@reactjit/router';
 
 function Layout() {
   const location = useLocation();
@@ -583,7 +583,7 @@ Example 4: Conditional navigation with useRoute
 ------------------------------------------------
 ```tsx
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import {
   RouterProvider,
   Routes,
@@ -591,7 +591,7 @@ import {
   useRoute,
   useLocation,
   createMemoryHistory
-} from '@ilovereact/router';
+} from '@reactjit/router';
 
 function Breadcrumbs() {
   const location = useLocation();
@@ -649,7 +649,7 @@ Example 5: Query string and hash handling
 ------------------------------------------
 ```tsx
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 import {
   RouterProvider,
   useLocation,
@@ -657,7 +657,7 @@ import {
   Routes,
   Route,
   createMemoryHistory
-} from '@ilovereact/router';
+} from '@reactjit/router';
 
 function SearchPage() {
   const location = useLocation();

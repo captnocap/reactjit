@@ -14,7 +14,7 @@ In web mode, Slider handles drag via mouse events with global listeners for reli
 
 === API / SYNTAX ===
 ```tsx
-import { Slider } from '@ilovereact/core';
+import { Slider } from '@reactjit/core';
 ```
 
 ```tsx

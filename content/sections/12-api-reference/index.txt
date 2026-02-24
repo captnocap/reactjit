@@ -8,7 +8,7 @@ related: style-properties, types
 difficulty: intermediate
 
 === OVERVIEW ===
-This section contains the complete API reference for iLoveReact. The style properties
+This section contains the complete API reference for ReactJIT. The style properties
 document lists every property available in the Style interface with types, valid values,
 and descriptions. The types document provides the full TypeScript type definitions for
 all components, events, and animation interfaces.

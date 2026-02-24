@@ -15,7 +15,7 @@ Tor hidden services let you host a multiplayer game without port forwarding, fir
 rules, or cloud servers. Your app generates a .onion address automatically. Share it
 with friends, they connect directly. That's it.
 
-iLoveReact includes Tor integration for anonymous multiplayer, direct peer connections,
+ReactJIT includes Tor integration for anonymous multiplayer, direct peer connections,
 and hosting hidden services. The tor.lua module auto-starts a Tor subprocess, configures
 hidden service forwarding, polls for bootstrap completion, and provides the .onion
 address. HTTP and WebSocket connections can be routed through Tor via SOCKS5 proxies.
@@ -353,7 +353,7 @@ Platforms: love2d
 
 **Active Connection:**
 - Tor adds ~50-100ms latency per message (typical)
-- Message bandwidth: limited by Tor network, not iLoveReact
+- Message bandwidth: limited by Tor network, not ReactJIT
 - Player state updates: batch & transmit at your game's update rate (e.g., 60 FPS)
 - No bandwidth overhead from Tor itself; data goes through at normal speeds
 
@@ -443,7 +443,7 @@ For a 4-player game at 20 Hz: ~80 KB/s total (all players combined)
 - [ ] Test on target machines (different networks, ISPs, firewalls)
 
 **Troubleshooting:**
-- Tor won't start? Check `~/.cache/ilovereact-tor/tor.log` for errors
+- Tor won't start? Check `~/.cache/reactjit-tor/tor.log` for errors
 - Connection hangs? Tor bootstrap can take 30s; be patient
 - getHostname() returns nil after 60s? Tor may have failed; check logs
 - SOCKS5 connection timeout? Network issue or Tor circuit too slow

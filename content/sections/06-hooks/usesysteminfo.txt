@@ -17,7 +17,7 @@ import {
   formatUptime,
   formatMemory,
   formatBytes,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 ```
 
 Hook signature:
@@ -83,7 +83,7 @@ formatBytes(bytes: number): string
 Example 1: Display a neofetch-style system summary
 ---
 ```tsx
-import { useSystemInfo, formatUptime, formatMemory } from '@ilovereact/core';
+import { useSystemInfo, formatUptime, formatMemory } from '@reactjit/core';
 
 function SystemCard() {
   const info = useSystemInfo();
@@ -112,7 +112,7 @@ Platforms: love2d
 Example 2: Live memory polling every 5 seconds
 ---
 ```tsx
-import { useSystemInfo, formatMemory } from '@ilovereact/core';
+import { useSystemInfo, formatMemory } from '@reactjit/core';
 
 function MemoryWidget() {
   const info = useSystemInfo(5000);
@@ -138,7 +138,7 @@ Example 3: Log a system snapshot to a file on mount
 ---
 ```tsx
 import { useEffect } from 'react';
-import { useSystemInfo } from '@ilovereact/core';
+import { useSystemInfo } from '@reactjit/core';
 
 function DiagnosticsLogger() {
   const info = useSystemInfo();
@@ -160,7 +160,7 @@ Platforms: love2d
 Example 4: Conditional content based on available memory
 ---
 ```tsx
-import { useSystemInfo } from '@ilovereact/core';
+import { useSystemInfo } from '@reactjit/core';
 
 function AdaptiveApp() {
   const info = useSystemInfo();

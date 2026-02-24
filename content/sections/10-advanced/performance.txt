@@ -1,6 +1,6 @@
 === METADATA ===
 title: Performance Tips
-description: Optimization strategies for iLoveReact applications
+description: Optimization strategies for ReactJIT applications
 category: Advanced
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: performance, optimization, flex tree, flatlist, virtualization, animated value, shallow
@@ -8,7 +8,7 @@ related: layout-engine, painter, lua-runtime
 difficulty: advanced
 
 === OVERVIEW ===
-iLoveReact runs a full layout pass on every frame where the tree is dirty. The layout
+ReactJIT runs a full layout pass on every frame where the tree is dirty. The layout
 engine, text measurement, and painter all have costs that scale with tree size and
 complexity. Most applications run comfortably at 60fps, but deeply nested trees, large
 text blocks, or unvirtualized long lists can cause frame drops.

@@ -13,7 +13,7 @@ Select provides a dropdown-style selection from a list of options. Each option h
 Select supports both controlled and uncontrolled modes. In web mode, it renders a native HTML `<select>` element with custom styling. In native mode (Love2D), it renders an inline accordion: clicking the header toggles the option list open or closed, and clicking an option selects it and collapses the list.
 
 === API / SYNTAX ===
-Import: import { Select } from '@ilovereact/core';
+Import: import { Select } from '@reactjit/core';
 
 SelectOption type:
 ```ts

@@ -8,7 +8,7 @@ related: useLoveRPC
 difficulty: intermediate
 
 === OVERVIEW ===
-The @ilovereact/media package provides two sets of hooks: archive hooks for working with compressed files (RAR, ZIP, 7z, TAR, and others), and media library hooks for scanning directories of media files. The archive hooks delegate to a Lua-side libarchive integration; the scan hooks walk the filesystem. useMediaIndex combines both — it looks inside archives to surface their contents as first-class MediaFile entries alongside regular files.
+The @reactjit/media package provides two sets of hooks: archive hooks for working with compressed files (RAR, ZIP, 7z, TAR, and others), and media library hooks for scanning directories of media files. The archive hooks delegate to a Lua-side libarchive integration; the scan hooks walk the filesystem. useMediaIndex combines both — it looks inside archives to surface their contents as first-class MediaFile entries alongside regular files.
 
 === API / SYNTAX ===
 
@@ -16,7 +16,7 @@ The @ilovereact/media package provides two sets of hooks: archive hooks for work
 
 List all entries inside an archive. Fetches automatically when filepath changes. Provides a refresh function for manual re-fetching.
 
-  import { useArchive } from '@ilovereact/media';
+  import { useArchive } from '@reactjit/media';
 
   const { entries, loading, error, refresh } = useArchive(filepath: string | null);
 
@@ -40,7 +40,7 @@ ArchiveEntry fields:
 
 Fetch a summary of an archive without listing every entry. Returns counts, total size, and an extension histogram.
 
-  import { useArchiveInfo } from '@ilovereact/media';
+  import { useArchiveInfo } from '@reactjit/media';
 
   const { info, loading, error } = useArchiveInfo(filepath: string | null);
 
@@ -63,7 +63,7 @@ ArchiveInfo fields:
 
 Returns an imperative function that reads a single file from inside an archive. Call it on demand rather than on mount. Throws on error.
 
-  import { useArchiveRead } from '@ilovereact/media';
+  import { useArchiveRead } from '@reactjit/media';
 
   const read = useArchiveRead();
   const { content, size } = await read(filepath, entryPath, maxBytes?);
@@ -83,7 +83,7 @@ Throws: Error with message from Lua if the entry cannot be read.
 
 Search archive entries by a Lua pattern. Fetches automatically when filepath or pattern changes.
 
-  import { useArchiveSearch } from '@ilovereact/media';
+  import { useArchiveSearch } from '@reactjit/media';
 
   const { matches, loading } = useArchiveSearch(filepath: string | null, pattern: string);
 
@@ -99,7 +99,7 @@ Returns:
 
 Scan a directory for media files. Returns typed MediaFile entries with source set to 'filesystem'. Does not look inside archives; use useMediaIndex for that.
 
-  import { useMediaLibrary } from '@ilovereact/media';
+  import { useMediaLibrary } from '@reactjit/media';
 
   const { files, stats, loading, error, rescan } = useMediaLibrary(
     directory: string | null,
@@ -146,7 +146,7 @@ DirStats fields:
 
 Fetch quick directory statistics without loading every file. Lighter than useMediaLibrary when you only need counts and sizes.
 
-  import { useMediaStats } from '@ilovereact/media';
+  import { useMediaStats } from '@reactjit/media';
 
   const { stats, loading } = useMediaStats(directory: string | null);
 
@@ -161,7 +161,7 @@ Returns:
 
 Deep-index a directory, scanning both filesystem files and the contents of archives. Archive contents appear as MediaFile entries with source set to 'archive'. This is the archive walker.
 
-  import { useMediaIndex } from '@ilovereact/media';
+  import { useMediaIndex } from '@reactjit/media';
 
   const { index, loading, error, rescan } = useMediaIndex(
     directory: string | null,
@@ -189,9 +189,9 @@ Returns:
 
 List entries in a RAR file and let the user pick one to read:
 
-  import { useArchive, useArchiveRead } from '@ilovereact/media';
+  import { useArchive, useArchiveRead } from '@reactjit/media';
   import { useState } from 'react';
-  import { Box, Text } from '@ilovereact/core';
+  import { Box, Text } from '@reactjit/core';
 
   function ArchiveBrowser({ filepath }: { filepath: string }) {
     const { entries, loading, error } = useArchive(filepath);
@@ -232,8 +232,8 @@ List entries in a RAR file and let the user pick one to read:
 
 Show only video files in a directory, with a count breakdown by type:
 
-  import { useMediaLibrary, formatSize } from '@ilovereact/media';
-  import { Box, Text } from '@ilovereact/core';
+  import { useMediaLibrary, formatSize } from '@reactjit/media';
+  import { Box, Text } from '@reactjit/core';
 
   function VideoLibrary({ dir }: { dir: string }) {
     const { files, stats, loading, rescan } = useMediaLibrary(dir, {
@@ -266,8 +266,8 @@ Show only video files in a directory, with a count breakdown by type:
 
 Surface video files both on disk and packed inside archives:
 
-  import { useMediaIndex, formatSize } from '@ilovereact/media';
-  import { Box, Text } from '@ilovereact/core';
+  import { useMediaIndex, formatSize } from '@reactjit/media';
+  import { Box, Text } from '@reactjit/core';
 
   function DeepIndex({ dir }: { dir: string }) {
     const { index, loading, error } = useMediaIndex(dir, {
@@ -299,8 +299,8 @@ Surface video files both on disk and packed inside archives:
 
 Show a summary of a ZIP without listing every entry:
 
-  import { useArchiveInfo, formatSize } from '@ilovereact/media';
-  import { Box, Text } from '@ilovereact/core';
+  import { useArchiveInfo, formatSize } from '@reactjit/media';
+  import { Box, Text } from '@reactjit/core';
 
   function ArchiveCard({ filepath }: { filepath: string }) {
     const { info, loading } = useArchiveInfo(filepath);

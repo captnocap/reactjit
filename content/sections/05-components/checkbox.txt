@@ -13,7 +13,7 @@ Checkbox is a square toggle control that displays a filled inner square when che
 Checkbox supports both controlled and uncontrolled modes. Pass `value` for controlled behavior, or use `defaultValue` for uncontrolled. The checkbox box border color changes between `color` (checked) and `uncheckedColor` (unchecked), and the box fills with `color` when checked with a white inner indicator.
 
 === API / SYNTAX ===
-Import: import { Checkbox } from '@ilovereact/core';
+Import: import { Checkbox } from '@reactjit/core';
 
 Usage:
 ```tsx

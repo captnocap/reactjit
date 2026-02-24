@@ -13,8 +13,8 @@ Returns the `IBridge` transport instance that handles communication between Java
 === API / SYNTAX ===
 Import:
 ```typescript
-import { useBridge, BridgeProvider } from '@ilovereact/core';
-import type { IBridge } from '@ilovereact/core';
+import { useBridge, BridgeProvider } from '@reactjit/core';
+import type { IBridge } from '@reactjit/core';
 ```
 
 Hook signature:
@@ -214,9 +214,9 @@ Platforms: Love2D
 
 Example 7: Provider setup at app root
 ---
-import { createRoot } from '@ilovereact/native';
-import { BridgeProvider, RendererProvider } from '@ilovereact/core';
-import { createBridge } from '@ilovereact/native';
+import { createRoot } from '@reactjit/native';
+import { BridgeProvider, RendererProvider } from '@reactjit/core';
+import { createBridge } from '@reactjit/native';
 
 const bridge = createBridge();
 

@@ -14,7 +14,7 @@ Pressable supports both static and function-based style and children props. When
 
 === API / SYNTAX ===
 ```tsx
-import { Pressable } from '@ilovereact/core';
+import { Pressable } from '@reactjit/core';
 ```
 
 ```tsx

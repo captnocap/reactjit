@@ -1,6 +1,6 @@
 === METADATA ===
 title: Troubleshooting
-description: Hub page for troubleshooting common issues with iLoveReact
+description: Hub page for troubleshooting common issues with ReactJIT
 category: Troubleshooting
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: troubleshooting, debugging, errors, faq, help, common issues
@@ -8,7 +8,7 @@ related: common-errors, faq, debugging
 difficulty: beginner
 
 === OVERVIEW ===
-This section covers the most common issues encountered when developing with iLoveReact.
+This section covers the most common issues encountered when developing with ReactJIT.
 The common errors page lists specific error symptoms and their solutions. The FAQ
 addresses frequently asked questions about capabilities, limitations, and workflows.
 

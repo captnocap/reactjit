@@ -1,6 +1,6 @@
 === METADATA ===
 title: Love2D Target
-description: The primary iLoveReact target - pixel-perfect rendering via the Love2D game engine
+description: The primary ReactJIT target - pixel-perfect rendering via the Love2D game engine
 category: Targets
 platforms: love2d
 keywords: love2d, native, quickjs, pixel rendering, iife, inspector, f12, game engine
@@ -8,13 +8,13 @@ related: web, terminal, pipeline, painter, layout-engine
 difficulty: intermediate
 
 === OVERVIEW ===
-Love2D is the primary and most mature iLoveReact target. Your React components run
+Love2D is the primary and most mature ReactJIT target. Your React components run
 inside QuickJS (a lightweight JavaScript engine embedded in the Love2D process via
 libquickjs.so). The Lua runtime handles layout computation and rendering using
 love.graphics draw calls. This gives you pixel-perfect rendering with full support for
 mouse, keyboard, touch, and gamepad input.
 
-The Love2D target supports the complete iLoveReact feature set: flexbox layout, text
+The Love2D target supports the complete ReactJIT feature set: flexbox layout, text
 measurement and wrapping, image loading, scroll containers, gradients, shadows,
 transforms, transitions, keyframe animations, and the F12 visual inspector.
 
@@ -24,9 +24,9 @@ esbuild Configuration:
   --global-name=ReactLove
 
 Build Commands:
-  ilovereact dev              - Watch mode with HMR
-  ilovereact build            - Lint gate + production bundle
-  ilovereact build dist:love  - Self-extracting Linux binary
+  reactjit dev              - Watch mode with HMR
+  reactjit build            - Lint gate + production bundle
+  reactjit build dist:love  - Self-extracting Linux binary
 
 Runtime Modes:
   native  - QuickJS FFI bridge (default for `love .`)
@@ -55,7 +55,7 @@ Love2D Callbacks (wired in main.lua):
 === EXAMPLES ===
 Example 1: Standard App Entry Point (src/index.tsx)
 ---
-import { createLove2DApp } from '@ilovereact/native';
+import { createLove2DApp } from '@reactjit/native';
 import App from './App';
 
 const app = createLove2DApp();
@@ -127,7 +127,7 @@ Features:
   - F12 visual inspector for debugging layout
   - Backtick (`) console for evaluating JS/Lua at runtime
   - Hot module reload (HMR) -- bundle.js changes detected automatically
-  - Screenshot capture via `ilovereact screenshot`
+  - Screenshot capture via `reactjit screenshot`
   - Error overlay for runtime errors
   - Self-extracting binary distribution (Linux)
 
@@ -140,9 +140,9 @@ Limitations:
 === CRITICAL RULES ===
 - The bundle format MUST be IIFE with --global-name=ReactLove.
   ESM or CJS bundles will not load in QuickJS.
-- Always use the CLI for builds: `ilovereact build`, not raw esbuild.
+- Always use the CLI for builds: `reactjit build`, not raw esbuild.
 - The Lua runtime files must be present locally for `love .` to work.
-  Run `ilovereact update` after any framework changes.
+  Run `reactjit update` after any framework changes.
 
 === SEE ALSO ===
 - 02-architecture/pipeline.txt - How the frame loop works

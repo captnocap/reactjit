@@ -178,7 +178,7 @@ return TextInput
 Example 1: TextInput - Zero bridge traffic per keystroke
 ---
 ```tsx
-import { TextInput } from '@ilovereact/core';
+import { TextInput } from '@reactjit/core';
 import { useState } from 'react';
 
 function SearchBox() {
@@ -211,7 +211,7 @@ Platforms: Love2D
 Example 2: VideoPlayer - Zero bridge traffic per frame
 ---
 ```tsx
-import { VideoPlayer } from '@ilovereact/core';
+import { VideoPlayer } from '@reactjit/core';
 import { useState } from 'react';
 
 function VideoDemo() {
@@ -247,7 +247,7 @@ Platforms: Love2D
 Example 3: TextEditor - Zero bridge traffic per cursor movement
 ---
 ```tsx
-import { TextEditor } from '@ilovereact/core';
+import { TextEditor } from '@reactjit/core';
 
 function CodeEditor() {
   const [code, setCode] = useState('function main()\n  print("hello")\nend');
@@ -277,7 +277,7 @@ Platforms: Love2D
 Example 4: ContextMenu - Zero bridge traffic per hover/keyboard nav
 ---
 ```tsx
-import { ContextMenu } from '@ilovereact/core';
+import { ContextMenu } from '@reactjit/core';
 
 function FileMenu() {
   return (
@@ -413,7 +413,7 @@ elseif focusedNode.type == "CustomSlider" then
 
 **Usage:**
 ```tsx
-import { CustomSlider } from '@ilovereact/core';
+import { CustomSlider } from '@reactjit/core';
 import { useState } from 'react';
 
 function VolumeControl() {

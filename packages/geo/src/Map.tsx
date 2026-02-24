@@ -23,11 +23,16 @@ export function Map({
   maxZoom,
   projection,
   style,
+  markers,
+  polylines,
   onViewChange,
   onClick,
   onLongPress,
   children,
-}: MapProps) {
+}: MapProps & {
+  markers?: Array<{ lat?: number; lng?: number;[key: number]: number; anchor?: string; draggable?: boolean }>;
+  polylines?: Array<{ positions: [number, number][]; color?: string; width?: number; dashArray?: number[]; animated?: boolean; arrowheads?: boolean }>;
+}) {
   const mode = useRendererMode();
 
   if (mode === 'web') {
@@ -58,8 +63,9 @@ export function Map({
       bearing,
       pitch,
       minZoom,
-      maxZoom,
       projection,
+      markers,
+      polylines,
       onViewChange,
       onClick,
       onLongPress,

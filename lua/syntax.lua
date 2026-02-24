@@ -551,7 +551,7 @@ local BASH_KW = {
 local BASH_BUILTIN = {
   echo=1,printf=1,read=1,cd=1,pwd=1,ls=1,cp=1,mv=1,rm=1,mkdir=1,rmdir=1,
   touch=1,cat=1,grep=1,sed=1,awk=1,find=1,sort=1,head=1,tail=1,wc=1,
-  source=1,["."]=1,eval=1,exec=1,test=1,["["]=1,["[["]=1,true=1,false=1,
+  source=1,["."]=1,eval=1,exec=1,test=1,["["]=1,["[["]=1,["true"]=1,["false"]=1,
   curl=1,wget=1,git=1,make=1,npm=1,node=1,python=1,python3=1,bash=1,sh=1,
 }
 
@@ -906,7 +906,7 @@ local function tokenizeHTML(line)
       while i<=len do
         local c2=line:sub(i,i)
         if c2=='>' then tokens[#tokens+1]={text='>',color=sc.tag}; i=i+1; break end
-        if line:sub(i,i+1)='/>' then tokens[#tokens+1]={text='/>',color=sc.tag}; i=i+2; break end
+        if line:sub(i,i+1)=='/>' then tokens[#tokens+1]={text='/>',color=sc.tag}; i=i+2; break end
         if c2:match("%s") then
           local s2=i; while i<=len and line:sub(i,i):match("%s") do i=i+1 end
           tokens[#tokens+1]={text=line:sub(s2,i-1),color=sc.text}
@@ -950,11 +950,11 @@ end
 -- ============================================================================
 
 local RUST_KW = {
-  as=1,async=1,await=1,break=1,const=1,continue=1,crate=1,dyn=1,["else"]=1,
+  as=1,async=1,await=1,["break"]=1,const=1,["continue"]=1,crate=1,dyn=1,["else"]=1,
   enum=1,extern=1,["false"]=1,fn=1,["for"]=1,["if"]=1,impl=1,["in"]=1,
   let=1,loop=1,match=1,mod=1,move=1,mut=1,pub=1,ref=1,["return"]=1,
   self=1,Self=1,static=1,struct=1,super=1,trait=1,["true"]=1,type=1,
-  unsafe=1,use=1,where=1,while=1,
+  unsafe=1,use=1,where=1,["while"]=1,
 }
 local RUST_PRIMITIVE = {
   i8=1,i16=1,i32=1,i64=1,i128=1,isize=1,u8=1,u16=1,u32=1,u64=1,u128=1,
@@ -1199,7 +1199,7 @@ local function tokenizeGo(line)
     if goop[ch] then
       local t2=line:sub(i,i+1)
       local g2={[":="]=1,["=="]=1,["!="]=1,[">="]=1,["<="]=1,["&&"]=1,["||"]=1,
-                ["+="]=1,["-="]=1,["*="]=1,["/="]=1,["%="]=1,"[<<]"=1,[">>"]="1",
+                ["+="]=1,["-="]=1,["*="]=1,["/="]=1,["%="]=1,["<<"]=1,[">>"]=1,
                 ["<-"]=1,["++"]=1,["--"]=1}
       if g2[t2] then tokens[#tokens+1]={text=t2,color=sc.operator}; i=i+2
       else tokens[#tokens+1]={text=ch,color=sc.operator}; i=i+1 end
@@ -1217,18 +1217,18 @@ end
 -- ============================================================================
 
 local C_KW = {
-  auto=1,break=1,case=1,char=1,const=1,continue=1,default=1,do=1,
-  double=1,["else"]=1,enum=1,extern=1,float=1,["for"]=1,goto=1,["if"]=1,
+  auto=1,["break"]=1,case=1,char=1,const=1,["continue"]=1,default=1,["do"]=1,
+  double=1,["else"]=1,enum=1,extern=1,float=1,["for"]=1,["goto"]=1,["if"]=1,
   inline=1,int=1,long=1,register=1,restrict=1,["return"]=1,short=1,
   signed=1,sizeof=1,static=1,struct=1,switch=1,typedef=1,union=1,
-  unsigned=1,void=1,volatile=1,while=1,
+  unsigned=1,void=1,volatile=1,["while"]=1,
   -- C++
   alignas=1,alignof=1,["and"]=1,["and_eq"]=1,asm=1,bitand=1,bitor=1,
   bool=1,catch=1,class=1,compl=1,concept=1,consteval=1,constexpr=1,
   constinit=1,["co_await"]=1,["co_return"]=1,["co_yield"]=1,decltype=1,
   delete=1,dynamic_cast=1,explicit=1,export=1,["false"]=1,friend=1,
-  mutable=1,namespace=1,new=1,noexcept=1,not=1,["not_eq"]=1,nullptr=1,
-  operator=1,or=1,or_eq=1,private=1,protected=1,public=1,
+  mutable=1,namespace=1,new=1,noexcept=1,["not"]=1,["not_eq"]=1,nullptr=1,
+  operator=1,["or"]=1,or_eq=1,private=1,protected=1,public=1,
   reinterpret_cast=1,requires=1,static_assert=1,static_cast=1,
   template=1,this=1,thread_local=1,throw=1,["true"]=1,try=1,typeid=1,
   typename=1,using=1,virtual=1,["xor"]=1,xor_eq=1,
@@ -1346,13 +1346,13 @@ end
 -- ============================================================================
 
 local JAVA_KW = {
-  abstract=1,assert=1,boolean=1,break=1,byte=1,case=1,catch=1,char=1,
-  class=1,const=1,continue=1,default=1,do=1,double=1,["else"]=1,enum=1,
-  extends=1,final=1,finally=1,float=1,["for"]=1,goto=1,["if"]=1,
+  abstract=1,assert=1,boolean=1,["break"]=1,byte=1,case=1,catch=1,char=1,
+  class=1,const=1,["continue"]=1,default=1,["do"]=1,double=1,["else"]=1,enum=1,
+  extends=1,final=1,finally=1,float=1,["for"]=1,["goto"]=1,["if"]=1,
   implements=1,import=1,instanceof=1,int=1,interface=1,long=1,native=1,
   new=1,package=1,private=1,protected=1,public=1,["return"]=1,short=1,
   static=1,strictfp=1,super=1,switch=1,synchronized=1,this=1,throw=1,
-  throws=1,transient=1,try=1,var=1,void=1,volatile=1,while=1,
+  throws=1,transient=1,try=1,var=1,void=1,volatile=1,["while"]=1,
   -- Kotlin
   val=1,fun=1,["when"]=1,["is"]=1,["as"]=1,["in"]=1,["out"]=1,by=1,
   companion=1,object=1,data=1,sealed=1,inline=1,suspend=1,reified=1,
@@ -1471,7 +1471,7 @@ local SQL_KW = {
   ["null"]=1,["true"]=1,["false"]=1,order=1,by=1,group=1,having=1,
   limit=1,offset=1,insert=1,into=1,values=1,update=1,set=1,delete=1,
   create=1,drop=1,alter=1,table=1,index=1,view=1,distinct=1,
-  case=1,when=1,then=1,["else"]=1,["end"]=1,with=1,
+  case=1,when=1,["then"]=1,["else"]=1,["end"]=1,with=1,
 }
 local SQL_FUNC = {
   COUNT=1,SUM=1,AVG=1,MAX=1,MIN=1,COALESCE=1,NULLIF=1,CAST=1,

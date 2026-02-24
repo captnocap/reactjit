@@ -11,7 +11,7 @@ difficulty: beginner
 Spacer is a layout utility component that creates space between elements. When used without props, it uses flexGrow to fill all available space in its parent container. When given a size prop, it creates a fixed-height gap. Spacer is the idiomatic way to push elements apart without manual margin calculations.
 
 === API / SYNTAX ===
-import { Spacer } from '@ilovereact/core';
+import { Spacer } from '@reactjit/core';
 
 Props:
 | Prop | Type | Default | Description |

@@ -98,6 +98,11 @@ end
 function Focus.set(node)
   local prev = defaultGroup.focusedNode
   Log.log("focus", "set id=%s type=%s (prev=%s)", tostring(node and node.id), tostring(node and node.type), tostring(prev and prev.id or "nil"))
+  if node == nil and prev ~= nil then
+    io.write("[focus:set(nil)] NULLIFYING focus from " .. tostring(prev.type) .. " id=" .. tostring(prev.id) .. "\n")
+    io.write("[focus:set(nil)] traceback: " .. debug.traceback("", 2) .. "\n")
+    io.flush()
+  end
   defaultGroup.focusedNode = node
   return prev
 end
@@ -106,6 +111,11 @@ end
 function Focus.clear()
   local prev = defaultGroup.focusedNode
   Log.log("focus", "clear (prev=%s)", tostring(prev and prev.id or "nil"))
+  if prev then
+    io.write("[focus:clear] CLEARING focus from " .. tostring(prev.type) .. " id=" .. tostring(prev.id) .. "\n")
+    io.write("[focus:clear] traceback: " .. debug.traceback("", 2) .. "\n")
+    io.flush()
+  end
   defaultGroup.focusedNode = nil
   return prev
 end
@@ -164,6 +174,7 @@ end
 -- ============================================================================
 
 --- Determine if a node is focusable.
+local _capabilities = nil
 local function isFocusable(node)
   if not node or not node.computed then return false end
   local s = node.style or {}
@@ -175,6 +186,14 @@ local function isFocusable(node)
   if props.focusable == false then return false end
 
   if node.hasHandlers then return true end
+
+  -- Hittable capabilities (e.g. ClaudeCanvas) are focusable even without React handlers
+  if not _capabilities then
+    local ok, cap = pcall(require, "lua.capabilities")
+    if ok then _capabilities = cap end
+  end
+  if _capabilities and node.type and _capabilities.isHittable(node.type) then return true end
+
   return false
 end
 

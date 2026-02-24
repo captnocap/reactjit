@@ -1,13 +1,13 @@
 === METADATA ===
 title: Animation Examples
-description: Demonstrates timing, spring, composite, and CSS-style animations in iLoveReact
+description: Demonstrates timing, spring, composite, and CSS-style animations in ReactJIT
 category: Examples
 platforms: all
 keywords: animation, spring, timing, easing, parallel, sequence, stagger, loop, AnimatedValue, useAnimation, useSpring, transition, keyframes
 difficulty: intermediate
 
 === OVERVIEW ===
-This example demonstrates the iLoveReact animation system. It covers three approaches:
+This example demonstrates the ReactJIT animation system. It covers three approaches:
 imperative animations via AnimatedValue (timing and spring), convenience hooks
 (useSpring, useTransition), and declarative CSS-style animations (style.transition and
 style.animation). The example shows how to create smooth motion without causing React
@@ -20,7 +20,7 @@ import {
   Box, Text, Pressable,
   AnimatedValue, useAnimation, useSpring, Easing,
   parallel, sequence, stagger, loop,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 
 // Example 1: Imperative Timing Animation
 function FadeInBox() {

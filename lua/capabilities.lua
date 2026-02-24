@@ -117,7 +117,20 @@ end
 --- @param nodes table  The full node table from tree.lua (id -> node)
 --- @param pushEvent function  Function to push events to the bridge
 --- @param dt number  Delta time since last frame
+local _syncDebugOnce = false
 function Capabilities.syncWithTree(nodes, pushEvent, dt)
+  if not _syncDebugOnce then
+    _syncDebugOnce = true
+    local count = 0
+    for id, node in pairs(nodes) do
+      count = count + 1
+      io.write(string.format("[cap:sync] node id=%s type=%s reg=%s\n",
+        tostring(id), tostring(node.type), tostring(registry[node.type] ~= nil)))
+    end
+    io.write(string.format("[cap:sync] total nodes=%d, registry keys:", count))
+    for k in pairs(registry) do io.write(" " .. k) end
+    io.write("\n"); io.flush()
+  end
   local seen = {}
 
   for id, node in pairs(nodes) do
@@ -242,6 +255,7 @@ function Capabilities.loadAll()
     "boids",
     "image_select",
     "scene3d",
+    "terminal",
   }
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)

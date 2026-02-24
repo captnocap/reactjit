@@ -1,6 +1,6 @@
 === METADATA ===
 title: Architecture
-description: Hub page for iLoveReact architecture documentation
+description: Hub page for ReactJIT architecture documentation
 category: Architecture
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: architecture, pipeline, reconciler, layout, transport, painter, source of truth
@@ -8,7 +8,7 @@ related: pipeline, reconciler, layout-engine, transport, painter, source-of-trut
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact's architecture is a multi-stage rendering pipeline. React components are
+ReactJIT's architecture is a multi-stage rendering pipeline. React components are
 reconciled into an instance tree, serialized as mutation commands, transported to the
 target runtime, laid out by a flexbox engine, and drawn by a target-specific painter.
 Each stage is independent and replaceable.

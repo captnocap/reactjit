@@ -8,14 +8,14 @@ related: useServer, useStaticServer, useLibrary
 difficulty: intermediate
 
 === OVERVIEW ===
-@ilovereact/server provides React hooks that start and manage a non-blocking
+@reactjit/server provides React hooks that start and manage a non-blocking
 HTTP server running inside Love2D via lua/httpserver.lua. Static files (media,
 assets) are served entirely from the Lua side with zero bridge overhead. Dynamic
 API routes forward requests across the QuickJS bridge to React handlers that
 return response objects. useLibrary adds on-demand filesystem indexing so you
 can build searchable media servers with a single call.
 
-Import: import { useServer, useStaticServer, useLibrary } from '@ilovereact/server';
+Import: import { useServer, useStaticServer, useLibrary } from '@reactjit/server';
 
 === API / SYNTAX ===
 
@@ -147,7 +147,7 @@ category breakdowns and per-directory stats.
 
 ---- Basic API server with JSON endpoints -----------------------------------
 
-import { useServer } from '@ilovereact/server';
+import { useServer } from '@reactjit/server';
 
 function App() {
   const [status, setStatus] = React.useState('ok');
@@ -187,7 +187,7 @@ function App() {
 
 ---- Static file server for a media directory --------------------------------
 
-import { useStaticServer } from '@ilovereact/server';
+import { useStaticServer } from '@reactjit/server';
 
 function MusicApp() {
   const server = useStaticServer(8080, '/home/user/music');
@@ -205,7 +205,7 @@ function MusicApp() {
 
 ---- Mixed server: static files + dynamic API ------------------------------
 
-import { useServer } from '@ilovereact/server';
+import { useServer } from '@reactjit/server';
 
 function MediaServer() {
   const [playlist, setPlaylist] = React.useState<string[]>([]);
@@ -247,7 +247,7 @@ function MediaServer() {
 
 ---- URL parameters in dynamic routes ---------------------------------------
 
-import { useServer } from '@ilovereact/server';
+import { useServer } from '@reactjit/server';
 
 const server = useServer({
   port: 9000,
@@ -271,7 +271,7 @@ const server = useServer({
 
 ---- Query string parameters ------------------------------------------------
 
-import { useServer } from '@ilovereact/server';
+import { useServer } from '@reactjit/server';
 
 const server = useServer({
   port: 9001,
@@ -297,8 +297,8 @@ const server = useServer({
 
 ---- Media library with index and file serving --------------------------------
 
-import { useLibrary } from '@ilovereact/server';
-import { Box, Text } from '@ilovereact/core';
+import { useLibrary } from '@reactjit/server';
+import { Box, Text } from '@reactjit/core';
 
 function LibraryApp() {
   const library = useLibrary(8080, [
@@ -336,7 +336,7 @@ function LibraryApp() {
 
 ---- Reindex on demand -------------------------------------------------------
 
-import { useLibrary } from '@ilovereact/server';
+import { useLibrary } from '@reactjit/server';
 
 function LibraryWithRefresh() {
   const library = useLibrary(8080, ['/home/user/media']);
@@ -353,7 +353,7 @@ function LibraryWithRefresh() {
 
 ---- Show recent request log ------------------------------------------------
 
-import { useServer } from '@ilovereact/server';
+import { useServer } from '@reactjit/server';
 
 function ServerLog() {
   const server = useServer({ port: 8080, routes: [] });
@@ -372,7 +372,7 @@ function ServerLog() {
 
 ---- Disable server conditionally -------------------------------------------
 
-import { useStaticServer } from '@ilovereact/server';
+import { useStaticServer } from '@reactjit/server';
 
 function App() {
   const [enabled, setEnabled] = React.useState(false);
@@ -387,7 +387,7 @@ function App() {
 
 ---- Manual close -----------------------------------------------------------
 
-import { useServer } from '@ilovereact/server';
+import { useServer } from '@reactjit/server';
 
 function App() {
   const server = useServer({ port: 9090, routes: [] });

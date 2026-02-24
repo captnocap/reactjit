@@ -3,9 +3,8 @@ local ReactJIT = require("lua.init")
 function love.load()
   love.graphics.setBackgroundColor(0.04, 0.04, 0.06)
   ReactJIT.init({
-    mode = "native",
-    bundlePath = "love/bundle.js",
-    libpath = "lib/libquickjs",
+    mode = "wasm",
+    namespace = "default",
     screenshot = false,  -- F2: not needed on landing page
     themeMenu = false,   -- F9: not needed on landing page
     settings = false,    -- F10: not needed on landing page

@@ -18,7 +18,7 @@ Auth: The free public tier requires no API key. Pass your CoinGecko Demo API key
 
 Fetch the spot price of one or more coins in any supported currency. Returns a flat dictionary keyed by coin ID.
 
-  import { useCoinPrice } from '@ilovereact/apis/coingecko';
+  import { useCoinPrice } from '@reactjit/apis/coingecko';
 
   const result: APIResult<CoinPrice> = useCoinPrice(
     coinIds: string | string[] | null,
@@ -54,7 +54,7 @@ CoinPrice shape:
 
 Fetch a paginated, market-cap-sorted list of coins with price statistics and optional 7-day sparkline data.
 
-  import { useCoinMarkets } from '@ilovereact/apis/coingecko';
+  import { useCoinMarkets } from '@reactjit/apis/coingecko';
 
   const result: APIResult<CoinMarket[]> = useCoinMarkets(
     opts?: {
@@ -101,7 +101,7 @@ CoinMarket fields:
 
 Fetch detailed information about a single coin: description, market data across all timeframes, links, and categories.
 
-  import { useCoinDetail } from '@ilovereact/apis/coingecko';
+  import { useCoinDetail } from '@reactjit/apis/coingecko';
 
   const result: APIResult<CoinDetail> = useCoinDetail(
     coinId: string | null,
@@ -137,7 +137,7 @@ CoinDetail fields:
 
 Fetch OHLCV-style historical price, market cap, and volume data for a coin over a time window. Returns timestamp-value pairs.
 
-  import { useCoinHistory } from '@ilovereact/apis/coingecko';
+  import { useCoinHistory } from '@reactjit/apis/coingecko';
 
   const result: APIResult<CoinHistory> = useCoinHistory(
     coinId: string | null,
@@ -159,7 +159,7 @@ Returns: APIResult<CoinHistory>
 
 Fetch the top 7 trending coins on CoinGecko in the last 24 hours (based on search volume).
 
-  import { useCoinTrending } from '@ilovereact/apis/coingecko';
+  import { useCoinTrending } from '@reactjit/apis/coingecko';
 
   const result: APIResult<CoinTrending> = useCoinTrending(
     opts?: { apiKey?: string | null },
@@ -184,7 +184,7 @@ Each item in data.coins:
 
 Fetch aggregate global cryptocurrency market statistics: total market cap, volume, dominance percentages, and 24-hour change.
 
-  import { useCoinGlobal } from '@ilovereact/apis/coingecko';
+  import { useCoinGlobal } from '@reactjit/apis/coingecko';
 
   const result: APIResult<CoinGlobal> = useCoinGlobal(
     opts?: { apiKey?: string | null },
@@ -207,8 +207,8 @@ Returns: APIResult<CoinGlobal>
 
 Poll BTC and ETH prices every 30 seconds and display them with color-coded change indicators.
 
-  import { useCoinPrice } from '@ilovereact/apis/coingecko';
-  import { Box, Text } from '@ilovereact/core';
+  import { useCoinPrice } from '@reactjit/apis/coingecko';
+  import { Box, Text } from '@reactjit/core';
 
   const COINS = ['bitcoin', 'ethereum', 'solana'];
 
@@ -245,9 +245,9 @@ Poll BTC and ETH prices every 30 seconds and display them with color-coded chang
 
 Fetch the top 10 coins with sparkline data and render a miniature 7-day price line using the Sparkline component.
 
-  import { useCoinMarkets } from '@ilovereact/apis/coingecko';
-  import { Sparkline } from '@ilovereact/shared';
-  import { Box, Text } from '@ilovereact/core';
+  import { useCoinMarkets } from '@reactjit/apis/coingecko';
+  import { Sparkline } from '@reactjit/shared';
+  import { Box, Text } from '@reactjit/core';
 
   function MarketTable() {
     const { data, loading } = useCoinMarkets({ perPage: 10, sparkline: true });

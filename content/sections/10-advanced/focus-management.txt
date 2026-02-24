@@ -19,10 +19,10 @@ Any node with an event handler (`onClick`, `onKeyDown`, `onTextInput`, etc.) or 
 
 **FocusGroup Component**
 
-Scoped focus regions for multiplayer or modal dialogs. Import from `@ilovereact/core`:
+Scoped focus regions for multiplayer or modal dialogs. Import from `@reactjit/core`:
 
 ```tsx
-import { FocusGroup } from '@ilovereact/core';
+import { FocusGroup } from '@reactjit/core';
 
 <FocusGroup controller={1} ringColor={[0.3, 0.6, 1.0, 0.9]}>
   {/* Only controller 1 can navigate these elements */}
@@ -124,7 +124,7 @@ Focus management integrates with:
 Example 1: Basic Tab navigation (auto-detected)
 ---
 ```tsx
-import { Box, Pressable, TextInput } from '@ilovereact/core';
+import { Box, Pressable, TextInput } from '@reactjit/core';
 
 function Form() {
   return (
@@ -147,7 +147,7 @@ Platforms: Love2D
 Example 2: Split-screen multiplayer with FocusGroups
 ---
 ```tsx
-import { Box, FocusGroup, Pressable, Text } from '@ilovereact/core';
+import { Box, FocusGroup, Pressable, Text } from '@reactjit/core';
 
 function MultiplayerUI() {
   return (
@@ -188,7 +188,7 @@ Platforms: Love2D
 Example 3: Modal dialog with temporary focus scope
 ---
 ```tsx
-import { Box, FocusGroup, Pressable, Text } from '@ilovereact/core';
+import { Box, FocusGroup, Pressable, Text } from '@reactjit/core';
 
 function ModalDialog({ onClose }: { onClose: () => void }) {
   return (
@@ -227,7 +227,7 @@ Platforms: Love2D
 Example 4: Handling focus events
 ---
 ```tsx
-import { TextInput } from '@ilovereact/core';
+import { TextInput } from '@reactjit/core';
 import { useState } from 'react';
 
 function SearchBox() {
@@ -253,7 +253,7 @@ Platforms: Love2D
 Example 5: Custom focusable node (no event handlers)
 ---
 ```tsx
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 
 function Card() {
   return (

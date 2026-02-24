@@ -1,6 +1,6 @@
 === METADATA ===
 title: Installation Guide
-description: Prerequisites and step-by-step setup for the iLoveReact monorepo and CLI
+description: Prerequisites and step-by-step setup for the ReactJIT monorepo and CLI
 category: Getting Started
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: installation, setup, prerequisites, npm, make, quickjs, cli, love2d
@@ -8,7 +8,7 @@ related: quick-start, first-app, source-of-truth
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact is an npm workspaces monorepo. The core framework runs on Node.js for builds
+ReactJIT is an npm workspaces monorepo. The core framework runs on Node.js for builds
 and development tooling. The Love2D target additionally requires the Love2D runtime and
 a compiled QuickJS shared library. This guide walks through every step from a fresh
 clone to a verified installation.
@@ -45,7 +45,7 @@ make cli-setup
 cd cli && npm link && cd ..
 
 # 6. Verify the installation
-ilovereact help
+reactjit help
 ---
 Platforms: All
 
@@ -88,7 +88,7 @@ Neovim:
 - Always run `make cli-setup` after pulling framework changes. This propagates
   source-of-truth files into the CLI runtime directory.
 - Never edit files in cli/runtime/ directly. They are overwritten by make cli-setup.
-- The `npm link` step in cli/ must be done once to make the `ilovereact` command
+- The `npm link` step in cli/ must be done once to make the `reactjit` command
   available globally.
 
 === SEE ALSO ===

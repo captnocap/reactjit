@@ -8,7 +8,7 @@ related: animatedvalue.txt, usetransition.txt, useanimation.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact provides a set of easing functions that control the rate of change during
+ReactJIT provides a set of easing functions that control the rate of change during
 timing-based animations. Easing functions take a progress value t (0 to 1) and return a
 transformed value that determines the animation's velocity curve. They are used with
 AnimatedValue.timing() and useTransition().
@@ -71,7 +71,7 @@ Factory easing functions (return an EasingFunction):
 Example 1: Different easing curves
 ---
 import { useEffect } from 'react';
-import { useAnimation, Easing, Box } from '@ilovereact/core';
+import { useAnimation, Easing, Box } from '@reactjit/core';
 
 function EasingDemo() {
   const [linearAnim, linearX] = useAnimation(0);
@@ -101,7 +101,7 @@ Platforms: All
 Example 2: Custom bezier curve
 ---
 import { useEffect } from 'react';
-import { useAnimation, Easing, Box } from '@ilovereact/core';
+import { useAnimation, Easing, Box } from '@reactjit/core';
 
 function CustomEase() {
   const [anim, value] = useAnimation(0);
@@ -129,7 +129,7 @@ Platforms: All
 Example 3: Elastic animation
 ---
 import { useEffect } from 'react';
-import { useAnimation, Easing, Box } from '@ilovereact/core';
+import { useAnimation, Easing, Box } from '@reactjit/core';
 
 function ElasticBox() {
   const [anim, value] = useAnimation(0);

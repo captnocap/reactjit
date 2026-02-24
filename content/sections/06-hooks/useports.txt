@@ -12,7 +12,7 @@ usePorts polls the host system for all listening TCP and UDP ports, returning ea
 
 === API / SYNTAX ===
 ```tsx
-import { usePorts } from '@ilovereact/core';
+import { usePorts } from '@reactjit/core';
 ```
 
 Hook signature:
@@ -62,7 +62,7 @@ PortInfo shape:
 Example 1: Display all listening ports in a table
 ---
 ```tsx
-import { usePorts } from '@ilovereact/core';
+import { usePorts } from '@reactjit/core';
 
 function PortTable() {
   const ports = usePorts(2000);
@@ -98,7 +98,7 @@ Example 2: Kill a process by clicking its port row
 ---
 ```tsx
 import { useState } from 'react';
-import { usePorts } from '@ilovereact/core';
+import { usePorts } from '@reactjit/core';
 
 function PortManager() {
   const ports = usePorts(3000);
@@ -137,7 +137,7 @@ Platforms: love2d
 Example 3: Filter to a specific protocol or address
 ---
 ```tsx
-import { usePorts } from '@ilovereact/core';
+import { usePorts } from '@reactjit/core';
 
 function TcpPorts() {
   const ports = usePorts(2000);
@@ -161,7 +161,7 @@ Platforms: love2d
 Example 4: Force-kill with SIGKILL
 ---
 ```tsx
-import { usePorts } from '@ilovereact/core';
+import { usePorts } from '@reactjit/core';
 
 function ForceKillButton({ pid }: { pid: number }) {
   const ports = usePorts();
@@ -185,7 +185,7 @@ Example 5: Log current port snapshot to file
 ---
 ```tsx
 import { useEffect } from 'react';
-import { usePorts } from '@ilovereact/core';
+import { usePorts } from '@reactjit/core';
 
 function PortLogger() {
   const ports = usePorts(5000);

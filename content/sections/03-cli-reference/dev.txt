@@ -1,5 +1,5 @@
 === METADATA ===
-title: ilovereact dev
+title: reactjit dev
 description: Start esbuild in watch mode for live Love2D development.
 category: CLI
 platforms: love2d
@@ -8,7 +8,7 @@ related: build.txt, init.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `ilovereact dev` command starts esbuild in watch mode, continuously rebuilding the
+The `reactjit dev` command starts esbuild in watch mode, continuously rebuilding the
 JavaScript bundle whenever source files change. It uses the correct esbuild flags for the
 Love2D target (IIFE format, ReactLove global name, ES2020 target, automatic JSX).
 
@@ -17,7 +17,7 @@ each frame update, so changes appear in real time without restarting Love2D.
 
 === API / SYNTAX ===
 Usage:
-  ilovereact dev
+  reactjit dev
 
 Entry point:
   src/main.tsx (required -- the command exits with an error if this file does not exist)
@@ -39,7 +39,7 @@ Example 1: Standard development workflow
 ---
 # Terminal 1:
 cd my-project
-ilovereact dev
+reactjit dev
 
 # Terminal 2:
 cd my-project
@@ -52,13 +52,13 @@ This command is specific to the Love2D target. It produces an IIFE bundle that r
 QuickJS via the Love2D bridge. For grid target development (terminal, Neovim, etc.), use
 the npm scripts in the monorepo root package.json instead.
 
-The dev command does not run the linter automatically. Run `ilovereact lint` separately
+The dev command does not run the linter automatically. Run `reactjit lint` separately
 after making component changes.
 
 === CRITICAL RULES ===
 - The project must have a src/main.tsx entry point
 - Do NOT run raw esbuild --watch manually -- the CLI encodes the correct flags
-- The dev command requires local lua/ and lib/ directories (run `ilovereact update` first if missing)
+- The dev command requires local lua/ and lib/ directories (run `reactjit update` first if missing)
 - Love2D must be running in a separate terminal -- the dev command only watches and bundles JS
 - Ctrl+C exits the watcher
 

@@ -12,8 +12,8 @@ usePeerServer starts a WebSocket server bound to the given port and manages the 
 
 === API / SYNTAX ===
 ```tsx
-import { usePeerServer } from '@ilovereact/core';
-import type { PeerMessage } from '@ilovereact/core';
+import { usePeerServer } from '@reactjit/core';
+import type { PeerMessage } from '@reactjit/core';
 ```
 
 Parameters:
@@ -42,7 +42,7 @@ Example 1: Echo server — broadcast each message back to all peers
 ---
 ```tsx
 import { useEffect } from 'react';
-import { usePeerServer, Box, Text } from '@ilovereact/core';
+import { usePeerServer, Box, Text } from '@reactjit/core';
 
 function EchoServer() {
   const { ready, peers, broadcast, lastMessage, error } = usePeerServer(9050);
@@ -69,7 +69,7 @@ Example 2: Reply only to the peer that sent a message
 ---
 ```tsx
 import { useEffect } from 'react';
-import { usePeerServer, Box, Text } from '@ilovereact/core';
+import { usePeerServer, Box, Text } from '@reactjit/core';
 
 interface Command {
   action: string;
@@ -103,7 +103,7 @@ Example 3: Broadcast world state to all peers whenever it changes
 ---
 ```tsx
 import { useEffect } from 'react';
-import { usePeerServer, useLoveState, Box, Text } from '@ilovereact/core';
+import { usePeerServer, useLoveState, Box, Text } from '@reactjit/core';
 
 interface WorldState {
   tick: number;
@@ -135,7 +135,7 @@ Example 4: Conditional server — activate only when hosting is toggled on
 ---
 ```tsx
 import { useState } from 'react';
-import { usePeerServer, Box, Text, Pressable } from '@ilovereact/core';
+import { usePeerServer, Box, Text, Pressable } from '@reactjit/core';
 
 function HostToggle() {
   const [hosting, setHosting] = useState(false);

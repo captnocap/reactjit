@@ -1,6 +1,6 @@
 === METADATA ===
 title: Router
-description: Client-side routing for iLoveReact apps across all targets
+description: Client-side routing for ReactJIT apps across all targets
 category: Routing
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: routing, navigation, history, params, location, route, link
@@ -8,8 +8,8 @@ related: useLocation, useParams, useNavigate
 difficulty: intermediate
 
 === OVERVIEW ===
-@ilovereact/router provides client-side routing with no external dependencies.
-It works on every iLoveReact target by abstracting history management behind
+@reactjit/router provides client-side routing with no external dependencies.
+It works on every ReactJIT target by abstracting history management behind
 a HistoryAdapter interface: memory-based for native targets, browser-based for
 web. Route matching supports named parameters (:id), optional parameters
 (:id?), and wildcards (*), with highest-specificity-wins semantics when
@@ -17,7 +17,7 @@ multiple routes match.
 
 Import: import { RouterProvider, Routes, Route, Link, Navigate, Outlet,
          useRouter, useNavigate, useLocation, useParams, useRoute,
-         createMemoryHistory, createBrowserHistory } from '@ilovereact/router';
+         createMemoryHistory, createBrowserHistory } from '@reactjit/router';
 
 === API / SYNTAX ===
 
@@ -227,8 +227,8 @@ Implement this to add custom history backends (e.g., hash-based routing).
 ---- Love2D / native target (memory history) --------------------------------
 
 import { RouterProvider, Routes, Route, Link, createMemoryHistory }
-  from '@ilovereact/router';
-import { Box, Text } from '@ilovereact/core';
+  from '@reactjit/router';
+import { Box, Text } from '@reactjit/core';
 
 const history = createMemoryHistory({ initialEntries: ['/'] });
 
@@ -260,7 +260,7 @@ export function App() {
 ---- Web target (browser history) -------------------------------------------
 
 import { RouterProvider, Routes, Route, createBrowserHistory }
-  from '@ilovereact/router';
+  from '@reactjit/router';
 
 const history = createBrowserHistory();
 
@@ -277,7 +277,7 @@ export function App() {
 
 ---- Named parameters -------------------------------------------------------
 
-import { useParams, useNavigate } from '@ilovereact/router';
+import { useParams, useNavigate } from '@reactjit/router';
 
 function UserPage() {
   const { id } = useParams<{ id: string }>();
@@ -297,7 +297,7 @@ function UserPage() {
 
 ---- Imperative navigation with replace -------------------------------------
 
-import { useNavigate } from '@ilovereact/router';
+import { useNavigate } from '@reactjit/router';
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -313,7 +313,7 @@ function LoginPage() {
 
 ---- Reading current location -----------------------------------------------
 
-import { useLocation } from '@ilovereact/router';
+import { useLocation } from '@reactjit/router';
 
 function NavBar() {
   const location = useLocation();
@@ -328,7 +328,7 @@ function NavBar() {
 
 ---- Conditional render with useRoute ---------------------------------------
 
-import { useRoute } from '@ilovereact/router';
+import { useRoute } from '@reactjit/router';
 
 function AdminPanel() {
   const [matched] = useRoute('/admin/*');
@@ -338,7 +338,7 @@ function AdminPanel() {
 
 ---- Declarative redirect ----------------------------------------------------
 
-import { Routes, Route, Navigate } from '@ilovereact/router';
+import { Routes, Route, Navigate } from '@reactjit/router';
 
 <Routes>
   <Route path="/home"     element={<Home />} />
@@ -359,7 +359,7 @@ import { Routes, Route, Navigate } from '@ilovereact/router';
 
 ---- Custom history adapter -------------------------------------------------
 
-import type { HistoryAdapter, Location } from '@ilovereact/router';
+import type { HistoryAdapter, Location } from '@reactjit/router';
 
 // Hash-based history for environments without pushState support
 function createHashHistory(): HistoryAdapter {

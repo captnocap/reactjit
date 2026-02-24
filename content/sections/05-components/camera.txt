@@ -12,7 +12,7 @@ Camera sets the perspective viewpoint used when rendering a Scene. Place exactly
 
 === API / SYNTAX ===
 ```tsx
-import { Camera } from '@ilovereact/3d';
+import { Camera } from '@reactjit/3d';
 ```
 
 Props:
@@ -28,7 +28,7 @@ Props:
 Example 1: Basic camera looking at the origin
 ---
 ```tsx
-import { Scene, Camera, Mesh } from '@ilovereact/3d';
+import { Scene, Camera, Mesh } from '@reactjit/3d';
 
 function App() {
   return (
@@ -45,8 +45,8 @@ Platforms: love2d
 Example 2: Animated camera orbiting the scene
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
-import { useAnimationFrame } from '@ilovereact/core';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
+import { useAnimationFrame } from '@reactjit/core';
 
 function OrbitingCamera() {
   const [angle, setAngle] = React.useState(0);
@@ -75,7 +75,7 @@ Platforms: love2d
 Example 3: Narrow field of view for a telephoto effect
 ---
 ```tsx
-import { Scene, Camera, Mesh } from '@ilovereact/3d';
+import { Scene, Camera, Mesh } from '@reactjit/3d';
 
 function TelephotoView() {
   return (

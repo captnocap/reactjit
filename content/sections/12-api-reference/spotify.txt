@@ -18,7 +18,7 @@ All hooks return APIResult<T>, a stable object containing data, loading, error, 
 
 Poll the currently-playing track. Re-fetches on a timer so the display stays live.
 
-  import { useSpotifyNowPlaying } from '@ilovereact/apis/spotify';
+  import { useSpotifyNowPlaying } from '@reactjit/apis/spotify';
 
   const result: APIResult<SpotifyNowPlaying> = useSpotifyNowPlaying(token, opts?);
 
@@ -43,7 +43,7 @@ SpotifyNowPlaying fields:
 
 Fetch the authenticated user's top tracks over a time range.
 
-  import { useSpotifyTopTracks } from '@ilovereact/apis/spotify';
+  import { useSpotifyTopTracks } from '@reactjit/apis/spotify';
 
   const result: APIResult<SpotifyTopItem<SpotifyTrack>> = useSpotifyTopTracks(token, opts?);
 
@@ -61,7 +61,7 @@ Returns: APIResult<SpotifyTopItem<SpotifyTrack>>
 
 Fetch the authenticated user's top artists over a time range.
 
-  import { useSpotifyTopArtists } from '@ilovereact/apis/spotify';
+  import { useSpotifyTopArtists } from '@reactjit/apis/spotify';
 
   const result: APIResult<SpotifyTopItem<SpotifyArtist>> = useSpotifyTopArtists(token, opts?);
 
@@ -79,7 +79,7 @@ Returns: APIResult<SpotifyTopItem<SpotifyArtist>>
 
 Fetch the authenticated user's recently played tracks.
 
-  import { useSpotifyRecentTracks } from '@ilovereact/apis/spotify';
+  import { useSpotifyRecentTracks } from '@reactjit/apis/spotify';
 
   const result: APIResult<{ items: RecentItem[] }> = useSpotifyRecentTracks(token, opts?);
 
@@ -94,7 +94,7 @@ Returns: APIResult<{ items: Array<{ track: SpotifyTrack; played_at: string }> }>
 
 Fetch the authenticated user's saved playlists.
 
-  import { useSpotifyPlaylists } from '@ilovereact/apis/spotify';
+  import { useSpotifyPlaylists } from '@reactjit/apis/spotify';
 
   const result: APIResult<SpotifyPaginated<SpotifyPlaylist>> = useSpotifyPlaylists(token, opts?);
 
@@ -122,7 +122,7 @@ SpotifyPlaylist fields:
 
 Search the Spotify catalog by query string.
 
-  import { useSpotifySearch } from '@ilovereact/apis/spotify';
+  import { useSpotifySearch } from '@reactjit/apis/spotify';
 
   const result: APIResult<SearchResults> = useSpotifySearch(token, query, opts?);
 
@@ -139,7 +139,7 @@ Returns: APIResult<{ tracks?: SpotifyPaginated<SpotifyTrack>; artists?: SpotifyP
 
 Imperative playback control. Returns action callbacks rather than reactive data.
 
-  import { useSpotifyPlayback } from '@ilovereact/apis/spotify';
+  import { useSpotifyPlayback } from '@reactjit/apis/spotify';
 
   const controls = useSpotifyPlayback(token);
 
@@ -189,8 +189,8 @@ SpotifyImage fields:
 
 Show the current track and allow the user to skip or pause:
 
-  import { useSpotifyNowPlaying, useSpotifyPlayback } from '@ilovereact/apis/spotify';
-  import { Box, Text } from '@ilovereact/core';
+  import { useSpotifyNowPlaying, useSpotifyPlayback } from '@reactjit/apis/spotify';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.SPOTIFY_TOKEN ?? null;
 
@@ -239,8 +239,8 @@ Show the current track and allow the user to skip or pause:
 
 Display the user's top 5 artists for the past month:
 
-  import { useSpotifyTopArtists } from '@ilovereact/apis/spotify';
-  import { Box, Text } from '@ilovereact/core';
+  import { useSpotifyTopArtists } from '@reactjit/apis/spotify';
+  import { Box, Text } from '@reactjit/core';
 
   function TopArtists({ token }: { token: string }) {
     const { data, loading, error } = useSpotifyTopArtists(token, {

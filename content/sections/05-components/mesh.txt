@@ -12,7 +12,7 @@ Mesh is the primary renderable object in a 3D scene. It supports four built-in g
 
 === API / SYNTAX ===
 ```tsx
-import { Mesh } from '@ilovereact/3d';
+import { Mesh } from '@reactjit/3d';
 ```
 
 Props:
@@ -42,7 +42,7 @@ Props:
 Example 1: Colored box with edge borders
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function ColoredBox() {
   return (
@@ -67,8 +67,8 @@ Platforms: love2d
 Example 2: Spinning sphere with procedural planet texture
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
-import { useAnimationFrame } from '@ilovereact/core';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
+import { useAnimationFrame } from '@reactjit/core';
 
 function SpinningPlanet() {
   const [rotation, setRotation] = React.useState<[number, number, number]>([0, 0, 0]);
@@ -102,7 +102,7 @@ Platforms: love2d
 Example 3: Multiple meshes at different positions
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function MultiMesh() {
   return (
@@ -123,7 +123,7 @@ Platforms: love2d
 Example 4: Loading an OBJ model file
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function ModelViewer() {
   return (
@@ -142,7 +142,7 @@ Platforms: love2d
 Example 5: Transparent mesh with Fresnel atmosphere glow
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function AtmosphereEffect() {
   return (

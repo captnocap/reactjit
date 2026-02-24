@@ -8,12 +8,12 @@ related: usePeerServer, useFetch, useLove
 difficulty: intermediate
 
 === OVERVIEW ===
-useWebSocket opens a WebSocket client connection to the given URL and keeps it alive for the lifetime of the component. It works across all iLoveReact targets: on Love2D the WebSocket global is polyfilled through the bridge using lua-websocket; on web and Node targets the platform's native WebSocket is used. The hook tracks the connection lifecycle through a typed status field and exposes the most recently received message string. Pass null as the URL to remain disconnected. The send function is a no-op when the socket is not in the open state, so it is always safe to call.
+useWebSocket opens a WebSocket client connection to the given URL and keeps it alive for the lifetime of the component. It works across all ReactJIT targets: on Love2D the WebSocket global is polyfilled through the bridge using lua-websocket; on web and Node targets the platform's native WebSocket is used. The hook tracks the connection lifecycle through a typed status field and exposes the most recently received message string. Pass null as the URL to remain disconnected. The send function is a no-op when the socket is not in the open state, so it is always safe to call.
 
 === API / SYNTAX ===
 ```tsx
-import { useWebSocket } from '@ilovereact/core';
-import type { WebSocketStatus } from '@ilovereact/core';
+import { useWebSocket } from '@reactjit/core';
+import type { WebSocketStatus } from '@reactjit/core';
 ```
 
 Parameters:
@@ -33,7 +33,7 @@ Returns:
 Example 1: Connect to a server and display live data
 ---
 ```tsx
-import { useWebSocket, Box, Text } from '@ilovereact/core';
+import { useWebSocket, Box, Text } from '@reactjit/core';
 
 interface GameState {
   score: number;
@@ -63,7 +63,7 @@ Platforms: All
 Example 2: Send commands to a server on button press
 ---
 ```tsx
-import { useWebSocket, Box, Text, Pressable } from '@ilovereact/core';
+import { useWebSocket, Box, Text, Pressable } from '@reactjit/core';
 
 function CommandPanel() {
   const { status, send } = useWebSocket('ws://localhost:8080');
@@ -94,7 +94,7 @@ Example 3: Conditional connection — connect only when a toggle is on
 ---
 ```tsx
 import { useState } from 'react';
-import { useWebSocket, Box, Text, Pressable } from '@ilovereact/core';
+import { useWebSocket, Box, Text, Pressable } from '@reactjit/core';
 
 function ConditionalSocket() {
   const [connected, setConnected] = useState(false);
@@ -120,7 +120,7 @@ Platforms: All
 Example 4: Display an error when the connection fails
 ---
 ```tsx
-import { useWebSocket, Box, Text } from '@ilovereact/core';
+import { useWebSocket, Box, Text } from '@reactjit/core';
 
 function ReliableSocket() {
   const { status, error, lastMessage } = useWebSocket('ws://localhost:9050');

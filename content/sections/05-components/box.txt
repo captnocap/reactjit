@@ -8,13 +8,13 @@ related: Text, Image, FlexRow, FlexColumn, Pressable
 difficulty: beginner
 
 === OVERVIEW ===
-Box is the fundamental layout primitive in iLoveReact. Every visual structure is built from nested Box elements. It renders as a flexbox container with configurable direction, alignment, spacing, and visual styling. In web mode it outputs a `<div>` with CSS flexbox; in native mode it outputs a `'View'` host element processed by the Lua layout engine.
+Box is the fundamental layout primitive in ReactJIT. Every visual structure is built from nested Box elements. It renders as a flexbox container with configurable direction, alignment, spacing, and visual styling. In web mode it outputs a `<div>` with CSS flexbox; in native mode it outputs a `'View'` host element processed by the Lua layout engine.
 
 Box also serves as the primary event target. It accepts handlers for pointer, keyboard, touch, gamepad, and drag interactions. For higher-level interaction patterns (press state tracking, long press, hover callbacks), use Pressable instead, which wraps Box internally.
 
 === API / SYNTAX ===
 ```tsx
-import { Box } from '@ilovereact/core';
+import { Box } from '@reactjit/core';
 ```
 
 ```tsx
@@ -139,7 +139,7 @@ Web:
   Renders as a <div> with CSS flexbox. Style is converted via styleToCSS(). The web renderer uses React state for hover/active style merging. Drag handlers use pointer capture for reliable cross-element dragging. Keyboard handlers automatically set tabIndex=0 for focus.
 
 Terminal:
-  Grid targets use <view> lowercase intrinsic, not the Box component. Layout is handled by @ilovereact/grid.
+  Grid targets use <view> lowercase intrinsic, not the Box component. Layout is handled by @reactjit/grid.
 
 === CRITICAL RULES ===
 - Root containers MUST have width: '100%' and height: '100%'. Using flexGrow: 1 on the root will produce a zero-height container because there is no parent with a known size to grow into.

@@ -12,7 +12,7 @@ useHotkey binds a callback to a keyboard combination string such as "ctrl+z" or 
 
 === API / SYNTAX ===
 ```tsx
-import { useHotkey } from '@ilovereact/core';
+import { useHotkey } from '@reactjit/core';
 ```
 
 Parameters:
@@ -29,7 +29,7 @@ void — this hook has no return value.
 Example 1: Undo and redo shortcuts
 ---
 ```tsx
-import { useHotkey } from '@ilovereact/core';
+import { useHotkey } from '@reactjit/core';
 
 function Editor() {
   useHotkey('ctrl+z', () => undo());
@@ -45,7 +45,7 @@ Example 2: Escape closes a modal only while it is open
 ---
 ```tsx
 import { useState } from 'react';
-import { useHotkey, Box, Text } from '@ilovereact/core';
+import { useHotkey, Box, Text } from '@reactjit/core';
 
 function App() {
   const [open, setOpen] = useState(false);
@@ -69,7 +69,7 @@ Platforms: All
 Example 3: Save with Ctrl+S and Ctrl+Shift+S for save-as
 ---
 ```tsx
-import { useHotkey } from '@ilovereact/core';
+import { useHotkey } from '@reactjit/core';
 
 function Document() {
   useHotkey('ctrl+s', () => save());
@@ -84,8 +84,8 @@ Platforms: All
 Example 4: Access the raw LoveEvent in the handler
 ---
 ```tsx
-import { useHotkey } from '@ilovereact/core';
-import type { LoveEvent } from '@ilovereact/core';
+import { useHotkey } from '@reactjit/core';
+import type { LoveEvent } from '@reactjit/core';
 
 function DevTools() {
   useHotkey('f12', (event: LoveEvent) => {

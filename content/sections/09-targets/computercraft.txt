@@ -1,6 +1,6 @@
 === METADATA ===
 title: ComputerCraft Target
-description: iLoveReact renderer for Minecraft ComputerCraft Tweaked terminals
+description: ReactJIT renderer for Minecraft ComputerCraft Tweaked terminals
 category: Targets
 platforms: cc
 keywords: computercraft, minecraft, cc tweaked, websocket, 16 color, terminal, grid
@@ -8,7 +8,7 @@ related: terminal, neovim, love2d
 difficulty: intermediate
 
 === OVERVIEW ===
-The ComputerCraft target (@ilovereact/cc) renders iLoveReact components inside Minecraft
+The ComputerCraft target (@reactjit/cc) renders ReactJIT components inside Minecraft
 via the ComputerCraft: Tweaked mod. The CC terminal provides a 51x19 character display
 with a fixed 16-color palette. Communication between the Node.js process (running your
 React app) and the in-game terminal happens over WebSocket.
@@ -32,7 +32,7 @@ Display Constraints:
 === EXAMPLES ===
 Example 1: CC App Setup
 ---
-import { createCCApp } from '@ilovereact/cc';
+import { createCCApp } from '@reactjit/cc';
 import App from './App';
 
 const app = createCCApp({

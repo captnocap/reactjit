@@ -8,7 +8,7 @@ related: useServer, useFetch, useWebSocket
 difficulty: intermediate
 
 === OVERVIEW ===
-The @ilovereact/webhooks package covers both sides of the webhook pattern: receiving HTTP POST payloads from external services (GitHub, Stripe, CI systems, etc.) and sending signed JSON payloads to external endpoints. The receiver hook (useWebhook) starts an HTTP server via the Love2D bridge and verifies HMAC-SHA256 signatures using the same algorithm GitHub, Slack, and most modern platforms use. The sender hook (useWebhookSender) wraps fetch with automatic signing, exponential-backoff retries, and React state for loading/error tracking. An imperative sendWebhook function is also exported for use outside React.
+The @reactjit/webhooks package covers both sides of the webhook pattern: receiving HTTP POST payloads from external services (GitHub, Stripe, CI systems, etc.) and sending signed JSON payloads to external endpoints. The receiver hook (useWebhook) starts an HTTP server via the Love2D bridge and verifies HMAC-SHA256 signatures using the same algorithm GitHub, Slack, and most modern platforms use. The sender hook (useWebhookSender) wraps fetch with automatic signing, exponential-backoff retries, and React state for loading/error tracking. An imperative sendWebhook function is also exported for use outside React.
 
 === API / SYNTAX ===
 
@@ -16,7 +16,7 @@ The @ilovereact/webhooks package covers both sides of the webhook pattern: recei
 
 Start an HTTP listener and receive incoming webhook events as React state. Each arriving request is parsed, optionally signature-verified, and prepended to the events array. Requires the Love2D HTTP server bridge (Lua-side httpserver module).
 
-  import { useWebhook } from '@ilovereact/webhooks';
+  import { useWebhook } from '@reactjit/webhooks';
 
   const result: WebhookReceiverResult = useWebhook(
     port: number | null,
@@ -60,7 +60,7 @@ WebhookEvent fields:
 
 React hook for sending webhook payloads with loading and error state tracking. Wraps sendWebhook with default options that apply to every call made through the returned send function.
 
-  import { useWebhookSender } from '@ilovereact/webhooks';
+  import { useWebhookSender } from '@reactjit/webhooks';
 
   const result: WebhookSenderResult = useWebhookSender(options?: WebhookSenderOptions);
 
@@ -89,7 +89,7 @@ WebhookSendResult fields:
 
 Send a webhook payload to a URL without React state. Use this in event handlers, Lua RPC callbacks, or any context where a hook is not appropriate.
 
-  import { sendWebhook } from '@ilovereact/webhooks';
+  import { sendWebhook } from '@reactjit/webhooks';
 
   const result: WebhookSendResult = await sendWebhook(
     url: string,
@@ -117,7 +117,7 @@ Does not throw — errors are captured in the result object.
 
 Compute an HMAC-SHA256 hex digest. Exported for use in custom signing schemes or signature verification outside of webhooks. Backed by @noble/hashes (audited).
 
-  import { hmacSHA256 } from '@ilovereact/webhooks';
+  import { hmacSHA256 } from '@reactjit/webhooks';
 
   const hex: string = hmacSHA256(key: string, message: string);
 
@@ -131,7 +131,7 @@ Returns: string — lowercase hex digest (64 characters)
 
 Compare two hex strings in constant time to prevent timing side-channel attacks. Use this when comparing received signatures against computed ones.
 
-  import { timingSafeEqual } from '@ilovereact/webhooks';
+  import { timingSafeEqual } from '@reactjit/webhooks';
 
   const equal: boolean = timingSafeEqual(a: string, b: string);
 
@@ -147,8 +147,8 @@ Returns: boolean — false immediately if lengths differ (length leakage is acce
 
 Listen for GitHub push events, verify the signature, and display the latest commit message:
 
-  import { useWebhook } from '@ilovereact/webhooks';
-  import { Box, Text } from '@ilovereact/core';
+  import { useWebhook } from '@reactjit/webhooks';
+  import { Box, Text } from '@reactjit/core';
 
   const SECRET = 'my-github-webhook-secret';
 
@@ -189,8 +189,8 @@ Listen for GitHub push events, verify the signature, and display the latest comm
 
 Send a deployment notification to an external service, showing progress in the UI:
 
-  import { useWebhookSender } from '@ilovereact/webhooks';
-  import { Box, Text } from '@ilovereact/core';
+  import { useWebhookSender } from '@reactjit/webhooks';
+  import { Box, Text } from '@reactjit/core';
 
   const ENDPOINT = 'https://hooks.example.com/deploy';
   const SECRET = 'shared-deploy-secret';
@@ -238,8 +238,8 @@ Send a deployment notification to an external service, showing progress in the U
 
 Receive webhooks from multiple sources on different paths and display a unified event log:
 
-  import { useWebhook } from '@ilovereact/webhooks';
-  import { Box, Text } from '@ilovereact/core';
+  import { useWebhook } from '@reactjit/webhooks';
+  import { Box, Text } from '@reactjit/core';
 
   function WebhookDashboard() {
     const github = useWebhook(9090, '/hooks/github', { secret: 'gh-secret' });

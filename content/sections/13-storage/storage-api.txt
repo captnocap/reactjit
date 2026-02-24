@@ -182,7 +182,7 @@ Purpose:
   No hooks, no context — pass adapter explicitly.
 
 Example:
-  import { createCRUD, z, MemoryAdapter } from '@ilovereact/storage';
+  import { createCRUD, z, MemoryAdapter } from '@reactjit/storage';
 
   const adapter = new MemoryAdapter();
   const users = createCRUD('users', UserSchema, adapter);
@@ -194,7 +194,7 @@ Example:
 Schema Validation (z)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-import { z } from '@ilovereact/storage';
+import { z } from '@reactjit/storage';
 
 Primitive Types:
   z.string()
@@ -462,7 +462,7 @@ Formats:
   text — plain text (best for logs)
 
 Example:
-  import { useLoveRPC } from '@ilovereact/core';
+  import { useLoveRPC } from '@reactjit/core';
   const rpc = useLoveRPC();
   const adapter = new Love2DFileAdapter({ rpc, format: 'json' });
 
@@ -499,7 +499,7 @@ IndexedDBAdapter
 new IndexedDBAdapter({ dbName?, version? })
 
 Options:
-  dbName?: string — Database name (default: 'ilovereact')
+  dbName?: string — Database name (default: 'reactjit')
   version?: number — Schema version (default: 1)
 
 Storage:
@@ -717,7 +717,7 @@ Platforms: love2d, web, terminal
 Example 6: Non-React Script with SQLite
 ---
 #!/usr/bin/env node
-import { createCRUD, z, TerminalSQLiteAdapter } from '@ilovereact/storage';
+import { createCRUD, z, TerminalSQLiteAdapter } from '@reactjit/storage';
 
 const TaskSchema = z.object({
   id: z.string(),

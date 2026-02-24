@@ -1,6 +1,6 @@
 === METADATA ===
 title: Routing
-description: Brief overview of the @ilovereact/router package for in-app navigation
+description: Brief overview of the @reactjit/router package for in-app navigation
 category: Routing
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: routing, navigation, router, screens, pages
@@ -8,7 +8,7 @@ related: pipeline, philosophy
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact includes a @ilovereact/router package for in-app navigation between screens.
+ReactJIT includes a @reactjit/router package for in-app navigation between screens.
 Since there is no browser URL bar or history API in most targets, routing is purely
 in-memory. The router manages a stack of screens and provides hooks for navigating
 between them.
@@ -18,7 +18,7 @@ them with the router, and use navigation hooks to push, pop, or replace screens.
 
 === API / SYNTAX ===
 Basic Usage Pattern:
-  import { Router, Screen, useNavigation } from '@ilovereact/router';
+  import { Router, Screen, useNavigation } from '@reactjit/router';
 
   function App() {
     return (

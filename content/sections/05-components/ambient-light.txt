@@ -12,7 +12,7 @@ AmbientLight provides a base level of non-directional illumination for all meshe
 
 === API / SYNTAX ===
 ```tsx
-import { AmbientLight } from '@ilovereact/3d';
+import { AmbientLight } from '@reactjit/3d';
 ```
 
 Props:
@@ -25,7 +25,7 @@ Props:
 Example 1: Default ambient light for a dark space scene
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function SpaceScene() {
   return (
@@ -44,7 +44,7 @@ Platforms: love2d
 Example 2: Warm tinted ambient light for an interior scene
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function WarmScene() {
   return (
@@ -63,7 +63,7 @@ Platforms: love2d
 Example 3: High ambient for a flat, evenly lit scene
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight } from '@reactjit/3d';
 
 function FlatLitScene() {
   return (

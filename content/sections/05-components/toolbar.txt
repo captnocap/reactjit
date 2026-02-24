@@ -17,7 +17,7 @@ an id, label, and optional disabled flag, or { type: 'divider' } for visual sepa
 
 === API / SYNTAX ===
 Import:
-  import { Toolbar } from '@ilovereact/core'
+  import { Toolbar } from '@reactjit/core'
 
 Types:
   type ToolbarEntry =

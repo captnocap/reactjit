@@ -37,7 +37,7 @@ Returns:
 Example 1: Smooth opacity transition
 ---
 import { useState } from 'react';
-import { useTransition, Box, Text } from '@ilovereact/core';
+import { useTransition, Box, Text } from '@reactjit/core';
 
 function FadeToggle() {
   const [visible, setVisible] = useState(true);
@@ -63,7 +63,7 @@ Platforms: All
 Example 2: Custom easing
 ---
 import { useState } from 'react';
-import { useTransition, Easing, Box } from '@ilovereact/core';
+import { useTransition, Easing, Box } from '@reactjit/core';
 
 function SlidePanel() {
   const [open, setOpen] = useState(false);
@@ -96,8 +96,8 @@ Platforms: All
 
 Example 3: Progress bar animation
 ---
-import { useTransition, Box, Text } from '@ilovereact/core';
-import { Easing } from '@ilovereact/core';
+import { useTransition, Box, Text } from '@reactjit/core';
+import { Easing } from '@reactjit/core';
 
 function ProgressBar({ progress }: { progress: number }) {
   const width = useTransition(progress * 300, { duration: 600, easing: Easing.easeOut });

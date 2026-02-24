@@ -36,7 +36,7 @@ Returns:
 === EXAMPLES ===
 Example 1: Log spawned entities
 ---
-import { useLoveEvent } from '@ilovereact/core';
+import { useLoveEvent } from '@reactjit/core';
 
 function SpawnLogger() {
   useLoveEvent('entity:spawned', (data) => {
@@ -50,7 +50,7 @@ Platforms: All
 
 Example 2: Trigger animation on event
 ---
-import { useLoveEvent, useAnimation } from '@ilovereact/core';
+import { useLoveEvent, useAnimation } from '@reactjit/core';
 
 function DamageFlash() {
   const [flashAnim, flashValue] = useAnimation(0);
@@ -74,7 +74,7 @@ Platforms: All
 Example 3: Update external state
 ---
 import { useState } from 'react';
-import { useLoveEvent } from '@ilovereact/core';
+import { useLoveEvent } from '@reactjit/core';
 
 function NotificationBanner() {
   const [message, setMessage] = useState('');

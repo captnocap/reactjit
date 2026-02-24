@@ -48,7 +48,7 @@ Lifecycle:
 Example 1: Opacity fade-in
 ---
 import { useEffect } from 'react';
-import { useAnimation, Box, Text } from '@ilovereact/core';
+import { useAnimation, Box, Text } from '@reactjit/core';
 
 function FadeIn() {
   const [opacityAnim, opacity] = useAnimation(0);
@@ -69,7 +69,7 @@ Platforms: All
 Example 2: Spring press effect
 ---
 import { useState, useEffect } from 'react';
-import { useAnimation, Box } from '@ilovereact/core';
+import { useAnimation, Box } from '@reactjit/core';
 
 function PressableBox() {
   const [scaleAnim, scale] = useAnimation(1);
@@ -104,7 +104,7 @@ Platforms: All
 Example 3: Continuous rotation
 ---
 import { useEffect } from 'react';
-import { useAnimation, loop, Easing, Box } from '@ilovereact/core';
+import { useAnimation, loop, Easing, Box } from '@reactjit/core';
 
 function Spinner() {
   const [rotAnim, rotation] = useAnimation(0);

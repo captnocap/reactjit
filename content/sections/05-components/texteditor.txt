@@ -12,10 +12,10 @@ TextEditor is a multi-line editing surface designed for document-style text edit
 
 This "Lua-owned interaction" design eliminates bridge traffic for every keystroke, making TextEditor suitable for editing large text content in the Love2D target. In web mode, TextEditor renders a standard HTML `<textarea>` with monospace styling.
 
-TextEditor can be integrated with iLoveReact's spell checking system for inline spell checking with dictionary support. Spell checking is implemented at the application level using the bridge RPC API (`spell:check`, `spell:checkText`, `spell:suggest`).
+TextEditor can be integrated with ReactJIT's spell checking system for inline spell checking with dictionary support. Spell checking is implemented at the application level using the bridge RPC API (`spell:check`, `spell:checkText`, `spell:suggest`).
 
 === API / SYNTAX ===
-Import: import { TextEditor } from '@ilovereact/core';
+Import: import { TextEditor } from '@reactjit/core';
 
 Usage:
 ```tsx

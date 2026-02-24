@@ -8,7 +8,7 @@ related: textinput, texteditor, sqlite-docstore
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact includes a lightweight spell checker (lua/spellcheck.lua) powered by a SQLite dictionary with 50,000+ frequency-ranked English words. It checks words against the dictionary and generates suggestions using edit-distance-1 candidates (insertions, deletions, substitutions, transpositions). Designed for real-time use in TextInput and TextEditor components, accessible from React via the RPC bridge. Requires a dictionary.db file in data/ and libsqlite3.so availability.
+ReactJIT includes a lightweight spell checker (lua/spellcheck.lua) powered by a SQLite dictionary with 50,000+ frequency-ranked English words. It checks words against the dictionary and generates suggestions using edit-distance-1 candidates (insertions, deletions, substitutions, transpositions). Designed for real-time use in TextInput and TextEditor components, accessible from React via the RPC bridge. Requires a dictionary.db file in data/ and libsqlite3.so availability.
 
 === API / SYNTAX ===
 
@@ -47,11 +47,11 @@ spellcheck.setLang("fr")                 -- switch language (if dictionary has F
 local lang = spellcheck.getLang()        -- "en"
 
 -- Add custom word
-spellcheck.addWord("ilovereact")
-spellcheck.addWord("ilovereact", 5000)   -- with frequency
+spellcheck.addWord("reactjit")
+spellcheck.addWord("reactjit", 5000)   -- with frequency
 
 -- Remove word
-spellcheck.removeWord("ilovereact")
+spellcheck.removeWord("reactjit")
 ```
 
 **React API (via RPC bridge)**
@@ -59,7 +59,7 @@ spellcheck.removeWord("ilovereact")
 Available RPC handlers (registered in lua/init.lua):
 
 ```tsx
-import { useBridge } from '@ilovereact/core';
+import { useBridge } from '@reactjit/core';
 
 function SpellCheckComponent() {
   const bridge = useBridge();
@@ -124,7 +124,7 @@ Platforms: Love2D
 Example 2: React TextInput with Real-Time Spell Check
 ---
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, TextInput, useBridge } from '@ilovereact/core';
+import { Box, Text, TextInput, useBridge } from '@reactjit/core';
 
 function SpellCheckedInput() {
   const bridge = useBridge();
@@ -176,7 +176,7 @@ Platforms: Love2D
 Example 3: Spell Check with Suggestions and Corrections
 ---
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Pressable, TextInput, useBridge } from '@ilovereact/core';
+import { Box, Text, Pressable, TextInput, useBridge } from '@reactjit/core';
 
 function SpellCheckWithSuggestions() {
   const bridge = useBridge();
@@ -254,7 +254,7 @@ spellcheck.init()
 -- Add technical terms to dictionary
 local function addTechnicalTerms()
   local terms = {
-    { word = "ilovereact", freq = 1000 },
+    { word = "reactjit", freq = 1000 },
     { word = "lua", freq = 2000 },
     { word = "opengl", freq = 1500 },
     { word = "vscode", freq = 1200 },
@@ -276,8 +276,8 @@ end
 addTechnicalTerms()
 cleanupDictionary()
 
--- Now "ilovereact" passes spell check
-print(spellcheck.check("ilovereact"))  -- true
+-- Now "reactjit" passes spell check
+print(spellcheck.check("reactjit"))  -- true
 ---
 Platforms: Love2D
 

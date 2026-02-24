@@ -15,7 +15,7 @@ Table supports striped row backgrounds, borderless mode, and per-section style o
 Auto-sizing: Table automatically sizes to fit its content when all columns have explicit widths. When at least one column lacks an explicit width, the table uses `width: '100%'` and distributes remaining space via flexGrow. For content-based sizing, specify fixed widths for all columns and omit the outer `style.width` prop.
 
 === API / SYNTAX ===
-Import: import { Table } from '@ilovereact/core';
+Import: import { Table } from '@reactjit/core';
 
 TableColumn<T> type:
 ```ts

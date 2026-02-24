@@ -1,6 +1,6 @@
 === METADATA ===
 title: 5-Minute Quick Start
-description: The fastest path from installation to a running iLoveReact application
+description: The fastest path from installation to a running ReactJIT application
 category: Getting Started
 platforms: love2d, web, terminal
 keywords: quick start, tutorial, hello world, scaffold, init, dev, build
@@ -8,7 +8,7 @@ related: installation, first-app, philosophy
 difficulty: beginner
 
 === OVERVIEW ===
-This guide gets you from zero to a running iLoveReact app in five minutes. You will
+This guide gets you from zero to a running ReactJIT app in five minutes. You will
 scaffold a new Love2D project, edit the entry component, run it in watch mode, and
 optionally produce a standalone binary. All you need is a completed installation
 (see installation.txt).
@@ -17,11 +17,11 @@ optionally produce a standalone binary. All you need is a completed installation
 Example 1: Scaffold and Run (Love2D)
 ---
 # Scaffold a new project
-ilovereact init my-app
+reactjit init my-app
 cd my-app
 
 # Start watch mode (rebuilds on file changes)
-ilovereact dev
+reactjit dev
 
 # In a second terminal, run Love2D
 love .
@@ -30,11 +30,11 @@ Platforms: love2d
 
 Example 2: Edit src/App.tsx
 ---
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 import { useState } from 'react';
 
 export default function App() {
-  const [message, setMessage] = useState('Hello iLoveReact!');
+  const [message, setMessage] = useState('Hello ReactJIT!');
 
   return (
     <Box style={{
@@ -71,23 +71,23 @@ Platforms: All
 Example 3: Build a Standalone Binary
 ---
 # Lint first (catches layout errors before build)
-ilovereact lint
+reactjit lint
 
 # Take a screenshot to verify layout
-ilovereact screenshot --output /tmp/preview.png
+reactjit screenshot --output /tmp/preview.png
 
 # Build self-extracting Linux binary
-ilovereact build dist:love
+reactjit build dist:love
 ---
 Platforms: love2d
 
 === CRITICAL RULES ===
-- Always use `ilovereact init` to scaffold projects. Do not mkdir and copy manually.
-- Always use `ilovereact dev` for watch mode. Do not run esbuild --watch manually.
-- Always use `ilovereact build` for production builds. Do not run esbuild manually.
+- Always use `reactjit init` to scaffold projects. Do not mkdir and copy manually.
+- Always use `reactjit dev` for watch mode. Do not run esbuild --watch manually.
+- Always use `reactjit build` for production builds. Do not run esbuild manually.
 - The CLI encodes correct esbuild flags, enforces lint gates, and handles runtime
   file placement.
-- After modifying any component, run `ilovereact lint` to catch layout errors.
+- After modifying any component, run `reactjit lint` to catch layout errors.
 
 === SEE ALSO ===
 - first-app.txt - Detailed step-by-step tutorial

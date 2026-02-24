@@ -1,6 +1,6 @@
 === METADATA ===
 title: Common Errors and Solutions
-description: Symptom-to-solution guide for the most frequent iLoveReact issues
+description: Symptom-to-solution guide for the most frequent ReactJIT issues
 category: Troubleshooting
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: errors, troubleshooting, text not rendering, flexGrow, justifyContent, build fails, lint
@@ -8,9 +8,9 @@ related: faq, debugging, style-properties, source-of-truth
 difficulty: beginner
 
 === OVERVIEW ===
-This page lists the most common errors and unexpected behaviors in iLoveReact, organized
+This page lists the most common errors and unexpected behaviors in ReactJIT, organized
 by symptom. Each entry explains why the problem occurs and how to fix it. Most of these
-are caught by the static linter (`ilovereact lint`), so running the linter after every
+are caught by the static linter (`reactjit lint`), so running the linter after every
 component change is the fastest way to avoid them.
 
 === EXAMPLES ===
@@ -95,12 +95,12 @@ Platforms: All
 
 Example 5: Build Fails
 ---
-Symptom: `ilovereact build` exits with errors.
+Symptom: `reactjit build` exits with errors.
 
-Cause: The build command runs `ilovereact lint` as a gate before bundling.
+Cause: The build command runs `reactjit lint` as a gate before bundling.
   Layout lint errors will block the build.
 
-Fix: Run `ilovereact lint` separately to see all errors. Fix each one.
+Fix: Run `reactjit lint` separately to see all errors. Fix each one.
   Common lint errors:
   - no-missing-font-size: Text without fontSize
   - no-block-char-in-text: Unicode block character in Text (use Box with backgroundColor)
@@ -123,8 +123,8 @@ Fix: Run the full sync pipeline.
 
   make cli-setup              # source -> cli/runtime/
   cd examples/<project>
-  ilovereact update           # cli/runtime/ -> project copies
-  ilovereact build dist:love  # rebuild
+  reactjit update           # cli/runtime/ -> project copies
+  reactjit build dist:love  # rebuild
 ---
 Platforms: All
 
@@ -140,12 +140,12 @@ Fix: Build QuickJS and sync to the project.
   make setup       # Clone quickjs-ng, compile libquickjs.so
   make cli-setup   # Copy to cli/runtime/lib/
   cd examples/<project>
-  ilovereact update  # Copy to project/lib/
+  reactjit update  # Copy to project/lib/
 ---
 Platforms: love2d
 
 === CRITICAL RULES ===
-- Run `ilovereact lint` after EVERY component change.
+- Run `reactjit lint` after EVERY component change.
 - The linter catches the most common errors before they become runtime bugs.
 - When in doubt, check the computed layout with the F12 inspector.
 - If changes are not appearing, check whether you edited the source of truth

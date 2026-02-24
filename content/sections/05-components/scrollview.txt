@@ -14,8 +14,8 @@ In web mode, ScrollView renders as a `<div>` with overflow: auto and CSS-based s
 
 === API / SYNTAX ===
 ```tsx
-import { ScrollView } from '@ilovereact/core';
-import type { ScrollViewRef, ScrollEvent } from '@ilovereact/core';
+import { ScrollView } from '@reactjit/core';
+import type { ScrollViewRef, ScrollEvent } from '@reactjit/core';
 ```
 
 ```tsx

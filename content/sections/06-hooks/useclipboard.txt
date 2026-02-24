@@ -12,7 +12,7 @@ useClipboard provides async copy and paste functions that route through the brid
 
 === API / SYNTAX ===
 ```tsx
-import { useClipboard } from '@ilovereact/core';
+import { useClipboard } from '@reactjit/core';
 ```
 
 Parameters:
@@ -29,7 +29,7 @@ Returns:
 Example 1: Copy button with transient feedback
 ---
 ```tsx
-import { useClipboard, Box, Text, Pressable } from '@ilovereact/core';
+import { useClipboard, Box, Text, Pressable } from '@reactjit/core';
 
 function CopyButton({ value }: { value: string }) {
   const { copy, copied } = useClipboard();
@@ -50,7 +50,7 @@ Example 2: Paste button that reads and displays clipboard text
 ---
 ```tsx
 import { useState } from 'react';
-import { useClipboard, Box, Text, Pressable } from '@ilovereact/core';
+import { useClipboard, Box, Text, Pressable } from '@reactjit/core';
 
 function PastePreview() {
   const { paste } = useClipboard();
@@ -78,7 +78,7 @@ Platforms: love2d, web
 Example 3: Trigger copy via a hotkey
 ---
 ```tsx
-import { useClipboard, useHotkey, Box, Text } from '@ilovereact/core';
+import { useClipboard, useHotkey, Box, Text } from '@reactjit/core';
 
 function TextDisplay({ text }: { text: string }) {
   const { copy, copied } = useClipboard();
@@ -99,7 +99,7 @@ Platforms: love2d, web
 Example 4: Copy a JSON payload to clipboard
 ---
 ```tsx
-import { useClipboard, Pressable, Text } from '@ilovereact/core';
+import { useClipboard, Pressable, Text } from '@reactjit/core';
 
 function ExportButton({ data }: { data: object }) {
   const { copy, copied } = useClipboard();

@@ -49,7 +49,7 @@ Coordinate mapping:
 Example 1: Render name labels above entities
 ---
 import { useRef } from 'react';
-import { useLoveOverlays, Box, Text } from '@ilovereact/core';
+import { useLoveOverlays, Box, Text } from '@reactjit/core';
 
 function GameOverlays() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,7 +83,7 @@ Platforms: web
 Example 2: Tooltip on hover
 ---
 import { useRef, useState } from 'react';
-import { useLoveOverlays } from '@ilovereact/core';
+import { useLoveOverlays } from '@reactjit/core';
 
 function EntityTooltips() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -123,7 +123,7 @@ Platforms: web
 === PLATFORM NOTES ===
 This hook is only meaningful in web mode. On Love2D native, Neovim, terminal, and other
 non-web targets, there is no DOM to position overlays in. The hook is exported from
-@ilovereact/core for completeness but should only be used in web-mode applications.
+@reactjit/core for completeness but should only be used in web-mode applications.
 
 The hook uses ResizeObserver to track canvas size changes and automatically updates overlay
 positions when the canvas is resized.

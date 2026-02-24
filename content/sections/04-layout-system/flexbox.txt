@@ -1,6 +1,6 @@
 === METADATA ===
 title: Flexbox Layout Model
-description: How iLoveReact uses Flexbox for all layout, with column as the default direction.
+description: How ReactJIT uses Flexbox for all layout, with column as the default direction.
 category: Layout
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: flexbox, flexDirection, justifyContent, alignItems, alignSelf, flexGrow, flexShrink, flexBasis, flexWrap, gap, row, column
@@ -8,7 +8,7 @@ related: sizing.txt, spacing.txt, critical-rules.txt
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact uses Flexbox for all layout, mirroring React Native's approach. Every Box is
+ReactJIT uses Flexbox for all layout, mirroring React Native's approach. Every Box is
 implicitly a flex container -- there is no need to set display: 'flex' (it is the default).
 The critical difference from CSS is that flexDirection defaults to 'column', not 'row'.
 This means children stack vertically unless you explicitly set flexDirection: 'row'.

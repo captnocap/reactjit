@@ -5,7 +5,6 @@
  * Catches layout mistakes before they reach the renderer.
  *
  * Rules:
- *   no-mixed-text-children      (error)   Mixed text + expressions create overlapping __TEXT__ nodes
  *   no-invalid-style-props      (error)   Style properties not recognized by ReactJIT
  *   no-link-without-to          (error)   <Link> missing "to" prop
  *   no-routes-without-fallback  (warning) <Routes> without path="*" catch-all
@@ -1109,20 +1108,6 @@ async function discoverHttp(info, timeout) {
 // ── Rules ────────────────────────────────────────────────────
 
 const rules = [
-
-  // Mixed text and expressions in <Text> creates multiple __TEXT__ nodes.
-  // The layout engine lays them out as separate flex items at y=0, causing overlap.
-  // Fix: use a template literal {`text ${value}`} to produce a single __TEXT__ node.
-  {
-    name: 'no-mixed-text-children',
-    severity: 'error',
-    check(ctx) {
-      if (!TEXT_TAGS.has(ctx.tagName)) return null;
-      if (!ctx.hasMixedTextChildren) return null;
-
-      return 'Mixed text and expressions in <Text> creates multiple __TEXT__ nodes that overlap in layout — use a template literal instead: {`text ${value}`}';
-    },
-  },
 
   // Invalid style properties that don't exist in ReactJIT
   // Only checks ReactJIT primitives (Box, Text, Image, view, text) — not HTML elements

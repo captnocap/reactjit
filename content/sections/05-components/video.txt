@@ -22,7 +22,7 @@ Requires: libmpv-dev (on Love2D). If libmpv is not installed, videos show an err
 
 === API / SYNTAX ===
 ```tsx
-import { Video } from '@ilovereact/core';
+import { Video } from '@reactjit/core';
 ```
 
 ```tsx

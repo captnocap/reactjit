@@ -12,7 +12,7 @@ StackedBarChart renders a column of vertical bars where each bar is subdivided i
 
 === API / SYNTAX ===
 ```tsx
-import { StackedBarChart } from '@ilovereact/core';
+import { StackedBarChart } from '@reactjit/core';
 ```
 
 Data shape:
@@ -40,7 +40,7 @@ Props:
 Example 1: Quarterly revenue by product line
 ---
 ```tsx
-import { StackedBarChart } from '@ilovereact/core';
+import { StackedBarChart } from '@reactjit/core';
 
 const series = [
   { label: 'Hardware', color: '#3b82f6', data: [42, 55, 38, 61] },
@@ -68,7 +68,7 @@ Platforms: All
 Example 2: Fluid-width bars filling the container
 ---
 ```tsx
-import { StackedBarChart } from '@ilovereact/core';
+import { StackedBarChart } from '@reactjit/core';
 
 const series = [
   { label: 'Read',  color: '#6366f1', data: [120, 95, 110, 130, 88, 140, 105] },
@@ -96,7 +96,7 @@ Platforms: All
 Example 3: Interactive with breakdown tooltip
 ---
 ```tsx
-import { StackedBarChart } from '@ilovereact/core';
+import { StackedBarChart } from '@reactjit/core';
 
 const series = [
   { label: 'Errors',   color: '#ef4444', data: [3, 7, 2, 10, 4] },

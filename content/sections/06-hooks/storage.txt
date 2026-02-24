@@ -8,7 +8,7 @@ related: useCRUD, useStorage, createCRUD
 difficulty: intermediate
 
 === OVERVIEW ===
-@ilovereact/storage provides schema-validated CRUD operations with reactive
+@reactjit/storage provides schema-validated CRUD operations with reactive
 React hooks and a plain-JS interface for non-React code. The same API works
 on every target: Love2D stores data in love.filesystem, terminals use SQLite
 via Node.js built-in node:sqlite, web targets use localStorage or IndexedDB,
@@ -19,7 +19,7 @@ external dependencies.
 
 Import: import { StorageProvider, useCRUD, useStorage, createCRUD, z,
          MemoryAdapter, Love2DFileAdapter, TerminalSQLiteAdapter,
-         LocalStorageAdapter, IndexedDBAdapter } from '@ilovereact/storage';
+         LocalStorageAdapter, IndexedDBAdapter } from '@reactjit/storage';
 
 === API / SYNTAX ===
 
@@ -259,7 +259,7 @@ IndexedDBAdapter
     new IndexedDBAdapter({ dbName?, collections? })
 
     Options:
-      dbName?      string     IndexedDB database name. Default: 'ilovereact-storage'.
+      dbName?      string     IndexedDB database name. Default: 'reactjit-storage'.
       collections? string[]   Known collection names for initial schema creation.
 
     Extra method:
@@ -277,7 +277,7 @@ the new version.
   Migrations run sequentially. A record at version 0 with migrations defined
   for versions 1, 2, 3 will have all three functions applied in order.
 
-  Helper utilities (importable from @ilovereact/storage):
+  Helper utilities (importable from @reactjit/storage):
     getLatestVersion(migrations): number
     migrateRecord(data, migrations, autoMigrate): any
     stampVersion(data, migrations): any
@@ -287,7 +287,7 @@ the new version.
 
 ---- Define a schema and type -----------------------------------------------
 
-import { z } from '@ilovereact/storage';
+import { z } from '@reactjit/storage';
 
 const NoteSchema = z.object({
   id:        z.string(),
@@ -301,8 +301,8 @@ type Note = z.infer<typeof NoteSchema>;
 
 ---- Love2D app: wire up StorageProvider ------------------------------------
 
-import { StorageProvider, Love2DFileAdapter } from '@ilovereact/storage';
-import { useLoveRPC } from '@ilovereact/core';
+import { StorageProvider, Love2DFileAdapter } from '@reactjit/storage';
+import { useLoveRPC } from '@reactjit/core';
 
 function AppWithStorage({ children }) {
   const rpc = useLoveRPC;   // pass the hook factory, not a result
@@ -316,7 +316,7 @@ function AppWithStorage({ children }) {
 
 ---- useCRUD basic usage ----------------------------------------------------
 
-import { useCRUD, z } from '@ilovereact/storage';
+import { useCRUD, z } from '@reactjit/storage';
 
 function NotesScreen() {
   const Notes = useCRUD('notes', NoteSchema);
@@ -384,7 +384,7 @@ function Standalone() {
 
 ---- createCRUD outside React (script / CLI) --------------------------------
 
-import { createCRUD, TerminalSQLiteAdapter, z } from '@ilovereact/storage';
+import { createCRUD, TerminalSQLiteAdapter, z } from '@reactjit/storage';
 
 const db = new TerminalSQLiteAdapter({ dbPath: './app.db' });
 
@@ -418,7 +418,7 @@ const Users = useCRUD('users', UserSchema, {
 
 ---- Web app: localStorage adapter ------------------------------------------
 
-import { StorageProvider, LocalStorageAdapter } from '@ilovereact/storage';
+import { StorageProvider, LocalStorageAdapter } from '@reactjit/storage';
 
 const adapter = new LocalStorageAdapter({ prefix: 'myapp:' });
 
@@ -432,7 +432,7 @@ function App() {
 
 ---- Web app: IndexedDB adapter ----------------------------------------------
 
-import { IndexedDBAdapter } from '@ilovereact/storage';
+import { IndexedDBAdapter } from '@reactjit/storage';
 
 const adapter = new IndexedDBAdapter({
   dbName:      'myapp',

@@ -1,6 +1,6 @@
 === METADATA ===
 title: Neovim Target
-description: iLoveReact renderer that outputs to Neovim floating windows
+description: ReactJIT renderer that outputs to Neovim floating windows
 category: Targets
 platforms: nvim
 keywords: neovim, nvim, floating windows, stdio, grid, editor
@@ -8,7 +8,7 @@ related: terminal, awesomewm, love2d
 difficulty: intermediate
 
 === OVERVIEW ===
-The Neovim target (@ilovereact/nvim) renders iLoveReact components as Neovim floating
+The Neovim target (@reactjit/nvim) renders ReactJIT components as Neovim floating
 windows. Communication happens via stdio using the neovim npm package. The grid layout
 engine computes character-cell positions, and the painter creates and updates floating
 windows with the appropriate content and highlight groups.
@@ -28,7 +28,7 @@ Requirements:
 === EXAMPLES ===
 Example 1: Neovim Plugin Entry Point
 ---
-import { createNvimApp } from '@ilovereact/nvim';
+import { createNvimApp } from '@reactjit/nvim';
 import App from './App';
 
 const app = createNvimApp();

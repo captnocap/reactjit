@@ -1,6 +1,6 @@
 === METADATA ===
 title: Hammerspoon Target
-description: iLoveReact renderer for Hammerspoon macOS automation overlays
+description: ReactJIT renderer for Hammerspoon macOS automation overlays
 category: Targets
 platforms: hs
 keywords: hammerspoon, macos, automation, overlay, canvas, websocket, pixel
@@ -8,7 +8,7 @@ related: awesomewm, love2d, web
 difficulty: intermediate
 
 === OVERVIEW ===
-The Hammerspoon target (@ilovereact/hs) renders iLoveReact components as pixel-perfect
+The Hammerspoon target (@reactjit/hs) renders ReactJIT components as pixel-perfect
 overlays on macOS using Hammerspoon's hs.canvas API. Communication happens over
 WebSocket between the Node.js process (running your React app) and the Hammerspoon Lua
 runtime. This lets you build rich floating dashboards, HUDs, or status panels that
@@ -27,7 +27,7 @@ Requirements:
 === EXAMPLES ===
 Example 1: Hammerspoon App Entry Point
 ---
-import { createHSApp } from '@ilovereact/hs';
+import { createHSApp } from '@reactjit/hs';
 import App from './App';
 
 const app = createHSApp({

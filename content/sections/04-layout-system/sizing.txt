@@ -1,6 +1,6 @@
 === METADATA ===
 title: Width, Height, and Min/Max Sizing
-description: Sizing properties for controlling element dimensions in iLoveReact.
+description: Sizing properties for controlling element dimensions in ReactJIT.
 category: Layout
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: width, height, minWidth, minHeight, maxWidth, maxHeight, aspectRatio, sizing, dimensions, percentage, pixels
@@ -8,14 +8,14 @@ related: flexbox.txt, spacing.txt, critical-rules.txt
 difficulty: beginner
 
 === OVERVIEW ===
-Every element in iLoveReact has explicit sizing control through width, height, and their
+Every element in ReactJIT has explicit sizing control through width, height, and their
 min/max variants. Values can be numbers (interpreted as pixels on Love2D/web, or character
 cells on grid targets) or percentage strings like '100%' or '50%'. Unlike the web, Box
-elements in iLoveReact have no intrinsic width -- if you do not specify a width, it is
+elements in ReactJIT have no intrinsic width -- if you do not specify a width, it is
 effectively zero unless flexGrow or alignItems: 'stretch' provides one.
 
 Root containers must always use width: '100%', height: '100%' to fill the viewport. This
-is the most common mistake in iLoveReact development and is enforced by the linter. Using
+is the most common mistake in ReactJIT development and is enforced by the linter. Using
 flexGrow: 1 on the root does not work because there is no parent container to grow into.
 
 === API / SYNTAX ===

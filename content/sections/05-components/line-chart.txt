@@ -12,7 +12,7 @@ LineChart renders a fixed-size canvas divided into equal-width columns, one per 
 
 === API / SYNTAX ===
 ```tsx
-import { LineChart } from '@ilovereact/core';
+import { LineChart } from '@reactjit/core';
 ```
 
 Data shape:
@@ -42,7 +42,7 @@ Props:
 Example 1: Simple line chart with dots
 ---
 ```tsx
-import { LineChart } from '@ilovereact/core';
+import { LineChart } from '@reactjit/core';
 
 const cpu = [
   { x: '00:00', value: 18 },
@@ -69,7 +69,7 @@ Platforms: All
 Example 2: Area fill for cumulative data
 ---
 ```tsx
-import { LineChart } from '@ilovereact/core';
+import { LineChart } from '@reactjit/core';
 
 const downloads = [
   { value: 120 }, { value: 145 }, { value: 162 },
@@ -100,7 +100,7 @@ Example 3: Interactive with click handler
 ---
 ```tsx
 import { useState } from 'react';
-import { LineChart } from '@ilovereact/core';
+import { LineChart } from '@reactjit/core';
 
 const temps = [
   { x: 'Mon', value: 12 }, { x: 'Tue', value: 15 },

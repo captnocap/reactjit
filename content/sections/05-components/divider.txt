@@ -11,7 +11,7 @@ difficulty: beginner
 Divider renders a horizontal or vertical separator line between content sections. It's a styled Box with backgroundColor, defaulting to a 1-pixel horizontal line. Use it to visually separate groups of content, create borders, or add structure to complex layouts.
 
 === API / SYNTAX ===
-import { Divider } from '@ilovereact/core';
+import { Divider } from '@reactjit/core';
 
 Props:
 | Prop | Type | Default | Description |

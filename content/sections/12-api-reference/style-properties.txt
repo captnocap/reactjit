@@ -8,7 +8,7 @@ related: types, flexbox, sizing, spacing
 difficulty: intermediate
 
 === OVERVIEW ===
-The Style interface defines all visual and layout properties for iLoveReact nodes. It is
+The Style interface defines all visual and layout properties for ReactJIT nodes. It is
 passed via the `style` prop on Box, Text, Image, and other components. All properties
 are optional. Properties that are not set use their default values (typically 0, 'column',
 or undefined).

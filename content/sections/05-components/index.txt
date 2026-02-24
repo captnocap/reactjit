@@ -1,6 +1,6 @@
 === METADATA ===
 title: Components Overview
-description: Reference index for all iLoveReact primitives and components
+description: Reference index for all ReactJIT primitives and components
 category: Components
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: components, primitives, box, text, image, pressable, scrollview, modal, slider, codeblock, reference
@@ -8,9 +8,9 @@ related: Layout System, Hooks, Animation
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact ships a set of universal primitives and higher-level components that work across all render targets. Every visible element on screen is built from these building blocks. Primitives are the lowest-level elements (Box, Text, Image) that map directly to host elements in each target. Components are composed from primitives and provide richer interaction patterns (Pressable, ScrollView, Modal, Slider, and others).
+ReactJIT ships a set of universal primitives and higher-level components that work across all render targets. Every visible element on screen is built from these building blocks. Primitives are the lowest-level elements (Box, Text, Image) that map directly to host elements in each target. Components are composed from primitives and provide richer interaction patterns (Pressable, ScrollView, Modal, Slider, and others).
 
-All primitives and components are exported from `@ilovereact/core`. Grid targets (terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM) use lowercase JSX intrinsics (`<view>`, `<text>`) and typically define local wrapper components; the `@ilovereact/core` exports target Love2D and web renderers.
+All primitives and components are exported from `@reactjit/core`. Grid targets (terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM) use lowercase JSX intrinsics (`<view>`, `<text>`) and typically define local wrapper components; the `@reactjit/core` exports target Love2D and web renderers.
 
 === API / SYNTAX ===
 ```tsx
@@ -38,7 +38,7 @@ import {
 
   // Portal system
   Portal, PortalHost,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 ```
 
 === COMPONENT INDEX ===
@@ -100,14 +100,14 @@ Web:
   Primitives render as DOM elements (div, span, img) with CSS flexbox. Interaction events use standard DOM event listeners. Styles are converted from the Style type to React.CSSProperties by styleToCSS().
 
 Terminal / Grid targets:
-  Use lowercase intrinsics (<view>, <text>) with the grid layout engine. The @ilovereact/core components are not used directly; grid targets have their own component wrappers built on @ilovereact/grid.
+  Use lowercase intrinsics (<view>, <text>) with the grid layout engine. The @reactjit/core components are not used directly; grid targets have their own component wrappers built on @reactjit/grid.
 
 === CRITICAL RULES ===
-- Always import from '@ilovereact/core', never from internal package paths
+- Always import from '@reactjit/core', never from internal package paths
 - Every <Text> must have an explicit fontSize -- the linter will block your build otherwise
 - Root containers need width: '100%' and height: '100%', not flexGrow: 1
-- Grid targets use different primitives; do not import @ilovereact/core components into grid-target code
-- Run `ilovereact lint` after any component change to catch layout violations early
+- Grid targets use different primitives; do not import @reactjit/core components into grid-target code
+- Run `reactjit lint` after any component change to catch layout violations early
 
 === SEE ALSO ===
 - Layout System (04-layout-system)

@@ -1,6 +1,6 @@
 === METADATA ===
 title: React Reconciler
-description: How @ilovereact/native uses react-reconciler to build the instance tree and emit mutation commands
+description: How @reactjit/native uses react-reconciler to build the instance tree and emit mutation commands
 category: Architecture
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: reconciler, react-reconciler, host config, instance tree, mutations, createNode, updateProps
@@ -8,7 +8,7 @@ related: pipeline, transport, layout-engine
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact uses react-reconciler 0.29 (the same package React Native uses) to manage
+ReactJIT uses react-reconciler 0.29 (the same package React Native uses) to manage
 the component tree. The reconciler calls into a host config that creates, updates, and
 removes instances. In native mode, these instances are lightweight JavaScript objects
 that map 1:1 to nodes in the Lua-side retained tree.
@@ -31,7 +31,7 @@ Mutation Command Types:
   insertBefore   - Insert child before sibling: { type, parentId, childId, beforeId }
   commitTextUpdate - Update raw text content: { type, id, text }
 
-Key Exports from @ilovereact/native:
+Key Exports from @reactjit/native:
   createRoot()       - Create a reconciler root
   render(element)    - Render a React element into the root
   unmountAll()       - Tear down all roots
@@ -44,7 +44,7 @@ Key Exports from @ilovereact/native:
 === EXAMPLES ===
 Example 1: How createLove2DApp Works
 ---
-import { createLove2DApp } from '@ilovereact/native';
+import { createLove2DApp } from '@reactjit/native';
 
 const app = createLove2DApp();
 app.render(<App />);

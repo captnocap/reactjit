@@ -8,11 +8,11 @@ related: Camera, Mesh, AmbientLight, DirectionalLight
 difficulty: intermediate
 
 === OVERVIEW ===
-Scene is the root container for all 3D rendering in iLoveReact. It creates an off-screen canvas that the Love2D painter composites into the 2D layout at the node's computed position. Children of Scene must be 3D elements: Camera, Mesh, AmbientLight, and DirectionalLight. On web targets, Scene renders a placeholder div because 3D support is Love2D only.
+Scene is the root container for all 3D rendering in ReactJIT. It creates an off-screen canvas that the Love2D painter composites into the 2D layout at the node's computed position. Children of Scene must be 3D elements: Camera, Mesh, AmbientLight, and DirectionalLight. On web targets, Scene renders a placeholder div because 3D support is Love2D only.
 
 === API / SYNTAX ===
 ```tsx
-import { Scene } from '@ilovereact/3d';
+import { Scene } from '@reactjit/3d';
 ```
 
 Props:
@@ -28,7 +28,7 @@ Props:
 Example 1: Minimal scene with a box mesh
 ---
 ```tsx
-import { Scene, Camera, Mesh } from '@ilovereact/3d';
+import { Scene, Camera, Mesh } from '@reactjit/3d';
 
 function App() {
   return (
@@ -47,7 +47,7 @@ Platforms: love2d
 Example 2: Scene with starfield background and orbit controls
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function SpaceScene() {
   return (
@@ -71,7 +71,7 @@ Platforms: love2d
 Example 3: Scene embedded in a 2D layout
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function Dashboard() {
   return (

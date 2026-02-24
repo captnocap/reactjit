@@ -12,7 +12,7 @@ VideoPlayer wraps the Video primitive and adds interactive playback controls ren
 
 === API / SYNTAX ===
 ```tsx
-import { VideoPlayer } from '@ilovereact/core';
+import { VideoPlayer } from '@reactjit/core';
 
 <VideoPlayer
   src="video.mp4"
@@ -57,7 +57,7 @@ import { VideoPlayer } from '@ilovereact/core';
 Example 1: Basic usage with default controls
 ---
 ```tsx
-import { Box, VideoPlayer } from '@ilovereact/core';
+import { Box, VideoPlayer } from '@reactjit/core';
 
 export function App() {
   return (
@@ -78,7 +78,7 @@ Platforms: love2d, web
 Example 2: Controlled playback with event handling
 ---
 ```tsx
-import { Box, Text, VideoPlayer } from '@ilovereact/core';
+import { Box, Text, VideoPlayer } from '@reactjit/core';
 import { useState } from 'react';
 
 export function App() {
@@ -117,7 +117,7 @@ Platforms: love2d, web
 Example 3: M3U8/HLS stream playback
 ---
 ```tsx
-import { Box, VideoPlayer, TextEditor } from '@ilovereact/core';
+import { Box, VideoPlayer, TextEditor } from '@reactjit/core';
 import { useState } from 'react';
 
 export function App() {
@@ -158,7 +158,7 @@ Platforms: love2d
 Example 4: Looping background video with no controls
 ---
 ```tsx
-import { Box, VideoPlayer } from '@ilovereact/core';
+import { Box, VideoPlayer } from '@reactjit/core';
 
 export function App() {
   return (

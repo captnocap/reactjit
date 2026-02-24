@@ -12,7 +12,7 @@ PieChart rasterizes a pie chart into a 2x2-pixel cell grid using polar coordinat
 
 === API / SYNTAX ===
 ```tsx
-import { PieChart } from '@ilovereact/core';
+import { PieChart } from '@reactjit/core';
 ```
 
 Data shape:
@@ -37,7 +37,7 @@ Props:
 Example 1: Basic pie chart
 ---
 ```tsx
-import { PieChart } from '@ilovereact/core';
+import { PieChart } from '@reactjit/core';
 
 const marketShare = [
   { label: 'Chrome',  value: 65, color: '#3b82f6' },
@@ -60,7 +60,7 @@ Platforms: All
 Example 2: Donut chart with innerRadius
 ---
 ```tsx
-import { PieChart } from '@ilovereact/core';
+import { PieChart } from '@reactjit/core';
 
 const storage = [
   { label: 'Used',  value: 73, color: '#6366f1' },
@@ -85,7 +85,7 @@ Platforms: All
 Example 3: Interactive pie with legend tooltip
 ---
 ```tsx
-import { PieChart } from '@ilovereact/core';
+import { PieChart } from '@reactjit/core';
 
 const budget = [
   { label: 'Engineering', value: 45, color: '#3b82f6' },

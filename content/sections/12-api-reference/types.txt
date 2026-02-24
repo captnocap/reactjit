@@ -1,6 +1,6 @@
 === METADATA ===
 title: TypeScript Types Reference
-description: Complete TypeScript type definitions for all iLoveReact interfaces
+description: Complete TypeScript type definitions for all ReactJIT interfaces
 category: API Reference
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: types, typescript, interfaces, Color, Style, BoxProps, TextProps, ImageProps, LoveEvent
@@ -8,10 +8,10 @@ related: style-properties
 difficulty: intermediate
 
 === OVERVIEW ===
-This reference lists all TypeScript types exported from @ilovereact/core (packages/shared).
+This reference lists all TypeScript types exported from @reactjit/core (packages/shared).
 Types are organized by category: core types, primitive component props, higher-level
 component props, animation types, and utility types. All types are importable from
-'@ilovereact/core'.
+'@reactjit/core'.
 
 === API / SYNTAX ===
 

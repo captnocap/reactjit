@@ -12,7 +12,7 @@ ChartTooltip is a compound component that renders a dark-themed floating overlay
 
 === API / SYNTAX ===
 ```tsx
-import { ChartTooltip } from '@ilovereact/core';
+import { ChartTooltip } from '@reactjit/core';
 ```
 
 Props (ChartTooltip):
@@ -42,7 +42,7 @@ Example 1: Basic tooltip inside an interactive bar
 ---
 ```tsx
 import { useState } from 'react';
-import { ChartTooltip } from '@ilovereact/core';
+import { ChartTooltip } from '@reactjit/core';
 
 export default function App() {
   const [hovered, setHovered] = useState(false);
@@ -71,7 +71,7 @@ Example 2: Right-anchored tooltip for a horizontal bar row
 ---
 ```tsx
 import { useState } from 'react';
-import { ChartTooltip } from '@ilovereact/core';
+import { ChartTooltip } from '@reactjit/core';
 
 export default function App() {
   const [hovered, setHovered] = useState(false);
@@ -101,7 +101,7 @@ Example 3: Dynamic tooltip driven by external state
 ---
 ```tsx
 import { useState } from 'react';
-import { ChartTooltip } from '@ilovereact/core';
+import { ChartTooltip } from '@reactjit/core';
 
 const bars = [
   { label: 'Jan', value: 42 },

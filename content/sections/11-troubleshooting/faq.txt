@@ -1,6 +1,6 @@
 === METADATA ===
 title: FAQ
-description: Frequently asked questions about iLoveReact capabilities, limitations, and workflows
+description: Frequently asked questions about ReactJIT capabilities, limitations, and workflows
 category: Troubleshooting
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: faq, questions, npm packages, debug, hot reload, react version, css, text measurement
@@ -8,14 +8,14 @@ related: common-errors, installation, philosophy, debugging
 difficulty: beginner
 
 === OVERVIEW ===
-This page answers the most frequently asked questions about iLoveReact. If your question
+This page answers the most frequently asked questions about ReactJIT. If your question
 is not here, check the common errors page for specific error symptoms, or the debugging
 page for runtime investigation tools.
 
 === EXAMPLES ===
 Example 1: Can I use npm packages?
 ---
-Q: Can I install and use npm packages in my iLoveReact app?
+Q: Can I install and use npm packages in my ReactJIT app?
 
 A: Yes. Your src/ directory is a standard TypeScript/React project. Install packages
 with `npm install` and import them normally. The esbuild bundler resolves and bundles
@@ -45,7 +45,7 @@ Example 3: How does hot reload work?
 ---
 Q: How do I see my changes without restarting Love2D?
 
-A: Use `ilovereact dev` in one terminal (watch mode, rebuilds bundle.js on change)
+A: Use `reactjit dev` in one terminal (watch mode, rebuilds bundle.js on change)
 and `love .` in another terminal. The Lua runtime polls bundle.js every ~1 second.
 When it detects a change, it:
   1. Reads dev state from JS (__getDevState)
@@ -62,10 +62,10 @@ Platforms: love2d
 
 Example 4: What React version is required?
 ---
-Q: What version of React does iLoveReact use?
+Q: What version of React does ReactJIT use?
 
 A: React 18.3+ with react-reconciler 0.29. The reconciler version must match
-the React version. iLoveReact uses React's concurrent features where applicable.
+the React version. ReactJIT uses React's concurrent features where applicable.
 ---
 Platforms: All
 
@@ -73,7 +73,7 @@ Example 5: Can I use CSS?
 ---
 Q: Can I use CSS stylesheets, CSS modules, or Tailwind CSS?
 
-A: No. iLoveReact uses Style objects with flexbox properties, not CSS. The Style
+A: No. ReactJIT uses Style objects with flexbox properties, not CSS. The Style
 interface is defined in TypeScript and supports a subset of CSS flexbox properties
 plus custom properties for the target renderers.
 
@@ -87,7 +87,7 @@ Platforms: All
 
 Example 6: How does text measurement work?
 ---
-Q: How does iLoveReact know how wide text is?
+Q: How does ReactJIT know how wide text is?
 
 A: On Love2D, text measurement uses Love2D's font:getWrap() and font:getWidth()
 APIs. The measure.lua module loads fonts by (size, family, weight) and caches

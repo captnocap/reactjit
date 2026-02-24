@@ -359,20 +359,6 @@ export type {
   TelegramBotInfo,
 } from './telegram';
 
-// ── Display Components — primitives (own files) ──────────────────────────────
-export { NowPlayingCard } from './NowPlayingCard';
-export type { NowPlayingCardProps } from './NowPlayingCard';
-export { MediaPosterCard } from './MediaPosterCard';
-export type { MediaPosterCardProps } from './MediaPosterCard';
-export { CoinTickerRow } from './CoinTickerRow';
-export type { CoinTickerRowProps } from './CoinTickerRow';
-export { StatCard } from './StatCard';
-export type { StatCardProps } from './StatCard';
-export { ActivityRow } from './ActivityRow';
-export type { ActivityRowProps } from './ActivityRow';
-export { HueLightBadge } from './HueLightBadge';
-export type { HueLightBadgeProps } from './HueLightBadge';
-
 // ── Display Components — additional primitives + one-liners (components.tsx) ─
 export {
   TrackRow,

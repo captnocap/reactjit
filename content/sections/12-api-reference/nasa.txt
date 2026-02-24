@@ -18,7 +18,7 @@ Auth: All endpoints accept `DEMO_KEY` for low-rate testing (30 requests/hour). R
 
 Fetch the Astronomy Picture of the Day. Pass a specific date to get a historical image, or a count to get a random selection.
 
-  import { useNASAApod } from '@ilovereact/apis/nasa';
+  import { useNASAApod } from '@reactjit/apis/nasa';
 
   const result: APIResult<NASAAPOD | NASAAPOD[]> = useNASAApod(
     apiKey: string | null,
@@ -50,7 +50,7 @@ NASAAPOD fields:
 
 Fetch photos taken by a Mars rover on a given Martian sol (day) or Earth date. Supports all four rovers and optional camera filtering.
 
-  import { useNASAMarsPhotos } from '@ilovereact/apis/nasa';
+  import { useNASAMarsPhotos } from '@reactjit/apis/nasa';
 
   const result: APIResult<{ photos: NASAMarsPhoto[] }> = useNASAMarsPhotos(
     apiKey: string | null,
@@ -84,7 +84,7 @@ NASAMarsPhoto fields:
 
 Fetch Near-Earth Object (asteroid) close-approach data for a date range. Returns a date-keyed dictionary of asteroid arrays plus a total element count.
 
-  import { useNASANeoFeed } from '@ilovereact/apis/nasa';
+  import { useNASANeoFeed } from '@reactjit/apis/nasa';
 
   const result: APIResult<NASANeoFeed> = useNASANeoFeed(
     apiKey: string | null,
@@ -118,7 +118,7 @@ NASANeoObject fields:
 
 Fetch EPIC (Earth Polychromatic Imaging Camera) imagery. EPIC is a camera aboard the DSCOVR spacecraft that images the full sunlit face of Earth roughly every two hours.
 
-  import { useNASAEPIC } from '@ilovereact/apis/nasa';
+  import { useNASAEPIC } from '@reactjit/apis/nasa';
 
   const result: APIResult<NASAEPICImage[]> = useNASAEPIC(
     apiKey: string | null,
@@ -144,7 +144,7 @@ NASAEPICImage fields:
 
 Build a full PNG URL for an EPIC image object. The EPIC archive URL structure encodes the date into directory segments, so this helper does the transformation for you.
 
-  import { nasaEPICImageUrl } from '@ilovereact/apis/nasa';
+  import { nasaEPICImageUrl } from '@reactjit/apis/nasa';
 
   const url: string = nasaEPICImageUrl(
     image:       NASAEPICImage,
@@ -163,8 +163,8 @@ Returns: string   Full PNG URL, e.g. 'https://epic.gsfc.nasa.gov/archive/natural
 
 Fetch today's APOD and display the title and description. Show a note if it is a video.
 
-  import { useNASAApod } from '@ilovereact/apis/nasa';
-  import { Box, Text, Image } from '@ilovereact/core';
+  import { useNASAApod } from '@reactjit/apis/nasa';
+  import { Box, Text, Image } from '@reactjit/core';
 
   function APODWidget({ apiKey }: { apiKey: string | null }) {
     const { data, loading, error } = useNASAApod(apiKey);
@@ -197,8 +197,8 @@ Fetch today's APOD and display the title and description. Show a note if it is a
 
 Show today's close-approaching asteroids and flag potentially hazardous ones.
 
-  import { useNASANeoFeed } from '@ilovereact/apis/nasa';
-  import { Box, Text } from '@ilovereact/core';
+  import { useNASANeoFeed } from '@reactjit/apis/nasa';
+  import { Box, Text } from '@reactjit/core';
 
   function AsteroidToday({ apiKey }: { apiKey: string | null }) {
     const { data, loading } = useNASANeoFeed(apiKey);

@@ -15,7 +15,7 @@ frame, the runtime ticks the JavaScript engine, drains mutation commands, advanc
 animations, runs layout, and paints the tree.
 
 All Lua files live at lua/ in the monorepo root (source of truth) and are copied into
-projects via `make cli-setup` and `ilovereact update`.
+projects via `make cli-setup` and `reactjit update`.
 
 === API / SYNTAX ===
 Module Inventory:

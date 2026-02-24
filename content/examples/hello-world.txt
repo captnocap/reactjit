@@ -1,19 +1,19 @@
 === METADATA ===
 title: Hello World
-description: The simplest possible iLoveReact application - a centered greeting
+description: The simplest possible ReactJIT application - a centered greeting
 category: Examples
 platforms: all
 keywords: hello world, beginner, basic, first app, centered text
 difficulty: beginner
 
 === OVERVIEW ===
-This example demonstrates the absolute minimum iLoveReact application: a single Text
+This example demonstrates the absolute minimum ReactJIT application: a single Text
 node centered on a full-viewport Box. It covers the three essential concepts: importing
 primitives, filling the viewport, and centering content with flexbox.
 
 === CODE ===
 ---
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 
 export default function App() {
   return (
@@ -25,7 +25,7 @@ export default function App() {
       alignItems: 'center',
     }}>
       <Text style={{ fontSize: 32, color: '#f8fafc' }}>
-        Hello, iLoveReact!
+        Hello, ReactJIT!
       </Text>
     </Box>
   );
@@ -33,7 +33,7 @@ export default function App() {
 ---
 
 === EXPLANATION ===
-1. Import Box and Text from @ilovereact/core. These are the universal primitives
+1. Import Box and Text from @reactjit/core. These are the universal primitives
    that work on every target.
 
 2. The root Box has width: '100%' and height: '100%'. This is required to fill the

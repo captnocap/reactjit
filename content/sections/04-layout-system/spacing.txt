@@ -8,7 +8,7 @@ related: flexbox.txt, sizing.txt, visual.txt
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact supports padding (inner spacing), margin (outer spacing), and gap (spacing
+ReactJIT supports padding (inner spacing), margin (outer spacing), and gap (spacing
 between flex children). These work the same way as in CSS Flexbox: padding creates space
 inside the element's border, margin creates space outside, and gap creates uniform spacing
 between sibling children in a flex container.

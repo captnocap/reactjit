@@ -13,7 +13,7 @@ Breadcrumbs renders a horizontal trail of navigation items separated by a config
 The component is built with Box, Text, and Pressable primitives, making it work identically across all targets.
 
 === API / SYNTAX ===
-Import: import { Breadcrumbs } from '@ilovereact/core';
+Import: import { Breadcrumbs } from '@reactjit/core';
 
 BreadcrumbItem type:
 ```ts

@@ -8,7 +8,7 @@ related: useFetch, useWebSocket
 difficulty: beginner
 
 === OVERVIEW ===
-The @ilovereact/rss package turns any RSS/Atom feed URL into a reactive data source. It ships a zero-dependency XML parser that runs in QuickJS (Love2D), Node.js, and browsers without requiring DOMParser. The two main hooks — useRSSFeed and useRSSAggregate — handle fetching, polling, deduplication, and limit enforcement. Imperative helpers (fetchFeed, parseFeed) and OPML import/export utilities round out the package for building complete feed readers.
+The @reactjit/rss package turns any RSS/Atom feed URL into a reactive data source. It ships a zero-dependency XML parser that runs in QuickJS (Love2D), Node.js, and browsers without requiring DOMParser. The two main hooks — useRSSFeed and useRSSAggregate — handle fetching, polling, deduplication, and limit enforcement. Imperative helpers (fetchFeed, parseFeed) and OPML import/export utilities round out the package for building complete feed readers.
 
 === API / SYNTAX ===
 
@@ -16,7 +16,7 @@ The @ilovereact/rss package turns any RSS/Atom feed URL into a reactive data sou
 
 Subscribe to a single RSS, Atom, or RSS 1.0 feed. Fetches immediately on mount, re-fetches on url change or manual refetch, and polls if an interval is configured. New items are merged on top of the existing list with deduplication by item ID.
 
-  import { useRSSFeed } from '@ilovereact/rss';
+  import { useRSSFeed } from '@reactjit/rss';
 
   const result: RSSFeedResult = useRSSFeed(url: string | null, options?: RSSFeedOptions);
 
@@ -63,7 +63,7 @@ FeedItem fields:
 
 Subscribe to multiple feeds simultaneously and receive a single merged, chronologically sorted item list. All feeds are fetched in parallel. Each feed failure is isolated — one broken feed does not prevent the others from rendering.
 
-  import { useRSSAggregate } from '@ilovereact/rss';
+  import { useRSSAggregate } from '@reactjit/rss';
 
   const result: RSSAggregateResult = useRSSAggregate(urls: string[], options?: RSSAggregateOptions);
 
@@ -89,7 +89,7 @@ Returns: RSSAggregateResult
 
 Fetch and parse a feed outside of React. Returns a Promise<Feed>. Use this in event handlers, background tasks, or server-side scripts where hooks are not available.
 
-  import { fetchFeed } from '@ilovereact/rss';
+  import { fetchFeed } from '@reactjit/rss';
 
   const feed: Feed = await fetchFeed(url: string, corsProxy?: string);
 
@@ -104,7 +104,7 @@ Throws on network errors or non-2xx HTTP responses.
 
 Parse a raw XML string into a normalized Feed object. Supports RSS 2.0, Atom 1.0, and RSS 1.0 (RDF). No DOMParser — works in QuickJS.
 
-  import { parseFeed } from '@ilovereact/rss';
+  import { parseFeed } from '@reactjit/rss';
 
   const feed: Feed = parseFeed(xml: string);
 
@@ -117,7 +117,7 @@ Returns: Feed — never throws; returns an empty feed with type 'unknown' on unr
 
 Parse an OPML subscription list into an array of feed descriptors. Useful for importing browser bookmark exports or shared subscription bundles.
 
-  import { parseOPML } from '@ilovereact/rss';
+  import { parseOPML } from '@reactjit/rss';
 
   const outlines: OPMLOutline[] = parseOPML(xml: string);
 
@@ -138,7 +138,7 @@ OPMLOutline fields:
 
 Serialize a list of subscriptions as an OPML 2.0 document. Use this to export a user's feed list for sharing or backup.
 
-  import { generateOPML } from '@ilovereact/rss';
+  import { generateOPML } from '@reactjit/rss';
 
   const xml: string = generateOPML(
     title: string,
@@ -157,8 +157,8 @@ Returns: string — valid OPML 2.0 XML
 
 Display the latest stories from Hacker News with live polling every 5 minutes:
 
-  import { useRSSFeed } from '@ilovereact/rss';
-  import { Box, Text } from '@ilovereact/core';
+  import { useRSSFeed } from '@reactjit/rss';
+  import { Box, Text } from '@reactjit/core';
 
   function HNReader() {
     const { feed, items, loading, error } = useRSSFeed(
@@ -203,8 +203,8 @@ Display the latest stories from Hacker News with live polling every 5 minutes:
 
 Merge three feeds into one chronological stream and show which source each story comes from:
 
-  import { useRSSAggregate } from '@ilovereact/rss';
-  import { Box, Text } from '@ilovereact/core';
+  import { useRSSAggregate } from '@reactjit/rss';
+  import { Box, Text } from '@reactjit/core';
 
   const FEEDS = [
     'https://hnrss.org/frontpage',
@@ -257,9 +257,9 @@ Merge three feeds into one chronological stream and show which source each story
 
 Let the user paste an OPML export from their old feed reader and subscribe to all feeds at once:
 
-  import { parseOPML, useRSSAggregate } from '@ilovereact/rss';
+  import { parseOPML, useRSSAggregate } from '@reactjit/rss';
   import { useState } from 'react';
-  import { Box, Text, TextInput } from '@ilovereact/core';
+  import { Box, Text, TextInput } from '@reactjit/core';
 
   function OPMLImporter() {
     const [urls, setUrls] = useState<string[]>([]);

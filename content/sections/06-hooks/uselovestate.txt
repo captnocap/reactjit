@@ -41,7 +41,7 @@ Returns:
 === EXAMPLES ===
 Example 1: Shared volume setting
 ---
-import { useLoveState } from '@ilovereact/core';
+import { useLoveState } from '@reactjit/core';
 
 function VolumeControl() {
   const [volume, setVolume] = useLoveState('settings.volume', 0.8);
@@ -69,7 +69,7 @@ Platforms: All
 
 Example 2: Player health synced from Lua
 ---
-import { useLoveState } from '@ilovereact/core';
+import { useLoveState } from '@reactjit/core';
 
 function HealthBar() {
   const [health, setHealth] = useLoveState('player.health', 100);

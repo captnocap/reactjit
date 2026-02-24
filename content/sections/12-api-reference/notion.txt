@@ -1,6 +1,6 @@
 === METADATA ===
 title: Notion Hooks
-description: Hooks for querying Notion databases, reading pages and blocks, and writing new pages from iLoveReact components.
+description: Hooks for querying Notion databases, reading pages and blocks, and writing new pages from ReactJIT components.
 category: API Reference
 platforms: love2d, web, terminal
 keywords: notion, database, pages, blocks, cms, notes, tasks, knowledge base
@@ -8,7 +8,7 @@ related: useTodoistTasks, useGoogleSheet
 difficulty: intermediate
 
 === OVERVIEW ===
-The Notion hooks in @ilovereact/apis connect to the Notion REST API v1. You need an internal integration token — create one at https://www.notion.so/my-integrations and share it with the databases or pages you want to read.
+The Notion hooks in @reactjit/apis connect to the Notion REST API v1. You need an internal integration token — create one at https://www.notion.so/my-integrations and share it with the databases or pages you want to read.
 
 Read hooks (useNotionPage, useNotionBlocks) use reactive polling via useAPI. The database query hooks (useNotionDatabases, useNotionDatabase) use the POST-based search and query endpoints internally, so they are implemented with useAPIMutation but behave like read hooks — they auto-fetch on mount and expose a refetch() method. Write operations go through useNotionMutation, which returns imperative functions.
 
@@ -20,7 +20,7 @@ The Notion API version pinned by these hooks is 2022-06-28.
 
 Search for all databases the integration has been granted access to.
 
-  import { useNotionDatabases } from '@ilovereact/apis';
+  import { useNotionDatabases } from '@reactjit/apis';
 
   const result: APIResult<NotionPaginated<NotionDatabase>> = useNotionDatabases(
     token: string | null,
@@ -48,7 +48,7 @@ NotionPaginated<T> fields:
 
 Query rows from a specific database with optional filter and sort. Uses Notion's database query endpoint (POST).
 
-  import { useNotionDatabase } from '@ilovereact/apis';
+  import { useNotionDatabase } from '@reactjit/apis';
 
   const result: APIResult<NotionPaginated<NotionPage>> = useNotionDatabase(
     token: string | null,
@@ -78,7 +78,7 @@ NotionPage fields:
 
 Fetch a single Notion page by its ID.
 
-  import { useNotionPage } from '@ilovereact/apis';
+  import { useNotionPage } from '@reactjit/apis';
 
   const result: APIResult<NotionPage> = useNotionPage(
     token: string | null,
@@ -95,7 +95,7 @@ Returns: APIResult<NotionPage>
 
 Fetch the child blocks of a page or block. Returns the top-level block tree only — call recursively with a block's ID to fetch nested children.
 
-  import { useNotionBlocks } from '@ilovereact/apis';
+  import { useNotionBlocks } from '@reactjit/apis';
 
   const result: APIResult<NotionPaginated<NotionBlock>> = useNotionBlocks(
     token: string | null,
@@ -118,7 +118,7 @@ NotionBlock fields:
 
 Get imperative write operations: create pages and update existing page properties.
 
-  import { useNotionMutation } from '@ilovereact/apis';
+  import { useNotionMutation } from '@reactjit/apis';
 
   const mutation = useNotionMutation(token: string | null);
 
@@ -148,8 +148,8 @@ NotionRichText fields:
 
 Query a database of tasks filtered to incomplete items, sorted by priority:
 
-  import { useNotionDatabase } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useNotionDatabase } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.NOTION_TOKEN;
   const DB_ID = 'your-database-uuid-here';
@@ -188,8 +188,8 @@ Query a database of tasks filtered to incomplete items, sorted by priority:
 
 Add a new row to a Notion database when the user submits a form:
 
-  import { useNotionMutation } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useNotionMutation } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
   import { useState } from 'react';
 
   const TOKEN = process.env.NOTION_TOKEN;

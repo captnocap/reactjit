@@ -8,7 +8,7 @@ related: useTodoistTasks, useNotionDatabase
 difficulty: intermediate
 
 === OVERVIEW ===
-The Google hooks in @ilovereact/apis cover two Google APIs: Calendar and Sheets. Both use OAuth2 Bearer tokens. Obtain tokens via Google's OAuth2 flow (https://developers.google.com/identity/protocols/oauth2) and store them in your environment or a secure config file.
+The Google hooks in @reactjit/apis cover two Google APIs: Calendar and Sheets. Both use OAuth2 Bearer tokens. Obtain tokens via Google's OAuth2 flow (https://developers.google.com/identity/protocols/oauth2) and store them in your environment or a secure config file.
 
 Required OAuth scopes:
   Calendar read: https://www.googleapis.com/auth/calendar.readonly
@@ -24,7 +24,7 @@ Read hooks are reactive and fetch on mount. Mutation hooks (useGoogleCalendarMut
 
 Fetch all calendars in the authenticated user's calendar list.
 
-  import { useGoogleCalendars } from '@ilovereact/apis';
+  import { useGoogleCalendars } from '@reactjit/apis';
 
   const result: APIResult<{ items: GoogleCalendar[] }> = useGoogleCalendars(
     token: string | null,
@@ -48,7 +48,7 @@ GoogleCalendar fields:
 
 Fetch events from a calendar with optional time window and result limit. Defaults to upcoming events starting from now.
 
-  import { useGoogleCalendarEvents } from '@ilovereact/apis';
+  import { useGoogleCalendarEvents } from '@reactjit/apis';
 
   const result: APIResult<GoogleCalendarList> = useGoogleCalendarEvents(
     token: string | null,
@@ -99,7 +99,7 @@ GoogleCalendarEvent fields:
 
 Get imperative operations for creating and deleting calendar events.
 
-  import { useGoogleCalendarMutation } from '@ilovereact/apis';
+  import { useGoogleCalendarMutation } from '@reactjit/apis';
 
   const mutation = useGoogleCalendarMutation(token: string | null);
 
@@ -118,7 +118,7 @@ Returns: object
 
 Fetch spreadsheet metadata: sheet names, IDs, and document properties.
 
-  import { useGoogleSheet } from '@ilovereact/apis';
+  import { useGoogleSheet } from '@reactjit/apis';
 
   const result: APIResult<GoogleSheet> = useGoogleSheet(
     token: string | null,
@@ -140,7 +140,7 @@ GoogleSheet fields:
 
 Read cell values from a range in a spreadsheet. Values are returned as a 2D string array.
 
-  import { useGoogleSheetValues } from '@ilovereact/apis';
+  import { useGoogleSheetValues } from '@reactjit/apis';
 
   const result: APIResult<GoogleSheetValues> = useGoogleSheetValues(
     token: string | null,
@@ -164,7 +164,7 @@ GoogleSheetValues fields:
 
 Get imperative operations for appending and updating spreadsheet data.
 
-  import { useGoogleSheetMutation } from '@ilovereact/apis';
+  import { useGoogleSheetMutation } from '@reactjit/apis';
 
   const mutation = useGoogleSheetMutation(token: string | null);
 
@@ -188,8 +188,8 @@ Returns: object
 
 Show the next 5 events from the primary calendar:
 
-  import { useGoogleCalendarEvents } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useGoogleCalendarEvents } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.GOOGLE_TOKEN;
 
@@ -229,8 +229,8 @@ Show the next 5 events from the primary calendar:
 
 Fetch values from a named range in a Google Sheet and render a simple table:
 
-  import { useGoogleSheetValues } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useGoogleSheetValues } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.GOOGLE_TOKEN;
   const SHEET_ID = 'your-spreadsheet-id-here';

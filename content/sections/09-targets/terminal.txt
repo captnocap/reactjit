@@ -8,9 +8,9 @@ related: love2d, web, computercraft, neovim
 difficulty: intermediate
 
 === OVERVIEW ===
-The terminal target (@ilovereact/terminal) renders iLoveReact components to a terminal
+The terminal target (@reactjit/terminal) renders ReactJIT components to a terminal
 emulator using ANSI truecolor escape sequences. The layout is computed by the grid
-layout engine (@ilovereact/grid), which maps flexbox concepts to a character-cell grid.
+layout engine (@reactjit/grid), which maps flexbox concepts to a character-cell grid.
 Each cell contains a single character with foreground and background colors.
 
 This target runs as a Node.js process and writes directly to stdout. It requires a
@@ -23,7 +23,7 @@ esbuild Configuration:
 
 Build Commands:
   npm run build:terminal-demo       - Build terminal demo
-  ilovereact build dist:terminal    - Single-file Node.js executable
+  reactjit build dist:terminal    - Single-file Node.js executable
 
 Grid Target Primitives:
   Terminal targets use lowercase JSX intrinsics:
@@ -37,7 +37,7 @@ Grid Target Primitives:
 === EXAMPLES ===
 Example 1: Terminal App Entry Point
 ---
-import { createTerminalApp } from '@ilovereact/terminal';
+import { createTerminalApp } from '@reactjit/terminal';
 import App from './App';
 
 const app = createTerminalApp();
@@ -54,7 +54,7 @@ Constraints:
   - Input is keyboard-only in most terminals (no mouse by default)
 
 Distribution:
-  - `ilovereact build dist:terminal` produces a single-file Node.js executable
+  - `reactjit build dist:terminal` produces a single-file Node.js executable
   - The output can be run with `node dist/main.js`
   - No system dependencies beyond Node.js
 

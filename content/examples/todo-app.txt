@@ -14,7 +14,7 @@ This example builds a complete todo list application. It demonstrates text input
 === CODE ===
 ---
 import { useState, useCallback } from 'react';
-import { Box, Text, Pressable, TextInput, ScrollView } from '@ilovereact/core';
+import { Box, Text, Pressable, TextInput, ScrollView } from '@reactjit/core';
 
 interface Todo {
   id: string;
@@ -82,7 +82,7 @@ function TodoItem({ todo, onToggle, onRemove }: {
 
 export default function App() {
   const [todos, setTodos] = useState<Todo[]>([
-    { id: '1', text: 'Learn iLoveReact', done: false },
+    { id: '1', text: 'Learn ReactJIT', done: false },
     { id: '2', text: 'Build something cool', done: false },
   ]);
   const [nextId, setNextId] = useState(3);
@@ -171,7 +171,7 @@ export default function App() {
 5. textDecorationLine: 'line-through' adds a strikethrough on completed todos.
 
 6. Unicode characters (\u2713 for checkmark, \u00d7 for multiplication sign)
-   are used for icons. In iLoveReact there are no icon fonts, so Unicode or
+   are used for icons. In ReactJIT there are no icon fonts, so Unicode or
    Image components are the icon options.
 
 7. State is managed with useState and useCallback. The functional update pattern

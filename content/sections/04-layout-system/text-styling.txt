@@ -9,7 +9,7 @@ difficulty: beginner
 
 === OVERVIEW ===
 The Text primitive has its own set of style properties for controlling typography. The most
-important rule in iLoveReact is that every Text element MUST have an explicit fontSize in
+important rule in ReactJIT is that every Text element MUST have an explicit fontSize in
 its style. This is not optional -- the layout engine needs fontSize to measure text and
 compute layout, and the linter will block builds that violate this rule.
 

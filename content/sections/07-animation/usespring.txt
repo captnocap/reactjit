@@ -46,7 +46,7 @@ Spring behavior:
 Example 1: Toggle width
 ---
 import { useState } from 'react';
-import { useSpring, Box, Text } from '@ilovereact/core';
+import { useSpring, Box, Text } from '@reactjit/core';
 
 function ExpandableBox() {
   const [expanded, setExpanded] = useState(false);
@@ -71,7 +71,7 @@ Platforms: All
 Example 2: Bouncy spring
 ---
 import { useState } from 'react';
-import { useSpring, Box } from '@ilovereact/core';
+import { useSpring, Box } from '@reactjit/core';
 
 function BouncyButton() {
   const [pressed, setPressed] = useState(false);
@@ -96,7 +96,7 @@ Platforms: All
 Example 3: Smooth height transition
 ---
 import { useState } from 'react';
-import { useSpring, Box, Text } from '@ilovereact/core';
+import { useSpring, Box, Text } from '@reactjit/core';
 
 function AccordionItem({ title, content }: { title: string; content: string }) {
   const [open, setOpen] = useState(false);

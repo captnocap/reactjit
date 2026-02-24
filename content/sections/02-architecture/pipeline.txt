@@ -8,7 +8,7 @@ related: reconciler, layout-engine, transport, painter
 difficulty: intermediate
 
 === OVERVIEW ===
-Every frame in iLoveReact follows a fixed rendering pipeline. Your React components
+Every frame in ReactJIT follows a fixed rendering pipeline. Your React components
 produce a virtual tree. The reconciler diffs that tree against the previous version and
 emits mutation commands (create, update, remove, reorder). Those commands travel over a
 transport layer to the target runtime. The layout engine computes positions and sizes
@@ -20,7 +20,7 @@ The reconciler and layout engine are shared code.
 === EXAMPLES ===
 Example 1: Pipeline Stages
 ---
-Stage 1: React Reconciler (@ilovereact/native)
+Stage 1: React Reconciler (@reactjit/native)
   Input:  Your JSX component tree
   Output: Mutation commands (JSON)
   What:   react-reconciler 0.29 diffs the virtual tree.

@@ -14,7 +14,7 @@ DebugOverlay is particularly useful when tracking down layout bugs, verifying fl
 
 === API / SYNTAX ===
 ```tsx
-import { DebugOverlay, DebugBox, useDebugOverlay } from '@ilovereact/core';
+import { DebugOverlay, DebugBox, useDebugOverlay } from '@reactjit/core';
 ```
 
 ```tsx
@@ -47,7 +47,7 @@ Returns `{ enabled: boolean, borderColor: string, showLabels: boolean }` from th
 Example 1: Basic overlay for a section
 ---
 ```tsx
-import { DebugOverlay, DebugBox, Text } from '@ilovereact/core';
+import { DebugOverlay, DebugBox, Text } from '@reactjit/core';
 
 function MyComponent() {
   return (
@@ -71,7 +71,7 @@ Example 2: Toggle overlay with a button
 ---
 ```tsx
 import { useState } from 'react';
-import { DebugOverlay, DebugBox, Box, Text, Pressable } from '@ilovereact/core';
+import { DebugOverlay, DebugBox, Box, Text, Pressable } from '@reactjit/core';
 
 function LayoutDebugger() {
   const [debugEnabled, setDebugEnabled] = useState(false);
@@ -104,7 +104,7 @@ Platforms: All
 Example 3: Custom border color and labels
 ---
 ```tsx
-import { DebugOverlay, DebugBox, Text } from '@ilovereact/core';
+import { DebugOverlay, DebugBox, Text } from '@reactjit/core';
 
 function GridDebug() {
   return (
@@ -127,7 +127,7 @@ Platforms: All
 Example 4: Using the hook to read debug state
 ---
 ```tsx
-import { DebugOverlay, useDebugOverlay, Box, Text } from '@ilovereact/core';
+import { DebugOverlay, useDebugOverlay, Box, Text } from '@reactjit/core';
 
 function DebugAwareComponent() {
   const { enabled, borderColor } = useDebugOverlay();
@@ -160,7 +160,7 @@ Platforms: All
 === PLATFORM NOTES ===
 - **Love2D**: DebugOverlay works alongside the built-in inspector (F12). Use DebugOverlay for focused subtree inspection, use the inspector for full tree navigation and interaction state.
 - **Web**: Border colors are applied via CSS. Dimension labels (when showLabels is true) render as absolutely positioned Text elements overlaying each DebugBox.
-- **Grid targets**: Not currently supported. DebugOverlay and DebugBox are only available in `@ilovereact/core` (Love2D and web targets).
+- **Grid targets**: Not currently supported. DebugOverlay and DebugBox are only available in `@reactjit/core` (Love2D and web targets).
 
 === CRITICAL RULES ===
 - **DebugBox is required** — Regular `<Box>` elements inside a DebugOverlay will NOT show debug borders. You must use `<DebugBox>` for context awareness.

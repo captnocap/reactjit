@@ -14,7 +14,7 @@ The component uses Box and Text primitives, making it compatible with all target
 
 === API / SYNTAX ===
 ```tsx
-import { ProgressBar } from '@ilovereact/core';
+import { ProgressBar } from '@reactjit/core';
 ```
 
 Props:
@@ -34,7 +34,7 @@ Props:
 Example 1: Basic progress bar
 ---
 ```tsx
-import { ProgressBar } from '@ilovereact/core';
+import { ProgressBar } from '@reactjit/core';
 
 export default function App() {
   return (
@@ -50,7 +50,7 @@ Platforms: All
 Example 2: Progress bar with visible label
 ---
 ```tsx
-import { ProgressBar } from '@ilovereact/core';
+import { ProgressBar } from '@reactjit/core';
 
 export default function App() {
   return (
@@ -72,7 +72,7 @@ Platforms: All
 Example 3: Animated progress with custom label and interactive tooltip
 ---
 ```tsx
-import { ProgressBar } from '@ilovereact/core';
+import { ProgressBar } from '@reactjit/core';
 
 export default function App({ downloaded, total }: { downloaded: number; total: number }) {
   return (

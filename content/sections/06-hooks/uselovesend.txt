@@ -33,7 +33,7 @@ Returns:
 === EXAMPLES ===
 Example 1: Send a command on click
 ---
-import { useLoveSend } from '@ilovereact/core';
+import { useLoveSend } from '@reactjit/core';
 
 function FireButton() {
   const send = useLoveSend();
@@ -50,7 +50,7 @@ Platforms: All
 
 Example 2: Pass send to child components
 ---
-import { useLoveSend } from '@ilovereact/core';
+import { useLoveSend } from '@reactjit/core';
 
 function Toolbar() {
   const send = useLoveSend();

@@ -1,5 +1,5 @@
 === METADATA ===
-title: ilovereact build
+title: reactjit build
 description: Bundle JS for development or produce self-contained distribution packages.
 category: CLI
 platforms: love2d, terminal
@@ -8,18 +8,18 @@ related: dev.txt, update.txt, lint.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-The `ilovereact build` command bundles JavaScript and optionally produces self-contained
+The `reactjit build` command bundles JavaScript and optionally produces self-contained
 distribution packages. Without a target, it runs the lint gate and bundles JS for the
 `love .` dev workflow. With a target (dist:love or dist:terminal), it produces a standalone
 executable.
 
-Every build automatically runs `ilovereact update` first (unless --no-update) and passes
+Every build automatically runs `reactjit update` first (unless --no-update) and passes
 through the lint gate -- builds fail on lint errors. This ensures that distribution packages
 always contain up-to-date framework files and pass layout validation.
 
 === API / SYNTAX ===
 Usage:
-  ilovereact build [target] [flags]
+  reactjit build [target] [flags]
 
 Targets:
   (none)          Lint gate + bundle JS for dev (outputs bundle.js for `love .` workflow)
@@ -27,20 +27,20 @@ Targets:
   dist:terminal   Single-file Node.js executable with shebang
 
 Flags:
-  --no-update     Skip the automatic `ilovereact update` step
+  --no-update     Skip the automatic `reactjit update` step
   --debug         Enable the visual inspector (F12) in dist:love builds
                   (inspector is disabled by default in dist builds)
 
 Build steps for each target:
 
   No target (dev bundle):
-    1. ilovereact update (sync runtime files)
+    1. reactjit update (sync runtime files)
     2. Lint gate (fail on errors)
     3. esbuild --format=iife --global-name=ReactLove
     4. Output: bundle.js
 
   dist:love:
-    1. ilovereact update
+    1. reactjit update
     2. Bundle JS (IIFE for QuickJS)
     3. Stage .love archive (main.lua, conf.lua, lua/, bundle.js)
     4. Create .love zip archive
@@ -59,41 +59,41 @@ Build steps for each target:
 === EXAMPLES ===
 Example 1: Dev bundle
 ---
-ilovereact build
+reactjit build
 love .
 ---
 Platforms: love2d
 
 Example 2: Self-extracting Love2D binary
 ---
-ilovereact build dist:love
+reactjit build dist:love
 ./dist/my-app
 ---
 Platforms: love2d
 
 Example 3: Debug build with inspector
 ---
-ilovereact build dist:love --debug
+reactjit build dist:love --debug
 ---
 Platforms: love2d
 
 Example 4: Terminal executable
 ---
-ilovereact build dist:terminal
+reactjit build dist:terminal
 ./dist/my-app-terminal
 ---
 Platforms: terminal
 
 Example 5: Skip runtime update
 ---
-ilovereact build --no-update
+reactjit build --no-update
 ---
 Platforms: love2d
 
 === PLATFORM NOTES ===
 dist:love: Produces a self-extracting binary for x86_64 Linux. Bundles ALL shared libraries
 from the host system (same technique as Steam Runtime / AppImage), including glibc and the
-dynamic linker. The binary extracts to ~/.cache/ilovereact-<name>/ and uses an MD5 signature
+dynamic linker. The binary extracts to ~/.cache/reactjit-<name>/ and uses an MD5 signature
 to avoid re-extraction on subsequent runs. Requires Love2D and ldd to be available on the
 build system.
 
@@ -102,7 +102,7 @@ avoid module warnings. The ws package is marked as external.
 
 === CRITICAL RULES ===
 - Build always runs the lint gate -- fix all lint errors before building
-- Build always runs `ilovereact update` unless --no-update is passed
+- Build always runs `reactjit update` unless --no-update is passed
 - The inspector (F12) is automatically disabled in dist:love builds (pass --debug to keep it)
 - dist:love only works on x86_64 Linux (bundles host system's glibc and shared libraries)
 - dist:love requires Love2D installed on the build machine

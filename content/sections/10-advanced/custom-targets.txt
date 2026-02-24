@@ -1,6 +1,6 @@
 === METADATA ===
 title: Creating Custom Targets
-description: How to implement a new render target for iLoveReact
+description: How to implement a new render target for ReactJIT
 category: Advanced
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: custom target, IBridge, painter, transport, new platform, extending
@@ -8,7 +8,7 @@ related: transport, painter, reconciler, lua-runtime
 difficulty: advanced
 
 === OVERVIEW ===
-iLoveReact's architecture is designed for target extensibility. To add a new render
+ReactJIT's architecture is designed for target extensibility. To add a new render
 target, you need three things: a transport implementation (IBridge), a painter module,
 and an entry point that wires them together with the React reconciler. The existing
 targets serve as reference implementations for different transport types (QuickJS FFI,
@@ -33,7 +33,7 @@ Example 1: Steps to Create a New Target
 2. Implement IBridge for your transport:
 
    // packages/mytarget/src/MyBridge.ts
-   import type { IBridge, Listener, Unsubscribe } from '@ilovereact/core';
+   import type { IBridge, Listener, Unsubscribe } from '@reactjit/core';
 
    export class MyBridge implements IBridge {
      private listeners = new Map<string, Set<Listener>>();
@@ -83,8 +83,8 @@ Example 1: Steps to Create a New Target
 4. Create an entry point:
 
    // packages/mytarget/src/index.ts
-   import { createRoot, render } from '@ilovereact/native';
-   import { BridgeProvider, RendererProvider } from '@ilovereact/core';
+   import { createRoot, render } from '@reactjit/native';
+   import { BridgeProvider, RendererProvider } from '@reactjit/core';
    import { MyBridge } from './MyBridge';
 
    export function createMyApp() {
@@ -116,13 +116,13 @@ Example 2: Reference Implementations
 ---
 Study these existing targets for different patterns:
 
-  @ilovereact/terminal  - Node.js ESM, built-in transport, character grid painter
-  @ilovereact/cc        - Node.js ESM, WebSocket transport, 16-color grid painter
-  @ilovereact/nvim      - Node.js ESM, stdio transport, floating window painter
-  @ilovereact/hs        - Node.js ESM, WebSocket transport, pixel canvas painter
-  @ilovereact/awesome   - Node.js ESM, stdio transport, Cairo/Pango painter
-  @ilovereact/web       - Browser ESM, Module.FS transport, CSS flexbox "painter"
-  @ilovereact/native    - IIFE, QuickJS FFI transport, Lua pixel painter
+  @reactjit/terminal  - Node.js ESM, built-in transport, character grid painter
+  @reactjit/cc        - Node.js ESM, WebSocket transport, 16-color grid painter
+  @reactjit/nvim      - Node.js ESM, stdio transport, floating window painter
+  @reactjit/hs        - Node.js ESM, WebSocket transport, pixel canvas painter
+  @reactjit/awesome   - Node.js ESM, stdio transport, Cairo/Pango painter
+  @reactjit/web       - Browser ESM, Module.FS transport, CSS flexbox "painter"
+  @reactjit/native    - IIFE, QuickJS FFI transport, Lua pixel painter
 ---
 Platforms: All
 
@@ -132,7 +132,7 @@ Platforms: All
 - Event handlers stay on the JS side. Only the handler's existence is
   communicated to the target runtime (so it knows to dispatch events back).
 - The reconciler is shared. You should not need to modify it for a new target.
-- Use @ilovereact/grid for character-grid targets. It provides the shared
+- Use @reactjit/grid for character-grid targets. It provides the shared
   layout engine that maps flexbox to character cells.
 
 === SEE ALSO ===

@@ -8,7 +8,7 @@ related: State Management, Hooks
 difficulty: intermediate
 
 === OVERVIEW ===
-The storage system provides persistent data storage across all iLoveReact targets with a unified API. It combines schema validation, CRUD operations, reactive queries, and migrations. Multiple adapters handle platform differences: Love2DFileAdapter uses love.filesystem, LocalStorageAdapter and IndexedDBAdapter work in browsers, TerminalSQLiteAdapter uses Node.js SQLite, and MemoryAdapter provides in-memory storage for testing.
+The storage system provides persistent data storage across all ReactJIT targets with a unified API. It combines schema validation, CRUD operations, reactive queries, and migrations. Multiple adapters handle platform differences: Love2DFileAdapter uses love.filesystem, LocalStorageAdapter and IndexedDBAdapter work in browsers, TerminalSQLiteAdapter uses Node.js SQLite, and MemoryAdapter provides in-memory storage for testing.
 
 === API / SYNTAX ===
 
@@ -17,7 +17,7 @@ Core Components:
 - `useCRUD(collection, schema, options?)` — React hook for CRUD + reactive queries
 - `createCRUD(collection, schema, adapter, options?)` — Non-React CRUD for scripts/backends
 - `useStorage()` — Direct access to the underlying storage adapter
-- `z` — Schema builder for validation (exported from @ilovereact/storage)
+- `z` — Schema builder for validation (exported from @reactjit/storage)
 
 Adapters:
 - `MemoryAdapter()` — In-memory storage (lost on close)
@@ -58,7 +58,7 @@ $eq, $ne, $gt, $gte, $lt, $lte, $in, $contains
 
 Example 1: Basic CRUD with MemoryAdapter
 ---
-import { StorageProvider, useCRUD, z, MemoryAdapter } from '@ilovereact/storage';
+import { StorageProvider, useCRUD, z, MemoryAdapter } from '@reactjit/storage';
 
 const NoteSchema = z.object({
   id: z.string(),
@@ -105,8 +105,8 @@ Platforms: love2d, web, terminal
 
 Example 2: Love2D File Storage
 ---
-import { StorageProvider, useCRUD, z, Love2DFileAdapter } from '@ilovereact/storage';
-import { useLoveRPC } from '@ilovereact/core';
+import { StorageProvider, useCRUD, z, Love2DFileAdapter } from '@reactjit/storage';
+import { useLoveRPC } from '@reactjit/core';
 
 const SaveGameSchema = z.object({
   id: z.string(),
@@ -154,7 +154,7 @@ Platforms: love2d
 
 Example 3: Web with IndexedDB
 ---
-import { StorageProvider, useCRUD, z, IndexedDBAdapter } from '@ilovereact/storage';
+import { StorageProvider, useCRUD, z, IndexedDBAdapter } from '@reactjit/storage';
 
 const TaskSchema = z.object({
   id: z.string(),
@@ -263,7 +263,7 @@ Platforms: love2d, web, terminal
 
 Example 6: Non-React CRUD (Scripts/Backends)
 ---
-import { createCRUD, z, TerminalSQLiteAdapter } from '@ilovereact/storage';
+import { createCRUD, z, TerminalSQLiteAdapter } from '@reactjit/storage';
 
 const LogSchema = z.object({
   id: z.string(),

@@ -18,7 +18,7 @@ Auth: Press the physical link button on your bridge, then POST to `http://<bridg
 
 Fetch all lights registered on the bridge. Returns a dictionary keyed by light ID string.
 
-  import { useHueLights } from '@ilovereact/apis/hue';
+  import { useHueLights } from '@reactjit/apis/hue';
 
   const result: APIResult<Record<string, HueLight>> = useHueLights(
     bridgeIp: string | null,
@@ -59,7 +59,7 @@ HueLight fields:
 
 Fetch a single light by its ID.
 
-  import { useHueLight } from '@ilovereact/apis/hue';
+  import { useHueLight } from '@reactjit/apis/hue';
 
   const result: APIResult<HueLight> = useHueLight(
     bridgeIp: string | null,
@@ -81,7 +81,7 @@ Returns: APIResult<HueLight>
 
 Fetch all groups (rooms and zones) on the bridge.
 
-  import { useHueGroups } from '@ilovereact/apis/hue';
+  import { useHueGroups } from '@reactjit/apis/hue';
 
   const result: APIResult<Record<string, HueGroup>> = useHueGroups(
     bridgeIp: string | null,
@@ -108,7 +108,7 @@ HueGroup fields:
 
 Fetch all sensors registered on the bridge (motion sensors, switches, temperature probes, etc.).
 
-  import { useHueSensors } from '@ilovereact/apis/hue';
+  import { useHueSensors } from '@reactjit/apis/hue';
 
   const result: APIResult<Record<string, HueSensor>> = useHueSensors(
     bridgeIp: string | null,
@@ -134,7 +134,7 @@ HueSensor fields:
 
 Fetch all saved scenes on the bridge.
 
-  import { useHueScenes } from '@ilovereact/apis/hue';
+  import { useHueScenes } from '@reactjit/apis/hue';
 
   const result: APIResult<Record<string, HueScene>> = useHueScenes(
     bridgeIp: string | null,
@@ -159,7 +159,7 @@ HueScene fields:
 
 Imperative mutation hook for sending commands to the bridge. Returns methods for setting individual light states, group actions, and activating scenes.
 
-  import { useHueControl } from '@ilovereact/apis/hue';
+  import { useHueControl } from '@reactjit/apis/hue';
 
   const ctrl = useHueControl(
     bridgeIp: string | null,
@@ -184,7 +184,7 @@ Returns: object
 
 Convert a Hue light's CIE xy coordinates and brightness to an approximate sRGB hex string. Useful for rendering a color swatch from live light state.
 
-  import { hueXYToHex } from '@ilovereact/apis/hue';
+  import { hueXYToHex } from '@reactjit/apis/hue';
 
   const hex: string = hueXYToHex(x: number, y: number, bri: number);
 
@@ -201,8 +201,8 @@ Returns: string   Hex color string, e.g. '#f5a623'
 
 Poll every 3 seconds and render each light as a pressable row. Tap a row to toggle it.
 
-  import { useHueLights, useHueControl, hueXYToHex } from '@ilovereact/apis/hue';
-  import { Box, Text } from '@ilovereact/core';
+  import { useHueLights, useHueControl, hueXYToHex } from '@reactjit/apis/hue';
+  import { Box, Text } from '@reactjit/core';
 
   const BRIDGE_IP = '192.168.1.10';
   const API_KEY   = 'your-bridge-api-key';
@@ -252,8 +252,8 @@ Poll every 3 seconds and render each light as a pressable row. Tap a row to togg
 
 Fetch all scenes and render them as buttons. Tapping one activates it on group '1'.
 
-  import { useHueScenes, useHueControl } from '@ilovereact/apis/hue';
-  import { Box, Text } from '@ilovereact/core';
+  import { useHueScenes, useHueControl } from '@reactjit/apis/hue';
+  import { Box, Text } from '@reactjit/core';
 
   const BRIDGE_IP = '192.168.1.10';
   const API_KEY   = 'your-bridge-api-key';

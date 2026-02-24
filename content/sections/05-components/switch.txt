@@ -13,7 +13,7 @@ Switch is a toggle control that slides a thumb along a track to indicate an on/o
 Switch supports both controlled and uncontrolled modes. In controlled mode, pass `value` and respond to `onValueChange`. In uncontrolled mode, omit `value` and optionally set `defaultValue`. On web, the thumb animates with a CSS transition. In native mode, the thumb position is driven by flexbox `justifyContent`.
 
 === API / SYNTAX ===
-Import: import { Switch } from '@ilovereact/core';
+Import: import { Switch } from '@reactjit/core';
 
 Usage:
 ```tsx

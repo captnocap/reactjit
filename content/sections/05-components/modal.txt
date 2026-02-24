@@ -14,7 +14,7 @@ Modal is a controlled component -- you manage visibility via the `visible` prop 
 
 === API / SYNTAX ===
 ```tsx
-import { Modal } from '@ilovereact/core';
+import { Modal } from '@reactjit/core';
 ```
 
 ```tsx

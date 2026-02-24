@@ -20,7 +20,7 @@ The package also exports a weatherIcon() utility for building OpenWeatherMap ico
 
 Fetch current weather conditions for a city or coordinate pair.
 
-  import { useWeatherCurrent } from '@ilovereact/apis/weather';
+  import { useWeatherCurrent } from '@reactjit/apis/weather';
 
   const result: APIResult<WeatherCurrent> = useWeatherCurrent(apiKey, opts);
 
@@ -64,7 +64,7 @@ WeatherMain fields:
 
 Fetch a 5-day / 3-hour forecast for a city or coordinate pair.
 
-  import { useWeatherForecast } from '@ilovereact/apis/weather';
+  import { useWeatherForecast } from '@reactjit/apis/weather';
 
   const result: APIResult<WeatherForecast> = useWeatherForecast(apiKey, opts);
 
@@ -95,7 +95,7 @@ WeatherForecastItem fields:
 
 Resolve a city name or address query to latitude/longitude coordinates.
 
-  import { useGeocode } from '@ilovereact/apis/weather';
+  import { useGeocode } from '@reactjit/apis/weather';
 
   const result: APIResult<GeoLocation[]> = useGeocode(apiKey, query, opts?);
 
@@ -118,7 +118,7 @@ GeoLocation fields:
 
 Build an OpenWeatherMap icon URL from the icon code returned in any WeatherCondition.
 
-  import { weatherIcon } from '@ilovereact/apis/weather';
+  import { weatherIcon } from '@reactjit/apis/weather';
 
   const url: string = weatherIcon(icon, size?);
 
@@ -134,8 +134,8 @@ Returns: string — full https URL to the PNG icon image.
 
 Display temperature, description, and wind speed for a fixed city:
 
-  import { useWeatherCurrent } from '@ilovereact/apis/weather';
-  import { Box, Text } from '@ilovereact/core';
+  import { useWeatherCurrent } from '@reactjit/apis/weather';
+  import { Box, Text } from '@reactjit/core';
 
   const API_KEY = process.env.OWM_KEY ?? null;
 
@@ -166,8 +166,8 @@ Display temperature, description, and wind speed for a fixed city:
 
 Show daily high/low temperatures for the next 5 days by sampling one entry per day:
 
-  import { useWeatherForecast } from '@ilovereact/apis/weather';
-  import { Box, Text } from '@ilovereact/core';
+  import { useWeatherForecast } from '@reactjit/apis/weather';
+  import { Box, Text } from '@reactjit/core';
 
   function ForecastStrip({ city, apiKey }: { city: string; apiKey: string }) {
     const { data, loading } = useWeatherForecast(apiKey, { city, units: 'metric' });

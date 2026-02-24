@@ -9,7 +9,7 @@ difficulty: intermediate
 
 === OVERVIEW ===
 
-iLoveReact provides two networking layers: HTTP (via http.lua) for one-off requests,
+ReactJIT provides two networking layers: HTTP (via http.lua) for one-off requests,
 and WebSocket (via network.lua) for persistent connections. Both support proxying
 through HTTP proxies or SOCKS5 (useful for Tor). HTTP uses love.thread for async
 non-blocking requests. WebSockets use pure Lua with automatic reconnection.

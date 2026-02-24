@@ -20,7 +20,7 @@ Last.fm's JSON responses use unconventional field names (artist fields may be ob
 
 Fetch a user's recently scrobbled tracks. The first item may be a currently-playing track (check for '@attr'.nowplaying).
 
-  import { useLastFMRecentTracks } from '@ilovereact/apis/lastfm';
+  import { useLastFMRecentTracks } from '@reactjit/apis/lastfm';
 
   const result: APIResult<{ recenttracks: { track: LastFMTrack[] } }> =
     useLastFMRecentTracks(apiKey, user, opts?);
@@ -39,7 +39,7 @@ Returns: APIResult<{ recenttracks: { track: LastFMTrack[] } }>
 
 Poll for the track a user is currently scrobbling. Returns the same response shape as useLastFMRecentTracks (limit 1). The now-playing track has '@attr'.nowplaying === 'true'; a recently-played track has a date field instead.
 
-  import { useLastFMNowPlaying } from '@ilovereact/apis/lastfm';
+  import { useLastFMNowPlaying } from '@reactjit/apis/lastfm';
 
   const result: APIResult<{ recenttracks: { track: LastFMTrack[] } }> =
     useLastFMNowPlaying(apiKey, user, opts?);
@@ -56,7 +56,7 @@ Returns: APIResult<{ recenttracks: { track: LastFMTrack[] } }>
 
 Fetch a user's top artists over a time period.
 
-  import { useLastFMTopArtists } from '@ilovereact/apis/lastfm';
+  import { useLastFMTopArtists } from '@reactjit/apis/lastfm';
 
   const result: APIResult<{ topartists: { artist: LastFMArtist[] } }> =
     useLastFMTopArtists(apiKey, user, opts?);
@@ -75,7 +75,7 @@ Returns: APIResult<{ topartists: { artist: LastFMArtist[] } }>
 
 Fetch a user's top tracks over a time period.
 
-  import { useLastFMTopTracks } from '@ilovereact/apis/lastfm';
+  import { useLastFMTopTracks } from '@reactjit/apis/lastfm';
 
   const result: APIResult<{ toptracks: { track: LastFMTrack[] } }> =
     useLastFMTopTracks(apiKey, user, opts?);
@@ -93,7 +93,7 @@ Returns: APIResult<{ toptracks: { track: LastFMTrack[] } }>
 
 Fetch a user's top albums over a time period.
 
-  import { useLastFMTopAlbums } from '@ilovereact/apis/lastfm';
+  import { useLastFMTopAlbums } from '@reactjit/apis/lastfm';
 
   const result: APIResult<{ topalbums: { album: LastFMAlbum[] } }> =
     useLastFMTopAlbums(apiKey, user, opts?);
@@ -111,7 +111,7 @@ Returns: APIResult<{ topalbums: { album: LastFMAlbum[] } }>
 
 Fetch a user's profile information.
 
-  import { useLastFMUser } from '@ilovereact/apis/lastfm';
+  import { useLastFMUser } from '@reactjit/apis/lastfm';
 
   const result: APIResult<{ user: LastFMUser }> = useLastFMUser(apiKey, user);
 
@@ -134,7 +134,7 @@ LastFMUser fields:
 
 Extract the best available image URL from a Last.fm image array. Last.fm returns images as an array of { '#text': url; size: ... } objects. This utility picks the preferred size and falls back to the last available entry.
 
-  import { lastfmImage } from '@ilovereact/apis/lastfm';
+  import { lastfmImage } from '@reactjit/apis/lastfm';
 
   const url: string | null = lastfmImage(images, preferSize?);
 
@@ -180,8 +180,8 @@ LastFMImage fields:
 
 Show what a user is currently scrobbling, or the last played track if nothing is active:
 
-  import { useLastFMNowPlaying, lastfmImage } from '@ilovereact/apis/lastfm';
-  import { Box, Text } from '@ilovereact/core';
+  import { useLastFMNowPlaying, lastfmImage } from '@reactjit/apis/lastfm';
+  import { Box, Text } from '@reactjit/core';
 
   const API_KEY = process.env.LASTFM_KEY ?? null;
 
@@ -215,8 +215,8 @@ Show what a user is currently scrobbling, or the last played track if nothing is
 
 Render a ranked list of the user's top artists for the past month with scrobble counts:
 
-  import { useLastFMTopArtists } from '@ilovereact/apis/lastfm';
-  import { Box, Text } from '@ilovereact/core';
+  import { useLastFMTopArtists } from '@reactjit/apis/lastfm';
+  import { Box, Text } from '@reactjit/core';
 
   function TopArtists({ apiKey, username }: { apiKey: string; username: string }) {
     const { data, loading, error } = useLastFMTopArtists(apiKey, username, {

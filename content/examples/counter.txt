@@ -15,7 +15,7 @@ for dynamic text content.
 === CODE ===
 ---
 import { useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 
 function Button({ label, onPress }: { label: string; onPress: () => void }) {
   return (

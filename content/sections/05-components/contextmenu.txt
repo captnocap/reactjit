@@ -12,7 +12,7 @@ ContextMenu is a right-click context menu component that provides built-in text 
 
 === API / SYNTAX ===
 ```tsx
-import { ContextMenu } from '@ilovereact/core';
+import { ContextMenu } from '@reactjit/core';
 
 <ContextMenu
   items={[...]}
@@ -57,7 +57,7 @@ interface ContextMenuEvent {
 Example 1: Basic custom menu with actions
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@ilovereact/core';
+import { ContextMenu, Box, Text } from '@reactjit/core';
 
 function App() {
   return (
@@ -89,7 +89,7 @@ Platforms: love2d, web
 Example 2: Text selection with Copy support
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@ilovereact/core';
+import { ContextMenu, Box, Text } from '@reactjit/core';
 
 function TextDocument() {
   return (
@@ -117,7 +117,7 @@ Note: On Love2D, text selection requires `userSelect: 'text'` style. Built-in Co
 Example 3: Nested context menus (inner takes precedence)
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@ilovereact/core';
+import { ContextMenu, Box, Text } from '@reactjit/core';
 
 function NestedMenus() {
   return (
@@ -147,7 +147,7 @@ Note: The nearest ContextMenu ancestor wins when determining custom items.
 Example 4: Menu lifecycle events
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@ilovereact/core';
+import { ContextMenu, Box, Text } from '@reactjit/core';
 import { useState } from 'react';
 
 function MenuLifecycle() {

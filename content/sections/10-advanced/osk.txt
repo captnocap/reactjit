@@ -78,7 +78,7 @@ The OSK checks `node.props.keyboardType` when opening:
 The OSK is fully automatic. React components do not need to invoke it — it opens when a TextInput gains focus via gamepad.
 
 ```tsx
-import { TextInput } from '@ilovereact/core';
+import { TextInput } from '@reactjit/core';
 
 // OSK opens automatically when focused with gamepad
 <TextInput keyboardType="numeric" />   // opens numeric keypad
@@ -90,7 +90,7 @@ import { TextInput } from '@ilovereact/core';
 Example 1: Automatic OSK Behavior
 ---
 import React, { useState } from 'react';
-import { Box, Text, TextInput } from '@ilovereact/core';
+import { Box, Text, TextInput } from '@reactjit/core';
 
 function GamepadTextEntry() {
   const [name, setName] = useState('');
@@ -174,7 +174,7 @@ Platforms: Love2D
 Example 4: Multi-Layout Form
 ---
 import React, { useState } from 'react';
-import { Box, Text, TextInput } from '@ilovereact/core';
+import { Box, Text, TextInput } from '@reactjit/core';
 
 function RegistrationForm() {
   const [username, setUsername] = useState('');

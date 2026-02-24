@@ -12,7 +12,7 @@ HorizontalBarChart renders a series of labeled bars growing left-to-right, each 
 
 === API / SYNTAX ===
 ```tsx
-import { HorizontalBarChart } from '@ilovereact/core';
+import { HorizontalBarChart } from '@reactjit/core';
 ```
 
 Data shape:
@@ -44,7 +44,7 @@ Props:
 Example 1: Basic labeled chart
 ---
 ```tsx
-import { HorizontalBarChart } from '@ilovereact/core';
+import { HorizontalBarChart } from '@reactjit/core';
 
 const languages = [
   { label: 'TypeScript', value: 84 },
@@ -67,7 +67,7 @@ Platforms: All
 Example 2: Per-bar colors with value readout
 ---
 ```tsx
-import { HorizontalBarChart } from '@ilovereact/core';
+import { HorizontalBarChart } from '@reactjit/core';
 
 const budget = [
   { label: 'Rent',    value: 1500, color: '#ef4444' },
@@ -96,7 +96,7 @@ Example 3: Interactive with hover callback
 ---
 ```tsx
 import { useState } from 'react';
-import { HorizontalBarChart } from '@ilovereact/core';
+import { HorizontalBarChart } from '@reactjit/core';
 
 const scores = [
   { label: 'Alice', value: 92 },

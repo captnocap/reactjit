@@ -34,22 +34,33 @@ export function useWindowDimensions(): { width: number; height: number } {
   return dims;
 }
 
+/** Options shared by window control hooks. */
+export interface WindowControlOptions {
+  /** Target window by framework ID. 0 = main (default), 1+ = child windows. */
+  windowId?: number;
+  /** Smoothly animate the transition (default: false — snap). */
+  animate?: boolean;
+  /** Animation duration in ms (default: 300). Only used when animate=true. */
+  duration?: number;
+  /** Revert to the previous value when the component unmounts (default: false). */
+  revert?: boolean;
+}
+
 /**
- * Declaratively set the main window size from a component.
- * When the component mounts (or width/height change), the window resizes.
+ * Declaratively set a window's size. Targets the main window by default.
  *
  * @example
  * useWindowSize(800, 600);
  * useWindowSize(800, 600, { animate: true });
- * useWindowSize(800, 600, { animate: true, duration: 500 });
- * useWindowSize(800, 600, { revert: true });
+ * useWindowSize(400, 300, { windowId: 1, revert: true });
  */
 export function useWindowSize(
   width: number,
   height: number,
-  options?: { animate?: boolean; duration?: number; revert?: boolean },
+  options?: WindowControlOptions,
 ): void {
   const bridge = useBridge();
+  const windowId = options?.windowId;
   const animate = options?.animate ?? false;
   const duration = options?.duration;
   const revert = options?.revert ?? false;
@@ -60,7 +71,7 @@ export function useWindowSize(
       prevSize = { ..._lastViewport };
     }
 
-    bridge.rpc('window:setSize', { width, height, animate, duration });
+    bridge.rpc('window:setSize', { width, height, animate, duration, windowId });
 
     return () => {
       if (revert && prevSize) {
@@ -69,10 +80,83 @@ export function useWindowSize(
           height: prevSize.height,
           animate,
           duration,
+          windowId,
         });
       }
     };
-  }, [bridge, width, height, animate, duration, revert]);
+  }, [bridge, width, height, animate, duration, revert, windowId]);
+}
+
+/**
+ * Declaratively set a window's screen position.
+ *
+ * @example
+ * useWindowPosition(100, 200);
+ * useWindowPosition(100, 200, { animate: true });
+ * useWindowPosition(0, 0, { windowId: 1 });
+ */
+export function useWindowPosition(
+  x: number,
+  y: number,
+  options?: WindowControlOptions,
+): void {
+  const bridge = useBridge();
+  const windowId = options?.windowId;
+  const animate = options?.animate ?? false;
+  const duration = options?.duration;
+  const revert = options?.revert ?? false;
+
+  useEffect(() => {
+    let prevPos: { x: number; y: number } | null = null;
+
+    const apply = async () => {
+      if (revert) {
+        const pos = await bridge.rpc<{ x: number; y: number }>('window:getPosition', { windowId });
+        prevPos = pos;
+      }
+      bridge.rpc('window:setPosition', { x, y, animate, duration, windowId });
+    };
+    apply();
+
+    return () => {
+      if (revert && prevPos) {
+        bridge.rpc('window:setPosition', {
+          x: prevPos.x,
+          y: prevPos.y,
+          animate,
+          duration,
+          windowId,
+        });
+      }
+    };
+  }, [bridge, x, y, animate, duration, revert, windowId]);
+}
+
+/**
+ * Declaratively pin a window as always-on-top (or unpin it).
+ *
+ * @example
+ * useWindowAlwaysOnTop(true);
+ * useWindowAlwaysOnTop(isPinned, { windowId: 1 });
+ * useWindowAlwaysOnTop(true, { revert: true }); // unpins on unmount
+ */
+export function useWindowAlwaysOnTop(
+  onTop: boolean,
+  options?: Pick<WindowControlOptions, 'windowId' | 'revert'>,
+): void {
+  const bridge = useBridge();
+  const windowId = options?.windowId;
+  const revert = options?.revert ?? false;
+
+  useEffect(() => {
+    bridge.rpc('window:setAlwaysOnTop', { onTop, windowId });
+
+    return () => {
+      if (revert) {
+        bridge.rpc('window:setAlwaysOnTop', { onTop: !onTop, windowId });
+      }
+    };
+  }, [bridge, onTop, revert, windowId]);
 }
 
 /**

@@ -8,7 +8,7 @@ related: useGoogleSheet
 difficulty: beginner
 
 === OVERVIEW ===
-The YNAB hooks in @ilovereact/apis connect to the YNAB REST API v1. Authentication requires a Personal Access Token generated at https://app.ynab.com/settings/developer.
+The YNAB hooks in @reactjit/apis connect to the YNAB REST API v1. Authentication requires a Personal Access Token generated at https://app.ynab.com/settings/developer.
 
 All monetary values returned by the YNAB API are in milliunits (e.g., $12.34 is returned as 12340). Use the ynabAmount() utility to convert to dollars before displaying. Negative values represent outflows (spending); positive values represent inflows (income).
 
@@ -20,7 +20,7 @@ Most hooks accept an optional budgetId. When omitted or passed as null, they def
 
 Fetch all budgets accessible with the token.
 
-  import { useYNABBudgets } from '@ilovereact/apis';
+  import { useYNABBudgets } from '@reactjit/apis';
 
   const result: APIResult<{ data: { budgets: YNABBudget[] } }> = useYNABBudgets(
     token: string | null,
@@ -46,7 +46,7 @@ YNABBudget fields:
 
 Fetch all accounts in a budget.
 
-  import { useYNABAccounts } from '@ilovereact/apis';
+  import { useYNABAccounts } from '@reactjit/apis';
 
   const result: APIResult<{ data: { accounts: YNABAccount[] } }> = useYNABAccounts(
     token: string | null,
@@ -74,7 +74,7 @@ YNABAccount fields:
 
 Fetch all category groups and their categories for a budget month.
 
-  import { useYNABCategories } from '@ilovereact/apis';
+  import { useYNABCategories } from '@reactjit/apis';
 
   const result: APIResult<{ data: { category_groups: YNABCategoryGroup[] } }> = useYNABCategories(
     token: string | null,
@@ -107,7 +107,7 @@ YNABCategory fields:
 
 Fetch transactions with optional date and type filtering.
 
-  import { useYNABTransactions } from '@ilovereact/apis';
+  import { useYNABTransactions } from '@reactjit/apis';
 
   const result: APIResult<{ data: { transactions: YNABTransaction[] } }> = useYNABTransactions(
     token: string | null,
@@ -139,7 +139,7 @@ YNABTransaction fields:
 
 Fetch monthly summary data for a budget: income, budgeted, spending, and age of money.
 
-  import { useYNABMonths } from '@ilovereact/apis';
+  import { useYNABMonths } from '@reactjit/apis';
 
   const result: APIResult<{ data: { months: YNABMonth[] } }> = useYNABMonths(
     token: string | null,
@@ -164,7 +164,7 @@ YNABMonth fields:
 
 Convert YNAB milliunits to a dollar (or local currency) amount. Not a hook — call it inline.
 
-  import { ynabAmount } from '@ilovereact/apis';
+  import { ynabAmount } from '@reactjit/apis';
 
   const dollars: number = ynabAmount(milliunits: number);
 
@@ -179,8 +179,8 @@ Returns: number — human-readable amount (e.g. 12.34)
 
 Show each category's spending against its monthly budget:
 
-  import { useYNABCategories, ynabAmount } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useYNABCategories, ynabAmount } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.YNAB_TOKEN;
 
@@ -234,8 +234,8 @@ Show each category's spending against its monthly budget:
 
 Show this month's income, spending, and to-be-budgeted:
 
-  import { useYNABMonths, ynabAmount } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useYNABMonths, ynabAmount } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.YNAB_TOKEN;
 

@@ -14,7 +14,7 @@ In web mode, Image renders as an `<img>` element. In native mode, it outputs an 
 
 === API / SYNTAX ===
 ```tsx
-import { Image } from '@ilovereact/core';
+import { Image } from '@reactjit/core';
 ```
 
 ```tsx

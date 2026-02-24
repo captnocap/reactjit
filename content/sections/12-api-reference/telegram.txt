@@ -18,7 +18,7 @@ Auth: Create a bot via @BotFather in Telegram. BotFather gives you a token strin
 
 Fetch the identity of the bot associated with the given token. Use this to confirm the token is valid and to get the bot's username and capability flags.
 
-  import { useTelegramBot } from '@ilovereact/apis/telegram';
+  import { useTelegramBot } from '@reactjit/apis/telegram';
 
   const result: APIResult<{ ok: boolean; result: TelegramBotInfo }> = useTelegramBot(
     botToken: string | null,
@@ -44,7 +44,7 @@ TelegramBotInfo fields:
 
 Poll for incoming updates (messages, edited messages, callback queries) using Telegram's long-polling `getUpdates` method. Refetches on a configurable interval.
 
-  import { useTelegramUpdates } from '@ilovereact/apis/telegram';
+  import { useTelegramUpdates } from '@reactjit/apis/telegram';
 
   const result: APIResult<{ ok: boolean; result: TelegramUpdate[] }> = useTelegramUpdates(
     botToken: string | null,
@@ -97,7 +97,7 @@ TelegramUser fields:
 
 Imperative mutation hook for sending messages and photos to any chat your bot has access to.
 
-  import { useTelegramSend } from '@ilovereact/apis/telegram';
+  import { useTelegramSend } from '@reactjit/apis/telegram';
 
   const sender = useTelegramSend(botToken: string | null);
 
@@ -144,9 +144,9 @@ sendPhoto signature:
 
 Poll for new messages every 3 seconds and display the last 20 in a scrollable list. Track the offset to avoid re-showing old messages.
 
-  import { useTelegramUpdates } from '@ilovereact/apis/telegram';
+  import { useTelegramUpdates } from '@reactjit/apis/telegram';
   import { useState, useEffect } from 'react';
-  import { Box, Text, ScrollView } from '@ilovereact/core';
+  import { Box, Text, ScrollView } from '@reactjit/core';
 
   const BOT_TOKEN = 'your-bot-token';
 
@@ -199,8 +199,8 @@ Poll for new messages every 3 seconds and display the last 20 in a scrollable li
 
 Render a button that sends a formatted notification to a hardcoded alert channel when pressed.
 
-  import { useTelegramSend } from '@ilovereact/apis/telegram';
-  import { Box, Text } from '@ilovereact/core';
+  import { useTelegramSend } from '@reactjit/apis/telegram';
+  import { Box, Text } from '@reactjit/core';
 
   const BOT_TOKEN = 'your-bot-token';
   const ALERT_CHAT = -1001234567890; // channel or group ID (negative for groups)

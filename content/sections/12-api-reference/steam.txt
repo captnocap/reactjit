@@ -18,7 +18,7 @@ Auth: Get a Web API key at https://steamcommunity.com/dev/apikey. The key is sen
 
 Fetch public profile information for a Steam user by their 64-bit SteamID.
 
-  import { useSteamUser } from '@ilovereact/apis/steam';
+  import { useSteamUser } from '@reactjit/apis/steam';
 
   const result: APIResult<{ response: { players: SteamPlayer[] } }> = useSteamUser(
     apiKey:  string | null,
@@ -52,7 +52,7 @@ SteamPlayer fields:
 
 Fetch the full game library for a Steam user.
 
-  import { useSteamOwnedGames } from '@ilovereact/apis/steam';
+  import { useSteamOwnedGames } from '@reactjit/apis/steam';
 
   const result: APIResult<{ response: { game_count: number; games: SteamOwnedGame[] } }> = useSteamOwnedGames(
     apiKey:  string | null,
@@ -82,7 +82,7 @@ SteamOwnedGame fields:
 
 Fetch the games a user has played in the last two weeks, sorted by recent playtime.
 
-  import { useSteamRecentGames } from '@ilovereact/apis/steam';
+  import { useSteamRecentGames } from '@reactjit/apis/steam';
 
   const result: APIResult<{ response: { total_count: number; games: SteamRecentGame[] } }> = useSteamRecentGames(
     apiKey:  string | null,
@@ -110,7 +110,7 @@ SteamRecentGame fields:
 
 Fetch the friend list for a Steam user. The profile must be public for this to succeed.
 
-  import { useSteamFriends } from '@ilovereact/apis/steam';
+  import { useSteamFriends } from '@reactjit/apis/steam';
 
   const result: APIResult<{ friendslist: { friends: SteamFriend[] } }> = useSteamFriends(
     apiKey:  string | null,
@@ -133,7 +133,7 @@ SteamFriend fields:
 
 Fetch the achievement status for a specific user and game combination.
 
-  import { useSteamAchievements } from '@ilovereact/apis/steam';
+  import { useSteamAchievements } from '@reactjit/apis/steam';
 
   const result: APIResult<{ playerstats: { achievements: SteamAchievement[] } }> = useSteamAchievements(
     apiKey:  string | null,
@@ -160,7 +160,7 @@ SteamAchievement fields:
 
 Fetch store metadata for a game from the Steam Store API. No API key required.
 
-  import { useSteamAppDetails } from '@ilovereact/apis/steam';
+  import { useSteamAppDetails } from '@reactjit/apis/steam';
 
   const result: APIResult<Record<string, { success: boolean; data: SteamAppDetails }>> = useSteamAppDetails(
     appId: number | null,
@@ -191,7 +191,7 @@ SteamAppDetails fields:
 
 Construct a Steam CDN URL for a game's icon image.
 
-  import { steamGameIcon } from '@ilovereact/apis/steam';
+  import { steamGameIcon } from '@reactjit/apis/steam';
 
   const url: string = steamGameIcon(appId: number, iconHash: string);
 
@@ -205,7 +205,7 @@ Returns: string   Full JPEG URL
 
 Construct a Steam CDN URL for a game's 460x215 header image. No icon hash needed — only the App ID.
 
-  import { steamHeaderImage } from '@ilovereact/apis/steam';
+  import { steamHeaderImage } from '@reactjit/apis/steam';
 
   const url: string = steamHeaderImage(appId: number);
 
@@ -220,8 +220,8 @@ Returns: string   Full JPEG URL for the store header image
 
 Display what game the user is currently playing, or their last-seen status if offline.
 
-  import { useSteamUser } from '@ilovereact/apis/steam';
-  import { Box, Text, Image } from '@ilovereact/core';
+  import { useSteamUser } from '@reactjit/apis/steam';
+  import { Box, Text, Image } from '@reactjit/core';
 
   const API_KEY  = 'your-steam-api-key';
   const STEAM_ID = '76561197960435530';
@@ -253,8 +253,8 @@ Display what game the user is currently playing, or their last-seen status if of
 
 Show the last 5 games played with total and recent playtime, plus a header image.
 
-  import { useSteamRecentGames, steamHeaderImage } from '@ilovereact/apis/steam';
-  import { Box, Text, Image } from '@ilovereact/core';
+  import { useSteamRecentGames, steamHeaderImage } from '@reactjit/apis/steam';
+  import { Box, Text, Image } from '@reactjit/core';
 
   const API_KEY  = 'your-steam-api-key';
   const STEAM_ID = '76561197960435530';

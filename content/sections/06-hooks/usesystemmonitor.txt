@@ -16,7 +16,7 @@ import {
   useSystemMonitor,
   formatRate,
   formatTotalBytes,
-} from '@ilovereact/core';
+} from '@reactjit/core';
 ```
 
 Hook signature:
@@ -139,7 +139,7 @@ formatTotalBytes(bytes: number): string
 Example 1: CPU usage bar per core
 ---
 ```tsx
-import { useSystemMonitor } from '@ilovereact/core';
+import { useSystemMonitor } from '@reactjit/core';
 
 function CpuPanel() {
   const sys = useSystemMonitor(1000);
@@ -175,7 +175,7 @@ Platforms: love2d
 Example 2: Process list sorted by CPU (top 10)
 ---
 ```tsx
-import { useSystemMonitor } from '@ilovereact/core';
+import { useSystemMonitor } from '@reactjit/core';
 
 function ProcessList() {
   const sys = useSystemMonitor(2000, { processLimit: 10 });
@@ -206,7 +206,7 @@ Platforms: love2d
 Example 3: GPU temperature and VRAM gauge
 ---
 ```tsx
-import { useSystemMonitor } from '@ilovereact/core';
+import { useSystemMonitor } from '@reactjit/core';
 
 function GpuPanel() {
   const sys = useSystemMonitor(1000);
@@ -237,7 +237,7 @@ Platforms: love2d
 Example 4: Network I/O rates per interface
 ---
 ```tsx
-import { useSystemMonitor, formatRate } from '@ilovereact/core';
+import { useSystemMonitor, formatRate } from '@reactjit/core';
 
 function NetworkPanel() {
   const sys = useSystemMonitor(1000);
@@ -263,7 +263,7 @@ Example 5: Log full monitor snapshot every 10 seconds
 ---
 ```tsx
 import { useEffect } from 'react';
-import { useSystemMonitor } from '@ilovereact/core';
+import { useSystemMonitor } from '@reactjit/core';
 
 function TelemetryLogger() {
   const sys = useSystemMonitor(10000);

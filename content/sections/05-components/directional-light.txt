@@ -12,7 +12,7 @@ DirectionalLight simulates a distant light source such as a sun, with rays that 
 
 === API / SYNTAX ===
 ```tsx
-import { DirectionalLight } from '@ilovereact/3d';
+import { DirectionalLight } from '@reactjit/3d';
 ```
 
 Props:
@@ -26,7 +26,7 @@ Props:
 Example 1: Standard white directional light from above and to the side
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function LitScene() {
   return (
@@ -45,7 +45,7 @@ Platforms: love2d
 Example 2: Warm sunlight for a planet scene
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function PlanetScene() {
   return (
@@ -71,7 +71,7 @@ Platforms: love2d
 Example 3: Low-angle dramatic rim light
 ---
 ```tsx
-import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@ilovereact/3d';
+import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '@reactjit/3d';
 
 function DramaticLight() {
   return (

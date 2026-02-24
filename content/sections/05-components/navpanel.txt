@@ -13,7 +13,7 @@ NavPanel renders a vertical sidebar navigation component organized into titled s
 An optional header slot renders arbitrary content at the top of the panel, separated from the sections by a divider line. NavPanel uses a fixed width by default but can be customized via the `width` prop or `style` overrides.
 
 === API / SYNTAX ===
-Import: import { NavPanel } from '@ilovereact/core';
+Import: import { NavPanel } from '@reactjit/core';
 
 NavItem type:
 ```ts

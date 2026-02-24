@@ -14,7 +14,7 @@ Text supports font styling (fontSize, fontFamily, fontWeight, color, textAlign, 
 
 === API / SYNTAX ===
 ```tsx
-import { Text } from '@ilovereact/core';
+import { Text } from '@reactjit/core';
 ```
 
 ```tsx
@@ -128,7 +128,7 @@ Terminal:
   Grid targets use <text> lowercase intrinsic. Character-grid rendering means fontSize has no effect; text occupies cells based on character count. Color maps to ANSI truecolor or palette indices depending on the target.
 
 === CRITICAL RULES ===
-- EVERY Text element MUST have an explicit fontSize in its style prop. The static linter (`ilovereact lint`) enforces this as a build-blocking error. Text without fontSize will produce unpredictable rendering because the layout engine cannot measure the text.
+- EVERY Text element MUST have an explicit fontSize in its style prop. The static linter (`reactjit lint`) enforces this as a build-blocking error. Text without fontSize will produce unpredictable rendering because the layout engine cannot measure the text.
 - Do not mix bare text and JSX expressions: `"count: {value}"` renders literally as that string. Use template literals instead: `{`count: ${value}`}`.
 - Text is the only primitive with intrinsic width. Box and Image have zero width unless you set one explicitly. This means Text can size itself and its parent, but Box cannot.
 - Do not nest Box inside Text. Text children should be strings, numbers, or other Text elements only.

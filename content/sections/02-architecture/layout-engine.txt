@@ -72,7 +72,7 @@ Platforms: love2d
 Example 2: Text Measurement
 ---
 Text measurement is the key difference from CSS flexbox. In a browser, the layout
-engine has access to the full text shaping pipeline. In iLoveReact, text measurement
+engine has access to the full text shaping pipeline. In ReactJIT, text measurement
 is done via Love2D's font:getWrap() and font:getWidth() APIs.
 
 For a Text node without explicit width/height:

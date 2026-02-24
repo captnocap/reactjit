@@ -12,7 +12,7 @@ The Badge component renders a compact, pill-shaped label with semantic color var
 
 === API / SYNTAX ===
 ```tsx
-import { Badge } from '@ilovereact/core';
+import { Badge } from '@reactjit/core';
 
 <Badge
   label="Active"

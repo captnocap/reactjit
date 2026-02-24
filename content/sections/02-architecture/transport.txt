@@ -74,7 +74,7 @@ Platforms: web
 
 Example 3: IBridge in React Hooks
 ---
-import { useBridge, useLove, useLoveRPC, useLoveState } from '@ilovereact/core';
+import { useBridge, useLove, useLoveRPC, useLoveState } from '@reactjit/core';
 
 // All hooks consume IBridge from context -- transport-agnostic
 const [gameState, send] = useLove('game:state', { ready: false });

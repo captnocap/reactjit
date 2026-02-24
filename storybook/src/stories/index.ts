@@ -44,6 +44,8 @@ import { MasksStory } from './MasksStory';
 import { APIsStory } from './APIsStory';
 import { LayoutsStory } from './LayoutsStory';
 import { SearchStory } from './SearchStory';
+import { TerminalStory } from './TerminalStory';
+import { NoclipMazeStory } from './NoclipMazeStory';
 
 
 export const stories: StoryDef[] = [
@@ -73,6 +75,7 @@ export const stories: StoryDef[] = [
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'apis', title: 'APIs', section: 'Packages', component: APIsStory },
   { id: 'layouts', title: 'Layouts', section: 'Packages', component: LayoutsStory },
+  { id: 'terminal', title: 'Terminal (PTY)', section: 'Packages', component: TerminalStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
@@ -82,6 +85,7 @@ export const stories: StoryDef[] = [
   { id: 'map-basic', title: 'Map', section: 'Demos', component: MapBasicStory },
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
   { id: 'poly-pizza', title: 'Poly Pizza', section: 'Demos', component: PolyPizzaStory },
+  { id: 'noclip-maze', title: 'Noclip Maze', section: 'Demos', component: NoclipMazeStory },
 
   // Stress Test
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },

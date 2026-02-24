@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@reactjit/core": [
+        "./reactjit/core/src"
+      ],
+      "@reactjit/native": [
+        "./reactjit/native/src"
+      ],
+      "@reactjit/theme": [
+        "./reactjit/theme/src"
+      ],
+      "@reactjit/router": [
+        "./reactjit/router/src"
+      ],
+      "@reactjit/storage": [
+        "./reactjit/storage/src"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

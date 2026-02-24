@@ -20,7 +20,7 @@ The package also exports a tmdbImage() utility for constructing full image URLs 
 
 Fetch trending movies or TV shows for today or this week.
 
-  import { useTMDBTrending } from '@ilovereact/apis/tmdb';
+  import { useTMDBTrending } from '@reactjit/apis/tmdb';
 
   const result: APIResult<TMDBPaginated<TMDBMovie>> = useTMDBTrending(apiKey, opts?);
 
@@ -40,7 +40,7 @@ Returns: APIResult<TMDBPaginated<TMDBMovie>>
 
 Search the TMDB catalog by text query. Supports movies, TV shows, or a combined multi-search.
 
-  import { useTMDBSearch } from '@ilovereact/apis/tmdb';
+  import { useTMDBSearch } from '@reactjit/apis/tmdb';
 
   const result: APIResult<TMDBPaginated<TMDBMovie & TMDBSeries>> = useTMDBSearch(apiKey, query, opts?);
 
@@ -57,7 +57,7 @@ Returns: APIResult<TMDBPaginated<TMDBMovie & TMDBSeries>>
 
 Fetch full details for a single movie, including runtime, budget, genres, and production companies.
 
-  import { useTMDBMovie } from '@ilovereact/apis/tmdb';
+  import { useTMDBMovie } from '@reactjit/apis/tmdb';
 
   const result: APIResult<TMDBMovieDetails> = useTMDBMovie(apiKey, movieId);
 
@@ -80,7 +80,7 @@ TMDBMovieDetails extends TMDBMovie and adds:
 
 Fetch full details for a single TV series, including season count, episode count, and networks.
 
-  import { useTMDBSeries } from '@ilovereact/apis/tmdb';
+  import { useTMDBSeries } from '@reactjit/apis/tmdb';
 
   const result: APIResult<TMDBSeriesDetails> = useTMDBSeries(apiKey, seriesId);
 
@@ -102,7 +102,7 @@ TMDBSeriesDetails extends TMDBSeries and adds:
 
 Fetch the current popular movies or TV shows.
 
-  import { useTMDBPopular } from '@ilovereact/apis/tmdb';
+  import { useTMDBPopular } from '@reactjit/apis/tmdb';
 
   const result: APIResult<TMDBPaginated<TMDBMovie>> = useTMDBPopular(apiKey, opts?);
 
@@ -118,7 +118,7 @@ Returns: APIResult<TMDBPaginated<TMDBMovie>>
 
 Construct a full image URL from the partial path returned by TMDB.
 
-  import { tmdbImage } from '@ilovereact/apis/tmdb';
+  import { tmdbImage } from '@reactjit/apis/tmdb';
 
   const url: string | null = tmdbImage(path, size?);
 
@@ -158,8 +158,8 @@ TMDBSeries fields:
 
 Display a horizontal strip of this week's trending movies with their ratings:
 
-  import { useTMDBTrending, tmdbImage } from '@ilovereact/apis/tmdb';
-  import { Box, Text, Image } from '@ilovereact/core';
+  import { useTMDBTrending, tmdbImage } from '@reactjit/apis/tmdb';
+  import { Box, Text, Image } from '@reactjit/core';
 
   const API_KEY = process.env.TMDB_KEY ?? null;
 
@@ -198,8 +198,8 @@ Display a horizontal strip of this week's trending movies with their ratings:
 
 Fetch and display full details for a specific movie ID:
 
-  import { useTMDBMovie, tmdbImage } from '@ilovereact/apis/tmdb';
-  import { Box, Text } from '@ilovereact/core';
+  import { useTMDBMovie, tmdbImage } from '@reactjit/apis/tmdb';
+  import { Box, Text } from '@reactjit/core';
 
   function MovieCard({ movieId }: { movieId: number }) {
     const { data, loading } = useTMDBMovie(process.env.TMDB_KEY ?? null, movieId);

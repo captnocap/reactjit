@@ -14,7 +14,7 @@ Unlike BarChart, Sparkline is designed for inline use where labels and axes are 
 
 === API / SYNTAX ===
 ```tsx
-import { Sparkline } from '@ilovereact/core';
+import { Sparkline } from '@reactjit/core';
 ```
 
 Props:
@@ -33,7 +33,7 @@ Props:
 Example 1: Basic sparkline
 ---
 ```tsx
-import { Sparkline } from '@ilovereact/core';
+import { Sparkline } from '@reactjit/core';
 
 export default function App() {
   return (
@@ -49,7 +49,7 @@ Platforms: All
 Example 2: Custom size and color
 ---
 ```tsx
-import { Sparkline } from '@ilovereact/core';
+import { Sparkline } from '@reactjit/core';
 
 export default function App() {
   return (
@@ -71,7 +71,7 @@ Example 3: Inline with text and interactive hover callback
 ---
 ```tsx
 import { useState } from 'react';
-import { Sparkline } from '@ilovereact/core';
+import { Sparkline } from '@reactjit/core';
 
 export default function App() {
   const [hovered, setHovered] = useState<number | null>(null);

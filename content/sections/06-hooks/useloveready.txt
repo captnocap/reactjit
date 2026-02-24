@@ -31,7 +31,7 @@ Returns:
 === EXAMPLES ===
 Example 1: Loading screen
 ---
-import { useLoveReady } from '@ilovereact/core';
+import { useLoveReady } from '@reactjit/core';
 
 function App() {
   const ready = useLoveReady();
@@ -56,7 +56,7 @@ Platforms: All
 Example 2: Defer data fetching until ready
 ---
 import { useEffect } from 'react';
-import { useLoveReady, useLoveRPC } from '@ilovereact/core';
+import { useLoveReady, useLoveRPC } from '@reactjit/core';
 
 function DataLoader() {
   const ready = useLoveReady();

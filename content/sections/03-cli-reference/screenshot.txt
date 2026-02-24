@@ -1,5 +1,5 @@
 === METADATA ===
-title: ilovereact screenshot
+title: reactjit screenshot
 description: Capture a headless screenshot of the current app state for visual layout verification.
 category: CLI
 platforms: love2d
@@ -8,7 +8,7 @@ related: lint.txt, build.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `ilovereact screenshot` command runs the full lint + build pipeline, then launches
+The `reactjit screenshot` command runs the full lint + build pipeline, then launches
 Love2D in headless screenshot mode to capture the current app state as a PNG image. This is
 the primary tool for visual verification of layouts without manually inspecting a running
 Love2D window.
@@ -18,14 +18,14 @@ environments. If xvfb-run is not available, it launches Love2D normally (require
 
 === API / SYNTAX ===
 Usage:
-  ilovereact screenshot [--output path]
+  reactjit screenshot [--output path]
 
 Options:
   --output, -o    Path for the output PNG file.
                   Default: screenshot.png in the project root.
 
 Steps performed:
-  1. Lint gate (fails on errors, same as `ilovereact lint`)
+  1. Lint gate (fails on errors, same as `reactjit lint`)
   2. Bundle JS (esbuild with IIFE format for Love2D)
   3. Launch Love2D with ILOVEREACT_SCREENSHOT=1 environment variable
   4. Love2D renders one frame and saves to the specified output path
@@ -42,21 +42,21 @@ Timeout:
 === EXAMPLES ===
 Example 1: Default screenshot
 ---
-ilovereact screenshot
+reactjit screenshot
 # Output: screenshot.png in project root
 ---
 Platforms: love2d
 
 Example 2: Custom output path
 ---
-ilovereact screenshot --output /tmp/preview.png
+reactjit screenshot --output /tmp/preview.png
 ---
 Platforms: love2d
 
 Example 3: CI verification workflow
 ---
-ilovereact lint
-ilovereact screenshot --output /tmp/layout-check.png
+reactjit lint
+reactjit screenshot --output /tmp/layout-check.png
 # Inspect /tmp/layout-check.png or diff against a reference image
 ---
 Platforms: love2d

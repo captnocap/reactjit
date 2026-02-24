@@ -8,7 +8,7 @@ related: animatedvalue.txt, useanimation.txt, easing.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact provides four functions for composing multiple animations into coordinated
+ReactJIT provides four functions for composing multiple animations into coordinated
 sequences: parallel (run simultaneously), sequence (run one after another), stagger (start
 each with a delay offset), and loop (repeat an animation). All return an Animation object
 with start() and stop() methods, so they can themselves be composed into larger animations.
@@ -18,9 +18,9 @@ AnimatedValue.spring()), not on AnimatedValues directly. This means you create i
 animations first, then compose them.
 
 === API / SYNTAX ===
-All functions are imported from '@ilovereact/core':
+All functions are imported from '@reactjit/core':
 
-  import { parallel, sequence, stagger, loop } from '@ilovereact/core';
+  import { parallel, sequence, stagger, loop } from '@reactjit/core';
 
 parallel(animations: Animation[]): Animation
   Starts all animations simultaneously. Completes when ALL animations finish.
@@ -60,7 +60,7 @@ All return Animation:
 Example 1: Parallel fade + slide
 ---
 import { useEffect } from 'react';
-import { useAnimation, parallel, Box, Text } from '@ilovereact/core';
+import { useAnimation, parallel, Box, Text } from '@reactjit/core';
 
 function FadeSlideIn() {
   const [opacityAnim, opacity] = useAnimation(0);
@@ -94,7 +94,7 @@ Platforms: All
 Example 2: Sequential animation chain
 ---
 import { useEffect } from 'react';
-import { useAnimation, sequence, Easing, Box } from '@ilovereact/core';
+import { useAnimation, sequence, Easing, Box } from '@reactjit/core';
 
 function SequenceDemo() {
   const [xAnim, x] = useAnimation(0);
@@ -127,7 +127,7 @@ Platforms: All
 Example 3: Staggered list appearance
 ---
 import { useEffect } from 'react';
-import { useAnimation, stagger, Box, Text } from '@ilovereact/core';
+import { useAnimation, stagger, Box, Text } from '@reactjit/core';
 
 function StaggeredList() {
   const [a1, v1] = useAnimation(0);
@@ -174,7 +174,7 @@ Platforms: All
 Example 4: Infinite pulsing loop
 ---
 import { useEffect } from 'react';
-import { useAnimation, loop, sequence, Box } from '@ilovereact/core';
+import { useAnimation, loop, sequence, Box } from '@reactjit/core';
 
 function PulsingDot() {
   const [scaleAnim, scale] = useAnimation(1);
@@ -207,7 +207,7 @@ Platforms: All
 Example 5: Loop with finite iterations
 ---
 import { useEffect } from 'react';
-import { useAnimation, loop, Box } from '@ilovereact/core';
+import { useAnimation, loop, Box } from '@reactjit/core';
 
 function ShakeBox() {
   const [xAnim, x] = useAnimation(0);

@@ -8,7 +8,7 @@ related: useLoveRPC, useLoveEvent
 difficulty: intermediate
 
 === OVERVIEW ===
-The @ilovereact/audio package exposes a modular synthesis system as React hooks. Audio modules (oscillators, filters, envelopes, mixers, samplers, clocks, sequencers) are wired together into a signal graph called the rack. State flows from the Lua audio engine into React via bridge events; commands flow back via RPC. MIDI input is also surfaced through this package, including device enumeration, CC-to-parameter mapping, and a learn mode for real-time controller assignment. The package also provides sample file loading, microphone recording, a sample-accurate BPM clock, and a step sequencer for building drum machines and other rhythmic applications.
+The @reactjit/audio package exposes a modular synthesis system as React hooks. Audio modules (oscillators, filters, envelopes, mixers, samplers, clocks, sequencers) are wired together into a signal graph called the rack. State flows from the Lua audio engine into React via bridge events; commands flow back via RPC. MIDI input is also surfaced through this package, including device enumeration, CC-to-parameter mapping, and a learn mode for real-time controller assignment. The package also provides sample file loading, microphone recording, a sample-accurate BPM clock, and a step sequencer for building drum machines and other rhythmic applications.
 
 === API / SYNTAX ===
 
@@ -16,7 +16,7 @@ The @ilovereact/audio package exposes a modular synthesis system as React hooks.
 
 Initialize the audio engine. Call this once at the root of your app before using any other audio hooks. Returns true when the engine is ready. Resolves even if audio hardware is unavailable, so the UI always renders.
 
-  import { useAudioInit } from '@ilovereact/audio';
+  import { useAudioInit } from '@reactjit/audio';
 
   const ready: boolean = useAudioInit();
 
@@ -27,7 +27,7 @@ Returns: boolean — true once the engine has initialized (or failed gracefully)
 
 Access the full audio rack: the list of active modules, the connections between them, and operations to mutate the graph.
 
-  import { useRack } from '@ilovereact/audio';
+  import { useRack } from '@reactjit/audio';
 
   const rack: UseRackResult = useRack();
 
@@ -59,7 +59,7 @@ Connection fields:
 
 Access and control a single module by its ID. Subscribes to rack state updates and surfaces only the named module's params and ports.
 
-  import { useModule } from '@ilovereact/audio';
+  import { useModule } from '@reactjit/audio';
 
   const mod: UseModuleResult = useModule(moduleId: string);
 
@@ -78,7 +78,7 @@ Returns: UseModuleResult
 
 Read and write a single parameter on a module. Provides an optimistic update: the local value is set immediately while the RPC call propagates to Lua.
 
-  import { useParam } from '@ilovereact/audio';
+  import { useParam } from '@reactjit/audio';
 
   const [value, setParam] = useParam(moduleId: string, paramName: string);
 
@@ -94,7 +94,7 @@ Returns: [any, (value: any) => Promise<any>]
 
 Access connected MIDI devices, current CC mappings, learn mode state, and operations to add or remove mappings.
 
-  import { useMIDI } from '@ilovereact/audio';
+  import { useMIDI } from '@reactjit/audio';
 
   const midi: UseMIDIResult = useMIDI();
 
@@ -124,7 +124,7 @@ MIDIMapping fields:
 
 Subscribe to raw MIDI note on/off events from any connected device. The handler is stable — reassigning it between renders does not re-subscribe.
 
-  import { useMIDINote } from '@ilovereact/audio';
+  import { useMIDINote } from '@reactjit/audio';
 
   useMIDINote(handler: (event: MIDINoteEvent) => void);
 
@@ -144,7 +144,7 @@ MIDINoteEvent fields:
 
 Subscribe to raw MIDI CC (continuous controller) events from any connected device.
 
-  import { useMIDICC } from '@ilovereact/audio';
+  import { useMIDICC } from '@reactjit/audio';
 
   useMIDICC(handler: (event: MIDICCEvent) => void);
 
@@ -163,7 +163,7 @@ MIDICCEvent fields:
 
 Access a clock module's beat position and transport controls. The clock runs sample-accurate in the Lua audio engine. Position updates arrive via the 30fps state push.
 
-  import { useClock } from '@ilovereact/audio';
+  import { useClock } from '@reactjit/audio';
 
   const clock: UseClockResult = useClock(moduleId: string);
 
@@ -187,7 +187,7 @@ Returns: UseClockResult
 
 Subscribe to clock tick events. Fires on each tick at the audio engine's rate. The handler is stable across re-renders.
 
-  import { useClockEvent } from '@ilovereact/audio';
+  import { useClockEvent } from '@reactjit/audio';
 
   useClockEvent(handler: (event: ClockTickEvent) => void);
 
@@ -206,7 +206,7 @@ ClockTickEvent fields:
 
 Manage a sampler module's slots: load audio files, clear slots, trigger playback. Samples are loaded from the Love2D filesystem. MIDI note 36 = slot 1, 37 = slot 2, etc. (GM drum map starting at C2).
 
-  import { useSampler } from '@ilovereact/audio';
+  import { useSampler } from '@reactjit/audio';
 
   const sampler: UseSamplerResult = useSampler(moduleId: string);
 
@@ -235,7 +235,7 @@ SamplerVoice fields:
 
 Record audio from a microphone or input device into a sampler slot. Uses Love2D's RecordingDevice API. Call listDevices() to enumerate available inputs, startRecording() to begin capture, and stopRecording() to finalize the sample into its target slot.
 
-  import { useRecorder } from '@ilovereact/audio';
+  import { useRecorder } from '@reactjit/audio';
 
   const recorder: UseRecorderResult = useRecorder();
 
@@ -263,7 +263,7 @@ RecordingState fields:
 
 Control a step sequencer module's pattern and track assignments. The sequencer advances on rising edges from a connected clock module's gate output. Each track targets a different module for note triggering.
 
-  import { useSequencer } from '@ilovereact/audio';
+  import { useSequencer } from '@reactjit/audio';
 
   const seq: UseSequencerResult = useSequencer(moduleId: string);
 
@@ -289,8 +289,8 @@ StepData fields:
 
 Initialize the engine, build a one-oscillator patch, and render a waveform selector:
 
-  import { useAudioInit, useRack, useParam } from '@ilovereact/audio';
-  import { Box, Text } from '@ilovereact/core';
+  import { useAudioInit, useRack, useParam } from '@reactjit/audio';
+  import { Box, Text } from '@reactjit/core';
 
   function SynthApp() {
     const ready = useAudioInit();
@@ -340,8 +340,8 @@ Initialize the engine, build a one-oscillator patch, and render a waveform selec
 
 Arm a parameter for learn, then watch the mapping appear:
 
-  import { useMIDI } from '@ilovereact/audio';
-  import { Box, Text } from '@ilovereact/core';
+  import { useMIDI } from '@reactjit/audio';
+  import { Box, Text } from '@reactjit/core';
 
   function MIDILearnButton({ moduleId, param }: { moduleId: string; param: string }) {
     const midi = useMIDI();
@@ -375,9 +375,9 @@ Arm a parameter for learn, then watch the mapping appear:
 
 Show which notes are currently held:
 
-  import { useMIDINote } from '@ilovereact/audio';
+  import { useMIDINote } from '@reactjit/audio';
   import { useState } from 'react';
-  import { Box, Text } from '@ilovereact/core';
+  import { Box, Text } from '@reactjit/core';
 
   function NoteMonitor() {
     const [held, setHeld] = useState<number[]>([]);
@@ -399,8 +399,8 @@ Show which notes are currently held:
 
 Wire a clock, sequencer, and sampler together for a basic drum machine:
 
-  import { useAudioInit, useRack, useClock, useSequencer, useSampler } from '@ilovereact/audio';
-  import { Box, Text } from '@ilovereact/core';
+  import { useAudioInit, useRack, useClock, useSequencer, useSampler } from '@reactjit/audio';
+  import { Box, Text } from '@reactjit/core';
   import { useRef, useEffect } from 'react';
 
   function DrumMachine() {
@@ -458,8 +458,8 @@ Wire a clock, sequencer, and sampler together for a basic drum machine:
 
 Record audio from the default input device into a sampler slot:
 
-  import { useRecorder, useSampler } from '@ilovereact/audio';
-  import { Box, Text } from '@ilovereact/core';
+  import { useRecorder, useSampler } from '@reactjit/audio';
+  import { Box, Text } from '@reactjit/core';
 
   function RecordButton({ moduleId, slot }: { moduleId: string; slot: number }) {
     const recorder = useRecorder();

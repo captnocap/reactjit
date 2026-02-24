@@ -12,7 +12,7 @@ The Card component is a pre-styled container that provides a visual boundary aro
 
 === API / SYNTAX ===
 ```tsx
-import { Card } from '@ilovereact/core';
+import { Card } from '@reactjit/core';
 
 <Card
   title="Optional Title"

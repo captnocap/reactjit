@@ -1,6 +1,6 @@
 === METADATA ===
 title: Animation System
-description: Overview of the iLoveReact animation system including animated values, timing, springs, easing, and composite animations.
+description: Overview of the ReactJIT animation system including animated values, timing, springs, easing, and composite animations.
 category: Animation
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: animation, AnimatedValue, timing, spring, easing, parallel, sequence, stagger, loop, useAnimation, useSpring, useTransition
@@ -8,7 +8,7 @@ related: animatedvalue.txt, useanimation.txt, usespring.txt, usetransition.txt, 
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact includes a complete animation system built on the AnimatedValue class. It provides
+ReactJIT includes a complete animation system built on the AnimatedValue class. It provides
 timing-based animations (with easing functions), physics-based spring animations, and
 composite animations (parallel, sequence, stagger, loop). Three React hooks make it easy to
 integrate animations into components: useAnimation for full control, useSpring for automatic
@@ -20,7 +20,7 @@ animations share a single frame loop for efficiency. Animations are batched to a
 excessive re-renders.
 
 === API / SYNTAX ===
-All animation APIs are imported from '@ilovereact/core':
+All animation APIs are imported from '@reactjit/core':
 
   import {
     AnimatedValue,
@@ -32,7 +32,7 @@ All animation APIs are imported from '@ilovereact/core':
     sequence,
     stagger,
     loop,
-  } from '@ilovereact/core';
+  } from '@reactjit/core';
 
 Core types:
   Animation: { start(callback?), stop() }
@@ -45,7 +45,7 @@ Core types:
 Example 1: Fade-in animation
 ---
 import { useEffect } from 'react';
-import { useAnimation, Box, Text } from '@ilovereact/core';
+import { useAnimation, Box, Text } from '@reactjit/core';
 
 function FadeIn({ children }: { children: React.ReactNode }) {
   const [opacity, opacityValue] = useAnimation(0);
@@ -66,7 +66,7 @@ Platforms: All
 Example 2: Spring animation on state change
 ---
 import { useState } from 'react';
-import { useSpring, Box, Text } from '@ilovereact/core';
+import { useSpring, Box, Text } from '@reactjit/core';
 
 function ToggleBox() {
   const [expanded, setExpanded] = useState(false);

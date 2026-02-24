@@ -13,7 +13,7 @@ Returns the current renderer mode as either `'web'` or `'native'`. The mode is s
 === API / SYNTAX ===
 Import:
 ```typescript
-import { useRendererMode, RendererProvider } from '@ilovereact/core';
+import { useRendererMode, RendererProvider } from '@reactjit/core';
 ```
 
 Hook signature:
@@ -125,13 +125,13 @@ Platforms: love2d, terminal, nvim, cc, hs, awesome
 
 Example 5: Provider setup at app root
 ---
-import { createRoot } from '@ilovereact/native';
-import { RendererProvider } from '@ilovereact/core';
+import { createRoot } from '@reactjit/native';
+import { RendererProvider } from '@reactjit/core';
 
 function App() {
   return (
     <Box style={{ width: '100%', height: '100%' }}>
-      <Text fontSize={24}>Hello iLoveReact</Text>
+      <Text fontSize={24}>Hello ReactJIT</Text>
     </Box>
   );
 }
@@ -149,7 +149,7 @@ Platforms: love2d, terminal, nvim, cc, hs, awesome
 Example 6: Web overlay setup
 ---
 import { createRoot } from 'react-dom/client';
-import { RendererProvider } from '@ilovereact/core';
+import { RendererProvider } from '@reactjit/core';
 
 function App() {
   return (

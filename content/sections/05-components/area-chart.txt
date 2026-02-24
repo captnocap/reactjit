@@ -12,7 +12,7 @@ AreaChart is a thin wrapper over LineChart with `showArea` forced to true, `show
 
 === API / SYNTAX ===
 ```tsx
-import { AreaChart } from '@ilovereact/core';
+import { AreaChart } from '@reactjit/core';
 ```
 
 AreaChart accepts exactly the same props as LineChart:
@@ -44,7 +44,7 @@ Props (inherited from LineChart):
 Example 1: Traffic volume over a week
 ---
 ```tsx
-import { AreaChart } from '@ilovereact/core';
+import { AreaChart } from '@reactjit/core';
 
 const traffic = [
   { x: 'Mon', value: 2400 },
@@ -70,7 +70,7 @@ Platforms: All
 Example 2: Stacked feel with reduced opacity and custom color
 ---
 ```tsx
-import { AreaChart } from '@ilovereact/core';
+import { AreaChart } from '@reactjit/core';
 
 const memory = [
   { value: 1.2 }, { value: 1.8 }, { value: 2.1 },
@@ -98,7 +98,7 @@ Platforms: All
 Example 3: Interactive area chart with dots re-enabled
 ---
 ```tsx
-import { AreaChart } from '@ilovereact/core';
+import { AreaChart } from '@reactjit/core';
 
 const latency = [
   { x: '10s', value: 42 }, { x: '20s', value: 38 },

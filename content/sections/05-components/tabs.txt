@@ -13,7 +13,7 @@ Tabs renders a horizontal tab bar for switching between views. Each tab is defin
 Tabs supports two visual variants: `'underline'` (default) draws a colored bottom border on the active tab, while `'pill'` wraps the active tab in a filled rounded rectangle. Both variants use Pressable for hover feedback.
 
 === API / SYNTAX ===
-Import: import { Tabs } from '@ilovereact/core';
+Import: import { Tabs } from '@reactjit/core';
 
 Tab type:
 ```ts

@@ -1,6 +1,6 @@
 === METADATA ===
-title: iLoveReact Philosophy
-description: Core design principles behind iLoveReact - React stripped of browser magic, rendered as raw geometry
+title: ReactJIT Philosophy
+description: Core design principles behind ReactJIT - React stripped of browser magic, rendered as raw geometry
 category: Getting Started
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: philosophy, design, principles, multi-target, rendering, geometry, flexbox
@@ -8,7 +8,7 @@ related: pipeline, layout-engine, source-of-truth
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact is React stripped of browser magic and rendered as raw geometry. There is no
+ReactJIT is React stripped of browser magic and rendered as raw geometry. There is no
 DOM, no CSS cascade, no implicit sizing, no inherited font stacks, no default margins.
 Every pixel on screen exists because your code explicitly put it there.
 
@@ -22,7 +22,7 @@ Example 1: The Multi-Target Promise
 ---
 Write a component once:
 
-  import { Box, Text } from '@ilovereact/core';
+  import { Box, Text } from '@reactjit/core';
 
   function Greeting() {
     return (

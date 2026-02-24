@@ -1,6 +1,6 @@
 === METADATA ===
 title: Web Target
-description: DOM overlay renderer that maps iLoveReact components to HTML/CSS elements
+description: DOM overlay renderer that maps ReactJIT components to HTML/CSS elements
 category: Targets
 platforms: web
 keywords: web, browser, dom, css, flexbox, esm, renderer mode, overlay
@@ -8,7 +8,7 @@ related: love2d, terminal, painter, primitives
 difficulty: intermediate
 
 === OVERVIEW ===
-The web target (@ilovereact/web) renders iLoveReact components as real DOM elements with
+The web target (@reactjit/web) renders ReactJIT components as real DOM elements with
 CSS flexbox. The same Box, Text, and Image components that render as draw calls on
 Love2D render as div, span, and img elements in the browser. The RendererMode context
 switches the primitives between 'web' and 'native' behavior.
@@ -41,7 +41,7 @@ Example 1: Web-Only App
 ---
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { RendererProvider } from '@ilovereact/core';
+import { RendererProvider } from '@reactjit/core';
 import App from './App';
 
 const root = createRoot(document.getElementById('root')!);
@@ -55,7 +55,7 @@ Platforms: web
 
 Example 2: Web Overlay with Love2D Canvas
 ---
-import { useLoveOverlays } from '@ilovereact/core';
+import { useLoveOverlays } from '@reactjit/core';
 
 function GameOverlay({ canvasRef }) {
   const overlays = useLoveOverlays(canvasRef);

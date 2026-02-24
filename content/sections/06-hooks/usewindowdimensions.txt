@@ -18,7 +18,7 @@ first viewport event is dispatched.
 
 === API / SYNTAX ===
 ```tsx
-import { useWindowDimensions } from '@ilovereact/core';
+import { useWindowDimensions } from '@reactjit/core';
 ```
 
 Signature:
@@ -37,7 +37,7 @@ Returns:
 === EXAMPLES ===
 Example 1: Responsive layout
 ---
-import { useWindowDimensions, Box, Text } from '@ilovereact/core';
+import { useWindowDimensions, Box, Text } from '@reactjit/core';
 
 function ResponsiveLayout() {
   const { width, height } = useWindowDimensions();
@@ -69,7 +69,7 @@ Platforms: All
 
 Example 2: Conditional rendering based on viewport size
 ---
-import { useWindowDimensions, Box, Text } from '@ilovereact/core';
+import { useWindowDimensions, Box, Text } from '@reactjit/core';
 
 function AdaptiveUI() {
   const { width } = useWindowDimensions();
@@ -101,7 +101,7 @@ Platforms: All
 
 Example 3: Calculate aspect ratio
 ---
-import { useWindowDimensions, Box, Text } from '@ilovereact/core';
+import { useWindowDimensions, Box, Text } from '@reactjit/core';
 
 function AspectRatioDisplay() {
   const { width, height } = useWindowDimensions();

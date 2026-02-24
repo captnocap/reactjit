@@ -8,7 +8,7 @@ related: visual.txt, flexbox.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact supports a transform object on any element's style for applying geometric
+ReactJIT supports a transform object on any element's style for applying geometric
 transformations. Transforms affect the visual rendering of the element without changing its
 position in the layout tree. A transformed element still occupies the same layout space it
 would without the transform -- sibling elements are not affected.
@@ -105,8 +105,8 @@ Platforms: All
 
 Example 6: Animated transform with useSpring
 ---
-import { Box } from '@ilovereact/core';
-import { useSpring } from '@ilovereact/core';
+import { Box } from '@reactjit/core';
+import { useSpring } from '@reactjit/core';
 
 function PulseBox({ active }: { active: boolean }) {
   const scale = useSpring(active ? 1.1 : 1.0, { stiffness: 200, damping: 15 });

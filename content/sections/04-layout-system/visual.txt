@@ -8,7 +8,7 @@ related: text-styling.txt, sizing.txt, spacing.txt
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact provides a comprehensive set of visual styling properties for Box elements.
+ReactJIT provides a comprehensive set of visual styling properties for Box elements.
 These include background colors, border styling (width, color, radius with per-corner and
 per-side control), box shadows, linear gradients, opacity, overflow clipping, z-index
 stacking, outlines, and visibility toggling.

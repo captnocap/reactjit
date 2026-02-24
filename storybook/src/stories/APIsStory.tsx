@@ -2,16 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
-  // Existing primitives from components.tsx
-  NowPlayingBar,
   TrackRow,
-  MovieCard,
   RepoCard,
-  CoinRow,
   ArtistRow,
   APODCard,
   GitHubUserCard,
-  // New additions
   NowPlayingCard,
   MediaPosterCard,
   CoinTickerRow,
@@ -125,14 +120,14 @@ function MusicDemo() {
   return (
     <StorySection index={1} title="Music — Spotify / Last.fm">
       <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        NowPlayingBar and NowPlayingCard — use with useSpotifyNowPlaying() or useLastFMNowPlaying().
+        NowPlayingCard and NowPlayingCard — use with useSpotifyNowPlaying() or useLastFMNowPlaying().
         TrackRow and ArtistRow for ranked lists.
       </Text>
 
       <Box style={{ width: '100%', gap: 8 }}>
         <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 9 }}>NowPlayingBar</Text>
-          <NowPlayingBar track={current.title} artist={current.artist} album={current.album} isPlaying progress={progress} />
+          <Text style={{ color: c.muted, fontSize: 9 }}>NowPlayingCard</Text>
+          <NowPlayingCard title={current.title} artist={current.artist} album={current.album} playing progress={progress} />
         </Box>
 
         <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 6 }}>
@@ -176,13 +171,13 @@ function MediaDemo() {
   return (
     <StorySection index={2} title="Media — TMDB / Trakt / Plex">
       <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        MovieCard and MediaPosterCard for poster grids. Use tmdbImage() for real poster URLs.
+        MediaPosterCard and MediaPosterCard for poster grids. Use tmdbImage() for real poster URLs.
       </Text>
 
-      <Text style={{ color: c.muted, fontSize: 9 }}>MovieCard — star rating as Box geometry</Text>
+      <Text style={{ color: c.muted, fontSize: 9 }}>MediaPosterCard — star rating as Box geometry</Text>
       <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
         {MOVIES.map((m) => (
-          <MovieCard key={m.title} title={m.title} rating={m.rating} year={m.year} />
+          <MediaPosterCard key={m.title} title={m.title} score={m.rating} year={m.year} width={100} height={150} />
         ))}
       </Box>
 
@@ -216,15 +211,14 @@ function CoinDemo() {
   return (
     <StorySection index={3} title="Crypto — CoinGecko">
       <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        CoinRow for compact lists, CoinTickerRow adds sparkline. Both use useCoinMarkets() data.
+        CoinTickerRow for compact lists, CoinTickerRow adds sparkline. Both use useCoinMarkets() data.
       </Text>
 
-      <Text style={{ color: c.muted, fontSize: 9 }}>CoinRow</Text>
+      <Text style={{ color: c.muted, fontSize: 9 }}>CoinTickerRow</Text>
       <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
         {COINS_BASE.map((coin, i) => (
-          <CoinRow
+          <CoinTickerRow
             key={coin.symbol}
-            rank={coin.rank}
             symbol={coin.symbol}
             name={coin.name}
             price={coin.price}

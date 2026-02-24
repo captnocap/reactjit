@@ -8,7 +8,7 @@ related: lua-runtime, event-handling
 difficulty: intermediate
 
 === OVERVIEW ===
-Two specialized rendering components extend iLoveReact with advanced text features:
+Two specialized rendering components extend ReactJIT with advanced text features:
 CodeBlock for syntax-highlighted source code display, and TextSelection for
 interactive text selection with clipboard support.
 
@@ -119,7 +119,7 @@ Node Properties:
 
 Example 1: Display Syntax-Highlighted Code
 ---
-import { Box, Text } from '@ilovereact/core'
+import { Box, Text } from '@reactjit/core'
 import React from 'react'
 
 function CodeDemo() {
@@ -150,7 +150,7 @@ Platforms: love2d
 
 Example 2: Selectable Text Node
 ---
-import { Box, Text, Pressable } from '@ilovereact/core'
+import { Box, Text, Pressable } from '@reactjit/core'
 import React from 'react'
 
 function SelectableText() {
@@ -188,7 +188,7 @@ Platforms: love2d
 
 Example 3: Code Block with Custom Styling
 ---
-import { Box, Text } from '@ilovereact/core'
+import { Box, Text } from '@reactjit/core'
 import React from 'react'
 
 const LUA_CODE = `

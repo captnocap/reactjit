@@ -41,7 +41,7 @@ Returns:
 Example 1: Query nearby entities
 ---
 import { useState, useEffect } from 'react';
-import { useLoveRPC } from '@ilovereact/core';
+import { useLoveRPC } from '@reactjit/core';
 
 interface Entity {
   id: number;
@@ -77,7 +77,7 @@ Platforms: All
 
 Example 2: RPC with timeout
 ---
-import { useLoveRPC } from '@ilovereact/core';
+import { useLoveRPC } from '@reactjit/core';
 
 function SaveButton() {
   const saveGame = useLoveRPC<boolean>('saveGame');

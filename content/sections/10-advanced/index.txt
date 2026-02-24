@@ -1,6 +1,6 @@
 === METADATA ===
 title: Advanced Topics
-description: Hub page for advanced iLoveReact documentation
+description: Hub page for advanced ReactJIT documentation
 category: Advanced
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: advanced, lua runtime, events, performance, debugging, custom targets, networking, http, websocket, tor, focus, lua-owned
@@ -8,7 +8,7 @@ related: lua-runtime, event-handling, performance, debugging, custom-targets, ne
 difficulty: advanced
 
 === OVERVIEW ===
-This section covers the internals of iLoveReact for developers who need to understand
+This section covers the internals of ReactJIT for developers who need to understand
 what happens beneath the component API. Topics include the complete Lua runtime module
 inventory, focus management and controller navigation, the Lua-owned interaction pattern
 for zero-bridge-traffic primitives, networking (HTTP, WebSockets, proxies), Tor integration,

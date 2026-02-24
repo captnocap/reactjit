@@ -1,6 +1,6 @@
 === METADATA ===
 title: Layout System
-description: Overview of the iLoveReact layout system, based on Flexbox with fixed-canvas semantics.
+description: Overview of the ReactJIT layout system, based on Flexbox with fixed-canvas semantics.
 category: Layout
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: layout, flexbox, sizing, spacing, visual, text, transforms, critical rules
@@ -8,7 +8,7 @@ related: flexbox.txt, sizing.txt, spacing.txt, visual.txt, text-styling.txt, tra
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact uses a Flexbox layout model for all targets, similar to React Native. Every Box
+ReactJIT uses a Flexbox layout model for all targets, similar to React Native. Every Box
 is a flex container by default, with flexDirection defaulting to 'column'. There are no
 block, inline, or grid display modes -- everything is flex. The layout engine runs on the
 Lua side (layout.lua), computing absolute positions and sizes from the style tree that
@@ -16,9 +16,9 @@ React produces.
 
 Because Love2D renders to a fixed canvas (not a scrolling web page), the layout system
 demands explicit sizing at the root level and encourages explicit dimensions throughout.
-The static linter (ilovereact lint) enforces critical layout rules at build time, catching
+The static linter (reactjit lint) enforces critical layout rules at build time, catching
 the most common mistakes before they reach the renderer. Understanding these rules is
-essential for productive development with iLoveReact.
+essential for productive development with ReactJIT.
 
 === API / SYNTAX ===
 The layout system is configured entirely through the `style` prop on Box, Text, and Image
@@ -35,12 +35,12 @@ Layout-related style categories:
 === EXAMPLES ===
 Example 1: Full-viewport root container
 ---
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '@reactjit/core';
 
 function App() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#1e1e2e' }}>
-      <Text style={{ fontSize: 24, color: '#cdd6f4' }}>Hello, iLoveReact</Text>
+      <Text style={{ fontSize: 24, color: '#cdd6f4' }}>Hello, ReactJIT</Text>
     </Box>
   );
 }

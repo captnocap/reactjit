@@ -12,7 +12,7 @@ Portal renders children at the top level of the render tree, escaping the normal
 
 === API / SYNTAX ===
 ```tsx
-import { Portal, PortalHost } from '@ilovereact/core';
+import { Portal, PortalHost } from '@reactjit/core';
 ```
 
 **Portal Props**
@@ -33,7 +33,7 @@ import { Portal, PortalHost } from '@ilovereact/core';
 Example 1: Basic Portal Usage
 ---
 ```tsx
-import { Portal, Box, Text } from '@ilovereact/core';
+import { Portal, Box, Text } from '@reactjit/core';
 
 function App() {
   const [showOverlay, setShowOverlay] = useState(false);
@@ -86,10 +86,10 @@ Platforms: love2d, web, terminal, cc, nvim, hs, awesome
 Example 2: Setting Up PortalHost in Native Mode
 ---
 ```tsx
-import { PortalHost, Box, Text } from '@ilovereact/core';
-import { createRoot } from '@ilovereact/native';
-import { NativeBridge } from '@ilovereact/native';
-import { BridgeProvider, RendererProvider } from '@ilovereact/core';
+import { PortalHost, Box, Text } from '@reactjit/core';
+import { createRoot } from '@reactjit/native';
+import { NativeBridge } from '@reactjit/native';
+import { BridgeProvider, RendererProvider } from '@reactjit/core';
 
 function App() {
   return (
@@ -120,7 +120,7 @@ Platforms: love2d, terminal, cc, nvim, hs, awesome
 Example 3: Named Portals
 ---
 ```tsx
-import { Portal, Box, Text } from '@ilovereact/core';
+import { Portal, Box, Text } from '@reactjit/core';
 
 function NotificationSystem() {
   return (
@@ -161,7 +161,7 @@ Platforms: love2d, web, terminal, cc, nvim, hs, awesome
 Example 4: Portal with Modal Component
 ---
 ```tsx
-import { Modal, Box, Text, Pressable } from '@ilovereact/core';
+import { Modal, Box, Text, Pressable } from '@reactjit/core';
 
 function ModalDemo() {
   const [visible, setVisible] = useState(false);

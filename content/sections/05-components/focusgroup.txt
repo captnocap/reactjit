@@ -14,7 +14,7 @@ When a FocusGroup is bound to a specific controller via the controller prop, onl
 
 === API / SYNTAX ===
 ```tsx
-import { FocusGroup } from '@ilovereact/core';
+import { FocusGroup } from '@reactjit/core';
 ```
 
 ```tsx

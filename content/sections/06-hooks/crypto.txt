@@ -8,7 +8,7 @@ related: useWebhook, useFetch, useStorage
 difficulty: intermediate
 
 === OVERVIEW ===
-The @ilovereact/crypto package exposes pure-JavaScript cryptographic primitives that work across every iLoveReact target, including QuickJS inside Love2D. All implementations come from the @noble suite — a set of audited, dependency-free libraries that are widely used in production (millions of weekly downloads, no native code). The package is organized into four functional groups: hashing (sha256, sha512, BLAKE2b/2s/3, HMAC), symmetric encryption (AES-256-GCM, ChaCha20-Poly1305 with scrypt KDF), asymmetric signatures/key exchange (Ed25519, X25519), and token generation. Encoding utilities (hex, base64) are also re-exported. None of these are React hooks — they are synchronous or Promise-returning functions you call directly from hooks, effects, or event handlers.
+The @reactjit/crypto package exposes pure-JavaScript cryptographic primitives that work across every ReactJIT target, including QuickJS inside Love2D. All implementations come from the @noble suite — a set of audited, dependency-free libraries that are widely used in production (millions of weekly downloads, no native code). The package is organized into four functional groups: hashing (sha256, sha512, BLAKE2b/2s/3, HMAC), symmetric encryption (AES-256-GCM, ChaCha20-Poly1305 with scrypt KDF), asymmetric signatures/key exchange (Ed25519, X25519), and token generation. Encoding utilities (hex, base64) are also re-exported. None of these are React hooks — they are synchronous or Promise-returning functions you call directly from hooks, effects, or event handlers.
 
 === API / SYNTAX ===
 
@@ -16,7 +16,7 @@ The @ilovereact/crypto package exposes pure-JavaScript cryptographic primitives 
 
 Compute a SHA-256 digest.
 
-  import { sha256 } from '@ilovereact/crypto';
+  import { sha256 } from '@reactjit/crypto';
 
   const result: HashResult = sha256(input: string | Uint8Array);
 
@@ -32,7 +32,7 @@ Returns: HashResult
 
 Compute a SHA-512 digest.
 
-  import { sha512 } from '@ilovereact/crypto';
+  import { sha512 } from '@reactjit/crypto';
 
   const result: HashResult = sha512(input: string | Uint8Array);
 
@@ -45,7 +45,7 @@ Returns: HashResult (128-char hex, 64 raw bytes)
 
 BLAKE2b with configurable output length. Default: 32 bytes.
 
-  import { hash_blake2b } from '@ilovereact/crypto';
+  import { hash_blake2b } from '@reactjit/crypto';
 
   const result: HashResult = hash_blake2b(input: string | Uint8Array, bytes?: number);
 
@@ -59,7 +59,7 @@ Returns: HashResult
 
 BLAKE2s (always 32 bytes). Faster than BLAKE2b on 32-bit platforms.
 
-  import { hash_blake2s } from '@ilovereact/crypto';
+  import { hash_blake2s } from '@reactjit/crypto';
 
   const result: HashResult = hash_blake2s(input: string | Uint8Array);
 
@@ -72,7 +72,7 @@ Returns: HashResult
 
 BLAKE3 with configurable output length. Default: 32 bytes. Fastest of the three BLAKE variants.
 
-  import { hash_blake3 } from '@ilovereact/crypto';
+  import { hash_blake3 } from '@reactjit/crypto';
 
   const result: HashResult = hash_blake3(input: string | Uint8Array, bytes?: number);
 
@@ -86,7 +86,7 @@ Returns: HashResult
 
 HMAC-SHA256. Use for message authentication, API request signing, and webhook signature generation.
 
-  import { hmacSHA256 } from '@ilovereact/crypto';
+  import { hmacSHA256 } from '@reactjit/crypto';
 
   const result: HashResult = hmacSHA256(key: string | Uint8Array, message: string | Uint8Array);
 
@@ -100,7 +100,7 @@ Returns: HashResult (64-char hex)
 
 HMAC-SHA512. Same semantics as hmacSHA256 with a 128-char hex output.
 
-  import { hmacSHA512 } from '@ilovereact/crypto';
+  import { hmacSHA512 } from '@reactjit/crypto';
 
   const result: HashResult = hmacSHA512(key: string | Uint8Array, message: string | Uint8Array);
 
@@ -110,7 +110,7 @@ Returns: HashResult
 
 Compare two byte sequences in constant time. Safe for comparing secrets — the comparison time does not depend on where the first difference appears.
 
-  import { timingSafeEqual } from '@ilovereact/crypto';
+  import { timingSafeEqual } from '@reactjit/crypto';
 
   const equal: boolean = timingSafeEqual(a: string | Uint8Array, b: string | Uint8Array);
 
@@ -124,7 +124,7 @@ Returns: boolean — false immediately (with length leak) if lengths differ; oth
 
 Password-based authenticated encryption using scrypt KDF + AES-256-GCM (default) or ChaCha20-Poly1305. Returns a JSON-serializable EncryptedData envelope that bundles the algorithm, ciphertext, nonce, salt, and KDF parameters together so the receiver does not need to remember them separately.
 
-  import { encrypt } from '@ilovereact/crypto';
+  import { encrypt } from '@reactjit/crypto';
 
   const envelope: EncryptedData = encrypt(plaintext: string, password: string, options?: EncryptOptions);
 
@@ -149,7 +149,7 @@ Returns: EncryptedData
 
 Decrypt an EncryptedData envelope produced by encrypt. Reads KDF parameters from the envelope, re-derives the key, and authenticates + decrypts.
 
-  import { decrypt } from '@ilovereact/crypto';
+  import { decrypt } from '@reactjit/crypto';
 
   const plaintext: string = decrypt(data: EncryptedData, password: string);
 
@@ -164,7 +164,7 @@ Throws on wrong password (authentication tag mismatch) or malformed input.
 
 Encrypt raw bytes with a caller-managed 32-byte key. No KDF step. Use this when you already have a key from a Diffie-Hellman exchange or another key derivation flow.
 
-  import { encryptRaw } from '@ilovereact/crypto';
+  import { encryptRaw } from '@reactjit/crypto';
 
   const { ciphertext, nonce } = encryptRaw(
     plaintext: Uint8Array,
@@ -183,7 +183,7 @@ Returns: { ciphertext: Uint8Array, nonce: Uint8Array }
 
 Decrypt raw bytes with a caller-managed key and nonce.
 
-  import { decryptRaw } from '@ilovereact/crypto';
+  import { decryptRaw } from '@reactjit/crypto';
 
   const plaintext: Uint8Array = decryptRaw(
     ciphertext: Uint8Array,
@@ -205,7 +205,7 @@ Throws on authentication failure.
 
 Generate an Ed25519 key pair for digital signatures.
 
-  import { generateSigningKeys } from '@ilovereact/crypto';
+  import { generateSigningKeys } from '@reactjit/crypto';
 
   const keys: KeyPair = generateSigningKeys();
 
@@ -220,7 +220,7 @@ Returns: KeyPair
 
 Sign a message string with an Ed25519 private key.
 
-  import { sign } from '@ilovereact/crypto';
+  import { sign } from '@reactjit/crypto';
 
   const signed: SignedMessage = sign(privateKeyHex: string, message: string);
 
@@ -238,7 +238,7 @@ Returns: SignedMessage
 
 Verify a SignedMessage produced by sign.
 
-  import { verify } from '@ilovereact/crypto';
+  import { verify } from '@reactjit/crypto';
 
   const valid: boolean = verify(signed: SignedMessage);
 
@@ -251,7 +251,7 @@ Returns: boolean
 
 Verify a detached signature (when you have the three components separately rather than a SignedMessage envelope).
 
-  import { verifyDetached } from '@ilovereact/crypto';
+  import { verifyDetached } from '@reactjit/crypto';
 
   const valid: boolean = verifyDetached(
     message: string,
@@ -270,7 +270,7 @@ Returns: boolean
 
 Generate an X25519 key pair for Diffie-Hellman key exchange.
 
-  import { generateDHKeys } from '@ilovereact/crypto';
+  import { generateDHKeys } from '@reactjit/crypto';
 
   const keys: KeyPair = generateDHKeys();
 
@@ -285,7 +285,7 @@ Returns: KeyPair
 
 Compute a shared secret from your X25519 private key and the other party's public key. Both sides derive the same secret without transmitting it.
 
-  import { diffieHellman } from '@ilovereact/crypto';
+  import { diffieHellman } from '@reactjit/crypto';
 
   const sharedSecret: string = diffieHellman(privateKeyHex: string, publicKeyHex: string);
 
@@ -299,7 +299,7 @@ Returns: string — hex-encoded 32-byte shared secret
 
 Generate cryptographically random bytes. Re-exported from @noble/hashes.
 
-  import { randomBytes } from '@ilovereact/crypto';
+  import { randomBytes } from '@reactjit/crypto';
 
   const bytes: Uint8Array = randomBytes(length: number);
 
@@ -312,7 +312,7 @@ Returns: Uint8Array
 
 Generate a cryptographically random hex string. Use for API keys, session IDs, and CSRF tokens.
 
-  import { randomToken } from '@ilovereact/crypto';
+  import { randomToken } from '@reactjit/crypto';
 
   const token: string = randomToken(bytes?: number);
 
@@ -325,7 +325,7 @@ Returns: string — lowercase hex (length = bytes * 2)
 
 Generate a cryptographically random base64 string.
 
-  import { randomBase64 } from '@ilovereact/crypto';
+  import { randomBase64 } from '@reactjit/crypto';
 
   const token: string = randomBase64(bytes?: number);
 
@@ -338,7 +338,7 @@ Returns: string
 
 Generate a cryptographically random alphanumeric string. URL-safe with no special characters.
 
-  import { randomId } from '@ilovereact/crypto';
+  import { randomId } from '@reactjit/crypto';
 
   const id: string = randomId(length?: number);
 
@@ -349,7 +349,7 @@ Returns: string — alphanumeric characters only (A-Z, a-z, 0-9)
 
 --- Encoding utilities ---
 
-  import { toHex, fromHex, toBase64, fromBase64 } from '@ilovereact/crypto';
+  import { toHex, fromHex, toBase64, fromBase64 } from '@reactjit/crypto';
 
   toHex(bytes: Uint8Array): string            — Uint8Array to lowercase hex
   fromHex(hex: string): Uint8Array            — hex string to Uint8Array
@@ -362,9 +362,9 @@ Returns: string — alphanumeric characters only (A-Z, a-z, 0-9)
 
 Hash files on disk and verify them later to detect tampering:
 
-  import { sha256, toHex } from '@ilovereact/crypto';
+  import { sha256, toHex } from '@reactjit/crypto';
   import { useState } from 'react';
-  import { Box, Text } from '@ilovereact/core';
+  import { Box, Text } from '@reactjit/core';
 
   // Precomputed SHA-256 of known-good assets
   const EXPECTED: Record<string, string> = {
@@ -392,9 +392,9 @@ Hash files on disk and verify them later to detect tampering:
 
 Encrypt user settings with a password before writing to disk, decrypt on load:
 
-  import { encrypt, decrypt } from '@ilovereact/crypto';
+  import { encrypt, decrypt } from '@reactjit/crypto';
   import { useState } from 'react';
-  import { Box, Text } from '@ilovereact/core';
+  import { Box, Text } from '@reactjit/core';
 
   // Encryption is synchronous but scrypt is CPU-heavy — run in an effect or worker
   function SettingsPanel({ password }: { password: string }) {
@@ -446,7 +446,7 @@ Use X25519 DH to establish a shared secret, then encrypt each message with that 
     randomBytes,
     toHex,
     fromHex,
-  } from '@ilovereact/crypto';
+  } from '@reactjit/crypto';
 
   // Each peer generates a DH key pair and publishes their public key
   const alice = generateDHKeys();

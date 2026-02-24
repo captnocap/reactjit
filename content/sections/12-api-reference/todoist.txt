@@ -8,11 +8,11 @@ related: useNotionDatabase, useGoogleCalendarEvents
 difficulty: beginner
 
 === OVERVIEW ===
-The Todoist hooks in @ilovereact/apis use the Todoist REST API v2. Authentication is a single Bearer token found under Settings > Integrations > Developer in the Todoist web app.
+The Todoist hooks in @reactjit/apis use the Todoist REST API v2. Authentication is a single Bearer token found under Settings > Integrations > Developer in the Todoist web app.
 
 Read hooks (useTodoistTasks, useTodoistProjects, etc.) are reactive — they fetch on mount and expose a refetch() method. The useTodoistMutation hook returns imperative functions for write operations: creating tasks, marking them complete, reopening, updating, and deleting.
 
-All read hooks accept null as the token argument to suppress fetching, which is the standard pattern for conditional data loading in iLoveReact.
+All read hooks accept null as the token argument to suppress fetching, which is the standard pattern for conditional data loading in ReactJIT.
 
 === API / SYNTAX ===
 
@@ -20,7 +20,7 @@ All read hooks accept null as the token argument to suppress fetching, which is 
 
 Fetch tasks with optional filtering by project, label, or Todoist filter expression.
 
-  import { useTodoistTasks } from '@ilovereact/apis';
+  import { useTodoistTasks } from '@reactjit/apis';
 
   const result: APIResult<TodoistTask[]> = useTodoistTasks(
     token: string | null,
@@ -59,7 +59,7 @@ TodoistTask fields:
 
 Fetch all projects in the account.
 
-  import { useTodoistProjects } from '@ilovereact/apis';
+  import { useTodoistProjects } from '@reactjit/apis';
 
   const result: APIResult<TodoistProject[]> = useTodoistProjects(
     token: string | null,
@@ -84,7 +84,7 @@ TodoistProject fields:
 
 Fetch sections within a project.
 
-  import { useTodoistSections } from '@ilovereact/apis';
+  import { useTodoistSections } from '@reactjit/apis';
 
   const result: APIResult<TodoistSection[]> = useTodoistSections(
     token: string | null,
@@ -107,7 +107,7 @@ TodoistSection fields:
 
 Fetch all personal labels in the account.
 
-  import { useTodoistLabels } from '@ilovereact/apis';
+  import { useTodoistLabels } from '@reactjit/apis';
 
   const result: APIResult<TodoistLabel[]> = useTodoistLabels(
     token: string | null,
@@ -129,7 +129,7 @@ TodoistLabel fields:
 
 Fetch comments for a task or project.
 
-  import { useTodoistComments } from '@ilovereact/apis';
+  import { useTodoistComments } from '@reactjit/apis';
 
   const result: APIResult<TodoistComment[]> = useTodoistComments(
     token: string | null,
@@ -155,7 +155,7 @@ TodoistComment fields:
 
 Get imperative operations for creating and managing tasks.
 
-  import { useTodoistMutation } from '@ilovereact/apis';
+  import { useTodoistMutation } from '@reactjit/apis';
 
   const mutation = useTodoistMutation(token: string | null);
 
@@ -186,8 +186,8 @@ Returns: object
 
 Show tasks due today or overdue, with a tap-to-complete interaction:
 
-  import { useTodoistTasks, useTodoistMutation } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useTodoistTasks, useTodoistMutation } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const TOKEN = process.env.TODOIST_TOKEN;
 
@@ -234,8 +234,8 @@ Show tasks due today or overdue, with a tap-to-complete interaction:
 
 Create a new task with a priority and natural-language due date:
 
-  import { useTodoistMutation, useTodoistProjects } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useTodoistMutation, useTodoistProjects } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
   import { useState } from 'react';
 
   const TOKEN = process.env.TODOIST_TOKEN;

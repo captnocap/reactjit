@@ -12,7 +12,7 @@ usePixelArt converts a built-in symbol name or an array of string art lines into
 
 === API / SYNTAX ===
 ```tsx
-import { usePixelArt, PixelArt, getPixelArtSymbols } from '@ilovereact/core';
+import { usePixelArt, PixelArt, getPixelArtSymbols } from '@reactjit/core';
 ```
 
 Hook signature:
@@ -60,7 +60,7 @@ getPixelArtSymbols(): string[]
 Example 1: Built-in play icon in a media control bar
 ---
 ```tsx
-import { usePixelArt } from '@ilovereact/core';
+import { usePixelArt } from '@reactjit/core';
 
 function PlayButton({ onPress }: { onPress: () => void }) {
   const icon = usePixelArt('play', { size: 4, color: '#ffffff' });
@@ -88,7 +88,7 @@ Example 2: State-toggled mute/volume icon
 ---
 ```tsx
 import { useState } from 'react';
-import { usePixelArt } from '@ilovereact/core';
+import { usePixelArt } from '@reactjit/core';
 
 function VolumeControl({ onToggle }: { onToggle: (muted: boolean) => void }) {
   const [muted, setMuted] = useState(false);
@@ -117,7 +117,7 @@ Platforms: All
 Example 3: Multi-color custom heart art with per-row gradient
 ---
 ```tsx
-import { usePixelArt } from '@ilovereact/core';
+import { usePixelArt } from '@reactjit/core';
 
 function HeartIcon() {
   const heart = usePixelArt(
@@ -144,7 +144,7 @@ Platforms: All
 Example 4: PixelArt component in a toolbar
 ---
 ```tsx
-import { PixelArt } from '@ilovereact/core';
+import { PixelArt } from '@reactjit/core';
 
 function Toolbar() {
   return (
@@ -162,7 +162,7 @@ Platforms: All
 Example 5: Enumerate all built-in symbols in a gallery
 ---
 ```tsx
-import { getPixelArtSymbols, PixelArt } from '@ilovereact/core';
+import { getPixelArtSymbols, PixelArt } from '@reactjit/core';
 
 function SymbolGallery() {
   const names = getPixelArtSymbols();
@@ -185,7 +185,7 @@ Platforms: All
 Example 6: Custom logo art with pixel gap for retro look
 ---
 ```tsx
-import { usePixelArt } from '@ilovereact/core';
+import { usePixelArt } from '@reactjit/core';
 
 function LogoBanner() {
   const logo = usePixelArt(

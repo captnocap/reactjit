@@ -11,7 +11,7 @@ difficulty: beginner
 FlexColumn is a convenience component that wraps Box with flexDirection='column' pre-configured. It provides simplified props for common vertical layout tasks: gap spacing, vertical justification, and horizontal alignment. While column is the default flexDirection for Box, FlexColumn offers a cleaner API when you want explicit vertical stacking with readable prop names.
 
 === API / SYNTAX ===
-import { FlexColumn } from '@ilovereact/core';
+import { FlexColumn } from '@reactjit/core';
 
 Props:
 | Prop | Type | Required | Default | Description |
@@ -25,7 +25,7 @@ Props:
 === EXAMPLES ===
 Example 1: Basic vertical stack with spacing
 ---
-import { FlexColumn, Text } from '@ilovereact/core';
+import { FlexColumn, Text } from '@reactjit/core';
 
 <FlexColumn gap={12}>
   <Text fontSize={20}>Heading</Text>
@@ -37,7 +37,7 @@ Platforms: All
 
 Example 2: Centered card layout
 ---
-import { FlexColumn, Text, Box } from '@ilovereact/core';
+import { FlexColumn, Text, Box } from '@reactjit/core';
 
 <FlexColumn
   align="center"
@@ -58,7 +58,7 @@ Platforms: All
 
 Example 3: Space-between full height layout
 ---
-import { FlexColumn, Text } from '@ilovereact/core';
+import { FlexColumn, Text } from '@reactjit/core';
 
 <FlexColumn justify="space-between" style={{ width: '100%', height: '100%' }}>
   <Text fontSize={18}>Header</Text>
@@ -70,7 +70,7 @@ Platforms: All
 
 Example 4: Left-aligned form layout
 ---
-import { FlexColumn, Text, TextInput } from '@ilovereact/core';
+import { FlexColumn, Text, TextInput } from '@reactjit/core';
 
 <FlexColumn gap={16} align="flex-start" style={{ width: 300, padding: 20 }}>
   <Text fontSize={14}>Name:</Text>
@@ -91,7 +91,7 @@ Platforms: All
 
 Example 5: Vertically centered viewport content
 ---
-import { FlexColumn, Text, Box } from '@ilovereact/core';
+import { FlexColumn, Text, Box } from '@reactjit/core';
 
 <FlexColumn
   justify="center"

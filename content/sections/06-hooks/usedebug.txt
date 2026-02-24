@@ -12,7 +12,7 @@ useDebug registers arbitrary component data under a named key on `globalThis.__d
 
 === API / SYNTAX ===
 ```tsx
-import { useDebug, getDebugData, registerDebug } from '@ilovereact/core';
+import { useDebug, getDebugData, registerDebug } from '@reactjit/core';
 ```
 
 Hook signature:
@@ -51,7 +51,7 @@ Console access patterns:
 Example 1: Basic component state inspection
 ---
 ```tsx
-import { useDebug } from '@ilovereact/core';
+import { useDebug } from '@reactjit/core';
 
 function PlayerHUD({ player }: { player: Player }) {
   const [health, setHealth] = useState(player.maxHealth);
@@ -78,7 +78,7 @@ Example 2: FPS and frame counter via watch expression
 ---
 ```tsx
 import { useRef } from 'react';
-import { useDebug } from '@ilovereact/core';
+import { useDebug } from '@reactjit/core';
 
 function GameLoop({ deltaTime }: { deltaTime: number }) {
   const frameCount = useRef(0);
@@ -101,7 +101,7 @@ Platforms: All
 Example 3: Multiple components sharing the debug registry
 ---
 ```tsx
-import { useDebug } from '@ilovereact/core';
+import { useDebug } from '@reactjit/core';
 
 function Inventory({ items }: { items: Item[] }) {
   useDebug('Inventory', {
@@ -129,7 +129,7 @@ Platforms: All
 Example 4: Imperative registration from a game service
 ---
 ```tsx
-import { registerDebug } from '@ilovereact/core';
+import { registerDebug } from '@reactjit/core';
 
 const gameState = { running: true, paused: false, tickCount: 0 };
 
@@ -153,7 +153,7 @@ Platforms: All
 Example 5: Read all debug data from tooling code
 ---
 ```tsx
-import { getDebugData } from '@ilovereact/core';
+import { getDebugData } from '@reactjit/core';
 
 function DebugSnapshot() {
   const snapshot = getDebugData();

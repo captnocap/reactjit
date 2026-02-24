@@ -49,7 +49,10 @@ local function initSDL2Deps()
     void      SDL_SetWindowTitle(SDL_Window *win, const char *title);
     void      SDL_SetWindowSize(SDL_Window *win, int w, int h);
     void      SDL_SetWindowPosition(SDL_Window *win, int x, int y);
+    void      SDL_GetWindowPosition(SDL_Window *win, int *x, int *y);
     int       SDL_GL_MakeCurrent(SDL_Window *win, SDL_GLContext ctx);
+    void      SDL_SetWindowAlwaysOnTop(SDL_Window *win, int on_top);
+    void      SDL_RaiseWindow(SDL_Window *win);
   ]])
 end
 
@@ -417,10 +420,36 @@ end
 
 --- Set a window's position.
 function WindowManager.setPosition(entry, x, y)
+  x, y = math.floor(x), math.floor(y)
   if backend == "sdl2" and entry.sdlWindow then
     sdl.SDL_SetWindowPosition(entry.sdlWindow, x, y)
   end
   -- Love2D secondary windows: no position API yet
+end
+
+--- Get a window's current position. Returns x, y.
+function WindowManager.getPosition(entry)
+  if backend == "sdl2" and entry.sdlWindow then
+    local px = ffi.new("int[1]")
+    local py = ffi.new("int[1]")
+    sdl.SDL_GetWindowPosition(entry.sdlWindow, px, py)
+    return px[0], py[0]
+  end
+  return 0, 0
+end
+
+--- Set whether a window stays on top of all others (SDL2 2.0.16+).
+function WindowManager.setAlwaysOnTop(entry, onTop)
+  if backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_SetWindowAlwaysOnTop(entry.sdlWindow, onTop and 1 or 0)
+  end
+end
+
+--- Raise a window to the front and give it input focus.
+function WindowManager.raise(entry)
+  if backend == "sdl2" and entry.sdlWindow then
+    sdl.SDL_RaiseWindow(entry.sdlWindow)
+  end
 end
 
 --- Activate a secondary window's GL context (Love2D backend).
@@ -471,7 +500,6 @@ end
 function WindowManager.animateTo(entry, w, h, durationMs)
   w, h = math.floor(w), math.floor(h)
   if w == entry.width and h == entry.height then return end
-  -- Cancel any in-flight animation on this entry
   if not entry.anim then
     activeAnimations = activeAnimations + 1
   end
@@ -480,7 +508,25 @@ function WindowManager.animateTo(entry, w, h, durationMs)
     startH   = entry.height,
     targetW  = w,
     targetH  = h,
-    duration = (durationMs or 300) / 1000, -- convert to seconds
+    duration = (durationMs or 300) / 1000,
+    elapsed  = 0,
+  }
+end
+
+--- Animate a window to a target position over `durationMs` milliseconds.
+function WindowManager.animatePositionTo(entry, x, y, durationMs)
+  x, y = math.floor(x), math.floor(y)
+  local cx, cy = WindowManager.getPosition(entry)
+  if x == cx and y == cy then return end
+  if not entry.posAnim then
+    activeAnimations = activeAnimations + 1
+  end
+  entry.posAnim = {
+    startX   = cx,
+    startY   = cy,
+    targetX  = x,
+    targetY  = y,
+    duration = (durationMs or 300) / 1000,
     elapsed  = 0,
   }
 end
@@ -492,11 +538,11 @@ function WindowManager.tick(dt)
 
   local still = false
   for _, entry in pairs(windows) do
+    -- Size animation
     local a = entry.anim
     if a then
       a.elapsed = a.elapsed + dt
       if a.elapsed >= a.duration then
-        -- Snap to final size and clear animation
         WindowManager.setSize(entry, a.targetW, a.targetH)
         entry.anim = nil
         activeAnimations = activeAnimations - 1
@@ -505,6 +551,23 @@ function WindowManager.tick(dt)
         local cw = a.startW + (a.targetW - a.startW) * t
         local ch = a.startH + (a.targetH - a.startH) * t
         WindowManager.setSize(entry, cw, ch)
+        still = true
+      end
+    end
+
+    -- Position animation
+    local p = entry.posAnim
+    if p then
+      p.elapsed = p.elapsed + dt
+      if p.elapsed >= p.duration then
+        WindowManager.setPosition(entry, p.targetX, p.targetY)
+        entry.posAnim = nil
+        activeAnimations = activeAnimations - 1
+      else
+        local t = easeOutCubic(p.elapsed / p.duration)
+        local cx = p.startX + (p.targetX - p.startX) * t
+        local cy = p.startY + (p.targetY - p.startY) * t
+        WindowManager.setPosition(entry, cx, cy)
         still = true
       end
     end

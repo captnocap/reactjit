@@ -75,7 +75,7 @@ Animation interface:
 Example 1: Basic timing animation
 ---
 import { useEffect } from 'react';
-import { useAnimation, Box, Easing } from '@ilovereact/core';
+import { useAnimation, Box, Easing } from '@reactjit/core';
 
 function SlideIn() {
   const [xAnim, xValue] = useAnimation(-200);
@@ -103,7 +103,7 @@ Platforms: All
 Example 2: Spring animation
 ---
 import { useEffect, useState } from 'react';
-import { useAnimation, Box } from '@ilovereact/core';
+import { useAnimation, Box } from '@reactjit/core';
 
 function BounceBox() {
   const [scaleAnim, scaleValue] = useAnimation(1);
@@ -134,7 +134,7 @@ Platforms: All
 
 Example 3: Interpolation
 ---
-import { useAnimation, Box, Text } from '@ilovereact/core';
+import { useAnimation, Box, Text } from '@reactjit/core';
 
 function ProgressLabel() {
   const [progress, progressValue] = useAnimation(0);
@@ -169,7 +169,7 @@ Platforms: All
 Example 4: Chained animations with callback
 ---
 import { useEffect } from 'react';
-import { useAnimation, Box } from '@ilovereact/core';
+import { useAnimation, Box } from '@reactjit/core';
 
 function ChainedAnimation() {
   const [xAnim, xValue] = useAnimation(0);

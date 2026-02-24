@@ -13,7 +13,7 @@ Radio and RadioGroup work together for exclusive selection. RadioGroup wraps a s
 RadioGroup supports both controlled and uncontrolled modes. In controlled mode, pass `value` and respond to `onValueChange`. In uncontrolled mode, optionally set `defaultValue`. Each Radio reads the group state from React context and renders a circular indicator that fills when its value matches the group's selected value.
 
 === API / SYNTAX ===
-Import: import { Radio, RadioGroup } from '@ilovereact/core';
+Import: import { Radio, RadioGroup } from '@reactjit/core';
 
 Usage:
 ```tsx

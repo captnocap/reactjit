@@ -261,6 +261,30 @@ local function syncMap(node)
   m.polygons = {}
   m.geojsonLayers = {}
 
+  if props.markers then
+    for i, marker in ipairs(props.markers) do
+      m.markers["prop_" .. i] = {
+        lat = marker.lat or marker[1] or 0,
+        lng = marker.lng or marker[2] or 0,
+        anchor = marker.anchor or "bottom-center",
+        draggable = marker.draggable or false,
+      }
+    end
+  end
+
+  if props.polylines then
+    for i, poly in ipairs(props.polylines) do
+      m.polylines["prop_" .. i] = {
+        positions = poly.positions or {},
+        color = poly.color or "#3498db",
+        width = poly.width or 2,
+        dashArray = poly.dashArray,
+        animated = poly.animated or false,
+        arrowheads = poly.arrowheads or false,
+      }
+    end
+  end
+
   local function walkChildren(parent)
     for _, child in ipairs(parent.children or {}) do
       local cp = child.props or {}

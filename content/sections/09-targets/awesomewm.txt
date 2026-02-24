@@ -1,6 +1,6 @@
 === METADATA ===
 title: AwesomeWM Target
-description: iLoveReact renderer for AwesomeWM Linux tiling window manager widgets
+description: ReactJIT renderer for AwesomeWM Linux tiling window manager widgets
 category: Targets
 platforms: awesome
 keywords: awesomewm, awesome, linux, tiling, wm, cairo, pango, stdio, widgets
@@ -8,7 +8,7 @@ related: hammerspoon, love2d, neovim
 difficulty: intermediate
 
 === OVERVIEW ===
-The AwesomeWM target (@ilovereact/awesome) renders iLoveReact components as widgets in
+The AwesomeWM target (@reactjit/awesome) renders ReactJIT components as widgets in
 the Awesome tiling window manager on Linux. Rendering uses Cairo for 2D graphics and
 Pango for text shaping, giving high-quality output with full antialiasing.
 Communication happens via stdio between the Node.js process and the AwesomeWM Lua
@@ -29,7 +29,7 @@ Requirements:
 === EXAMPLES ===
 Example 1: AwesomeWM Widget Entry Point
 ---
-import { createAwesomeApp } from '@ilovereact/awesome';
+import { createAwesomeApp } from '@reactjit/awesome';
 import App from './App';
 
 const app = createAwesomeApp();

@@ -14,7 +14,7 @@ The component and hook use a "filled pixel" convention: any non-space character 
 
 === API / SYNTAX ===
 ```tsx
-import { PixelArt, usePixelArt, getPixelArtSymbols } from '@ilovereact/core';
+import { PixelArt, usePixelArt, getPixelArtSymbols } from '@reactjit/core';
 ```
 
 ```tsx
@@ -65,7 +65,7 @@ play, pause, stop, skip-next, skip-prev, check, close, arrow-up, arrow-down, arr
 Example 1: Built-in play icon
 ---
 ```tsx
-import { PixelArt, Box } from '@ilovereact/core';
+import { PixelArt, Box } from '@reactjit/core';
 
 function PlayButton() {
   return (
@@ -81,7 +81,7 @@ Platforms: All
 Example 2: Custom string art (single color)
 ---
 ```tsx
-import { PixelArt } from '@ilovereact/core';
+import { PixelArt } from '@reactjit/core';
 
 function CustomIcon() {
   const logo = [
@@ -101,7 +101,7 @@ Platforms: All
 Example 3: Multi-color gradient heart
 ---
 ```tsx
-import { PixelArt } from '@ilovereact/core';
+import { PixelArt } from '@reactjit/core';
 
 function Heart() {
   const heartArt = [
@@ -138,7 +138,7 @@ Example 4: Using the hook for dynamic icons
 ---
 ```tsx
 import { useState } from 'react';
-import { usePixelArt, Box, Pressable } from '@ilovereact/core';
+import { usePixelArt, Box, Pressable } from '@reactjit/core';
 
 function MediaControls() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -163,7 +163,7 @@ Platforms: All
 Example 5: Icon grid with all built-in symbols
 ---
 ```tsx
-import { getPixelArtSymbols, PixelArt, Box, Text } from '@ilovereact/core';
+import { getPixelArtSymbols, PixelArt, Box, Text } from '@reactjit/core';
 
 function IconGallery() {
   const symbols = getPixelArtSymbols();
@@ -189,7 +189,7 @@ Example 6: Animated arrow with pixel gap
 ---
 ```tsx
 import { useState, useEffect } from 'react';
-import { PixelArt, Box } from '@ilovereact/core';
+import { PixelArt, Box } from '@reactjit/core';
 
 function AnimatedArrow() {
   const [direction, setDirection] = useState<'arrow-up' | 'arrow-down' | 'arrow-left' | 'arrow-right'>('arrow-right');
@@ -217,7 +217,7 @@ Platforms: All
 Example 7: Custom navigation chevrons
 ---
 ```tsx
-import { PixelArt, Box, Text, Pressable } from '@ilovereact/core';
+import { PixelArt, Box, Text, Pressable } from '@reactjit/core';
 
 function Pagination() {
   return (
@@ -245,7 +245,7 @@ Platforms: All
 === PLATFORM NOTES ===
 - **Love2D**: PixelArt is essential for Love2D because the default font lacks Unicode symbol support. All UI controls (play buttons, checkmarks, arrows) should use PixelArt or custom Box-based shapes.
 - **Web**: PixelArt works but is unnecessary if you have a web font that includes Unicode symbols. Prefer native symbols for performance. PixelArt is useful for retro/pixel aesthetics or cross-target consistency.
-- **Grid targets**: Not currently supported. PixelArt is only available in `@ilovereact/core` (Love2D and web targets). Terminal/ComputerCraft targets can render Unicode symbols natively.
+- **Grid targets**: Not currently supported. PixelArt is only available in `@reactjit/core` (Love2D and web targets). Terminal/ComputerCraft targets can render Unicode symbols natively.
 
 === CRITICAL RULES ===
 - **Never put Unicode symbols in `<Text>`** — Characters like ▶ ⏸ █ ● ✓ arrows, dingbats, and geometric shapes won't render in Love2D's default font. Always use PixelArt or Box-based geometry instead. The linter enforces this via `no-unicode-symbol-in-text`.

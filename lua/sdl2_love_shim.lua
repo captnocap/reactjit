@@ -242,6 +242,7 @@ function graphics.push(mode)
     scissorActive = _scissorActive,
     scissorX = _scissorX, scissorY = _scissorY,
     scissorW = _scissorW, scissorH = _scissorH,
+    canvas = CanvasMod.getCurrent(),
   })
   GL.glPushMatrix()
 end
@@ -256,6 +257,11 @@ function graphics.pop()
       graphics.setScissor(s.scissorX, s.scissorY, s.scissorW, s.scissorH)
     else
       graphics.setScissor()
+    end
+    -- Only restore canvas if it actually changed (avoid resetting GL matrices on every pop)
+    local currentCanvas = CanvasMod.getCurrent()
+    if s.canvas ~= currentCanvas then
+      CanvasMod.bind(s.canvas)
     end
   end
   GL.glPopMatrix()

@@ -1,6 +1,6 @@
 === METADATA ===
 title: Targets
-description: Hub page listing all seven iLoveReact render targets
+description: Hub page listing all seven ReactJIT render targets
 category: Targets
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
 keywords: targets, platforms, love2d, web, terminal, computercraft, neovim, hammerspoon, awesomewm
@@ -8,7 +8,7 @@ related: love2d, web, terminal, computercraft, neovim, hammerspoon, awesomewm
 difficulty: beginner
 
 === OVERVIEW ===
-iLoveReact renders to seven distinct targets. Each target has its own painter, transport
+ReactJIT renders to seven distinct targets. Each target has its own painter, transport
 mechanism, and build configuration. The core component API (Box, Text, Image, Pressable,
 and all higher-level components) works across all of them. The differences are in
 rendering fidelity, color support, input capabilities, and distribution format.

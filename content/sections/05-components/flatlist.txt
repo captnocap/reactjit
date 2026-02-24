@@ -13,7 +13,7 @@ FlatList is a virtualized scrollable list component that renders only items visi
 FlatList supports vertical and horizontal scrolling, multi-column grid layouts, inverted lists, infinite scrolling via `onEndReached`, and imperative scrolling methods. It delegates all scrolling behavior to the ScrollView component internally. FlatList accepts a `ref` for imperative control via `scrollToIndex` and `scrollToOffset`.
 
 === API / SYNTAX ===
-Import: import { FlatList } from '@ilovereact/core';
+Import: import { FlatList } from '@reactjit/core';
 
 Usage:
 ```tsx

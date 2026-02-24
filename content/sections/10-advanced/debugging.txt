@@ -8,7 +8,7 @@ related: lua-runtime, event-handling, performance
 difficulty: intermediate
 
 === OVERVIEW ===
-iLoveReact provides several debugging tools for the Love2D target. The visual inspector
+ReactJIT provides several debugging tools for the Love2D target. The visual inspector
 (F12) overlays node boundaries and computed dimensions on the live UI. The interactive
 console (backtick key) lets you evaluate JavaScript or Lua expressions at runtime. The
 error overlay catches runtime errors and displays them with context. Additionally, React
@@ -84,7 +84,7 @@ Platforms: love2d
 
 Example 3: Debug Hooks in Components
 ---
-import { useDebug, DebugOverlay } from '@ilovereact/core';
+import { useDebug, DebugOverlay } from '@reactjit/core';
 
 function GamePanel() {
   const [fps, setFps] = useState(0);

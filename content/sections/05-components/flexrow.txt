@@ -11,7 +11,7 @@ difficulty: beginner
 FlexRow is a convenience component that wraps Box with flexDirection='row' pre-configured. It provides simplified props for common horizontal layout tasks: gap spacing, horizontal justification, vertical alignment, and wrapping. Use FlexRow when you need to arrange children horizontally without manually setting flexDirection on every Box.
 
 === API / SYNTAX ===
-import { FlexRow } from '@ilovereact/core';
+import { FlexRow } from '@reactjit/core';
 
 Props:
 | Prop | Type | Required | Default | Description |
@@ -26,7 +26,7 @@ Props:
 === EXAMPLES ===
 Example 1: Basic horizontal layout with spacing
 ---
-import { FlexRow, Text } from '@ilovereact/core';
+import { FlexRow, Text } from '@reactjit/core';
 
 <FlexRow gap={16}>
   <Text fontSize={16}>First</Text>
@@ -38,7 +38,7 @@ Platforms: All
 
 Example 2: Centered content with justify and align
 ---
-import { FlexRow, Text, Box } from '@ilovereact/core';
+import { FlexRow, Text, Box } from '@reactjit/core';
 
 <FlexRow
   justify="center"
@@ -53,7 +53,7 @@ Platforms: All
 
 Example 3: Space-between distribution (toolbar pattern)
 ---
-import { FlexRow, Text } from '@ilovereact/core';
+import { FlexRow, Text } from '@reactjit/core';
 
 <FlexRow justify="space-between" style={{ width: '100%', padding: 8 }}>
   <Text fontSize={14}>Left</Text>
@@ -65,7 +65,7 @@ Platforms: All
 
 Example 4: Wrapping horizontal grid
 ---
-import { FlexRow, Box } from '@ilovereact/core';
+import { FlexRow, Box } from '@reactjit/core';
 
 <FlexRow wrap gap={8} style={{ width: 300 }}>
   {Array.from({ length: 10 }).map((_, i) => (
@@ -77,7 +77,7 @@ Platforms: All
 
 Example 5: Combining with custom styles
 ---
-import { FlexRow, Text } from '@ilovereact/core';
+import { FlexRow, Text } from '@reactjit/core';
 
 <FlexRow
   gap={12}

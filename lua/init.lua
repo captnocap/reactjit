@@ -529,8 +529,6 @@ function ReactJIT.init(config)
     M.scene3d.init()
     M.mapmod = require("lua.map")
     M.mapmod.init()
-    M.gamemod = require("lua.game")
-    M.gamemod.init()
     M.emumod = require("lua.emulator")
     M.emumod.init()
     M.effectsmod = require("lua.effects")
@@ -547,7 +545,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = M.gamemod, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -613,8 +611,6 @@ function ReactJIT.init(config)
     -- map/browse/docstore/websocket/wsserver: stripped from WASM builds (use goto / PUC 5.1 incompatible)
     local ok_map, map_ = pcall(require, "lua.map")
     if ok_map then M.mapmod = map_; M.mapmod.init() end
-    M.gamemod = require("lua.game")
-    M.gamemod.init()
     -- emulator: SKIPPED (FFI)
     M.effectsmod = require("lua.effects")
     M.effectsmod.loadAll()
@@ -630,7 +626,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = M.gamemod, emulator = nil, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -698,8 +694,6 @@ function ReactJIT.init(config)
     M.scene3d.init()
     M.mapmod = require("lua.map")
     M.mapmod.init()
-    M.gamemod = require("lua.game")
-    M.gamemod.init()
     M.emumod = require("lua.emulator")
     M.emumod.init()
     M.effectsmod = require("lua.effects")
@@ -716,7 +710,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = M.gamemod, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -2537,6 +2531,11 @@ function ReactJIT.mousepressed(x, y, button)
       if M.mapmod then
         M.mapmod.handleMousePressed(hit, x, y, button)
       end
+    elseif M.capabilities and M.capabilities.isHittable(hit.type) then
+      -- Clicked a hittable capability (e.g. ClaudeCanvas): set focus
+      if not focus.isFocused(hit) then
+        focus.set(hit)
+      end
     elseif M.widgets then
       -- Convert screen coords to content-space (account for scroll ancestors)
       local cx, cy = M.events.screenToContent(hit, x, y)
@@ -2806,10 +2805,6 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
-  local _fdbg = focus.get()
-  io.write(string.format("[init:keypressed] key=%s focused=%s type=%s\n",
-    key, tostring(_fdbg and _fdbg.id or "nil"), tostring(_fdbg and _fdbg.type or "nil")))
-  io.flush()
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
@@ -3105,6 +3100,15 @@ function ReactJIT.wheelmoved(x, y)
   if hit.type == "Map2D" and M.mapmod then
     M.mapmod.handleWheel(hit, x, y)
     return  -- no bridge traffic (map emits viewchange events)
+  end
+
+  -- Hittable capabilities handle their own scroll (e.g. ClaudeCanvas)
+  if M.capabilities and M.capabilities.isHittable(hit.type) then
+    local capDef = M.capabilities.getDefinition(hit.type)
+    if capDef and capDef.handleWheelMoved then
+      capDef.handleWheelMoved(hit, x, y)
+      return
+    end
   end
 
   -- Find the nearest ancestor scroll container that can consume this wheel

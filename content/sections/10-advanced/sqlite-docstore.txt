@@ -8,7 +8,7 @@ related: hooks, rpc
 difficulty: advanced
 
 === OVERVIEW ===
-iLoveReact provides two complementary layers for data persistence: a low-level SQLite3 wrapper (lua/sqlite.lua) using LuaJIT FFI for direct SQL access, and a high-level schema-free document store (lua/docstore.lua) offering a MongoDB-like API. Both are accessible from React via the RPC bridge (useBridge). SQLite uses the system libsqlite3.so shared library, with automatic fallback to a stub module if unavailable. DocStore builds on SQLite, storing JSON documents in a single table with query operators for filtering.
+ReactJIT provides two complementary layers for data persistence: a low-level SQLite3 wrapper (lua/sqlite.lua) using LuaJIT FFI for direct SQL access, and a high-level schema-free document store (lua/docstore.lua) offering a MongoDB-like API. Both are accessible from React via the RPC bridge (useBridge). SQLite uses the system libsqlite3.so shared library, with automatic fallback to a stub module if unavailable. DocStore builds on SQLite, storing JSON documents in a single table with query operators for filtering.
 
 === API / SYNTAX ===
 
@@ -129,7 +129,7 @@ end
 
 2. Call from React:
 ```tsx
-import { useBridge } from '@ilovereact/core';
+import { useBridge } from '@reactjit/core';
 
 function Component() {
   const bridge = useBridge();
@@ -283,7 +283,7 @@ rpcHandlers["game:find"] = function(args)
 end
 
 // React component
-import { useBridge } from '@ilovereact/core';
+import { useBridge } from '@reactjit/core';
 import { useState, useEffect } from 'react';
 
 function PlayerList() {

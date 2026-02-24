@@ -43,7 +43,7 @@ Returns:
 === EXAMPLES ===
 Example 1: Track game state
 ---
-import { useLove } from '@ilovereact/core';
+import { useLove } from '@reactjit/core';
 
 function GameHUD() {
   const [gameState, send] = useLove('game:state', { score: 0, level: 1, lives: 3 });
@@ -65,7 +65,7 @@ Platforms: All
 
 Example 2: Player movement controls
 ---
-import { useLove } from '@ilovereact/core';
+import { useLove } from '@reactjit/core';
 
 function Controls() {
   const [position, send] = useLove('player:position', { x: 0, y: 0 });

@@ -18,7 +18,7 @@ All hooks return APIResult<T> with data, loading, error, and refetch. A null use
 
 Fetch a public GitHub user's profile.
 
-  import { useGitHubUser } from '@ilovereact/apis/github';
+  import { useGitHubUser } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubUser> = useGitHubUser(username, token?);
 
@@ -44,7 +44,7 @@ GitHubUser fields:
 
 Fetch the profile of the currently authenticated user (requires a valid token).
 
-  import { useGitHubAuthUser } from '@ilovereact/apis/github';
+  import { useGitHubAuthUser } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubUser> = useGitHubAuthUser(token);
 
@@ -57,7 +57,7 @@ Returns: APIResult<GitHubUser>   Same shape as useGitHubUser.
 
 Fetch the public repositories for a given user.
 
-  import { useGitHubRepos } from '@ilovereact/apis/github';
+  import { useGitHubRepos } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubRepo[]> = useGitHubRepos(username, opts?);
 
@@ -89,7 +89,7 @@ GitHubRepo fields:
 
 Fetch a single repository by owner and repo name.
 
-  import { useGitHubRepo } from '@ilovereact/apis/github';
+  import { useGitHubRepo } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubRepo> = useGitHubRepo(owner, repo, token?);
 
@@ -104,7 +104,7 @@ Returns: APIResult<GitHubRepo>
 
 Fetch the open (or closed) issues for a repository. Note: pull requests appear in this list too; check for the presence of pull_request on each item to distinguish them.
 
-  import { useGitHubIssues } from '@ilovereact/apis/github';
+  import { useGitHubIssues } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubIssue[]> = useGitHubIssues(owner, repo, opts?);
 
@@ -135,7 +135,7 @@ GitHubIssue fields:
 
 Fetch the recent public activity events for a user.
 
-  import { useGitHubEvents } from '@ilovereact/apis/github';
+  import { useGitHubEvents } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubEvent[]> = useGitHubEvents(username, opts?);
 
@@ -158,7 +158,7 @@ GitHubEvent fields:
 
 Fetch public gists for a user.
 
-  import { useGitHubGists } from '@ilovereact/apis/github';
+  import { useGitHubGists } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubGist[]> = useGitHubGists(username, token?);
 
@@ -180,7 +180,7 @@ GitHubGist fields:
 
 Fetch the repositories that a user has starred.
 
-  import { useGitHubStarred } from '@ilovereact/apis/github';
+  import { useGitHubStarred } from '@reactjit/apis/github';
 
   const result: APIResult<GitHubRepo[]> = useGitHubStarred(username, opts?);
 
@@ -198,8 +198,8 @@ Returns: APIResult<GitHubRepo[]>   Same shape as useGitHubRepos.
 
 Display a user's avatar, bio, and key stats:
 
-  import { useGitHubUser } from '@ilovereact/apis/github';
-  import { Box, Text } from '@ilovereact/core';
+  import { useGitHubUser } from '@reactjit/apis/github';
+  import { Box, Text } from '@reactjit/core';
 
   function GitHubCard({ username }: { username: string }) {
     const { data, loading, error } = useGitHubUser(username);
@@ -233,8 +233,8 @@ Display a user's avatar, bio, and key stats:
 
 Show the top repositories for a user, sorted by star count:
 
-  import { useGitHubRepos } from '@ilovereact/apis/github';
-  import { Box, Text } from '@ilovereact/core';
+  import { useGitHubRepos } from '@reactjit/apis/github';
+  import { Box, Text } from '@reactjit/core';
 
   function RepoList({ username, token }: { username: string; token?: string }) {
     const { data, loading } = useGitHubRepos(username, {

@@ -8,7 +8,7 @@ related: usePlexSessions, useTMDB
 difficulty: beginner
 
 === OVERVIEW ===
-The Trakt hooks in @ilovereact/apis connect to the Trakt.tv REST API. Most endpoints require a Client ID (public) and a user OAuth token (private). The now-watching hook is especially useful for building media dashboards because it reflects the current scrobble state in near real-time.
+The Trakt hooks in @reactjit/apis connect to the Trakt.tv REST API. Most endpoints require a Client ID (public) and a user OAuth token (private). The now-watching hook is especially useful for building media dashboards because it reflects the current scrobble state in near real-time.
 
 Credentials: create an application at https://trakt.tv/oauth/applications to get a Client ID. User tokens are obtained through OAuth — store them in your environment or config file.
 
@@ -20,7 +20,7 @@ All hooks return null data until credentials are provided. Passing null for clie
 
 Fetch what a user is currently watching. Returns null data when nothing is playing. Supports polling.
 
-  import { useTraktWatching } from '@ilovereact/apis';
+  import { useTraktWatching } from '@reactjit/apis';
 
   const result: APIResult<TraktWatching | null> = useTraktWatching(
     clientId: string | null,
@@ -52,7 +52,7 @@ TraktWatching fields:
 
 Fetch a user's watch history, optionally filtered by media type.
 
-  import { useTraktHistory } from '@ilovereact/apis';
+  import { useTraktHistory } from '@reactjit/apis';
 
   const result: APIResult<TraktHistoryItem[]> = useTraktHistory(
     clientId: string | null,
@@ -83,7 +83,7 @@ TraktHistoryItem fields:
 
 Fetch a user's watchlist, optionally filtered to movies or shows only.
 
-  import { useTraktWatchlist } from '@ilovereact/apis';
+  import { useTraktWatchlist } from '@reactjit/apis';
 
   const result: APIResult<TraktWatchlistItem[]> = useTraktWatchlist(
     clientId: string | null,
@@ -110,7 +110,7 @@ TraktWatchlistItem fields:
 
 Fetch currently trending movies or shows across all Trakt users. Does not require a user token.
 
-  import { useTraktTrending } from '@ilovereact/apis';
+  import { useTraktTrending } from '@reactjit/apis';
 
   const result: APIResult<Array<{ watchers: number; movie?: TraktMovie; show?: TraktShow }>> = useTraktTrending(
     clientId: string | null,
@@ -131,7 +131,7 @@ Returns: APIResult<Array<{ watchers: number; movie?: TraktMovie; show?: TraktSho
 
 Fetch aggregate statistics for a user: total plays, time watched, shows and episodes seen.
 
-  import { useTraktStats } from '@ilovereact/apis';
+  import { useTraktStats } from '@reactjit/apis';
 
   const result: APIResult<TraktStats> = useTraktStats(
     clientId: string | null,
@@ -175,8 +175,8 @@ TraktEpisode fields:
 
 Show what the authenticated user is currently watching, polling every 30 seconds:
 
-  import { useTraktWatching } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useTraktWatching } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   const CLIENT_ID = process.env.TRAKT_CLIENT_ID;
   const TOKEN = process.env.TRAKT_TOKEN;
@@ -204,8 +204,8 @@ Show what the authenticated user is currently watching, polling every 30 seconds
 
 Render the user's movie watchlist next to the global trending list:
 
-  import { useTraktWatchlist, useTraktTrending } from '@ilovereact/apis';
-  import { Box, Text } from '@ilovereact/core';
+  import { useTraktWatchlist, useTraktTrending } from '@reactjit/apis';
+  import { Box, Text } from '@reactjit/core';
 
   function TraktDashboard({ clientId, token }: { clientId: string; token: string }) {
     const watchlist = useTraktWatchlist(clientId, token, { type: 'movies' });

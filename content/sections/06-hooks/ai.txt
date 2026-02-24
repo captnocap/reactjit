@@ -8,7 +8,7 @@ related: useFetch, useWebSocket, useLoveRPC
 difficulty: intermediate
 
 === OVERVIEW ===
-The @ilovereact/ai package brings LLM integration into iLoveReact apps as composable hooks. It supports OpenAI-compatible APIs and Anthropic natively, handles token streaming over SSE, and runs full agentic tool execution loops without leaving React. Provider configuration is shared via context so API keys and model selection are declared once at the app root and inherited by every hook beneath.
+The @reactjit/ai package brings LLM integration into ReactJIT apps as composable hooks. It supports OpenAI-compatible APIs and Anthropic natively, handles token streaming over SSE, and runs full agentic tool execution loops without leaving React. Provider configuration is shared via context so API keys and model selection are declared once at the app root and inherited by every hook beneath.
 
 The package is organized into four capability layers:
 
@@ -25,7 +25,7 @@ All hooks handle streaming, loading state, and errors uniformly. Tool calls in u
 
 Wrap your app (or a subtree) to set default AI configuration for all hooks below it. Any hook option passed directly to useChat / useCompletion overrides the context value.
 
-  import { AIProvider } from '@ilovereact/ai';
+  import { AIProvider } from '@reactjit/ai';
 
   <AIProvider config={AIConfig}>
     {children}
@@ -45,7 +45,7 @@ AIConfig fields:
 
 Read the current AI configuration from context. Returns null when no AIProvider ancestor is present; hooks handle this gracefully.
 
-  import { useAIConfig } from '@ilovereact/ai';
+  import { useAIConfig } from '@reactjit/ai';
 
   const config: AIConfig | null = useAIConfig();
 
@@ -56,7 +56,7 @@ Returns: AIConfig | null
 
 Conversational AI with streaming, message history, and a built-in agentic tool loop. Supports both OpenAI and Anthropic. Streams each token into the live message list as it arrives. When the model returns tool calls, executes them concurrently and feeds results back for the next round — automatically, up to maxToolRounds.
 
-  import { useChat } from '@ilovereact/ai';
+  import { useChat } from '@reactjit/ai';
 
   const result: ChatResult = useChat(options?: ChatOptions);
 
@@ -107,7 +107,7 @@ ToolDefinition fields:
 
 Single-shot text completion with streaming. Does not maintain conversation history — each call to complete() is independent. Ideal for summaries, transformations, and one-off generation tasks.
 
-  import { useCompletion } from '@ilovereact/ai';
+  import { useCompletion } from '@reactjit/ai';
 
   const result: CompletionResult = useCompletion(options?: CompletionOptions);
 
@@ -135,7 +135,7 @@ Returns: CompletionResult
 
 Fetch the list of available models from a provider. For OpenAI-compatible endpoints, calls GET /v1/models. For Anthropic, returns a static curated list (Anthropic has no models endpoint). Fetches automatically on mount and whenever provider/baseURL/apiKey changes.
 
-  import { useModels } from '@ilovereact/ai';
+  import { useModels } from '@reactjit/ai';
 
   const result: ModelsResult = useModels(options?: Partial<AIConfig>);
 
@@ -155,9 +155,9 @@ ModelInfo fields:
 
 --- useAPIKeys ---
 
-Manage stored API keys. Persists keys across sessions via @ilovereact/storage when a StorageProvider ancestor is present; falls back to in-memory storage without one. Keys are stored in a collection named 'ai_keys'.
+Manage stored API keys. Persists keys across sessions via @reactjit/storage when a StorageProvider ancestor is present; falls back to in-memory storage without one. Keys are stored in a collection named 'ai_keys'.
 
-  import { useAPIKeys } from '@ilovereact/ai';
+  import { useAPIKeys } from '@reactjit/ai';
 
   const result: APIKeysResult = useAPIKeys();
 
@@ -182,7 +182,7 @@ APIKeyRecord fields:
 
 Control a stealth browse session (anti-fingerprint Firefox) from React components. The browser runs as a separate process on the host machine, listening on TCP port 7331. Commands route through Lua's browse.lua worker thread via the QuickJS bridge. Returns loading and error state so you can reflect browser activity in the UI.
 
-  import { useBrowser } from '@ilovereact/ai';
+  import { useBrowser } from '@reactjit/ai';
 
   const browser: BrowseResult = useBrowser(options?: BrowseOptions);
 
@@ -219,7 +219,7 @@ PageContent fields:
 
 Build a ToolDefinition[] array that gives an AI agent full control over the browser. Pass the result directly into useChat's tools option. The agent can then navigate, click, type, take screenshots, and manage tabs autonomously using natural language instructions.
 
-  import { createBrowserTools } from '@ilovereact/ai';
+  import { createBrowserTools } from '@reactjit/ai';
 
   const tools: ToolDefinition[] = createBrowserTools(options?: BrowseOptions);
 
@@ -246,7 +246,7 @@ Page content returned to the model is automatically truncated to 8000 characters
 
 Connect to an MCP (Model Context Protocol) server and expose its tools as ToolDefinitions ready to pass into useChat. Handles the full lifecycle: connect, initialize handshake, tool discovery, permission filtering, and optional confirmation gates. Reconnects automatically when transport parameters change.
 
-  import { useMCPServer } from '@ilovereact/ai';
+  import { useMCPServer } from '@reactjit/ai';
 
   const result: MCPServerResult = useMCPServer(config: MCPServerConfig);
 
@@ -285,7 +285,7 @@ Returns: MCPServerResult
 
 Low-level MCP client class. Used by useMCPServer internally and available for imperative use cases such as the CLI linter, build-time tool discovery, or custom React effects.
 
-  import { MCPClient } from '@ilovereact/ai';
+  import { MCPClient } from '@reactjit/ai';
 
   const client = new MCPClient(config: MCPServerConfig);
 
@@ -309,7 +309,7 @@ MCPTool fields:
 
 Estimate the context window cost of tool definitions before passing them to a model. Useful for deciding which MCP tools to enable when working with tight context budgets.
 
-  import { estimateToolTokens, estimateToolBudget } from '@ilovereact/ai';
+  import { estimateToolTokens, estimateToolBudget } from '@reactjit/ai';
 
   const tokens: number = estimateToolTokens(tool: MCPTool);
   const budget: { total: number; note: string } = estimateToolBudget(tools: MCPTool[]);
@@ -328,8 +328,8 @@ estimateToolBudget:
 
 A minimal streaming chat interface backed by Anthropic Claude:
 
-  import { AIProvider, useChat } from '@ilovereact/ai';
-  import { Box, Text, TextInput, Pressable, ScrollView } from '@ilovereact/core';
+  import { AIProvider, useChat } from '@reactjit/ai';
+  import { Box, Text, TextInput, Pressable, ScrollView } from '@reactjit/core';
 
   // Wrap the app once with provider config
   function App() {
@@ -387,9 +387,9 @@ A minimal streaming chat interface backed by Anthropic Claude:
 
 Wire an agent that can fetch weather data using a custom tool:
 
-  import { useChat } from '@ilovereact/ai';
-  import type { ToolDefinition } from '@ilovereact/ai';
-  import { Box, Text } from '@ilovereact/core';
+  import { useChat } from '@reactjit/ai';
+  import type { ToolDefinition } from '@reactjit/ai';
+  import { Box, Text } from '@reactjit/core';
 
   const weatherTool: ToolDefinition = {
     name: 'get_weather',
@@ -436,9 +436,9 @@ Wire an agent that can fetch weather data using a custom tool:
 
 Let users enter and persist their own API keys:
 
-  import { AIProvider, useAPIKeys, useModels } from '@ilovereact/ai';
-  import { StorageProvider } from '@ilovereact/storage';
-  import { Box, Text, TextInput, Pressable } from '@ilovereact/core';
+  import { AIProvider, useAPIKeys, useModels } from '@reactjit/ai';
+  import { StorageProvider } from '@reactjit/storage';
+  import { Box, Text, TextInput, Pressable } from '@reactjit/core';
   import { useState } from 'react';
 
   function SettingsScreen() {
@@ -489,8 +489,8 @@ Let users enter and persist their own API keys:
 
 Combine browser control and an MCP filesystem server into a single agent:
 
-  import { useChat, useBrowser, createBrowserTools, useMCPServer } from '@ilovereact/ai';
-  import { Box, Text, Pressable } from '@ilovereact/core';
+  import { useChat, useBrowser, createBrowserTools, useMCPServer } from '@reactjit/ai';
+  import { Box, Text, Pressable } from '@reactjit/core';
   import mcpPermissions from '../mcp.tools.json';
 
   function ResearchAgent() {
@@ -532,7 +532,7 @@ Combine browser control and an MCP filesystem server into a single agent:
           Filesystem MCP: {status}
         </Text>
         <Pressable
-          onPress={() => send('Research the latest iLoveReact releases and save a summary to /tmp/research/notes.txt')}
+          onPress={() => send('Research the latest ReactJIT releases and save a summary to /tmp/research/notes.txt')}
           backgroundColor={isLoading ? '#555' : '#1565C0'}
           padding={10}
         >

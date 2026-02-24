@@ -13,7 +13,7 @@ TextInput is an editable text field that handles keyboard input, cursor position
 In web mode, TextInput renders a native HTML `<input>` or `<textarea>` with standard browser behavior. In native mode (Love2D), it renders a Lua-owned custom implementation where ALL editing state (text, cursor position, selection, clipboard) lives entirely in Lua. Only boundary events (focus, blur, submit, changeText) cross the JS bridge — there is zero bridge traffic per keystroke.
 
 === API / SYNTAX ===
-Import: import { TextInput } from '@ilovereact/core';
+Import: import { TextInput } from '@reactjit/core';
 
 Usage:
 ```tsx

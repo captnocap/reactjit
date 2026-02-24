@@ -20,7 +20,7 @@ useHACallService is a mutation hook — it returns a call() function rather than
 
 Fetch all entity states from Home Assistant. Optionally polls on an interval.
 
-  import { useHAStates } from '@ilovereact/apis/homeassistant';
+  import { useHAStates } from '@reactjit/apis/homeassistant';
 
   const result: APIResult<HAState[]> = useHAStates(baseUrl, token, opts?);
 
@@ -43,7 +43,7 @@ HAState fields:
 
 Fetch a single entity's state by entity ID. Optionally polls on an interval.
 
-  import { useHAEntity } from '@ilovereact/apis/homeassistant';
+  import { useHAEntity } from '@reactjit/apis/homeassistant';
 
   const result: APIResult<HAState> = useHAEntity(baseUrl, token, entityId, opts?);
 
@@ -60,7 +60,7 @@ Returns: APIResult<HAState>   Same HAState shape as above.
 
 Fetch the Home Assistant instance configuration (location, timezone, version, unit system).
 
-  import { useHAConfig } from '@ilovereact/apis/homeassistant';
+  import { useHAConfig } from '@reactjit/apis/homeassistant';
 
   const result: APIResult<HAConfig> = useHAConfig(baseUrl, token);
 
@@ -83,7 +83,7 @@ HAConfig fields:
 
 Fetch the list of all available service domains and their service definitions.
 
-  import { useHAServices } from '@ilovereact/apis/homeassistant';
+  import { useHAServices } from '@reactjit/apis/homeassistant';
 
   const result: APIResult<HAService[]> = useHAServices(baseUrl, token);
 
@@ -101,7 +101,7 @@ HAService fields:
 
 Fetch the state history for a single entity over a recent time window.
 
-  import { useHAHistory } from '@ilovereact/apis/homeassistant';
+  import { useHAHistory } from '@reactjit/apis/homeassistant';
 
   const result: APIResult<HAState[][]> = useHAHistory(baseUrl, token, entityId, opts?);
 
@@ -118,7 +118,7 @@ Returns: APIResult<HAState[][]>   Outer array has one entry per entity matched (
 
 Fetch the logbook (human-readable event log) for an optional entity filter.
 
-  import { useHALogbook } from '@ilovereact/apis/homeassistant';
+  import { useHALogbook } from '@reactjit/apis/homeassistant';
 
   const result: APIResult<HALogEntry[]> = useHALogbook(baseUrl, token, opts?);
 
@@ -141,7 +141,7 @@ HALogEntry fields:
 
 Imperative hook for calling Home Assistant services (toggle lights, set climate, trigger automations, etc.).
 
-  import { useHACallService } from '@ilovereact/apis/homeassistant';
+  import { useHACallService } from '@reactjit/apis/homeassistant';
 
   const ha = useHACallService(baseUrl, token);
 
@@ -160,8 +160,8 @@ Returns:
 
 Display the state of a light entity and provide a toggle button:
 
-  import { useHAEntity, useHACallService } from '@ilovereact/apis/homeassistant';
-  import { Box, Text } from '@ilovereact/core';
+  import { useHAEntity, useHACallService } from '@reactjit/apis/homeassistant';
+  import { Box, Text } from '@reactjit/core';
 
   const HA_URL = 'http://homeassistant.local:8123';
   const TOKEN = process.env.HA_TOKEN ?? null;
@@ -196,8 +196,8 @@ Display the state of a light entity and provide a toggle button:
 
 Display a grid of sensor readings with live polling:
 
-  import { useHAStates } from '@ilovereact/apis/homeassistant';
-  import { Box, Text } from '@ilovereact/core';
+  import { useHAStates } from '@reactjit/apis/homeassistant';
+  import { Box, Text } from '@reactjit/core';
 
   const SENSORS = [
     'sensor.living_room_temperature',
