@@ -1,81 +1,60 @@
 === METADATA ===
-title: ilovereact lint
-description: Static layout linter that catches common iLoveReact mistakes at build time.
+title: reactjit lint
+description: Static layout linter that catches common ReactJIT mistakes at build time.
 category: CLI
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: lint, linter, static analysis, layout, errors, warnings, no-text-without-fontsize, no-mixed-text-children, no-row-justify-without-width, no-flexgrow-root, no-block-char-in-text
+keywords: lint, linter, static analysis, layout, errors, warnings, no-mixed-text-children, no-invalid-style-props, no-image-without-src
 related: build.txt, ../04-layout-system/critical-rules.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `ilovereact lint` command runs a static layout linter on all .tsx files in the project's
+The `reactjit lint` command runs a static layout linter on all .tsx files in the project's
 src/ directory. It uses TypeScript's AST parser (ts.createSourceFile) to analyze JSX elements
 and their style props without type checking. The linter catches layout mistakes that would
 produce invisible, overlapping, or incorrectly sized elements at runtime.
 
-The linter is also run automatically as a lint gate during `ilovereact build` -- builds fail
+The linter is also run automatically as a lint gate during `reactjit build` -- builds fail
 when error-level rules are violated. You should run the linter after every component change
 to catch issues early.
 
+NOTE: Seven layout-related lint rules were removed in recent versions because the layout engine
+now handles these cases correctly: no-text-without-fontsize, no-unicode-symbol-in-text,
+no-row-justify-without-width, no-flexrow-flexcolumn, no-uncontexted-flexgrow, no-deep-flex-nesting,
+and no-implicit-container-sizing. The engine is mature enough that these patterns work reliably.
+
 === API / SYNTAX ===
 Usage:
-  ilovereact lint
+  reactjit lint
 
 Runs on:
   All .tsx files under src/ (recursively, skipping node_modules, dist, .git, build, out)
 
 Error rules (block builds):
 
-  no-text-without-fontsize
-    Every <Text> element must have fontSize in its style. Without it, text measurement
-    fails and layout is incorrect.
-
-  no-block-char-in-text
-    The block character (U+2588) in <Text> renders as a font glyph with gaps, not a filled
-    pixel. Use Box with backgroundColor instead.
-
   no-mixed-text-children
     Mixed literal text and JSX expressions in <Text> (e.g., Score: {score}) creates multiple
     __TEXT__ nodes that overlap. Use a template literal: {`Score: ${score}`}.
 
-  no-row-justify-without-width
-    A row container (flexDirection: 'row') with justifyContent but no explicit width. Box
-    nodes have no intrinsic width, so justifyContent has nothing to distribute.
-    Exception: justifyContent: 'start' does not trigger this rule.
-
-  no-flexgrow-root
-    Root container (top-level JSX with no parent) uses flexGrow without width/height. The
-    root has no parent to grow into. Use width: '100%', height: '100%' instead.
-
   no-invalid-style-props
-    Style object contains properties not recognized by iLoveReact's style system. Only
-    checked on iLoveReact primitives (Box, Text, Image, etc.), not on HTML elements.
+    Style object contains properties not recognized by ReactJIT's style system. Only
+    checked on ReactJIT primitives (Box, Text, Image, etc.), not on HTML elements.
 
   no-link-without-to
     <Link> component is missing the "to" prop for navigation target.
+
+  no-image-without-src
+    <Image> component is missing the "src" prop.
 
   no-usecrud-without-schema
     useCRUD() hook called without a schema argument (requires at least 2 arguments).
 
 Warning rules (advisory):
 
-  no-uncontexted-flexgrow
-    flexGrow used where siblings lack explicit main-axis sizing. Layout depends on content
-    measurement, which is unreliable.
-
-  no-deep-flex-nesting
-    Flex container nested 4+ levels deep without explicit width and height. May produce
-    unexpected layout.
-
-  no-flexrow-flexcolumn
-    Using <FlexRow> or <FlexColumn> instead of <Box> with flexDirection. Prefer Box to keep
-    the layout tree transparent.
-
-  no-implicit-container-sizing
-    Container with more than 5 direct children but no explicit width/height.
-
   no-routes-without-fallback
     <Routes> without a <Route path="*"> catch-all for 404 handling.
+
+  no-pressable-without-onpress
+    <Pressable> component lacks an onPress handler.
 
 Escape hatch:
   // ilr-ignore-next-line
@@ -90,7 +69,7 @@ Exit code:
 Example 1: Run the linter
 ---
 cd my-project
-ilovereact lint
+reactjit lint
 ---
 Platforms: All
 
@@ -105,9 +84,9 @@ Platforms: All
 Example 3: Typical lint output
 ---
   src/App.tsx
-    12:5  error  Text element missing fontSize in style  [no-text-without-fontsize]
-    28:3  error  Row with justifyContent but no width     [no-row-justify-without-width]
-    45:7  warn   flexGrow used but sibling lacks width    [no-uncontexted-flexgrow]
+    12:5  error  Mixed text and expressions in Text node  [no-mixed-text-children]
+    28:3  error  Image element missing src prop            [no-image-without-src]
+    45:7  warn   Pressable has no onPress handler          [no-pressable-without-onpress]
 
   2 errors, 1 warning in 3 files
 ---
@@ -125,8 +104,8 @@ The linter requires TypeScript to be installed as a dev dependency (npm install 
 - Error-level rules block builds -- they must be fixed or explicitly suppressed
 - The escape hatch (// ilr-ignore-next-line) should be used sparingly
 - Style passed via variables (style={myStyle}) cannot be analyzed -- the linter skips those
-- Style objects with spread operators ({...baseStyle, fontSize: 14}) are partially analyzed
-- Only iLoveReact primitives are linted (Box, Text, Image, etc.) -- HTML elements are skipped
+- Style objects with spread operators ({...baseStyle, color: '#fff'}) are partially analyzed
+- Only ReactJIT primitives are linted (Box, Text, Image, etc.) -- HTML elements are skipped
 
 === SEE ALSO ===
 - build.txt -- Build command includes lint gate
