@@ -53,6 +53,8 @@ function TextInput.initState(node)
     blinkOn = true,
     isDragging = false,
     lastValue = initialText, -- track for controlled value changes
+    undoStack = {},           -- { {text, cursorPos}, ... }
+    redoStack = {},           -- redo buffer (cleared on new edit)
     -- liveChange: debounced per-keystroke change event support
     changeDebounce = 0,     -- seconds remaining in debounce window
     changePending = false,  -- true when text changed and event not yet emitted
@@ -220,6 +222,43 @@ local function moveCursorRight(is)
     pos = pos + 1
   end
   is.cursorPos = pos
+end
+
+local function pushUndo(is)
+  local snap = { text = is.text, cursorPos = is.cursorPos }
+  is.undoStack[#is.undoStack + 1] = snap
+  if #is.undoStack > 100 then table.remove(is.undoStack, 1) end
+  is.redoStack = {}
+end
+
+local function applySnapshot(is, snap)
+  local cur = { text = is.text, cursorPos = is.cursorPos }
+  is.text = snap.text
+  is.cursorPos = snap.cursorPos
+  clearSelection(is)
+  clampCursor(is)
+  return cur
+end
+
+--- Jump cursor to start of previous word.
+local function wordJumpLeft(is)
+  local col = is.cursorPos
+  local text = is.text
+  if col == 0 then return end
+  while col > 0 and not text:sub(col, col):match("[%w_]") do col = col - 1 end
+  while col > 0 and text:sub(col, col):match("[%w_]") do col = col - 1 end
+  is.cursorPos = col
+end
+
+--- Jump cursor to end of next word.
+local function wordJumpRight(is)
+  local col = is.cursorPos
+  local text = is.text
+  local len = #text
+  if col >= len then return end
+  while col < len and not text:sub(col+1, col+1):match("[%w_]") do col = col + 1 end
+  while col < len and text:sub(col+1, col+1):match("[%w_]") do col = col + 1 end
+  is.cursorPos = col
 end
 
 --- Delete one character before cursor.
@@ -441,10 +480,51 @@ function TextInput.handleKeyPressed(node, key, scancode, isRepeat)
     elseif key == "x" then
       if isEditable(node) and hasSelection(is) then
         love.system.setClipboardText(getSelectedText(is))
+        pushUndo(is)
         deleteSelection(is)
         resetBlink(is)
         ensureCursorVisible(node, is)
       end
+      return true
+    elseif key == "z" then
+      local shift = love.keyboard.isDown("lshift", "rshift")
+      if shift then
+        if #is.redoStack > 0 then
+          local snap = table.remove(is.redoStack)
+          local cur = applySnapshot(is, snap)
+          is.undoStack[#is.undoStack + 1] = cur
+          resetBlink(is); ensureCursorVisible(node, is)
+        end
+      else
+        if #is.undoStack > 0 then
+          local snap = table.remove(is.undoStack)
+          local cur = applySnapshot(is, snap)
+          is.redoStack[#is.redoStack + 1] = cur
+          resetBlink(is); ensureCursorVisible(node, is)
+        end
+      end
+      return true
+    elseif key == "y" then
+      if #is.redoStack > 0 then
+        local snap = table.remove(is.redoStack)
+        local cur = applySnapshot(is, snap)
+        is.undoStack[#is.undoStack + 1] = cur
+        resetBlink(is); ensureCursorVisible(node, is)
+      end
+      return true
+    elseif key == "left" then
+      if shift then startOrExtendSelection(is) end
+      if not shift then clearSelection(is) end
+      wordJumpLeft(is)
+      if shift then updateSelectionEnd(is) end
+      clampCursor(is); resetBlink(is); ensureCursorVisible(node, is)
+      return true
+    elseif key == "right" then
+      if shift then startOrExtendSelection(is) end
+      if not shift then clearSelection(is) end
+      wordJumpRight(is)
+      if shift then updateSelectionEnd(is) end
+      clampCursor(is); resetBlink(is); ensureCursorVisible(node, is)
       return true
     elseif key == "v" then
       if not isEditable(node) then return true end
@@ -454,6 +534,7 @@ function TextInput.handleKeyPressed(node, key, scancode, isRepeat)
         if not isMultiline(node) then
           text = text:gsub("\r\n", " "):gsub("\n", " "):gsub("\r", " ")
         end
+        pushUndo(is)
         if hasSelection(is) then deleteSelection(is) end
         insertAtCursor(node, is, text)
         clearSelection(is)
@@ -533,6 +614,7 @@ function TextInput.handleKeyPressed(node, key, scancode, isRepeat)
   if not isEditable(node) then return true end
 
   if key == "backspace" then
+    pushUndo(is)
     if hasSelection(is) then
       deleteSelection(is)
     else
@@ -541,6 +623,7 @@ function TextInput.handleKeyPressed(node, key, scancode, isRepeat)
     resetBlink(is); ensureCursorVisible(node, is)
     return true
   elseif key == "delete" then
+    pushUndo(is)
     if hasSelection(is) then
       deleteSelection(is)
     else
@@ -568,6 +651,7 @@ function TextInput.handleTextInput(node, text)
     if text == "\n" or text == "\r" then return end
   end
 
+  pushUndo(is)
   if hasSelection(is) then deleteSelection(is) end
   insertAtCursor(node, is, text)
   resetBlink(is)
