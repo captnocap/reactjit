@@ -319,6 +319,30 @@ Commit early and often. This project has no test suite, so git history IS the sa
 - Do not assume the user will commit for you. They won't. That's your job.
 - Do not skip committing because "it's just a small change." Small changes are the easiest to commit and the hardest to reconstruct later.
 
+## Documentation Workflow (CRITICAL)
+
+**Documentation is a completion criterion, not an afterthought.** After completing a major feature, architectural change, or significant addition:
+
+1. **Emit a structured CHANGESET brief** — capture the essence of what changed while context is fresh:
+   ```markdown
+   # CHANGESET: [Feature Name]
+
+   **What:** [One-liner description of what was added/changed]
+   **Why:** [The problem it solves or capability it enables]
+   **Affects:** [List of docs, sections, or areas that need updates]
+   **Breaking Changes:** [If any; else "None"]
+   **New APIs:** [List of new components, hooks, capabilities, or patterns users need to know about]
+   ```
+
+2. **Invoke the docs-generator skill** — let it consume the changeset and propagate updates to `content/sections/` while the context is loaded:
+   ```
+   Use the /docs skill with the changeset as context to update affected documentation sections
+   ```
+
+3. **Include docs in your definition of done** — do not consider the implementation complete until documentation has been updated. The moment of highest fidelity for docs is during implementation, when the full design context is in memory.
+
+**Why this matters:** Documentation decays rapidly after the moment of implementation. A feature built at 3am with full context understanding becomes a mystery three weeks later when someone (including a parallel Claude) needs to debug it. By treating docs as part of the feature, not a follow-up, you preserve the knowledge graph while it's hot.
+
 ## TypeScript
 
 - Target: ES2020, JSX: react-jsx (automatic), Module resolution: bundler
