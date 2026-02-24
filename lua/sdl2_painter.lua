@@ -483,6 +483,7 @@ local VideoPlayerModule = nil
 -- Video module reference (set via Painter.init())
 local VideosModule = nil
 local ImagesModule = nil
+local EffectsModule = nil
 
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
@@ -668,6 +669,40 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       textDecorationLine = (node.parent.style or {}).textDecorationLine
     end
 
+    -- Text shadow: draw offset copy before main text
+    local shadowColor = s.textShadowColor
+    if not shadowColor and node.type == "__TEXT__" and node.parent then
+      shadowColor = (node.parent.style or {}).textShadowColor
+    end
+    if shadowColor then
+      local sox = s.textShadowOffsetX or 0
+      local soy = s.textShadowOffsetY or 0
+      if sox == 0 and node.type == "__TEXT__" and node.parent then
+        sox = (node.parent.style or {}).textShadowOffsetX or 0
+      end
+      if soy == 0 and node.type == "__TEXT__" and node.parent then
+        soy = (node.parent.style or {}).textShadowOffsetY or 0
+      end
+      if c.w > 0 then
+        local lines = wrapText(text, fontSize, c.w)
+        if numberOfLines and numberOfLines > 0 and #lines > numberOfLines then
+          local trunc = {}
+          for i = 1, numberOfLines do trunc[i] = lines[i] end
+          if textOverflow == "ellipsis" then
+            trunc[numberOfLines] = truncateWithEllipsis(trunc[numberOfLines], fontSize, c.w)
+          end
+          lines = trunc
+        end
+        local lh = Font.lineHeight(fontSize)
+        for i, line in ipairs(lines) do
+          drawText(line, c.x + sox, c.y + (i-1)*lh + soy, c.w, align, fontSize, shadowColor, eff)
+        end
+      else
+        drawText(text, c.x + sox, c.y + soy, 99999, align, fontSize, shadowColor, eff)
+      end
+    end
+
+    -- Main text draw
     if c.w > 0 then
       local lines = wrapText(text, fontSize, c.w)
 
@@ -883,6 +918,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         VideoPlayerModule.draw(node, eff)
       end
     end
+
+  -- Generative effect viewport: draw the pre-rendered Canvas from effects.lua
+  elseif not isHidden and EffectsModule and EffectsModule.isEffect(node.type) then
+    local canvas = EffectsModule.get(node.id)
+    if canvas then
+      flushQuads()
+      -- Canvas is a love.Canvas (sdl2_canvas FBO). Draw it scaled to the node bounds.
+      love.graphics.setColor(1, 1, 1, eff)
+      local cw, ch = canvas:getDimensions()
+      love.graphics.draw(canvas, c.x, c.y, 0, c.w / cw, c.h / ch)
+    end
   end
 
   -- Generic capability draw dispatch — any visual capability with a draw()
@@ -895,6 +941,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       if inst then
         def.draw(tostring(node.id), inst.state, inst.props or {}, c, eff)
       end
+    end
+  end
+
+  -- Background effect canvas (renders behind children, from child effect with background=true)
+  if EffectsModule then
+    local bgCanvas = EffectsModule.getBackground(node.id)
+    if bgCanvas then
+      flushQuads()
+      love.graphics.setColor(1, 1, 1, eff)
+      local cw, ch = bgCanvas:getDimensions()
+      love.graphics.draw(bgCanvas, c.x, c.y, 0, c.w / cw, c.h / ch)
     end
   end
 
@@ -945,6 +1002,12 @@ function Painter.init(config)
   H = (config and config.height) or 720
   VideosModule = config and config.videos
   ImagesModule = config and config.images
+  EffectsModule = config and config.effects
+end
+
+--- Set effects module reference (called after effects.loadAll()).
+function Painter.setEffects(mod)
+  EffectsModule = mod
 end
 
 -- Update screen dimensions (called on resize)

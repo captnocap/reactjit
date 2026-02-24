@@ -685,6 +685,22 @@ function SDL2Init.run(config)
   end
 
   -- ------------------------------------------------------------------
+  -- 3c7. Generative effects (Perlin noise, text effects, etc.)
+  -- ------------------------------------------------------------------
+  local effectsmod = nil
+  do
+    local efOk, efMod = pcall(require, "lua.effects")
+    if efOk then
+      effectsmod = efMod
+      effectsmod.loadAll()
+      Painter.setEffects(effectsmod)
+      io.write("[sdl2_init] effects system initialized\n"); io.flush()
+    else
+      io.write("[sdl2_init] effects module not available: " .. tostring(efMod) .. "\n"); io.flush()
+    end
+  end
+
+  -- ------------------------------------------------------------------
   -- 3d. Capabilities (audio, timer, window, etc.)
   -- ------------------------------------------------------------------
   local capabilities = require("lua.capabilities")
@@ -1789,6 +1805,13 @@ function SDL2Init.run(config)
     -- ---- Capabilities sync ----
     Shim.setDelta(dt)
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
+
+    -- ---- Generative effects sync + update + render ----
+    if effectsmod then
+      effectsmod.syncWithTree(tree.getNodes())
+      effectsmod.updateAll(dt)
+      effectsmod.renderAll()
+    end
 
     -- ---- Video sync + render + poll ----
     if Videos then
