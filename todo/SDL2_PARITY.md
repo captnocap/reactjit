@@ -166,8 +166,8 @@ Non-rendering capabilities that Love2D provides and SDL2 needs equivalents for.
 `love.graphics.newCanvas` equivalent using OpenGL framebuffer objects. This is one
 implementation that unblocks five entire feature categories.
 
-- [ ] **Implement FBO wrapper** — `glGenFramebuffers` / `glBindFramebuffer` / `glFramebufferTexture2D`. OpenGL 2.1 `GL_EXT_framebuffer_object` is universally available.
-  - Files: New `lua/sdl2_canvas.lua`, integrate into `lua/sdl2_gl.lua`
+- [x] **Implement FBO wrapper** — **FIXED**. Created `sdl2_canvas.lua` with Canvas object (FBO + RGBA texture + lazy depth renderbuffer). Wired into `sdl2_love_shim.lua` as `love.graphics.newCanvas/setCanvas/getCanvas/draw/clear/setDepthMode/setBlendMode/setShader`. Existing shared modules can now create and render to off-screen surfaces.
+  - Files: `lua/sdl2_canvas.lua`, `lua/sdl2_love_shim.lua`
 
 Once FBO exists, these all unblock:
 
@@ -180,8 +180,8 @@ Once FBO exists, these all unblock:
 - [ ] **Map2D** `[#40]` — Needs Canvas, shaders, `love.math.triangulate`
   - Files: `lua/map.lua`, `lua/tilecache.lua`
 
-- [ ] **Video playback** — libmpv GL pipeline needs FBO for texture rendering
-  - Files: `lua/videos.lua`, `lua/videoplayer.lua`
+- [x] **Video playback** — **FIXED** (commit `cd277ce`). Created `sdl2_videos.lua` (libmpv + dual-FBO pipeline, GL state save/restore, pixel store protection) and `sdl2_videoplayer.lua` (full controls UI in GL immediate mode). Wired into `sdl2_init.lua` with lifecycle management and mouse/keyboard input routing. `sdl2_painter.lua` renders Video and VideoPlayer nodes.
+  - Files: `lua/sdl2_videos.lua`, `lua/sdl2_videoplayer.lua`, `lua/sdl2_painter.lua`, `lua/sdl2_init.lua`, `lua/target_sdl2.lua`
 
 - [ ] **Games / Emulator** `[#38]` — Need Canvas for game surface
   - Files: `lua/game.lua`, `lua/emulator.lua`
