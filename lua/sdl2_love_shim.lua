@@ -2,14 +2,19 @@
   sdl2_love_shim.lua — Minimal love.* compatibility layer for SDL2
 
   Provides just enough of love.graphics, love.mouse, love.keyboard,
-  and love.timer so that inspector.lua, devtools.lua, and console.lua
-  can load and run unchanged on the SDL2 renderer.
+  and love.timer so that inspector.lua, devtools.lua, console.lua,
+  and shared modules (effects, scene3d, map, masks, etc.) can load
+  and run unchanged on the SDL2 renderer.
+
+  Includes Canvas support backed by sdl2_canvas.lua (GL FBOs).
 
   Call shim.init({ ... }) once after SDL2 and GL are ready.
 ]]
 
 local ffi = require("ffi")
+local bit = require("bit")
 local GL  = require("lua.sdl2_gl")
+local CanvasMod = require("lua.sdl2_canvas")
 
 local Shim = {}
 
@@ -313,6 +318,113 @@ function graphics.getHeight() return _H end
 function graphics.getDimensions() return _W, _H end
 
 -- ============================================================================
+-- love.graphics — Canvas (FBO) support
+-- ============================================================================
+
+function graphics.newCanvas(w, h)
+  return CanvasMod.new(w, h)
+end
+
+function graphics.setCanvas(target)
+  CanvasMod.bind(target)
+end
+
+function graphics.getCanvas()
+  return CanvasMod.getCurrent()
+end
+
+--- draw: render a Canvas (or other drawable) to the current target.
+--- Only Canvas objects are supported on SDL2. Images/meshes are handled
+--- by the target-specific painter directly.
+function graphics.draw(drawable, x, y, r, sx, sy, ox, oy)
+  if drawable and drawable._isCanvas then
+    GL.glColor4f(_colorR, _colorG, _colorB, _colorA)
+    CanvasMod.draw(drawable, x, y, r, sx, sy, ox, oy)
+  end
+  -- Other drawable types (Image, Mesh) are no-ops in the shim.
+  -- The SDL2 painter handles them via Images.drawTexture() directly.
+end
+
+--- clear: clear the current render target (canvas or screen).
+function graphics.clear(r, g, b, a)
+  r = r or 0
+  g = g or 0
+  b = b or 0
+  a = a or 0
+  GL.glClearColor(r, g, b, a)
+  GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.DEPTH_BUFFER_BIT))
+end
+
+--- setDepthMode: enable/disable depth testing.
+--- setDepthMode("lequal", true) — enable with lequal, write depth
+--- setDepthMode("lequal", false) — enable with lequal, don't write depth
+--- setDepthMode() — disable depth testing
+local DEPTH_FUNC_MAP = {
+  never    = GL.NEVER,
+  less     = GL.LESS,
+  equal    = GL.EQUAL,
+  lequal   = GL.LEQUAL,
+  greater  = GL.GREATER,
+  notequal = GL.NOTEQUAL,
+  gequal   = GL.GEQUAL,
+  always   = GL.ALWAYS,
+}
+
+function graphics.setDepthMode(mode, write)
+  if not mode then
+    GL.glDisable(GL.DEPTH_TEST)
+    return
+  end
+  GL.glEnable(GL.DEPTH_TEST)
+  GL.glDepthFunc(DEPTH_FUNC_MAP[mode] or GL.LEQUAL)
+  GL.glDepthMask(write and GL.TRUE or GL.FALSE)
+end
+
+--- setBlendMode: configure blend function.
+function graphics.setBlendMode(mode)
+  if not mode or mode == "alpha" then
+    GL.glEnable(GL.BLEND)
+    GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+  elseif mode == "add" or mode == "additive" then
+    GL.glEnable(GL.BLEND)
+    GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE)
+  elseif mode == "multiply" then
+    GL.glEnable(GL.BLEND)
+    GL.glBlendFunc(0x0306, 0x0303)  -- GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA
+  elseif mode == "replace" then
+    GL.glDisable(GL.BLEND)
+  else
+    -- Default: alpha blend
+    GL.glEnable(GL.BLEND)
+    GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+  end
+end
+
+--- setShader: stub for shader program binding.
+--- Full shader creation is future work; this just handles on/off toggle.
+function graphics.setShader(shader)
+  if shader and shader._program then
+    GL.glUseProgram(shader._program)
+  else
+    GL.glUseProgram(0)
+  end
+end
+
+-- Stencil convenience (Love2D compatible, for modules that use it)
+function graphics.setStencilTest(mode, value)
+  if not mode then
+    GL.glDisable(GL.STENCIL_TEST)
+    return
+  end
+  GL.glEnable(GL.STENCIL_TEST)
+  local func = GL.EQUAL
+  if mode == "greater" then func = GL.GREATER
+  elseif mode == "gequal" then func = GL.GEQUAL
+  end
+  GL.glStencilFunc(func, value or 1, 0xFF)
+end
+
+-- ============================================================================
 -- love.mouse
 -- ============================================================================
 
@@ -483,6 +595,9 @@ function Shim.init(cfg)
   _W   = cfg.width  or 800
   _H   = cfg.height or 600
 
+  -- Init Canvas module with window dimensions
+  CanvasMod.setWindowDimensions(_W, _H)
+
   -- Install global love table
   love = {
     graphics   = graphics,
@@ -498,6 +613,7 @@ end
 
 function Shim.setDimensions(w, h)
   _W, _H = w, h
+  CanvasMod.setWindowDimensions(w, h)
 end
 
 function Shim.setMousePosition(x, y)
