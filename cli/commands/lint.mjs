@@ -5,19 +5,22 @@
  * Catches layout mistakes before they reach the renderer.
  *
  * Rules:
- *   no-text-without-fontsize    (error)   Text without fontSize cannot be measured
- *   no-unicode-symbol-in-text   (error)   Unicode symbols in Text won't render in Love2D
  *   no-mixed-text-children      (error)   Mixed text + expressions create overlapping __TEXT__ nodes
- *   no-row-justify-without-width (error)  Row with justifyContent but no width
- *   no-uncontexted-flexgrow     (warning) flexGrow where siblings lack explicit sizing
- *   no-deep-flex-nesting        (warning) 3+ flex container levels without explicit dimensions
- *   no-flexrow-flexcolumn       (warning) Prefer Box with flexDirection
- *   no-implicit-container-sizing (warning) >5 children without explicit container size
+ *   no-invalid-style-props      (error)   Style properties not recognized by ReactJIT
  *   no-link-without-to          (error)   <Link> missing "to" prop
  *   no-routes-without-fallback  (warning) <Routes> without path="*" catch-all
  *   no-image-without-src        (error)   <Image> missing "src" prop
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
+ *
+ * Removed rules (layout engine handles these correctly now):
+ *   no-text-without-fontsize    — layout engine falls back to default fontSize
+ *   no-unicode-symbol-in-text   — DejaVu Sans has full unicode symbol coverage
+ *   no-row-justify-without-width — rows resolve width from parent correctly
+ *   no-flexrow-flexcolumn       — FlexRow/FlexColumn work fine
+ *   no-uncontexted-flexgrow     — flex distribution works without explicit sibling sizes
+ *   no-deep-flex-nesting        — handles 8+ levels without explicit dims
+ *   no-implicit-container-sizing — handles 12+ children without explicit container size
  *
  * API settings detection:
  *   suggest-settings-menu       (info)    API hooks used without useSettingsRegistry()
@@ -1107,84 +1110,6 @@ async function discoverHttp(info, timeout) {
 
 const rules = [
 
-  // Every <Text> must have fontSize for Love2D/Web measurement
-  {
-    name: 'no-text-without-fontsize',
-    severity: 'error',
-    check(ctx) {
-      if (!TEXT_TAGS.has(ctx.tagName)) return null;
-
-      // Accept shorthand `size` prop on the element: <Text size={14}>
-      if (ctx._attrs && ctx._attrs.has('size')) return null;
-
-      // No style attribute at all
-      if (!ctx.style) {
-        return 'Text element has no style attribute — fontSize (or size shorthand) is required for Love2D/Web targets';
-      }
-
-      // Style is a variable — can't verify, skip
-      if (!ctx.style.analyzable) return null;
-
-      // Has spread — fontSize might be in the spread, skip
-      if (ctx.style.hasSpread && !ctx.style.props.has('fontSize')) return null;
-
-      // Has fontSize — OK
-      if (ctx.style.props.has('fontSize')) return null;
-
-      return 'Text element missing fontSize in style (or size shorthand) — required for text measurement on Love2D/Web';
-    },
-  },
-
-  // Unicode symbols (geometric shapes, arrows, dingbats, block elements, technical
-  // symbols, etc.) don't render in Love2D's default font. They must be converted to
-  // Box-based geometry — e.g., a play triangle as colored Box elements, pause bars as
-  // two narrow Box elements, block characters as a boolean grid with backgroundColor.
-  {
-    name: 'no-unicode-symbol-in-text',
-    severity: 'error',
-    check(ctx) {
-      if (!TEXT_TAGS.has(ctx.tagName)) return null;
-      if (!ctx.textContent) return null;
-
-      // Unicode blocks that contain "icon" characters Love2D's font won't render
-      const SYMBOL_RANGES = [
-        [0x2190, 0x21FF], // Arrows (← ↑ → ↓ ⇒ etc.)
-        [0x2200, 0x22FF], // Mathematical Operators (∞ ≤ ≥ ≠ etc.)
-        [0x2300, 0x23FF], // Miscellaneous Technical (⌘ ⏎ ⏸ ⏹ ⏺ etc.)
-        [0x2500, 0x257F], // Box Drawing (─ │ ┌ ┐ └ ┘ etc.)
-        [0x2580, 0x259F], // Block Elements (█ ▀ ▄ ▌ ▐ etc.)
-        [0x25A0, 0x25FF], // Geometric Shapes (■ □ ▲ ▶ ● ○ etc.)
-        [0x2600, 0x26FF], // Miscellaneous Symbols (☀ ☎ ♠ ♣ ♥ etc.)
-        [0x2700, 0x27BF], // Dingbats (✂ ✓ ✗ ✦ etc.)
-        [0x2B00, 0x2BFF], // Misc Symbols and Arrows (⬆ ⬇ ⬛ ⭐ etc.)
-        [0x1F300, 0x1F9FF], // Emoji / Symbols / Pictographs
-      ];
-
-      function isSymbol(cp) {
-        for (const [lo, hi] of SYMBOL_RANGES) {
-          if (cp >= lo && cp <= hi) return true;
-        }
-        return false;
-      }
-
-      const found = [];
-      for (const ch of ctx.textContent) {
-        const cp = ch.codePointAt(0);
-        if (isSymbol(cp)) {
-          const hex = 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
-          if (!found.some(f => f.hex === hex)) {
-            found.push({ char: ch, hex });
-          }
-        }
-      }
-
-      if (found.length === 0) return null;
-
-      const chars = found.map(f => `${f.char} (${f.hex})`).join(', ');
-      return `Text contains Unicode symbol${found.length > 1 ? 's' : ''}: ${chars} — these won't render in Love2D's default font. Use Box-based geometry instead (colored Box elements for shapes, see NeofetchDemo heart pattern)`;
-    },
-  },
-
   // Mixed text and expressions in <Text> creates multiple __TEXT__ nodes.
   // The layout engine lays them out as separate flex items at y=0, causing overlap.
   // Fix: use a template literal {`text ${value}`} to produce a single __TEXT__ node.
@@ -1196,128 +1121,6 @@ const rules = [
       if (!ctx.hasMixedTextChildren) return null;
 
       return 'Mixed text and expressions in <Text> creates multiple __TEXT__ nodes that overlap in layout — use a template literal instead: {`text ${value}`}';
-    },
-  },
-
-  // Row containers with justifyContent may need explicit width for predictable alignment
-  {
-    name: 'no-row-justify-without-width',
-    severity: 'warning',
-    check(ctx) {
-      if (!CONTAINER_TAGS.has(ctx.tagName)) return null;
-
-      const attrs = ctx._attrs;
-
-      // Determine if this is a row (style.flexDirection or direction shorthand)
-      const isRowFromStyle = ctx.style && ctx.style.analyzable && ctx.style.flexDirection === 'row';
-      const isRowFromShorthand = attrs && (attrs.get('direction') === 'row');
-      const isRow = isRowFromStyle || isRowFromShorthand || ctx.tagName === 'FlexRow';
-      if (!isRow) return null;
-
-      // Check for justifyContent in style or justify shorthand
-      const hasJustifyInStyle = ctx.style && ctx.style.analyzable && ctx.style.props.has('justifyContent');
-      const hasJustifyShorthand = attrs && attrs.has('justify');
-      if (!hasJustifyInStyle && !hasJustifyShorthand) return null;
-
-      // Check for width in style or w shorthand or fill shorthand
-      const hasWidthInStyle = ctx.style && ctx.style.analyzable && ctx.style.props.has('width');
-      const hasWidthShorthand = attrs && (attrs.has('w') || attrs.has('fill'));
-      if (hasWidthInStyle || hasWidthShorthand) return null;
-
-      // Style has spread — width might be in the spread, skip
-      if (ctx.style && ctx.style.analyzable && ctx.style.hasSpread) return null;
-
-      // "start" is the default — it doesn't distribute space, so no width needed
-      const justifyValue = (ctx.style && ctx.style.analyzable && ctx.style.justifyContent)
-        || (attrs && typeof attrs.get('justify') === 'string' && attrs.get('justify'));
-      if (justifyValue === 'start' || justifyValue === 'flex-start') return null;
-
-      return "Row with justifyContent may need explicit width for predictable alignment (auto-sizing uses content width)";
-    },
-  },
-
-  // Prefer <Box style={{ flexDirection: 'row' }}> over <FlexRow>
-  {
-    name: 'no-flexrow-flexcolumn',
-    severity: 'warning',
-    check(ctx) {
-      if (ctx.tagName === 'FlexRow') {
-        return "Use <Box style={{ flexDirection: 'row' }}> instead of <FlexRow> — keeps the layout tree transparent";
-      }
-      if (ctx.tagName === 'FlexColumn') {
-        return 'Use <Box> instead of <FlexColumn> — column is the default flexDirection';
-      }
-      return null;
-    },
-  },
-
-  // flexGrow where siblings lack explicit main-axis sizing, OR all siblings grow with no sizes
-  {
-    name: 'no-uncontexted-flexgrow',
-    severity: 'warning',
-    check(ctx) {
-      // Check for flexGrow in style or grow shorthand
-      const hasGrowInStyle = ctx.style && ctx.style.analyzable && ctx.style.props.has('flexGrow');
-      const hasGrowShorthand = ctx._attrs && ctx._attrs.has('grow');
-      if (!hasGrowInStyle && !hasGrowShorthand) return null;
-
-      // Need a parent with multiple direct children for sibling analysis
-      if (!ctx.parent || ctx.parent.directChildren.length < 2) return null;
-
-      // Determine parent's flex direction
-      let parentDir = 'column'; // default
-      if (ctx.parent.tagName === 'FlexRow') {
-        parentDir = 'row';
-      } else if (ctx.parent.style && ctx.parent.style.analyzable && ctx.parent.style.flexDirection) {
-        parentDir = ctx.parent.style.flexDirection;
-      } else if (ctx.parent._attrs && ctx.parent._attrs.get('direction') === 'row') {
-        parentDir = 'row';
-      }
-
-      const mainProp = parentDir === 'row' ? 'width' : 'height';
-      const mainShorthand = parentDir === 'row' ? 'w' : 'h';
-      const siblings = ctx.parent.directChildren.filter((s) => s !== ctx);
-
-      // Helper: does a node have explicit main-axis size (style or shorthand)?
-      function hasMainSize(node) {
-        if (node.style && node.style.analyzable && node.style.props.has(mainProp)) return true;
-        if (node._attrs && (node._attrs.has(mainShorthand) || node._attrs.has('fill'))) return true;
-        return false;
-      }
-
-      // Helper: does a node use flexGrow (style or shorthand)?
-      function hasGrow(node) {
-        if (node.style && node.style.analyzable && node.style.props.has('flexGrow')) return true;
-        if (node._attrs && node._attrs.has('grow')) return true;
-        return false;
-      }
-
-      // Case 1: ALL siblings also grow and NONE have explicit main-axis size
-      const analyzableSibs = siblings.filter(
-        (s) => (s.style && s.style.analyzable && !s.style.hasSpread) || s._attrs,
-      );
-      if (analyzableSibs.length > 0) {
-        const allGrow = analyzableSibs.every((s) => hasGrow(s));
-        const noneHaveSize = analyzableSibs.every((s) => !hasMainSize(s));
-        const selfLacksSize = !hasMainSize(ctx);
-
-        if (allGrow && noneHaveSize && selfLacksSize) {
-          return `All ${ctx.parent.directChildren.length} siblings use flexGrow without explicit ${mainProp} — layout will depend on content measurement which is unreliable. Add ${mainProp} (or ${mainShorthand} shorthand) or use justifyContent on the parent`;
-        }
-      }
-
-      // Case 2: Some siblings don't grow and lack explicit sizing
-      for (const sib of siblings) {
-        if (hasGrow(sib)) continue;
-        if (!sib.style || !sib.style.analyzable || sib.style.hasSpread) {
-          if (!sib._attrs) continue; // Can't analyze
-        }
-        if (!hasMainSize(sib)) {
-          return `flexGrow used but sibling at line ${sib.line} lacks explicit ${mainProp} — in a ${parentDir} container, non-growing siblings need ${mainProp} (or ${mainShorthand} shorthand) for predictable layout`;
-        }
-      }
-
-      return null;
     },
   },
 
@@ -1382,57 +1185,6 @@ const rules = [
         return `Invalid style propert${invalid.length > 1 ? 'ies' : 'y'}: ${invalid.join(', ')} — not recognized by ReactJIT's style system`;
       }
       return null;
-    },
-  },
-
-  // Deep flex nesting without explicit dimensions
-  {
-    name: 'no-deep-flex-nesting',
-    severity: 'warning',
-    check(ctx) {
-      if (!CONTAINER_TAGS.has(ctx.tagName)) return null;
-      if (ctx.flexDepth < 6) return null;
-
-      // Has explicit dimensions via style — OK
-      if (ctx.style && ctx.style.analyzable) {
-        if (ctx.style.props.has('width') && ctx.style.props.has('height')) return null;
-        if (ctx.style.hasSpread) return null;
-      }
-
-      // Has explicit dimensions via shorthand (w+h or fill) — OK
-      if (ctx._attrs) {
-        if (ctx._attrs.has('fill')) return null;
-        if (ctx._attrs.has('w') && ctx._attrs.has('h')) return null;
-      }
-
-      return `Flex container nested ${ctx.flexDepth} levels deep without explicit width and height — may produce unexpected layout`;
-    },
-  },
-
-  // Large number of children without explicit container sizing
-  // Skips the outermost returned element (it fills its parent naturally)
-  {
-    name: 'no-implicit-container-sizing',
-    severity: 'warning',
-    check(ctx) {
-      if (!CONTAINER_TAGS.has(ctx.tagName)) return null;
-      if (ctx.directChildren.length <= 10) return null;
-      // Outermost element fills its parent naturally
-      if (!ctx.parent) return null;
-
-      // Has explicit dimensions via style — OK
-      if (ctx.style && ctx.style.analyzable) {
-        if (ctx.style.props.has('width') && ctx.style.props.has('height')) return null;
-        if (ctx.style.hasSpread) return null;
-      }
-
-      // Has explicit dimensions via shorthand (w+h or fill) — OK
-      if (ctx._attrs) {
-        if (ctx._attrs.has('fill')) return null;
-        if (ctx._attrs.has('w') && ctx._attrs.has('h')) return null;
-      }
-
-      return `Container with ${ctx.directChildren.length} direct children has no explicit width/height — add explicit dimensions for deterministic layout`;
     },
   },
 
