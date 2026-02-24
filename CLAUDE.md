@@ -199,11 +199,9 @@ The layout engine has three sizing tiers. They resolve in order — the first on
 ### Rules that still cause bugs
 
 1. **Root containers** need `width: '100%', height: '100%'` — the proportional fallback doesn't apply at the root because the root IS the viewport
-2. **Every `<Text>` MUST have explicit `fontSize`** — the linter enforces this
-3. **Use `flexGrow: 1` for space-filling elements** — in a column of header + content + footer, the content should have `flexGrow: 1` to absorb remaining space. Do NOT hardcode pixel heights to "fill" a known window size — that creates deadspace at different resolutions
-4. **Row Boxes NEED explicit width for `justifyContent` to work** — a `flexDirection: 'row'` Box without an explicit width won't respond to `justifyContent: 'center'`. Add `width: '100%'` (or a fixed width) to row Boxes that need horizontal content distribution
-5. **ScrollView needs explicit height** — scroll containers are excluded from the proportional fallback. They need `height` or `flexGrow` to define their viewport
-6. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in the default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`
+2. **Use `flexGrow: 1` for space-filling elements** — in a column of header + content + footer, the content should have `flexGrow: 1` to absorb remaining space. Do NOT hardcode pixel heights to "fill" a known window size — that creates deadspace at different resolutions
+3. **ScrollView needs explicit height** — scroll containers are excluded from the proportional fallback. They need `height` or `flexGrow` to define their viewport
+4. **Don't mix text and expressions in `<Text>`** — `<Text>Hello {name}!</Text>` creates 3 separate `__TEXT__` nodes that stack vertically instead of rendering inline. Use a template literal: `{`Hello ${name}!`}`. The linter enforces this via `no-mixed-text-children` (pending reconciler-level fix to make this just work)
 
 ### Layout anti-patterns (DO NOT DO)
 
@@ -211,7 +209,7 @@ The layout engine has three sizing tiers. They resolve in order — the first on
 - **Budgeting pixels manually.** Don't add up `48 + 260 + 80 + gaps` to hit a target height. Let flex do this — one element grows, the rest auto-size from content.
 - **Using fixed dimensions where auto-sizing works.** If a panel contains text and buttons, it knows its own size. Don't constrain it with a hardcoded height — let it shrink-wrap, and give a sibling `flexGrow: 1` to fill the gap.
 
-The static linter (`cli/commands/lint.mjs`) catches many of these as build-blocking errors. Escape hatch: `// rjit-ignore-next-line`.
+The static linter (`cli/commands/lint.mjs`) catches remaining issues (mixed text children, missing props, invalid style properties) as build-blocking errors. Escape hatch: `// rjit-ignore-next-line`.
 
 ## Auto-Sizing and Proportional Fallback
 
@@ -347,7 +345,7 @@ Commit early and often. This project has no test suite, so git history IS the sa
 
 - **Never edit local copies** — always fix at source (`lua/`, `packages/`), then `make cli-setup` and `reactjit update`. Local copies are disposable.
 - **Use `flexGrow: 1` not hardcoded heights** — `flexGrow` adapts to any window size. Pixel heights leave dead air or clip content.
-- **No Unicode symbols in `<Text>`** — ▶ ⏸ ● ✓ arrows etc. won't render. Convert to Box geometry or use `usePixelArt()`.
+- **Unicode symbols work in `<Text>`** — the default font (DejaVu Sans) has full coverage for arrows, geometric shapes, dingbats, block elements, math symbols, etc. `usePixelArt()` is available for pixel-perfect custom icons but is no longer required.
 - **Color palette in one place** — define it as `const C = { ... }` at the top of the file, use `C.accent` throughout. Never naked hex strings in style props.
 
 ### Storybook (`storybook/`)
