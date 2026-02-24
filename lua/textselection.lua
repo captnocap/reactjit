@@ -703,6 +703,45 @@ function TextSelection.get()
   return selection
 end
 
+--- Select all selectable Text nodes on the page.
+--- Sets selection spanning from the first character of the first node to the
+--- last character of the last node, extracts text, and copies to clipboard.
+--- Returns true if any text was selected, false if no text nodes were found.
+function TextSelection.selectAll(root)
+  local treeRoot = root or getRoot()
+  if not treeRoot then return false end
+
+  local order = buildNodeOrder(treeRoot)
+  if not order or #order.nodes == 0 then return false end
+
+  local firstNode = order.nodes[1]
+  local lastNode  = order.nodes[#order.nodes]
+  local lastLines = getWrappedLines(lastNode)
+  local lastLine  = #lastLines
+  local lastCol   = #(lastLines[lastLine] or "")
+
+  selection = {
+    node       = firstNode,
+    startNode  = firstNode,
+    startLine  = 1,
+    startCol   = 0,
+    endNode    = lastNode,
+    endLine    = lastLine,
+    endCol     = lastCol,
+    isDragging = false,
+    text       = nil,
+    order      = order,
+  }
+
+  selection.text = extractSelectionText()
+  if not selection.text or #selection.text == 0 then
+    selection = nil
+    return false
+  end
+
+  return true
+end
+
 --- Copy selected text to system clipboard.
 --- Returns true if text was copied, false otherwise.
 function TextSelection.copyToClipboard()

@@ -78,6 +78,7 @@ local M = {
   manifestMod = require("lua.manifest"),
   cartReader  = require("lua.cart_reader"),
   themes   = nil,
+  search   = nil,
   currentThemeName = 'catppuccin-mocha',
   currentTheme     = nil,
   controllerToast = {
@@ -588,6 +589,8 @@ function ReactJIT.init(config)
 
     M.events.setWidgetsModule(M.widgets)
 
+    M.search = require("lua.search")
+
     loadThemes()
 
     print("[reactjit] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
@@ -755,6 +758,9 @@ function ReactJIT.init(config)
 
     M.events.setWidgetsModule(M.widgets)
 
+    -- App-wide text search (hot index over live tree + cold structural paths)
+    M.search = require("lua.search")
+
     -- Initialize async HTTP (love.thread + LuaSocket) — gated by network permit
     if permit.check("network") then
       M.http = require("lua.http")
@@ -852,6 +858,43 @@ function ReactJIT.init(config)
       paintMs = 0,
       nodeCount = 0,
     }
+  end
+
+  -- App-wide text search RPC handlers
+  rpcHandlers["search:query"] = function(args)
+    if not M.search then return {} end
+    local tree = M.tree and M.tree.getTree()
+    if not tree then return {} end
+    local hotIndex = M.search.buildHotIndex(tree)
+    local matches  = M.search.query(hotIndex, args and args.query or "")
+    local out = {}
+    for _, m in ipairs(matches) do
+      out[#out + 1] = {
+        path = m.path, text = m.text, context = m.context, propKey = m.propKey,
+        matchStart = m.matchStart, matchEnd = m.matchEnd,
+        x = m.x, y = m.y, w = m.w, h = m.h,
+      }
+    end
+    return out
+  end
+
+  rpcHandlers["search:navigate"] = function(args)
+    if not M.search then return false end
+    local tree = M.tree and M.tree.getTree()
+    if not tree then return false end
+    if args and args.path then
+      local node = M.search.resolvePath(tree, args.path)
+      if node then M.search.navigateTo(node); return true end
+    end
+    if args and args.text then
+      return M.search.navigateByText(tree, args.text)
+    end
+    return false
+  end
+
+  rpcHandlers["search:clear"] = function()
+    if M.search then M.search.clearHighlight() end
+    return true
   end
 
   -- Register settings RPC handlers (API key management)
@@ -1834,6 +1877,7 @@ function ReactJIT.update(dt)
 
   -- 11. Tick Lua-side transitions and animations (before layout)
   if M.animate then M.animate.tick(dt) end
+  if M.search  then M.search.tick(dt)  end
 
   -- 11. Relayout if tree changed
   if M.tree.isDirty() then
@@ -2112,6 +2156,22 @@ function ReactJIT.draw()
 
   -- Theme menu: end canvas capture (draws captured frame to screen at full size)
   if themeCapturing then themeMenu.endCapture() end
+
+  -- Search highlight overlay (drawn under devtools so inspector can inspect it)
+  if M.search then
+    local sh = M.search.getHighlight()
+    if sh and sh.node and sh.node.computed then
+      local c = sh.node.computed
+      love.graphics.push("all")
+      love.graphics.setBlendMode("alpha")
+      love.graphics.setColor(0.2, 0.6, 1.0, sh.alpha * 0.25)
+      love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
+      love.graphics.setColor(0.4, 0.75, 1.0, sh.alpha * 0.85)
+      love.graphics.setLineWidth(2)
+      love.graphics.rectangle("line", c.x, c.y, c.w, c.h)
+      love.graphics.pop()
+    end
+  end
 
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   if M.inspectorEnabled then devtools.draw(root) end
@@ -2746,6 +2806,10 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
+  local _fdbg = focus.get()
+  io.write(string.format("[init:keypressed] key=%s focused=%s type=%s\n",
+    key, tostring(_fdbg and _fdbg.id or "nil"), tostring(_fdbg and _fdbg.type or "nil")))
+  io.flush()
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
@@ -2762,6 +2826,17 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   if M.textselection and key == "c" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
     if M.textselection.copyToClipboard() then
       return  -- Consumed
+    end
+  end
+
+  -- Ctrl+A / Cmd+A: select all page text (when no text editor/input is focused)
+  if M.textselection and key == "a" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
+    local focusedNode = focus.get()
+    if not focusedNode or (focusedNode.type ~= "TextEditor" and focusedNode.type ~= "TextInput") then
+      local root = M.tree and M.tree.getTree()
+      if root and M.textselection.selectAll(root) then
+        return  -- Consumed
+      end
     end
   end
 

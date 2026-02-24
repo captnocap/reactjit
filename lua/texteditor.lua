@@ -94,6 +94,8 @@ function TextEditor.initState(node)
     lastValue = initialText,  -- track for controlled value changes
     dirty = false,            -- text changed since last change event
     changeTimer = 0,          -- seconds since last edit (for idle detection)
+    undoStack = {},           -- { {lines, cursorLine, cursorCol}, ... }
+    redoStack = {},           -- redo buffer (cleared on new edit)
     -- Hover tooltip state
     hoverWord = nil,          -- currently hovered token (string or nil)
     hoverLine = 0,            -- line of hovered word
@@ -176,6 +178,60 @@ end
 local function markDirty(es)
   es.dirty = true
   es.changeTimer = 0
+end
+
+local function pushUndo(es)
+  local snap = { lines = {}, cursorLine = es.cursorLine, cursorCol = es.cursorCol }
+  for i, l in ipairs(es.lines) do snap.lines[i] = l end
+  es.undoStack[#es.undoStack + 1] = snap
+  if #es.undoStack > 100 then table.remove(es.undoStack, 1) end
+  es.redoStack = {}
+end
+
+local function applySnapshot(es, snap)
+  local cur = { lines = {}, cursorLine = es.cursorLine, cursorCol = es.cursorCol }
+  for i, l in ipairs(es.lines) do cur.lines[i] = l end
+  es.lines = snap.lines
+  es.cursorLine = snap.cursorLine
+  es.cursorCol = snap.cursorCol
+  clearSelection(es)
+  clampCursor(es)
+  return cur
+end
+
+--- Jump cursor to start of previous word on current line.
+local function wordJumpLeft(es)
+  local col = es.cursorCol
+  local line = es.lines[es.cursorLine]
+  if col == 0 then
+    if es.cursorLine > 1 then
+      es.cursorLine = es.cursorLine - 1
+      es.cursorCol = #es.lines[es.cursorLine]
+    end
+    return
+  end
+  -- Step back past non-word chars, then past word chars (stop at word boundary)
+  while col > 0 and not line:sub(col, col):match("[%w_]") do col = col - 1 end
+  while col > 0 and line:sub(col, col):match("[%w_]") do col = col - 1 end
+  es.cursorCol = col
+end
+
+--- Jump cursor to end of next word on current line.
+local function wordJumpRight(es)
+  local col = es.cursorCol
+  local line = es.lines[es.cursorLine]
+  local len = #line
+  if col >= len then
+    if es.cursorLine < lineCount(es) then
+      es.cursorLine = es.cursorLine + 1
+      es.cursorCol = 0
+    end
+    return
+  end
+  -- Step forward past non-word chars, then past word chars
+  while col < len and not line:sub(col+1, col+1):match("[%w_]") do col = col + 1 end
+  while col < len and line:sub(col+1, col+1):match("[%w_]") do col = col + 1 end
+  es.cursorCol = col
 end
 
 local function clearSelection(es)
@@ -576,6 +632,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     elseif key == "x" then
       if not isReadOnly(node) and hasSelection(es) then
         love.system.setClipboardText(getSelectedText(es))
+        pushUndo(es)
         deleteSelection(es)
         markDirty(es)
         resetBlink(es)
@@ -585,6 +642,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
       if isReadOnly(node) then return true end
       local text = love.system.getClipboardText() or ""
       if text ~= "" then
+        pushUndo(es)
         if hasSelection(es) then deleteSelection(es) end
         local before = currentLine(es):sub(1, es.cursorCol)
         local after = currentLine(es):sub(es.cursorCol + 1)
@@ -614,6 +672,51 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     elseif key == "return" then
       -- Ctrl+Enter = submit
       return "submit"
+    elseif key == "z" then
+      local shift = love.keyboard.isDown("lshift", "rshift")
+      if shift then
+        -- Ctrl+Shift+Z = redo
+        if #es.redoStack > 0 then
+          local snap = table.remove(es.redoStack)
+          local cur = applySnapshot(es, snap)
+          es.undoStack[#es.undoStack + 1] = cur
+          markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
+        end
+      else
+        -- Ctrl+Z = undo
+        if #es.undoStack > 0 then
+          local snap = table.remove(es.undoStack)
+          local cur = applySnapshot(es, snap)
+          es.redoStack[#es.redoStack + 1] = cur
+          markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
+        end
+      end
+      return true
+    elseif key == "y" then
+      -- Ctrl+Y = redo
+      if #es.redoStack > 0 then
+        local snap = table.remove(es.redoStack)
+        local cur = applySnapshot(es, snap)
+        es.undoStack[#es.undoStack + 1] = cur
+        markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
+      end
+      return true
+    elseif key == "left" then
+      -- Ctrl+Left = word jump left
+      if shift then startOrExtendSelection(es) end
+      if not shift then clearSelection(es) end
+      wordJumpLeft(es)
+      if shift then updateSelectionEnd(es) end
+      clampCursor(es); resetBlink(es); ensureCursorVisible(node, es)
+      return true
+    elseif key == "right" then
+      -- Ctrl+Right = word jump right
+      if shift then startOrExtendSelection(es) end
+      if not shift then clearSelection(es) end
+      wordJumpRight(es)
+      if shift then updateSelectionEnd(es) end
+      clampCursor(es); resetBlink(es); ensureCursorVisible(node, es)
+      return true
     end
   end
 
@@ -707,6 +810,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
   if isReadOnly(node) then return true end
 
   if key == "backspace" then
+    pushUndo(es)
     if hasSelection(es) then
       deleteSelection(es)
     elseif es.cursorCol > 0 then
@@ -723,6 +827,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "delete" then
+    pushUndo(es)
     if hasSelection(es) then
       deleteSelection(es)
     elseif es.cursorCol < #currentLine(es) then
@@ -735,6 +840,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "return" then
+    pushUndo(es)
     if hasSelection(es) then deleteSelection(es) end
     local line = currentLine(es)
     local before = line:sub(1, es.cursorCol)
@@ -747,6 +853,7 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
     markDirty(es); resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "tab" then
+    pushUndo(es)
     if hasSelection(es) then deleteSelection(es) end
     local line = currentLine(es)
     local spaces = "    "
@@ -768,6 +875,7 @@ function TextEditor.handleTextInput(node, text)
   if isReadOnly(node) then return end
   local es = ensureState(node)
   if love.keyboard.isDown("lctrl", "rctrl") then return end
+  pushUndo(es)
   if hasSelection(es) then deleteSelection(es) end
   local line = currentLine(es)
   es.lines[es.cursorLine] = line:sub(1, es.cursorCol) .. text .. line:sub(es.cursorCol + 1)
