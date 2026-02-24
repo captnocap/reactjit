@@ -1,21 +1,13 @@
 /**
- * Modal component for reactjit — native mode only.
+ * Modal component for reactjit.
  *
- * Displays content in a full-screen overlay with backdrop via the Portal system.
- *
- * Features:
- * - Backdrop with customizable color (tap/click to dismiss)
- * - Centered content via flexbox
- * - Escape key dismissal via onKeyDown broadcast
- * - onShow / onRequestClose lifecycle callbacks
- *
- * Native requirements:
- * - Wrap your root component with <PortalHost> (already done in native-main.tsx).
- *   Without it the portal registers with a null context and renders nothing.
+ * Renders a full-screen overlay with backdrop. No PortalHost required —
+ * uses position:absolute + zIndex to layer above everything else.
+ * The layout engine handles absolute children out-of-flow and the
+ * painter sorts by zIndex, so this works from anywhere in the tree.
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Portal } from './Portal';
 import { Box } from './primitives';
 import { Pressable } from './Pressable';
 import type { Style, Color, LoveEvent } from './types';
@@ -74,42 +66,41 @@ export function Modal({
   // the content area are consumed and do not fall through to the backdrop.
 
   return (
-    <Portal>
-      <Box
+    <Box
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 1000,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+      onKeyDown={handleNativeKeyDown}
+    >
+      {/* Backdrop — position:absolute so it doesn't participate in flex flow */}
+      <Pressable
+        onPress={handleBackdropPress}
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
           width: '100%',
           height: '100%',
-          justifyContent: 'center',
-          alignItems: 'center',
+          backgroundColor: finalBackdropColor,
         }}
-        onKeyDown={handleNativeKeyDown}
       >
-        {/* Backdrop — position:absolute so it doesn't participate in flex flow */}
-        <Pressable
-          onPress={handleBackdropPress}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: finalBackdropColor,
-          }}
-        >
-          <Box style={{ width: '100%', height: '100%' }} />
-        </Pressable>
+        <Box style={{ width: '100%', height: '100%' }} />
+      </Pressable>
 
-        {/* Content — fills viewport, centers children, consumes clicks */}
-        <Pressable
-          onPress={() => {/* consume clicks so they don't reach the backdrop */}}
-          style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', zIndex: 1, ...style }}
-        >
-          {children}
-        </Pressable>
-      </Box>
-    </Portal>
+      {/* Content — fills viewport, centers children, consumes clicks */}
+      <Pressable
+        onPress={() => {/* consume clicks so they don't reach the backdrop */}}
+        style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', zIndex: 1, ...style }}
+      >
+        {children}
+      </Pressable>
+    </Box>
   );
 }
