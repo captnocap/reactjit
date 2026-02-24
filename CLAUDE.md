@@ -306,12 +306,14 @@ Commit early and often. This project has no test suite, so git history IS the sa
 - **Before risky operations.** About to refactor a core file, change the build pipeline, or touch Lua runtime code? Commit your current working state first so there's a clean rollback point.
 - **When you've touched 3+ files.** That's already a commit-sized change. Stop and commit before continuing.
 - **At natural breakpoints in multi-step work.** If a task has phases (e.g., add types → add Lua shader → add React component → update story), commit after each phase, not all at the end.
+- **CRITICAL: Only after explicit human approval.** When debugging or fixing, do NOT commit between iterations. Wait for the human to say "yes, that's fixed" or "good job, this works" — that approval IS your commit signal. This prevents git history pollution from incremental fixes to the same bug. The human's confirmation = completion. You do not decide when something is done.
 
 ### How to commit
 
 - **Use descriptive conventional-commit messages.** Say what changed and why: `feat(3d): add Blinn-Phong lighting shader with directional + ambient lights` not `update stuff`.
 - **Don't batch unrelated changes.** One logical change per commit. If you added a feature AND fixed a bug, that's two commits.
 - **Never leave a session with uncommitted work.** If the conversation is winding down and there are unstaged changes, commit them. The next Claude instance that picks up this repo should start from a clean tree.
+- **When the human approves, commit immediately + update docs.** Once you hear "yes, this works" or similar confirmation, that is the signal to: (1) run `git status` and `git diff` to prepare the commit, (2) create the commit with a descriptive message, (3) emit the CHANGESET brief, (4) invoke `/docs` to update documentation. Do not wait or ask for permission again — the approval already happened.
 
 ### What NOT to do
 
