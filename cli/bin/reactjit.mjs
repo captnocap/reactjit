@@ -15,6 +15,7 @@ import { tslCommand } from '../commands/tsl.mjs';
 import { diagnoseCommand } from '../commands/diagnose.mjs';
 import { fontsCommand } from '../commands/fonts.mjs';
 import { storybookCommand } from '../commands/storybook.mjs';
+import { searchIndexCommand } from '../commands/search-index.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -68,6 +69,7 @@ const HELP = `
     rjit tsl --test               Run TSL transpiler test suite
     rjit screenshot [--output]    Lint + build + headless screenshot
     rjit diagnose                 Find ghost nodes (in tree, not painting)
+    rjit search-index             Index all <Text> nodes for cold AppSearch
     rjit help                     Show this help message
 
   Flags:
@@ -109,6 +111,9 @@ switch (command) {
     break;
   case 'storybook':
     await storybookCommand(args);
+    break;
+  case 'search-index':
+    await searchIndexCommand(args);
     break;
   case '--version':
   case '-v':

@@ -28,6 +28,7 @@ local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
 local MapModule = nil     -- Injected at init time via Painter.init()
+local ChartModule = nil   -- Lazy-loaded to avoid circular deps
 local GameModule = nil    -- Injected at init time via Painter.init()
 local EmulatorModule = nil -- Injected at init time via Painter.init()
 local EffectsModule = nil  -- Injected at init time via Painter.init()
@@ -1341,6 +1342,14 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
+  elseif not isHidden and node.type == "Chart2D" then
+    if not ChartModule then
+      ChartModule = require("lua.chart")
+    end
+    if c and c.w > 0 and c.h > 0 then
+      ChartModule.draw(node.props, c.x, c.y, c.w, c.h)
+    end
+
   elseif not isHidden and node.type == "GameCanvas" then
     -- Game viewport: draw the pre-rendered Canvas from game.lua
     if GameModule then
@@ -1693,6 +1702,22 @@ function Painter.paint(node)
   if not node then return end
   Log.log("paint", "paint pass root=%s children=%d", tostring(node.type), #(node.children or {}))
   Painter.paintNode(node)
+
+  -- Search highlight overlay (drawn after the full tree so it's on top)
+  local ok, Search = pcall(require, "lua.search")
+  if ok then
+    local hl = Search.getHighlight()
+    if hl and hl.node and hl.node.computed then
+      local c = hl.node.computed
+      love.graphics.setColor(0.23, 0.51, 0.96, hl.alpha * 0.3)
+      love.graphics.rectangle("fill", c.x - 2, c.y - 2, c.w + 4, c.h + 4, 4)
+      love.graphics.setColor(0.23, 0.51, 0.96, hl.alpha * 0.8)
+      love.graphics.setLineWidth(2)
+      love.graphics.rectangle("line", c.x - 2, c.y - 2, c.w + 4, c.h + 4, 4)
+      love.graphics.setLineWidth(1)
+    end
+  end
+
   love.graphics.setColor(1, 1, 1, 1)
 end
 
