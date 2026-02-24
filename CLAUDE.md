@@ -331,15 +331,17 @@ Commit early and often. This project has no test suite, so git history IS the sa
 
    **What:** [One-liner description of what was added/changed]
    **Why:** [The problem it solves or capability it enables]
-   **Affects:** [List of docs, sections, or areas that need updates]
+   **Affects:** [List of docs sections, or areas that need updates]
    **Breaking Changes:** [If any; else "None"]
    **New APIs:** [List of new components, hooks, capabilities, or patterns users need to know about]
    ```
 
-2. **Invoke the docs-generator skill** — let it consume the changeset and propagate updates to `content/sections/` while the context is loaded:
-   ```
-   Use the /docs skill with the changeset as context to update affected documentation sections
-   ```
+2. **Run a scoped docs update** — use the `/docs` skill in single-item mode (not full regeneration):
+   - Read the CHANGESET you just emitted
+   - Read `references/content-format.md` to understand the style and structure
+   - Update only the affected `.txt` file(s) in `content/sections/` directly
+   - Run `npm run validate:docs` to verify formatting
+   - Commit both code and docs together as the final step
 
 3. **Include docs in your definition of done** — do not consider the implementation complete until documentation has been updated. The moment of highest fidelity for docs is during implementation, when the full design context is in memory.
 
