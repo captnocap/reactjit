@@ -49,6 +49,9 @@ ffi.cdef[[
                    uint8_t event; uint8_t p1; uint8_t p2; uint8_t p3;
                    int32_t data1; int32_t data2; }
                    SDL2_WindowEvent;
+  typedef struct { uint32_t type; uint32_t ts; uint32_t wid;
+                   char *file; }
+                   SDL2_DropEvent;
   typedef union {
     uint32_t               type;
     SDL2_MouseButtonEvent  button;
@@ -57,6 +60,7 @@ ffi.cdef[[
     SDL2_KeyboardEvent     key;
     SDL2_TextInputEvent    text;
     SDL2_WindowEvent       window;
+    SDL2_DropEvent         drop;
     uint8_t                padding[56];
   } SDL2_Event;
 
@@ -85,6 +89,8 @@ ffi.cdef[[
   int           SDL_SetClipboardText(const char *text);
   int           SDL_HasClipboardText(void);
   void          SDL_free(void *mem);
+  void          SDL_GetWindowPosition(SDL_Window *win, int *x, int *y);
+  void          SDL_EventState(uint32_t type, int state);
 ]]
 
 local loader = require("lua.lib_loader")
@@ -105,6 +111,10 @@ local SDL_MOUSEMOTION  = 0x400
 local SDL_MOUSEBTNDOWN = 0x401
 local SDL_MOUSEBTNUP   = 0x402
 local SDL_MOUSEWHEEL   = 0x403
+local SDL_DROPFILE     = 0x1000
+local SDL_DROPTEXT     = 0x1001
+local SDL_DROPBEGIN    = 0x1002
+local SDL_DROPCOMPLETE = 0x1003
 
 local SDL_WINDOWEVENT_RESIZED      = 5
 local SDL_WINDOWEVENT_FOCUS_GAINED = 12
@@ -485,6 +495,195 @@ function SDL2Init.run(config)
     end
   end
 
+  -- App-wide text search
+  local search = require("lua.search")
+
+  -- ------------------------------------------------------------------
+  -- 3c6. Drag and drop (X11 hover detection + SDL2 drop events)
+  -- ------------------------------------------------------------------
+  local dragdrop = nil
+  local lastDragHoverId = nil
+  do
+    local ddOk, ddMod = pcall(require, "lua.dragdrop")
+    if ddOk then
+      dragdrop = ddMod
+      -- Inject SDL2 window accessors so dragdrop.poll() can do bounds checking
+      -- without love.window (which doesn't exist in the SDL2 target).
+      love = love or {}
+      love.window = love.window or {}
+      love.window.getPosition = function()
+        local wx = ffi.new("int[1]")
+        local wy = ffi.new("int[1]")
+        sdl.SDL_GetWindowPosition(window, wx, wy)
+        return tonumber(wx[0]), tonumber(wy[0])
+      end
+      love.window.getMode = function()
+        return W, H
+      end
+      dragdrop.init({ sdl = sdl })
+      -- Enable SDL2 drop events (they are disabled by default)
+      sdl.SDL_EventState(SDL_DROPFILE, 1)
+      sdl.SDL_EventState(SDL_DROPTEXT, 1)
+      sdl.SDL_EventState(SDL_DROPBEGIN, 1)
+      sdl.SDL_EventState(SDL_DROPCOMPLETE, 1)
+      io.write("[sdl2_init] drag-and-drop initialized\n"); io.flush()
+    else
+      io.write("[sdl2_init] dragdrop module not available: " .. tostring(ddMod) .. "\n"); io.flush()
+    end
+  end
+
+  -- File drop helpers (shared logic with init.lua)
+  local FILE_DROP_PREVIEW_MAX_BYTES = 128 * 1024
+
+  local FILE_DROP_TEXT_EXTENSIONS = {
+    txt = true, text = true, md = true, markdown = true, rst = true,
+    log = true, csv = true, tsv = true, json = true, yaml = true,
+    yml = true, toml = true, ini = true, cfg = true, conf = true,
+    xml = true, html = true, css = true, js = true, jsx = true,
+    ts = true, tsx = true, lua = true, py = true, rb = true,
+    go = true, rs = true, c = true, h = true, cpp = true, hpp = true,
+    java = true, kt = true, swift = true, cs = true, sh = true,
+    bash = true, zsh = true, fish = true, ps1 = true, bat = true,
+    cmd = true, sql = true,
+  }
+
+  local function fileNameFromPath(path)
+    if type(path) ~= "string" then return nil end
+    return path:match("([^/\\]+)$") or path
+  end
+
+  local function fileExtensionFromPath(path)
+    if type(path) ~= "string" then return nil end
+    local ext = path:match("%.([^./\\]+)$")
+    return ext and string.lower(ext) or nil
+  end
+
+  local function normalizeFileDropMode(value)
+    if type(value) ~= "string" then return nil end
+    local mode = string.lower(value)
+    if mode == "upload" or mode == "preview" then return mode end
+    return nil
+  end
+
+  local function resolveFileDropMode(node)
+    local current = node
+    while current do
+      local props = current.props
+      if props then
+        local mode = normalizeFileDropMode(props.fileDropMode)
+        if mode then return mode end
+      end
+      current = current.parent
+    end
+    return "upload"
+  end
+
+  local function stripUtf8Bom(text)
+    if type(text) ~= "string" or #text < 3 then return text end
+    local b1, b2, b3 = text:byte(1, 3)
+    if b1 == 0xEF and b2 == 0xBB and b3 == 0xBF then return text:sub(4) end
+    return text
+  end
+
+  local function isLikelyBinary(data)
+    if type(data) ~= "string" or #data == 0 then return false end
+    if data:find("\0", 1, true) then return true end
+    local control = 0
+    local len = #data
+    for i = 1, len do
+      local b = data:byte(i)
+      if b < 9 or (b > 13 and b < 32) then
+        control = control + 1
+        if control > (len * 0.10) then return true end
+      end
+    end
+    return false
+  end
+
+  local function readFilePreviewFromPath(filePath)
+    local f = io.open(filePath, "rb")
+    if not f then return nil, false, "preview_open_failed" end
+    local raw = f:read(FILE_DROP_PREVIEW_MAX_BYTES + 1)
+    f:close()
+    if type(raw) ~= "string" then return nil, false, "preview_read_failed" end
+    local truncated = #raw > FILE_DROP_PREVIEW_MAX_BYTES
+    if truncated then raw = raw:sub(1, FILE_DROP_PREVIEW_MAX_BYTES) end
+    if isLikelyBinary(raw) then return nil, truncated, "preview_binary_file" end
+    return stripUtf8Bom(raw), truncated, nil
+  end
+
+  local function getFileSizeFromPath(filePath)
+    local f = io.open(filePath, "rb")
+    if not f then return nil end
+    local size = f:seek("end")
+    f:close()
+    return size
+  end
+
+  local function handleFileDrop(filePath)
+    if not bridge then return end
+    local root = tree.getTree()
+    if not root then return end
+
+    -- Get mouse position (SDL_GetMouseState is most reliable during drops)
+    local mx, my = 0, 0
+    if dragdrop then
+      local ddx, ddy = dragdrop.getMousePosition()
+      if ddx then mx, my = ddx, ddy end
+    end
+
+    local hit = events.hitTest(root, mx, my)
+    if not hit then return end
+
+    local fileName = fileNameFromPath(filePath)
+    local fileExtension = fileExtensionFromPath(filePath)
+    local fileDropMode = resolveFileDropMode(hit)
+    local size = getFileSizeFromPath(filePath)
+
+    local dropMeta = {
+      fileDropMode = fileDropMode,
+      fileName = fileName,
+      fileExtension = fileExtension,
+    }
+
+    if fileDropMode == "preview" then
+      if fileExtension and not FILE_DROP_TEXT_EXTENSIONS[fileExtension] then
+        dropMeta.filePreviewError = "preview_unsupported_extension"
+      else
+        local previewText, truncated, previewErr = readFilePreviewFromPath(filePath)
+        if previewText ~= nil then
+          dropMeta.filePreviewText = previewText
+          dropMeta.filePreviewTruncated = truncated
+          dropMeta.filePreviewEncoding = "utf-8"
+        else
+          dropMeta.filePreviewError = previewErr
+          dropMeta.filePreviewTruncated = truncated
+        end
+      end
+    end
+
+    local bubblePath = events.buildBubblePath(hit)
+    pushEvent(events.createFileDropEvent("filedrop", hit.id, mx, my, filePath, size, bubblePath, dropMeta))
+  end
+
+  local function handleDirectoryDrop(dirPath)
+    if not bridge then return end
+    local root = tree.getTree()
+    if not root then return end
+
+    local mx, my = 0, 0
+    if dragdrop then
+      local ddx, ddy = dragdrop.getMousePosition()
+      if ddx then mx, my = ddx, ddy end
+    end
+
+    local hit = events.hitTest(root, mx, my)
+    if not hit then return end
+
+    local bubblePath = events.buildBubblePath(hit)
+    pushEvent(events.createFileDropEvent("directorydrop", hit.id, mx, my, dirPath, nil, bubblePath))
+  end
+
   -- ------------------------------------------------------------------
   -- 3d. Capabilities (audio, timer, window, etc.)
   -- ------------------------------------------------------------------
@@ -547,6 +746,41 @@ function SDL2Init.run(config)
       paintMs = 0,
       nodeCount = 0,
     }
+  end
+
+  -- App-wide text search RPC handlers
+  rpcHandlers["search:query"] = function(args)
+    local root = tree.getTree()
+    if not root then return {} end
+    local hotIndex = search.buildHotIndex(root)
+    local matches  = search.query(hotIndex, args and args.query or "")
+    local out = {}
+    for _, m in ipairs(matches) do
+      out[#out + 1] = {
+        path = m.path, text = m.text, context = m.context, propKey = m.propKey,
+        matchStart = m.matchStart, matchEnd = m.matchEnd,
+        x = m.x, y = m.y, w = m.w, h = m.h,
+      }
+    end
+    return out
+  end
+
+  rpcHandlers["search:navigate"] = function(args)
+    local root = tree.getTree()
+    if not root then return false end
+    if args and args.path then
+      local node = search.resolvePath(root, args.path)
+      if node then search.navigateTo(node); return true end
+    end
+    if args and args.text then
+      return search.navigateByText(root, args.text)
+    end
+    return false
+  end
+
+  rpcHandlers["search:clear"] = function()
+    search.clearHighlight()
+    return true
   end
 
   -- System monitoring RPC handlers (sys:info/sys:monitor/sys:ports/...).
@@ -776,6 +1010,33 @@ function SDL2Init.run(config)
     systemPanel.update(dt)
     inspector.update(dt)
     console.update(dt)
+
+    -- ---- Drag-hover polling (X11 XDnD + SDL2 global mouse) ----
+    if dragdrop then
+      dragdrop.poll()
+      if dragdrop.isDragHovering() then
+        local root = tree.getTree()
+        if root then
+          local dx, dy = dragdrop.getPosition()
+          local hit = events.hitTest(root, dx, dy)
+          local hitId = hit and hit.id or nil
+
+          if hitId ~= lastDragHoverId then
+            if lastDragHoverId then
+              pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, dx, dy, nil, nil, nil))
+            end
+            if hit then
+              local bubblePath = events.buildBubblePath(hit)
+              pushEvent(events.createFileDropEvent("filedragenter", hit.id, dx, dy, nil, nil, bubblePath))
+            end
+            lastDragHoverId = hitId
+          end
+        end
+      elseif lastDragHoverId then
+        pushEvent(events.createFileDropEvent("filedragleave", lastDragHoverId, 0, 0, nil, nil, nil))
+        lastDragHoverId = nil
+      end
+    end
 
     -- ---- Event pump (pcall-wrapped so crashes show in error overlay) ----
     local _pumpOk, _pumpErr = pcall(function()
@@ -1313,6 +1574,40 @@ function SDL2Init.run(config)
             bridge:pushEvent(events.createTextInputEvent(text))
           end
         end
+
+      elseif t == SDL_DROPFILE or t == SDL_DROPTEXT then
+        -- SDL2 delivers dropped file/text paths via SDL_DropEvent.
+        -- The .file pointer is allocated by SDL and must be freed with SDL_free.
+        local filePtr = event.drop.file
+        if filePtr ~= nil then
+          local filePath = ffi.string(filePtr)
+          sdl.SDL_free(filePtr)
+
+          -- Distinguish files from directories.
+          -- io.open(path.."/.", "r") succeeds only for directories on POSIX.
+          local isDir = false
+          local dh = io.open(filePath .. "/.", "r")
+          if dh then
+            dh:close()
+            isDir = true
+          end
+
+          if isDir then
+            handleDirectoryDrop(filePath)
+          else
+            handleFileDrop(filePath)
+          end
+        end
+
+      -- SDL_DROPBEGIN / SDL_DROPCOMPLETE are bookend events for multi-file drops.
+      -- We don't need special handling — each individual SDL_DROPFILE is dispatched above.
+      elseif t == SDL_DROPBEGIN or t == SDL_DROPCOMPLETE then
+        -- no-op, free file pointer if present (shouldn't be, but be safe)
+        local filePtr = event.drop.file
+        if filePtr ~= nil then
+          sdl.SDL_free(filePtr)
+        end
+
       end
     end
     end) -- pcall event pump
@@ -1488,6 +1783,9 @@ function SDL2Init.run(config)
       end
     end
 
+    -- ---- Search highlight timer ----
+    search.tick(dt)
+
     -- ---- Capabilities sync ----
     Shim.setDelta(dt)
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
@@ -1612,6 +1910,33 @@ function SDL2Init.run(config)
         GL.glLoadIdentity()
         GL.glColor4f(1, 1, 1, 1)
 
+        -- Search highlight (before devtools so inspector can inspect it)
+        do
+          local sh = search.getHighlight()
+          if sh and sh.node and sh.node.computed then
+            local c = sh.node.computed
+            GL.glEnable(GL.BLEND)
+            GL.glBlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+            GL.glColor4f(0.2, 0.6, 1.0, sh.alpha * 0.25)
+            GL.glBegin(GL.QUADS)
+            GL.glVertex2f(c.x,         c.y        )
+            GL.glVertex2f(c.x + c.w,   c.y        )
+            GL.glVertex2f(c.x + c.w,   c.y + c.h  )
+            GL.glVertex2f(c.x,         c.y + c.h  )
+            GL.glEnd()
+            -- Outline
+            GL.glColor4f(0.4, 0.75, 1.0, sh.alpha * 0.85)
+            GL.glLineWidth(2)
+            GL.glBegin(GL.LINE_LOOP)
+            GL.glVertex2f(c.x,         c.y        )
+            GL.glVertex2f(c.x + c.w,   c.y        )
+            GL.glVertex2f(c.x + c.w,   c.y + c.h  )
+            GL.glVertex2f(c.x,         c.y + c.h  )
+            GL.glEnd()
+            GL.glColor4f(1, 1, 1, 1)
+          end
+        end
+
         devtools.draw(winRoot)
         if settings.isOpen() then settings.draw() end
         if systemPanel.isOpen() then systemPanel.draw() end
@@ -1657,6 +1982,7 @@ function SDL2Init.run(config)
   end
 
   if Videos then Videos.shutdown() end
+  if dragdrop then dragdrop.cleanup() end
   bridge:destroy()
   Font.done()
   sdl.SDL_GL_DeleteContext(ctx)

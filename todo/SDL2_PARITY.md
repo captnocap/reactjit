@@ -151,7 +151,7 @@ Non-rendering capabilities that Love2D provides and SDL2 needs equivalents for.
   - Files: `lua/crypto.lua`
   - Verify: Crypto story passes all sections in SDL2
 
-- [ ] **Drag and drop** `[#38]` — SDL2 has `SDL_DropEvent`. Wire it up.
+- [x] **Drag and drop** `[#38]` — **FIXED**. Added `SDL2_DropEvent` FFI struct, `SDL_DROPFILE`/`SDL_DROPTEXT`/`SDL_DROPBEGIN`/`SDL_DROPCOMPLETE` event handling in the SDL2 event pump. File drops hit-test at cursor position, read file metadata (size, extension, preview text for text files), and dispatch `filedrop`/`directorydrop` events through the bridge. Directory detection via POSIX `/. ` probe. Updated `dragdrop.lua` to accept an explicit SDL2 library handle (required since SDL2 target loads via `ffi.load` not `ffi.C`). X11/XDnD drag-hover detection (enter/leave events) wired into per-frame update loop. Cleanup on exit.
   - Files: `lua/sdl2_init.lua`, `lua/dragdrop.lua`
   - Verify: File drop works in SDL2 (NES emulator test)
 
@@ -274,7 +274,7 @@ Which phases fix which audit observations. ✅ = fully done, 🔶 = partially do
 | 3 | #3, #4 | 2 | 🔶 Hover events wired; tooltip render unverified |
 | 4 | #13, #23, #31, #44 done; #47 remains | 5 | 🔶 4/5 fixed (devtools remain) |
 | 5 | #22, #43 | 2 | Not started |
-| 6 | clipboard done; #20 partial; #21, #38 remain | 3 | 🔶 1.5/3 |
+| 6 | clipboard done; #20 partial; #38 done; #21 remain | 3 | 🔶 2.5/3 |
 | 7 | #27, #38, #39, #40 | 4 | Not started |
 | 8 | #41 | 1 | Not started |
 | Story bugs | #16, #19, #26, #28, #30, #32 done; #8, #17, #35, #36, #37 remain | 11 | 🔶 6/11 fixed |

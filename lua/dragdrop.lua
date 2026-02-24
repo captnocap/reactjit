@@ -1,7 +1,7 @@
 --[[
   dragdrop.lua — Drag-hover detection via LuaJIT FFI
 
-  Detects when files are being dragged over the Love2D window (before drop)
+  Detects when files are being dragged over the window (before drop)
   by polling X11's XDnD selection owner and SDL2's mouse state.
 
   Also provides getMousePosition() which returns accurate window-local
@@ -9,7 +9,13 @@
   returns stale values).
 
   X11-only for hover detection (Linux). getMousePosition() works anywhere
-  SDL2 is available (i.e. any Love2D build).
+  SDL2 is available (i.e. any Love2D or SDL2 target build).
+
+  init() accepts an optional config table:
+    { sdl = <ffi library handle> }
+  When provided, SDL functions are called through the explicit handle instead
+  of ffi.C. This is required for the SDL2 target where SDL2 is loaded via
+  ffi.load("SDL2") and its symbols are not in the default C namespace.
 ]]
 
 local ffi = require("ffi")
@@ -19,6 +25,7 @@ local DragDrop = {}
 -- State
 local x11Available = false   -- X11 drag-hover detection available
 local sdlMouseAvail = false  -- SDL_GetMouseState available
+local sdlGlobalMouseAvail = false  -- SDL_GetGlobalMouseState available
 local isDragHover = false
 local localX, localY = 0, 0
 local loggedEnter = false
@@ -28,20 +35,22 @@ local x11Display = nil
 local xdndSelectionAtom = nil
 local x11Lib = nil
 
+-- SDL2 library handle (ffi.C for Love2D, explicit handle for SDL2 target)
+local sdlLib = ffi.C
+
 -- ── SDL2 mouse state setup (independent of X11) ─────────────
 
-local function initSDLMouse()
-  local ok, err = pcall(ffi.cdef, [[
+local function initSDLMouse(sdlHandle)
+  sdlLib = sdlHandle or ffi.C
+
+  pcall(ffi.cdef, [[
     unsigned int SDL_GetMouseState(int* x, int* y);
   ]])
-  if not ok then
-    -- Might already be declared, try calling it
-  end
-  -- Verify it works
+  -- Verify SDL_GetMouseState works with the chosen handle
   local testOk = pcall(function()
     local mx = ffi.new("int[1]")
     local my = ffi.new("int[1]")
-    ffi.C.SDL_GetMouseState(mx, my)
+    sdlLib.SDL_GetMouseState(mx, my)
   end)
   if testOk then
     sdlMouseAvail = true
@@ -76,6 +85,19 @@ local function tryInitX11()
     unsigned int SDL_GetGlobalMouseState(int* x, int* y);
   ]])
 
+  -- Verify SDL_GetGlobalMouseState works with our handle
+  local globalOk = pcall(function()
+    local mx = ffi.new("int[1]")
+    local my = ffi.new("int[1]")
+    sdlLib.SDL_GetGlobalMouseState(mx, my)
+  end)
+  if globalOk then
+    sdlGlobalMouseAvail = true
+  else
+    io.write("[dragdrop] SDL_GetGlobalMouseState NOT available — hover detection disabled\n"); io.flush()
+    return false
+  end
+
   -- Load libX11
   local loadOk
   loadOk, x11Lib = pcall(ffi.load, "X11")
@@ -105,11 +127,15 @@ end
 
 -- ── Public API ─────────────────────────────────────────────
 
-function DragDrop.init()
+--- Initialize drag-drop detection.
+--- @param config? table  Optional config: { sdl = <ffi SDL2 handle> }
+function DragDrop.init(config)
   io.write("[dragdrop] init starting\n"); io.flush()
 
+  local sdlHandle = config and config.sdl or nil
+
   -- SDL mouse (works on all platforms, needed for file drop position)
-  initSDLMouse()
+  initSDLMouse(sdlHandle)
 
   -- X11 drag-hover detection (Linux only)
   x11Available = tryInitX11()
@@ -141,7 +167,7 @@ function DragDrop.poll()
   -- and love.window for bounds check.
   local mx = ffi.new("int[1]")
   local my = ffi.new("int[1]")
-  ffi.C.SDL_GetGlobalMouseState(mx, my)
+  sdlLib.SDL_GetGlobalMouseState(mx, my)
   local screenX, screenY = tonumber(mx[0]), tonumber(my[0])
 
   local winX, winY = love.window.getPosition()
@@ -159,7 +185,7 @@ function DragDrop.poll()
     if sdlMouseAvail then
       local lx = ffi.new("int[1]")
       local ly = ffi.new("int[1]")
-      ffi.C.SDL_GetMouseState(lx, ly)
+      sdlLib.SDL_GetMouseState(lx, ly)
       localX = tonumber(lx[0])
       localY = tonumber(ly[0])
     else
@@ -190,7 +216,7 @@ function DragDrop.getMousePosition()
   if not sdlMouseAvail then return nil end
   local mx = ffi.new("int[1]")
   local my = ffi.new("int[1]")
-  ffi.C.SDL_GetMouseState(mx, my)
+  sdlLib.SDL_GetMouseState(mx, my)
   return tonumber(mx[0]), tonumber(my[0])
 end
 
@@ -200,6 +226,7 @@ function DragDrop.cleanup()
     x11Display = nil
   end
   x11Available = false
+  sdlGlobalMouseAvail = false
   isDragHover = false
 end
 
