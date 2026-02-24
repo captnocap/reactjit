@@ -7,8 +7,6 @@
 
   The sdl2 target has no Love2D dependency. It runs via:
     luajit sdl2_init.lua   (from the project root)
-
-  Videos: not supported on this target.
 ]]
 
 local Target = {}
@@ -17,6 +15,6 @@ Target.name    = "sdl2"
 Target.measure = require("lua.sdl2_measure")
 Target.painter = require("lua.sdl2_painter")
 Target.images  = require("lua.sdl2_images")
-Target.videos  = nil   -- not supported
+Target.videos  = require("lua.sdl2_videos")
 
 return Target

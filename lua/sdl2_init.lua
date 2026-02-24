@@ -295,7 +295,7 @@ function SDL2Init.run(config)
   local Measure = Target.measure
 
   Font.init(config.fontFamily)
-  Painter.init({ width = W, height = H })
+  Painter.init({ width = W, height = H, images = Images, videos = Target.videos })
 
   local ok_json, json = pcall(require, "lua.json")
   if not ok_json then error("[sdl2_init] lua.json required") end
@@ -472,6 +472,20 @@ function SDL2Init.run(config)
   end
 
   -- ------------------------------------------------------------------
+  -- 3c5. Video backend + VideoPlayer
+  -- ------------------------------------------------------------------
+  local Videos = Target.videos
+  local videoplayer = nil
+  if Videos then
+    Videos.initBackend()
+    local vpOk, vpMod = pcall(require, "lua.sdl2_videoplayer")
+    if vpOk then
+      videoplayer = vpMod
+      videoplayer.init({ measure = Measure, videos = Videos })
+    end
+  end
+
+  -- ------------------------------------------------------------------
   -- 3d. Capabilities (audio, timer, window, etc.)
   -- ------------------------------------------------------------------
   local capabilities = require("lua.capabilities")
@@ -593,6 +607,9 @@ function SDL2Init.run(config)
 
     if Images and Images.clearCache then
       Images.clearCache()
+    end
+    if Videos and Videos.clearCache then
+      Videos.clearCache()
     end
     Measure.clearCache()
     errors.clear()
@@ -876,6 +893,18 @@ function SDL2Init.run(config)
           end
         end
 
+        -- VideoPlayer hover/drag tracking
+        if videoplayer and tree then
+          local nodes = tree.getNodes()
+          if nodes then
+            for _, node in pairs(nodes) do
+              if node.type == "VideoPlayer" and node._vp then
+                videoplayer.handleMouseMoved(node, mx, my)
+              end
+            end
+          end
+        end
+
       elseif t == SDL_MOUSEBTNDOWN or t == SDL_MOUSEBTNUP then
         local wid = event.button.wid
         local evtWin = WM.getBySDLId(wid) or mainWin
@@ -889,6 +918,15 @@ function SDL2Init.run(config)
         if evtWin.isMain then
           Shim.setMousePosition(mx, my)
           Shim.setMouseButton(btn, t == SDL_MOUSEBTNDOWN)
+        end
+
+        -- Fullscreen VideoPlayer gets ALL mouse input (bypass normal hit-test)
+        if videoplayer and t == SDL_MOUSEBTNDOWN and btn == 1 then
+          local fsNode = videoplayer.getFullscreenNode()
+          if fsNode then
+            videoplayer.handleMousePressed(fsNode, mx, my, btn)
+            goto mouse_done
+          end
         end
 
         -- Route to devtools first (main window only)
@@ -988,6 +1026,12 @@ function SDL2Init.run(config)
                 elseif hit.type == "CodeBlock" then
                   local cx, cy = events.screenToContent(hit, mx, my)
                   codeblock.handleMousePressed(hit, cx, cy, btn)
+
+                -- VideoPlayer: handle internally in Lua
+                elseif hit.type == "VideoPlayer" then
+                  if videoplayer then
+                    videoplayer.handleMousePressed(hit, mx, my, btn)
+                  end
                 end
 
                 local path = events.buildBubblePath(hit)
@@ -1001,6 +1045,18 @@ function SDL2Init.run(config)
                     textinput.handleMouseReleased(focusedNode)
                   elseif focusedNode.type == "TextEditor" then
                     texteditor.handleMouseReleased(focusedNode)
+                  end
+                end
+
+                -- VideoPlayer drag release (seek/volume)
+                if videoplayer and tree then
+                  local allNodes = tree.getNodes()
+                  if allNodes then
+                    for _, vnode in pairs(allNodes) do
+                      if vnode.type == "VideoPlayer" and vnode._vp then
+                        videoplayer.handleMouseReleased(vnode, mx, my, btn)
+                      end
+                    end
                   end
                 end
 
@@ -1038,12 +1094,24 @@ function SDL2Init.run(config)
                   texteditor.handleMouseReleased(focusedNode)
                 end
               end
+              -- VideoPlayer drag release (even outside hit node)
+              if videoplayer and tree then
+                local allNodes = tree.getNodes()
+                if allNodes then
+                  for _, vnode in pairs(allNodes) do
+                    if vnode.type == "VideoPlayer" and vnode._vp then
+                      videoplayer.handleMouseReleased(vnode, mx, my, btn)
+                    end
+                  end
+                end
+              end
               events.clearPressedNode()
             end
           end
           end -- if not overlayConsumed
         end
         end -- error overlay if-else
+        ::mouse_done::
 
       elseif t == SDL_MOUSEWHEEL then
         local wid = event.wheel.wid
@@ -1175,8 +1243,26 @@ function SDL2Init.run(config)
               consumed = true
             end
 
+          -- Route to fullscreen or hovered VideoPlayer (space, arrows, m, f, l)
+          elseif videoplayer then
+            local fsNode = videoplayer.getFullscreenNode()
+            if fsNode then
+              if videoplayer.handleKeyPressed(fsNode, keyname) then
+                consumed = true
+              end
+            elseif events then
+              local hoveredNode = events.getHoveredNode()
+              if hoveredNode and hoveredNode.type == "VideoPlayer" then
+                if videoplayer.handleKeyPressed(hoveredNode, keyname) then
+                  consumed = true
+                end
+              end
+            end
+          end
+
+          if not consumed then
           -- Escape: quit (only if devtools and text widgets didn't consume it)
-          elseif keyname == "escape" then
+          if keyname == "escape" then
             running = false
             consumed = true
 
@@ -1198,8 +1284,9 @@ function SDL2Init.run(config)
               mainWin.needsLayout = true
               consumed = true
             end
-          end
-        end
+          end -- if keyname == "escape" / elseif ctrl
+          end -- if not consumed
+        end -- if t == SDL_KEYDOWN
 
         -- Forward to JS if not consumed by Lua
         if not consumed then
@@ -1405,6 +1492,45 @@ function SDL2Init.run(config)
     Shim.setDelta(dt)
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
 
+    -- ---- Video sync + render + poll ----
+    if Videos then
+      Videos.syncWithTree(tree.getNodes())
+      Videos.renderAll()
+
+      -- Poll video status events (ready/error)
+      local videoEvents = Videos.poll()
+      for _, evt in ipairs(videoEvents) do
+        if evt.status == "error" then
+          pushEvent({
+            type = "video:error",
+            payload = { src = evt.src, message = evt.message, targetId = evt.nodeId },
+          })
+        else
+          local nodes = Videos.getNodesForSrc(evt.src)
+          for _, nodeId in ipairs(nodes) do
+            pushEvent({
+              type = "video:" .. evt.status,
+              payload = { src = evt.src, targetId = nodeId },
+            })
+          end
+        end
+      end
+
+      -- Poll playback events (onReady, onPlay, onPause, onTimeUpdate, onEnded)
+      local playbackEvents = Videos.pollPlayback()
+      for _, evt in ipairs(playbackEvents) do
+        pushEvent({
+          type = "video:playback",
+          payload = evt,
+        })
+      end
+    end
+
+    -- ---- VideoPlayer controls update ----
+    if videoplayer and tree then
+      videoplayer.update(dt, tree.getNodes())
+    end
+
     -- ---- Window animations (animated resize) ----
     WM.tick(dt)
 
@@ -1447,6 +1573,9 @@ function SDL2Init.run(config)
       GL.glLoadIdentity()
 
       GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
+
+      -- Ensure pixel store is clean before painting (mpv may have dirtied it)
+      if Videos then Videos.ensurePixelStore() end
 
       Painter.setDimensions(win.width, win.height)
 
@@ -1527,6 +1656,7 @@ function SDL2Init.run(config)
     end
   end
 
+  if Videos then Videos.shutdown() end
   bridge:destroy()
   Font.done()
   sdl.SDL_GL_DeleteContext(ctx)

@@ -478,6 +478,11 @@ local SwitchModule = nil
 local CheckboxModule = nil
 local RadioModule = nil
 local SelectModule = nil
+local VideoPlayerModule = nil
+
+-- Video module reference (set via Painter.init())
+local VideosModule = nil
+local ImagesModule = nil
 
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
@@ -796,6 +801,88 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       else io.write("[painter] Select load error: " .. tostring(mod) .. "\n"); io.flush() end
     end
     if SelectModule then SelectModule.draw(node, eff) end
+
+  elseif not isHidden and node.type == "Video" and VideosModule then
+    local src = node.props and node.props.src
+    if src then
+      local status = VideosModule.getStatus(src)
+      if status == "ready" then
+        local vidEntry = VideosModule.get(src)
+        if vidEntry then
+          -- Control playback via mpv property API
+          VideosModule.setPaused(src, node.props.paused)
+          VideosModule.setMuted(src, node.props.muted)
+          VideosModule.setVolume(src, node.props.volume or 1)
+          VideosModule.setLoop(src, node.props.loop)
+
+          -- Calculate scaling (objectFit)
+          local objectFit = s.objectFit or "fill"
+          local vidW, vidH = vidEntry.w, vidEntry.h
+          local drawX, drawY, drawW, drawH
+
+          if objectFit == "contain" then
+            local scale = math.min(c.w / vidW, c.h / vidH)
+            drawW = vidW * scale
+            drawH = vidH * scale
+            drawX = c.x + (c.w - drawW) / 2
+            drawY = c.y + (c.h - drawH) / 2
+          elseif objectFit == "cover" then
+            local scale = math.max(c.w / vidW, c.h / vidH)
+            drawW = vidW * scale
+            drawH = vidH * scale
+            drawX = c.x + (c.w - drawW) / 2
+            drawY = c.y + (c.h - drawH) / 2
+          elseif objectFit == "none" then
+            drawW = vidW
+            drawH = vidH
+            drawX = c.x + (c.w - vidW) / 2
+            drawY = c.y + (c.h - vidH) / 2
+          else -- "fill"
+            drawX = c.x
+            drawY = c.y
+            drawW = c.w
+            drawH = c.h
+          end
+
+          -- Draw video frame as textured quad
+          flushQuads()
+          if ImagesModule and ImagesModule.drawTexture then
+            ImagesModule.drawTexture(vidEntry.texId, drawX, drawY, drawW, drawH, eff)
+          end
+        end
+      else
+        -- Loading / error / no video: dark placeholder
+        Painter.setColor({0.10, 0.11, 0.14, 1})
+        Painter.applyOpacity(eff)
+        filledRoundedRect(c.x, c.y, c.w, c.h, borderRadius)
+        -- Play triangle icon
+        local iconSize = math.min(c.w, c.h) * 0.15
+        if iconSize > 6 then
+          flushQuads()
+          local cx = c.x + c.w / 2
+          local cy = c.y + c.h / 2
+          GL.glColor4f(0.30, 0.33, 0.40, 0.5 * eff)
+          GL.glBegin(GL.TRIANGLE_FAN)
+            GL.glVertex2f(cx - iconSize * 0.4, cy - iconSize * 0.5)
+            GL.glVertex2f(cx + iconSize * 0.5, cy)
+            GL.glVertex2f(cx - iconSize * 0.4, cy + iconSize * 0.5)
+          GL.glEnd()
+        end
+      end
+    end
+
+  elseif not isHidden and node.type == "VideoPlayer" then
+    if not VideoPlayerModule then
+      local ok, mod = pcall(require, "lua.sdl2_videoplayer")
+      if ok then VideoPlayerModule = mod
+      else io.write("[painter] VideoPlayer load error: " .. tostring(mod) .. "\n"); io.flush() end
+    end
+    if VideoPlayerModule then
+      local vpState = node._vp
+      if not (vpState and vpState.isFullscreen) then
+        VideoPlayerModule.draw(node, eff)
+      end
+    end
   end
 
   -- Generic capability draw dispatch — any visual capability with a draw()
@@ -856,6 +943,8 @@ end
 function Painter.init(config)
   W = (config and config.width)  or 1280
   H = (config and config.height) or 720
+  VideosModule = config and config.videos
+  ImagesModule = config and config.images
 end
 
 -- Update screen dimensions (called on resize)
