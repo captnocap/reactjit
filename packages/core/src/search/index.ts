@@ -15,3 +15,6 @@ export type { SearchComboProps, ComboItem } from './SearchCombo';
 
 export { CommandPalette } from './CommandPalette';
 export type { CommandPaletteProps, CommandDef } from './CommandPalette';
+
+export { AppSearch, Searchable } from './AppSearch';
+export type { AppSearchProps, SearchableProps } from './AppSearch';

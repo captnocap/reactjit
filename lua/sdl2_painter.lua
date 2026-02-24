@@ -994,6 +994,34 @@ function Painter.paint(node)
   if not node then return end
   Painter.paintNode(node)
   flushQuads()
+
+  -- Search highlight overlay (drawn after the full tree so it's on top)
+  local ok, Search = pcall(require, "lua.search")
+  if ok then
+    local hl = Search.getHighlight()
+    if hl and hl.node and hl.node.computed then
+      local nc = hl.node.computed
+      -- Fill
+      GL.glColor4f(0.23, 0.51, 0.96, hl.alpha * 0.3)
+      GL.glBegin(GL.QUADS)
+        GL.glVertex2f(nc.x - 2, nc.y - 2)
+        GL.glVertex2f(nc.x + nc.w + 2, nc.y - 2)
+        GL.glVertex2f(nc.x + nc.w + 2, nc.y + nc.h + 2)
+        GL.glVertex2f(nc.x - 2, nc.y + nc.h + 2)
+      GL.glEnd()
+      -- Border
+      GL.glColor4f(0.23, 0.51, 0.96, hl.alpha * 0.8)
+      GL.glLineWidth(2)
+      GL.glBegin(GL.LINE_LOOP)
+        GL.glVertex2f(nc.x - 2, nc.y - 2)
+        GL.glVertex2f(nc.x + nc.w + 2, nc.y - 2)
+        GL.glVertex2f(nc.x + nc.w + 2, nc.y + nc.h + 2)
+        GL.glVertex2f(nc.x - 2, nc.y + nc.h + 2)
+      GL.glEnd()
+      GL.glLineWidth(1)
+    end
+  end
+
   GL.glColor4f(1,1,1,1)
 end
 

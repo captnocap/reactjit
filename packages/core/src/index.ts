@@ -79,6 +79,10 @@ export { VideoPlayer } from './VideoPlayer';
 // Emulator
 export { Emulator } from './Emulator';
 
+// Terminal (PTY capability + hook)
+export { Terminal, type TerminalProps } from './Terminal';
+export { usePTY, type UsePTYOptions, type UsePTYResult, type TerminalCapabilityProps } from './usePTY';
+
 // ScrollView
 export { ScrollView } from './ScrollView';
 
@@ -112,7 +116,7 @@ export { TextInput } from './TextInput';
 // Search components (headless, Lua-owned input lifecycle)
 export {
   SearchBar, SearchResults, SearchResultsSections, SearchCombo, CommandPalette,
-  SearchSchemaHint,
+  SearchSchemaHint, AppSearch, Searchable,
 } from './search';
 export type {
   SearchBarProps,
@@ -121,6 +125,7 @@ export type {
   SearchComboProps, ComboItem,
   CommandPaletteProps, CommandDef,
   SearchSchemaHintProps,
+  AppSearchProps, SearchableProps,
 } from './search';
 
 // Search hooks
@@ -142,6 +147,14 @@ export {
   type UseCommandSearchOptions,
   type SearchSchema,
 } from './useSearch';
+
+// App search (hot live-tree + cold compile-time index)
+export {
+  useAppSearch,
+  type HotSearchResult,
+  type ColdSearchEntry,
+  type UseAppSearchOptions,
+} from './useAppSearch';
 
 // TextEditor (Lua-owned document editor)
 export { TextEditor } from './TextEditor';
@@ -197,6 +210,7 @@ export { ChartTooltip, type ChartTooltipProps } from './ChartTooltip';
 export { HorizontalBarChart, type HorizontalBarChartProps, type HorizontalBarChartBar } from './HorizontalBarChart';
 export { StackedBarChart, type StackedBarChartProps, type StackedBarChartSeries } from './StackedBarChart';
 export { LineChart, type LineChartProps, type LineChartPoint } from './LineChart';
+export { CandlestickChart, type CandlestickChartProps, type CandlestickDataPoint } from './CandlestickChart';
 export { AreaChart, type AreaChartProps } from './AreaChart';
 export { PieChart, type PieChartProps, type PieChartSegment } from './PieChart';
 export { RadarChart, type RadarChartProps, type RadarChartAxis } from './RadarChart';
