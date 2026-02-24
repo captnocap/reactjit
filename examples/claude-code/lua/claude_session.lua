@@ -1,36 +1,32 @@
 --[[
-  claude_session.lua — Claude Code CLI integration via stream-json protocol
+  claude_session.lua — Claude Code integration via damage-driven screen scraping
 
-  Spawns `claude` as a child process with bidirectional JSON streaming.
-  All parsing, buffering, and state management happens here in Lua.
-  React just gets clean events to render.
+  Spawns `claude` in interactive mode over a PTY. libvterm sits on the read
+  side with damage callbacks — we never scan the full grid. Only dirty rows
+  get read, only on settled frames.
 
-  Protocol (proven in /home/siah/creative/ai/app/src/bun/lib/code-session-manager.ts):
-    CLI flags: claude -p --verbose --output-format stream-json
-                      --input-format stream-json --include-partial-messages
-    Stdin:  {"type":"user","message":{"role":"user","content":"..."}}\n
-    Stdout: Line-delimited JSON with stream_event wrappers
+  Architecture:
+    WRITES (you -> Claude): direct to PTY stdin
+    READS  (Claude -> you): PTY stdout -> libvterm -> damage callbacks ->
+                           settle timer -> extract dirty rows -> semantic diff ->
+                           transition events -> block renderer
+
+  Semantic state machine:
+    Idle          -> cursor visible, prompt at bottom, no recent damage
+    Streaming     -> rapid damage on content rows, cursor advancing
+    Thinking      -> spinner chars on bottom rows, cursor moving
+    PermissionGate -> "Do you want to" detected in dirty rows
+    Splash        -> banner detected, no idle prompt yet
 
   React usage:
-    <ClaudeCode
-      workingDir="/path/to/project"
-      model="sonnet"
-    />
-
-  RPC:
-    bridge.rpc("claude:send", { message = "fix the bug" })
-    bridge.rpc("claude:stop")
-    bridge.rpc("claude:status")
+    <ClaudeCode workingDir="/path/to/project" model="sonnet" />
 ]]
 
 local Capabilities = require("lua.capabilities")
-local Process = require("lua.process")
+local PTY          = require("lua.pty")
+local VTerm        = require("lua.vterm")
 
-local ok_json, json = pcall(require, "cjson")
-if not ok_json then ok_json, json = pcall(require, "lua.json") end
-if not ok_json then error("[claude_session] JSON library required but not found") end
-
--- Renderer for feeding stream events into the visual blocks
+-- Renderer for the pretty block UI
 local Renderer = nil
 local function getRenderer()
   if not Renderer then
@@ -40,380 +36,380 @@ local function getRenderer()
   return Renderer
 end
 
--- ── DocStore persistence ─────────────────────────────────────────
-
-local _store = nil
-local function getStore()
-  if _store then return _store end
-  local ok, docstore = pcall(require, "lua.docstore")
-  if ok and docstore.available then
-    _store = docstore.open("claude_history.db")
-    if _store then
-      io.write("[claude_session] DocStore opened: claude_history.db\n"); io.flush()
-    end
-  end
-  return _store
-end
-
-local function timestamp()
-  return os.date("!%Y-%m-%dT%H:%M:%SZ")
-end
-
-local function persistConversation(state)
-  local store = getStore()
-  if not store then return end
-  if not state.conversationId then
-    state.conversationId = state.rendererSessionId .. "-" .. tostring(os.clock()):gsub("%.", "")
-    store:save("conversations", {
-      _id = state.conversationId,
-      agentId = state.rendererSessionId,
-      workingDir = state._workingDir or ".",
-      model = state.model,
-      title = nil,  -- auto-generated later from first message
-      startedAt = timestamp(),
-      updatedAt = timestamp(),
-    })
-  end
-end
-
-local function persistMessage(state, role, content, toolName, toolInput, filePath)
-  local store = getStore()
-  if not store or not state.conversationId then return end
-  local msgId = state.conversationId .. "-" .. tostring(os.clock()):gsub("%.", "")
-  store:save("messages", {
-    _id = msgId,
-    conversationId = state.conversationId,
-    role = role,
-    content = content or "",
-    timestamp = timestamp(),
-  })
-  -- Update conversation timestamp
-  store:update("conversations", state.conversationId, { updatedAt = timestamp() })
-  -- Auto-title from first user message
-  if role == "user" and not state._titled then
-    local title = (content or ""):sub(1, 80)
-    store:update("conversations", state.conversationId, { title = title })
-    state._titled = true
-  end
-  -- Track tool uses separately
-  if toolName then
-    store:save("tool_uses", {
-      conversationId = state.conversationId,
-      messageId = msgId,
-      toolName = toolName,
-      filePath = filePath,
-      summary = toolInput and tostring(toolInput):sub(1, 200) or nil,
-      timestamp = timestamp(),
-    })
-  end
-end
-
--- ── Module table (exported for claude_canvas.lua to call) ────────
+-- ── Module table ─────────────────────────────────────────────────────
 
 local Session = {}
 
--- ── Module-level state (multi-session registry) ─────────────────────
+-- ── State ────────────────────────────────────────────────────────────
 
-local _sessions = {}   -- nodeId -> state
-local _focusedId = nil -- which session has UI focus
+local _sessions  = {}
+local _focusedId = nil
+
+-- ── Constants ────────────────────────────────────────────────────────
+
+local TERM_ROWS    = 50
+local TERM_COLS    = 120
+local SETTLE_MS    = 120   -- ms after last damage before extracting semantics
+local STREAM_MS    = 50    -- ms between streaming text updates to renderer
+
+-- ── Clock (monotonic, milliseconds) ─────────────────────────────────
+
+local function now_ms()
+  if love and love.timer then
+    return love.timer.getTime() * 1000
+  end
+  return os.clock() * 1000
+end
 
 -- ── Helpers ──────────────────────────────────────────────────────────
 
 local function pushCapEvent(pushEvent, nodeId, handler, data)
   if not pushEvent then return end
   local payload = { targetId = nodeId, handler = handler }
-  if data then
-    for k, v in pairs(data) do
-      payload[k] = v
-    end
-  end
+  if data then for k, v in pairs(data) do payload[k] = v end end
   pushEvent({ type = "capability", payload = payload })
 end
 
--- ── Stream-JSON line parser ──────────────────────────────────────────
--- Handles incomplete lines across read() calls.
+-- ── Semantic modes ──────────────────────────────────────────────────
 
-local function createLineBuffer()
-  return { partial = "" }
-end
+local MODE_SPLASH     = "splash"
+local MODE_IDLE       = "idle"
+local MODE_STREAMING  = "streaming"
+local MODE_THINKING   = "thinking"
+local MODE_PERMISSION = "permission"
 
-local function feedLines(buf, data)
-  if not data then return {} end
-  buf.partial = buf.partial .. data
+-- ── Row classification ──────────────────────────────────────────────
 
-  local lines = {}
-  while true do
-    local pos = buf.partial:find("\n", 1, true)
-    if not pos then break end
-    local line = buf.partial:sub(1, pos - 1)
-    buf.partial = buf.partial:sub(pos + 1)
-    line = line:match("^%s*(.-)%s*$") -- trim
-    if #line > 0 then
-      lines[#lines + 1] = line
-    end
+local function classifyRow(text, row, totalRows)
+  if #text == 0 then return "empty" end
+
+  -- Permission prompt
+  local action, target = text:match("Do you want to (%w+)%s+(.-)%?")
+  if action then return "permission", action, target end
+
+  -- Numbered permission options (1. Yes, 2. Yes allow all, 3. No)
+  if text:match("^%s*[›>]?%s*%d+%.%s+") then return "permission_option" end
+
+  -- Banner / version
+  if text:find("Claude Code v", 1, true) or text:find("Claude Code ", 1, true) then return "banner" end
+
+  -- Model indicator
+  if text:match("Opus [%d%.]+") or text:match("Sonnet [%d%.]+") or text:match("Haiku [%d%.]+") then
+    return "banner"
   end
-  return lines
-end
 
--- ── Stream event dispatch ────────────────────────────────────────────
+  -- Token/cost status bar
+  if text:match("%d+%s*tokens") or text:match("%$%d") then return "status_bar" end
+  if text:find("for shortcuts", 1, true) or text:find("esc to interrupt", 1, true) then return "status_bar" end
 
-local function handleStreamEvent(state, event, pushEvent, nodeId)
-  local etype = event.type
-  local R = getRenderer()
-
-  if etype == "message_start" then
-    -- New assistant message
-    state.streamingText = ""
-    state.streamingMessageId = tostring(os.clock())
-    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "streaming" })
-    -- Feed to renderer
-    if R and state.rendererSessionId then
-      R.setStatus(state.rendererSessionId, "streaming")
-    end
-
-  elseif etype == "content_block_start" then
-    local block = event.content_block
-    if block then
-      if block.type == "tool_use" then
-        pushCapEvent(pushEvent, nodeId, "onToolUse", {
-          name = block.name or "unknown",
-          toolId = block.id,
-          input = block.input,
-        })
-        -- Feed to renderer: tool start block
-        if R and state.rendererSessionId then
-          R.addToolStart(state.rendererSessionId, block.name or "unknown", block.id, block.input)
-        end
-        -- Persist tool use
-        local filePath = nil
-        if type(block.input) == "table" then
-          filePath = block.input.file_path or block.input.path or block.input.command
-        end
-        persistMessage(state, "assistant", nil, block.name or "unknown", block.input, filePath)
-      elseif block.type == "text" and block.text and #block.text > 0 then
-        state.streamingText = (state.streamingText or "") .. block.text
-      end
-    end
-
-  elseif etype == "content_block_delta" then
-    local delta = event.delta
-    if delta then
-      if delta.type == "text_delta" and delta.text then
-        state.streamingText = (state.streamingText or "") .. delta.text
-        pushCapEvent(pushEvent, nodeId, "onTextDelta", {
-          text = delta.text,
-          fullText = state.streamingText,
-        })
-        -- Feed to renderer: streaming text update
-        if R and state.rendererSessionId then
-          R.setStreaming(state.rendererSessionId, state.streamingText)
-        end
-      elseif delta.type == "input_json_delta" and delta.partial_json then
-        -- Tool input streaming — accumulate for display
-        pushCapEvent(pushEvent, nodeId, "onToolInput", {
-          partialJson = delta.partial_json,
-        })
-      end
-    end
-
-  elseif etype == "content_block_stop" then
-    -- Block finished, no action needed
-
-  elseif etype == "message_delta" then
-    -- Check stop_reason
-    if event.delta and event.delta.stop_reason == "end_turn" then
-      -- Message is complete
-    end
-
-  elseif etype == "message_stop" then
-    -- Full message complete
-    if state.streamingText and #state.streamingText > 0 then
-      pushCapEvent(pushEvent, nodeId, "onTextDone", {
-        text = state.streamingText,
-      })
-      -- Feed to renderer: finalize streaming text as a text block
-      if R and state.rendererSessionId then
-        R.addText(state.rendererSessionId, state.streamingText)
-        R.setStreaming(state.rendererSessionId, nil)
-      end
-      -- Persist assistant message
-      persistMessage(state, "assistant", state.streamingText)
-    end
-    state.streamingText = nil
-    state.streamingMessageId = nil
-    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
-    if R and state.rendererSessionId then
-      R.setStatus(state.rendererSessionId, "idle")
-    end
+  -- Idle prompt: ❯ alone (possibly with spaces) near bottom of screen
+  -- Must check BEFORE thinking — ❯ shares byte 0xE2 with spinner chars
+  if row >= totalRows - 8 then
+    local stripped = text:match("^%s*(.-)%s*$")
+    if stripped == "❯" or stripped == ">" then return "idle_prompt" end
   end
-end
 
--- ── Top-level JSON dispatch ──────────────────────────────────────────
-
-local function handleJsonMessage(state, msg, pushEvent, nodeId)
-  local mtype = msg.type
-  local R = getRenderer()
-
-  if mtype == "stream_event" and msg.event then
-    handleStreamEvent(state, msg.event, pushEvent, nodeId)
-
-  elseif mtype == "system" then
-    state.sessionId = msg.session_id
-    state.model = msg.model
-    state.claudeVersion = msg.version
-    pushCapEvent(pushEvent, nodeId, "onSystemInit", {
-      sessionId = msg.session_id,
-      model = msg.model,
-      version = msg.version,
-    })
-    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
-    -- Feed to renderer: system info block
-    if R and state.rendererSessionId then
-      local sysText = (msg.version or "claude") .. "  |  " .. (msg.model or "unknown") .. "  |  session " .. (msg.session_id or "?")
-      R.addSystem(state.rendererSessionId, sysText)
-      R.setStatus(state.rendererSessionId, "idle", msg.model)
-    end
-
-  elseif mtype == "assistant" then
-    -- Full assistant message with content blocks (tool calls)
-    local message = msg.message
-    if message and message.content then
-      for _, block in ipairs(message.content) do
-        if block.type == "tool_use" then
-          pushCapEvent(pushEvent, nodeId, "onToolUse", {
-            name = block.name,
-            toolId = block.id,
-            input = block.input,
-          })
-          -- Feed to renderer
-          if R and state.rendererSessionId then
-            R.addToolStart(state.rendererSessionId, block.name, block.id, block.input)
-          end
-        elseif block.type == "tool_result" then
-          -- Feed tool output to renderer
-          if R and state.rendererSessionId and block.content then
-            local outputText = type(block.content) == "string" and block.content
-              or (type(block.content) == "table" and block.content[1] and block.content[1].text)
-              or ""
-            if #outputText > 0 then
-              R.addToolOutput(state.rendererSessionId, outputText)
-            end
-          end
-        elseif block.type == "text" and block.text then
-          -- Feed text to renderer
-          if R and state.rendererSessionId then
-            R.addText(state.rendererSessionId, block.text)
-          end
-        end
-      end
-    end
-
-  elseif mtype == "result" then
-    -- Conversation result — Claude is done, waiting for next input
-    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
-    if R and state.rendererSessionId then
-      R.setStatus(state.rendererSessionId, "idle")
-    end
-
-  elseif mtype == "error" then
-    local errMsg = "Unknown error"
-    if msg.error then
-      errMsg = msg.error.message or msg.error or errMsg
-    elseif msg.message then
-      errMsg = msg.message
-    end
-    pushCapEvent(pushEvent, nodeId, "onError", { error = tostring(errMsg) })
-    -- Feed to renderer
-    if R and state.rendererSessionId then
-      R.addError(state.rendererSessionId, tostring(errMsg))
-    end
+  -- User prompt: ❯ or > followed by typed text
+  if text:find("❯ ", 1, true) and not text:find("Imagining", 1, true) then
+    local afterPrompt = text:match("❯ (.+)")
+    if afterPrompt and #afterPrompt > 0 then return "user_prompt" end
   end
+  if text:match("^> .") then return "user_prompt" end
+
+  -- Thinking/spinner lines
+  if text:find("Imagining", 1, true) or text:find("Thinking", 1, true)
+     or text:find("Saut", 1, true) then
+    return "thinking"
+  end
+
+  -- Tool use (bullet + tool name) — use plain find for bullet chars
+  local hasBullet = text:find("● ", 1, true) or text:find("• ", 1, true) or text:find("◆ ", 1, true)
+  if hasBullet then return "tool" end
+
+  -- Diff lines
+  if text:match("^%+") or text:match("^%-") then return "diff" end
+
+  -- Box drawing (tool block borders) — use plain find
+  if text:find("┌", 1, true) or text:find("╭", 1, true) or text:find("│", 1, true)
+     or text:find("└", 1, true) or text:find("╰", 1, true) then
+    return "box_drawing"
+  end
+  local stripped = text:match("^%s*(.-)%s*$")
+  if stripped:find("────", 1, true) then return "box_drawing" end
+
+  -- Error
+  if text:match("^%s*[Ee]rror:") then return "error" end
+
+  return "text"
 end
 
--- ── Process spawn ────────────────────────────────────────────────────
+-- ── PTY spawn ────────────────────────────────────────────────────────
 
 local function spawnClaude(state, props)
   local executable = props.executable or "claude"
-  local args = {
-    "-p",
-    "--verbose",
-    "--output-format", "stream-json",
-    "--input-format", "stream-json",
-    "--include-partial-messages",
-  }
+  local args = { "--verbose" }
 
-  -- Model selection
   if props.model and props.model ~= "" then
     args[#args + 1] = "--model"
     args[#args + 1] = props.model
   end
 
-  -- Max budget
-  if props.maxBudget then
-    args[#args + 1] = "--max-budget-usd"
-    args[#args + 1] = tostring(props.maxBudget)
-  end
-
-  -- Permission mode
-  if props.permissionMode then
-    args[#args + 1] = "--permission-mode"
-    args[#args + 1] = props.permissionMode
-  end
-
   local cwd = props.workingDir or "."
 
-  io.write("[claude_session] Spawning: " .. executable .. " " .. table.concat(args, " ") .. "\n")
-  io.write("[claude_session] CWD: " .. cwd .. "\n")
-  io.flush()
+  -- libvterm: damage-driven ANSI parser
+  state.vterm = VTerm.new(TERM_ROWS, TERM_COLS)
 
-  state.proc = Process.spawn(executable, args, {
-    cwd = cwd,
-    env = {
-      CLAUDECODE = false,       -- unset (prevent nested session guard)
-      PAGER = "",               -- disable pager
-      GIT_PAGER = "",           -- disable git pager
-      TERM = "xterm-256color",  -- proper terminal type
+  -- PTY: gives Claude isatty()=true
+  state.proc = PTY.open({
+    shell = executable,
+    args  = args,
+    cwd   = cwd,
+    rows  = TERM_ROWS,
+    cols  = TERM_COLS,
+    env   = {
+      CLAUDECODE      = false,
+      LD_PRELOAD      = false,
+      LD_LIBRARY_PATH = false,
+      PAGER           = "",
+      GIT_PAGER       = "",
+      TERM            = "xterm-256color",
+      FORCE_COLOR     = "1",
+      COLORTERM       = "truecolor",
     },
-    unsetEnv = { "LD_PRELOAD", "LD_LIBRARY_PATH" },
   })
 
-  state.lineBuffer = createLineBuffer()
-  state.running = true
-  state.streamingText = nil
-  state.streamingMessageId = nil
+  state.running         = true
+  state.mode            = MODE_SPLASH
+  state.settleAt        = nil
+  state.lastStreamPush  = 0
+  state.bannerText      = nil
+  state.permissionInfo  = nil
+  state.lastAssistantText = nil
+  state._emittedRows    = {}  -- dedup: rowKey -> true
 end
 
--- ── Send user message to stdin ───────────────────────────────────────
+-- ── Send message: type directly into PTY ─────────────────────────────
 
 local function sendMessage(state, message)
   if not state.proc then return false, "No process" end
 
-  -- Persist user message
-  persistConversation(state)
-  persistMessage(state, "user", message)
-
-  local payload = json.encode({
-    type = "user",
-    message = {
-      role = "user",
-      content = message,
-    },
-  })
-
-  io.write("[claude_session] Sending: " .. payload:sub(1, 200) .. "\n"); io.flush()
-
-  local ok, err = state.proc:write(payload .. "\n")
-  if not ok then
-    io.write("[claude_session] Write failed: " .. tostring(err) .. "\n"); io.flush()
-    return false, err
-  end
-
+  state.proc:write(message)
+  state._pendingEnter = true
   return true
 end
 
--- ── Module API (for claude_canvas.lua) ───────────────────────────────
+-- Respond to permission — write keystroke directly to PTY
+local function respondToPermission(state, choice, pushEvent, nodeId)
+  if not state.permissionInfo then return end
+  if not state.proc then return end
 
---- Send a message to a session. Defaults to focused session.
+  -- 1 = approve, 2 = allow-all, 3 = deny
+  state.proc:write(tostring(choice))
+  state.permissionInfo = nil
+
+  local R = getRenderer()
+  if R and state.rendererSessionId then
+    local labels = { [1] = "Approved", [2] = "Approved (all)", [3] = "Denied" }
+    R.resolvePermissionPrompt(state.rendererSessionId, labels[choice] or "Responded")
+  end
+
+  -- Notify React that permission is resolved
+  pushCapEvent(pushEvent, nodeId, "onPermissionResolved", {})
+end
+
+-- ── Semantic extraction (called when screen settles) ─────────────────
+
+local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
+  local vt = state.vterm
+  local R = getRenderer()
+  local sid = state.rendererSessionId
+  local numRows = TERM_ROWS
+
+  local prevMode = state.mode
+  local sawPermission = false
+  local permAction, permTarget, permQuestion = nil, nil, nil
+  local sawIdlePrompt = false
+  local sawThinking = false
+  local sawBanner = false
+  local newTextLines = {}
+  local sawTool = false
+  local toolText = nil
+  local sawError = false
+  local errorText = nil
+
+  -- Classify each dirty row
+  for _, row in ipairs(dirtyRows) do
+    local text = vt:getRowText(row)
+    local kind, extra1, extra2 = classifyRow(text, row, numRows)
+
+    -- Dedup: skip rows we've already emitted this turn
+    local rowKey = row .. ":" .. text:sub(1, 60)
+    if state._emittedRows[rowKey] and kind ~= "permission" then
+      -- Always let permission through (needs instant response)
+      goto continue
+    end
+    state._emittedRows[rowKey] = true
+
+    if kind == "permission" then
+      sawPermission = true
+      permAction = extra1
+      permTarget = extra2
+      permQuestion = text
+    elseif kind == "permission_option" then
+      sawPermission = sawPermission or (state.mode == MODE_PERMISSION)
+    elseif kind == "idle_prompt" then
+      sawIdlePrompt = true
+    elseif kind == "thinking" then
+      sawThinking = true
+    elseif kind == "banner" then
+      sawBanner = true
+      state.bannerText = state.bannerText or text
+    elseif kind == "tool" then
+      sawTool = true
+      toolText = text
+    elseif kind == "error" then
+      sawError = true
+      errorText = text
+    elseif kind == "text" or kind == "user_prompt" then
+      newTextLines[#newTextLines + 1] = { row = row, text = text, kind = kind }
+    end
+
+    ::continue::
+  end
+
+  -- ── Mode transitions ────────────────────────────────────────────
+
+  local newMode = prevMode
+
+  if sawPermission then
+    newMode = MODE_PERMISSION
+  elseif state.mode == MODE_PERMISSION and not sawPermission then
+    local found = vt:findText("Do you want to")
+    if not found then
+      newMode = MODE_IDLE
+      state.permissionInfo = nil
+      if R and sid then R.resolvePermissionPrompt(sid, "Resolved") end
+      pushCapEvent(pushEvent, nodeId, "onPermissionResolved", {})
+    end
+  elseif sawThinking and prevMode ~= MODE_SPLASH then
+    newMode = MODE_THINKING
+  elseif sawIdlePrompt and prevMode ~= MODE_SPLASH then
+    newMode = MODE_IDLE
+  elseif prevMode == MODE_SPLASH and (sawIdlePrompt or sawBanner) then
+    state._readyForInput = true
+    newMode = MODE_SPLASH
+
+    if state._queuedMessage then
+      local msg = state._queuedMessage
+      state._queuedMessage = nil
+      newMode = MODE_IDLE
+      state._readyForInput = true
+      local R = getRenderer()
+      if R and state.rendererSessionId then
+        if state.bannerText then R.addSystem(state.rendererSessionId, state.bannerText) end
+        R.setStatus(state.rendererSessionId, "running")
+      end
+      sendMessage(state, msg)
+      pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "running" })
+    end
+  elseif #newTextLines > 0 and prevMode ~= MODE_SPLASH then
+    newMode = MODE_STREAMING
+  end
+
+  -- Clear dedup set on transition to idle (new conversation turn)
+  if newMode == MODE_IDLE and prevMode ~= MODE_IDLE then
+    state._emittedRows = {}
+  end
+
+  state.mode = newMode
+
+  -- ── Emit events to renderer based on transitions ────────────────
+
+  if not R or not sid then return end
+
+  if prevMode == MODE_SPLASH and newMode == MODE_IDLE then
+    if state.bannerText then
+      R.addSystem(sid, state.bannerText)
+    end
+    R.setStatus(sid, "idle")
+    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
+  end
+
+  -- Enter PermissionGate
+  if newMode == MODE_PERMISSION and prevMode ~= MODE_PERMISSION then
+    state.permissionInfo = { action = permAction, target = permTarget, rawQuestion = permQuestion }
+    R.showPermissionPrompt(sid, state.permissionInfo)
+    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "waiting_permission" })
+    -- Fire React event for modal
+    pushCapEvent(pushEvent, nodeId, "onPermissionRequest", {
+      action = permAction or "",
+      target = permTarget or "",
+      question = permQuestion or "",
+    })
+  end
+
+  -- Enter Thinking
+  if newMode == MODE_THINKING and prevMode ~= MODE_THINKING then
+    R.setStatus(sid, "thinking")
+    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "thinking" })
+  end
+
+  -- Streaming text -> push to renderer (rate-limited)
+  if newMode == MODE_STREAMING then
+    local t = now_ms()
+    if t - state.lastStreamPush >= STREAM_MS then
+      state.lastStreamPush = t
+      local contentLines = {}
+      for i = 3, numRows - 3 do
+        local text = vt:getRowText(i)
+        if #text > 0 then
+          contentLines[#contentLines + 1] = text
+        end
+      end
+      if #contentLines > 0 then
+        local fullText = table.concat(contentLines, "\n")
+        if fullText ~= state.lastAssistantText then
+          state.lastAssistantText = fullText
+          R.setStreaming(sid, fullText)
+        end
+      end
+    end
+  end
+
+  -- Streaming -> Idle: finalize the response
+  if newMode == MODE_IDLE and (prevMode == MODE_STREAMING or prevMode == MODE_THINKING) then
+    local contentLines = {}
+    for i = 3, numRows - 3 do
+      local text = vt:getRowText(i)
+      if #text > 0 then
+        contentLines[#contentLines + 1] = text
+      end
+    end
+    if #contentLines > 0 then
+      local fullText = table.concat(contentLines, "\n")
+      if fullText ~= state.lastAssistantText then
+        R.addText(sid, fullText)
+        state.lastAssistantText = fullText
+      end
+    end
+    R.setStreaming(sid, nil)
+    R.setStatus(sid, "idle")
+    pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
+  end
+
+  -- Tool blocks
+  if sawTool and toolText then
+    R.addToolStart(sid, toolText, nil, nil)
+  end
+
+  -- Errors
+  if sawError and errorText then
+    R.addError(sid, errorText)
+  end
+end
+
+-- ── Module API ───────────────────────────────────────────────────────
+
 function Session.send(message, sessionNodeId)
   local id = sessionNodeId or _focusedId
   local state = _sessions[id]
@@ -422,21 +418,22 @@ function Session.send(message, sessionNodeId)
   return true
 end
 
---- Stop a session. Defaults to focused session.
 function Session.stop(sessionNodeId)
   local id = sessionNodeId or _focusedId
   local state = _sessions[id]
   if not state then return false end
-  if state.proc then
-    state.proc:kill()
-    state.proc:close()
-    state.proc = nil
-    state.running = false
-  end
+  if state.proc then state.proc:write("\x03") end
   return true
 end
 
---- Get the renderer session ID for a session. Defaults to focused.
+function Session.respond(choice, sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state then return false end
+  respondToPermission(state, choice)
+  return true
+end
+
 function Session.getRendererSessionId(sessionNodeId)
   local id = sessionNodeId or _focusedId
   local state = _sessions[id]
@@ -444,47 +441,35 @@ function Session.getRendererSessionId(sessionNodeId)
   return nil
 end
 
---- Get the focused session ID.
-function Session.getFocusedId()
-  return _focusedId
+function Session.getVTerm(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state.vterm end
+  return nil
 end
 
---- List all sessions with their status.
-function Session.list()
-  local result = {}
-  for id, state in pairs(_sessions) do
-    result[#result + 1] = {
-      id = id,
-      status = state.running and "running" or "idle",
-      model = state.model,
-      sessionId = state.sessionId,
-      rendererSessionId = state.rendererSessionId,
-    }
-  end
-  return result, _focusedId
+function Session.getScreenState(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state.mode end
+  return nil
 end
 
---- Get recent conversations from persistence (for sidebar).
-function Session.getConversations(limit)
-  local store = getStore()
-  if not store then return {} end
-  return store:find("conversations", nil, {
-    sort = { updatedAt = "desc" },
-    limit = limit or 20,
-  })
+function Session.isInitialized(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state.mode ~= MODE_SPLASH end
+  return false
 end
 
---- Search messages across all conversations.
-function Session.searchMessages(query, limit)
-  local store = getStore()
-  if not store then return {} end
-  return store:find("messages", {
-    content = { like = "%" .. query .. "%" },
-  }, {
-    sort = { timestamp = "desc" },
-    limit = limit or 20,
-  })
+function Session.getMode(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state.mode end
+  return nil
 end
+
+function Session.getFocusedId() return _focusedId end
 
 -- ── Capability registration ──────────────────────────────────────────
 
@@ -492,57 +477,58 @@ Capabilities.register("ClaudeCode", {
   visual = false,
 
   schema = {
-    workingDir     = { type = "string", desc = "Project directory for Claude to operate in" },
-    model          = { type = "string", default = "sonnet", desc = "Model: sonnet, opus, haiku" },
-    executable     = { type = "string", default = "claude", desc = "Path to claude executable" },
-    permissionMode = { type = "string", desc = "Permission mode: default, plan, acceptEdits, bypassPermissions" },
-    maxBudget      = { type = "number", desc = "Max budget in USD" },
-    sessionId      = { type = "string", default = "default", desc = "Session ID for renderer linkage" },
+    workingDir = { type = "string", desc = "Project directory for Claude to operate in" },
+    model      = { type = "string", default = "sonnet", desc = "Model: sonnet, opus, haiku" },
+    executable = { type = "string", default = "claude", desc = "Path to claude executable" },
+    sessionId  = { type = "string", default = "default", desc = "Session ID for renderer" },
   },
 
-  events = {
-    "onSystemInit",
-    "onTextDelta",
-    "onTextDone",
-    "onToolUse",
-    "onToolInput",
-    "onError",
-    "onStatusChange",
-  },
+  events = { "onError", "onStatusChange", "onPermissionRequest", "onPermissionResolved", "onQuestionPrompt" },
 
   create = function(nodeId, props)
     local state = {
-      proc = nil,
-      lineBuffer = nil,
-      running = false,
-      sessionId = nil,
-      model = nil,
-      streamingText = nil,
-      streamingMessageId = nil,
-      pendingMessage = nil,
-      rendererSessionId = props.sessionId or "default",  -- link to renderer session
-      _workingDir = props.workingDir or ".",
-      conversationId = nil,
-      _titled = false,
+      proc              = nil,
+      vterm             = nil,
+      running           = false,
+      mode              = MODE_SPLASH,
+      pendingMessage    = nil,
+      permissionInfo    = nil,
+      settleAt          = nil,
+      lastStreamPush    = 0,
+      bannerText        = nil,
+      lastAssistantText = nil,
+      rendererSessionId = props.sessionId or "default",
+      _workingDir       = props.workingDir or ".",
+      _pendingEnter     = false,
+      _queuedMessage    = nil,
+      _pendingDirty     = {},
+      _emittedRows      = {},
     }
 
     _sessions[nodeId] = state
     if not _focusedId then _focusedId = nodeId end
 
-    -- Ensure renderer has a session for us
     local R = getRenderer()
     if R then R.getSession(state.rendererSessionId) end
+
+    local ok, err = pcall(spawnClaude, state, props)
+    if not ok then
+      io.write("[claude_session] Spawn failed: " .. tostring(err) .. "\n"); io.flush()
+    end
 
     return state
   end,
 
-  update = function(nodeId, props, prev, state)
-    -- If workingDir or model changed while not running, note for next spawn
-    -- (Don't restart mid-conversation)
-  end,
+  update = function() end,
 
   tick = function(nodeId, state, dt, pushEvent, props)
     if not pushEvent then return end
+
+    -- Deferred Enter: fires on the tick AFTER sendMessage wrote the text
+    if state._pendingEnter and state.proc then
+      state._pendingEnter = false
+      state.proc:write("\r")
+    end
 
     -- Handle pending message
     if state.pendingMessage then
@@ -550,82 +536,131 @@ Capabilities.register("ClaudeCode", {
       state.pendingMessage = nil
 
       if not state.proc or not state.running then
-        -- Spawn process first
         local ok, err = pcall(spawnClaude, state, props)
         if not ok then
-          pushCapEvent(pushEvent, nodeId, "onError", { error = "Failed to spawn: " .. tostring(err) })
-          local R = getRenderer()
-          if R and state.rendererSessionId then
-            R.addError(state.rendererSessionId, "Failed to spawn: " .. tostring(err))
-          end
+          pushCapEvent(pushEvent, nodeId, "onError", { error = "Spawn failed: " .. tostring(err) })
           return
         end
-        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "starting" })
       end
 
-      -- Send the message
-      local ok, err = sendMessage(state, msg)
-      if ok then
-        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "running" })
+      if state.mode == MODE_SPLASH and not state._readyForInput then
+        state._queuedMessage = msg
+      elseif state.mode == MODE_SPLASH and state._readyForInput then
+        state.mode = MODE_IDLE
+        state._emittedRows = {}  -- clear dedup for new turn
         local R = getRenderer()
         if R and state.rendererSessionId then
+          if state.bannerText then R.addSystem(state.rendererSessionId, state.bannerText) end
           R.setStatus(state.rendererSessionId, "running")
         end
+        sendMessage(state, msg)
+        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "running" })
       else
-        pushCapEvent(pushEvent, nodeId, "onError", { error = "Send failed: " .. tostring(err) })
+        state._emittedRows = {}  -- clear dedup for new turn
+        sendMessage(state, msg)
+        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "running" })
       end
     end
 
-    -- Read from process (non-blocking, drains all available data)
-    if state.proc and state.running then
-      local data = state.proc:read()
-      if data then
-        local lines = feedLines(state.lineBuffer, data)
-        for _, line in ipairs(lines) do
-          local ok, parsed = pcall(json.decode, line)
-          if ok and parsed then
-            handleJsonMessage(state, parsed, pushEvent, nodeId)
-          else
-            -- Non-JSON output (debug info, etc.)
-            io.write("[claude_session] Non-JSON: " .. line:sub(1, 200) .. "\n"); io.flush()
+    -- Read PTY output -> feed into libvterm
+    if not state.proc or not state.running then return end
+
+    local data = state.proc:read()
+    if data and #data > 0 then
+      state.vterm:feed(data)
+    end
+
+    -- Drain damage events from vterm
+    local events = state.vterm:drain()
+
+    if events.damaged then
+      -- Accumulate dirty rows
+      for _, row in ipairs(events.dirtyRows) do
+        state._pendingDirty[row] = true
+      end
+      state.settleAt = now_ms() + SETTLE_MS
+
+      -- Instant permission detection — bypass settle entirely
+      -- Ink renders the prompt across batches, so settle keeps resetting.
+      -- Fire the React event the moment we see the trigger text.
+      if state.mode ~= MODE_PERMISSION then
+        for _, row in ipairs(events.dirtyRows) do
+          local text = state.vterm:getRowText(row)
+          if text:find("Do you want to", 1, true) then
+            local action, target = text:match("Do you want to (%w+)%s+(.-)%?")
+            state.mode = MODE_PERMISSION
+            state.permissionInfo = { action = action, target = target, rawQuestion = text }
+            local R = getRenderer()
+            if R and state.rendererSessionId then
+              R.showPermissionPrompt(state.rendererSessionId, state.permissionInfo)
+            end
+            pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "waiting_permission" })
+            pushCapEvent(pushEvent, nodeId, "onPermissionRequest", {
+              action = action or "",
+              target = target or "",
+              question = text,
+            })
+            break
           end
         end
       end
+    end
 
-      -- Check if process is still alive
-      if not state.proc:alive() then
-        local code = state.proc:exitCode()
-        io.write("[claude_session] Process exited with code " .. tostring(code) .. "\n"); io.flush()
-        state.running = false
-        state.proc:close()
-        state.proc = nil
-        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "stopped" })
-        local R = getRenderer()
-        if R and state.rendererSessionId then
-          R.setStatus(state.rendererSessionId, "stopped")
+    -- Render-complete signal
+    if events.renderCompleted then
+      if next(state._pendingDirty) and (not state.settleAt or state.settleAt > now_ms() + 16) then
+        state.settleAt = now_ms() + 16
+      end
+    end
+
+    -- Streaming mode: push text updates at STREAM_MS rate
+    if state.mode == MODE_STREAMING and next(state._pendingDirty) then
+      local t = now_ms()
+      if t - state.lastStreamPush >= STREAM_MS then
+        local dirtyList = {}
+        for r in pairs(state._pendingDirty) do
+          dirtyList[#dirtyList + 1] = r
         end
-        if code and code ~= 0 then
-          pushCapEvent(pushEvent, nodeId, "onError", {
-            error = "Claude exited with code " .. tostring(code),
-          })
-          if R and state.rendererSessionId then
-            R.addError(state.rendererSessionId, "Claude exited with code " .. tostring(code))
-          end
-        end
+        table.sort(dirtyList)
+        extractSemantics(state, dirtyList, pushEvent, nodeId)
+      end
+    end
+
+    -- Settle: extract semantics from accumulated dirty rows
+    if state.settleAt and now_ms() >= state.settleAt then
+      state.settleAt = nil
+
+      local dirtyList = {}
+      for r in pairs(state._pendingDirty) do
+        dirtyList[#dirtyList + 1] = r
+      end
+      table.sort(dirtyList)
+
+      if #dirtyList > 0 then
+        extractSemantics(state, dirtyList, pushEvent, nodeId)
+        state._pendingDirty = {}
+      end
+    end
+
+    -- Check if process is still alive
+    if not state.proc:alive() then
+      local code = state.proc:exitCode()
+      state.running = false
+      state.proc:close()
+      state.proc = nil
+      pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "stopped" })
+      local R = getRenderer()
+      if R and state.rendererSessionId then
+        R.setStatus(state.rendererSessionId, "stopped")
       end
     end
   end,
 
   destroy = function(nodeId, state)
     _sessions[nodeId] = nil
-    if _focusedId == nodeId then
-      _focusedId = next(_sessions)  -- pick any remaining, or nil
-    end
-    if state.proc then
-      state.proc:kill()
-      state.proc:close()
-      state.proc = nil
-    end
+    if _focusedId == nodeId then _focusedId = next(_sessions) end
+    if state.proc then state.proc:kill(); state.proc:close(); state.proc = nil end
+    if state.vterm then state.vterm:free(); state.vterm = nil end
   end,
 })
 
@@ -636,88 +671,53 @@ local rpcHandlers = {}
 rpcHandlers["claude:send"] = function(args)
   local id = (args and args.session) or _focusedId
   local state = _sessions[id]
-  if not state then
-    return { error = "No session: " .. tostring(id) }
-  end
-  if not args or not args.message then
-    return { error = "Missing 'message' argument" }
-  end
+  if not state then return { error = "No session" } end
+  if not args or not args.message then return { error = "Missing 'message'" } end
   state.pendingMessage = args.message
-  return { ok = true, status = "queued", session = id }
+  return { ok = true }
 end
 
 rpcHandlers["claude:stop"] = function(args)
   local id = (args and args.session) or _focusedId
   local state = _sessions[id]
-  if not state then
-    return { error = "No session" }
-  end
-  if state.proc then
-    state.proc:kill()
-    state.proc:close()
-    state.proc = nil
-    state.running = false
-  end
+  if not state then return { error = "No session" } end
+  if state.proc then state.proc:write("\x03") end
   return { ok = true }
 end
 
-rpcHandlers["claude:status"] = function(args)
-  if args and args.session then
-    local state = _sessions[args.session]
-    if not state then return { status = "not_found" } end
-    return {
-      status = state.running and "running" or "idle",
-      model = state.model,
-      sessionId = state.sessionId,
-      running = state.running,
-    }
-  end
-  -- Return all sessions
-  local all = {}
-  for id, state in pairs(_sessions) do
-    all[id] = {
-      status = state.running and "running" or "idle",
-      model = state.model,
-    }
-  end
-  return { sessions = all, focused = _focusedId }
+rpcHandlers["claude:respond"] = function(args)
+  if not args or not args.choice then return { error = "Missing 'choice'" } end
+  local id = (args and args.session) or _focusedId
+  local state = _sessions[id]
+  if not state then return { error = "No session" } end
+  -- Pass pushEvent=nil since RPC doesn't have it; React already knows
+  respondToPermission(state, args.choice, nil, nil)
+  return { ok = true }
 end
 
-rpcHandlers["claude:focus"] = function(args)
-  if not args or not args.session then
-    return { error = "Missing 'session' argument" }
-  end
-  if _sessions[args.session] then
-    _focusedId = args.session
-    return { ok = true }
-  end
-  return { error = "Unknown session: " .. tostring(args.session) }
+rpcHandlers["claude:screen"] = function(args)
+  local id = (args and args.session) or _focusedId
+  local state = _sessions[id]
+  if not state or not state.vterm then return { error = "No vterm" } end
+  return {
+    rows = state.vterm:getRows(),
+    cursor = state.vterm:getCursor(),
+    mode = state.mode,
+  }
 end
 
-rpcHandlers["claude:list"] = function()
-  local list = {}
-  for id, state in pairs(_sessions) do
-    list[#list + 1] = {
-      id = id,
-      status = state.running and "running" or "idle",
-      model = state.model,
-      sessionId = state.sessionId,
-      rendererSessionId = state.rendererSessionId,
-    }
-  end
-  return { sessions = list, focused = _focusedId }
+rpcHandlers["claude:mode"] = function(args)
+  local id = (args and args.session) or _focusedId
+  local state = _sessions[id]
+  if not state then return { error = "No session" } end
+  return { mode = state.mode }
 end
 
--- Extend Capabilities.getHandlers to include our RPC methods
 local originalGetHandlers = Capabilities.getHandlers
 Capabilities.getHandlers = function()
   local handlers = originalGetHandlers()
-  for method, handler in pairs(rpcHandlers) do
-    handlers[method] = handler
-  end
+  for method, handler in pairs(rpcHandlers) do handlers[method] = handler end
   return handlers
 end
-
-io.write("[claude_session] Registered ClaudeCode capability\n"); io.flush()
 
 return Session

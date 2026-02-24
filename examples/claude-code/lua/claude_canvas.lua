@@ -26,7 +26,6 @@ local Measure = nil
 
 -- Per-instance input state (keyed by nodeId)
 local _inputStates = {}
-
 local function getInputState(nodeId)
   if not _inputStates[nodeId] then
     _inputStates[nodeId] = {
@@ -128,18 +127,67 @@ Capabilities.register("ClaudeCanvas", {
 
   render = function(node, c, effectiveOpacity)
     local nodeId = node.id
+    local props = node.props or {}
+    local sessionId = props.sessionId or "default"
 
-    -- Render the terminal blocks
-    Renderer.render(node, c, effectiveOpacity)
+    -- If Claude hasn't initialized yet, render raw vterm grid (splash screen)
+    local vterm = Session.getVTerm()
+    local isInit = Session.isInitialized()
+    local mode = Session.getMode()
 
-    -- Render the inline "> " input prompt at bottom
+    if vterm and not isInit and Measure then
+      -- Raw vterm grid rendering (splash, boot, etc.)
+      local font = Measure.getFont(13, nil, nil)
+      local boldFont = Measure.getFont(13, "bold", nil)
+      local charW = font:getWidth("M")
+      local lineH = font:getHeight()
+      local rows, cols = vterm:size()
+
+      -- Background
+      love.graphics.setColor(Color.toTable("#0f172a")[1], Color.toTable("#0f172a")[2],
+                             Color.toTable("#0f172a")[3], effectiveOpacity)
+      love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
+
+      love.graphics.setFont(font)
+      for row = 0, rows - 1 do
+        local py = c.y + 8 + row * lineH
+        if py > c.y + c.h then break end
+        for col = 0, cols - 1 do
+          local cell = vterm:getCell(row, col)
+          if cell.char and #cell.char > 0 and cell.char ~= " " then
+            local px = c.x + 8 + col * charW
+            -- Background
+            if cell.bg then
+              love.graphics.setColor(cell.bg[1]/255, cell.bg[2]/255, cell.bg[3]/255, effectiveOpacity)
+              love.graphics.rectangle("fill", px, py, charW, lineH)
+            end
+            -- Foreground
+            if cell.fg then
+              love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
+            else
+              love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
+                                     COLORS.inputText[3], effectiveOpacity)
+            end
+            if cell.bold then love.graphics.setFont(boldFont) end
+            love.graphics.print(cell.char, px, py)
+            if cell.bold then love.graphics.setFont(font) end
+          end
+        end
+      end
+      -- Fall through to input bar below
+    else
+      -- Normal mode: render the block-based UI
+      Renderer.render(node, c, effectiveOpacity)
+    end
+
+    -- ── Input bar (always drawn, every mode) ──────────────────────
     local inputState = getInputState(nodeId)
     if not Measure then return end
 
     local fontSize = 13
     local font = Measure.getFont(fontSize, nil, nil)
     local lineHeight = font:getHeight()
-    local promptY = c.y + c.h - lineHeight - 28  -- above status bar
+    local promptY = c.y + c.h - lineHeight - 28
     local promptX = c.x + 16
 
     -- Input background
@@ -175,6 +223,27 @@ Capabilities.register("ClaudeCanvas", {
     local props = node.props or {}
     local sessionId = props.sessionId or "default"
     local inputState = getInputState(nodeId)
+
+    -- Reset cursor blink on every key press
+    inputState.blinkOn = true
+    inputState.blinkTimer = 0
+
+    -- Check for permission prompt — intercept y/a/n/Esc
+    local permPrompt = Renderer.getPermissionPrompt(sessionId)
+    if permPrompt then
+      if key == "y" or key == "return" or key == "kpenter" then
+        Session.respond(1)
+        return true
+      elseif key == "a" then
+        Session.respond(2)
+        return true
+      elseif key == "n" or key == "escape" then
+        Session.respond(3)
+        return true
+      end
+      -- Block all other input while permission is pending
+      return true
+    end
 
     -- Enter: submit message
     if key == "return" or key == "kpenter" then
@@ -348,7 +417,5 @@ local Canvas = {}
 function Canvas.getInputText(nodeId)
   return getInputState(nodeId).text
 end
-
-io.write("[claude_canvas] Registered ClaudeCanvas visual capability\n"); io.flush()
 
 return Canvas
