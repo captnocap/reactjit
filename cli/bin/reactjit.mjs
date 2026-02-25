@@ -16,6 +16,8 @@ import { diagnoseCommand } from '../commands/diagnose.mjs';
 import { fontsCommand } from '../commands/fonts.mjs';
 import { storybookCommand } from '../commands/storybook.mjs';
 import { searchIndexCommand } from '../commands/search-index.mjs';
+import { runConvert } from '../commands/convert.mjs';
+import { migrateCommand } from '../commands/migrate.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -64,7 +66,14 @@ const HELP = `
     rjit fonts add <pack>         Add a font pack (e.g. cjk, arabic)
     rjit fonts remove <pack>      Remove a font pack
 
+  Migration:
+    rjit migrate <source-dir>     Convert React+Express app → ReactJIT project
+    rjit migrate <dir> --dry-run  Show file classification without converting
+    rjit migrate <dir> -o <out>   Custom output directory
+
   Tools:
+    rjit convert <file>           Convert HTML/React div-soup → ReactJIT
+    rjit convert <file> -o out    Write converted output to file
     rjit tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
     rjit tsl --test               Run TSL transpiler test suite
     rjit screenshot [--output]    Lint + build + headless screenshot
@@ -114,6 +123,12 @@ switch (command) {
     break;
   case 'search-index':
     await searchIndexCommand(args);
+    break;
+  case 'convert':
+    runConvert(args);
+    break;
+  case 'migrate':
+    await migrateCommand(args);
     break;
   case '--version':
   case '-v':
