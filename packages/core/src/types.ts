@@ -253,6 +253,9 @@ export interface LayoutEvent {
 }
 
 export interface BoxProps {
+  /** Tailwind utility classes. Lowest priority: className < shorthands < style={}. */
+  className?: string;
+
   // Shorthand layout props — mapped to style, style={} wins if both set
   direction?: 'row' | 'col';
   gap?: number | string;
@@ -322,6 +325,21 @@ export interface BoxProps {
   onLayout?: (event: LayoutEvent) => void;
   children?: React.ReactNode;
   key?: string | number;
+}
+
+export interface ColProps extends BoxProps {
+  /** Fixed span (1-12) or semantic word. Applied at all breakpoints. */
+  span?: import('./useBreakpoint').SpanValue;
+  /** Span at sm (≥0px) breakpoint. */
+  sm?: import('./useBreakpoint').SpanValue;
+  /** Span at md (≥640px) breakpoint. */
+  md?: import('./useBreakpoint').SpanValue;
+  /** Span at lg (≥1024px) breakpoint. */
+  lg?: import('./useBreakpoint').SpanValue;
+  /** Span at xl (≥1440px) breakpoint. */
+  xl?: import('./useBreakpoint').SpanValue;
+  /** Auto-responsive: sm=12, md=6, lg=4, xl=3. Override with breakpoint props. */
+  responsive?: boolean;
 }
 
 export interface TextProps {
@@ -739,6 +757,46 @@ export interface ImageSelectProps {
   /** Click handler for selection origin */
   onClick?: (event: LoveEvent) => void;
   style?: Style;
+  key?: string | number;
+}
+
+// ── Image Processing Capability ──────────────────────────
+
+/**
+ * Frame-distributed image resize + compress. Spreads CPU work across frames
+ * so the UI never blocks. Drop it in, get progress events, done.
+ *
+ * @example
+ * <ImageProcess
+ *   src="/photos/big.jpg"
+ *   output="/thumbs/big_800.jpg"
+ *   width={800}
+ *   quality={80}
+ *   onProgress={(e) => setProgress(e.progress)}
+ *   onComplete={(e) => console.log(e.outputPath, e.sizeBytes)}
+ * />
+ */
+export interface ImageProcessProps {
+  /** Source image path */
+  src: string;
+  /** Output file path */
+  output: string;
+  /** Target width (aspect-preserving if height omitted) */
+  width?: number;
+  /** Target height (aspect-preserving if width omitted) */
+  height?: number;
+  /** JPEG quality 1–100 (default 80) */
+  quality?: number;
+  /** Output format (default "jpeg") */
+  format?: 'jpeg' | 'jpg' | 'png' | 'bmp';
+  /** Max ms per frame for processing (default 4) */
+  frameBudgetMs?: number;
+  /** Progress callback: { phase: "load"|"resize", progress: 0–1 } */
+  onProgress?: (event: LoveEvent) => void;
+  /** Fires when processing is complete: { outputPath, width, height, sizeBytes, format } */
+  onComplete?: (event: LoveEvent) => void;
+  /** Fires on error: { message } */
+  onError?: (event: LoveEvent) => void;
   key?: string | number;
 }
 

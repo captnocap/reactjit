@@ -46,6 +46,8 @@ import { LayoutsStory } from './LayoutsStory';
 import { SearchStory } from './SearchStory';
 import { TerminalStory } from './TerminalStory';
 import { NoclipMazeStory } from './NoclipMazeStory';
+import { GridStory } from './GridStory';
+import { TailwindStory } from './TailwindStory';
 
 
 export const stories: StoryDef[] = [
@@ -61,6 +63,8 @@ export const stories: StoryDef[] = [
   { id: 'input', title: 'Input', section: 'Core', component: InputStory },
   { id: 'search', title: 'Search', section: 'Core', component: SearchStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
+  { id: 'grid', title: 'Grid System', section: 'Core', component: GridStory },
+  { id: 'tailwind', title: 'Tailwind', section: 'Core', component: TailwindStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
 
   // Packages

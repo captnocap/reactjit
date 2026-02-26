@@ -10,7 +10,10 @@
 import React from 'react';
 import { useRendererMode, useThemeColorsOptional } from './context';
 import { useScaledStyle } from './ScaleContext';
-import type { BoxProps, TextProps, ImageProps, FocusGroupProps, Style, Color } from './types';
+import type { BoxProps, ColProps, TextProps, ImageProps, FocusGroupProps, Style, Color } from './types';
+import { useBreakpoint, resolveSpan, spanToFlexBasis, RESPONSIVE_DEFAULTS } from './useBreakpoint';
+import type { Breakpoint } from './useBreakpoint';
+import { tw } from './tw';
 
 // ── Theme token resolution ──────────────────────────────
 //
@@ -239,47 +242,56 @@ function styleToCSS(style?: Style): React.CSSProperties {
 
 // ── Shorthand prop → style merging ────────────────────
 
-/** Build a Style from Box shorthand props. style={} overrides. */
+/**
+ * Build a Style from Box shorthand props + optional className.
+ * Priority: className < shorthand props < style={}
+ */
 function resolveBoxStyle(props: BoxProps): Style | undefined {
   const {
+    className,
     direction, gap, padding, px, py, margin,
     align, justify, fill, grow, bg, radius,
     w, h, wrap, scroll, hidden, z, style,
   } = props;
 
-  // Fast path: no shorthand props used
-  if (
-    direction === undefined && gap === undefined && padding === undefined &&
-    px === undefined && py === undefined && margin === undefined &&
-    align === undefined && justify === undefined && !fill && !grow &&
-    bg === undefined && radius === undefined && w === undefined &&
-    h === undefined && !wrap && !scroll && !hidden && z === undefined
-  ) {
-    return style;
+  const hasShorthands = (
+    direction !== undefined || gap !== undefined || padding !== undefined ||
+    px !== undefined || py !== undefined || margin !== undefined ||
+    align !== undefined || justify !== undefined || fill || grow ||
+    bg !== undefined || radius !== undefined || w !== undefined ||
+    h !== undefined || wrap || scroll || hidden || z !== undefined
+  );
+
+  // Fast path: nothing to resolve
+  if (!className && !hasShorthands) return style;
+
+  // className is the base layer (lowest priority)
+  const base: Style = className ? { ...tw(className) } : {};
+
+  // Shorthand props override className
+  if (hasShorthands) {
+    if (direction === 'row') base.flexDirection = 'row';
+    if (direction === 'col') base.flexDirection = 'column';
+    if (gap !== undefined) base.gap = gap;
+    if (padding !== undefined) base.padding = padding;
+    if (px !== undefined) { base.paddingLeft = px; base.paddingRight = px; }
+    if (py !== undefined) { base.paddingTop = py; base.paddingBottom = py; }
+    if (margin !== undefined) base.margin = margin;
+    if (align) base.alignItems = align;
+    if (justify) base.justifyContent = justify;
+    if (fill) { base.width = '100%'; base.height = '100%'; }
+    if (grow) base.flexGrow = 1;
+    if (bg !== undefined) base.backgroundColor = bg;
+    if (radius !== undefined) base.borderRadius = radius;
+    if (w !== undefined) base.width = w;
+    if (h !== undefined) base.height = h;
+    if (wrap) base.flexWrap = 'wrap';
+    if (scroll) base.overflow = 'scroll';
+    if (hidden) base.display = 'none';
+    if (z !== undefined) base.zIndex = z;
   }
 
-  const base: Style = {};
-  if (direction === 'row') base.flexDirection = 'row';
-  if (direction === 'col') base.flexDirection = 'column';
-  if (gap !== undefined) base.gap = gap;
-  if (padding !== undefined) base.padding = padding;
-  if (px !== undefined) { base.paddingLeft = px; base.paddingRight = px; }
-  if (py !== undefined) { base.paddingTop = py; base.paddingBottom = py; }
-  if (margin !== undefined) base.margin = margin;
-  if (align) base.alignItems = align;
-  if (justify) base.justifyContent = justify;
-  if (fill) { base.width = '100%'; base.height = '100%'; }
-  if (grow) base.flexGrow = 1;
-  if (bg !== undefined) base.backgroundColor = bg;
-  if (radius !== undefined) base.borderRadius = radius;
-  if (w !== undefined) base.width = w;
-  if (h !== undefined) base.height = h;
-  if (wrap) base.flexWrap = 'wrap';
-  if (scroll) base.overflow = 'scroll';
-  if (hidden) base.display = 'none';
-  if (z !== undefined) base.zIndex = z;
-
-  // style={} wins over shorthand props
+  // style={} wins over everything
   return style ? { ...base, ...style } : base;
 }
 
@@ -493,9 +505,55 @@ export function Row(props: BoxProps) {
   return <Box direction="row" {...props} />;
 }
 
-/** Col — shorthand for <Box direction="col"> (default, but explicit) */
-export function Col(props: BoxProps) {
-  return <Box direction="col" {...props} />;
+/**
+ * Col — column layout primitive with optional 12-column grid support.
+ *
+ * Without grid props: behaves as `<Box direction="col">` (backwards compatible).
+ * With grid props: computes flexBasis from a 12-column span system.
+ *
+ * Three authoring modes, same output:
+ *   <Col span={6}>              // numeric (CSS-literate)
+ *   <Col md="half">             // semantic (non-CSS)
+ *   <Col responsive>            // auto: sm=12, md=6, lg=4, xl=3
+ */
+export function Col({ span, sm, md, lg, xl, responsive, style, ...rest }: ColProps) {
+  const hasGrid = span !== undefined || sm !== undefined || md !== undefined
+    || lg !== undefined || xl !== undefined || responsive;
+
+  // Fast path: no grid props → plain column Box (zero overhead, no hook call)
+  if (!hasGrid) return <Box direction="col" style={style} {...rest} />;
+
+  // Grid mode: resolve active span for current breakpoint
+  const bp = useBreakpoint();
+
+  // Apply responsive defaults if flag set (individual breakpoint props override)
+  const eSm = sm ?? (responsive ? RESPONSIVE_DEFAULTS.sm : undefined);
+  const eMd = md ?? (responsive ? RESPONSIVE_DEFAULTS.md : undefined);
+  const eLg = lg ?? (responsive ? RESPONSIVE_DEFAULTS.lg : undefined);
+  const eXl = xl ?? (responsive ? RESPONSIVE_DEFAULTS.xl : undefined);
+
+  // Cascade: use the highest defined breakpoint ≤ current, else span, else 12
+  const bpRank: Record<Breakpoint, number> = { sm: 0, md: 1, lg: 2, xl: 3 };
+  const rank = bpRank[bp];
+  const cascade: [Breakpoint, typeof eSm][] = [
+    ['xl', eXl], ['lg', eLg], ['md', eMd], ['sm', eSm],
+  ];
+  let activeSpan = span ?? 12;
+  for (const [b, val] of cascade) {
+    if (bpRank[b] <= rank && val !== undefined) {
+      activeSpan = val;
+      break;
+    }
+  }
+
+  const numericSpan = resolveSpan(activeSpan);
+  const gridStyle: Style = {
+    flexBasis: spanToFlexBasis(numericSpan),
+    flexGrow: 0,
+    ...style,
+  };
+
+  return <Box style={gridStyle} {...rest} />;
 }
 
 export function Text(props: TextProps) {

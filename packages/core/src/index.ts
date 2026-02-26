@@ -5,6 +5,7 @@ export type {
   FileDropMode,
   LoveEvent,
   BoxProps,
+  ColProps,
   TextProps,
   ImageProps,
   VideoProps,
@@ -62,6 +63,21 @@ export {
   type PeerMessage,
   type Overlay,
 } from './hooks';
+
+// Breakpoint / responsive grid
+export {
+  useBreakpoint,
+  resolveSpan,
+  spanToFlexBasis,
+  BREAKPOINTS,
+  RESPONSIVE_DEFAULTS,
+  type Breakpoint,
+  type SemanticSpan,
+  type SpanValue,
+} from './useBreakpoint';
+
+// Tailwind class-to-style parser
+export { tw } from './tw';
 
 // Local store (persistent useState backed by SQLite)
 export { useLocalStore, type UseLocalStoreOptions } from './useLocalStore';
@@ -287,12 +303,12 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent, Window, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect } from './capabilities';
+export { Audio, Timer, LLMAgent, Window, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type {
   NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps, ImageSelectProps,
+  BoidsProps, ImageSelectProps, ImageProcessProps,
   CapabilitySchema,
 } from './types';
 
