@@ -443,45 +443,11 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "thinking" })
   end
 
-  -- Streaming text -> push to renderer (rate-limited)
-  if newMode == MODE_STREAMING then
-    local t = now_ms()
-    if t - state.lastStreamPush >= STREAM_MS then
-      state.lastStreamPush = t
-      local contentLines = {}
-      for i = 3, inputBoundary - 1 do
-        local text = vt:getRowText(i)
-        if #text > 0 then
-          contentLines[#contentLines + 1] = text
-        end
-      end
-      if #contentLines > 0 then
-        local fullText = table.concat(contentLines, "\n")
-        if fullText ~= state.lastAssistantText then
-          state.lastAssistantText = fullText
-          R.setStreaming(sid, fullText)
-        end
-      end
-    end
-  end
+  -- Streaming content push is handled in tick, not here
 
-  -- Streaming -> Idle: finalize the response
-  if newMode == MODE_IDLE and (prevMode == MODE_STREAMING or prevMode == MODE_THINKING) then
-    local contentLines = {}
-    for i = 3, inputBoundary - 1 do
-      local text = vt:getRowText(i)
-      if #text > 0 then
-        contentLines[#contentLines + 1] = text
-      end
-    end
-    if #contentLines > 0 then
-      local fullText = table.concat(contentLines, "\n")
-      if fullText ~= state.lastAssistantText then
-        R.addText(sid, fullText)
-        state.lastAssistantText = fullText
-      end
-    end
-    R.setStreaming(sid, nil)
+  -- Thinking -> Idle: finalize
+  -- (Streaming -> Idle is handled by the tick timer, not here)
+  if newMode == MODE_IDLE and prevMode == MODE_THINKING then
     R.setStatus(sid, "idle")
     pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
   end
@@ -622,6 +588,7 @@ Capabilities.register("ClaudeCode", {
       _queuedMessage    = nil,
       _pendingDirty     = {},
       _emittedRows      = {},
+      _lastDamageAt     = nil,
     }
 
     _sessions[nodeId] = state
