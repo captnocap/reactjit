@@ -128,13 +128,27 @@ end
 
 local function loadLibrary()
   -- Try paths in order: project-local bundled, then system
-  local paths = {
-    resolveLibPath("lib/libsqlite3.so.0"),  -- project-local (bundled by CLI, .so.0)
-    resolveLibPath("lib/libsqlite3.so"),     -- project-local (symlink variant)
-    "libsqlite3.so.0",                       -- system (Linux)
-    "libsqlite3",                            -- system (let dlopen resolve)
-    "sqlite3",                               -- system (canonical name)
-  }
+  local isLinux = ffi.os == "Linux"
+  local paths
+  if isLinux then
+    paths = {
+      resolveLibPath("lib/libsqlite3.so.0"),  -- project-local (bundled by CLI, .so.0)
+      resolveLibPath("lib/libsqlite3.so"),     -- project-local (symlink variant)
+      "libsqlite3.so.0",                       -- system (Linux)
+      "libsqlite3",                            -- system (let dlopen resolve)
+      "sqlite3",                               -- system (canonical name)
+    }
+  else
+    paths = {
+      resolveLibPath("lib/libsqlite3.0.dylib"),   -- project-local (bundled by CLI)
+      resolveLibPath("lib/libsqlite3.dylib"),      -- project-local (symlink variant)
+      "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib",  -- Homebrew (Apple Silicon)
+      "/usr/local/opt/sqlite/lib/libsqlite3.dylib",     -- Homebrew (Intel)
+      "/usr/lib/libsqlite3.dylib",                       -- macOS system
+      "libsqlite3",                                      -- system (let dlopen resolve)
+      "sqlite3",                                         -- system (canonical name)
+    }
+  end
 
   for _, path in ipairs(paths) do
     local ok, result = pcall(ffi.load, path)

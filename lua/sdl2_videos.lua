@@ -140,14 +140,25 @@ local libmpvAvailable = false
 local mpv = nil
 
 do
+  local isLinux = ffi.os == "Linux"
   local RTLD_LAZY     = 0x00001
-  local RTLD_DEEPBIND = 0x00008
+  local RTLD_DEEPBIND = isLinux and 0x00008 or 0  -- macOS uses two-level namespaces
   -- Try bundled lib/ first, then fall back to system library
-  local paths = { "lib/libmpv.so.2", "libmpv.so.2" }
+  local paths
+  if isLinux then
+    paths = { "lib/libmpv.so.2", "libmpv.so.2" }
+  else
+    paths = {
+      "lib/libmpv.2.dylib", "lib/libmpv.dylib",
+      "/opt/homebrew/lib/libmpv.dylib",
+      "/usr/local/lib/libmpv.dylib",
+      "libmpv.2.dylib",
+    }
+  end
   local lastErr
   for _, path in ipairs(paths) do
     local ok, err = pcall(function()
-      -- RTLD_DEEPBIND isolates mpv's Lua 5.2 symbols from LuaJIT.
+      -- RTLD_DEEPBIND isolates mpv's Lua 5.2 symbols from LuaJIT (Linux only).
       ffi.C.dlopen(path, bit.bor(RTLD_LAZY, RTLD_DEEPBIND))
       mpv = ffi.load(path)
     end)
@@ -158,7 +169,7 @@ do
     lastErr = err
   end
   if not libmpvAvailable then
-    io.write("[sdl2_videos] WARNING: libmpv not available — install libmpv-dev for video\n"); io.flush()
+    io.write("[sdl2_videos] WARNING: libmpv not available — install libmpv-dev (Linux) or brew install mpv (macOS)\n"); io.flush()
   end
 end
 

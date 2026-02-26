@@ -237,7 +237,8 @@ function SDL2Init.run(config)
   local H     = config.height or 720
   local title = config.title  or "ReactJIT"
   local bundle = config.bundle or "sdl2/bundle.js"
-  local bridgeLibPath = config.libpath or "lib/libquickjs.so"
+  local libExt = ffi.os == "OSX" and ".dylib" or ".so"
+  local bridgeLibPath = config.libpath or ("lib/libquickjs" .. libExt)
 
   -- ------------------------------------------------------------------
   -- 1. SDL2 + OpenGL window

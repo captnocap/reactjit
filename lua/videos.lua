@@ -180,30 +180,43 @@ local libmpvAvailable = false
 local mpv = nil
 
 do
+  local loader = require("lua.lib_loader")
+  local isLinux = ffi.os == "Linux"
+
+  -- Platform-aware library paths:
+  -- Linux: libmpv.so.2 (versioned soname)
+  -- macOS: libmpv.2.dylib (Homebrew versioned) or libmpv.dylib
+  local paths
+  if isLinux then
+    paths = { "lib/libmpv.so.2", "libmpv.so.2" }
+  else
+    paths = {
+      "lib/libmpv.2.dylib", "lib/libmpv.dylib",
+      "/opt/homebrew/lib/libmpv.dylib", "/usr/local/lib/libmpv.dylib",
+      "libmpv.2.dylib",
+    }
+  end
+
   local RTLD_LAZY     = 0x00001
-  local RTLD_DEEPBIND = 0x00008
-  -- Try bundled lib/ first, then fall back to system library
-  local paths = { "lib/libmpv.so.2", "libmpv.so.2" }
+  -- RTLD_DEEPBIND is Linux-only (0x00008). macOS uses two-level namespaces
+  -- by default, which provides equivalent symbol isolation.
+  local RTLD_DEEPBIND = isLinux and 0x00008 or 0
   local lastErr
   for _, path in ipairs(paths) do
     local ok, err = pcall(function()
-      -- RTLD_DEEPBIND isolates mpv's Lua 5.2 symbols from Love2D's LuaJIT.
-      -- CRITICAL: ffi.load must use the SAME path so both dlopen calls resolve
-      -- to the same shared object. Using ffi.load("mpv") can find a different
-      -- libmpv.so without DEEPBIND, causing symbol corruption.
       ffi.C.dlopen(path, bit.bor(RTLD_LAZY, RTLD_DEEPBIND))
       mpv = ffi.load(path)
     end)
     if ok then
       libmpvAvailable = true
-      io.write("[videos] libmpv loaded from " .. path .. " (RTLD_DEEPBIND)\n"); io.flush()
+      io.write("[videos] libmpv loaded from " .. path .. "\n"); io.flush()
       break
     end
     lastErr = err
   end
   if not libmpvAvailable then
     io.write("[videos] libmpv not available: " .. tostring(lastErr) .. "\n"); io.flush()
-    io.write("[videos] Install libmpv-dev for video playback\n"); io.flush()
+    io.write("[videos] Install libmpv for video playback\n"); io.flush()
   end
 end
 

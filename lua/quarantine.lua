@@ -112,15 +112,28 @@ local function init_sha256()
   local ffi_ok, ffi = pcall(require, "ffi")
   if not ffi_ok then return false end
 
-  -- Try to load libcrypto (OpenSSL)
-  local ok, lib = pcall(ffi.load, "crypto")
-  if not ok then
-    ok, lib = pcall(ffi.load, "libcrypto.so.3")
-    if not ok then
-      ok, lib = pcall(ffi.load, "libcrypto.so.1.1")
-      if not ok then return false end
-    end
+  -- Try to load libcrypto (OpenSSL) — platform-aware paths
+  local isLinux = ffi.os == "Linux"
+  local cryptoPaths
+  if isLinux then
+    cryptoPaths = { "crypto", "libcrypto.so.3", "libcrypto.so.1.1" }
+  else
+    -- macOS 15.4+ aborts if you load the unversioned system libcrypto.dylib
+    -- ("Invalid dylib load. Clients should not load the unversioned libcrypto
+    -- dylib as it does not have a stable ABI.") Use Homebrew's OpenSSL instead.
+    cryptoPaths = {
+      "/opt/homebrew/opt/openssl/lib/libcrypto.dylib",
+      "/usr/local/opt/openssl/lib/libcrypto.dylib",
+      "libcrypto.3.dylib",
+      "libcrypto.1.1.dylib",
+    }
   end
+  local ok, lib = false, nil
+  for _, path in ipairs(cryptoPaths) do
+    ok, lib = pcall(ffi.load, path)
+    if ok then break end
+  end
+  if not ok then return false end
 
   -- Declare SHA256 functions
   pcall(ffi.cdef, [[
