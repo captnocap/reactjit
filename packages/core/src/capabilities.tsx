@@ -21,7 +21,7 @@ import { Native } from './Native';
 import type {
   AudioProps, TimerProps, LLMAgentProps, WindowProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps, ImageSelectProps,
+  BoidsProps, ImageSelectProps, ImageProcessProps,
 } from './types';
 
 /**
@@ -102,6 +102,19 @@ export function Window(props: WindowProps) {
  */
 export function ImageSelect(props: ImageSelectProps) {
   return <Native type="ImageSelect" {...props} />;
+}
+
+/**
+ * Frame-distributed image resize + compress. Spreads work across frames
+ * so the UI never blocks — like Tor distributing circuit setup over its event loop.
+ *
+ * @example
+ * <ImageProcess src="/photos/big.jpg" output="/thumbs/big_800.jpg" width={800} quality={80}
+ *   onProgress={(e) => setProgress(e.progress)}
+ *   onComplete={(e) => console.log(e.sizeBytes)} />
+ */
+export function ImageProcess(props: ImageProcessProps) {
+  return <Native type="ImageProcess" {...props} />;
 }
 
 // ── GPIO Capabilities ─────────────────────────────────────
