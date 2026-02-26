@@ -18,6 +18,8 @@ import { storybookCommand } from '../commands/storybook.mjs';
 import { searchIndexCommand } from '../commands/search-index.mjs';
 import { runConvert } from '../commands/convert.mjs';
 import { migrateCommand } from '../commands/migrate.mjs';
+import { migrateTkinterCommand } from '../commands/migrate-tkinter.mjs';
+import { migrateSwiftUICommand } from '../commands/migrate-swiftui.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -70,6 +72,8 @@ const HELP = `
     rjit migrate <source-dir>     Convert React+Express app → ReactJIT project
     rjit migrate <dir> --dry-run  Show file classification without converting
     rjit migrate <dir> -o <out>   Custom output directory
+    rjit migrate-tkinter <app.py> Convert Python Tkinter app → ReactJIT TSX
+    rjit migrate-swiftui <app.swift> Convert SwiftUI app → ReactJIT TSX
 
   Tools:
     rjit convert <file>           Convert HTML/React div-soup → ReactJIT
@@ -129,6 +133,12 @@ switch (command) {
     break;
   case 'migrate':
     await migrateCommand(args);
+    break;
+  case 'migrate-tkinter':
+    migrateTkinterCommand(args);
+    break;
+  case 'migrate-swiftui':
+    migrateSwiftUICommand(args);
     break;
   case '--version':
   case '-v':
