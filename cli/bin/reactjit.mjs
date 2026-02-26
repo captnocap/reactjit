@@ -20,6 +20,7 @@ import { runConvert } from '../commands/convert.mjs';
 import { migrateCommand } from '../commands/migrate.mjs';
 import { migrateTkinterCommand } from '../commands/migrate-tkinter.mjs';
 import { migrateSwiftUICommand } from '../commands/migrate-swiftui.mjs';
+import { migrateBlessedCommand } from '../commands/migrate-blessed.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -74,6 +75,7 @@ const HELP = `
     rjit migrate <dir> -o <out>   Custom output directory
     rjit migrate-tkinter <app.py> Convert Python Tkinter app → ReactJIT TSX
     rjit migrate-swiftui <app.swift> Convert SwiftUI app → ReactJIT TSX
+    rjit migrate-blessed <app.js>   Convert Blessed terminal UI → ReactJIT TSX
 
   Tools:
     rjit convert <file>           Convert HTML/React div-soup → ReactJIT
@@ -139,6 +141,9 @@ switch (command) {
     break;
   case 'migrate-swiftui':
     migrateSwiftUICommand(args);
+    break;
+  case 'migrate-blessed':
+    migrateBlessedCommand(args);
     break;
   case '--version':
   case '-v':
