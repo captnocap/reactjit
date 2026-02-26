@@ -321,4 +321,4 @@ Caps.getHandlers = function()
   return h
 end
 
-io.write("[capabilities] Registered Terminal capability\n"); io.flush()
+-- (registration logged by capabilities.loadAll summary)

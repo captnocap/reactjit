@@ -60,17 +60,7 @@ local available = llm_ok and llm.available
   and mem_ok and Memory and Memory.available
   and agent_ok and Agent
 
-if not available then
-  io.write("[capability:LLMAgent] Not available (")
-  if not llm_ok then io.write("llm.lua failed, ")
-  elseif not llm.available then io.write("libllama.so missing, ")
-  end
-  if not mem_ok then io.write("memory.lua failed, ")
-  elseif not Memory.available then io.write("libsqlite3 missing, ")
-  end
-  if not agent_ok then io.write("agent.lua failed, ") end
-  io.write(")\n"); io.flush()
-end
+-- (availability logged by capabilities.loadAll summary)
 
 -- ── Think block parser ─────────────────────────────────────────────────
 
@@ -513,4 +503,4 @@ Capabilities.getHandlers = function()
   return handlers
 end
 
-io.write("[capability:LLMAgent] Registered (available=" .. tostring(available) .. ")\n"); io.flush()
+-- (registration logged by capabilities.loadAll summary)

@@ -279,7 +279,7 @@ function SDL2Init.run(config)
   W, H = dw[0], dh[0]
   local scaleX = W / ww[0]
   local scaleY = H / wh[0]
-  io.write("[sdl2_init] " .. W .. "x" .. H .. " (scale " .. scaleX .. "x" .. scaleY .. ")\n"); io.flush()
+  -- (resolution reported in the "ready" line before run loop)
 
   -- ------------------------------------------------------------------
   -- 2. OpenGL state
@@ -529,9 +529,6 @@ function SDL2Init.run(config)
       sdl.SDL_EventState(SDL_DROPTEXT, 1)
       sdl.SDL_EventState(SDL_DROPBEGIN, 1)
       sdl.SDL_EventState(SDL_DROPCOMPLETE, 1)
-      io.write("[sdl2_init] drag-and-drop initialized\n"); io.flush()
-    else
-      io.write("[sdl2_init] dragdrop module not available: " .. tostring(ddMod) .. "\n"); io.flush()
     end
   end
 
@@ -697,9 +694,6 @@ function SDL2Init.run(config)
       effectsmod = efMod
       effectsmod.loadAll()
       Painter.setEffects(effectsmod)
-      io.write("[sdl2_init] effects system initialized\n"); io.flush()
-    else
-      io.write("[sdl2_init] effects module not available: " .. tostring(efMod) .. "\n"); io.flush()
     end
   end
 
@@ -809,7 +803,7 @@ function SDL2Init.run(config)
       for method, handler in pairs(smMod.getHandlers()) do
         rpcHandlers[method] = handler
       end
-      io.write("[sdl2_init] sysmon module loaded\n"); io.flush()
+      -- (loaded quietly)
     end
   end
 
@@ -818,7 +812,7 @@ function SDL2Init.run(config)
   local httpOk, httpMod = pcall(require, "lua.http")
   if httpOk and httpMod then
     http = httpMod
-    io.write("[sdl2_init] HTTP module loaded\n"); io.flush()
+    -- (loaded quietly)
   end
 
   -- Audio engine (optional)
@@ -835,7 +829,7 @@ function SDL2Init.run(config)
       audioEngine.init(args)
       return true
     end
-    io.write("[sdl2_init] Audio engine loaded\n"); io.flush()
+    -- (loaded quietly)
   end
 
   -- Push initial viewport
@@ -847,7 +841,7 @@ function SDL2Init.run(config)
   local hmrHasLoaded = bundleSource ~= nil
 
   local function reloadBundle(nextBundleSource)
-    io.write("[sdl2_init] Hot reload starting...\n"); io.flush()
+    io.write("[hmr] reloading...\n"); io.flush()
 
     -- Read dev state before tearing down the old context.
     local devStateCache = nil
@@ -956,7 +950,7 @@ function SDL2Init.run(config)
 
     bridge:pushEvent({ type = "viewport", payload = { width = W, height = H } })
 
-    io.write("[sdl2_init] Hot reload complete (" .. #nextBundleSource .. " bytes)\n"); io.flush()
+    io.write("[hmr] done (" .. #nextBundleSource .. " bytes)\n"); io.flush()
     return true
   end
 
@@ -970,11 +964,6 @@ function SDL2Init.run(config)
   -- Enable vsync so SDL_GL_SwapWindow throttles to display refresh rate.
   -- If vsync fails (returns -1), fall back to manual frame cap.
   local vsyncOk = sdl.SDL_GL_SetSwapInterval(1) == 0
-  if vsyncOk then
-    io.write("[sdl2_init] vsync enabled\n"); io.flush()
-  else
-    io.write("[sdl2_init] vsync not available, using manual frame cap\n"); io.flush()
-  end
 
   local lastTicks = sdl.SDL_GetTicks()
 
@@ -986,11 +975,10 @@ function SDL2Init.run(config)
   local diagWaitFrames = 3  -- let tree mutations + layout settle
   local diagDone = false
 
-  if diagEnabled then
-    io.write("[sdl2_init] diagnostic mode enabled\n"); io.flush()
-  end
-
-  io.write("[sdl2_init] entering run loop\n"); io.flush()
+  io.write("[sdl2_init] ready — " .. W .. "x" .. H
+    .. (vsyncOk and ", vsync" or ", no vsync")
+    .. (diagEnabled and ", diagnostic" or "")
+    .. "\n"); io.flush()
 
   while running do
     local now = sdl.SDL_GetTicks()
@@ -1739,9 +1727,7 @@ function SDL2Init.run(config)
           elseif type(cmd) == "table" and cmd.type == "theme:set" then
             local payload = cmd.payload
             local name = payload and payload.name
-            if applyThemeByName(name) then
-              io.write("[sdl2_init] Theme switched to: " .. tostring(name) .. "\n"); io.flush()
-            end
+            applyThemeByName(name)
           else
             treeCommands[#treeCommands + 1] = cmd
           end

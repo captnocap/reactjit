@@ -117,19 +117,20 @@ end
 --- @param nodes table  The full node table from tree.lua (id -> node)
 --- @param pushEvent function  Function to push events to the bridge
 --- @param dt number  Delta time since last frame
+local Log = require("lua.debug_log")
 local _syncDebugOnce = false
 function Capabilities.syncWithTree(nodes, pushEvent, dt)
-  if not _syncDebugOnce then
+  if not _syncDebugOnce and Log.isOn("capsync") then
     _syncDebugOnce = true
     local count = 0
     for id, node in pairs(nodes) do
       count = count + 1
-      io.write(string.format("[cap:sync] node id=%s type=%s reg=%s\n",
-        tostring(id), tostring(node.type), tostring(registry[node.type] ~= nil)))
+      Log.log("capsync", "node id=%s type=%s reg=%s",
+        tostring(id), tostring(node.type), tostring(registry[node.type] ~= nil))
     end
-    io.write(string.format("[cap:sync] total nodes=%d, registry keys:", count))
-    for k in pairs(registry) do io.write(" " .. k) end
-    io.write("\n"); io.flush()
+    local keys = {}
+    for k in pairs(registry) do keys[#keys + 1] = k end
+    Log.log("capsync", "total nodes=%d, registry keys: %s", count, table.concat(keys, " "))
   end
   local seen = {}
 
@@ -258,14 +259,17 @@ function Capabilities.loadAll()
     "scene3d",
     "terminal",
   }
+  local loaded, failed = {}, {}
   for _, name in ipairs(files) do
     local ok, err = pcall(require, "lua.capabilities." .. name)
     if ok then
-      io.write("[capabilities] Loaded: " .. name .. "\n"); io.flush()
+      loaded[#loaded + 1] = name
     else
-      io.write("[capabilities] Failed to load " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
+      failed[#failed + 1] = name
+      io.write("[capabilities] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
     end
   end
+  io.write("[capabilities] " .. #loaded .. " capabilities registered\n"); io.flush()
 end
 
 return Capabilities

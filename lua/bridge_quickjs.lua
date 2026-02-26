@@ -351,15 +351,12 @@ local function validateTags(ctx, qjs)
   -- Update constants if they differ from expected
   if strTag ~= TAG_STRING or intTag ~= TAG_INT or boolTag ~= TAG_BOOL
      or nullTag ~= TAG_NULL or floatTag ~= TAG_FLOAT64 or objTag ~= TAG_OBJECT then
-    print("[reactjit] JSValue tags differ from defaults, updating...")
     TAG_STRING = strTag
     TAG_INT = intTag
     TAG_BOOL = boolTag
     TAG_NULL = nullTag
     TAG_FLOAT64 = floatTag
     TAG_OBJECT = objTag
-    print(string.format("  STRING=%d INT=%d BOOL=%d NULL=%d FLOAT64=%d OBJECT=%d",
-      strTag, intTag, boolTag, nullTag, floatTag, objTag))
   end
 end
 

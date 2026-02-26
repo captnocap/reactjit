@@ -54,9 +54,6 @@ local function initSDLMouse(sdlHandle)
   end)
   if testOk then
     sdlMouseAvail = true
-    io.write("[dragdrop] SDL_GetMouseState available\n"); io.flush()
-  else
-    io.write("[dragdrop] SDL_GetMouseState NOT available\n"); io.flush()
   end
 end
 
@@ -64,7 +61,6 @@ end
 
 local function tryInitX11()
   if ffi.os ~= "Linux" then
-    io.write("[dragdrop] not Linux, skipping X11\n"); io.flush()
     return false
   end
 
@@ -75,10 +71,7 @@ local function tryInitX11()
     unsigned long XGetSelectionOwner(void* display, unsigned long selection);
     unsigned long XInternAtom(void* display, const char* atom_name, int only_if_exists);
   ]])
-  if not ok then
-    io.write("[dragdrop] X11 cdef failed: " .. tostring(cdefErr) .. "\n"); io.flush()
-    return false
-  end
+  if not ok then return false end
 
   -- SDL2 global mouse state for hover detection (needs screen coords)
   pcall(ffi.cdef, [[
@@ -94,29 +87,19 @@ local function tryInitX11()
   if globalOk then
     sdlGlobalMouseAvail = true
   else
-    io.write("[dragdrop] SDL_GetGlobalMouseState NOT available — hover detection disabled\n"); io.flush()
     return false
   end
 
   -- Load libX11
   local loadOk
   loadOk, x11Lib = pcall(ffi.load, "X11")
-  if not loadOk then
-    io.write("[dragdrop] ffi.load('X11') failed: " .. tostring(x11Lib) .. "\n"); io.flush()
-    return false
-  end
+  if not loadOk then return false end
 
   x11Display = x11Lib.XOpenDisplay(nil)
-  if x11Display == nil then
-    io.write("[dragdrop] XOpenDisplay(nil) returned nil\n"); io.flush()
-    return false
-  end
-  io.write("[dragdrop] X11 display opened\n"); io.flush()
+  if x11Display == nil then return false end
 
   xdndSelectionAtom = x11Lib.XInternAtom(x11Display, "XdndSelection", 0)
-  io.write("[dragdrop] XdndSelection atom = " .. tostring(tonumber(xdndSelectionAtom)) .. "\n"); io.flush()
   if tonumber(xdndSelectionAtom) == 0 then
-    io.write("[dragdrop] XdndSelection atom is 0, bailing\n"); io.flush()
     x11Lib.XCloseDisplay(x11Display)
     x11Display = nil
     return false
@@ -130,8 +113,6 @@ end
 --- Initialize drag-drop detection.
 --- @param config? table  Optional config: { sdl = <ffi SDL2 handle> }
 function DragDrop.init(config)
-  io.write("[dragdrop] init starting\n"); io.flush()
-
   local sdlHandle = config and config.sdl or nil
 
   -- SDL mouse (works on all platforms, needed for file drop position)
@@ -139,11 +120,6 @@ function DragDrop.init(config)
 
   -- X11 drag-hover detection (Linux only)
   x11Available = tryInitX11()
-  if x11Available then
-    io.write("[dragdrop] X11 drag detection enabled\n"); io.flush()
-  else
-    io.write("[dragdrop] X11 drag detection NOT available\n"); io.flush()
-  end
 end
 
 --- Poll drag-hover state. Call once per frame from love.update.

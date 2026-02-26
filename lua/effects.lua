@@ -310,14 +310,17 @@ function Effects.loadAll()
     "plotter",
     "lsystem",
   }
+  local loaded, failed = {}, {}
   for _, name in ipairs(effectFiles) do
     local ok, err = pcall(require, "lua.effects." .. name)
     if ok then
-      io.write("[effects] Loaded: " .. name .. "\n"); io.flush()
+      loaded[#loaded + 1] = name
     else
-      io.write("[effects] Failed to load " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
+      failed[#failed + 1] = name
+      io.write("[effects] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
     end
   end
+  io.write("[effects] " .. #loaded .. " effects registered\n"); io.flush()
 end
 
 return Effects

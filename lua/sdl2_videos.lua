@@ -153,14 +153,12 @@ do
     end)
     if ok then
       libmpvAvailable = true
-      io.write("[sdl2_videos] libmpv loaded from " .. path .. " (RTLD_DEEPBIND)\n"); io.flush()
       break
     end
     lastErr = err
   end
   if not libmpvAvailable then
-    io.write("[sdl2_videos] libmpv not available: " .. tostring(lastErr) .. "\n"); io.flush()
-    io.write("[sdl2_videos] Install libmpv-dev for video playback\n"); io.flush()
+    io.write("[sdl2_videos] WARNING: libmpv not available — install libmpv-dev for video\n"); io.flush()
   end
 end
 
@@ -516,7 +514,6 @@ function Videos.initBackend()
     return
   end
   backendReady = true
-  io.write("[sdl2_videos] initBackend: ready (per-source instances)\n"); io.flush()
 end
 
 --- Create a per-source mpv handle + render context + load the file.

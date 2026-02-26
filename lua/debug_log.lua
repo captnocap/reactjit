@@ -37,6 +37,7 @@ Log.CHANNELS = {
   dispatch = { color = {0.55, 0.75, 0.90, 1}, desc = "TS event dispatcher routing" },
   focus    = { color = {0.90, 0.65, 0.55, 1}, desc = "Focus management and navigation" },
   animate  = { color = {0.75, 0.55, 0.90, 1}, desc = "Transitions and animations" },
+  capsync  = { color = {0.55, 0.90, 0.75, 1}, desc = "Capability tree sync (node discovery, registry)" },
 }
 
 -- ============================================================================

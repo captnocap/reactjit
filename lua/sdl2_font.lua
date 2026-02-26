@@ -78,7 +78,6 @@ function Font.init(fontFamily)
   local path = findFont(fontFamily)
   err = ft.ft_load_font(path)
   if err ~= 0 then error("[sdl2_font] Load failed (" .. err .. "): " .. path) end
-  print("[sdl2_font] loaded: " .. path)
 end
 
 local function ensureSize(size)
@@ -215,9 +214,6 @@ local function loadGlyph(size, cp)
   return g
 end
 
-local _fontDiag = false
-local _fontFrames = 0
-
 function Font.draw(text, x, y, size, r, g, b, a)
   if #text == 0 then return end
   ensureSize(size)
@@ -225,21 +221,9 @@ function Font.draw(text, x, y, size, r, g, b, a)
   local ascender  = ft.ft_get_ascender()
   local baselineY = y + ascender
 
-  if not _fontDiag then
-    _fontDiag = true
-    -- Defer diag to after glyphs are loaded
-    local function doDiag()
-      local total, withPx = 0, 0
-      for _, gi in pairs(atlas.glyphs) do
-        total = total + 1
-        if gi.hasPixels then withPx = withPx + 1 end
-      end
-      io.write(string.format("[sdl2_font] DIAG: text=%q size=%d rgba=(%.2f,%.2f,%.2f,%.2f) texId=%s total=%d withPx=%d\n",
-        text:sub(1,30), size, r, g, b, a, tostring(atlas.texId), total, withPx))
-      io.flush()
-    end
-    -- Load glyphs first, then diag
-    local cx2 = x
+  -- Pre-load all glyphs BEFORE glBegin (loadGlyph uses GL calls that are
+  -- illegal inside glBegin/glEnd — glBindTexture, glTexSubImage2D, etc.)
+  do
     local j = 1
     while j <= #text do
       local cp, len = utf8next(text, j)
@@ -247,35 +231,33 @@ function Font.draw(text, x, y, size, r, g, b, a)
       loadGlyph(size, cp)
       j = j + len
     end
-    doDiag()
   end
 
-  -- DEBUG TEST: draw rects WITH GL_TEXTURE_2D enabled + atlas bound
+  -- Single bind + batched draw for the entire text string
   GL.glEnable(GL.TEXTURE_2D)
   GL.glBindTexture(GL.TEXTURE_2D, atlas.texId)
   GL.glColor4f(r, g, b, a)
+  GL.glBegin(GL.QUADS)
 
   local cx = x
   local i  = 1
   while i <= #text do
     local cp, len = utf8next(text, i)
     if not cp then break end
-    local gi = loadGlyph(size, cp)
-    if gi.hasPixels then
+    local gi = atlas.glyphs[cp]  -- already loaded above
+    if gi and gi.hasPixels then
       local gx = cx + gi.left
       local gy = baselineY - gi.top
-      -- Use actual UV coords from atlas
-      GL.glBegin(GL.QUADS)
-        GL.glTexCoord2f(gi.u0, gi.v0); GL.glVertex2f(gx,        gy)
-        GL.glTexCoord2f(gi.u1, gi.v0); GL.glVertex2f(gx + gi.w, gy)
-        GL.glTexCoord2f(gi.u1, gi.v1); GL.glVertex2f(gx + gi.w, gy + gi.h)
-        GL.glTexCoord2f(gi.u0, gi.v1); GL.glVertex2f(gx,        gy + gi.h)
-      GL.glEnd()
+      GL.glTexCoord2f(gi.u0, gi.v0); GL.glVertex2f(gx,        gy)
+      GL.glTexCoord2f(gi.u1, gi.v0); GL.glVertex2f(gx + gi.w, gy)
+      GL.glTexCoord2f(gi.u1, gi.v1); GL.glVertex2f(gx + gi.w, gy + gi.h)
+      GL.glTexCoord2f(gi.u0, gi.v1); GL.glVertex2f(gx,        gy + gi.h)
     end
-    cx = cx + gi.advance
+    if gi then cx = cx + gi.advance end
     i  = i + len
   end
 
+  GL.glEnd()
   GL.glBindTexture(GL.TEXTURE_2D, 0)
   GL.glDisable(GL.TEXTURE_2D)
 end
