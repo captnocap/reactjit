@@ -48,6 +48,7 @@ import { TerminalStory } from './TerminalStory';
 import { NoclipMazeStory } from './NoclipMazeStory';
 import { GridStory } from './GridStory';
 import { TailwindStory } from './TailwindStory';
+import { HtmlCompatStory } from './HtmlCompatStory';
 
 
 export const stories: StoryDef[] = [
@@ -65,6 +66,7 @@ export const stories: StoryDef[] = [
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
   { id: 'grid', title: 'Grid System', section: 'Core', component: GridStory },
   { id: 'tailwind', title: 'Tailwind', section: 'Core', component: TailwindStory },
+  { id: 'html-compat', title: 'HTML Compat', section: 'Core', component: HtmlCompatStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
 
   // Packages

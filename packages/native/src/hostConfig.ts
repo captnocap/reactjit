@@ -9,6 +9,96 @@
 import type { HostConfig } from 'react-reconciler';
 import { reportError } from './errorReporter';
 import { debugLog } from './debugLog';
+import { tw } from '@reactjit/core';
+
+// ── HTML Element Remapping ───────────────────────────────────────────
+// Maps standard HTML element types to ReactJIT host types so that
+// <div>, <span>, <h1>, <img>, etc. just work without modification.
+// Lua never sees unknown types — the remap happens before CREATE.
+
+const HTML_TYPE_MAP: Record<string, string> = {
+  // Container elements → View
+  'div': 'View', 'section': 'View', 'article': 'View', 'aside': 'View',
+  'main': 'View', 'nav': 'View', 'header': 'View', 'footer': 'View',
+  'form': 'View', 'fieldset': 'View', 'figure': 'View', 'figcaption': 'View',
+  'ul': 'View', 'ol': 'View', 'li': 'View', 'dl': 'View', 'dt': 'View', 'dd': 'View',
+  'table': 'View', 'thead': 'View', 'tbody': 'View', 'tfoot': 'View',
+  'tr': 'View', 'td': 'View', 'th': 'View', 'caption': 'View',
+  'a': 'View', 'button': 'View', 'details': 'View', 'summary': 'View',
+  'dialog': 'View', 'menu': 'View',
+  // Text elements → Text
+  'span': 'Text', 'p': 'Text', 'label': 'Text',
+  'h1': 'Text', 'h2': 'Text', 'h3': 'Text',
+  'h4': 'Text', 'h5': 'Text', 'h6': 'Text',
+  'strong': 'Text', 'b': 'Text', 'em': 'Text', 'i': 'Text',
+  'code': 'Text', 'small': 'Text', 'mark': 'Text',
+  'abbr': 'Text', 'cite': 'Text', 'q': 'Text', 'time': 'Text',
+  'sub': 'Text', 'sup': 'Text',
+  // Media → native equivalents
+  'img': 'Image', 'video': 'Video',
+  'input': 'TextInput', 'textarea': 'TextEditor',
+  'pre': 'CodeBlock',
+  // Ignored structural (map to View so they don't break)
+  'html': 'View', 'body': 'View', 'head': 'View',
+  'br': 'View', 'hr': 'View', 'wbr': 'View',
+};
+
+// Heading font sizes (matching common browser defaults)
+const HEADING_FONT_SIZE: Record<string, number> = {
+  h1: 32, h2: 28, h3: 24, h4: 20, h5: 18, h6: 16,
+};
+
+// HTML-only props that should not cross the bridge
+const HTML_STRIP_PROPS = new Set([
+  'alt', 'htmlFor', 'href', 'target', 'rel', 'method', 'action',
+  'encType', 'noValidate', 'autoComplete', 'role', 'tabIndex',
+  'aria-label', 'aria-hidden', 'aria-describedby', 'aria-labelledby',
+  'data-testid', 'data-cy',
+]);
+
+/**
+ * Transform HTML props into ReactJIT-compatible props.
+ * Only called when the element type is in HTML_TYPE_MAP.
+ */
+function resolveHtmlProps(originalType: string, props: Record<string, any>): Record<string, any> {
+  const resolved: Record<string, any> = {};
+
+  for (const key of Object.keys(props)) {
+    if (key === 'children') continue;
+    if (HTML_STRIP_PROPS.has(key)) continue;
+    // Strip any aria-* and data-* attributes
+    if (key.startsWith('aria-') || key.startsWith('data-')) continue;
+    resolved[key] = props[key];
+  }
+
+  // className → tw() → merge into style (style wins on conflicts)
+  if (resolved.className && typeof resolved.className === 'string') {
+    const twStyle = tw(resolved.className);
+    resolved.style = resolved.style ? { ...twStyle, ...resolved.style } : twStyle;
+    delete resolved.className;
+  }
+
+  // Heading defaults: fontSize + bold
+  const headingSize = HEADING_FONT_SIZE[originalType];
+  if (headingSize) {
+    const headingStyle = { fontSize: headingSize, fontWeight: 'bold' as const };
+    resolved.style = resolved.style ? { ...headingStyle, ...resolved.style } : headingStyle;
+  }
+
+  // strong/b → bold
+  if (originalType === 'strong' || originalType === 'b') {
+    const boldStyle = { fontWeight: 'bold' as const };
+    resolved.style = resolved.style ? { ...boldStyle, ...resolved.style } : boldStyle;
+  }
+
+  // img: src → source
+  if (originalType === 'img' && resolved.src) {
+    resolved.source = resolved.src;
+    delete resolved.src;
+  }
+
+  return resolved;
+}
 
 // ── Types ────────────────────────────────────────────────
 
@@ -324,13 +414,18 @@ export const hostConfig: HostConfig<
     internalHandle?: any // React fiber (opaque, but we bend the rules for debugging)
   ): Instance {
     const id = ++nodeIdCounter;
-    const { clean, handlers } = extractHandlers(props);
+
+    // HTML element remapping: <div> → View, <h1> → Text, <img> → Image, etc.
+    const resolvedType = HTML_TYPE_MAP[type] || type;
+    const resolvedProps = HTML_TYPE_MAP[type] ? resolveHtmlProps(type, props) : props;
+
+    const { clean, handlers } = extractHandlers(resolvedProps);
     if (handlers.onLayout) {
       clean.__hasOnLayout = true;
     }
 
     const hasHandlers = Object.keys(handlers).length > 0;
-    debugLog.log('recon', `createInstance id=${id} type=${type} handlers=${hasHandlers}`);
+    debugLog.log('recon', `createInstance id=${id} type=${resolvedType} handlers=${hasHandlers}`);
 
     // Extract component debug info from fiber (dev tooling only)
     let debugName: string | undefined;
@@ -364,7 +459,7 @@ export const hostConfig: HostConfig<
     emit({
       op: 'CREATE',
       id,
-      type,
+      type: resolvedType,
       props: clean,
       hasHandlers,
       debugName,
@@ -375,7 +470,7 @@ export const hostConfig: HostConfig<
       handlerRegistry.set(id, handlers);
     }
 
-    return { id, type, props: clean, handlers, children: [] };
+    return { id, type: resolvedType, props: clean, handlers, children: [] };
   },
 
   createTextInstance(text: string): TextInstance {
@@ -468,8 +563,12 @@ export const hostConfig: HostConfig<
     oldProps: Props,
     newProps: Props
   ): UpdatePayload {
-    const { clean: oldClean, handlers: oldH } = extractHandlers(oldProps);
-    const { clean: newClean, handlers: newH } = extractHandlers(newProps);
+    // Resolve HTML props before diffing so className→style, src→source, etc. are compared correctly
+    const resolvedOld = HTML_TYPE_MAP[_type] ? resolveHtmlProps(_type, oldProps) : oldProps;
+    const resolvedNew = HTML_TYPE_MAP[_type] ? resolveHtmlProps(_type, newProps) : newProps;
+
+    const { clean: oldClean, handlers: oldH } = extractHandlers(resolvedOld);
+    const { clean: newClean, handlers: newH } = extractHandlers(resolvedNew);
     if (oldH.onLayout) {
       oldClean.__hasOnLayout = true;
     }
@@ -496,7 +595,9 @@ export const hostConfig: HostConfig<
     _oldProps: Props,
     newProps: Props
   ) {
-    const { clean, handlers } = extractHandlers(newProps);
+    // Resolve HTML props so the committed state matches what prepareUpdate diffed
+    const resolvedNew = HTML_TYPE_MAP[_type] ? resolveHtmlProps(_type, newProps) : newProps;
+    const { clean, handlers } = extractHandlers(resolvedNew);
     if (handlers.onLayout) {
       clean.__hasOnLayout = true;
     }
