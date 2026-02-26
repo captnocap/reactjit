@@ -38,7 +38,7 @@ function spacing(val: string): number | undefined {
 
 function widthValue(val: string): number | string | undefined {
   if (val === 'full') return '100%';
-  if (val === 'screen') return '100vw';
+  if (val === 'screen') return '100%';
   if (val === 'auto') return undefined; // let engine decide
   if (val === 'min') return undefined;
   if (val === 'max') return undefined;
@@ -83,7 +83,7 @@ function widthValue(val: string): number | string | undefined {
 const MAX_WIDTH: Record<string, number | string> = {
   '0': 0, 'none': 'none' as any, 'xs': 320, 'sm': 384, 'md': 448,
   'lg': 512, 'xl': 576, '2xl': 672, '3xl': 768, '4xl': 896,
-  '5xl': 1024, '6xl': 1152, '7xl': 1280, 'full': '100%', 'screen': '100vw',
+  '5xl': 1024, '6xl': 1152, '7xl': 1280, 'full': '100%', 'screen': '100%',
 };
 
 // ── Font Size Scale ──────────────────────────────────────────────────
@@ -206,35 +206,78 @@ interface TransitionState {
 }
 
 function parseClass(cls: string, grad: GradientState, trans: TransitionState): Partial<Style> | undefined {
+  // ── Pseudo-variant stripping ──
+  // hover:bg-gray-800 → silently ignored (ReactJIT handles hover via onHoverIn/onHoverOut)
+  // group-hover:*, focus:*, disabled:*, last:*, first:*, active:*, etc.
+  if (cls.includes(':')) return {};
+
   // ── Static keywords ──
 
   if (cls === 'flex') return {};
+  if (cls === 'block') return {};
+  if (cls === 'inline-block') return {};
+  if (cls === 'inline') return {};
+  if (cls === 'inline-flex') return { flexDirection: 'row' };
+  if (cls === 'grid') return { flexDirection: 'row', flexWrap: 'wrap' };
   if (cls === 'hidden') return { display: 'none' };
   if (cls === 'visible') return { visibility: 'visible' };
   if (cls === 'invisible') return { visibility: 'hidden' };
   if (cls === 'relative') return { position: 'relative' };
   if (cls === 'absolute') return { position: 'absolute' };
+  if (cls === 'sticky') return { position: 'relative' };
+  if (cls === 'fixed') return { position: 'absolute' };
   if (cls === 'truncate') return { textOverflow: 'ellipsis', overflow: 'hidden' };
   if (cls === 'underline') return { textDecorationLine: 'underline' };
   if (cls === 'line-through') return { textDecorationLine: 'line-through' };
   if (cls === 'no-underline') return { textDecorationLine: 'none' };
   if (cls === 'italic') return {}; // noted: not rendered in Lua yet
   if (cls === 'not-italic') return {};
+  if (cls === 'uppercase') return {};
+  if (cls === 'lowercase') return {};
+  if (cls === 'capitalize') return {};
+  if (cls === 'normal-case') return {};
+  if (cls === 'break-words') return {};
+  if (cls === 'break-all') return {};
+  if (cls === 'whitespace-nowrap') return {};
+  if (cls === 'whitespace-pre') return {};
   if (cls === 'grow') return { flexGrow: 1 };
   if (cls === 'grow-0') return { flexGrow: 0 };
   if (cls === 'shrink') return { flexShrink: 1 };
   if (cls === 'shrink-0') return { flexShrink: 0 };
+  if (cls === 'group') return {};
+  if (cls === 'cursor-pointer') return {};
+  if (cls === 'cursor-default') return {};
+  if (cls === 'cursor-not-allowed') return {};
+  if (cls === 'select-none') return {};
+  if (cls === 'select-text') return {};
+  if (cls === 'resize-none') return {};
+  if (cls === 'outline-none') return { outlineWidth: 0 };
+  if (cls === 'outline-0') return { outlineWidth: 0 };
+  if (cls === 'backdrop-blur') return {};
+  if (cls === 'backdrop-blur-sm') return {};
+  if (cls === 'backdrop-blur-md') return {};
+  if (cls === 'backdrop-blur-lg') return {};
+  if (cls === 'backdrop-blur-xl') return {};
+  if (cls === 'backdrop-blur-2xl') return {};
+  if (cls === 'backdrop-blur-3xl') return {};
 
   // ── Flex shorthands ──
 
   if (cls === 'flex-row') return { flexDirection: 'row' };
   if (cls === 'flex-col') return { flexDirection: 'column' };
+  if (cls === 'flex-row-reverse') return { flexDirection: 'row' };
+  if (cls === 'flex-col-reverse') return { flexDirection: 'column' };
   if (cls === 'flex-wrap') return { flexWrap: 'wrap' };
+  if (cls === 'flex-wrap-reverse') return { flexWrap: 'wrap' };
   if (cls === 'flex-nowrap') return { flexWrap: 'nowrap' };
   if (cls === 'flex-1') return { flexGrow: 1, flexShrink: 1, flexBasis: '0%' };
   if (cls === 'flex-auto') return { flexGrow: 1, flexShrink: 1, flexBasis: 'auto' };
   if (cls === 'flex-initial') return { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' };
   if (cls === 'flex-none') return { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' };
+  if (cls === 'flex-shrink') return { flexShrink: 1 };
+  if (cls === 'flex-shrink-0') return { flexShrink: 0 };
+  if (cls === 'flex-grow') return { flexGrow: 1 };
+  if (cls === 'flex-grow-0') return { flexGrow: 0 };
 
   // ── Overflow ──
 
@@ -242,6 +285,12 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
   if (cls === 'overflow-visible') return { overflow: 'visible' };
   if (cls === 'overflow-scroll') return { overflow: 'scroll' };
   if (cls === 'overflow-auto') return { overflow: 'scroll' };
+  if (cls === 'overflow-x-auto') return { overflow: 'scroll' };
+  if (cls === 'overflow-y-auto') return { overflow: 'scroll' };
+  if (cls === 'overflow-x-hidden') return { overflow: 'hidden' };
+  if (cls === 'overflow-y-hidden') return { overflow: 'hidden' };
+  if (cls === 'overflow-x-scroll') return { overflow: 'scroll' };
+  if (cls === 'overflow-y-scroll') return { overflow: 'scroll' };
 
   // ── Align / Justify / Self ──
 
@@ -329,17 +378,24 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
 
   // ── Margin ──
 
-  if (token.startsWith('m-'))  { const v = neg(spacing(token.slice(2)));  return v !== undefined ? { margin: v } : undefined; }
-  if (token.startsWith('mx-')) { const v = neg(spacing(token.slice(3)));  return v !== undefined ? { marginLeft: v, marginRight: v } : undefined; }
-  if (token.startsWith('my-')) { const v = neg(spacing(token.slice(3)));  return v !== undefined ? { marginTop: v, marginBottom: v } : undefined; }
-  if (token.startsWith('mt-')) { const v = neg(spacing(token.slice(3)));  return v !== undefined ? { marginTop: v } : undefined; }
-  if (token.startsWith('mr-')) { const v = neg(spacing(token.slice(3)));  return v !== undefined ? { marginRight: v } : undefined; }
-  if (token.startsWith('mb-')) { const v = neg(spacing(token.slice(3)));  return v !== undefined ? { marginBottom: v } : undefined; }
-  if (token.startsWith('ml-')) { const v = neg(spacing(token.slice(3)));  return v !== undefined ? { marginLeft: v } : undefined; }
+  if (token.startsWith('m-'))  { const val = token.slice(2); if (val === 'auto') return {}; const v = neg(spacing(val)); return v !== undefined ? { margin: v } : undefined; }
+  if (token.startsWith('mx-')) { const val = token.slice(3); if (val === 'auto') return { alignSelf: 'center' }; const v = neg(spacing(val)); return v !== undefined ? { marginLeft: v, marginRight: v } : undefined; }
+  if (token.startsWith('my-')) { const val = token.slice(3); if (val === 'auto') return {}; const v = neg(spacing(val)); return v !== undefined ? { marginTop: v, marginBottom: v } : undefined; }
+  if (token.startsWith('mt-')) { const val = token.slice(3); if (val === 'auto') return {}; const v = neg(spacing(val)); return v !== undefined ? { marginTop: v } : undefined; }
+  if (token.startsWith('mr-')) { const val = token.slice(3); if (val === 'auto') return {}; const v = neg(spacing(val)); return v !== undefined ? { marginRight: v } : undefined; }
+  if (token.startsWith('mb-')) { const val = token.slice(3); if (val === 'auto') return {}; const v = neg(spacing(val)); return v !== undefined ? { marginBottom: v } : undefined; }
+  if (token.startsWith('ml-')) { const val = token.slice(3); if (val === 'auto') return {}; const v = neg(spacing(val)); return v !== undefined ? { marginLeft: v } : undefined; }
 
   // ── Gap ──
 
   if (token.startsWith('gap-')) { const v = spacing(token.slice(4)); return v !== undefined ? { gap: v } : undefined; }
+  if (token.startsWith('gap-x-')) { const v = spacing(token.slice(6)); return v !== undefined ? { gap: v } : undefined; }
+  if (token.startsWith('gap-y-')) { const v = spacing(token.slice(6)); return v !== undefined ? { gap: v } : undefined; }
+
+  // ── Space between (approximate as gap) ──
+
+  if (token.startsWith('space-y-')) { const v = spacing(token.slice(8)); return v !== undefined ? { gap: v } : undefined; }
+  if (token.startsWith('space-x-')) { const v = spacing(token.slice(8)); return v !== undefined ? { gap: v } : undefined; }
 
   // ── Width ──
 
@@ -368,6 +424,37 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
     const v = widthValue(val);
     return v !== undefined ? { flexBasis: v } : undefined;
   }
+
+  // ── Grid (approximate as flex-row + wrap) ──
+
+  if (token.startsWith('grid-cols-')) {
+    const val = token.slice(10);
+    const n = parseInt(val, 10);
+    if (!isNaN(n)) return { flexDirection: 'row', flexWrap: 'wrap' };
+    return {};
+  }
+  if (token.startsWith('col-span-')) return {};
+  if (token.startsWith('row-span-')) return {};
+
+  // ── bg-opacity (approximate) ──
+
+  if (token.startsWith('bg-opacity-')) {
+    const val = token.slice(11);
+    const n = parseInt(val, 10);
+    return !isNaN(n) ? { opacity: n / 100 } : undefined;
+  }
+
+  // ── Placeholder (no-op, TextInput handles separately) ──
+
+  if (token.startsWith('placeholder-')) return {};
+
+  // ── Animate (no-op for now) ──
+
+  if (token.startsWith('animate-')) return {};
+
+  // ── Line clamp (no-op) ──
+
+  if (token.startsWith('line-clamp-')) return {};
 
   // ── Z-index ──
 

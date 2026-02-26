@@ -52,6 +52,9 @@ const HEADING_FONT_SIZE: Record<string, number> = {
 const HTML_STRIP_PROPS = new Set([
   'alt', 'htmlFor', 'href', 'target', 'rel', 'method', 'action',
   'encType', 'noValidate', 'autoComplete', 'role', 'tabIndex',
+  'type', 'min', 'max', 'step', 'checked', 'selected', 'multiple',
+  'cols', 'rows', 'wrap', 'spellCheck', 'inputMode', 'pattern',
+  'required', 'readOnly', 'disabled', 'name', 'form', 'list',
   'aria-label', 'aria-hidden', 'aria-describedby', 'aria-labelledby',
   'data-testid', 'data-cy',
 ]);
@@ -96,6 +99,14 @@ function resolveHtmlProps(originalType: string, props: Record<string, any>): Rec
     resolved.source = resolved.src;
     delete resolved.src;
   }
+
+  // input/textarea: coerce value to string (Lua textinput expects string, not number)
+  if ((originalType === 'input' || originalType === 'textarea') && resolved.value != null) {
+    resolved.value = String(resolved.value);
+  }
+
+  // Note: onClick is NOT remapped — the event dispatcher already dispatches
+  // press events as 'onClick'. Handlers pass through as-is.
 
   return resolved;
 }
