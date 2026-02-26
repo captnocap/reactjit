@@ -200,6 +200,27 @@ function Renderer.setStatus(sessionId, status, model, elapsed, tokens)
   if tokens then session.tokenCount = tokens end
 end
 
+--- Adjust scroll position by delta pixels. Positive delta = scroll down.
+function Renderer.adjustScroll(sessionId, delta, viewportH)
+  local session = Renderer.getSession(sessionId)
+  session.scrollY = session.scrollY + delta
+  if session.scrollY < 0 then session.scrollY = 0 end
+  local maxScroll = (session._contentHeight or 0) - (viewportH or 600)
+  if maxScroll < 0 then maxScroll = 0 end
+  if session.scrollY > maxScroll then session.scrollY = maxScroll end
+  -- If user scrolled away from bottom, mark it so auto-scroll doesn't fight them
+  session._userScrolled = (session.scrollY < maxScroll - 5)
+end
+
+--- Scroll to bottom (clears user-scrolled flag)
+function Renderer.scrollToBottom(sessionId, viewportH)
+  local session = Renderer.getSession(sessionId)
+  local maxScroll = (session._contentHeight or 0) - (viewportH or 600)
+  if maxScroll < 0 then maxScroll = 0 end
+  session.scrollY = maxScroll
+  session._userScrolled = false
+end
+
 --- Toggle collapse on the Nth tool block (0-indexed from bottom)
 function Renderer.toggleCollapse(sessionId, blockIdx)
   local session = Renderer.getSession(sessionId)
@@ -279,8 +300,28 @@ local function setColorWithOpacity(color, opacity)
 end
 
 --- Word-wrap text to fit within a given pixel width using the current font.
+--- Handles long unbreakable strings (paths, URLs) by breaking mid-word.
 local function wrapText(font, text, maxWidth)
   if not text or text == "" then return { "" } end
+  if maxWidth <= 0 then return { text } end
+
+  -- Break a single word that exceeds maxWidth into character-level chunks
+  local function breakWord(word)
+    local chunks = {}
+    local chunk = ""
+    for i = 1, #word do
+      local ch = word:sub(i, i)
+      if font:getWidth(chunk .. ch) > maxWidth and #chunk > 0 then
+        chunks[#chunks + 1] = chunk
+        chunk = ch
+      else
+        chunk = chunk .. ch
+      end
+    end
+    if #chunk > 0 then chunks[#chunks + 1] = chunk end
+    return chunks
+  end
+
   local lines = {}
   -- First split by actual newlines
   for segment in (text .. "\n"):gmatch("([^\n]*)\n") do
@@ -290,12 +331,29 @@ local function wrapText(font, text, maxWidth)
       -- Word wrap this segment
       local current = ""
       for word in segment:gmatch("%S+") do
-        local test = current == "" and word or (current .. " " .. word)
-        if font:getWidth(test) > maxWidth and current ~= "" then
-          lines[#lines + 1] = current
-          current = word
+        -- If the word itself is wider than maxWidth, break it
+        if font:getWidth(word) > maxWidth then
+          -- Flush current line first
+          if current ~= "" then
+            lines[#lines + 1] = current
+            current = ""
+          end
+          local chunks = breakWord(word)
+          for ci, chunk in ipairs(chunks) do
+            if ci < #chunks then
+              lines[#lines + 1] = chunk
+            else
+              current = chunk  -- last chunk continues as current line
+            end
+          end
         else
-          current = test
+          local test = current == "" and word or (current .. " " .. word)
+          if font:getWidth(test) > maxWidth and current ~= "" then
+            lines[#lines + 1] = current
+            current = word
+          else
+            current = test
+          end
         end
       end
       lines[#lines + 1] = current
@@ -407,11 +465,13 @@ function Renderer.render(node, c, effectiveOpacity)
   local sx, sy = love.graphics.transformPoint(c.x, c.y)
   love.graphics.setScissor(sx, sy, c.w, c.h)
 
-  -- Background
+  -- Background (fixed, not scrolled)
   setColorWithOpacity(COLORS.bg, effectiveOpacity)
   love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
 
-  local curY = c.y + 12  -- top padding
+  -- Apply scroll offset — content moves up by scrollY
+  local scrollY = session.scrollY or 0
+  local curY = c.y + 12 - scrollY  -- top padding, offset by scroll
   love.graphics.setFont(font)
 
   for _, block in ipairs(session.blocks) do
@@ -576,7 +636,22 @@ function Renderer.render(node, c, effectiveOpacity)
     curY = curY + #wrapped * lineHeight + BLOCK_GAP
   end
 
-  -- ── Status bar at bottom ──
+  -- Track content height for scroll clamping
+  -- curY is currently offset by scroll, so add scrollY back to get true content height
+  local contentHeight = (curY + scrollY) - c.y + lineHeight + 40
+  session._contentHeight = contentHeight
+
+  -- Clamp scroll
+  local maxScroll = contentHeight - c.h
+  if maxScroll < 0 then maxScroll = 0 end
+  if session.scrollY > maxScroll then session.scrollY = maxScroll end
+
+  -- Auto-scroll to bottom during streaming, but only if user hasn't scrolled away
+  if session.isStreaming and not session._userScrolled then
+    session.scrollY = maxScroll
+  end
+
+  -- ── Status bar at bottom (fixed, not scrolled) ──
   local statusY = c.y + c.h - smallLineHeight - 8
   love.graphics.setFont(smallFont)
   setColorWithOpacity(COLORS.statusText, effectiveOpacity)

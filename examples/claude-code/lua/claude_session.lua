@@ -47,7 +47,7 @@ local _focusedId = nil
 
 -- ── Constants ────────────────────────────────────────────────────────
 
-local TERM_ROWS    = 50
+local TERM_ROWS    = 200
 local TERM_COLS    = 120
 local SETTLE_MS    = 120   -- ms after last damage before extracting semantics
 local STREAM_MS    = 50    -- ms between streaming text updates to renderer
@@ -88,10 +88,20 @@ local MODE_PERMISSION = "permission"
 --   boundaryRow   = first row of the input zone (or numRows if not found)
 --   placeholderText = text after ❯ in the prompt line (the tab-completable hint)
 
+-- Helper: is this row a separator line (────, ╌╌╌╌, etc.)?
+local function isSeparatorRow(vt, row)
+  local text = vt:getRowText(row)
+  local stripped = text:match("^%s*(.-)%s*$") or ""
+  return stripped:find("────", 1, true)
+    or stripped:find("╌╌╌╌", 1, true)
+    or stripped:find("┄┄┄┄", 1, true)
+    or stripped:find("┈┈┈┈", 1, true)
+    or (stripped:match("^%-%-%-%-") and #stripped > 20)
+end
+
 local function findInputZoneBoundary(vt, numRows)
   local boundary = numRows
   local placeholder = nil
-  local promptRow = nil
 
   -- Find the last non-empty row — that's where the content ends.
   -- Claude CLI renders inline top-down, NOT pinned to the bottom.
@@ -105,48 +115,66 @@ local function findInputZoneBoundary(vt, numRows)
 
   if lastContent < 0 then return numRows, nil end  -- grid is empty
 
-  -- Scan backward from last content to find the prompt and separators
-  for r = lastContent, math.max(0, lastContent - 10), -1 do
+  -- The real input prompt is ALWAYS sandwiched between two ──── separators:
+  --   ────────────────────────
+  --   ❯ Try "fix typecheck errors"
+  --   ────────────────────────
+  --
+  -- A menu selection cursor (❯ 1. Default) is NOT between separators.
+  -- Scan backward looking for this sandwich pattern.
+
+  for r = lastContent, math.max(0, lastContent - 15), -1 do
     local text = vt:getRowText(r)
     local stripped = text:match("^%s*(.-)%s*$") or ""
 
-    -- Extract placeholder from the ❯ prompt line
-    -- Note: Claude CLI uses NO-BREAK SPACE (U+00A0, bytes C2 A0) after ❯,
-    -- not regular space 0x20. Lua %s only matches single-byte whitespace.
-    if not promptRow then
-      local promptStart = stripped:find("❯", 1, true)
-      if promptStart or stripped:match("^>%s") or stripped == ">" then
-        promptRow = r
+    local promptStart = stripped:find("❯", 1, true)
+    local isSimplePrompt = stripped:match("^>%s") or stripped == ">"
+
+    if promptStart or isSimplePrompt then
+      -- Check for separator ABOVE this row
+      local hasSepAbove = false
+      for above = r - 1, math.max(0, r - 3), -1 do
+        local aboveText = vt:getRowText(above)
+        if #aboveText > 0 then
+          hasSepAbove = isSeparatorRow(vt, above)
+          break  -- check only the nearest non-empty row above
+        end
+      end
+
+      -- Check for separator BELOW this row
+      local hasSepBelow = false
+      for below = r + 1, math.min(lastContent, r + 3) do
+        local belowText = vt:getRowText(below)
+        if #belowText > 0 then
+          hasSepBelow = isSeparatorRow(vt, below)
+          break  -- check only the nearest non-empty row below
+        end
+      end
+
+      if hasSepAbove and hasSepBelow then
+        -- This is the real input prompt, sandwiched between separators.
+        -- Extract placeholder text.
         if promptStart then
-          -- ❯ is 3 bytes (E2 9D AF). Grab everything after it.
           local rest = stripped:sub(promptStart + 3)
-          -- Strip leading regular spaces (0x20) and NBSP pairs (C2 A0 = \194\160)
-          rest = rest:gsub("^\194\160", "")  -- strip one NBSP
-          rest = rest:gsub("^%s+", "")       -- strip remaining regular whitespace
+          rest = rest:gsub("^\194\160", "")  -- strip NBSP
+          rest = rest:gsub("^%s+", "")
           if #rest > 1 then placeholder = rest end
         else
           local after = stripped:match("^>%s+(.+)")
           if after and #after > 1 then placeholder = after end
         end
+
+        -- Boundary = the separator above the prompt (top of input zone)
+        for above = r - 1, math.max(0, r - 3), -1 do
+          if isSeparatorRow(vt, above) then
+            boundary = above
+            break
+          end
+        end
+        break
       end
+      -- Not sandwiched → menu cursor, keep scanning upward
     end
-
-    -- Separator line — matches various dash-like Unicode chars
-    local isSeparator = stripped:find("────", 1, true)
-      or stripped:find("╌╌╌╌", 1, true)
-      or stripped:find("┄┄┄┄", 1, true)
-      or stripped:find("┈┈┈┈", 1, true)
-      or (stripped:match("^%-%-%-%-") and #stripped > 20)
-    if isSeparator and promptRow then
-      -- Found separator ABOVE the prompt — this is the top of the input zone
-      boundary = r
-      break
-    end
-  end
-
-  -- No separator found but we found the prompt — use the prompt row as boundary
-  if boundary == numRows and promptRow then
-    boundary = promptRow
   end
 
   return boundary, placeholder
@@ -160,8 +188,15 @@ local function classifyRow(text, row, totalRows)
   local action, target = text:match("Do you want to (%w+)%s+(.-)%?")
   if action then return "permission", action, target end
 
-  -- Numbered permission options (1. Yes, 2. Yes allow all, 3. No)
-  if text:match("^%s*[›>]?%s*%d+%.%s+") then return "permission_option" end
+  -- Numbered menu/selection options (1. Yes, 2. Sonnet, ❯ 1. Default, etc.)
+  -- Matches with or without ❯/› cursor prefix
+  if text:match("^%s*[›>]?%s*%d+%.%s+") then return "menu_option" end
+  -- Also catch ❯ followed by a numbered option (the selected item in a menu)
+  if text:find("❯", 1, true) then
+    local pos = text:find("❯", 1, true)
+    local after = text:sub(pos + 3):gsub("^\194\160", ""):gsub("^%s+", "")
+    if after:match("^%d+%.%s") then return "menu_option" end
+  end
 
   -- Banner / version
   if text:find("Claude Code v", 1, true) or text:find("Claude Code ", 1, true) then return "banner" end
@@ -170,6 +205,14 @@ local function classifyRow(text, row, totalRows)
   if text:match("Opus [%d%.]+") or text:match("Sonnet [%d%.]+") or text:match("Haiku [%d%.]+") then
     return "banner"
   end
+
+  -- Interactive menu elements
+  -- Horizontal selector: "High effort (default) ← → to adjust"
+  if text:find("← →", 1, true) or text:find("to adjust", 1, true) then return "selector" end
+  -- Menu hint footer: "Enter to confirm · Esc to exit"
+  if text:find("Enter to confirm", 1, true) then return "confirmation" end
+  -- Menu title: "Select model", "Select permission", etc.
+  if text:match("^%s*Select%s+") then return "menu_title" end
 
   -- Token/cost status bar
   if text:match("%d+%s*tokens") or text:match("%$%d") then return "status_bar" end
@@ -303,7 +346,12 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
   -- Find where the input zone starts — everything at/below is CLI chrome
   local inputBoundary, placeholder = findInputZoneBoundary(vt, numRows)
   state._inputBoundary = inputBoundary
-  state._placeholder = placeholder  -- tab-completable hint from CLI
+  -- Only set placeholder once (first detection). Once user types, the prompt
+  -- text changes but _placeholder must stay as the original hint text so
+  -- getPromptState() can distinguish placeholder from real input.
+  if placeholder and not state._placeholder then
+    state._placeholder = placeholder
+  end
 
   local prevMode = state.mode
   local sawPermission = false
@@ -319,6 +367,12 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
   local sawError = false
   local errorText = nil
 
+  -- Count dirty content rows — rows above the input boundary that have content.
+  -- This is separate from classification: Claude CLI wraps responses in │ box
+  -- borders, which classifyRow marks as "box_drawing". But they're still content
+  -- rows that indicate Claude is actively streaming a response.
+  local contentDirtyCount = 0
+
   -- Classify each dirty row
   for _, row in ipairs(dirtyRows) do
     -- Skip rows in the input zone — we have our own input field
@@ -326,6 +380,12 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
 
     local text = vt:getRowText(row)
     local kind, extra1, extra2 = classifyRow(text, row, numRows)
+
+    -- Count content-area rows with actual text (regardless of classification)
+    -- Skip first 3 rows (banner area) and status_bar/idle_prompt
+    if row >= 3 and #text > 0 and kind ~= "banner" and kind ~= "status_bar" and kind ~= "idle_prompt" then
+      contentDirtyCount = contentDirtyCount + 1
+    end
 
     -- Dedup: skip rows we've already emitted this turn
     local rowKey = row .. ":" .. text:sub(1, 60)
@@ -339,7 +399,7 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
       permAction = extra1
       permTarget = extra2
       permQuestion = text
-    elseif kind == "permission_option" then
+    elseif kind == "menu_option" then
       sawPermission = sawPermission or (state.mode == MODE_PERMISSION)
     elseif kind == "idle_prompt" then
       sawIdlePrompt = true
@@ -357,13 +417,19 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     elseif kind == "text" then
       newTextLines[#newTextLines + 1] = { row = row, text = text, kind = kind }
     end
-    -- user_prompt, status_bar, box_drawing → intentionally ignored (CLI chrome)
+    -- user_prompt, status_bar, box_drawing → intentionally ignored for blocks
+    -- (but box_drawing IS counted for streaming detection via contentDirtyCount)
 
     ::continue::
   end
 
   -- ── Mode transitions ────────────────────────────────────────────
+  -- Key insight: Claude CLI wraps all response text in │ box borders, so
+  -- classifyRow returns "box_drawing" for response lines, not "text".
+  -- Use contentDirtyCount (any content-area damage) for streaming detection,
+  -- not just #newTextLines (which requires "text" classification).
 
+  local hasContentActivity = contentDirtyCount > 0 or #newTextLines > 0
   local newMode = prevMode
 
   if sawPermission then
@@ -376,7 +442,7 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
       if R and sid then R.resolvePermissionPrompt(sid, "Resolved") end
       pushCapEvent(pushEvent, nodeId, "onPermissionResolved", {})
     end
-  elseif sawThinking and prevMode ~= MODE_SPLASH then
+  elseif sawThinking and not hasContentActivity and prevMode ~= MODE_SPLASH then
     newMode = MODE_THINKING
   elseif prevMode == MODE_SPLASH and (sawIdlePrompt or sawBanner) then
     state._readyForInput = true
@@ -395,19 +461,20 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
       sendMessage(state, msg)
       pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "running" })
     end
-  elseif #newTextLines > 0 and prevMode ~= MODE_SPLASH then
+  elseif hasContentActivity and prevMode ~= MODE_SPLASH then
     newMode = MODE_STREAMING
   elseif prevMode == MODE_STREAMING then
     -- Stay in streaming — tick handles the STREAMING→IDLE transition
     -- after a quiet period with no damage (STREAM_IDLE_MS)
     newMode = MODE_STREAMING
-  elseif sawIdlePrompt and not sawThinking and prevMode ~= MODE_SPLASH then
+  elseif sawIdlePrompt and not sawThinking and not hasContentActivity and prevMode ~= MODE_SPLASH then
     newMode = MODE_IDLE
   end
 
-  -- Clear dedup set on transition to idle (new conversation turn)
+  -- Clear dedup set and placeholder on transition to idle (new conversation turn)
   if newMode == MODE_IDLE and prevMode ~= MODE_IDLE then
     state._emittedRows = {}
+    state._placeholder = nil  -- reset so next idle prompt detects fresh placeholder
   end
 
   state.mode = newMode
@@ -524,6 +591,136 @@ function Session.getInputBoundary(sessionNodeId)
   return TERM_ROWS
 end
 
+--- Check if the CLI is showing an interactive menu (e.g. /model, /permissions).
+--- Detected by "Enter to confirm" in the vterm content.
+function Session.isMenuActive(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state or not state.vterm then return false end
+  return state.vterm:findText("Enter to confirm") ~= nil
+end
+
+--- Write raw bytes to the PTY (for sending escape sequences like arrow keys)
+function Session.writeRaw(data, sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state or not state.proc then
+    io.write("[PTY] writeRaw FAILED: no state/proc for id=" .. tostring(id) .. "\n"); io.flush()
+    return false
+  end
+  -- Log printable chars, hex for control chars
+  local display = data:gsub("[%c]", function(c) return string.format("\\x%02x", c:byte()) end)
+  io.write("[PTY] writeRaw: '" .. display .. "' (" .. #data .. " bytes)\n"); io.flush()
+  state.proc:write(data)
+  return true
+end
+
+--- Read the current prompt line text and cursor column from the vterm.
+--- Returns: { text = "user's input", cursorCol = N, promptRow = R }
+--- Uses vterm cursor position to find the prompt row (works for ❯, !, >, etc.)
+function Session.getPromptState(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state or not state.vterm then return nil end
+
+  local vt = state.vterm
+  local boundary = state._inputBoundary or TERM_ROWS
+  local cursor = vt:getCursor()
+  if not cursor then return nil end
+
+  local cursorRow = cursor.row
+  local cursorCol = cursor.col
+
+  -- Cursor must be in the input zone (at or below boundary)
+  if cursorRow < boundary then return nil end
+
+  local text = vt:getRowText(cursorRow)
+  if #text == 0 then return nil end
+
+  -- Find the prompt prefix by scanning cells from the left.
+  -- The prompt is a symbol (❯, !, >) followed by space/NBSP, then user text.
+  -- We find where the actual text content starts by looking for the first
+  -- cell after the prompt symbol + space.
+  local textStartCol = 0
+  local foundPrompt = false
+  for col = 0, math.min(15, cursorCol + 5) do
+    local cell = vt:getCell(cursorRow, col)
+    if not cell or not cell.char then break end
+    local ch = cell.char
+    -- Common prompt symbols: ❯ (U+276F), !, >, ›
+    if not foundPrompt and (ch:find("❯", 1, true) or ch == "!" or ch == ">" or ch == "›") then
+      foundPrompt = true
+      -- Next cell should be space/NBSP — skip it too
+    elseif foundPrompt then
+      -- Skip the space/NBSP after the prompt symbol
+      if ch == " " or ch == "\194\160" or ch == "" then
+        textStartCol = col + 1
+      else
+        textStartCol = col
+      end
+      break
+    end
+  end
+
+  -- Extract user text: everything from textStartCol onward
+  -- Build the text by reading cells (avoids byte/cell mismatch)
+  local userChars = {}
+  local cols = select(2, vt:size())
+  for col = textStartCol, cols - 1 do
+    local cell = vt:getCell(cursorRow, col)
+    if cell and cell.char and #cell.char > 0 then
+      userChars[#userChars + 1] = cell.char
+    else
+      break  -- hit empty cell, end of text
+    end
+  end
+  local userText = table.concat(userChars)
+  -- Trim trailing whitespace
+  userText = userText:gsub("%s+$", "")
+
+  -- If the text exactly matches the known placeholder, it's not user input
+  if state._placeholder and #userText > 0 and userText == state._placeholder then
+    userText = ""
+  end
+
+  -- Cursor offset into user text (cell-based)
+  local inputCursorCol = math.max(0, cursorCol - textStartCol)
+
+  return {
+    text = userText,
+    cursorCol = inputCursorCol,
+    promptRow = cursorRow,
+  }
+end
+
+--- Read rows below the input zone (for @-picker dropdown, slash command menus, etc.)
+--- Returns array of { row = N, text = "...", kind = "..." }
+function Session.getDropdownRows(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state or not state.vterm then return {} end
+
+  local vt = state.vterm
+  local boundary = state._inputBoundary or TERM_ROWS
+  local rows = {}
+
+  -- Find the last non-empty row below boundary
+  for r = boundary, TERM_ROWS - 1 do
+    local text = vt:getRowText(r)
+    if #text > 0 then
+      -- Skip separator lines and the prompt itself
+      local stripped = text:match("^%s*(.-)%s*$") or ""
+      if not isSeparatorRow(vt, r) then
+        local kind = classifyRow(text, r, TERM_ROWS)
+        if kind ~= "idle_prompt" and kind ~= "status_bar" and kind ~= "user_prompt" then
+          rows[#rows + 1] = { row = r, text = text, kind = kind }
+        end
+      end
+    end
+  end
+  return rows
+end
+
 -- Deferred resize: canvas sets desired size from render, tick applies it
 local _desiredCols, _desiredRows = nil, nil
 
@@ -556,11 +753,45 @@ function Session.isInitialized(sessionNodeId)
   return false
 end
 
+--- Check if the CLI prompt is ready for input (may still be in SPLASH mode visually)
+function Session.isReady(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state._readyForInput == true end
+  return false
+end
+
 function Session.getMode(sessionNodeId)
   local id = sessionNodeId or _focusedId
   local state = _sessions[id]
   if state then return state.mode end
   return nil
+end
+
+function Session.getDebugInfo(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state then return { alive = false, mode = "no_session" } end
+  local dirtyCount = 0
+  for _ in pairs(state._pendingDirty) do dirtyCount = dirtyCount + 1 end
+  -- Count content rows in vterm (for debug display)
+  local vtContentRows = 0
+  if state.vterm then
+    local boundary = state._inputBoundary or TERM_ROWS
+    for i = 0, boundary - 1 do
+      if #(state.vterm:getRowText(i)) > 0 then vtContentRows = vtContentRows + 1 end
+    end
+  end
+  return {
+    alive = state.proc and state.proc:alive() or false,
+    mode = state.mode or "?",
+    boundary = state._inputBoundary or -1,
+    dirty = dirtyCount,
+    lastDmg = state._lastDamageAt and math.floor(now_ms() - state._lastDamageAt) or -1,
+    settle = state.settleAt and math.floor(state.settleAt - now_ms()) or -1,
+    streaming = state.lastAssistantText and #state.lastAssistantText or 0,
+    vtContent = vtContentRows,
+  }
 end
 
 function Session.getFocusedId() return _focusedId end
@@ -619,15 +850,15 @@ Capabilities.register("ClaudeCode", {
   tick = function(nodeId, state, dt, pushEvent, props)
     if not pushEvent then return end
 
-    -- Apply deferred vterm resize (set by canvas render, safe to do here before PTY read)
-    if _desiredCols and _desiredRows and state.vterm then
+    -- Apply deferred column resize (rows stay fixed — row resize segfaults libvterm)
+    if _desiredCols and state.vterm then
       local curRows, curCols = state.vterm:size()
-      if curCols ~= _desiredCols or curRows ~= _desiredRows then
-        state.vterm:resize(_desiredRows, _desiredCols)
-        if state.proc then state.proc:resize(_desiredRows, _desiredCols) end
+      if curCols ~= _desiredCols then
+        state.vterm:resize(curRows, _desiredCols)
+        if state.proc then state.proc:resize(curRows, _desiredCols) end
         state._emittedRows = {}
       end
-      _desiredCols, _desiredRows = nil, nil
+      _desiredCols = nil
     end
 
     -- Deferred Enter: fires on the tick AFTER sendMessage wrote the text
@@ -730,12 +961,57 @@ Capabilities.register("ClaudeCode", {
         local sid = state.rendererSessionId
         if R and sid then
           local vt = state.vterm
-          local inputBoundary = state._inputBoundary or TERM_ROWS
-          local contentLines = {}
-          for i = 3, inputBoundary - 1 do
+          -- Refresh boundary every push — it moves as Claude streams content
+          -- and the prompt shifts down. Using the stale value from extractSemantics
+          -- would read only the first few banner rows.
+          local inputBoundary = findInputZoneBoundary(vt, TERM_ROWS)
+          state._inputBoundary = inputBoundary
+          -- Only capture Claude's response content, not the full vterm history.
+          -- 1. Walk backward to find the ❯ user_prompt row
+          -- 2. Walk forward past user message continuation rows
+          -- 3. Start capturing at the first Claude response row
+          local promptRow = nil
+          for i = inputBoundary - 1, 0, -1 do
             local text = vt:getRowText(i)
             if #text > 0 then
-              contentLines[#contentLines + 1] = text
+              local kind = classifyRow(text, i, TERM_ROWS)
+              if kind == "user_prompt" then
+                promptRow = i
+                break
+              end
+            end
+          end
+          -- Walk forward from prompt to find where Claude's response starts.
+          -- User message continuation rows are plain text (no bullets, no box chars).
+          -- Claude's response starts with thinking, tool bullet, or box-drawing (│).
+          local responseStart = promptRow and (promptRow + 1) or 3
+          if promptRow then
+            for i = promptRow + 1, inputBoundary - 1 do
+              local text = vt:getRowText(i)
+              if #text > 0 then
+                local kind = classifyRow(text, i, TERM_ROWS)
+                -- These kinds mark the start of Claude's output
+                if kind == "thinking" or kind == "tool" or kind == "box_drawing"
+                   or kind == "diff" or kind == "error" then
+                  responseStart = i
+                  break
+                end
+                -- A blank line after user text also signals the boundary
+              elseif i > promptRow + 1 then
+                -- Empty row after user message = gap before response
+                responseStart = i + 1
+                break
+              end
+            end
+          end
+          local contentLines = {}
+          for i = responseStart, inputBoundary - 1 do
+            local text = vt:getRowText(i)
+            if #text > 0 then
+              local kind = classifyRow(text, i, TERM_ROWS)
+              if kind ~= "banner" and kind ~= "status_bar" and kind ~= "idle_prompt" then
+                contentLines[#contentLines + 1] = "[" .. kind .. "] " .. text
+              end
             end
           end
           if #contentLines > 0 then
@@ -749,22 +1025,76 @@ Capabilities.register("ClaudeCode", {
       end
 
       -- STREAMING → IDLE: only after no damage for STREAM_IDLE_MS
+      -- But if a menu is active, DON'T finalize — keep overwriting streaming text
+      -- so arrow key navigation replaces the display instead of stacking blocks.
+      local menuActive = state.vterm and state.vterm:findText("Enter to confirm") ~= nil
       if state._lastDamageAt and (now_ms() - state._lastDamageAt) >= STREAM_IDLE_MS then
-        local R = getRenderer()
-        local sid = state.rendererSessionId
-        if R and sid then
-          -- Finalize: convert streaming text to permanent block
-          local fullText = state.lastAssistantText
-          if fullText then
-            R.addText(sid, fullText)
+        if menuActive then
+          -- Menu is open — stay in streaming mode so next arrow key just overwrites.
+          -- Do one content refresh to keep display current, but don't finalize.
+          state.mode = MODE_STREAMING
+          state._lastDamageAt = now_ms()  -- reset timer so we don't keep hitting this
+        else
+          -- Final boundary refresh before finalizing
+          local finalBoundary = findInputZoneBoundary(state.vterm, TERM_ROWS)
+          state._inputBoundary = finalBoundary
+          local R = getRenderer()
+          local sid = state.rendererSessionId
+          if R and sid then
+            -- Finalize: one last content read — only the current response
+            local promptRow = nil
+            for i = finalBoundary - 1, 0, -1 do
+              local text = state.vterm:getRowText(i)
+              if #text > 0 then
+                local kind = classifyRow(text, i, TERM_ROWS)
+                if kind == "user_prompt" then
+                  promptRow = i
+                  break
+                end
+              end
+            end
+            local responseStart = promptRow and (promptRow + 1) or 3
+            if promptRow then
+              for i = promptRow + 1, finalBoundary - 1 do
+                local text = state.vterm:getRowText(i)
+                if #text > 0 then
+                  local kind = classifyRow(text, i, TERM_ROWS)
+                  if kind == "thinking" or kind == "tool" or kind == "box_drawing"
+                     or kind == "diff" or kind == "error" then
+                    responseStart = i
+                    break
+                  end
+                elseif i > promptRow + 1 then
+                  responseStart = i + 1
+                  break
+                end
+              end
+            end
+            local contentLines = {}
+            for i = responseStart, finalBoundary - 1 do
+              local text = state.vterm:getRowText(i)
+              if #text > 0 then
+                local kind = classifyRow(text, i, TERM_ROWS)
+                if kind ~= "banner" and kind ~= "status_bar" and kind ~= "idle_prompt" then
+                  contentLines[#contentLines + 1] = "[" .. kind .. "] " .. text
+                end
+              end
+            end
+            if #contentLines > 0 then
+              state.lastAssistantText = table.concat(contentLines, "\n")
+            end
+            local fullText = state.lastAssistantText
+            if fullText then
+              R.addText(sid, fullText)
+            end
+            R.setStreaming(sid, nil)
+            R.setStatus(sid, "idle")
           end
-          R.setStreaming(sid, nil)
-          R.setStatus(sid, "idle")
+          state.mode = MODE_IDLE
+          state._emittedRows = {}
+          state._pendingDirty = {}
+          pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
         end
-        state.mode = MODE_IDLE
-        state._emittedRows = {}
-        state._pendingDirty = {}
-        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
       end
     end
 
@@ -862,5 +1192,8 @@ Capabilities.getHandlers = function()
   for method, handler in pairs(rpcHandlers) do handlers[method] = handler end
   return handlers
 end
+
+Session.classifyRow = classifyRow
+Session.isSeparatorRow = isSeparatorRow
 
 return Session
