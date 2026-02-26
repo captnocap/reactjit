@@ -48,20 +48,29 @@
 ├── apis
 │   ├── package.json
 │   ├── src
+│   │   ├── ActivityRow.tsx
 │   │   ├── base.ts
 │   │   ├── coingecko.ts
+│   │   ├── CoinTickerRow.tsx
+│   │   ├── components.tsx
 │   │   ├── github.ts
 │   │   ├── google.ts
 │   │   ├── homeassistant.ts
+│   │   ├── HueLightBadge.tsx
 │   │   ├── hue.ts
 │   │   ├── index.ts
 │   │   ├── lastfm.ts
+│   │   ├── MediaPosterCard.tsx
 │   │   ├── nasa.ts
 │   │   ├── notion.ts
+│   │   ├── NowPlayingCard.tsx
 │   │   ├── plex.ts
+│   │   ├── polypizza.ts
+│   │   ├── rateLimit.ts
 │   │   ├── registry.ts
 │   │   ├── settings.ts
 │   │   ├── spotify.ts
+│   │   ├── StatCard.tsx
 │   │   ├── steam.ts
 │   │   ├── telegram.ts
 │   │   ├── tmdb.ts
@@ -78,41 +87,6 @@
 │   │   ├── index.ts
 │   │   └── types.ts
 │   └── tsconfig.json
-├── awesome
-│   ├── package.json
-│   └── src
-│       ├── AwesomeServer.ts
-│       └── index.ts
-├── cc
-│   ├── package.json
-│   └── src
-│       ├── CCServer.ts
-│       ├── index.ts
-│       └── palette.ts
-├── components
-│   ├── package.json
-│   ├── src
-│   │   ├── Badge
-│   │   │   ├── Badge.story.tsx
-│   │   │   └── Badge.tsx
-│   │   ├── Card
-│   │   │   ├── Card.story.tsx
-│   │   │   └── Card.tsx
-│   │   ├── Divider
-│   │   │   ├── Divider.story.tsx
-│   │   │   └── Divider.tsx
-│   │   ├── FlexColumn
-│   │   │   ├── FlexColumn.story.tsx
-│   │   │   └── FlexColumn.tsx
-│   │   ├── FlexRow
-│   │   │   ├── FlexRow.story.tsx
-│   │   │   └── FlexRow.tsx
-│   │   ├── index.ts
-│   │   ├── Spacer
-│   │   │   ├── Spacer.story.tsx
-│   │   │   └── Spacer.tsx
-│   │   └── stories.ts
-│   └── tsconfig.json
 ├── controls
 │   ├── package.json
 │   ├── src
@@ -122,8 +96,134 @@
 │   │   ├── LEDIndicator.tsx
 │   │   ├── Meter.tsx
 │   │   ├── PadButton.tsx
+│   │   ├── PianoKeyboard.tsx
+│   │   ├── PitchWheel.tsx
 │   │   ├── StepSequencer.tsx
-│   │   └── TransportBar.tsx
+│   │   ├── TransportBar.tsx
+│   │   └── XYPad.tsx
+│   └── tsconfig.json
+├── core
+│   ├── package.json
+│   ├── src
+│   │   ├── ActionBar.tsx
+│   │   ├── animation.ts
+│   │   ├── AreaChart.tsx
+│   │   ├── Badge.tsx
+│   │   ├── BarChart.tsx
+│   │   ├── BentoImageGallery.tsx
+│   │   ├── Breadcrumbs.tsx
+│   │   ├── bridge.ts
+│   │   ├── CandlestickChart.tsx
+│   │   ├── capabilities.tsx
+│   │   ├── Card.tsx
+│   │   ├── CartridgeInspector.tsx
+│   │   ├── ChartTooltip.tsx
+│   │   ├── ChatInput.tsx
+│   │   ├── Checkbox.tsx
+│   │   ├── CodeBlock.tsx
+│   │   ├── colors.ts
+│   │   ├── ContextMenu.tsx
+│   │   ├── context.ts
+│   │   ├── ConversationCard.tsx
+│   │   ├── DebugOverlay.tsx
+│   │   ├── Divider.tsx
+│   │   ├── effects
+│   │   │   ├── Automata.tsx
+│   │   │   ├── Combustion.tsx
+│   │   │   ├── Constellation.tsx
+│   │   │   ├── Contours.tsx
+│   │   │   ├── Cymatics.tsx
+│   │   │   ├── EdgeGravity.tsx
+│   │   │   ├── Feedback.tsx
+│   │   │   ├── FlowParticles.tsx
+│   │   │   ├── index.ts
+│   │   │   ├── LSystem.tsx
+│   │   │   ├── Mandala.tsx
+│   │   │   ├── Mirror.tsx
+│   │   │   ├── Mycelium.tsx
+│   │   │   ├── Orbits.tsx
+│   │   │   ├── Pipes.tsx
+│   │   │   ├── PixelSort.tsx
+│   │   │   ├── Plotter.tsx
+│   │   │   ├── ReactionDiffusion.tsx
+│   │   │   ├── Rings.tsx
+│   │   │   ├── Spirograph.tsx
+│   │   │   ├── StainedGlass.tsx
+│   │   │   ├── Terrain.tsx
+│   │   │   ├── TextEffect.tsx
+│   │   │   ├── types.ts
+│   │   │   └── Voronoi.tsx
+│   │   ├── Emulator.tsx
+│   │   ├── FlatList.tsx
+│   │   ├── FlexColumn.tsx
+│   │   ├── FlexRow.tsx
+│   │   ├── hooks.ts
+│   │   ├── HorizontalBarChart.tsx
+│   │   ├── HoverPreviewRowsGallery.tsx
+│   │   ├── ImageGallery.tsx
+│   │   ├── ImageViewerModal.tsx
+│   │   ├── index.ts
+│   │   ├── LineChart.tsx
+│   │   ├── LoadingDots.tsx
+│   │   ├── masks
+│   │   │   ├── Ascii.tsx
+│   │   │   ├── CRT.tsx
+│   │   │   ├── Dither.tsx
+│   │   │   ├── index.ts
+│   │   │   ├── Scanlines.tsx
+│   │   │   ├── types.ts
+│   │   │   └── VHS.tsx
+│   │   ├── MessageBubble.tsx
+│   │   ├── MessageList.tsx
+│   │   ├── Modal.tsx
+│   │   ├── Native.tsx
+│   │   ├── NavPanel.tsx
+│   │   ├── PieChart.tsx
+│   │   ├── Portal.tsx
+│   │   ├── Pressable.tsx
+│   │   ├── primitives.tsx
+│   │   ├── ProgressBar.tsx
+│   │   ├── RadarChart.tsx
+│   │   ├── Radio.tsx
+│   │   ├── ScaleContext.tsx
+│   │   ├── scaleStyle.ts
+│   │   ├── ScrollView.tsx
+│   │   ├── search
+│   │   │   ├── AppSearch.tsx
+│   │   │   ├── CommandPalette.tsx
+│   │   │   ├── index.ts
+│   │   │   ├── SearchBar.tsx
+│   │   │   ├── SearchCombo.tsx
+│   │   │   ├── SearchResultsSections.tsx
+│   │   │   ├── SearchResults.tsx
+│   │   │   └── SearchSchemaHint.tsx
+│   │   ├── Select.tsx
+│   │   ├── Slider.tsx
+│   │   ├── Spacer.tsx
+│   │   ├── Sparkline.tsx
+│   │   ├── StackedBarChart.tsx
+│   │   ├── Switch.tsx
+│   │   ├── Table.tsx
+│   │   ├── Tabs.tsx
+│   │   ├── Terminal.tsx
+│   │   ├── TextEditor.tsx
+│   │   ├── TextInput.tsx
+│   │   ├── Toolbar.tsx
+│   │   ├── types.ts
+│   │   ├── Typography.tsx
+│   │   ├── useAppSearch.ts
+│   │   ├── useCapabilities.ts
+│   │   ├── useDebug.ts
+│   │   ├── useGPIO.tsx
+│   │   ├── useLocalStore.ts
+│   │   ├── usePixelArt.tsx
+│   │   ├── usePorts.ts
+│   │   ├── usePTY.ts
+│   │   ├── useSearch.ts
+│   │   ├── useSystemInfo.ts
+│   │   ├── useSystemMonitor.ts
+│   │   ├── VideoPlayer.tsx
+│   │   └── Video.tsx
 │   └── tsconfig.json
 ├── crypto
 │   ├── package.json
@@ -131,66 +231,12 @@
 │   │   ├── encoding.ts
 │   │   ├── encrypt.ts
 │   │   ├── hash.ts
+│   │   ├── hooks.ts
 │   │   ├── index.ts
+│   │   ├── rpc.ts
 │   │   ├── sign.ts
 │   │   ├── token.ts
 │   │   └── types.ts
-│   └── tsconfig.json
-├── game
-│   ├── package.json
-│   ├── src
-│   │   ├── components
-│   │   │   ├── DamageNumber.tsx
-│   │   │   ├── DialogueBox.tsx
-│   │   │   ├── EntitySprite.tsx
-│   │   │   ├── HealthBar.tsx
-│   │   │   ├── InventoryGrid.tsx
-│   │   │   ├── Minimap.tsx
-│   │   │   ├── QuestLog.tsx
-│   │   │   ├── SkillTreeView.tsx
-│   │   │   ├── StatusBar.tsx
-│   │   │   └── TilemapView.tsx
-│   │   ├── core
-│   │   │   ├── useCamera.ts
-│   │   │   ├── useGameLoop.ts
-│   │   │   ├── useGameState.ts
-│   │   │   ├── useInput.ts
-│   │   │   └── useTimer.ts
-│   │   ├── entity
-│   │   │   ├── useEntityPool.ts
-│   │   │   ├── useEntity.ts
-│   │   │   ├── useSpawner.ts
-│   │   │   └── useStateMachine.ts
-│   │   ├── GameCanvas.tsx
-│   │   ├── index.ts
-│   │   ├── physics
-│   │   │   ├── useCollision.ts
-│   │   │   ├── usePhysics.ts
-│   │   │   ├── usePlatformer.ts
-│   │   │   └── useProjectile.ts
-│   │   ├── systems
-│   │   │   ├── useAchievements.ts
-│   │   │   ├── useCombat.ts
-│   │   │   ├── useCrafting.ts
-│   │   │   ├── useDialogue.ts
-│   │   │   ├── useEconomy.ts
-│   │   │   ├── useInventory.ts
-│   │   │   ├── useLoot.ts
-│   │   │   ├── useProgression.ts
-│   │   │   ├── useQuest.ts
-│   │   │   └── useSkillTree.ts
-│   │   ├── templates
-│   │   │   ├── platformer.tsx
-│   │   │   ├── roguelite.tsx
-│   │   │   └── turnBased.tsx
-│   │   ├── types.ts
-│   │   └── world
-│   │       ├── useFogOfWar.ts
-│   │       ├── usePathfinding.ts
-│   │       ├── useProcGen.ts
-│   │       ├── useRoomGraph.ts
-│   │       └── useTilemap.ts
-│   ├── tree.md
 │   └── tsconfig.json
 ├── geo
 │   ├── package.json
@@ -204,22 +250,13 @@
 │       ├── Polyline.tsx
 │       ├── TileLayer.tsx
 │       └── types.ts
-├── grid
+├── layouts
 │   ├── package.json
 │   └── src
-│       ├── flatten.ts
+│       ├── container.tsx
 │       ├── index.ts
-│       ├── layout.ts
-│       ├── RenderServer.ts
-│       └── transports
-│           ├── stdio.ts
-│           ├── types.ts
-│           └── websocket.ts
-├── hs
-│   ├── package.json
-│   └── src
-│       ├── HammerspoonServer.ts
-│       └── index.ts
+│       ├── nav.tsx
+│       └── page.tsx
 ├── media
 │   ├── package.json
 │   ├── src
@@ -238,13 +275,9 @@
 │   │   ├── Love2DApp.ts
 │   │   ├── measureText.ts
 │   │   ├── NativeBridge.ts
-│   │   └── NativeRenderer.ts
+│   │   ├── NativeRenderer.ts
+│   │   └── WasmApp.ts
 │   └── tsconfig.json
-├── nvim
-│   ├── package.json
-│   └── src
-│       ├── index.ts
-│       └── NvimServer.ts
 ├── router
 │   ├── package.json
 │   └── src
@@ -270,74 +303,6 @@
 │   │   ├── index.ts
 │   │   └── types.ts
 │   └── tsconfig.json
-├── shared
-│   ├── package.json
-│   ├── src
-│   │   ├── ActionBar.tsx
-│   │   ├── animation.ts
-│   │   ├── AreaChart.tsx
-│   │   ├── Badge.tsx
-│   │   ├── BarChart.tsx
-│   │   ├── Breadcrumbs.tsx
-│   │   ├── bridge.ts
-│   │   ├── capabilities.tsx
-│   │   ├── Card.tsx
-│   │   ├── ChartTooltip.tsx
-│   │   ├── ChatInput.tsx
-│   │   ├── Checkbox.tsx
-│   │   ├── CodeBlock.tsx
-│   │   ├── colors.ts
-│   │   ├── ContextMenu.tsx
-│   │   ├── context.ts
-│   │   ├── ConversationCard.tsx
-│   │   ├── DebugOverlay.tsx
-│   │   ├── Divider.tsx
-│   │   ├── FlatList.tsx
-│   │   ├── FlexColumn.tsx
-│   │   ├── FlexRow.tsx
-│   │   ├── hooks.ts
-│   │   ├── HorizontalBarChart.tsx
-│   │   ├── ImageGallery.tsx
-│   │   ├── ImageViewerModal.tsx
-│   │   ├── index.ts
-│   │   ├── LineChart.tsx
-│   │   ├── LoadingDots.tsx
-│   │   ├── MessageBubble.tsx
-│   │   ├── MessageList.tsx
-│   │   ├── Modal.tsx
-│   │   ├── Native.tsx
-│   │   ├── NavPanel.tsx
-│   │   ├── PieChart.tsx
-│   │   ├── Portal.tsx
-│   │   ├── Pressable.tsx
-│   │   ├── primitives.tsx
-│   │   ├── ProgressBar.tsx
-│   │   ├── RadarChart.tsx
-│   │   ├── Radio.tsx
-│   │   ├── ScaleContext.tsx
-│   │   ├── scaleStyle.ts
-│   │   ├── ScrollView.tsx
-│   │   ├── Select.tsx
-│   │   ├── Slider.tsx
-│   │   ├── Spacer.tsx
-│   │   ├── Sparkline.tsx
-│   │   ├── StackedBarChart.tsx
-│   │   ├── Switch.tsx
-│   │   ├── Table.tsx
-│   │   ├── Tabs.tsx
-│   │   ├── TextEditor.tsx
-│   │   ├── TextInput.tsx
-│   │   ├── Toolbar.tsx
-│   │   ├── types.ts
-│   │   ├── useCapabilities.ts
-│   │   ├── useDebug.ts
-│   │   ├── usePixelArt.tsx
-│   │   ├── usePorts.ts
-│   │   ├── useSystemInfo.ts
-│   │   ├── useSystemMonitor.ts
-│   │   ├── VideoPlayer.tsx
-│   │   └── Video.tsx
-│   └── tsconfig.json
 ├── storage
 │   ├── package.json
 │   └── src
@@ -354,13 +319,6 @@
 │       ├── query.ts
 │       ├── schema.ts
 │       └── types.ts
-├── terminal
-│   ├── package.json
-│   └── src
-│       ├── ansi.ts
-│       ├── index.ts
-│       ├── input.ts
-│       └── TerminalApp.ts
 ├── theme
 │   ├── package.json
 │   └── src
@@ -382,14 +340,6 @@
 │       ├── types.ts
 │       └── useTheme.ts
 ├── tree.md
-├── web
-│   ├── package.json
-│   ├── src
-│   │   ├── CanvasBridge.ts
-│   │   ├── index.ts
-│   │   ├── LoveInstance.tsx
-│   │   └── WebBridge.ts
-│   └── tsconfig.json
 └── webhooks
     ├── package.json
     ├── src
@@ -399,4 +349,4 @@
     │   └── types.ts
     └── tsconfig.json
 
-71 directories, 329 files
+44 directories, 306 files
