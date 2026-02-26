@@ -51,6 +51,7 @@ local TERM_ROWS    = 50
 local TERM_COLS    = 120
 local SETTLE_MS    = 120   -- ms after last damage before extracting semantics
 local STREAM_MS    = 50    -- ms between streaming text updates to renderer
+local STREAM_IDLE_MS = 500 -- ms of no damage before exiting streaming mode
 
 -- ── Clock (monotonic, milliseconds) ─────────────────────────────────
 
@@ -78,10 +79,82 @@ local MODE_STREAMING  = "streaming"
 local MODE_THINKING   = "thinking"
 local MODE_PERMISSION = "permission"
 
+-- ── Input zone detection ────────────────────────────────────────────
+-- Scans from the bottom of the vterm grid upward to find where Claude CLI's
+-- input area starts (the ──── separator above the ❯ prompt). Everything at
+-- or below that row is "input zone" and should never be extracted as content.
+--
+-- Returns: boundaryRow, placeholderText
+--   boundaryRow   = first row of the input zone (or numRows if not found)
+--   placeholderText = text after ❯ in the prompt line (the tab-completable hint)
+
+local function findInputZoneBoundary(vt, numRows)
+  local boundary = numRows
+  local placeholder = nil
+  local promptRow = nil
+
+  -- Find the last non-empty row — that's where the content ends.
+  -- Claude CLI renders inline top-down, NOT pinned to the bottom.
+  local lastContent = -1
+  for r = numRows - 1, 0, -1 do
+    if #(vt:getRowText(r)) > 0 then
+      lastContent = r
+      break
+    end
+  end
+
+  if lastContent < 0 then return numRows, nil end  -- grid is empty
+
+  -- Scan backward from last content to find the prompt and separators
+  for r = lastContent, math.max(0, lastContent - 10), -1 do
+    local text = vt:getRowText(r)
+    local stripped = text:match("^%s*(.-)%s*$") or ""
+
+    -- Extract placeholder from the ❯ prompt line
+    -- Note: Claude CLI uses NO-BREAK SPACE (U+00A0, bytes C2 A0) after ❯,
+    -- not regular space 0x20. Lua %s only matches single-byte whitespace.
+    if not promptRow then
+      local promptStart = stripped:find("❯", 1, true)
+      if promptStart or stripped:match("^>%s") or stripped == ">" then
+        promptRow = r
+        if promptStart then
+          -- ❯ is 3 bytes (E2 9D AF). Grab everything after it.
+          local rest = stripped:sub(promptStart + 3)
+          -- Strip leading regular spaces (0x20) and NBSP pairs (C2 A0 = \194\160)
+          rest = rest:gsub("^\194\160", "")  -- strip one NBSP
+          rest = rest:gsub("^%s+", "")       -- strip remaining regular whitespace
+          if #rest > 1 then placeholder = rest end
+        else
+          local after = stripped:match("^>%s+(.+)")
+          if after and #after > 1 then placeholder = after end
+        end
+      end
+    end
+
+    -- Separator line — matches various dash-like Unicode chars
+    local isSeparator = stripped:find("────", 1, true)
+      or stripped:find("╌╌╌╌", 1, true)
+      or stripped:find("┄┄┄┄", 1, true)
+      or stripped:find("┈┈┈┈", 1, true)
+      or (stripped:match("^%-%-%-%-") and #stripped > 20)
+    if isSeparator and promptRow then
+      -- Found separator ABOVE the prompt — this is the top of the input zone
+      boundary = r
+      break
+    end
+  end
+
+  -- No separator found but we found the prompt — use the prompt row as boundary
+  if boundary == numRows and promptRow then
+    boundary = promptRow
+  end
+
+  return boundary, placeholder
+end
+
 -- ── Row classification ──────────────────────────────────────────────
 
 local function classifyRow(text, row, totalRows)
-  if #text == 0 then return "empty" end
 
   -- Permission prompt
   local action, target = text:match("Do you want to (%w+)%s+(.-)%?")
@@ -110,9 +183,11 @@ local function classifyRow(text, row, totalRows)
   end
 
   -- User prompt: ❯ or > followed by typed text
-  if text:find("❯ ", 1, true) and not text:find("Imagining", 1, true) then
-    local afterPrompt = text:match("❯ (.+)")
-    if afterPrompt and #afterPrompt > 0 then return "user_prompt" end
+  -- ❯ followed by text — check both regular space and NBSP (C2 A0 = \194\160)
+  if text:find("❯", 1, true) and not text:find("Imagining", 1, true) then
+    local pos = text:find("❯", 1, true)
+    local rest = text:sub(pos + 3):gsub("^\194\160", ""):gsub("^%s+", "")
+    if #rest > 0 then return "user_prompt" end
   end
   if text:match("^> .") then return "user_prompt" end
 
@@ -225,10 +300,17 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
   local sid = state.rendererSessionId
   local numRows = TERM_ROWS
 
+  -- Find where the input zone starts — everything at/below is CLI chrome
+  local inputBoundary, placeholder = findInputZoneBoundary(vt, numRows)
+  state._inputBoundary = inputBoundary
+  state._placeholder = placeholder  -- tab-completable hint from CLI
+
   local prevMode = state.mode
   local sawPermission = false
   local permAction, permTarget, permQuestion = nil, nil, nil
-  local sawIdlePrompt = false
+  -- The ❯ prompt lives in the input zone (below boundary), so we detect idle
+  -- from the boundary scan: if we found the input zone, the prompt is visible.
+  local sawIdlePrompt = (inputBoundary < numRows)
   local sawThinking = false
   local sawBanner = false
   local newTextLines = {}
@@ -239,13 +321,15 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
 
   -- Classify each dirty row
   for _, row in ipairs(dirtyRows) do
+    -- Skip rows in the input zone — we have our own input field
+    if row >= inputBoundary then goto continue end
+
     local text = vt:getRowText(row)
     local kind, extra1, extra2 = classifyRow(text, row, numRows)
 
     -- Dedup: skip rows we've already emitted this turn
     local rowKey = row .. ":" .. text:sub(1, 60)
     if state._emittedRows[rowKey] and kind ~= "permission" then
-      -- Always let permission through (needs instant response)
       goto continue
     end
     state._emittedRows[rowKey] = true
@@ -270,9 +354,10 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     elseif kind == "error" then
       sawError = true
       errorText = text
-    elseif kind == "text" or kind == "user_prompt" then
+    elseif kind == "text" then
       newTextLines[#newTextLines + 1] = { row = row, text = text, kind = kind }
     end
+    -- user_prompt, status_bar, box_drawing → intentionally ignored (CLI chrome)
 
     ::continue::
   end
@@ -293,8 +378,6 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     end
   elseif sawThinking and prevMode ~= MODE_SPLASH then
     newMode = MODE_THINKING
-  elseif sawIdlePrompt and prevMode ~= MODE_SPLASH then
-    newMode = MODE_IDLE
   elseif prevMode == MODE_SPLASH and (sawIdlePrompt or sawBanner) then
     state._readyForInput = true
     newMode = MODE_SPLASH
@@ -314,6 +397,12 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     end
   elseif #newTextLines > 0 and prevMode ~= MODE_SPLASH then
     newMode = MODE_STREAMING
+  elseif prevMode == MODE_STREAMING then
+    -- Stay in streaming — tick handles the STREAMING→IDLE transition
+    -- after a quiet period with no damage (STREAM_IDLE_MS)
+    newMode = MODE_STREAMING
+  elseif sawIdlePrompt and not sawThinking and prevMode ~= MODE_SPLASH then
+    newMode = MODE_IDLE
   end
 
   -- Clear dedup set on transition to idle (new conversation turn)
@@ -360,7 +449,7 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     if t - state.lastStreamPush >= STREAM_MS then
       state.lastStreamPush = t
       local contentLines = {}
-      for i = 3, numRows - 3 do
+      for i = 3, inputBoundary - 1 do
         local text = vt:getRowText(i)
         if #text > 0 then
           contentLines[#contentLines + 1] = text
@@ -379,7 +468,7 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
   -- Streaming -> Idle: finalize the response
   if newMode == MODE_IDLE and (prevMode == MODE_STREAMING or prevMode == MODE_THINKING) then
     local contentLines = {}
-    for i = 3, numRows - 3 do
+    for i = 3, inputBoundary - 1 do
       local text = vt:getRowText(i)
       if #text > 0 then
         contentLines[#contentLines + 1] = text
@@ -453,6 +542,36 @@ function Session.getScreenState(sessionNodeId)
   local state = _sessions[id]
   if state then return state.mode end
   return nil
+end
+
+function Session.getPlaceholder(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state then return state._placeholder end
+  return nil
+end
+
+function Session.getInputBoundary(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if state and state._inputBoundary then return state._inputBoundary end
+  return TERM_ROWS
+end
+
+function Session.resize(cols, rows, sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  if not state then return end
+  rows = rows or TERM_ROWS
+  cols = cols or TERM_COLS
+  if state.vterm then
+    local curRows, curCols = state.vterm:size()
+    if curCols ~= cols or curRows ~= rows then
+      state.vterm:resize(rows, cols)
+      if state.proc then state.proc:resize(rows, cols) end
+      state._emittedRows = {}  -- clear dedup — grid reflows
+    end
+  end
 end
 
 function Session.isInitialized(sessionNodeId)
@@ -579,6 +698,7 @@ Capabilities.register("ClaudeCode", {
         state._pendingDirty[row] = true
       end
       state.settleAt = now_ms() + SETTLE_MS
+      state._lastDamageAt = now_ms()
 
       -- Instant permission detection — bypass settle entirely
       -- Ink renders the prompt across batches, so settle keeps resetting.
@@ -613,21 +733,57 @@ Capabilities.register("ClaudeCode", {
       end
     end
 
-    -- Streaming mode: push text updates at STREAM_MS rate
-    if state.mode == MODE_STREAMING and next(state._pendingDirty) then
+    -- Streaming mode: push content directly at STREAM_MS rate
+    -- Don't call extractSemantics here — that caused mode toggling via dedup
+    if state.mode == MODE_STREAMING then
       local t = now_ms()
       if t - state.lastStreamPush >= STREAM_MS then
-        local dirtyList = {}
-        for r in pairs(state._pendingDirty) do
-          dirtyList[#dirtyList + 1] = r
+        state.lastStreamPush = t
+        local R = getRenderer()
+        local sid = state.rendererSessionId
+        if R and sid then
+          local vt = state.vterm
+          local inputBoundary = state._inputBoundary or TERM_ROWS
+          local contentLines = {}
+          for i = 3, inputBoundary - 1 do
+            local text = vt:getRowText(i)
+            if #text > 0 then
+              contentLines[#contentLines + 1] = text
+            end
+          end
+          if #contentLines > 0 then
+            local fullText = table.concat(contentLines, "\n")
+            if fullText ~= state.lastAssistantText then
+              state.lastAssistantText = fullText
+              R.setStreaming(sid, fullText)
+            end
+          end
         end
-        table.sort(dirtyList)
-        extractSemantics(state, dirtyList, pushEvent, nodeId)
+      end
+
+      -- STREAMING → IDLE: only after no damage for STREAM_IDLE_MS
+      if state._lastDamageAt and (now_ms() - state._lastDamageAt) >= STREAM_IDLE_MS then
+        local R = getRenderer()
+        local sid = state.rendererSessionId
+        if R and sid then
+          -- Finalize: convert streaming text to permanent block
+          local fullText = state.lastAssistantText
+          if fullText then
+            R.addText(sid, fullText)
+          end
+          R.setStreaming(sid, nil)
+          R.setStatus(sid, "idle")
+        end
+        state.mode = MODE_IDLE
+        state._emittedRows = {}
+        state._pendingDirty = {}
+        pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "idle" })
       end
     end
 
     -- Settle: extract semantics from accumulated dirty rows
-    if state.settleAt and now_ms() >= state.settleAt then
+    -- Skip during streaming — the streaming block above handles content + idle transition
+    if state.mode ~= MODE_STREAMING and state.settleAt and now_ms() >= state.settleAt then
       state.settleAt = nil
 
       local dirtyList = {}

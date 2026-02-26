@@ -141,21 +141,33 @@ Capabilities.register("ClaudeCanvas", {
       local boldFont = Measure.getFont(13, "bold", nil)
       local charW = font:getWidth("M")
       local lineH = font:getHeight()
+
+      -- Dynamic resize: compute how many cols fit at font size 13
+      local availW = c.w - 16  -- 8px padding each side
+      local fitCols = math.max(20, math.floor(availW / charW))
+      Session.resize(fitCols, nil)  -- resize vterm+pty if changed
+
       local rows, cols = vterm:size()
+
+      -- Don't render past the input zone
+      local maxRow = math.min(rows, Session.getInputBoundary()) - 1
 
       -- Background
       love.graphics.setColor(Color.toTable("#0f172a")[1], Color.toTable("#0f172a")[2],
                              Color.toTable("#0f172a")[3], effectiveOpacity)
       love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
 
+      -- Scissor clip to the layout box
+      love.graphics.setScissor(c.x, c.y, c.w, c.h)
       love.graphics.setFont(font)
-      for row = 0, rows - 1 do
+      for row = 0, maxRow do
         local py = c.y + 8 + row * lineH
-        if py > c.y + c.h then break end
+        if py + lineH > c.y + c.h then break end
         for col = 0, cols - 1 do
           local cell = vterm:getCell(row, col)
           if cell.char and #cell.char > 0 and cell.char ~= " " then
             local px = c.x + 8 + col * charW
+            if px > c.x + c.w then break end
             -- Background
             if cell.bg then
               love.graphics.setColor(cell.bg[1]/255, cell.bg[2]/255, cell.bg[3]/255, effectiveOpacity)
@@ -174,6 +186,17 @@ Capabilities.register("ClaudeCanvas", {
           end
         end
       end
+      love.graphics.setScissor()
+
+      -- Debug overlay: cols + window width (temporary)
+      local debugFont = Measure.getFont(10, nil, nil)
+      love.graphics.setFont(debugFont)
+      love.graphics.setColor(1, 1, 0, 0.8 * effectiveOpacity)
+      love.graphics.print(
+        string.format("cols=%d  w=%.0f  fitCols=%d", cols, c.w, fitCols),
+        c.x + 8, c.y + c.h - 60
+      )
+
       -- Fall through to input bar below
     else
       -- Normal mode: render the block-based UI
@@ -187,32 +210,117 @@ Capabilities.register("ClaudeCanvas", {
     local fontSize = 13
     local font = Measure.getFont(fontSize, nil, nil)
     local lineHeight = font:getHeight()
-    local promptY = c.y + c.h - lineHeight - 28
     local promptX = c.x + 16
+    local prefixW = font:getWidth("> ")
+    local textAreaW = c.w - 32 - prefixW  -- available width for text
+    if textAreaW < 20 then textAreaW = 20 end
+
+    -- Word-wrap helper: splits text into lines that fit within maxW
+    local function wrapText(text, maxW)
+      if #text == 0 then return { "" }, { 0 } end
+      local lines = {}
+      local lineStarts = { 1 }  -- byte offset where each line starts
+      local lineStart = 1
+      local lastSpace = nil
+      local x = 0
+      local i = 1
+      while i <= #text do
+        local ch = text:sub(i, i)
+        local chW = font:getWidth(ch)
+        if ch == " " then lastSpace = i end
+        if x + chW > maxW and i > lineStart then
+          -- Wrap: prefer breaking at last space
+          local breakAt
+          if lastSpace and lastSpace > lineStart then
+            breakAt = lastSpace
+            lines[#lines + 1] = text:sub(lineStart, breakAt - 1)
+            lineStart = breakAt + 1  -- skip the space
+          else
+            breakAt = i
+            lines[#lines + 1] = text:sub(lineStart, breakAt - 1)
+            lineStart = breakAt
+          end
+          lineStarts[#lineStarts + 1] = lineStart
+          lastSpace = nil
+          x = 0
+        else
+          x = x + chW
+          i = i + 1
+        end
+      end
+      lines[#lines + 1] = text:sub(lineStart)
+      return lines, lineStarts
+    end
+
+    -- Compute wrapped lines
+    local wrappedLines, lineStarts
+    if #inputState.text > 0 then
+      wrappedLines, lineStarts = wrapText(inputState.text, textAreaW)
+    else
+      wrappedLines = { "" }
+      lineStarts = { 1 }
+    end
+    local numLines = #wrappedLines
+    local inputH = numLines * lineHeight + 8  -- 4px padding top+bottom
+    local inputTop = c.y + c.h - inputH - 20  -- 20px bottom margin
 
     -- Input background
     love.graphics.setColor(COLORS.inputBg[1], COLORS.inputBg[2], COLORS.inputBg[3],
                            (COLORS.inputBg[4] or 1) * effectiveOpacity)
-    love.graphics.rectangle("fill", c.x + 8, promptY - 4, c.w - 16, lineHeight + 8, 4, 4)
+    love.graphics.rectangle("fill", c.x + 8, inputTop, c.w - 16, inputH, 4, 4)
 
-    -- "> " prefix
+    -- "> " prefix on first line
     love.graphics.setFont(font)
     love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
                            (COLORS.inputPrompt[4] or 1) * effectiveOpacity)
-    love.graphics.print("> ", promptX, promptY)
+    love.graphics.print("> ", promptX, inputTop + 4)
 
-    -- Input text
-    local prefixW = font:getWidth("> ")
-    love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2], COLORS.inputText[3],
-                           (COLORS.inputText[4] or 1) * effectiveOpacity)
-    love.graphics.print(inputState.text, promptX + prefixW, promptY)
+    if #inputState.text == 0 then
+      -- Show placeholder from Claude CLI (tab to accept)
+      local ph = Session.getPlaceholder()
+      if ph and #ph > 0 then
+        love.graphics.setScissor(promptX + prefixW, inputTop, textAreaW, inputH)
+        love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
+                               0.4 * effectiveOpacity)
+        love.graphics.print(ph, promptX + prefixW, inputTop + 4)
+        local phW = font:getWidth(ph)
+        love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
+                               0.25 * effectiveOpacity)
+        love.graphics.print("  tab", promptX + prefixW + phW, inputTop + 4)
+        love.graphics.setScissor()
+      end
+    else
+      -- Draw each wrapped line
+      love.graphics.setScissor(c.x + 8, inputTop, c.w - 16, inputH)
+      love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2], COLORS.inputText[3],
+                             (COLORS.inputText[4] or 1) * effectiveOpacity)
+      for i, line in ipairs(wrappedLines) do
+        local lx = promptX + (i == 1 and prefixW or 0)
+        local ly = inputTop + 4 + (i - 1) * lineHeight
+        love.graphics.print(line, lx, ly)
+      end
+      love.graphics.setScissor()
+    end
 
-    -- Cursor
+    -- Cursor: find which wrapped line the cursor is on
     if inputState.blinkOn then
-      local cursorX = promptX + prefixW + font:getWidth(inputState.text:sub(1, inputState.cursorPos))
+      local cursorByte = inputState.cursorPos
+      local cursorLine = 1
+      for i = 2, #lineStarts do
+        if cursorByte >= lineStarts[i] then
+          cursorLine = i
+        else
+          break
+        end
+      end
+      local lineOffset = cursorByte - lineStarts[cursorLine] + 1
+      local textBefore = wrappedLines[cursorLine]:sub(1, lineOffset)
+      local cursorPx = font:getWidth(textBefore)
+      local cursorX = promptX + (cursorLine == 1 and prefixW or 0) + cursorPx
+      local cursorY = inputTop + 4 + (cursorLine - 1) * lineHeight
       love.graphics.setColor(COLORS.inputCaret[1], COLORS.inputCaret[2], COLORS.inputCaret[3],
                              (COLORS.inputCaret[4] or 1) * effectiveOpacity)
-      love.graphics.rectangle("fill", cursorX, promptY, 2, lineHeight)
+      love.graphics.rectangle("fill", cursorX, cursorY, 2, lineHeight)
     end
   end,
 
@@ -242,6 +350,16 @@ Capabilities.register("ClaudeCanvas", {
         return true
       end
       -- Block all other input while permission is pending
+      return true
+    end
+
+    -- Tab: accept placeholder text from Claude CLI
+    if key == "tab" and #inputState.text == 0 then
+      local ph = Session.getPlaceholder()
+      if ph and #ph > 0 then
+        inputState.text = ph
+        inputState.cursorPos = #ph
+      end
       return true
     end
 
