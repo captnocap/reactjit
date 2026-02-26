@@ -2545,6 +2545,13 @@ function ReactJIT.mousepressed(x, y, button)
       if M.widgets.handleMousePressed(hit, cx, cy, button) then
         -- Handled by unified widget dispatch (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
         do end  -- no-op body; dispatch already happened in the condition
+      else
+        -- Widget didn't handle it — fall through to normal click dispatch
+        M.events.startDrag(hit.id, x, y)
+        local bubblePath = M.events.buildBubblePath(hit)
+        pushEvent(M.events.createEvent("click", hit.id, x, y, button, bubblePath))
+        M.events.setPressedNode(hit)
+        applyInteractionStyle(hit)
       end
     else
       -- Normal node: standard drag + click handling
