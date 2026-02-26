@@ -653,6 +653,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     if type(text)=="table" then text=table.concat(text) end
     text = tostring(text)
 
+
     -- Resolve numberOfLines / textOverflow (with inheritance for __TEXT__)
     local numberOfLines = (node.props and node.props.numberOfLines)
     if not numberOfLines and node.type == "__TEXT__" and node.parent then

@@ -254,6 +254,7 @@ function Capabilities.loadAll()
     "window",
     "boids",
     "image_select",
+    "image_process",
     "scene3d",
     "terminal",
   }

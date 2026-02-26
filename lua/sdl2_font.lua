@@ -87,16 +87,15 @@ local function ensureSize(size)
   currentSize = size
 end
 
--- Create a new atlas page for a given font size
+-- Create a new atlas page for a given font size (RGBA format for Mesa compat)
 local function createAtlas(size)
   local ids = ffi.new("unsigned int[1]")
   GL.glGenTextures(1, ids)
   local texId = ids[0]
   GL.glBindTexture(GL.TEXTURE_2D, texId)
-  GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 1)
-  -- Allocate empty ALPHA texture
-  GL.glTexImage2D(GL.TEXTURE_2D, 0, GL.ALPHA,
-                  ATLAS_SIZE, ATLAS_SIZE, 0, GL.ALPHA, GL.UNSIGNED_BYTE, nil)
+  GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 4)
+  GL.glTexImage2D(GL.TEXTURE_2D, 0, GL.RGBA,
+                  ATLAS_SIZE, ATLAS_SIZE, 0, GL.RGBA, GL.UNSIGNED_BYTE, nil)
   GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR)
   GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR)
   GL.glTexParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE)
@@ -173,13 +172,25 @@ local function loadGlyph(size, cp)
       end
 
       if atlas.cursorY + g.h + PAD <= ATLAS_SIZE then
-        -- Upload glyph bitmap into atlas
+        -- Expand alpha bitmap to RGBA (white + alpha) for Mesa compat
+        local pixelCount = g.w * g.h
+        local rgbaBuf = ffi.new("unsigned char[?]", pixelCount * 4)
+        local src = _obuf[0]
+        for pi = 0, pixelCount - 1 do
+          local off = pi * 4
+          rgbaBuf[off]     = 255       -- R
+          rgbaBuf[off + 1] = 255       -- G
+          rgbaBuf[off + 2] = 255       -- B
+          rgbaBuf[off + 3] = src[pi]   -- A from glyph
+        end
+
+        -- Upload RGBA glyph into atlas
         GL.glBindTexture(GL.TEXTURE_2D, atlas.texId)
-        GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 1)
+        GL.glPixelStorei(GL.UNPACK_ALIGNMENT, 4)
         GL.glTexSubImage2D(GL.TEXTURE_2D, 0,
                            atlas.cursorX, atlas.cursorY,
                            g.w, g.h,
-                           GL.ALPHA, GL.UNSIGNED_BYTE, _obuf[0])
+                           GL.RGBA, GL.UNSIGNED_BYTE, rgbaBuf)
         GL.glBindTexture(GL.TEXTURE_2D, 0)
 
         -- Compute UV coordinates
