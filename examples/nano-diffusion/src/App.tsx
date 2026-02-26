@@ -114,11 +114,10 @@ export function App() {
 
         {/* Dashboard Tab */}
         {activeTab === 0 && (
-          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4 }}>
+          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Overview"}</Text>
             <Box style={{
               width: '100%',
-              height: '30%',
               borderWidth: 1,
               borderColor: C.border,
               padding: 8,
@@ -127,16 +126,15 @@ export function App() {
             </Box>
 
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Jobs"}</Text>
-            <ScrollView style={{
+            <Box style={{
               width: '100%',
-              height: '30%',
               borderWidth: 1,
               borderColor: C.border,
               padding: 8,
             }}>
               <TableHeader headers={['ID', 'Source', 'Prompt', 'Status', 'Batches', 'Images', 'Last']} />
               {SAMPLE_JOBS.map((row, i) => <TableRow key={i} cells={row} />)}
-            </ScrollView>
+            </Box>
 
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Active Jobs"}</Text>
             <Box style={{
@@ -153,23 +151,21 @@ export function App() {
 
         {/* Queue Tab */}
         {activeTab === 1 && (
-          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4 }}>
+          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Queue Plan"}</Text>
-            <ScrollView style={{
+            <Box style={{
               width: '100%',
-              height: '50%',
               borderWidth: 1,
               borderColor: C.border,
               padding: 8,
             }}>
               <TableHeader headers={['#', 'Prompt', 'Status', 'Progress', 'Model', 'Refs']} />
               {SAMPLE_PLAN.map((row, i) => <TableRow key={i} cells={row} />)}
-            </ScrollView>
+            </Box>
 
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Queue Status"}</Text>
             <Box style={{
               width: '100%',
-              height: '20%',
               borderWidth: 1,
               borderColor: C.border,
               padding: 8,
@@ -192,41 +188,39 @@ export function App() {
 
         {/* Telemetry Tab */}
         {activeTab === 2 && (
-          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4 }}>
-            <Box style={{ flexDirection: 'row', gap: 8, flexGrow: 1 }}>
+          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
+            <Box style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
               <Box style={{ width: '50%', flexDirection: 'column' }}>
                 <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Prompt Health"}</Text>
-                <ScrollView style={{
+                <Box style={{
                   width: '100%',
-                  flexGrow: 1,
                   borderWidth: 1,
                   borderColor: C.border,
                   padding: 8,
                 }}>
                   <TableHeader headers={['Prompt', '✅', '❌', 'Fail %', 'Last error']} />
                   {SAMPLE_PROMPTS.map((row, i) => <TableRow key={i} cells={row} />)}
-                </ScrollView>
+                </Box>
               </Box>
 
               <Box style={{ width: '50%', flexDirection: 'column' }}>
                 <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Reference Health"}</Text>
-                <ScrollView style={{
+                <Box style={{
                   width: '100%',
-                  flexGrow: 1,
                   borderWidth: 1,
                   borderColor: C.border,
                   padding: 8,
                 }}>
                   <TableHeader headers={['Reference', '✅', '❌', 'Fail %', 'Last error']} />
                   {SAMPLE_REFS.map((row, i) => <TableRow key={i} cells={row} />)}
-                </ScrollView>
+                </Box>
               </Box>
             </Box>
 
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Assets"}</Text>
             <Box style={{
               width: '100%',
-              height: '25%',
+              flexGrow: 1,
               borderWidth: 1,
               borderColor: C.border,
               padding: 8,
@@ -238,7 +232,7 @@ export function App() {
 
         {/* Logs Tab */}
         {activeTab === 3 && (
-          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4 }}>
+          <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, paddingBottom: 4 }}>{"Event Log"}</Text>
             <ScrollView style={{
               width: '100%',
