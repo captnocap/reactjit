@@ -37,6 +37,8 @@
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename, dirname, extname, relative, resolve } from 'node:path';
+import { deriveProjectName } from '../lib/migration-core.mjs';
+import { scaffoldProject } from './init.mjs';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // WIDGET MAPPING
@@ -187,7 +189,7 @@ const TK_COLORS = {
  * Parse a Python Tkinter source file into a structured representation.
  * Returns: { widgets, variables, bindings, geometry, functions, rootConfig, imports, rawLines }
  */
-function parseTkinterSource(source) {
+export function parseTkinterSource(source) {
   const lines = source.split('\n');
   const result = {
     widgets: [],       // { name, widgetType, parent, kwargs, line }
@@ -933,7 +935,7 @@ function convertGeometry(geo) {
 /**
  * Generate a complete ReactJIT TSX component from the parsed Tkinter structure.
  */
-function generateReactJIT(parsed) {
+export function generateReactJIT(parsed) {
   const components = new Set(['Box']);
   const warnings = [...parsed.warnings];
 
@@ -1680,15 +1682,25 @@ export function migrateTkinterCommand(args) {
   const dryRun = args.includes('--dry-run');
   const outputIdx = args.indexOf('--output');
   const outputFile = outputIdx !== -1 ? args[outputIdx + 1] : null;
+  const scaffoldIdx = args.indexOf('--scaffold');
+  const scaffoldName = (scaffoldIdx !== -1 && args[scaffoldIdx + 1] && !args[scaffoldIdx + 1].startsWith('-'))
+    ? args[scaffoldIdx + 1] : null;
+  const scaffoldMode = scaffoldIdx !== -1;
+
+  if (scaffoldMode && outputFile) {
+    console.error('  Cannot use --scaffold and --output together.');
+    process.exit(1);
+  }
 
   if (helpMode) {
     console.log(`
   rjit migrate-tkinter — Convert Python Tkinter apps to ReactJIT
 
   Usage:
-    rjit migrate-tkinter <app.py>                  Convert and print to stdout
-    rjit migrate-tkinter <app.py> --output out.tsx  Write to file
-    rjit migrate-tkinter <app.py> --dry-run         Show analysis only
+    rjit migrate-tkinter <app.py>                          Convert and print to stdout
+    rjit migrate-tkinter <app.py> --output out.tsx          Write to file
+    rjit migrate-tkinter <app.py> --scaffold [name]         Convert + create a new project
+    rjit migrate-tkinter <app.py> --dry-run                 Show analysis only
 
   What it converts:
     Widgets:    Label→Text, Button→Pressable, Entry→TextInput, Frame→Box,
@@ -1703,7 +1715,10 @@ export function migrateTkinterCommand(args) {
     return;
   }
 
-  const fileArg = args.find(a => !a.startsWith('-') && a !== outputFile);
+  const skipArgs = new Set();
+  if (outputFile) skipArgs.add(outputFile);
+  if (scaffoldName) skipArgs.add(scaffoldName);
+  const fileArg = args.find(a => !a.startsWith('-') && !skipArgs.has(a));
   if (!fileArg) {
     console.error('No input file specified. Use --help for usage.');
     process.exit(1);
@@ -1756,7 +1771,23 @@ export function migrateTkinterCommand(args) {
   const result = generateReactJIT(parsed);
 
   // Output
-  if (outputFile) {
+  if (scaffoldMode) {
+    const projectName = scaffoldName || deriveProjectName(fileArg);
+    const dest = join(process.cwd(), projectName);
+    scaffoldProject(dest, { name: projectName, appTsx: result.code });
+    console.log(`  Converted ${fileArg} → ${projectName}/src/App.tsx`);
+    console.log(`  ${result.stats.widgets} widgets, ${result.stats.variables} state vars, ${result.stats.functions} functions`);
+    console.log(`  Components: ${result.components.join(', ')}`);
+    if (result.warnings.length > 0) {
+      console.log(`  ${result.warnings.length} warning(s):`);
+      for (const w of result.warnings) {
+        console.log(`    ${w}`);
+      }
+    }
+    console.log(`\n  Next steps:`);
+    console.log(`    cd ${projectName}`);
+    console.log(`    reactjit dev`);
+  } else if (outputFile) {
     writeFileSync(outputFile, result.code, 'utf-8');
     console.log(`  Converted ${fileArg} → ${outputFile}`);
     console.log(`  ${result.stats.widgets} widgets, ${result.stats.variables} state vars, ${result.stats.functions} functions`);

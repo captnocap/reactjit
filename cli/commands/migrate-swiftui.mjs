@@ -25,7 +25,9 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { deriveProjectName } from '../lib/migration-core.mjs';
+import { scaffoldProject } from './init.mjs';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // VIEW MAPPING
@@ -185,7 +187,7 @@ function extractParens(source, start) {
 /**
  * Parse a SwiftUI source file into a structured representation.
  */
-function parseSwiftUISource(source) {
+export function parseSwiftUISource(source) {
   const result = {
     structs: [],    // { name, conformances, properties, bodySource, line }
     imports: [],
@@ -1070,7 +1072,7 @@ function resolveSwiftColor(expr) {
 // CODE GENERATOR
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function generateReactJIT(parsedFile) {
+export function generateReactJIT(parsedFile) {
   const allComponents = new Set(['Box']);
   const allWarnings = [...parsedFile.warnings];
   const outputs = [];
@@ -1826,15 +1828,25 @@ export function migrateSwiftUICommand(args) {
   const dryRun = args.includes('--dry-run');
   const outputIdx = args.indexOf('--output');
   const outputFile = outputIdx !== -1 ? args[outputIdx + 1] : null;
+  const scaffoldIdx = args.indexOf('--scaffold');
+  const scaffoldName = (scaffoldIdx !== -1 && args[scaffoldIdx + 1] && !args[scaffoldIdx + 1].startsWith('-'))
+    ? args[scaffoldIdx + 1] : null;
+  const scaffoldMode = scaffoldIdx !== -1;
+
+  if (scaffoldMode && outputFile) {
+    console.error('Cannot use --scaffold and --output together.');
+    process.exit(1);
+  }
 
   if (helpMode) {
     console.log(`
   rjit migrate-swiftui — Convert SwiftUI apps to ReactJIT
 
   Usage:
-    rjit migrate-swiftui <file.swift>                  Convert and print to stdout
-    rjit migrate-swiftui <file.swift> --output out.tsx  Write to file
-    rjit migrate-swiftui <file.swift> --dry-run         Show analysis only
+    rjit migrate-swiftui <file.swift>                           Convert and print to stdout
+    rjit migrate-swiftui <file.swift> --output out.tsx           Write to file
+    rjit migrate-swiftui <file.swift> --scaffold [name]          Convert + create a new project
+    rjit migrate-swiftui <file.swift> --dry-run                  Show analysis only
 
   What it converts:
     Views:      VStack→Box(column), HStack→Box(row), Text→Text, Button→Pressable,
@@ -1848,7 +1860,7 @@ export function migrateSwiftUICommand(args) {
     return;
   }
 
-  const fileArg = args.find(a => !a.startsWith('-') && a !== outputFile);
+  const fileArg = args.find(a => !a.startsWith('-') && a !== outputFile && a !== scaffoldName);
   if (!fileArg) {
     console.error('No input file specified. Use --help for usage.');
     process.exit(1);
@@ -1896,6 +1908,21 @@ export function migrateSwiftUICommand(args) {
   }
 
   const result = generateReactJIT(parsed);
+
+  if (scaffoldMode) {
+    const projectName = scaffoldName || deriveProjectName(fileArg);
+    const dest = join(process.cwd(), projectName);
+    scaffoldProject(dest, { name: projectName, appTsx: result.code });
+    console.log(`  ${result.stats.views} views, ${result.stats.stateVars} state vars, ${result.stats.functions} functions`);
+    console.log(`  Components: ${result.components.join(', ')}`);
+    if (result.warnings.length > 0) {
+      console.log(`  ${result.warnings.length} warning(s):`);
+      for (const w of result.warnings.slice(0, 20)) console.log(`    ${w}`);
+      if (result.warnings.length > 20) console.log(`    ... and ${result.warnings.length - 20} more`);
+    }
+    console.log(`\n  Next steps:\n    cd ${projectName}\n    reactjit dev`);
+    return;
+  }
 
   if (outputFile) {
     writeFileSync(outputFile, result.code, 'utf-8');

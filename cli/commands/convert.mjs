@@ -23,6 +23,9 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { deriveProjectName } from '../lib/migration-core.mjs';
+import { scaffoldProject } from './init.mjs';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ELEMENT MAPPING
@@ -1612,9 +1615,19 @@ export function runConvert(args) {
   // Parse args
   const outputIdx = args.indexOf('--output');
   const outputFile = outputIdx !== -1 ? args[outputIdx + 1] : null;
+  const scaffoldIdx = args.indexOf('--scaffold');
+  const scaffoldName = scaffoldIdx !== -1
+    ? (args[scaffoldIdx + 1] && !args[scaffoldIdx + 1].startsWith('-') ? args[scaffoldIdx + 1] : null)
+    : null;
+  const scaffoldMode = scaffoldIdx !== -1;
   const stdinMode = args.includes('--stdin');
   const helpMode = args.includes('--help') || args.includes('-h');
   const quietMode = args.includes('--quiet') || args.includes('-q');
+
+  if (scaffoldMode && outputFile) {
+    console.error('  --scaffold and --output are mutually exclusive.');
+    process.exit(1);
+  }
 
   if (helpMode) {
     console.log(`
@@ -1623,6 +1636,7 @@ export function runConvert(args) {
   Usage:
     rjit convert <file.html|.tsx|.jsx>     Read file and print converted output
     rjit convert <file> --output out.tsx   Write converted output to file
+    rjit convert <file> --scaffold [name]  Convert + create a new project
     rjit convert --stdin                   Read from stdin
     cat file.html | rjit convert           Pipe mode (auto-detects stdin)
 
@@ -1646,7 +1660,8 @@ export function runConvert(args) {
   }
 
   // Get input
-  const fileArg = args.find(a => !a.startsWith('-') && a !== outputFile);
+  const skipArgs = new Set([outputFile, scaffoldName].filter(Boolean));
+  const fileArg = args.find(a => !a.startsWith('-') && !skipArgs.has(a));
   if (fileArg) {
     try {
       input = readFileSync(fileArg, 'utf-8');
@@ -1687,7 +1702,22 @@ export function runConvert(args) {
     result.code,
   ].filter(Boolean).join('\n');
 
-  if (outputFile) {
+  if (scaffoldMode) {
+    const projectName = scaffoldName || (inputFile ? deriveProjectName(inputFile) : 'converted-app');
+    const dest = join(process.cwd(), projectName);
+    console.log(`\n  Converting ${inputFile || 'stdin'} → new project: ${projectName}/`);
+    scaffoldProject(dest, {
+      name: projectName,
+      appTsx: fullOutput,
+    });
+    console.log(`  Components used: ${result.usedComponents.join(', ')}`);
+    if (result.warnings.length) {
+      console.log(`  ${result.warnings.length} warning(s) — check output for // TODO comments`);
+    }
+    console.log(`\n  Next steps:`);
+    console.log(`    cd ${projectName}`);
+    console.log(`    reactjit dev\n`);
+  } else if (outputFile) {
     const { writeFileSync: wf } = require('node:fs');
     wf(outputFile, fullOutput, 'utf-8');
     if (!quietMode) {

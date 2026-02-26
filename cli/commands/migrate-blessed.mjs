@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   capitalize, toPascalCase, escapeStr, indent,
   inferTypeAnnotation, stripBlessedTags,
@@ -24,7 +24,9 @@ import {
   generateStateDecl, generateEffectDecl,
   assembleComponent,
   extractBlock, extractBrackets, extractParens,
+  deriveProjectName,
 } from '../lib/migration-core.mjs';
+import { scaffoldProject } from './init.mjs';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // WIDGET MAPPING
@@ -182,7 +184,7 @@ function parseStyleBlock(src) {
 // PARSER (scope-aware, UI/backend separation)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function parseBlessedSource(source) {
+export function parseBlessedSource(source) {
   const result = {
     screen: null,
     widgets: [],         // { varName, scopedName, type, options, parentVar, events, line, scope }
@@ -688,7 +690,7 @@ function convertWidgetStyles(widget) {
 // IR BUILDER (parsed → common IR)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function buildIR(parsed) {
+export function buildIR(parsed) {
   const title = parsed.screen?.options?.title?.replace(/^['"]|['"]$/g, '') || 'BlessedApp';
   const compName = toPascalCase(title);
 
@@ -1402,18 +1404,26 @@ function generateReactJIT(parsed) {
 export function migrateBlessedCommand(args) {
   const helpMode = args.includes('--help') || args.includes('-h');
   const dryRun = args.includes('--dry-run');
+  const scaffoldIdx = args.indexOf('--scaffold');
   const outputIdx = args.indexOf('--output');
   const shortOutputIdx = args.indexOf('-o');
   const outputFile = outputIdx !== -1 ? args[outputIdx + 1] : (shortOutputIdx !== -1 ? args[shortOutputIdx + 1] : null);
+
+  // --scaffold [name] — next arg is project name if it doesn't start with -
+  const scaffoldName = scaffoldIdx !== -1
+    ? (args[scaffoldIdx + 1] && !args[scaffoldIdx + 1].startsWith('-') ? args[scaffoldIdx + 1] : null)
+    : null;
+  const scaffoldMode = scaffoldIdx !== -1;
 
   if (helpMode) {
     console.log(`
   rjit migrate-blessed — Convert Blessed terminal UI apps to ReactJIT
 
   Usage:
-    rjit migrate-blessed <file.js>                    Convert and print to stdout
-    rjit migrate-blessed <file.js> --output out.tsx    Write to file
-    rjit migrate-blessed <file.js> --dry-run           Show analysis only
+    rjit migrate-blessed <file.js>                       Convert and print to stdout
+    rjit migrate-blessed <file.js> --output out.tsx       Write to file
+    rjit migrate-blessed <file.js> --scaffold [name]      Convert + create a new project
+    rjit migrate-blessed <file.js> --dry-run              Show analysis only
 
   Features:
     - UI/backend separation: only blessed UI code is converted
@@ -1425,7 +1435,14 @@ export function migrateBlessedCommand(args) {
     return;
   }
 
-  const fileArg = args.find(a => !a.startsWith('-') && a !== outputFile);
+  if (scaffoldMode && outputFile) {
+    console.error('  --scaffold and --output are mutually exclusive.');
+    process.exit(1);
+  }
+
+  // Find input file (skip flag values)
+  const skipArgs = new Set([outputFile, scaffoldName].filter(Boolean));
+  const fileArg = args.find(a => !a.startsWith('-') && !skipArgs.has(a));
   if (!fileArg) {
     console.error('No input file specified. Use --help for usage.');
     process.exit(1);
@@ -1448,7 +1465,24 @@ export function migrateBlessedCommand(args) {
 
   const result = generateReactJIT(parsed);
 
-  if (outputFile) {
+  if (scaffoldMode) {
+    const projectName = scaffoldName || deriveProjectName(fileArg);
+    const dest = join(process.cwd(), projectName);
+    console.log(`\n  Converting ${fileArg} → new project: ${projectName}/`);
+    scaffoldProject(dest, {
+      name: projectName,
+      appTsx: result.code,
+    });
+    console.log(`  ${result.stats.widgets} widgets, ${result.stats.events} events, ${result.stats.functions} functions`);
+    console.log(`  Components: ${result.components.join(', ')}`);
+    if (result.warnings.length > 0) {
+      console.log(`  ${result.warnings.length} warning(s):`);
+      for (const w of result.warnings.slice(0, 10)) console.log(`    ${w}`);
+    }
+    console.log(`\n  Next steps:`);
+    console.log(`    cd ${projectName}`);
+    console.log(`    reactjit dev\n`);
+  } else if (outputFile) {
     writeFileSync(outputFile, result.code, 'utf-8');
     console.log(`  Converted ${fileArg} → ${outputFile}`);
     console.log(`  ${result.stats.widgets} widgets, ${result.stats.events} events, ${result.stats.functions} functions`);

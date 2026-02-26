@@ -1,6 +1,7 @@
 import { existsSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bold, dim, cyan, green, yellow } from '../lib/log.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = join(__dirname, '..');
@@ -17,12 +18,12 @@ function isSymlink(p) {
  */
 function syncDir(src, dest, label) {
   if (isSymlink(dest)) {
-    console.log(`  Skipped ${label} (symlink — reading from source directly)`);
+    console.log(`  ${dim('skip')}  ${cyan(label)} ${dim('(symlink — reading from source directly)')}`);
     return;
   }
   if (!existsSync(dest)) {
     cpSync(src, dest, { recursive: true });
-    console.log(`  Updated ${label}`);
+    console.log(`  ${green(' ok')}  ${cyan(label)}`);
     return;
   }
   // Merge: walk source tree and copy each file, creating dirs as needed
@@ -41,7 +42,7 @@ function syncDir(src, dest, label) {
     }
   }
   mergeRecursive(src, dest);
-  console.log(`  Updated ${label} (${count} files merged, user files preserved)`);
+  console.log(`  ${green(' ok')}  ${cyan(label)} ${dim(`(${count} files merged, user files preserved)`)}`);
 }
 
 export async function updateCommand(args) {
@@ -75,7 +76,7 @@ export async function updateCommand(args) {
     process.exit(1);
   }
 
-  console.log('\n  Updating ReactJIT runtime...\n');
+  console.log(`\n  ${bold('Updating ReactJIT runtime...')}\n`);
 
   // Update lua/
   syncDir(runtimeLua, join(cwd, 'lua'), 'lua/');
@@ -120,5 +121,5 @@ export async function updateCommand(args) {
     }
   }
 
-  console.log('\n  Done! Runtime files are up to date.\n');
+  console.log(`\n  ${green('Done!')} Runtime files are up to date.\n`);
 }

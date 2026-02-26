@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, cpSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -9,12 +9,7 @@ const CLI_ROOT = join(__dirname, '..');
 
 // ── Color helpers ────────────────────────────────────────
 
-const color = (code) => (s) => `\x1b[${code}m${s}\x1b[0m`;
-const bold   = color('1');
-const dim    = color('2');
-const cyan   = color('36');
-const green  = color('32');
-const yellow = color('33');
+import { bold, dim, cyan, green, yellow } from '../lib/log.mjs';
 
 // ── Package registry ─────────────────────────────────────
 
@@ -165,6 +160,15 @@ const OPTIONAL_PACKAGES = [
   },
 ];
 
+// ── Supported migration frameworks ──────────────────────
+
+const MIGRATION_FRAMEWORKS = [
+  { name: 'Blessed (Node.js TUI)', command: 'migrate-blessed', extensions: ['.js', '.cjs', '.mjs'] },
+  { name: 'Tkinter (Python GUI)', command: 'migrate-tkinter', extensions: ['.py'] },
+  { name: 'SwiftUI (iOS/macOS)', command: 'migrate-swiftui', extensions: ['.swift'] },
+  { name: 'HTML / React (Web)', command: 'convert', extensions: ['.html', '.htm', '.tsx', '.jsx'] },
+];
+
 // ── Interactive checkbox prompt ──────────────────────────
 
 function promptPackages(packages) {
@@ -256,6 +260,80 @@ function promptPackages(packages) {
   });
 }
 
+// ── Interactive single-choice prompt ─────────────────────
+
+function promptChoice(question, choices) {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      resolve(0);
+      return;
+    }
+
+    let cursor = 0;
+
+    function render() {
+      if (render._drawn) {
+        process.stdout.write(`\x1b[${choices.length}A`);
+      }
+      render._drawn = true;
+
+      for (let i = 0; i < choices.length; i++) {
+        const pointer = i === cursor ? cyan('>') : ' ';
+        const label = i === cursor ? bold(choices[i].label) : choices[i].label;
+        const desc = choices[i].description ? `  ${dim(choices[i].description)}` : '';
+        process.stdout.write(`\x1b[2K  ${pointer} ${label}${desc}\n`);
+      }
+    }
+
+    console.log(`\n  ${bold(question)}\n`);
+    render();
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+
+    function onData(key) {
+      if (key === '\x03') {
+        process.stdin.setRawMode(false);
+        process.stdin.removeListener('data', onData);
+        process.stdout.write('\n');
+        process.exit(0);
+      }
+      if (key === '\r' || key === '\n') {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        process.stdout.write('\n');
+        resolve(cursor);
+        return;
+      }
+      if (key === '\x1b[A' || key === 'k') {
+        cursor = (cursor - 1 + choices.length) % choices.length;
+        render();
+      }
+      if (key === '\x1b[B' || key === 'j') {
+        cursor = (cursor + 1) % choices.length;
+        render();
+      }
+    }
+
+    process.stdin.on('data', onData);
+  });
+}
+
+// ── Interactive text input prompt ────────────────────────
+
+function promptText(question, defaultValue) {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const prompt = defaultValue ? `  ${question} ${dim(`(${defaultValue})`)}: ` : `  ${question}: `;
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer.trim() || defaultValue || '');
+    });
+  });
+}
+
 // ── Parse flags for non-interactive mode ─────────────────
 
 function parseFlags(args) {
@@ -305,36 +383,30 @@ function generateTsconfig(selectedPackages) {
   };
 }
 
-// ── Init command ─────────────────────────────────────────
+// ── Scaffold project (reusable core) ─────────────────────
 
-export async function initCommand(args) {
-  const name = args.filter(a => !a.startsWith('--'))[0];
-  if (!name) {
-    console.error('Usage: reactjit init <project-name> [--all | --minimal | --router --storage --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
-    process.exit(1);
-  }
-
-  const dest = join(process.cwd(), name);
-  if (existsSync(dest)) {
-    console.error(`Directory "${name}" already exists.`);
-    process.exit(1);
-  }
-
-  console.log(`\n  ${bold('Creating ReactJIT project:')} ${cyan(name)}`);
-
-  // Determine which optional packages to include
-  let selections = parseFlags(args);
-  if (selections === null) {
-    // Interactive mode
-    selections = await promptPackages(OPTIONAL_PACKAGES);
-  } else {
-    // Non-interactive — show what was selected
-    const mode = args.includes('--minimal') ? 'minimal' : args.includes('--all') ? 'all' : 'custom';
-    const count = selections.filter(Boolean).length;
-    console.log(`  ${dim(`(${mode} mode: ${count} optional package${count !== 1 ? 's' : ''})`)}\n`);
-  }
-
+/**
+ * Create a new ReactJIT project on disk.
+ *
+ * @param {string} dest     Absolute path to the project directory (must not exist)
+ * @param {object} opts
+ * @param {string}   opts.name          Project name for package.json
+ * @param {boolean[]} [opts.selections] Optional package selections (default: minimal = all false)
+ * @param {string}   [opts.appTsx]      If provided, overwrite src/App.tsx with this content
+ * @param {boolean}  [opts.skipInstall] Skip npm install (for testing)
+ * @param {boolean}  [opts.quiet]       Suppress output
+ * @returns {{ dest: string, name: string }}
+ */
+export function scaffoldProject(dest, opts = {}) {
+  const { name, appTsx, skipInstall, quiet } = opts;
+  const selections = opts.selections || OPTIONAL_PACKAGES.map(() => false);
   const selectedPackages = OPTIONAL_PACKAGES.filter((_, i) => selections[i]);
+  const log = quiet ? () => {} : (...args) => console.log(...args);
+
+  if (existsSync(dest)) {
+    console.error(`  Directory "${name || dest}" already exists.`);
+    process.exit(1);
+  }
 
   // Create project directory
   mkdirSync(dest, { recursive: true });
@@ -368,7 +440,6 @@ export async function initCommand(args) {
   // Copy framework source (shared + native — always included)
   const runtimePkgs = join(CLI_ROOT, 'runtime', 'reactjit');
   if (existsSync(runtimePkgs)) {
-    // Copy core packages (always included)
     const destPkgs = join(dest, 'reactjit');
     mkdirSync(destPkgs, { recursive: true });
 
@@ -379,7 +450,6 @@ export async function initCommand(args) {
       }
     }
 
-    // Copy selected optional packages
     for (const pkg of selectedPackages) {
       const src = join(runtimePkgs, pkg.dir);
       if (existsSync(src)) {
@@ -390,13 +460,13 @@ export async function initCommand(args) {
     console.warn('  Warning: reactjit/ packages not found in CLI. Run `make cli-setup` first.');
   }
 
-  // Generate tsconfig.json with selected path aliases (overwrite template)
+  // Generate tsconfig.json
   const tsconfig = generateTsconfig(selectedPackages);
   writeFileSync(join(dest, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2) + '\n');
 
-  // Write package.json for the new project
+  // Write package.json
   const pkg = {
-    name: name,
+    name: name || 'reactjit-app',
     version: '0.1.0',
     private: true,
     scripts: {
@@ -415,13 +485,205 @@ export async function initCommand(args) {
   };
   writeFileSync(join(dest, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
 
-  // Install dependencies
-  console.log('  Installing dependencies...\n');
-  try {
-    execSync('npm install', { cwd: dest, stdio: 'inherit' });
-  } catch {
-    console.warn('\n  npm install failed. Run it manually in the project directory.');
+  // Overwrite App.tsx if conversion output provided
+  if (appTsx) {
+    writeFileSync(join(dest, 'src', 'App.tsx'), appTsx, 'utf-8');
+    // Migration scripts use `export default` — update main.tsx to match
+    const mainTsx = join(dest, 'src', 'main.tsx');
+    if (existsSync(mainTsx)) {
+      const mainContent = readFileSync(mainTsx, 'utf-8');
+      writeFileSync(mainTsx, mainContent
+        .replace(/import\s*\{\s*App\s*\}\s*from/, "import App from")
+      , 'utf-8');
+    }
   }
+
+  // Install dependencies
+  if (!skipInstall) {
+    log('  Installing dependencies...\n');
+    try {
+      execSync('npm install', { cwd: dest, stdio: quiet ? 'pipe' : 'inherit' });
+    } catch {
+      console.warn('\n  npm install failed. Run it manually in the project directory.');
+    }
+  }
+
+  return { dest, name: name || 'reactjit-app', selectedPackages };
+}
+
+// ── Run a converter by command name ──────────────────────
+
+async function runConverter(command, source) {
+  if (command === 'migrate-blessed') {
+    const { parseBlessedSource, buildIR } = await import('./migrate-blessed.mjs');
+    const { assembleComponent } = await import('../lib/migration-core.mjs');
+    const parsed = parseBlessedSource(source);
+    const ir = buildIR(parsed);
+    return assembleComponent(ir).code;
+  }
+  if (command === 'migrate-tkinter') {
+    const { parseTkinterSource, generateReactJIT } = await import('./migrate-tkinter.mjs');
+    return generateReactJIT(parseTkinterSource(source)).code;
+  }
+  if (command === 'migrate-swiftui') {
+    const { parseSwiftUISource, generateReactJIT } = await import('./migrate-swiftui.mjs');
+    return generateReactJIT(parseSwiftUISource(source)).code;
+  }
+  // convert (HTML/React)
+  const { convertToReactJIT } = await import('./convert.mjs');
+  const result = convertToReactJIT(source);
+  return [result.imports, result.warningBlock, result.code].filter(Boolean).join('\n');
+}
+
+// ── Convert flow (interactive) ───────────────────────────
+
+async function runConvertFlow(name) {
+  // Pick framework
+  const fwIdx = await promptChoice('What framework is the existing code written in?', [
+    { label: 'Blessed (Node.js TUI)', description: '.js / .cjs / .mjs' },
+    { label: 'Tkinter (Python GUI)', description: '.py' },
+    { label: 'SwiftUI (iOS/macOS)', description: '.swift' },
+    { label: 'HTML / React (Web)', description: '.html / .tsx / .jsx' },
+  ]);
+
+  const fw = MIGRATION_FRAMEWORKS[fwIdx];
+
+  // Get input file
+  const filePath = await promptText('Path to source file');
+  if (!filePath) {
+    console.error('  No file path provided.');
+    process.exit(1);
+  }
+
+  const absPath = resolve(filePath);
+  if (!existsSync(absPath)) {
+    console.error(`  File not found: ${absPath}`);
+    process.exit(1);
+  }
+
+  const source = readFileSync(absPath, 'utf-8');
+
+  // Run the appropriate converter
+  let code;
+  console.log(`\n  ${dim('Converting with')} ${bold(fw.command)}${dim('...')}`);
+
+  code = await runConverter(fw.command, source);
+
+  // Scaffold project with converted code
+  const dest = join(process.cwd(), name);
+  console.log(`\n  ${bold('Scaffolding project:')} ${cyan(name)}`);
+
+  const { selectedPackages } = scaffoldProject(dest, {
+    name,
+    selections: OPTIONAL_PACKAGES.map(() => false),
+    appTsx: code,
+  });
+
+  return { dest, name, selectedPackages };
+}
+
+// ── Init command ─────────────────────────────────────────
+
+export async function initCommand(args) {
+  const name = args.filter(a => !a.startsWith('--'))[0];
+  if (!name) {
+    console.error('Usage: reactjit init <project-name> [--all | --minimal | --convert | --router --storage --audio --game --3d --ai --apis --server --crypto --media --rss --webhooks --theme --controls --geo]');
+    process.exit(1);
+  }
+
+  const dest = join(process.cwd(), name);
+
+  // Non-interactive convert mode: rjit init myapp --convert path/to/file.js
+  const convertIdx = args.indexOf('--convert');
+  if (convertIdx !== -1) {
+    const convertFile = args[convertIdx + 1];
+    if (!convertFile || convertFile.startsWith('--')) {
+      console.error('  --convert requires a file path. Usage: rjit init myapp --convert path/to/file.js');
+      process.exit(1);
+    }
+    // Detect framework from extension
+    const ext = '.' + convertFile.split('.').pop();
+    const fw = MIGRATION_FRAMEWORKS.find(f => f.extensions.includes(ext));
+    if (!fw) {
+      console.error(`  Unknown file extension "${ext}". Supported: ${MIGRATION_FRAMEWORKS.flatMap(f => f.extensions).join(', ')}`);
+      process.exit(1);
+    }
+
+    const absPath = resolve(convertFile);
+    if (!existsSync(absPath)) {
+      console.error(`  File not found: ${absPath}`);
+      process.exit(1);
+    }
+
+    const source = readFileSync(absPath, 'utf-8');
+    console.log(`\n  ${bold('Converting')} ${cyan(convertFile)} ${dim('with')} ${bold(fw.command)}`);
+    const code = await runConverter(fw.command, source);
+
+    console.log(`\n  ${bold('Scaffolding project:')} ${cyan(name)}`);
+    scaffoldProject(dest, {
+      name,
+      selections: OPTIONAL_PACKAGES.map(() => false),
+      appTsx: code,
+    });
+
+    console.log(`\n  ${green('Done!')} Converted ${convertFile} into a ReactJIT project.\n`);
+    console.log(`  ${bold('Next steps:')}`);
+    console.log(`    ${cyan('cd ' + name)}`);
+    console.log(`    ${cyan('reactjit dev')}          ${dim('# Start esbuild watch (HMR)')}`);
+    console.log(`    ${cyan('love .')}                  ${dim('# Run Love2D (in another terminal)')}`);
+    console.log(`\n  Your converted code is in src/App.tsx\n`);
+    return;
+  }
+
+  // Interactive mode — ask: new project or convert existing?
+  const hasFlags = args.some(a => a.startsWith('--'));
+  let mode = 'new';
+
+  if (!hasFlags && process.stdin.isTTY) {
+    console.log(`\n  ${bold('Creating ReactJIT project:')} ${cyan(name)}`);
+    const choice = await promptChoice('How would you like to start?', [
+      { label: 'New project', description: 'Start fresh with a blank canvas' },
+      { label: 'Convert existing code', description: 'Migrate a Blessed, Tkinter, SwiftUI, or HTML app' },
+    ]);
+    mode = choice === 0 ? 'new' : 'convert';
+  }
+
+  if (mode === 'convert') {
+    const { selectedPackages } = await runConvertFlow(name);
+    console.log(`\n  ${green('Done!')} Your converted ReactJIT project is ready.\n`);
+    console.log(`  ${bold('Next steps:')}`);
+    console.log(`    ${cyan('cd ' + name)}`);
+    console.log(`    ${cyan('reactjit dev')}          ${dim('# Start esbuild watch (HMR)')}`);
+    console.log(`    ${cyan('love .')}                  ${dim('# Run Love2D (in another terminal)')}`);
+    console.log(`\n  Your converted code is in src/App.tsx\n`);
+    return;
+  }
+
+  // ── Standard new project flow ──────────────────────────
+
+  if (!hasFlags) {
+    console.log(`\n  ${bold('Creating ReactJIT project:')} ${cyan(name)}`);
+  }
+
+  if (existsSync(dest)) {
+    console.error(`Directory "${name}" already exists.`);
+    process.exit(1);
+  }
+
+  // Determine which optional packages to include
+  let selections = parseFlags(args);
+  if (selections === null) {
+    // Interactive mode
+    selections = await promptPackages(OPTIONAL_PACKAGES);
+  } else {
+    // Non-interactive — show what was selected
+    console.log(`\n  ${bold('Creating ReactJIT project:')} ${cyan(name)}`);
+    const modeLabel = args.includes('--minimal') ? 'minimal' : args.includes('--all') ? 'all' : 'custom';
+    const count = selections.filter(Boolean).length;
+    console.log(`  ${dim(`(${modeLabel} mode: ${count} optional package${count !== 1 ? 's' : ''})`)}\n`);
+  }
+
+  const { selectedPackages } = scaffoldProject(dest, { name, selections });
 
   // Show results
   console.log(`\n  ${green('Done!')} Your ReactJIT project is ready.\n`);

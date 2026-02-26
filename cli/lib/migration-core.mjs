@@ -80,6 +80,25 @@ export function stripBlessedTags(str) {
   return str.replace(/\{\/?\w+(?:-\w+)?\}/g, '');
 }
 
+/**
+ * Derive a kebab-case project name from an input file path.
+ * e.g. "convertme.cjs" → "convertme", "SystemDashboard.py" → "system-dashboard"
+ */
+export function deriveProjectName(filePath) {
+  // Strip directory and extension
+  let name = filePath.replace(/^.*[\\/]/, '').replace(/\.\w+$/, '');
+  // Insert hyphens before uppercase runs (PascalCase → kebab)
+  name = name.replace(/([a-z])([A-Z])/g, '$1-$2');
+  // Replace non-alphanum with hyphens, collapse, trim
+  name = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return name || 'converted-app';
+}
+
+/** Sanitize text for use inside a JSX comment: {/\* ... *\/} */
+function sanitizeComment(str) {
+  return str.replace(/\*\//g, '* /').replace(/\/\*/g, '/ *');
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // COLOR RESOLUTION
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -262,7 +281,7 @@ export function generateJSXTree(nodes, depth, components) {
 
     // Comment-only node
     if (node.comment && !node.component) {
-      out.push(`${ind}{/* ${node.comment} */}`);
+      out.push(`${ind}{/* ${sanitizeComment(node.comment)} */}`);
       continue;
     }
 
@@ -303,7 +322,7 @@ export function generateJSXTree(nodes, depth, components) {
 
     // Comment inline
     if (node.comment) {
-      out.push(`${ind}{/* ${node.comment} */}`);
+      out.push(`${ind}{/* ${sanitizeComment(node.comment)} */}`);
     }
 
     const attrStr = attrs.join('');
@@ -382,7 +401,7 @@ export function generateTableJSX(node, depth, components) {
   // Data rows
   if (rows) {
     out.push(`${indent(depth + 1)}{/* Data rows — populate from state */}`);
-    out.push(`${indent(depth + 1)}{/* ${rows.replace(/\n/g, ' ').slice(0, 120)} */}`);
+    out.push(`${indent(depth + 1)}{/* ${sanitizeComment(rows.replace(/\n/g, ' ').slice(0, 120))} */}`);
   }
 
   out.push(`${ind}</ScrollView>`);

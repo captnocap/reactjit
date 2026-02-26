@@ -173,12 +173,7 @@ function scanForMinerPatterns(source) {
 
 // ── Color helpers ────────────────────────────────────────────
 
-const color = (code) => (s) => `\x1b[${code}m${s}\x1b[0m`;
-const red    = color('31');
-const yellow = color('33');
-const cyan   = color('36');
-const dim    = color('2');
-const bold   = color('1');
+import { red, yellow, cyan, dim, bold } from '../lib/log.mjs';
 
 // ── Find .tsx / .tsl files recursively ───────────────────────
 
