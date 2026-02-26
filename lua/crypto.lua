@@ -239,12 +239,37 @@ local sodium, crypto_lib, blake3
 -- libsodium
 local function loadSodium()
   local loader = require("lua.lib_loader")
-  return loader.try_load("sodium", { "libsodium.so.23" })
+  local extra = {}
+  if ffi.os == "Linux" then
+    extra = { "libsodium.so.23" }
+  elseif ffi.os == "OSX" then
+    extra = {
+      "/opt/homebrew/lib/libsodium.dylib",
+      "/usr/local/lib/libsodium.dylib",
+    }
+  end
+  return loader.try_load("sodium", extra)
 end
 
 -- OpenSSL libcrypto
+-- macOS 15.4+ aborts if you load the unversioned system libcrypto.dylib
+-- ("Invalid dylib load"), so we must avoid the bare "crypto" name on macOS
+-- and only load from Homebrew or the project-bundled copy.
 local function loadCrypto()
   local loader = require("lua.lib_loader")
+  if ffi.os == "OSX" then
+    -- Try bundled first, then Homebrew — never bare "crypto" (hits system unversioned)
+    local paths = {
+      "lib/libcrypto.dylib",
+      "/opt/homebrew/opt/openssl/lib/libcrypto.dylib",
+      "/usr/local/opt/openssl/lib/libcrypto.dylib",
+    }
+    for _, p in ipairs(paths) do
+      local ok, lib = pcall(ffi.load, p)
+      if ok then return lib end
+    end
+    return nil
+  end
   return loader.try_load("crypto", { "libcrypto.so.3" })
 end
 

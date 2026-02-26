@@ -261,12 +261,18 @@
   if (getFS()) {
     startPolling();
   } else {
-    // Poll until FS is available (postRun captures it as Module._FS)
+    // Poll until FS is available — Safari WASM init can be slower than Chrome.
+    // The build-time love.js patch or postRun hook exposes Module.FS.
+    var waitCount = 0;
     var waitForFS = setInterval(function () {
+      waitCount++;
       if (getFS()) {
         clearInterval(waitForFS);
+        console.log('[Bridge] Module.FS available after ' + (waitCount * 50) + 'ms');
         startPolling();
+      } else if (waitCount % 40 === 0) {
+        console.log('[Bridge] Waiting for Module.FS... (' + (waitCount * 50) + 'ms)');
       }
-    }, 100);
+    }, 50);
   }
 })();

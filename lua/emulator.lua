@@ -48,7 +48,8 @@ local function loadAgnes()
   if agnesLoadAttempted then return nil end
   agnesLoadAttempted = true
 
-  local libpath = "lua/emulator/libagnes.so"
+  local libExt = ffi.os == "OSX" and ".dylib" or ".so"
+  local libpath = "lua/emulator/libagnes" .. libExt
 
   if love and love.filesystem then
     local source = love.filesystem.getSource()
@@ -65,11 +66,11 @@ local function loadAgnes()
   local ok, lib = pcall(ffi.load, libpath)
   if ok then
     agnesLib = lib
-    io.write("[emulator] Loaded libagnes.so from " .. libpath .. "\n"); io.flush()
+    io.write("[emulator] Loaded libagnes from " .. libpath .. "\n"); io.flush()
     return agnesLib
   end
 
-  io.write("[emulator] ERROR: Could not load libagnes.so from " .. libpath .. "\n"); io.flush()
+  io.write("[emulator] ERROR: Could not load libagnes from " .. libpath .. "\n"); io.flush()
   return nil
 end
 

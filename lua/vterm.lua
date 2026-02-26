@@ -125,14 +125,15 @@ pcall(ffi.cdef, [[
 
 local lib  = ffi.load("vterm")
 
--- Load the shim .so — try multiple paths for different contexts (love ., luajit, etc.)
+-- Load the shim library — try multiple paths for different contexts (love ., luajit, etc.)
 local shim
 do
+  local libExt = ffi.os == "OSX" and ".dylib" or ".so"
   local paths = {
-    "./lua/libvterm_shim.so",     -- love . from project root
-    "lua/libvterm_shim.so",       -- alt
-    "./libvterm_shim.so",         -- if running from lua/ dir
-    "libvterm_shim",              -- system search fallback
+    "./lua/libvterm_shim" .. libExt,     -- love . from project root
+    "lua/libvterm_shim" .. libExt,       -- alt
+    "./libvterm_shim" .. libExt,         -- if running from lua/ dir
+    "libvterm_shim",                     -- system search fallback
   }
   for _, p in ipairs(paths) do
     local ok, lib_or_err = pcall(ffi.load, p)
@@ -142,7 +143,7 @@ do
     end
   end
   if not shim then
-    error("[vterm] Cannot load libvterm_shim.so — build it with: gcc -shared -fPIC -o lua/libvterm_shim.so lua/vterm_shim.c -lvterm")
+    error("[vterm] Cannot load libvterm_shim" .. libExt .. " — build it with: gcc -shared -fPIC -o lua/libvterm_shim" .. libExt .. " lua/vterm_shim.c -lvterm")
   end
 end
 

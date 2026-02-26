@@ -105,12 +105,25 @@ local function resolveLibPath(relpath)
   return relpath
 end
 
--- Try bundled first, then system
-local loadPaths = {
-  resolveLibPath("lib/libarchive.so.13"),
-  "libarchive.so.13",
-  "libarchive",
-}
+-- Try bundled first, then system (platform-aware paths)
+local loadPaths
+if ffi.os == "Linux" then
+  loadPaths = {
+    resolveLibPath("lib/libarchive.so.13"),
+    "libarchive.so.13",
+    "libarchive",
+  }
+else
+  loadPaths = {
+    resolveLibPath("lib/libarchive.13.dylib"),
+    resolveLibPath("lib/libarchive.dylib"),
+    "/opt/homebrew/opt/libarchive/lib/libarchive.dylib",  -- keg-only
+    "/opt/homebrew/lib/libarchive.dylib",
+    "/usr/local/opt/libarchive/lib/libarchive.dylib",     -- keg-only (Intel)
+    "/usr/local/lib/libarchive.dylib",
+    "libarchive",
+  }
+end
 
 for _, path in ipairs(loadPaths) do
   local ok, result = pcall(ffi.load, path)

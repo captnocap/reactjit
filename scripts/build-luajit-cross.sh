@@ -104,7 +104,12 @@ for arg in "$@"; do
 done
 exec zig cc -target TARGET "${args[@]}"
 WRAPEOF
-    sed -i "s/TARGET/$ZIG_TRIPLE/" "$WRAP_DIR/zig-cc"
+    # macOS sed requires -i '' (empty backup ext); GNU sed uses -i without arg
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        sed -i '' "s/TARGET/$ZIG_TRIPLE/" "$WRAP_DIR/zig-cc"
+    else
+        sed -i "s/TARGET/$ZIG_TRIPLE/" "$WRAP_DIR/zig-cc"
+    fi
 
     cat > "$WRAP_DIR/zig-ar" <<'EOF'
 #!/bin/sh
@@ -176,6 +181,10 @@ EOF
     fi
 else
     MAKE_CROSS_ARGS=()
+    # Native macOS builds also require MACOSX_DEPLOYMENT_TARGET
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+    fi
 fi
 
 # ── Build ────────────────────────────────────────────────────────────────────

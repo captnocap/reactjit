@@ -812,8 +812,16 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   // 2. Ensure zig artifacts exist
   console.log(`  [1/6] Building native artifacts for ${targetFlag}...`);
   const zigTriple = plat.zigTriple;
+  // When building for the host platform, omit -Dtarget so zig uses native
+  // compilation. On macOS this is critical: explicit -Dtarget=aarch64-macos
+  // makes zig treat it as cross-compilation and lose framework search paths
+  // (OpenGL, Metal, Cocoa, etc.), causing SDL2 to fail to link.
+  const isNative = targetFlag === detectHostPlatform();
+  const zigCmd = isNative
+    ? 'zig build all'
+    : `zig build all -Dtarget=${zigTriple}`;
   try {
-    execSync(`zig build all -Dtarget=${zigTriple}`, { cwd: monoRoot, stdio: 'pipe' });
+    execSync(zigCmd, { cwd: monoRoot, stdio: 'pipe' });
   } catch (e) {
     console.error(`  zig build failed for ${zigTriple}:`);
     console.error(e.stderr?.toString() || e.message);
@@ -821,13 +829,16 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   }
 
   // 3. Ensure LuaJIT exists
+  // When building for the host, use 'native' mode — direct cc, no zig cross-compiler.
+  // zig cc as a macOS cross-compiler hits "unexpected pointer encoding" in LuaJIT's linker.
   console.log(`  [2/6] Building LuaJIT for ${targetFlag}...`);
-  const luajitDir = join(zigOut, 'luajit', zigTriple);
+  const luajitBuildTriple = isNative ? 'native' : zigTriple;
+  const luajitDir = join(zigOut, 'luajit', luajitBuildTriple);
   if (!existsSync(join(luajitDir, plat.luajitBin))) {
     try {
-      execSync(`bash scripts/build-luajit-cross.sh ${zigTriple}`, { cwd: monoRoot, stdio: 'pipe' });
+      execSync(`bash scripts/build-luajit-cross.sh ${luajitBuildTriple}`, { cwd: monoRoot, stdio: 'pipe' });
     } catch (e) {
-      console.error(`  LuaJIT build failed for ${zigTriple}:`);
+      console.error(`  LuaJIT build failed for ${luajitBuildTriple}:`);
       console.error(e.stderr?.toString() || e.message);
       process.exit(1);
     }
@@ -858,7 +869,7 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   // 4. Bundle JS
   console.log('  [3/6] Bundling JS...');
   rmSync(stagingDir, { recursive: true, force: true });
-  mkdirSync(join(stagingDir, 'lua'), { recursive: true });
+  mkdirSync(stagingDir, { recursive: true });
   mkdirSync(join(stagingDir, 'sdl2'), { recursive: true });
   mkdirSync(join(stagingDir, 'lib'),  { recursive: true });
 
@@ -945,8 +956,10 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
   rmSync(stagingDir, { recursive: true, force: true });
   rmSync(payloadDir, { recursive: true, force: true });
 
-  const sizeMb = (statSync(outFile).size / (1024 * 1024)).toFixed(1);
-  console.log(`\n  Done! ${sizeMb} MB → ${outFile}`);
+  // macOS packages as .tar.gz, Windows as .exe with embedded zip
+  const actualOutFile = plat.os === 'macos' ? outFile + '.tar.gz' : outFile;
+  const sizeMb = (statSync(actualOutFile).size / (1024 * 1024)).toFixed(1);
+  console.log(`\n  Done! ${sizeMb} MB → ${actualOutFile}`);
 }
 
 // ── reactjit build web / dist:web ───────────────────────────────────

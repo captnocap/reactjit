@@ -237,8 +237,11 @@ pub fn build(b: *std.Build) void {
         // Core portable sources (always included).
         // Non-assembly builds define BLAKE3_NO_* so dispatch.c doesn't reference
         // SIMD functions that aren't linked in.
+        // aarch64 uses NEON intrinsics via blake3_neon.c (added below).
         const blake3_portable_flags: []const []const u8 = if (blake3_use_asm)
             &.{"-O3"}
+        else if (blake3_arch == .aarch64)
+            &.{ "-O3", "-DBLAKE3_NO_SSE2", "-DBLAKE3_NO_SSE41", "-DBLAKE3_NO_AVX2", "-DBLAKE3_NO_AVX512" }
         else
             &.{ "-O3", "-DBLAKE3_NO_SSE2", "-DBLAKE3_NO_SSE41", "-DBLAKE3_NO_AVX2", "-DBLAKE3_NO_AVX512" };
 
@@ -258,8 +261,14 @@ pub fn build(b: *std.Build) void {
             blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_sse41_x86-64_unix.S"));
             blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_avx2_x86-64_unix.S"));
             blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_avx512_x86-64_unix.S"));
+        } else if (blake3_arch == .aarch64) {
+            // aarch64: ARM NEON intrinsics (4-way parallel hashing)
+            blake3_lib.addCSourceFile(.{
+                .file = b.path("third_party/blake3/blake3_neon.c"),
+                .flags = &.{"-O3"},
+            });
         }
-        // Windows + aarch64: portable C only. Still fast — the portable
+        // Windows x86: portable C only. Still fast — the portable
         // implementation uses compiler auto-vectorization.
 
         blake3_lib.linkLibC();

@@ -406,12 +406,35 @@
           : '');
       },
       postRun: [function () {
-        console.log('[ReactJIT] WASM runtime initialized');
+        // Fallback FS exposure — the build-time love.js patch may not fire on
+        // all browsers (Safari WASM init order differs from Chrome/Firefox).
+        // This guarantees Module.FS is available for bridge.js and WasmApp.
+        if (!Module.FS && typeof FS !== 'undefined') {
+          Module.FS = FS;
+          console.log('[ReactJIT] FS exposed via postRun fallback');
+        }
+        console.log('[ReactJIT] WASM runtime initialized, FS=' + !!Module.FS);
       }],
     };
     Module.setStatus('Downloading...');
 
-    var applicationLoad = function () { Love(Module); };
+    var applicationLoad = function () {
+      // Wrap Love() to capture FS from Emscripten's closure scope.
+      // The build-time patch injects Module["FS"]=FS inside love.js, but on
+      // Safari the WASM init order can race. This wrapper polls until FS appears.
+      Love(Module);
+      if (!Module.FS) {
+        var fsRetry = setInterval(function () {
+          // Love() sets Module.FS synchronously via our build patch, OR
+          // the postRun hook captures it. If neither worked after 5s, give up.
+          if (Module.FS) {
+            clearInterval(fsRetry);
+            console.log('[ReactJIT] Module.FS detected after Love() init');
+          }
+        }, 50);
+        setTimeout(function () { clearInterval(fsRetry); }, 5000);
+      }
+    };
   </script>
 
   <!-- Emscripten data loader (packages .love contents into Module.FS) -->

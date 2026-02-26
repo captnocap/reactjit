@@ -1,5 +1,23 @@
 # reactjit Makefile
 # Builds: QuickJS shared library + bundled React apps for both targets
+# Cross-platform: works on Linux (x86_64/aarch64) and macOS (Intel/Apple Silicon)
+
+# ── Platform detection ─────────────────────────────────
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+ifeq ($(UNAME_S),Darwin)
+  LIB_EXT := .dylib
+  # Portable readlink -f (macOS lacks GNU readlink)
+  READLINK_F = python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))"
+  # Find a Homebrew/system library by name (returns path or empty)
+  # Usage: $(call find_dylib,libmpv.2)
+  find_dylib = $(shell find /opt/homebrew/lib /usr/local/lib /usr/lib 2>/dev/null -name '$(1).dylib' -o -name '$(1)*.dylib' 2>/dev/null | head -1)
+else
+  LIB_EXT := .so
+  READLINK_F = readlink -f
+  find_dylib = $(shell ldconfig -p 2>/dev/null | grep '$(1)' | head -1 | sed 's/.*=> //')
+endif
 
 QUICKJS_DIR = quickjs
 NATIVE_GAME = examples/native-hud/game
@@ -9,7 +27,7 @@ STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 STORYBOOK_SDL2 = storybook/sdl2
 STORYBOOK_SDL2_LIB = $(STORYBOOK_SDL2)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-web install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-natives build-luajit build-all-platforms
+.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-sdl2-libs storybook-web install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-natives build-luajit build-all-platforms
 
 all: setup build
 
@@ -25,7 +43,7 @@ node_modules:
 # build.zig references native/quickjs-shim/qjs_ffi_shim.c directly —
 # no manual copy into the quickjs/ source tree needed.
 
-setup: $(LIB_DIR)/libquickjs.so lib/libblake3.so
+setup: $(LIB_DIR)/libquickjs$(LIB_EXT) lib/libblake3$(LIB_EXT)
 
 $(QUICKJS_DIR):
 	git clone https://github.com/quickjs-ng/quickjs.git $(QUICKJS_DIR)
@@ -33,26 +51,26 @@ $(QUICKJS_DIR):
 $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
 
-$(LIB_DIR)/libquickjs.so: $(QUICKJS_DIR) $(LIB_DIR)
+$(LIB_DIR)/libquickjs$(LIB_EXT): $(QUICKJS_DIR) $(LIB_DIR)
 	zig build libquickjs
-	cp zig-out/lib/libquickjs.so $(LIB_DIR)/
+	cp zig-out/lib/libquickjs$(LIB_EXT) $(LIB_DIR)/
 
 # ── BLAKE3 (crypto) ────────────────────────────────────
 # Built via zig build (cross-compilable). Uses x86-64 assembly on unix,
 # portable C on Windows/aarch64.
 
-lib/libblake3.so: third_party/blake3/blake3.c
+lib/libblake3$(LIB_EXT): third_party/blake3/blake3.c
 	zig build blake3
 	mkdir -p lib
-	cp zig-out/lib/libblake3.so $@
-	@echo "  Built libblake3.so (via zig)"
+	cp zig-out/lib/libblake3$(LIB_EXT) $@
+	@echo "  Built libblake3$(LIB_EXT) (via zig)"
 
-build-blake3: lib/libblake3.so
+build-blake3: lib/libblake3$(LIB_EXT)
 
 # Copy libquickjs to storybook
-$(STORYBOOK_LIB)/libquickjs.so: $(LIB_DIR)/libquickjs.so
+$(STORYBOOK_LIB)/libquickjs$(LIB_EXT): $(LIB_DIR)/libquickjs$(LIB_EXT)
 	mkdir -p $(STORYBOOK_LIB)
-	cp zig-out/lib/libquickjs.so $(STORYBOOK_LIB)/
+	cp zig-out/lib/libquickjs$(LIB_EXT) $(STORYBOOK_LIB)/
 
 # ── Build targets ───────────────────────────────────────
 
@@ -112,25 +130,90 @@ build-storybook-sdl2: node_modules
 
 # ── Storybook ──────────────────────────────────────────
 
-storybook-sdl2: build-storybook-sdl2 $(STORYBOOK_SDL2_LIB)/libquickjs.so $(STORYBOOK_SDL2_LIB)/libft_helper.so $(STORYBOOK_SDL2_LIB)/libSDL2.so
+storybook-sdl2: build-storybook-sdl2 storybook-sdl2-libs
 	@echo ""
 	@echo "=== SDL2 Storybook ready ==="
 	@echo "  Run:  cd $(STORYBOOK_SDL2) && luajit main.lua"
 	@echo ""
 
-$(STORYBOOK_SDL2_LIB)/libquickjs.so: zig-out/lib/libquickjs.so
+# Copy all zig-built libraries + optional system libraries into storybook/sdl2/lib/.
+# Mirrors cli-setup so the storybook SDL2 target has full parity with consumer projects.
+storybook-sdl2-libs: $(STORYBOOK_SDL2_LIB)/libquickjs$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libft_helper$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libimage_helper$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libSDL2$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libblake3$(LIB_EXT)
+ifeq ($(UNAME_S),Darwin)
+	@LIBMPV=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libmpv.2.dylib' -o -name 'libmpv.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBMPV" ]; then \
+		cp "$$LIBMPV" $(STORYBOOK_SDL2_LIB)/libmpv.2.dylib; \
+		echo "  [sdl2-storybook] Bundled libmpv.2.dylib"; \
+	fi
+	@LIBSQLITE=$$(find /opt/homebrew/opt/sqlite/lib /opt/homebrew/lib /usr/local/opt/sqlite/lib /usr/local/lib /usr/lib 2>/dev/null -name 'libsqlite3.0.dylib' -o -name 'libsqlite3.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBSQLITE" ]; then \
+		cp "$$LIBSQLITE" $(STORYBOOK_SDL2_LIB)/libsqlite3.0.dylib; \
+		echo "  [sdl2-storybook] Bundled libsqlite3.0.dylib"; \
+	fi
+	@LIBARCHIVE=$$(find /opt/homebrew/opt/libarchive/lib /opt/homebrew/lib /usr/local/opt/libarchive/lib /usr/local/lib 2>/dev/null -name 'libarchive.13.dylib' -o -name 'libarchive.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBARCHIVE" ]; then \
+		cp "$$LIBARCHIVE" $(STORYBOOK_SDL2_LIB)/libarchive.13.dylib; \
+		echo "  [sdl2-storybook] Bundled libarchive.13.dylib"; \
+	fi
+	@LIBSODIUM=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libsodium.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBSODIUM" ]; then \
+		cp "$$LIBSODIUM" $(STORYBOOK_SDL2_LIB)/libsodium.dylib; \
+		echo "  [sdl2-storybook] Bundled libsodium.dylib"; \
+	fi
+	@LIBCRYPTO=$$(find /opt/homebrew/opt/openssl/lib /opt/homebrew/lib /usr/local/opt/openssl/lib /usr/local/lib 2>/dev/null -name 'libcrypto.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBCRYPTO" ]; then \
+		cp "$$LIBCRYPTO" $(STORYBOOK_SDL2_LIB)/libcrypto.dylib; \
+		echo "  [sdl2-storybook] Bundled libcrypto.dylib"; \
+	fi
+else
+	@LIBMPV=$$(ldconfig -p 2>/dev/null | grep 'libmpv.so.2 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBMPV" ]; then \
+		cp "$$LIBMPV" $(STORYBOOK_SDL2_LIB)/libmpv.so.2; \
+		echo "  [sdl2-storybook] Bundled libmpv.so.2"; \
+	fi
+	@LIBSQLITE=$$(ldconfig -p 2>/dev/null | grep 'libsqlite3.so.0 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBSQLITE" ]; then \
+		cp "$$LIBSQLITE" $(STORYBOOK_SDL2_LIB)/libsqlite3.so.0; \
+		echo "  [sdl2-storybook] Bundled libsqlite3.so.0"; \
+	fi
+	@LIBARCHIVE=$$(ldconfig -p 2>/dev/null | grep 'libarchive.so.13 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBARCHIVE" ]; then \
+		cp "$$LIBARCHIVE" $(STORYBOOK_SDL2_LIB)/libarchive.so.13; \
+		echo "  [sdl2-storybook] Bundled libarchive.so.13"; \
+	fi
+	@LIBSODIUM=$$(ldconfig -p 2>/dev/null | grep 'libsodium.so ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBSODIUM" ]; then \
+		cp "$$LIBSODIUM" $(STORYBOOK_SDL2_LIB)/libsodium.so; \
+		echo "  [sdl2-storybook] Bundled libsodium.so"; \
+	fi
+	@LIBCRYPTO=$$(ldconfig -p 2>/dev/null | grep 'libcrypto.so ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
+	if [ -n "$$LIBCRYPTO" ]; then \
+		cp "$$LIBCRYPTO" $(STORYBOOK_SDL2_LIB)/libcrypto.so; \
+		echo "  [sdl2-storybook] Bundled libcrypto.so"; \
+	fi
+endif
+
+$(STORYBOOK_SDL2_LIB)/libquickjs$(LIB_EXT): zig-out/lib/libquickjs$(LIB_EXT)
 	mkdir -p $(STORYBOOK_SDL2_LIB)
 	cp $< $@
 
-$(STORYBOOK_SDL2_LIB)/libft_helper.so: zig-out/lib/libft_helper.so
+$(STORYBOOK_SDL2_LIB)/libft_helper$(LIB_EXT): zig-out/lib/libft_helper$(LIB_EXT)
 	mkdir -p $(STORYBOOK_SDL2_LIB)
 	cp $< $@
 
-$(STORYBOOK_SDL2_LIB)/libSDL2.so: zig-out/lib/libSDL2.so
+$(STORYBOOK_SDL2_LIB)/libimage_helper$(LIB_EXT): zig-out/lib/libimage_helper$(LIB_EXT)
 	mkdir -p $(STORYBOOK_SDL2_LIB)
 	cp $< $@
 
-storybook: setup build-storybook-native build-storybook $(STORYBOOK_LIB)/libquickjs.so
+$(STORYBOOK_SDL2_LIB)/libSDL2$(LIB_EXT): zig-out/lib/libSDL2$(LIB_EXT)
+	mkdir -p $(STORYBOOK_SDL2_LIB)
+	cp $< $@
+
+$(STORYBOOK_SDL2_LIB)/libblake3$(LIB_EXT): zig-out/lib/libblake3$(LIB_EXT)
+	mkdir -p $(STORYBOOK_SDL2_LIB)
+	cp $< $@
+
+storybook: setup build-storybook-native build-storybook $(STORYBOOK_LIB)/libquickjs$(LIB_EXT)
 	@echo ""
 	@echo "=== Storybook ready ==="
 	@echo "  Native:  cd $(STORYBOOK_LOVE) && love ."
@@ -169,6 +252,12 @@ LOVE_WIN_DIR     = vendor/love-$(LOVE_WIN_VERSION)-win64
 WIN_STAGING      = /tmp/reactjit-demo-win
 
 dist-storybook: build-storybook-native setup
+ifneq ($(UNAME_S),Linux)
+	@echo "Error: dist-storybook produces a self-extracting Linux binary."
+	@echo "  This target can only run on Linux (requires ldd, ldconfig, ld-linux)."
+	@echo "  Use 'rjit build linux' for cross-compiled SDL2 builds from any host."
+	@exit 1
+endif
 	@echo "=== Packaging single-file binary ==="
 	mkdir -p $(DIST_DIR)
 	rm -rf $(DIST_BINARY)
@@ -333,7 +422,7 @@ dev:
 		--watch \
 		examples/native-hud/src/main.tsx
 
-dev-storybook: setup $(STORYBOOK_LIB)/libquickjs.so node_modules
+dev-storybook: setup $(STORYBOOK_LIB)/libquickjs$(LIB_EXT) node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
@@ -347,7 +436,7 @@ dev-storybook: setup $(STORYBOOK_LIB)/libquickjs.so node_modules
 # ── CLI setup (developer tooling — expects Love2D installed) ──
 
 cli-setup: setup
-	@echo "=== Populating CLI runtime ==="
+	@echo "=== Populating CLI runtime ($(UNAME_S) $(UNAME_M)) ==="
 	rm -rf cli/runtime
 	mkdir -p cli/runtime/lua cli/runtime/lib cli/runtime/bin cli/runtime/reactjit
 	cp lua/*.lua cli/runtime/lua/
@@ -360,20 +449,60 @@ cli-setup: setup
 	cp lua/capabilities/*.lua cli/runtime/lua/capabilities/
 	mkdir -p cli/runtime/lua/effects
 	cp lua/effects/*.lua cli/runtime/lua/effects/
-	cp $(QUICKJS_DIR)/libquickjs.so cli/runtime/lib/
-	@echo "  Compiling ft_helper.so (FreeType bridge for SDL2 target)..."
+	cp zig-out/lib/libquickjs$(LIB_EXT) cli/runtime/lib/
+	@echo "  Compiling ft_helper (FreeType bridge for SDL2 target)..."
 	@zig build ft-helper \
-		&& cp zig-out/lib/libft_helper.so cli/runtime/lib/ft_helper.so \
-		&& echo "  Bundled ft_helper.so" \
-		|| echo "  Warning: ft_helper.so build failed — SDL2 target text rendering unavailable"
+		&& cp zig-out/lib/libft_helper$(LIB_EXT) cli/runtime/lib/libft_helper$(LIB_EXT) \
+		&& echo "  Bundled libft_helper$(LIB_EXT)" \
+		|| echo "  Warning: ft_helper build failed — SDL2 target text rendering unavailable"
 	@zig build image-helper \
-		&& cp zig-out/lib/libimage_helper.so cli/runtime/lib/image_helper.so \
-		&& echo "  Bundled image_helper.so" \
-		|| echo "  Warning: image_helper.so build failed — SDL2 image loading unavailable"
+		&& cp zig-out/lib/libimage_helper$(LIB_EXT) cli/runtime/lib/libimage_helper$(LIB_EXT) \
+		&& echo "  Bundled libimage_helper$(LIB_EXT)" \
+		|| echo "  Warning: image_helper build failed — SDL2 image loading unavailable"
 	@zig build sdl2 \
-		&& cp zig-out/lib/libSDL2.so cli/runtime/lib/libSDL2.so \
-		&& echo "  Bundled libSDL2.so (via zig)" \
-		|| echo "  Warning: libSDL2.so build failed — SDL2 target unavailable"
+		&& cp zig-out/lib/libSDL2$(LIB_EXT) cli/runtime/lib/libSDL2$(LIB_EXT) \
+		&& echo "  Bundled libSDL2$(LIB_EXT) (via zig)" \
+		|| echo "  Warning: libSDL2 build failed — SDL2 target unavailable"
+	@# ── Optional system libraries (platform-aware discovery) ──
+ifeq ($(UNAME_S),Darwin)
+	@# macOS: search Homebrew and system paths
+	@LIBMPV=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libmpv.2.dylib' -o -name 'libmpv.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBMPV" ]; then \
+		cp "$$LIBMPV" cli/runtime/lib/libmpv.2.dylib; \
+		echo "  Bundled libmpv.2.dylib"; \
+	else \
+		echo "  Warning: libmpv not found — video playback won't be bundled"; \
+	fi
+	@LIBSQLITE=$$(find /opt/homebrew/opt/sqlite/lib /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libsqlite3.0.dylib' -o -name 'libsqlite3.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBSQLITE" ]; then \
+		cp "$$LIBSQLITE" cli/runtime/lib/libsqlite3.0.dylib; \
+		echo "  Bundled libsqlite3.0.dylib"; \
+	else \
+		echo "  Warning: libsqlite3 not found — SQLite features won't be bundled"; \
+	fi
+	@LIBARCHIVE=$$(find /opt/homebrew/opt/libarchive/lib /opt/homebrew/lib /usr/local/opt/libarchive/lib /usr/local/lib 2>/dev/null -name 'libarchive.13.dylib' -o -name 'libarchive.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBARCHIVE" ]; then \
+		cp "$$LIBARCHIVE" cli/runtime/lib/libarchive.13.dylib; \
+		echo "  Bundled libarchive.13.dylib"; \
+	else \
+		echo "  Warning: libarchive not found — archive features won't be bundled"; \
+	fi
+	@LIBSODIUM=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libsodium.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBSODIUM" ]; then \
+		cp "$$LIBSODIUM" cli/runtime/lib/libsodium.dylib; \
+		echo "  Bundled libsodium.dylib"; \
+	else \
+		echo "  Warning: libsodium not found — crypto features won't be bundled"; \
+	fi
+	@LIBCRYPTO=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libcrypto.dylib' 2>/dev/null | head -1); \
+	if [ -n "$$LIBCRYPTO" ]; then \
+		cp "$$LIBCRYPTO" cli/runtime/lib/libcrypto.dylib; \
+		echo "  Bundled libcrypto.dylib"; \
+	else \
+		echo "  Warning: libcrypto not found — BLAKE2s/PBKDF2 won't be bundled"; \
+	fi
+else
+	@# Linux: use ldconfig for library discovery
 	@LIBMPV=$$(ldconfig -p | grep 'libmpv.so.2 ' | head -1 | sed 's/.*=> //'); \
 	if [ -n "$$LIBMPV" ]; then \
 		cp "$$LIBMPV" cli/runtime/lib/libmpv.so.2; \
@@ -409,13 +538,14 @@ cli-setup: setup
 	else \
 		echo "  Warning: libcrypto.so not found — BLAKE2s/PBKDF2 won't be bundled"; \
 	fi
+endif
 	@zig build blake3 \
-		&& cp zig-out/lib/libblake3.so cli/runtime/lib/libblake3.so \
-		&& echo "  Bundled libblake3.so (via zig)" \
-		|| echo "  Warning: libblake3.so build failed — BLAKE3 hashing unavailable"
+		&& cp zig-out/lib/libblake3$(LIB_EXT) cli/runtime/lib/libblake3$(LIB_EXT) \
+		&& echo "  Bundled libblake3$(LIB_EXT) (via zig)" \
+		|| echo "  Warning: libblake3 build failed — BLAKE3 hashing unavailable"
 	@TOR=$$(which tor 2>/dev/null); \
 	if [ -n "$$TOR" ]; then \
-		cp "$$(readlink -f "$$TOR")" cli/runtime/bin/tor; \
+		cp "$$($(READLINK_F) "$$TOR")" cli/runtime/bin/tor; \
 		chmod +x cli/runtime/bin/tor; \
 		echo "  Bundled tor"; \
 	else \
@@ -477,6 +607,10 @@ build-all-platforms:
 	bash scripts/build-luajit-cross.sh x86_64-windows-gnu
 	zig build all -Dtarget=aarch64-linux-gnu
 	bash scripts/build-luajit-cross.sh aarch64-linux-gnu
+	zig build all -Dtarget=x86_64-macos
+	bash scripts/build-luajit-cross.sh x86_64-macos
+	zig build all -Dtarget=aarch64-macos
+	bash scripts/build-luajit-cross.sh aarch64-macos
 	@echo "=== All platforms built ==="
 
 # ── CLI distribution (Full / Light / Storybook tiers) ────
