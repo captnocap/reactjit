@@ -10,6 +10,9 @@
   appropriate bridge, tree, layout, painter, and events modules.
 ]]
 
+-- Colorize [tag] prefixes in terminal output (must be first)
+require("lua.log_colors")
+
 local ReactJIT = {}
 
 -- ============================================================================

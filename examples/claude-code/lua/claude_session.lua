@@ -524,6 +524,15 @@ function Session.getInputBoundary(sessionNodeId)
   return TERM_ROWS
 end
 
+-- Deferred resize: canvas sets desired size from render, tick applies it
+local _desiredCols, _desiredRows = nil, nil
+
+function Session.setDesiredSize(cols, rows)
+  _desiredCols = cols
+  _desiredRows = rows
+end
+
+-- For backward compat (not called from render anymore)
 function Session.resize(cols, rows, sessionNodeId)
   local id = sessionNodeId or _focusedId
   local state = _sessions[id]
@@ -609,6 +618,17 @@ Capabilities.register("ClaudeCode", {
 
   tick = function(nodeId, state, dt, pushEvent, props)
     if not pushEvent then return end
+
+    -- Apply deferred vterm resize (set by canvas render, safe to do here before PTY read)
+    if _desiredCols and _desiredRows and state.vterm then
+      local curRows, curCols = state.vterm:size()
+      if curCols ~= _desiredCols or curRows ~= _desiredRows then
+        state.vterm:resize(_desiredRows, _desiredCols)
+        if state.proc then state.proc:resize(_desiredRows, _desiredCols) end
+        state._emittedRows = {}
+      end
+      _desiredCols, _desiredRows = nil, nil
+    end
 
     -- Deferred Enter: fires on the tick AFTER sendMessage wrote the text
     if state._pendingEnter and state.proc then

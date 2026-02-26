@@ -18,6 +18,9 @@
     })
 ]]
 
+-- Colorize [tag] prefixes in terminal output (must be first)
+require("lua.log_colors")
+
 local ffi = require("ffi")
 local bit = require("bit")
 local GL  = require("lua.sdl2_gl")

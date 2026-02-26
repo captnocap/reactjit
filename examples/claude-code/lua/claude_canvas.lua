@@ -130,26 +130,25 @@ Capabilities.register("ClaudeCanvas", {
     local props = node.props or {}
     local sessionId = props.sessionId or "default"
 
-    -- If Claude hasn't initialized yet, render raw vterm grid (splash screen)
+    -- Compute desired vterm size — applied next tick (not here, to avoid segfault)
+    if Measure then
+      local sizeFont = Measure.getFont(13, nil, nil)
+      local charW = sizeFont:getWidth("M")
+      local lineH = sizeFont:getHeight()
+      local fitCols = math.max(20, math.floor((c.w - 16) / charW))
+      local fitRows = math.max(10, math.floor((c.h - 60) / lineH))
+      Session.setDesiredSize(fitCols, fitRows)
+    end
+
     local vterm = Session.getVTerm()
     local isInit = Session.isInitialized()
-    local mode = Session.getMode()
 
     if vterm and not isInit and Measure then
       -- Raw vterm grid rendering (splash, boot, etc.)
       local font = Measure.getFont(13, nil, nil)
-      local boldFont = Measure.getFont(13, "bold", nil)
       local charW = font:getWidth("M")
       local lineH = font:getHeight()
-
-      -- Dynamic resize: compute how many cols fit at font size 13
-      local availW = c.w - 16  -- 8px padding each side
-      local fitCols = math.max(20, math.floor(availW / charW))
-      Session.resize(fitCols, nil)  -- resize vterm+pty if changed
-
       local rows, cols = vterm:size()
-
-      -- Don't render past the input zone
       local maxRow = math.min(rows, Session.getInputBoundary()) - 1
 
       -- Background
@@ -157,7 +156,6 @@ Capabilities.register("ClaudeCanvas", {
                              Color.toTable("#0f172a")[3], effectiveOpacity)
       love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
 
-      -- Scissor clip to the layout box
       love.graphics.setScissor(c.x, c.y, c.w, c.h)
       love.graphics.setFont(font)
       for row = 0, maxRow do
@@ -168,39 +166,34 @@ Capabilities.register("ClaudeCanvas", {
           if cell.char and #cell.char > 0 and cell.char ~= " " then
             local px = c.x + 8 + col * charW
             if px > c.x + c.w then break end
-            -- Background
-            if cell.bg then
-              love.graphics.setColor(cell.bg[1]/255, cell.bg[2]/255, cell.bg[3]/255, effectiveOpacity)
-              love.graphics.rectangle("fill", px, py, charW, lineH)
-            end
-            -- Foreground
             if cell.fg then
               love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
             else
               love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
                                      COLORS.inputText[3], effectiveOpacity)
             end
-            if cell.bold then love.graphics.setFont(boldFont) end
             love.graphics.print(cell.char, px, py)
-            if cell.bold then love.graphics.setFont(font) end
           end
         end
       end
       love.graphics.setScissor()
-
-      -- Debug overlay: cols + window width (temporary)
-      local debugFont = Measure.getFont(10, nil, nil)
-      love.graphics.setFont(debugFont)
-      love.graphics.setColor(1, 1, 0, 0.8 * effectiveOpacity)
-      love.graphics.print(
-        string.format("cols=%d  w=%.0f  fitCols=%d", cols, c.w, fitCols),
-        c.x + 8, c.y + c.h - 60
-      )
-
-      -- Fall through to input bar below
     else
-      -- Normal mode: render the block-based UI
       Renderer.render(node, c, effectiveOpacity)
+    end
+
+    -- Debug overlay (all modes)
+    if Measure then
+      local vt = Session.getVTerm()
+      if vt then
+        local dRows, dCols = vt:size()
+        local df = Measure.getFont(10, nil, nil)
+        love.graphics.setFont(df)
+        love.graphics.setColor(1, 1, 0, 0.8)
+        local modeStr = Session.getMode() or "?"
+        love.graphics.print(
+          string.format("cols=%d rows=%d w=%.0f h=%.0f mode=%s", dCols, dRows, c.w, c.h, modeStr),
+          c.x + 8, c.y + c.h - 60)
+      end
     end
 
     -- ── Input bar (always drawn, every mode) ──────────────────────
