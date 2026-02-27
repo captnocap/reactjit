@@ -154,7 +154,7 @@ local function loadLibrary()
     local ok, result = pcall(ffi.load, path)
     if ok then
       lib = result
-      io.write("[sqlite] Loaded from " .. path .. "\n"); io.flush()
+      if _G._reactjit_verbose then io.write("[sqlite] Loaded from " .. path .. "\n"); io.flush() end
       return true
     end
   end

@@ -302,9 +302,9 @@ function Masks.loadAll()
   for _, name in ipairs(maskFiles) do
     local ok, err = pcall(require, "lua.masks." .. name)
     if ok then
-      io.write("[masks] Loaded: " .. name .. "\n"); io.flush()
+      if _G._reactjit_verbose then io.write("[masks] Loaded: " .. name .. "\n"); io.flush() end
     else
-      io.write("[masks] Failed to load " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
+      if _G._reactjit_verbose then io.write("[masks] Failed to load " .. name .. ": " .. tostring(err) .. "\n"); io.flush() end
     end
   end
 end

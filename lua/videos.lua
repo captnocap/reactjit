@@ -209,14 +209,16 @@ do
     end)
     if ok then
       libmpvAvailable = true
-      io.write("[videos] libmpv loaded from " .. path .. "\n"); io.flush()
+      if _G._reactjit_verbose then io.write("[videos] libmpv loaded from " .. path .. "\n"); io.flush() end
       break
     end
     lastErr = err
   end
   if not libmpvAvailable then
-    io.write("[videos] libmpv not available: " .. tostring(lastErr) .. "\n"); io.flush()
-    io.write("[videos] Install libmpv for video playback\n"); io.flush()
+    if _G._reactjit_verbose then
+      io.write("[videos] libmpv not available: " .. tostring(lastErr) .. "\n"); io.flush()
+      io.write("[videos] Install libmpv for video playback\n"); io.flush()
+    end
   end
 end
 
@@ -563,11 +565,11 @@ local backendReady = false
 --- Verify libmpv is available. Called during love.load().
 function Videos.initBackend()
   if not libmpvAvailable then
-    io.write("[videos] initBackend: libmpv not available\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[videos] initBackend: libmpv not available\n"); io.flush() end
     return
   end
   backendReady = true
-  io.write("[videos] initBackend: ready (per-source instances)\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[videos] initBackend: ready (per-source instances)\n"); io.flush() end
 end
 
 --- Create a per-source mpv handle + render context + load the file.

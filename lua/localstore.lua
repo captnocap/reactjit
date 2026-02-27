@@ -35,13 +35,13 @@ local db = nil  -- lazily opened Database instance
 function LocalStore.init()
   if db then return true end
   if not sqlite.available then
-    io.write("[localstore] SQLite unavailable — local store disabled\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[localstore] SQLite unavailable — local store disabled\n"); io.flush() end
     return false
   end
 
   local ok, result = pcall(sqlite.open, "localstore.db")
   if not ok then
-    io.write("[localstore] Failed to open database: " .. tostring(result) .. "\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[localstore] Failed to open database: " .. tostring(result) .. "\n"); io.flush() end
     return false
   end
 
@@ -57,7 +57,7 @@ function LocalStore.init()
     )
   ]])
 
-  io.write("[localstore] Initialized (" .. db.path .. ")\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[localstore] Initialized (" .. db.path .. ")\n"); io.flush() end
   return true
 end
 

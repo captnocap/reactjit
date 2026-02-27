@@ -36,12 +36,7 @@ function love.load()
   end
 end
 
-local _frameCount = 0
 function love.update(dt)
-  _frameCount = _frameCount + 1
-  if _frameCount <= 3 then
-    print("[main.lua] love.update frame=" .. _frameCount)
-  end
   ReactJIT.update(dt)
 end
 

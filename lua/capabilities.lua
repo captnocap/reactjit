@@ -258,6 +258,7 @@ function Capabilities.loadAll()
     "image_process",
     "scene3d",
     "terminal",
+    "semantic_terminal",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do
@@ -266,10 +267,10 @@ function Capabilities.loadAll()
       loaded[#loaded + 1] = name
     else
       failed[#failed + 1] = name
-      io.write("[capabilities] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
+      if _G._reactjit_verbose then io.write("[capabilities] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush() end
     end
   end
-  io.write("[capabilities] " .. #loaded .. " capabilities registered\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[capabilities] " .. #loaded .. " capabilities registered\n"); io.flush() end
 end
 
 return Capabilities

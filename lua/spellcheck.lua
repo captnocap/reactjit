@@ -34,7 +34,7 @@ local lang = "en"
 --- @param config table|nil  { path = "dictionary.db", lang = "en" }
 function SpellCheck.init(config)
   if not sqlite.available then
-    io.write("[spellcheck] SQLite not available — spell check disabled\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[spellcheck] SQLite not available — spell check disabled\n"); io.flush() end
     return
   end
 
@@ -60,20 +60,20 @@ function SpellCheck.init(config)
   end
 
   if not dictPath then
-    io.write("[spellcheck] dictionary.db not found — spell check disabled\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[spellcheck] dictionary.db not found — spell check disabled\n"); io.flush() end
     return
   end
 
   -- Open with absolute path (bypass Love2D save directory resolution)
   local ok, result = pcall(sqlite.open, dictPath)
   if not ok then
-    io.write("[spellcheck] Failed to open dictionary: " .. tostring(result) .. "\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[spellcheck] Failed to open dictionary: " .. tostring(result) .. "\n"); io.flush() end
     return
   end
 
   db = result
   local count = db:scalar("SELECT COUNT(*) FROM words WHERE lang = ?", lang)
-  io.write("[spellcheck] Loaded " .. (count or 0) .. " words (" .. lang .. ")\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[spellcheck] Loaded " .. (count or 0) .. " words (" .. lang .. ")\n"); io.flush() end
   SpellCheck.available = true
 end
 

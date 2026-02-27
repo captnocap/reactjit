@@ -16,6 +16,13 @@
       (algorithm names in docs, config tokens in parsers, crypto primitives
       in security research) but become damning in combination.
 
+  JS source scanning (scanJS) uses HARD triggers ONLY.  Composite matching
+  was removed from JS scanning because substring matching on bundled code
+  produces too many false positives (e.g. "setHashes" matching "ethash",
+  "result" matching stratum fields, "scrypt" matching a mining algorithm).
+  Composite matching remains active in scanBinary() and scanWSFrame() where
+  it operates on structured data with far fewer false positives.
+
   Defense in depth:
     - Loads patterns from lua/miner_signatures.lua (updateable, versionable)
     - Embeds hardcoded fallback patterns that can't be removed by file tampering
@@ -89,10 +96,10 @@ local FALLBACK_PROTOCOL_MARKERS = {
   "mining.notify", "mining.submit", "mining.subscribe",
 }
 
-local FALLBACK_BEHAVIORAL = {
-  "CryptoNight", "cryptonight", "RandomX", "randomx",
-  "hashrate", "hashRate", "hash_rate",
-}
+-- NOTE: Behavioral fallback patterns (CryptoNight, RandomX, hashrate, etc.)
+-- were removed from JS source scanning — too many false positives from
+-- substring matching on bundled code.  These patterns remain in
+-- miner_signatures.lua for use by scanBinary() and scanWSFrame().
 
 local FALLBACK_SYMBOL_NAMES = {
   "rx_slow_hash", "cn_slow_hash", "cryptonight_hash",
@@ -248,17 +255,8 @@ function Quarantine.scanJS(source)
     end
   end
 
-  -- Helper: check Lua patterns (not plain string find)
-  local function checkLua(patterns, category, trigger)
-    for _, pattern in ipairs(patterns) do
-      local lp = pattern:lower()
-      if lower:find(lp) then
-        matches[#matches + 1] = { category = category, pattern = pattern, trigger = trigger }
-      end
-    end
-  end
-
-  -- ===== HARD triggers (single match = quarantine) =====
+  -- ===== HARD triggers only (single match = quarantine) =====
+  -- Composite triggers were removed from JS scanning — see note below.
 
   -- Known mining libraries — unambiguous
   checkPlain(FALLBACK_LIBRARIES, "library", HARD)
@@ -288,89 +286,17 @@ function Quarantine.scanJS(source)
     checkPlain(_signatures.wasm_patterns.export_names, "wasm_export", HARD)
   end
 
-  -- ===== COMPOSITE triggers (2+ from different categories) =====
-
-  -- Behavioral patterns — algorithm names could appear in docs/research
-  checkPlain(FALLBACK_BEHAVIORAL, "behavioral", COMPOSITE)
-  if _signatures and _signatures.behavioral_patterns then
-    checkLua(_signatures.behavioral_patterns, "behavioral", COMPOSITE)
-  end
-
-  -- Miner config tokens — could appear in config parsing code
-  if _signatures and _signatures.miner_config_tokens then
-    checkPlain(_signatures.miner_config_tokens, "config_token", COMPOSITE)
-  end
-
-  -- RandomX personalization strings — high-signal but could be in security research
-  if _signatures and _signatures.randomx_personalization then
-    checkPlain(_signatures.randomx_personalization, "randomx_personalization", COMPOSITE)
-  end
-
-  -- Stratum JSON-RPC method names — "login"/"submit" are generic alone
-  if _signatures and _signatures.stratum_json_rpc and _signatures.stratum_json_rpc.methods then
-    -- Only match these in JSON-like context: "method":"login" etc.
-    for _, method in ipairs(_signatures.stratum_json_rpc.methods) do
-      -- Check for JSON-RPC style: "method":"<name>" or "method": "<name>"
-      local json_pat = '"method":%s*"' .. method:lower() .. '"'
-      if lower:find(json_pat) then
-        matches[#matches + 1] = {
-          category = "stratum_rpc",
-          pattern = 'method:' .. method,
-          trigger = COMPOSITE,
-        }
-      end
-    end
-  end
-
-  -- Stratum JSON-RPC distinctive fields (job_id + nonce + result together)
-  if _signatures and _signatures.stratum_json_rpc and _signatures.stratum_json_rpc.fields then
-    for _, field in ipairs(_signatures.stratum_json_rpc.fields) do
-      local lf = field:lower()
-      -- Dotted fields like "params.login" — check for "params":{"login"
-      if lf:find(".", 1, true) then
-        local parts = {}
-        for part in lf:gmatch("[^%.]+") do parts[#parts + 1] = part end
-        if #parts == 2 then
-          local pat = '"' .. parts[1] .. '".-"' .. parts[2] .. '"'
-          if lower:find(pat) then
-            matches[#matches + 1] = {
-              category = "stratum_field",
-              pattern = field,
-              trigger = COMPOSITE,
-            }
-          end
-        end
-      else
-        -- Simple field: "job_id", "nonce", "result" — only in JSON context
-        local pat = '"' .. lf .. '"'
-        if lower:find(pat, 1, true) then
-          matches[#matches + 1] = {
-            category = "stratum_field",
-            pattern = field,
-            trigger = COMPOSITE,
-          }
-        end
-      end
-    end
-  end
-
-  -- Algorithm constants (string_values only, hex isn't in JS source)
-  if _signatures and _signatures.algorithm_constants then
-    for _, ac in ipairs(_signatures.algorithm_constants) do
-      if ac.string_values then
-        for _, sv in ipairs(ac.string_values) do
-          if lower:find(sv:lower(), 1, true) then
-            matches[#matches + 1] = {
-              category = "algorithm_constant",
-              pattern = sv,
-              trigger = COMPOSITE,
-              name = ac.name,
-            }
-          end
-        end
-      end
-    end
-  end
+  -- NOTE: Composite triggers (behavioral patterns, config tokens, stratum
+  -- fields, algorithm constants) were removed from JS source scanning.
+  -- Substring matching on bundled JS is too noisy — legitimate code
+  -- routinely contains "nonce", "result", "scrypt", "setHashes" (which
+  -- substring-matches "ethash"), etc.  Two false-positive composite
+  -- categories = quarantine on innocent apps.
+  --
+  -- These composite checks remain active in scanBinary() and scanWSFrame()
+  -- where they operate on structured data with far fewer false positives.
+  -- The JS scan now only fires on HARD triggers: known miner libraries,
+  -- pool domains, stratum protocol URIs, agent strings, and WASM exports.
 
   local unique = deduplicate(matches)
   return {
