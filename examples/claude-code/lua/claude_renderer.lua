@@ -668,38 +668,8 @@ function Renderer.render(node, c, effectiveOpacity)
   -- Reset scissor
   love.graphics.setScissor()
 
-  -- Permission overlay removed — React Modal handles it now.
-  -- Status bar shows "awaiting approval" when permission is active.
-  if session.permissionPrompt then
-    love.graphics.setFont(smallFont)
-    setColorWithOpacity(Color.toTable("#f97316"), effectiveOpacity)
-    local awaitText = "Awaiting approval: " .. (session.permissionPrompt.action or "tool")
-    love.graphics.print(awaitText, c.x + MARGIN_LEFT, statusY - smallLineHeight - 4)
-  end
-end
-
--- ── Permission prompt API ──────────────────────────────────────────
-
-function Renderer.showPermissionPrompt(sessionId, permInfo)
-  local session = Renderer.getSession(sessionId)
-  session.permissionPrompt = {
-    action = permInfo.action,
-    target = permInfo.target,
-    rawQuestion = permInfo.rawQuestion,
-  }
-end
-
-function Renderer.resolvePermissionPrompt(sessionId, label)
-  local session = Renderer.getSession(sessionId)
-  if session.permissionPrompt then
-    Renderer.addSystem(sessionId, label .. ": " .. (session.permissionPrompt.target or "tool"))
-  end
-  session.permissionPrompt = nil
-end
-
-function Renderer.getPermissionPrompt(sessionId)
-  local session = Renderer.getSession(sessionId)
-  return session.permissionPrompt
+  -- Permission prompts render natively through vterm — no overlay needed.
+  -- Keyboard y/a/n interception handled by claude_canvas.lua.
 end
 
 return Renderer

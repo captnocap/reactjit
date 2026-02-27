@@ -1,19 +1,51 @@
-# TUI Compositor — Claude Code + @reactjit/tui
+# TUI Compositor — Claude Code + Terminal Emulation
 
 ## Status
 
 **Working end-to-end.** PTY spawn, libvterm parsing, damage-driven extraction,
 keystroke passthrough, semantic row classification, real-time vterm rendering
-with tagged rows. Claude Code is the proof-of-concept stress test.
+with tagged rows. Claude Code is the first app built on this.
 
 Commit: `feat(claude-code): TUI compositor — real-time semantic classification of terminal output`
 
 ---
 
+## The Big Picture
+
+This is not a CLI wrapper. It's a **terminal emulator that renders through React**.
+
+PTY + libvterm + damage callbacks + keystroke passthrough = a complete terminal.
+The semantic classification layer on top turns raw terminal rows into typed
+props that React components consume. The terminal app has no idea it's being
+composited — it thinks it's talking to xterm.
+
+```
+Process → PTY → libvterm → { row, text, token, fg[], bg[] } → React children
+   ↑                                                               |
+   └──────────────── keystroke passthrough ←────────────────────────┘
+```
+
+The foundation is `<Terminal />` — a first-class ReactJIT component. Claude Code
+is just one consumer. The semantic token map is just a config passed as props.
+Anyone can define their own tokens for any terminal app. The community shares
+configs. No code required — just pattern definitions.
+
+### What this means
+
+- **Better xterm.js** — native rendering, React composability, semantic awareness
+- **Multi-agent orchestration** — spawn N Claude instances in N PTYs, each with
+  its own vterm + classification, all interactive in parallel. Not subagents.
+  Real persistent terminal sessions you walk between.
+- **Any TUI gets a React face** — lazygit, htop, k9s, vim, docker — define
+  tokens, declare components, done.
+
+---
+
 ## Part 1: Claude Code Semantic Token Map
 
-Every vterm row gets a token. These are what we've found so far and what's
-still needed. Each token becomes a React component prop.
+The primary build target. Nail every token, build the React overlay, ship
+something usable. This work directly informs the generic `<Terminal />`
+component — Claude Code is the stress test.
 
 ### Content Zone (above input boundary)
 
@@ -22,7 +54,12 @@ still needed. Each token becomes a React component prop.
 | `banner` | "Claude Code v", model names (Opus/Sonnet/Haiku + version) | `Claude Code v2.1.59` | Done |
 | `text` | Plain text, no special markers | `~/creative/reactjit` | Done |
 | `box_drawing` | `│`, `┌`, `╭`, `└`, `╰`, long `────` | Claude's response borders | Done |
-| `thinking` | "Thinking", "Imagining", "Saut" | `Thinking...` | Done |
+| `thinking` | "Thinking", "Imagining" (in-progress, no prefix) | `Thinking...` | Done |
+| `thought_complete` | `✻` prefix + past tense verb + duration (gray) | `✻ Sautéed for 38s` | Done |
+| `task_active` | `+` prefix + present participle + `…` + timer (orange, >30s) | `+ Razzmatazzing… (7m 48s)` | Done |
+| `task_summary` | "N tasks (N done, N open)" | `9 tasks (8 done, 1 open)` | Done |
+| `task_done` | `✔` prefix (completed task) | `✔ Create shared migration…` | Done |
+| `task_open` | `◻` prefix (pending task) | `◻ Refactor swiftui, tkinte…` | Done |
 | `tool` | Bullet chars `●`, `•`, `◆` followed by tool name | `● Read(file.lua)` | Done |
 | `diff` | Lines starting with `+` or `-` | `+ const foo = 1` | Done |
 | `error` | Lines matching `Error:` | `Error: file not found` | Done |
@@ -41,14 +78,28 @@ still needed. Each token becomes a React component prop.
 | `menu_title` | "Select ..." headers | `Select model` | Done |
 | `selector` | Horizontal value adjuster with `← →` | `High effort ← → to adjust` | Done |
 | `confirmation` | "Enter to confirm" footer | `Enter to confirm · Esc to exit` | Done |
+| `slash_menu` | `/command description` items in input zone | `/resume Resume a previous...` | Done |
+| `list_selectable` | Box-drawing row with bright/def fg (clickable) | Agent names, config items | Done |
+| `list_selected` | `❯` inside a menu context (cursor on this row) | `❯ Sonnet 4.6` | Done |
+| `list_info` | Box-drawing row with dim fg (non-interactive) | Descriptions, metadata | Done |
+| `menu_desc` | Text after a menu_option (option description) | `Best for most tasks` | Done |
+| `search_box` | Search bar inside a menu | `Search settings` | Done |
+| `picker_selected` | User_prompt followed by picker_meta | Selected resume session | Done |
+| `picker_item` | Text followed by picker_meta | Non-selected resume session | Done |
+| `picker_meta` | "N ago · branch · size" metadata | `5 hours ago · main · 10.1MB` | Done |
+| `picker_title` | Picker header (e.g. "Resume Session") | `Resume Session` | Done |
+| `user_text` | Text continuation after user_prompt (multi-line) | Long user input wrap lines | Done |
+| `hint` | Footer hints (Enter/Arrow/Esc instructions) | `Arrow keys to navigate` | Done |
+| `result` | `⎿` bracket (menu dismissed, tool result) | `⎿ (no content)` | Done |
+| `assistant_text` | Text after tool/thinking/thought_complete/result (state machine) | Claude's multiline prose | Done |
+| `plan_border` | `╌╌╌` dashed borders (content block wrapper) | Plan content delimiters | Done |
+| `wizard_step` | `← □ ... □ ... ✓ ... →` step indicators | Plan mode question stepper | Done |
 
 ### Tokens Still Needed
 
 | Token | Pattern | When it appears | Priority |
 |-------|---------|-----------------|----------|
 | `file_picker` | `@` autocomplete items (`+` prefix, file/dir names) | Type `@` in prompt | High |
-| `slash_menu` | `/` command autocomplete items | Type `/` in prompt | High |
-| `task_progress` | Task list items with checkmarks/spinners | During multi-step tasks | Medium |
 | `code_block` | Code inside `│` borders with syntax highlighting | Claude's code responses | Medium |
 | `file_path` | File path references in tool output | `src/App.tsx:42` | Medium |
 | `streaming_cursor` | The blinking cursor during response generation | Active streaming | Low |
@@ -74,169 +125,243 @@ still needed. Each token becomes a React component prop.
 
 ---
 
-## Part 2: @reactjit/tui — The Generic TUI Compositor
+## Part 2: `<Terminal />` — The Foundation
 
-### Vision
+### What it is
 
-Any TUI app can be wrapped in a React skin with zero code changes to the app.
-The pipeline:
-
-```
-CLI process → PTY → libvterm → semantic classifier → React components
-     ↑                                                      |
-     └──────────── keystroke passthrough ←──────────────────┘
-```
-
-The classifier is driven by a JSON config. No Lua knowledge needed. The config
-is the only thing that changes between apps.
+A first-class ReactJIT capability that IS a terminal emulator. Not a wrapper,
+not a skin, not a compositor on top of something else. PTY + libvterm + React
+rendering. The app inside sees a normal terminal. React sees typed rows.
 
 ### Architecture
 
 ```
-packages/tui/
-  src/
-    TUI.tsx              — <TUI command="lazygit" config={config} />
-    CLICanvas.tsx         — <CLICanvas config={config}>{(rows) => ...}</CLICanvas>
-    useTokenizer.ts       — Hook: returns classified rows from vterm
-    types.ts              — TokenConfig, PatternRule, ClassifiedRow
-
-lua/capabilities/tui.lua — Generic TUI capability (PTY + vterm + classifier)
+lua/capabilities/terminal.lua    — PTY + vterm + classifier (the engine)
+packages/core/src/Terminal.tsx   — <Terminal /> component
+packages/core/src/useTerminal.ts — Hook: rows, writeRaw, resize
 ```
 
-### Config Format
+Claude Code's `claude_session.lua` / `claude_canvas.lua` become a CONSUMER
+of this capability, not the implementation. The hard-won lessons from parsing
+Claude CLI (sandwich detection, menu handling, streaming) become the reference
+semantic config.
 
-```json
-{
-  "app": "lazygit",
-  "command": "lazygit",
-  "args": [],
-  "patterns": [
-    {
-      "token": "branch_name",
-      "match": "regex",
-      "pattern": "^\\s*[*\\s]\\s+\\w",
-      "region": "content"
-    },
-    {
-      "token": "commit_hash",
-      "match": "cell_fg_color",
-      "fg_range": [200, 200, 0, 255, 255, 100],
-      "region": "content"
-    },
-    {
-      "token": "diff_add",
-      "match": "prefix",
-      "pattern": "+",
-      "region": "content"
-    },
-    {
-      "token": "diff_remove",
-      "match": "prefix",
-      "pattern": "-",
-      "region": "content"
-    },
-    {
-      "token": "status_bar",
-      "match": "row_position",
-      "position": "last_non_empty",
-      "region": "chrome"
-    },
-    {
-      "token": "input",
-      "match": "cursor_row",
-      "region": "input"
-    }
-  ]
+### React API
+
+```tsx
+// Raw terminal — full control
+<Terminal command="bash" args={["-l"]}>
+  {(rows) => rows.map(row => (
+    <Text key={row.index} style={{ color: row.fg }}>
+      {row.text}
+    </Text>
+  ))}
+</Terminal>
+
+// With semantic tokens — rows get classified
+<Terminal command="claude" args={["--verbose"]} tokens={claudeTokens}>
+  {(rows) => rows.map(row => {
+    if (row.token === 'thinking') return <Spinner key={row.index} />;
+    if (row.token === 'permission') return <PermissionCard key={row.index} row={row} />;
+    if (row.token === 'user_input') return <InputBar key={row.index} row={row} />;
+    return <TerminalRow key={row.index} row={row} />;
+  })}
+</Terminal>
+
+// Hook for custom layouts
+const term = useTerminal('claude', ['--verbose'], claudeTokens);
+// term.rows: ClassifiedRow[]
+// term.writeRaw(data): send bytes to PTY
+// term.resize(cols, rows): resize terminal
+// term.cursor: { row, col }
+```
+
+### Semantic Token Config
+
+Tokens are defined as pattern rules. The classifier runs them top-to-bottom,
+first match wins. Passed as props, not hardcoded.
+
+```ts
+const claudeTokens: TokenRule[] = [
+  { token: 'permission',   match: 'contains', text: 'Do you want to' },
+  { token: 'menu_option',  match: 'regex',    pattern: /^\s*[›>]?\s*\d+\.\s+/ },
+  { token: 'banner',       match: 'contains', text: 'Claude Code' },
+  { token: 'thinking',     match: 'contains', text: 'Thinking' },
+  { token: 'tool',         match: 'contains', text: '● ' },
+  { token: 'diff',         match: 'regex',    pattern: /^[+-]/ },
+  { token: 'selector',     match: 'contains', text: '← →' },
+  { token: 'confirmation', match: 'contains', text: 'Enter to confirm' },
+  { token: 'status_bar',   match: 'regex',    pattern: /\d+\s*tokens/ },
+  { token: 'box_drawing',  match: 'regex',    pattern: /[│┌╭└╰]/ },
+  { token: 'error',        match: 'regex',    pattern: /^\s*[Ee]rror:/ },
+  { token: 'user_prompt',  match: 'contains', text: '❯' },
+  // Zone-aware rules
+  { token: 'input_border', match: 'separator', zone: 'input' },
+  { token: 'user_input',   match: 'cursor_row', zone: 'input' },
+];
+```
+
+### Row Data Shape
+
+```ts
+interface ClassifiedRow {
+  index: number;         // vterm row number
+  text: string;          // full row text
+  token: string;         // semantic classification
+  zone: 'content' | 'input';  // above or below boundary
+  cells: Cell[];         // per-cell data (char, fg, bg, bold, etc.)
+  cursor?: { col: number }; // if cursor is on this row
 }
 ```
 
-### Match Types
+---
 
-| Type | Description | Uses |
-|------|-------------|------|
-| `regex` | Row text matches regex | Most text classification |
-| `prefix` | Row starts with literal string | Diff lines, bullets |
-| `contains` | Row contains literal string | Status indicators |
-| `cell_fg_color` | Cell foreground color in range | Syntax-highlighted content |
-| `cell_bg_color` | Cell background color in range | Selection highlights |
-| `cell_attribute` | Bold, dim, italic, underline | Emphasis detection |
-| `row_position` | First, last, Nth from top/bottom | Headers, status bars |
-| `cursor_row` | Row where vterm cursor sits | Input detection |
-| `sandwich` | Row between two matching rows | Input zones (separator-bounded) |
-| `column_layout` | Detect tabular column structure | Table-based TUIs |
+## Part 3: Interactive Semantics — Controlling What You See
 
-### React Usage
+Classification tells you what a row IS. Interactive semantics tell you what you
+can DO with it. This is the second config layer — pure data, no code.
+
+### The Problem
+
+The effort selector shows `High effort ← → to adjust`. We classify it as
+`selector`. But to render three React buttons (Low / Med / High) that actually
+work, we need to:
+
+1. Parse current value from row text → "High"
+2. Know all possible values in order → ["low", "medium", "high"]
+3. Calculate: from "High" to "Low" = 2 left arrows
+4. Send those keystrokes to the PTY
+
+This applies to every interactive element in every TUI. Permission prompts,
+model menus, file pickers, question prompts. Same shape, different configs.
+
+### Interaction Types
+
+| Type | What it is | Navigation | Examples |
+|------|-----------|------------|----------|
+| `discrete` | Ordered values, arrow nav | prev/next keys, computed delta | Effort selector, theme picker |
+| `choice` | Named keystroke options | Direct key per option | Permission (y/a/n) |
+| `menu` | Cursor-navigated list | Up/down + select | Model picker, question options |
+| `action` | Simple button → keystroke | Direct key per action | Confirm (Enter), Cancel (Esc) |
+
+### Interaction Config (alongside token config)
+
+```ts
+const claudeInteractions: InteractionRule[] = [
+  {
+    token: 'selector',
+    type: 'discrete',
+    values: ['low', 'medium', 'high'],
+    parseValue: /^(\w+)\s+effort/i,     // extract current from row text
+    prevKey: '\x1b[D',                   // left arrow
+    nextKey: '\x1b[C',                   // right arrow
+  },
+  {
+    token: 'permission',
+    type: 'choice',
+    options: [
+      { label: 'Approve', key: 'y' },
+      { label: 'Allow All', key: 'a' },
+      { label: 'Deny', key: 'n' },
+    ],
+  },
+  {
+    token: 'menu_option',
+    type: 'menu',
+    parseOption: /\d+\.\s+(.*)/,         // extract option text per row
+    cursorUp: '\x1b[A',
+    cursorDown: '\x1b[B',
+    selectKey: '\r',
+  },
+  {
+    token: 'confirmation',
+    type: 'action',
+    actions: [
+      { label: 'Confirm', key: '\r' },
+      { label: 'Cancel', key: '\x1b' },
+    ],
+  },
+];
+```
+
+### Enriched Row Data
+
+When a classified row matches an interaction rule, it gets an `interaction`
+property. React components use this to render controls and compute keystrokes.
+
+```ts
+interface ClassifiedRow {
+  index: number;
+  text: string;
+  token: string;
+  zone: 'content' | 'input';
+  cells: Cell[];
+  cursor?: { col: number };
+  // Present when an interaction rule matches this token
+  interaction?: {
+    type: 'discrete' | 'choice' | 'menu' | 'action';
+    currentValue?: string;      // parsed from row text
+    currentIndex?: number;      // position in values array
+    values?: string[];          // for discrete
+    options?: InteractionOption[];  // for choice/action/menu
+  };
+}
+```
+
+### React Consumption
+
+The Terminal exposes `write()` — raw bytes to PTY. React computes what to send
+from the interaction data. No magic, fully explicit.
 
 ```tsx
-import { TUI, CLICanvas } from '@reactjit/tui';
-import lazygitConfig from './configs/lazygit.json';
-
-// Simple: auto-render with default styling per token
-<TUI command="lazygit" config={lazygitConfig} />
-
-// Custom: full control over rendering each token
-<CLICanvas command="lazygit" config={lazygitConfig}>
-  {(rows) => (
-    <Box style={{ flexDirection: 'column' }}>
-      {rows.map(row => {
-        switch (row.token) {
-          case 'branch_name':
-            return <BranchBadge key={row.row}>{row.text}</BranchBadge>;
-          case 'commit_hash':
-            return <CommitRow key={row.row} hash={row.text} />;
-          case 'diff_add':
-            return <DiffLine key={row.row} type="add">{row.text}</DiffLine>;
-          default:
-            return <Text key={row.row}>{row.text}</Text>;
-        }
-      })}
-    </Box>
-  )}
-</CLICanvas>
-
-// Hook: just the data, bring your own rendering
-const { rows, send, writeRaw } = useTUI('lazygit', lazygitConfig);
+<Terminal command="claude" tokens={claudeTokens} interactions={claudeInteractions}>
+  {(rows, write) => rows.map(row => {
+    if (row.token === 'selector' && row.interaction) {
+      const { values, currentIndex } = row.interaction;
+      return (
+        <SegmentedControl
+          options={values}
+          selected={currentIndex}
+          onSelect={(targetIdx) => {
+            const delta = targetIdx - currentIndex;
+            const key = delta > 0 ? '\x1b[C' : '\x1b[D';
+            write(key.repeat(Math.abs(delta)));
+          }}
+        />
+      );
+    }
+    if (row.token === 'permission') {
+      return (
+        <PermissionCard
+          options={row.interaction.options}
+          onSelect={(opt) => write(opt.key)}
+        />
+      );
+    }
+  })}
+</Terminal>
 ```
 
-### The Config Editor (the tool that builds the tools)
+### Why This Can't Be Hacked Around
 
-A ReactJIT app itself — runs the target TUI, shows the vterm with row numbers
-and cell colors, lets you:
+Env vars, settings files, and API flags are workarounds for a single app's
+single control. The interaction layer solves the general case:
 
-1. **Click a row** → see its text, cell colors, cursor position
-2. **Name it** → type a token name like `branch_name`
-3. **Define the match** → pick from match types, test regex, preview
-4. **See it live** → row immediately gets tagged with your token
-5. **Export** → saves the JSON config
+- Any TUI, any selector, any menu — same pattern
+- Pure data config — an AI or visual editor can generate these
+- No app-specific knowledge baked into the framework
+- The terminal IS the source of truth — we read and write it directly
 
-This is the meta-loop: ReactJIT renders the editor, which uses the TUI
-compositor to display the target app, which generates a config that other
-ReactJIT apps consume through the same compositor.
-
-### Community Distribution
-
-```bash
-# Install a community TUI skin
-rjit tui install lazygit
-
-# Run it
-rjit tui run lazygit
-
-# Create your own
-rjit tui create htop
-# Opens the config editor with htop running inside it
-
-# Share it
-rjit tui publish htop
-```
-
-Configs are just JSON files. Share on GitHub, npm, or a future registry.
+---
 
 ### Priority Order
 
-1. **Extract the generic TUI capability from claude-code** — factor out PTY + vterm + classifier into `lua/capabilities/tui.lua`
-2. **Build the config-driven classifier** — replace hardcoded `classifyRow` with pattern matching engine
-3. **Create `@reactjit/tui` package** — React components + hook wrapping the capability
-4. **Build the config editor** — the meta-tool that generates configs
-5. **Claude Code as first consumer** — migrate claude-code example to use the generic package
-6. **Second app** — skin `lazygit` or `htop` to prove it generalizes
+1. **Keep building Claude Code** — it's the daily driver and the stress test
+2. **Factor the engine** — extract PTY + vterm + classifier from claude_session
+   into `lua/capabilities/terminal.lua`
+3. **Wire `<Terminal />`** — React component consuming the capability
+4. **Build interaction layer** — enrich classified rows with interaction data
+5. **Claude Code migrates** — becomes `<Terminal command="claude" tokens={...}>`
+   with custom overlay components
+6. **Multi-instance** — spawn N terminals side by side, per-session focus
+7. **Config editor** — the meta-tool: run any TUI, click rows, name tokens, export

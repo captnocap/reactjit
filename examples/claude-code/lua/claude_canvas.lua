@@ -36,6 +36,7 @@ local function getInputState(nodeId)
       history = {},
       historyIdx = 0,
       viewportH = 600,  -- updated each render frame
+      scrollY = 0,      -- scroll offset in pixels (0 = top, positive = scrolled down)
     }
   end
   return _inputStates[nodeId]
@@ -145,10 +146,15 @@ Capabilities.register("ClaudeCanvas", {
     inputState.viewportH = c.h
 
     -- Compute desired column count — applied next tick (row resize segfaults libvterm)
+    -- Must match the visible cell area: canvas width minus tag prefix and right-side debug info
     if Measure then
       local sizeFont = Measure.getFont(13, nil, nil)
+      local tagSizeFont = Measure.getFont(9, nil, nil)
       local charW = sizeFont:getWidth("M")
-      local fitCols = math.max(20, math.floor((c.w - 16) / charW))
+      local leftReserve = tagSizeFont:getWidth("[list_selectable] ") + 4
+      local rightReserve = 180  -- row numbers + color debug labels
+      local cellArea = c.w - leftReserve - rightReserve
+      local fitCols = math.max(20, math.floor(cellArea / charW))
       Session.setDesiredSize(fitCols, nil)
     end
 
@@ -245,10 +251,10 @@ Capabilities.register("ClaudeCanvas", {
       local rows, cols = vterm:size()
 
       -- Measure tag prefix width for offsetting cell content
-      local tagW = tagFont:getWidth("[confirmation] ")  -- widest tag as reference
+      local tagW = tagFont:getWidth("[list_selectable] ")  -- widest tag as reference
       local cellOffsetX = tagW + 4
-      -- Row numbers reserve space on the right
-      local rowNumW = 34  -- "999" + padding
+      -- Right side reserve: row numbers + color debug info
+      local rowNumW = 180  -- row number + "255,255,255 153,153,153 def" color labels
       -- Available width for vterm cells between tag and row numbers
       local cellAreaW = c.w - cellOffsetX - rowNumW
       local maxCellCols = math.max(1, math.floor(cellAreaW / charW))
@@ -268,14 +274,156 @@ Capabilities.register("ClaudeCanvas", {
         end
       end
 
+      -- Clamp scroll: max = total content height - visible area
+      local totalContentH = (lastNonEmpty + 1) * lineH + 16
+      local maxScroll = math.max(0, totalContentH - contentRect.h)
+      if inputState.scrollY > maxScroll then inputState.scrollY = maxScroll end
+
+      local scrollY = inputState.scrollY
+      local prevKind = nil
+      local inMenu = false
+      local rowColors = {}  -- row -> { fg, hasText }
+
       for row = 0, lastNonEmpty do
-        local py = c.y + 8 + row * lineH
-        if py + lineH > contentBottom then break end
+        local py = c.y + 8 + row * lineH - scrollY
+        if py + lineH < c.y then goto continue_row end  -- above viewport, skip
+        if py > contentBottom then break end             -- below viewport, done
+
+        -- Alternating row background for visual tracking
+        if row % 2 == 1 then
+          love.graphics.setColor(1, 1, 1, 0.03 * effectiveOpacity)
+          love.graphics.rectangle("fill", c.x, py, c.w, lineH)
+        end
 
         local rowText = vterm:getRowText(row)
         if #rowText > 0 then
           -- Classify with zone awareness
           local kind = Session.classifyRow(rowText, row, rows)
+
+          -- Lookahead: rows followed by picker_meta are part of a picker list
+          if row < lastNonEmpty then
+            local nextText = vterm:getRowText(row + 1)
+            if #nextText > 0 and Session.classifyRow(nextText, row + 1, rows) == "picker_meta" then
+              if kind == "user_prompt" then
+                kind = "picker_selected"
+              elseif kind == "text" then
+                kind = "picker_item"
+              end
+            end
+          end
+
+          -- Sample ALL distinct fg colors on this row
+          local borderChars = { ["│"] = true, ["┌"] = true, ["╭"] = true,
+            ["└"] = true, ["╰"] = true, ["─"] = true, ["┐"] = true,
+            ["╮"] = true, ["┘"] = true, ["╯"] = true, ["┤"] = true,
+            ["├"] = true, ["┬"] = true, ["┴"] = true, ["╌"] = true }
+          local sampledFg = nil       -- first content cell's fg (for brightness check)
+          local hasTextContent = false
+          local colorSet = {}         -- unique color strings seen
+          local colorList = {}        -- ordered unique color labels
+          local colorSeen = {}
+          for col = 0, math.min(cols - 1, 80) do
+            local cell = vterm:getCell(row, col)
+            if cell and cell.char and #cell.char > 0
+               and cell.char ~= " " and not borderChars[cell.char] then
+              if not hasTextContent then
+                hasTextContent = true
+                sampledFg = cell.fg
+              end
+              local label
+              if cell.fg then
+                label = string.format("%d,%d,%d", cell.fg[1], cell.fg[2], cell.fg[3])
+              else
+                label = "def"
+              end
+              if not colorSeen[label] then
+                colorSeen[label] = true
+                colorList[#colorList + 1] = label
+              end
+            end
+          end
+          rowColors[row] = { fg = sampledFg, hasText = hasTextContent, colors = colorList }
+
+          -- Brightness-based reclassification for box_drawing rows with text content
+          if kind == "box_drawing" and hasTextContent then
+            if not sampledFg then
+              kind = "list_selectable"
+            else
+              local brightness = (sampledFg[1] + sampledFg[2] + sampledFg[3]) / 3
+              if brightness > 180 then
+                kind = "list_selectable"
+              elseif brightness > 80 then
+                kind = "list_info"
+              end
+            end
+          end
+
+          -- Adjacency: text after user_prompt/user_text = user_text (multi-line input)
+          if kind == "text" and (prevKind == "user_prompt" or prevKind == "user_text") then
+            kind = "user_text"
+          end
+
+          -- Adjacency: text after assistant-attributed tokens = assistant_text
+          -- State machine: ● tool / thinking / thought_complete / result / task_* = assistant owns stream
+          -- All subsequent def-colored text belongs to assistant until next user marker
+          if kind == "text" and (prevKind == "tool" or prevKind == "thinking"
+             or prevKind == "thought_complete" or prevKind == "result"
+             or prevKind == "assistant_text" or prevKind == "task_done"
+             or prevKind == "task_open" or prevKind == "task_summary"
+             or prevKind == "task_active" or prevKind == "diff"
+             or prevKind == "plan_border") then
+            kind = "assistant_text"
+          end
+
+          -- Adjacency: text after menu_option = menu_option_desc (option description)
+          if kind == "text" and prevKind == "menu_option" then
+            kind = "menu_desc"
+          end
+
+          -- Footer hints: "Enter to select", "Tab/Arrow keys", "Esc to cancel/go back"
+          if kind == "text" and (rowText:find("Enter to select", 1, true)
+             or rowText:find("Arrow keys", 1, true)
+             or rowText:find("Esc to cancel", 1, true)
+             or rowText:find("Esc to go back", 1, true)) then
+            kind = "hint"
+          end
+
+          -- Structure check: detect menu context after box_drawing separator
+          if prevKind == "box_drawing" then
+            if kind == "list_selectable" then
+              if rowText:find("Search", 1, true) then
+                kind = "search_box"
+              else
+                kind = "menu_title"
+              end
+              inMenu = true
+            elseif kind == "text" and sampledFg then
+              -- Colored text after separator = menu title (e.g. "Manage MCP servers" in purple)
+              local brightness = (sampledFg[1] + sampledFg[2] + sampledFg[3]) / 3
+              if brightness > 150 then
+                kind = "menu_title"
+                inMenu = true
+              end
+            end
+          end
+
+          -- Inside a menu: reclassify text/user_prompt based on color
+          if inMenu and row < boundary then
+            if kind == "user_prompt" then
+              kind = "list_selected"
+            elseif kind == "text" and not sampledFg then
+              -- def fg inside a menu = selectable item
+              kind = "list_selectable"
+            elseif kind == "text" and sampledFg then
+              local brightness = (sampledFg[1] + sampledFg[2] + sampledFg[3]) / 3
+              if brightness > 180 then
+                kind = "list_selectable"
+              elseif brightness > 80 then
+                kind = "list_info"
+              end
+            end
+          end
+
           -- Override: rows in the input zone get zone-specific tags
           if row >= boundary then
             if Session.isSeparatorRow(vterm, row) then
@@ -286,10 +434,14 @@ Capabilities.register("ClaudeCanvas", {
               kind = "status_bar"
             elseif kind == "confirmation" or kind == "menu_option" or kind == "selector" or kind == "menu_title" then
               -- keep these as-is
+            elseif rowText:match("^%s*/[%w%-]") then
+              kind = "slash_menu"
             else
               kind = "input_zone"
             end
           end
+
+          prevKind = kind
 
           -- Draw tag prefix
           love.graphics.setFont(tagFont)
@@ -317,6 +469,7 @@ Capabilities.register("ClaudeCanvas", {
             end
           end
         end
+        ::continue_row::
       end
       love.graphics.setScissor()
 
@@ -324,8 +477,9 @@ Capabilities.register("ClaudeCanvas", {
       local numFont = Measure.getFont(9, nil, nil)
       love.graphics.setFont(numFont)
       for row = 0, lastNonEmpty do
-        local py = c.y + 8 + row * lineH
-        if py + lineH > contentBottom then break end
+        local py = c.y + 8 + row * lineH - scrollY
+        if py + lineH < c.y then goto continue_num end
+        if py > contentBottom then break end
         local rowText = vterm:getRowText(row)
         if row >= boundary then
           love.graphics.setColor(1, 0.6, 0.2, 0.5)  -- orange for input zone
@@ -335,6 +489,15 @@ Capabilities.register("ClaudeCanvas", {
           love.graphics.setColor(1, 1, 1, 0.15)
         end
         love.graphics.print(string.format("%3d", row), c.x + c.w - 30, py)
+        -- Show all distinct fg colors next to row number
+        local rc = rowColors[row]
+        if rc and rc.colors and #rc.colors > 0 then
+          love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+          local colorStr = table.concat(rc.colors, " ")
+          local cw = numFont:getWidth(colorStr .. "  ")
+          love.graphics.print(colorStr, c.x + c.w - 34 - cw, py)
+        end
+        ::continue_num::
       end
     end
 
@@ -464,8 +627,8 @@ Capabilities.register("ClaudeCanvas", {
     inputState.blinkTimer = 0
 
     -- Check for permission prompt — intercept y/a/n/Esc
-    local permPrompt = Renderer.getPermissionPrompt(sessionId)
-    if permPrompt then
+    -- Permission renders natively through vterm; we just need to route keystrokes
+    if Session.getMode() == "permission" then
       if key == "y" or key == "return" or key == "kpenter" then
         Session.respond(1)
         return true
@@ -483,18 +646,20 @@ Capabilities.register("ClaudeCanvas", {
 
     -- Scroll: PgUp / PgDn / Shift+Up / Shift+Down
     if key == "pageup" then
-      Renderer.adjustScroll(sessionId, -(inputState.viewportH - 60), inputState.viewportH)
+      inputState.scrollY = inputState.scrollY - (inputState.viewportH - 60)
+      if inputState.scrollY < 0 then inputState.scrollY = 0 end
       return true
     elseif key == "pagedown" then
-      Renderer.adjustScroll(sessionId, (inputState.viewportH - 60), inputState.viewportH)
+      inputState.scrollY = inputState.scrollY + (inputState.viewportH - 60)
       return true
     end
     if love.keyboard.isDown("lshift", "rshift") then
       if key == "up" then
-        Renderer.adjustScroll(sessionId, -SCROLL_LINE, inputState.viewportH)
+        inputState.scrollY = inputState.scrollY - SCROLL_LINE
+        if inputState.scrollY < 0 then inputState.scrollY = 0 end
         return true
       elseif key == "down" then
-        Renderer.adjustScroll(sessionId, SCROLL_LINE, inputState.viewportH)
+        inputState.scrollY = inputState.scrollY + SCROLL_LINE
         return true
       end
     end
@@ -617,12 +782,10 @@ Capabilities.register("ClaudeCanvas", {
   end,
 
   handleWheelMoved = function(node, dx, dy)
-    local props = node.props or {}
-    local sessionId = props.sessionId or "default"
     local inputState = getInputState(node.id)
     -- dy is positive when scrolling up, negative when scrolling down (love2d convention)
-    -- We want scroll up = content moves down = scrollY decreases
-    Renderer.adjustScroll(sessionId, -dy * SCROLL_LINE, inputState.viewportH)
+    inputState.scrollY = inputState.scrollY - dy * SCROLL_LINE
+    if inputState.scrollY < 0 then inputState.scrollY = 0 end
   end,
 })
 

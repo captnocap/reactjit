@@ -206,6 +206,10 @@ local function classifyRow(text, row, totalRows)
     return "banner"
   end
 
+  -- Banner: crab ASCII art + working directory (e.g. "╰─ ~/creative/reactjit")
+  -- Always in the first few rows of the splash screen
+  if row <= 5 and text:find("~/", 1, true) then return "banner" end
+
   -- Interactive menu elements
   -- Horizontal selector: "High effort (default) ← → to adjust"
   if text:find("← →", 1, true) or text:find("to adjust", 1, true) then return "selector" end
@@ -213,6 +217,12 @@ local function classifyRow(text, row, totalRows)
   if text:find("Enter to confirm", 1, true) then return "confirmation" end
   -- Menu title: "Select model", "Select permission", etc.
   if text:match("^%s*Select%s+") then return "menu_title" end
+
+  -- Picker titles: "Resume Session", etc.
+  if text:match("^%s*Resume Session") then return "picker_title" end
+
+  -- Picker metadata: "5 hours ago · main · 10.1MB"
+  if text:match("%d+%s+%a+ ago") and text:find("·", 1, true) then return "picker_meta" end
 
   -- Token/cost status bar
   if text:match("%d+%s*tokens") or text:match("%$%d") then return "status_bar" end
@@ -234,9 +244,27 @@ local function classifyRow(text, row, totalRows)
   end
   if text:match("^> .") then return "user_prompt" end
 
-  -- Thinking/spinner lines
-  if text:find("Imagining", 1, true) or text:find("Thinking", 1, true)
-     or text:find("Saut", 1, true) then
+  -- Thought complete: ✻ Sautéed for 38s, ✻ Brewed for 13m 8s, ✻ Churned for 44s
+  -- ✻ is the constant character — verb varies (cooking/drink themed past tense)
+  if text:find("✻", 1, true) then return "thought_complete" end
+
+  -- Task active: live progress line (appears after 30s of task activity)
+  -- Pattern: "+ Verbing… (Xm Xs · ↓ Nk tokens)" in orange
+  if text:find("…", 1, true) and (text:find("· ↓", 1, true) or text:find("tokens", 1, true)) then
+    return "task_active"
+  end
+
+  -- Task summary: "9 tasks (8 done, 1 open)"
+  if text:match("%d+%s+tasks?%s*%(") then return "task_summary" end
+
+  -- Task done: ✔ prefix (completed task in list)
+  if text:find("✔", 1, true) then return "task_done" end
+
+  -- Task open: ◻ prefix (pending task in list)
+  if text:find("◻", 1, true) then return "task_open" end
+
+  -- Thinking/spinner lines (in-progress, no ✻ prefix)
+  if text:find("Imagining", 1, true) or text:find("Thinking", 1, true) then
     return "thinking"
   end
 
@@ -247,13 +275,23 @@ local function classifyRow(text, row, totalRows)
   -- Diff lines
   if text:match("^%+") or text:match("^%-") then return "diff" end
 
+  -- Result/dismiss bracket: ⎿ (menu closed, command result, dialog dismissed)
+  if text:find("⎿", 1, true) then return "result" end
+
   -- Box drawing (tool block borders) — use plain find
   if text:find("┌", 1, true) or text:find("╭", 1, true) or text:find("│", 1, true)
      or text:find("└", 1, true) or text:find("╰", 1, true) then
     return "box_drawing"
   end
+  -- Plan/content block borders: ╌╌╌ dashed lines (distinct from ─── solid chrome)
   local stripped = text:match("^%s*(.-)%s*$")
+  if stripped:find("╌╌╌", 1, true) then return "plan_border" end
   if stripped:find("────", 1, true) then return "box_drawing" end
+
+  -- Wizard step indicator: ← □ Drop tar... □ Direction ✓ Submit →
+  if text:find("□", 1, true) and (text:find("←", 1, true) or text:find("→", 1, true)) then
+    return "wizard_step"
+  end
 
   -- Error
   if text:match("^%s*[Ee]rror:") then return "error" end
@@ -324,12 +362,6 @@ local function respondToPermission(state, choice, pushEvent, nodeId)
   -- 1 = approve, 2 = allow-all, 3 = deny
   state.proc:write(tostring(choice))
   state.permissionInfo = nil
-
-  local R = getRenderer()
-  if R and state.rendererSessionId then
-    local labels = { [1] = "Approved", [2] = "Approved (all)", [3] = "Denied" }
-    R.resolvePermissionPrompt(state.rendererSessionId, labels[choice] or "Responded")
-  end
 
   -- Notify React that permission is resolved
   pushCapEvent(pushEvent, nodeId, "onPermissionResolved", {})
@@ -494,7 +526,6 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
   -- Enter PermissionGate
   if newMode == MODE_PERMISSION and prevMode ~= MODE_PERMISSION then
     state.permissionInfo = { action = permAction, target = permTarget, rawQuestion = permQuestion }
-    R.showPermissionPrompt(sid, state.permissionInfo)
     pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "waiting_permission" })
     -- Fire React event for modal
     pushCapEvent(pushEvent, nodeId, "onPermissionRequest", {
@@ -928,10 +959,6 @@ Capabilities.register("ClaudeCode", {
             local action, target = text:match("Do you want to (%w+)%s+(.-)%?")
             state.mode = MODE_PERMISSION
             state.permissionInfo = { action = action, target = target, rawQuestion = text }
-            local R = getRenderer()
-            if R and state.rendererSessionId then
-              R.showPermissionPrompt(state.rendererSessionId, state.permissionInfo)
-            end
             pushCapEvent(pushEvent, nodeId, "onStatusChange", { status = "waiting_permission" })
             pushCapEvent(pushEvent, nodeId, "onPermissionRequest", {
               action = action or "",
