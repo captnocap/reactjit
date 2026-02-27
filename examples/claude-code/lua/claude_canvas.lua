@@ -42,6 +42,9 @@ local function getInputState(nodeId)
   return _inputStates[nodeId]
 end
 
+-- Cached classified rows from last render frame (for clipboard dump)
+local _lastClassified = {}  -- nodeId -> { rows = { { row, kind, text, turnId, groupId, groupType, colors } } }
+
 -- Scroll step sizes
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
 local SCROLL_PAGE = 400  -- pixels per PgUp/PgDn (updated to viewport height at render)
@@ -243,6 +246,20 @@ Capabilities.register("ClaudeCanvas", {
     local vterm = Session.getVTerm()
     local boundary = Session.getInputBoundary()
 
+    -- Sanity check: boundary must be near the bottom of content.
+    -- During streaming, stale boundary from a previous settle can land mid-content.
+    -- The real input zone is always the last ~10 rows. If boundary is too far up, ignore it.
+    if vterm then
+      local vtRows = vterm:size()
+      local lastRow = 0
+      for r = vtRows - 1, 0, -1 do
+        if #(vterm:getRowText(r)) > 0 then lastRow = r; break end
+      end
+      if boundary < lastRow - 15 then
+        boundary = vtRows  -- no input zone (treat everything as content)
+      end
+    end
+
     if vterm and Measure then
       local vtFont = Measure.getFont(13, nil, nil)
       local tagFont = Measure.getFont(9, nil, nil)
@@ -283,14 +300,33 @@ Capabilities.register("ClaudeCanvas", {
       local prevKind = nil
       local inMenu = false
       local rowColors = {}  -- row -> { fg, hasText }
+      local rowMeta = {}    -- row -> { turnId, groupId, groupType }
+
+      -- Turn and group counters
+      local currentTurnId = 0
+      local currentGroupId = 0
+      local currentGroupType = nil
+
+      local classifiedCache = {}  -- built during render, stored for clipboard dump
+
+      -- Group type lookup: which tokens form interactive groups
+      local GROUP_TYPES = {
+        menu_title = "menu", menu_option = "menu", menu_desc = "menu",
+        list_selectable = "menu", list_selected = "menu", list_info = "menu",
+        search_box = "menu", selector = "menu", confirmation = "menu", hint = "menu",
+        picker_title = "picker", picker_item = "picker",
+        picker_selected = "picker", picker_meta = "picker",
+        task_summary = "task", task_done = "task", task_open = "task", task_active = "task",
+        permission = "permission",
+        plan_border = "plan", wizard_step = "plan",
+      }
 
       for row = 0, lastNonEmpty do
         local py = c.y + 8 + row * lineH - scrollY
-        if py + lineH < c.y then goto continue_row end  -- above viewport, skip
-        if py > contentBottom then break end             -- below viewport, done
+        local inViewport = (py + lineH >= c.y) and (py <= contentBottom)
 
-        -- Alternating row background for visual tracking
-        if row % 2 == 1 then
+        -- Alternating row background for visual tracking (draw-only)
+        if inViewport and row % 2 == 1 then
           love.graphics.setColor(1, 1, 1, 0.03 * effectiveOpacity)
           love.graphics.rectangle("fill", c.x, py, c.w, lineH)
         end
@@ -363,10 +399,11 @@ Capabilities.register("ClaudeCanvas", {
             kind = "user_text"
           end
 
-          -- Adjacency: text after assistant-attributed tokens = assistant_text
+          -- Adjacency: text/menu_option after assistant-attributed tokens = assistant_text
           -- State machine: ● tool / thinking / thought_complete / result / task_* = assistant owns stream
           -- All subsequent def-colored text belongs to assistant until next user marker
-          if kind == "text" and (prevKind == "tool" or prevKind == "thinking"
+          -- menu_option (numbered list "1. Foo") also gets absorbed — it's a list in prose, not an interactive menu
+          if (kind == "text" or kind == "menu_option") and (prevKind == "tool" or prevKind == "thinking"
              or prevKind == "thought_complete" or prevKind == "result"
              or prevKind == "assistant_text" or prevKind == "task_done"
              or prevKind == "task_open" or prevKind == "task_summary"
@@ -375,16 +412,19 @@ Capabilities.register("ClaudeCanvas", {
             kind = "assistant_text"
           end
 
-          -- Adjacency: text after menu_option = menu_option_desc (option description)
+          -- Adjacency: text after menu_option = menu_desc (option description)
+          -- Only applies when menu_option survived reclassification (i.e., actual interactive menu)
           if kind == "text" and prevKind == "menu_option" then
             kind = "menu_desc"
           end
 
-          -- Footer hints: "Enter to select", "Tab/Arrow keys", "Esc to cancel/go back"
+          -- Footer hints: keyboard shortcuts, navigation instructions
           if kind == "text" and (rowText:find("Enter to select", 1, true)
              or rowText:find("Arrow keys", 1, true)
              or rowText:find("Esc to cancel", 1, true)
-             or rowText:find("Esc to go back", 1, true)) then
+             or rowText:find("Esc to go back", 1, true)
+             or rowText:find("Type to search", 1, true)
+             or (rowText:find("Ctrl+", 1, true) and rowText:find(" to ", 1, true))) then
             kind = "hint"
           end
 
@@ -397,6 +437,9 @@ Capabilities.register("ClaudeCanvas", {
                 kind = "menu_title"
               end
               inMenu = true
+            elseif (kind == "list_info" or kind == "text") and rowText:find("Search", 1, true) then
+              -- Search box inside ╭───╮ borders gets brightness-reclassified to list_info
+              kind = "search_box"
             elseif kind == "text" and sampledFg then
               -- Colored text after separator = menu title (e.g. "Manage MCP servers" in purple)
               local brightness = (sampledFg[1] + sampledFg[2] + sampledFg[3]) / 3
@@ -441,37 +484,76 @@ Capabilities.register("ClaudeCanvas", {
             end
           end
 
+          -- ── Turn + group tracking ───────────────────────────────
+          -- turnId: increments on user_prompt (new conversation turn)
+          if kind == "user_prompt" then
+            currentTurnId = currentTurnId + 1
+          end
+
+          -- groupId: increments when entering a new interactive group
+          local groupType = GROUP_TYPES[kind]
+          if groupType ~= currentGroupType then
+            if groupType then
+              currentGroupId = currentGroupId + 1
+            end
+            currentGroupType = groupType
+          end
+
+          rowMeta[row] = {
+            turnId = currentTurnId,
+            groupId = groupType and currentGroupId or nil,
+            groupType = groupType,
+          }
+
+          -- Cache for clipboard dump
+          local rc = rowColors[row]
+          classifiedCache[#classifiedCache + 1] = {
+            row = row,
+            kind = kind,
+            text = rowText,
+            turnId = currentTurnId,
+            groupId = groupType and currentGroupId or nil,
+            groupType = groupType,
+            colors = rc and rc.colors or {},
+          }
+
           prevKind = kind
 
-          -- Draw tag prefix
-          love.graphics.setFont(tagFont)
-          -- Color-code by zone: blue=content, orange=input zone
-          if row >= boundary then
-            love.graphics.setColor(1.0, 0.6, 0.2, 0.7 * effectiveOpacity)
-          else
-            love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
-          end
-          love.graphics.print("[" .. kind .. "]", c.x + 4, py + 2)
-
-          -- Draw cells between tag prefix and row numbers
-          love.graphics.setFont(vtFont)
-          for col = 0, math.min(cols - 1, maxCellCols - 1) do
-            local cell = vterm:getCell(row, col)
-            if cell.char and #cell.char > 0 and cell.char ~= " " then
-              local px = c.x + cellOffsetX + col * charW
-              if cell.fg then
-                love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
-              else
-                love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
-                                       COLORS.inputText[3], effectiveOpacity)
-              end
-              love.graphics.print(cell.char, px, py)
+          -- Drawing: only for visible rows
+          if inViewport then
+            -- Draw tag prefix
+            love.graphics.setFont(tagFont)
+            -- Color-code by zone: blue=content, orange=input zone
+            if row >= boundary then
+              love.graphics.setColor(1.0, 0.6, 0.2, 0.7 * effectiveOpacity)
+            else
+              love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
             end
-          end
+            love.graphics.print("[" .. kind .. "]", c.x + 4, py + 2)
+
+            -- Draw cells between tag prefix and row numbers
+            love.graphics.setFont(vtFont)
+            for col = 0, math.min(cols - 1, maxCellCols - 1) do
+              local cell = vterm:getCell(row, col)
+              if cell.char and #cell.char > 0 and cell.char ~= " " then
+                local px = c.x + cellOffsetX + col * charW
+                if cell.fg then
+                  love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
+                else
+                  love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
+                                         COLORS.inputText[3], effectiveOpacity)
+                end
+                love.graphics.print(cell.char, px, py)
+              end
+            end
+          end  -- inViewport drawing
         end
         ::continue_row::
       end
       love.graphics.setScissor()
+
+      -- Store classified cache for clipboard dump hotkey
+      _lastClassified[nodeId] = classifiedCache
 
       -- Row numbers
       local numFont = Measure.getFont(9, nil, nil)
@@ -489,13 +571,31 @@ Capabilities.register("ClaudeCanvas", {
           love.graphics.setColor(1, 1, 1, 0.15)
         end
         love.graphics.print(string.format("%3d", row), c.x + c.w - 30, py)
-        -- Show all distinct fg colors next to row number
+        -- Show turnId:groupId next to row number
+        local rm = rowMeta[row]
+        if rm then
+          local metaStr = "t" .. rm.turnId
+          if rm.groupId then
+            metaStr = metaStr .. " g" .. rm.groupId
+            if rm.groupType then metaStr = metaStr .. ":" .. rm.groupType end
+          end
+          love.graphics.setColor(0.6, 0.8, 0.4, 0.6)
+          local mw = numFont:getWidth(metaStr .. "  ")
+          love.graphics.print(metaStr, c.x + c.w - 34 - mw, py)
+        end
+        -- Show all distinct fg colors further left
         local rc = rowColors[row]
         if rc and rc.colors and #rc.colors > 0 then
           love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+          local rmWidth = 0
+          if rm then
+            local ms = "t" .. rm.turnId
+            if rm.groupId then ms = ms .. " g" .. rm.groupId .. ":" .. (rm.groupType or "") end
+            rmWidth = numFont:getWidth(ms .. "    ")
+          end
           local colorStr = table.concat(rc.colors, " ")
           local cw = numFont:getWidth(colorStr .. "  ")
-          love.graphics.print(colorStr, c.x + c.w - 34 - cw, py)
+          love.graphics.print(colorStr, c.x + c.w - 34 - rmWidth - cw, py)
         end
         ::continue_num::
       end
@@ -671,6 +771,30 @@ Capabilities.register("ClaudeCanvas", {
       return true
     end
 
+    -- Ctrl+Shift+D: dump classified transcript to clipboard
+    if key == "d" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
+      local cache = _lastClassified[nodeId]
+      if cache and #cache > 0 then
+        local lines = {}
+        for _, entry in ipairs(cache) do
+          local meta = "t" .. entry.turnId
+          if entry.groupId then
+            meta = meta .. " g" .. entry.groupId .. ":" .. entry.groupType
+          end
+          local colors = #entry.colors > 0 and table.concat(entry.colors, " ") or ""
+          lines[#lines + 1] = string.format("%3d %-20s %-16s %-30s %s",
+            entry.row,
+            "[" .. entry.kind .. "]",
+            meta,
+            colors,
+            entry.text)
+        end
+        love.system.setClipboardText(table.concat(lines, "\n"))
+        io.write("[CLIPBOARD] Copied " .. #lines .. " classified rows\n"); io.flush()
+      end
+      return true
+    end
+
     -- Ctrl+R: expand/collapse the last tool block (UI-only)
     if key == "r" and love.keyboard.isDown("lctrl", "rctrl") then
       local session = Renderer.getSession(sessionId)
@@ -720,7 +844,8 @@ Capabilities.register("ClaudeCanvas", {
     end
 
     -- Ctrl+key combos → send as control characters
-    if love.keyboard.isDown("lctrl", "rctrl") then
+    -- Skip if Shift is also held — those are UI hotkeys (Ctrl+Shift+D, etc.)
+    if love.keyboard.isDown("lctrl", "rctrl") and not love.keyboard.isDown("lshift", "rshift") then
       -- Ctrl+V: paste clipboard text into PTY
       if key == "v" then
         local clipboard = love.system.getClipboardText()
