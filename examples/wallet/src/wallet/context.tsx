@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
-import { useBridge, type IBridge } from '@reactjit/core';
+import { useBridge, useLuaInterval, type IBridge } from '@reactjit/core';
 import { generateMnemonic, isValidMnemonic, mnemonicToSeed, deriveAccount } from '../crypto/keys';
 import { encryptKeystore, decryptKeystore, type EncryptedKeystore } from '../crypto/keystore';
 import { signTransaction, type Transaction } from '../crypto/signing';
@@ -150,25 +150,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [bridge]);
 
   // Auto-refresh balance every 30s when unlocked
-  useEffect(() => {
-    if (state.screen !== 'dashboard' || state.accounts.length === 0) return;
-
-    const refresh = () => {
-      const s = stateRef.current;
-      if (s.accounts.length === 0) return;
-      dispatch({ type: 'SET_BALANCE_LOADING', loading: true });
-      getBalance(s.accounts[0].address, s.network, { useTor: s.useTor })
-        .then(bal => dispatch({ type: 'SET_BALANCE', balance: bal }))
-        .catch(err => {
-          dispatch({ type: 'SET_BALANCE_LOADING', loading: false });
-          console.warn('Balance fetch failed:', err.message);
-        });
-    };
-
-    refresh();
-    const interval = setInterval(refresh, 30000);
-    return () => clearInterval(interval);
-  }, [state.screen, state.accounts.length, state.network]);
+  const shouldPollBalance = state.screen === 'dashboard' && state.accounts.length > 0;
+  useLuaInterval(shouldPollBalance ? 30000 : null, () => {
+    const s = stateRef.current;
+    if (s.accounts.length === 0) return;
+    dispatch({ type: 'SET_BALANCE_LOADING', loading: true });
+    getBalance(s.accounts[0].address, s.network, { useTor: s.useTor })
+      .then(bal => dispatch({ type: 'SET_BALANCE', balance: bal }))
+      .catch(err => {
+        dispatch({ type: 'SET_BALANCE_LOADING', loading: false });
+        console.warn('Balance fetch failed:', err.message);
+      });
+  });
 
   const actions: WalletActions = {
     navigate: useCallback((screen: Screen) => {

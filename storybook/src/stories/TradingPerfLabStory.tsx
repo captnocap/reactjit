@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useRendererMode, formatUptime, formatMemory } from '../../../packages/core/src';
+import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useRendererMode, formatUptime, formatMemory, useLuaInterval } from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -341,120 +341,99 @@ export function TradingPerfLabStory() {
     setSelectedIndex((prev) => Math.min(prev, symbolCount - 1));
   }, [symbolCount, depth]);
 
-  useEffect(() => {
-    if (!live) return;
-    let prevTick = nowMs();
-    const id = setInterval(() => {
-      const engine = engineRef.current;
-      const frameStart = nowMs();
-      const dtMs = Math.max(1, frameStart - prevTick);
-      prevTick = frameStart;
+  const prevTickRef = useRef(nowMs());
+  useLuaInterval(live ? 16 : null, () => {
+    const engine = engineRef.current;
+    const frameStart = nowMs();
+    const dtMs = Math.max(1, frameStart - prevTickRef.current);
+    prevTickRef.current = frameStart;
 
-      engine.carryEvents += (effectiveTargetEvents * dtMs) / 1000;
-      const rawBatch = Math.floor(engine.carryEvents);
-      const batch = Math.min(rawBatch, maxBatchPerTick);
-      engine.carryEvents -= batch;
-      if (rawBatch > batch) {
-        // Guard against backlog spirals on stalls.
-        engine.carryEvents = Math.min(engine.carryEvents, maxBatchPerTick * 2);
+    engine.carryEvents += (effectiveTargetEvents * dtMs) / 1000;
+    const rawBatch = Math.floor(engine.carryEvents);
+    const batch = Math.min(rawBatch, maxBatchPerTick);
+    engine.carryEvents -= batch;
+    if (rawBatch > batch) {
+      engine.carryEvents = Math.min(engine.carryEvents, maxBatchPerTick * 2);
+    }
+
+    const mutateOps = Math.min(batch, maxMutationsPerTick);
+    if (mutateOps > 0) {
+      const intensity = batch / mutateOps;
+      for (let i = 0; i < mutateOps; i += 1) {
+        const idx = Math.floor(nextRand(rngRef.current) * engine.symbols.length);
+        mutateSymbol(engine.symbols[idx], depth, rngRef.current, intensity);
       }
+    }
 
-      const mutateOps = Math.min(batch, maxMutationsPerTick);
-      if (mutateOps > 0) {
-        const intensity = batch / mutateOps;
-        for (let i = 0; i < mutateOps; i += 1) {
-          const idx = Math.floor(nextRand(rngRef.current) * engine.symbols.length);
-          mutateSymbol(engine.symbols[idx], depth, rngRef.current, intensity);
-        }
-      }
+    const procMs = nowMs() - frameStart;
+    engine.processedTotal += batch;
+    engine.processedWindow += batch;
+    engine.frameProcSamples.push(procMs);
+    if (engine.frameProcSamples.length > 240) engine.frameProcSamples.shift();
+    engine.maxFrameMs = Math.max(engine.maxFrameMs, procMs);
+    if (procMs > 16.6) engine.droppedFrames += 1;
 
-      const procMs = nowMs() - frameStart;
-      engine.processedTotal += batch;
-      engine.processedWindow += batch;
-      engine.frameProcSamples.push(procMs);
-      if (engine.frameProcSamples.length > 240) engine.frameProcSamples.shift();
-      engine.maxFrameMs = Math.max(engine.maxFrameMs, procMs);
-      if (procMs > 16.6) engine.droppedFrames += 1;
+    const now = nowMs();
+    const elapsed = now - engine.windowStartMs;
+    if (elapsed >= 1000) {
+      engine.throughput = Math.round((engine.processedWindow * 1000) / elapsed);
+      engine.processedWindow = 0;
+      engine.windowStartMs = now;
+      engine.maxFrameMs = 0;
+    }
+  });
 
-      const now = nowMs();
-      const elapsed = now - engine.windowStartMs;
-      if (elapsed >= 1000) {
-        engine.throughput = Math.round((engine.processedWindow * 1000) / elapsed);
-        engine.processedWindow = 0;
-        engine.windowStartMs = now;
-        engine.maxFrameMs = 0;
-      }
-    }, 16);
-    return () => clearInterval(id);
-  }, [live, effectiveTargetEvents, depth, maxMutationsPerTick, maxBatchPerTick]);
+  const uiIntervalMs = viewMode === '3d' ? (live ? uiIntervalLive3D : 90) : (live ? uiIntervalLive2D : 160);
+  useLuaInterval(uiIntervalMs, () => {
+    setUiTick((t) => (t + 1) % 1000000);
+    if (viewMode === '3d') setSpin((s) => s + 0.02);
+  });
 
-  useEffect(() => {
-    const intervalMs = viewMode === '3d' ? (live ? uiIntervalLive3D : 90) : (live ? uiIntervalLive2D : 160);
-    const id = setInterval(() => {
-      setUiTick((t) => (t + 1) % 1000000);
-      if (viewMode === '3d') setSpin((s) => s + 0.02);
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [viewMode, live, uiIntervalLive2D, uiIntervalLive3D]);
-
-  useEffect(() => {
-    const intervalMs = live ? 200 : 800;
-    const id = setInterval(() => {
-      const engine = engineRef.current;
-      const next = {
-        throughput: engine.throughput,
-        processedTotal: engine.processedTotal,
-        droppedFrames: engine.droppedFrames,
-        p50: percentile(engine.frameProcSamples, 0.5),
-        p95: percentile(engine.frameProcSamples, 0.95),
-        maxFrameMs: engine.maxFrameMs,
-      };
-      setSnapshot((prev) => {
-        if (
-          prev.throughput === next.throughput &&
-          prev.processedTotal === next.processedTotal &&
-          prev.droppedFrames === next.droppedFrames &&
-          prev.p50 === next.p50 &&
-          prev.p95 === next.p95 &&
-          prev.maxFrameMs === next.maxFrameMs
-        ) {
-          return prev;
-        }
-        return next;
-      });
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [live]);
-
-  useEffect(() => {
-    let disposed = false;
-    const sample = async () => {
-      try {
-        const next = await getPerf();
-        if (!disposed && next && typeof next === 'object') {
-          setRuntimePerf((prev) => {
-            if (
-              prev.fps === next.fps &&
-              prev.layoutMs === next.layoutMs &&
-              prev.paintMs === next.paintMs &&
-              prev.nodeCount === next.nodeCount
-            ) {
-              return prev;
-            }
-            return next;
-          });
-        }
-      } catch (_err) {
-        // Optional in non-native paths
-      }
+  useLuaInterval(live ? 200 : 800, () => {
+    const engine = engineRef.current;
+    const next = {
+      throughput: engine.throughput,
+      processedTotal: engine.processedTotal,
+      droppedFrames: engine.droppedFrames,
+      p50: percentile(engine.frameProcSamples, 0.5),
+      p95: percentile(engine.frameProcSamples, 0.95),
+      maxFrameMs: engine.maxFrameMs,
     };
-    sample();
-    const id = setInterval(sample, 500);
-    return () => {
-      disposed = true;
-      clearInterval(id);
-    };
-  }, [getPerf]);
+    setSnapshot((prev) => {
+      if (
+        prev.throughput === next.throughput &&
+        prev.processedTotal === next.processedTotal &&
+        prev.droppedFrames === next.droppedFrames &&
+        prev.p50 === next.p50 &&
+        prev.p95 === next.p95 &&
+        prev.maxFrameMs === next.maxFrameMs
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  });
+
+  useLuaInterval(500, async () => {
+    try {
+      const next = await getPerf();
+      if (next && typeof next === 'object') {
+        setRuntimePerf((prev) => {
+          if (
+            prev.fps === next.fps &&
+            prev.layoutMs === next.layoutMs &&
+            prev.paintMs === next.paintMs &&
+            prev.nodeCount === next.nodeCount
+          ) {
+            return prev;
+          }
+          return next;
+        });
+      }
+    } catch (_err) {
+      // Optional in non-native paths
+    }
+  });
 
   const selected = useMemo(() => {
     const symbols = engineRef.current.symbols;

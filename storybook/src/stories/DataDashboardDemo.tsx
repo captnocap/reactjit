@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView } from '../../../packages/core/src';
+import React, { useState, useRef } from 'react';
+import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView, useLuaInterval } from '../../../packages/core/src';
 import type { TableColumn } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -123,39 +123,35 @@ export function DataDashboardDemoStory() {
   ]);
 
   // Update every 3 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTick(t => t + 1);
+  useLuaInterval(3000, () => {
+    setTick(t => t + 1);
 
-      setRevenue(generateRevenue());
-      setProducts(generateProducts());
+    setRevenue(generateRevenue());
+    setProducts(generateProducts());
 
-      setKpis(prev => ({
-        revenue: Math.round(drift(prev.revenue, 3000)),
-        users: Math.round(drift(prev.users, 80)),
-        errors: Math.max(0, Math.round(drift(prev.errors, 2))),
-        latency: Math.max(50, Math.round(drift(prev.latency, 20))),
-        revChange: +(drift(prev.revChange, 3)).toFixed(1),
-        userChange: +(drift(prev.userChange, 2)).toFixed(1),
-        errChange: Math.min(0, +(drift(prev.errChange, 15)).toFixed(1)),
-        latChange: Math.min(0, +(drift(prev.latChange, 3)).toFixed(1)),
-      }));
+    setKpis(prev => ({
+      revenue: Math.round(drift(prev.revenue, 3000)),
+      users: Math.round(drift(prev.users, 80)),
+      errors: Math.max(0, Math.round(drift(prev.errors, 2))),
+      latency: Math.max(50, Math.round(drift(prev.latency, 20))),
+      revChange: +(drift(prev.revChange, 3)).toFixed(1),
+      userChange: +(drift(prev.userChange, 2)).toFixed(1),
+      errChange: Math.min(0, +(drift(prev.errChange, 15)).toFixed(1)),
+      latChange: Math.min(0, +(drift(prev.latChange, 3)).toFixed(1)),
+    }));
 
-      setSparks({
-        revenue: generateSpark(SPARK_BASE_REVENUE, 10),
-        users: generateSpark(SPARK_BASE_USERS, 30),
-        errors: generateSpark(SPARK_BASE_ERRORS, 5),
-        latency: generateSpark(SPARK_BASE_LATENCY, 25),
-      });
+    setSparks({
+      revenue: generateSpark(SPARK_BASE_REVENUE, 10),
+      users: generateSpark(SPARK_BASE_USERS, 30),
+      errors: generateSpark(SPARK_BASE_ERRORS, 5),
+      latency: generateSpark(SPARK_BASE_LATENCY, 25),
+    });
 
-      setTargets(prev => prev.map(t => ({
-        ...t,
-        value: Math.max(0.05, Math.min(1, t.value + (Math.random() - 0.45) * 0.08)),
-      })));
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, []);
+    setTargets(prev => prev.map(t => ({
+      ...t,
+      value: Math.max(0.05, Math.min(1, t.value + (Math.random() - 0.45) * 0.08)),
+    })));
+  });
 
   const kpiCards = [
     { label: 'Revenue', raw: kpis.revenue, prefix: '$', data: sparks.revenue, color: '#22c55e', change: kpis.revChange },

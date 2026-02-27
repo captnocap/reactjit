@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text } from '../reactjit/shared/src';
+import { Box, Text, useLuaInterval } from '../reactjit/shared/src';
 import { tokenizeLine, TOKEN_COLORS } from './lib/tokenizer';
 import type { LoveEvent } from '../reactjit/shared/src/types';
 
@@ -19,11 +19,12 @@ interface CodeEditorProps { initialCode: string; onChange: (code: string) => voi
 function useCursorBlink(focused: boolean): [boolean, () => void] {
   const [visible, setVisible] = useState(true);
   const resetRef = useRef(0);
+  useLuaInterval(focused ? 530 : null, () => {
+    setVisible(v => !v);
+  });
   useEffect(() => {
     if (!focused) { setVisible(false); return; }
     setVisible(true);
-    const id = setInterval(() => setVisible(v => !v), 530);
-    return () => clearInterval(id);
   }, [focused, resetRef.current]);
   return [visible, useCallback(() => { resetRef.current += 1; }, [])];
 }

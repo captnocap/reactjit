@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Text,
@@ -23,6 +23,7 @@ import {
   Rings,
   FlowParticles,
   TextEffect,
+  useLuaInterval,
 } from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import type { ThemeColors } from '../../../packages/theme/src';
@@ -355,39 +356,35 @@ function MasksDashboardDemo() {
   const [targets, setTargets] = useState(generateTargets);
   const [services, setServices] = useState(generateServices);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTick(prev => prev + 1);
-      setRevenueBars(generateRevenueBars());
+  useLuaInterval(2800, () => {
+    setTick(prev => prev + 1);
+    setRevenueBars(generateRevenueBars());
 
-      setKpis(prev => ({
-        revenue: Math.round(jitter(prev.revenue, 4200, 28000, 98000)),
-        users: Math.round(jitter(prev.users, 120, 800, 4200)),
-        errors: Math.round(jitter(prev.errors, 4, 0, 42)),
-        latency: Math.round(jitter(prev.latency, 28, 55, 300)),
-        revDelta: +jitter(prev.revDelta, 3.8, -12, 20).toFixed(1),
-        userDelta: +jitter(prev.userDelta, 2.7, -9, 22).toFixed(1),
-        errDelta: +jitter(prev.errDelta, 8, -90, 90).toFixed(1),
-        latDelta: +jitter(prev.latDelta, 5.2, -40, 35).toFixed(1),
-      }));
+    setKpis(prev => ({
+      revenue: Math.round(jitter(prev.revenue, 4200, 28000, 98000)),
+      users: Math.round(jitter(prev.users, 120, 800, 4200)),
+      errors: Math.round(jitter(prev.errors, 4, 0, 42)),
+      latency: Math.round(jitter(prev.latency, 28, 55, 300)),
+      revDelta: +jitter(prev.revDelta, 3.8, -12, 20).toFixed(1),
+      userDelta: +jitter(prev.userDelta, 2.7, -9, 22).toFixed(1),
+      errDelta: +jitter(prev.errDelta, 8, -90, 90).toFixed(1),
+      latDelta: +jitter(prev.latDelta, 5.2, -40, 35).toFixed(1),
+    }));
 
-      setSparks({
-        revenue: jitterSeries([28, 31, 30, 39, 42, 48, 52, 49, 57, 60, 58, 63], 10),
-        users: jitterSeries([115, 132, 148, 156, 144, 169, 174, 188, 201, 220, 235, 244], 24),
-        errors: jitterSeries([12, 10, 9, 11, 8, 7, 6, 9, 5, 4, 5, 3], 5),
-        latency: jitterSeries([190, 182, 176, 168, 160, 172, 158, 149, 142, 138, 134, 128], 22),
-      });
+    setSparks({
+      revenue: jitterSeries([28, 31, 30, 39, 42, 48, 52, 49, 57, 60, 58, 63], 10),
+      users: jitterSeries([115, 132, 148, 156, 144, 169, 174, 188, 201, 220, 235, 244], 24),
+      errors: jitterSeries([12, 10, 9, 11, 8, 7, 6, 9, 5, 4, 5, 3], 5),
+      latency: jitterSeries([190, 182, 176, 168, 160, 172, 158, 149, 142, 138, 134, 128], 22),
+    });
 
-      setTargets(prev => prev.map(metric => ({
-        ...metric,
-        value: jitter(metric.value, 0.07, 0.05, 0.99),
-      })));
+    setTargets(prev => prev.map(metric => ({
+      ...metric,
+      value: jitter(metric.value, 0.07, 0.05, 0.99),
+    })));
 
-      setServices(generateServices());
-    }, 2800);
-
-    return () => clearInterval(interval);
-  }, []);
+    setServices(generateServices());
+  });
 
   const activeProfile = profileDefs.find(p => p.id === profileId) ?? profileDefs[0];
   const activeMap = profileId === 'random' ? randomMap : organizedMappings[profileId];

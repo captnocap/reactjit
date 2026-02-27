@@ -626,3 +626,40 @@ export function useClipboard(): {
 
   return { copy, paste, copied };
 }
+
+/**
+ * Register a Lua-side interval timer. The timer ticks in love.update(dt)
+ * and pushes a bridge event each interval. Replaces setInterval in JS hooks.
+ *
+ * @param intervalMs - Interval in milliseconds (0 or null disables)
+ * @param callback - Called each tick
+ */
+export function useLuaInterval(intervalMs: number | null | undefined, callback: () => void): void {
+  const bridge = useBridge();
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+  const timerIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!intervalMs || intervalMs <= 0) return;
+
+    const eventName = `timer:poll:${++_luaIntervalCounter}`;
+
+    bridge.rpc<{ id: number }>('timer:create', { interval: intervalMs, event: eventName })
+      .then((res) => { timerIdRef.current = res.id; });
+
+    const unsub = bridge.subscribe(eventName, () => {
+      callbackRef.current();
+    });
+
+    return () => {
+      unsub();
+      if (timerIdRef.current != null) {
+        bridge.rpc('timer:cancel', { id: timerIdRef.current });
+        timerIdRef.current = null;
+      }
+    };
+  }, [bridge, intervalMs]);
+}
+
+let _luaIntervalCounter = 0;

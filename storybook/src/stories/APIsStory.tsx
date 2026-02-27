@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   TrackRow,
@@ -32,6 +32,7 @@ const MOVIES = [
   { title: 'Oppenheimer', rating: 8.3, year: '2023' },
   { title: 'Poor Things', rating: 7.8, year: '2023' },
   { title: 'Saltburn', rating: 7.1, year: '2023' },
+  { title: 'Past Lives', rating: 7.8, year: '2023' },
 ];
 
 const REPOS = [
@@ -41,21 +42,21 @@ const REPOS = [
 ];
 
 const ARTISTS = [
-  { rank: 1, name: 'M83', playcount: '4,210' },
-  { rank: 2, name: 'Daft Punk', playcount: '3,880' },
-  { rank: 3, name: 'Boards of Canada', playcount: '2,940' },
-  { rank: 4, name: 'Aphex Twin', playcount: '2,312' },
-  { rank: 5, name: 'Jon Hopkins', playcount: '1,870' },
+  { rank: 1, name: 'M83', playcount: 4210 },
+  { rank: 2, name: 'Daft Punk', playcount: 3880 },
+  { rank: 3, name: 'Boards of Canada', playcount: 2940 },
+  { rank: 4, name: 'Aphex Twin', playcount: 2312 },
+  { rank: 5, name: 'Jon Hopkins', playcount: 1870 },
 ];
 
 const COINS_BASE = [
-  { symbol: 'BTC', name: 'Bitcoin', price: 68420, change24h: 2.41, rank: 1 },
-  { symbol: 'ETH', name: 'Ethereum', price: 3810, change24h: -1.73, rank: 2 },
-  { symbol: 'SOL', name: 'Solana', price: 182.5, change24h: 5.88, rank: 3 },
-  { symbol: 'DOGE', name: 'Dogecoin', price: 0.1823, change24h: -0.44, rank: 5 },
+  { symbol: 'BTC', name: 'Bitcoin', price: 68420, change24h: 2.41 },
+  { symbol: 'ETH', name: 'Ethereum', price: 3810, change24h: -1.73 },
+  { symbol: 'SOL', name: 'Solana', price: 182.5, change24h: 5.88 },
+  { symbol: 'DOGE', name: 'Dogecoin', price: 0.1823, change24h: -0.44 },
 ];
 
-function fakeSpark(seed: number, len = 20): number[] {
+function fakeSpark(seed: number, len = 24): number[] {
   let v = 100 + seed * 10;
   return Array.from({ length: len }, () => {
     v += (Math.random() - 0.48) * 8;
@@ -84,6 +85,7 @@ const LIGHTS = [
   { name: 'Ceiling', on: false, color: '#ffffff', brightness: 0 },
   { name: 'Bedside', on: true, color: '#f97316', brightness: 0.3 },
   { name: 'Kitchen', on: false, color: '#34d399', brightness: 0 },
+  { name: 'Hallway', on: true, color: '#38bdf8', brightness: 0.6 },
 ];
 
 const APOD_MOCK = {
@@ -94,6 +96,22 @@ const APOD_MOCK = {
   copyright: 'NASA, ESA, CSA, STScI',
 };
 
+// ── Section label helper ───────────────────────────────────────────────────────
+
+function Label({ children }: { children: string }) {
+  const c = useThemeColors();
+  return (
+    <Text style={{ color: c.muted, fontSize: 9, letterSpacing: 0.5, marginBottom: 4 }}>
+      {children.toUpperCase()}
+    </Text>
+  );
+}
+
+function Divider() {
+  const c = useThemeColors();
+  return <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />;
+}
+
 // ── Sections ──────────────────────────────────────────────────────────────────
 
 function MusicDemo() {
@@ -101,42 +119,57 @@ function MusicDemo() {
   const [trackIdx, setTrackIdx] = useState(0);
   const [progress, setProgress] = useState(0.3);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setProgress((p) => {
-        const next = p + 0.002;
-        if (next >= 1) {
-          setTrackIdx((i) => (i + 1) % TRACKS.length);
-          return 0;
-        }
-        return next;
-      });
-    }, 80);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(80, () => {
+    setProgress((p) => {
+      const next = p + 0.002;
+      if (next >= 1) {
+        setTrackIdx((i) => (i + 1) % TRACKS.length);
+        return 0;
+      }
+      return next;
+    });
+  });
 
   const current = TRACKS[trackIdx];
 
   return (
     <StorySection index={1} title="Music — Spotify / Last.fm">
-      <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        NowPlayingCard and NowPlayingCard — use with useSpotifyNowPlaying() or useLastFMNowPlaying().
-        TrackRow and ArtistRow for ranked lists.
+      <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
+        {`NowPlayingCard wires to useSpotifyNowPlaying() or useLastFMNowPlaying(). TrackRow and ArtistRow for ranked lists.`}
       </Text>
 
-      <Box style={{ width: '100%', gap: 8 }}>
-        <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 9 }}>NowPlayingCard</Text>
-          <NowPlayingCard title={current.title} artist={current.artist} album={current.album} playing progress={progress} />
+      {/* Now playing — two accent variants side by side */}
+      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 6 }}>
+          <Label>NowPlayingCard</Label>
+          <NowPlayingCard
+            title={current.title}
+            artist={current.artist}
+            album={current.album}
+            playing
+            progress={progress}
+          />
         </Box>
-
-        <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 9 }}>NowPlayingCard — accent color, progress bar</Text>
-          <NowPlayingCard title={current.title} artist={current.artist} album={current.album} playing progress={progress} accentColor="#1DB954" />
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 6 }}>
+          <Label>accentColor="#1DB954"</Label>
+          <NowPlayingCard
+            title={current.title}
+            artist={current.artist}
+            album={current.album}
+            playing
+            progress={progress}
+            accentColor="#1DB954"
+          />
         </Box>
+      </Box>
 
-        <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
-          <Text style={{ color: c.muted, fontSize: 9, padding: 8, paddingBottom: 4 }}>TrackRow</Text>
+      {/* Track list + Artist list side by side */}
+      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
+          <Box style={{ padding: 10, paddingBottom: 4 }}>
+            <Label>TrackRow</Label>
+          </Box>
+          <Divider />
           {TRACKS.map((t, i) => (
             <TrackRow
               key={t.title}
@@ -144,20 +177,31 @@ function MusicDemo() {
               title={t.title}
               artist={t.artist}
               nowPlaying={i === trackIdx}
-              style={{ paddingHorizontal: 8, borderBottomWidth: i < TRACKS.length - 1 ? 1 : 0, borderColor: c.border }}
+              style={{
+                paddingHorizontal: 10,
+                borderBottomWidth: i < TRACKS.length - 1 ? 1 : 0,
+                borderColor: c.border,
+              }}
             />
           ))}
         </Box>
 
-        <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
-          <Text style={{ color: c.muted, fontSize: 9, padding: 8, paddingBottom: 4 }}>ArtistRow</Text>
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
+          <Box style={{ padding: 10, paddingBottom: 4 }}>
+            <Label>ArtistRow</Label>
+          </Box>
+          <Divider />
           {ARTISTS.map((a, i) => (
             <ArtistRow
               key={a.name}
               rank={a.rank}
               name={a.name}
               playcount={a.playcount}
-              style={{ paddingHorizontal: 8, borderBottomWidth: i < ARTISTS.length - 1 ? 1 : 0, borderColor: c.border }}
+              style={{
+                paddingHorizontal: 10,
+                borderBottomWidth: i < ARTISTS.length - 1 ? 1 : 0,
+                borderColor: c.border,
+              }}
             />
           ))}
         </Box>
@@ -170,21 +214,12 @@ function MediaDemo() {
   const c = useThemeColors();
   return (
     <StorySection index={2} title="Media — TMDB / Trakt / Plex">
-      <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        MediaPosterCard and MediaPosterCard for poster grids. Use tmdbImage() for real poster URLs.
+      <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
+        {`MediaPosterCard renders poster art, score badge, and year. Pass posterUrl={tmdbImage(path)} for real artwork.`}
       </Text>
-
-      <Text style={{ color: c.muted, fontSize: 9 }}>MediaPosterCard — star rating as Box geometry</Text>
       <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
         {MOVIES.map((m) => (
-          <MediaPosterCard key={m.title} title={m.title} score={m.rating} year={m.year} width={100} height={150} />
-        ))}
-      </Box>
-
-      <Text style={{ color: c.muted, fontSize: 9, marginTop: 4 }}>MediaPosterCard — score badge overlay</Text>
-      <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-        {MOVIES.map((m) => (
-          <MediaPosterCard key={m.title} title={m.title} score={m.rating} year={m.year} width={100} height={150} />
+          <MediaPosterCard key={m.title} title={m.title} score={m.rating} year={m.year} width={105} height={158} />
         ))}
       </Box>
     </StorySection>
@@ -195,52 +230,69 @@ function CoinDemo() {
   const c = useThemeColors();
   const [sparks, setSparks] = useState(() => COINS_BASE.map((_, i) => fakeSpark(i)));
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setSparks((prev) =>
-        prev.map((spark) => {
-          const last = spark[spark.length - 1];
-          const next = Math.max(1, last + (Math.random() - 0.49) * last * 0.012);
-          return [...spark.slice(1), next];
-        }),
-      );
-    }, 600);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(600, () => {
+    setSparks((prev) =>
+      prev.map((spark) => {
+        const last = spark[spark.length - 1];
+        const next = Math.max(1, last + (Math.random() - 0.49) * last * 0.012);
+        return [...spark.slice(1), next];
+      }),
+    );
+  });
 
   return (
     <StorySection index={3} title="Crypto — CoinGecko">
-      <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        CoinTickerRow for compact lists, CoinTickerRow adds sparkline. Both use useCoinMarkets() data.
+      <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
+        {`CoinTickerRow for compact lists. Add sparkline={prices} for a live 7-day chart. Both use useCoinMarkets().`}
       </Text>
 
-      <Text style={{ color: c.muted, fontSize: 9 }}>CoinTickerRow</Text>
-      <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
-        {COINS_BASE.map((coin, i) => (
-          <CoinTickerRow
-            key={coin.symbol}
-            symbol={coin.symbol}
-            name={coin.name}
-            price={coin.price}
-            change24h={coin.change24h}
-            style={{ paddingHorizontal: 12, borderBottomWidth: i < COINS_BASE.length - 1 ? 1 : 0, borderColor: c.border }}
-          />
-        ))}
-      </Box>
+      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+        {/* Without sparklines */}
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
+          <Box style={{ padding: 10, paddingBottom: 4 }}>
+            <Label>CoinTickerRow</Label>
+          </Box>
+          <Divider />
+          {COINS_BASE.map((coin, i) => (
+            <CoinTickerRow
+              key={coin.symbol}
+              symbol={coin.symbol}
+              name={coin.name}
+              price={coin.price}
+              change24h={coin.change24h}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderBottomWidth: i < COINS_BASE.length - 1 ? 1 : 0,
+                borderColor: c.border,
+              }}
+            />
+          ))}
+        </Box>
 
-      <Text style={{ color: c.muted, fontSize: 9, marginTop: 4 }}>CoinTickerRow — live sparkline</Text>
-      <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
-        {COINS_BASE.map((coin, i) => (
-          <CoinTickerRow
-            key={coin.symbol}
-            symbol={coin.symbol}
-            name={coin.name}
-            price={sparks[i][sparks[i].length - 1]}
-            change24h={coin.change24h}
-            sparkline={sparks[i]}
-            style={{ paddingHorizontal: 12, borderBottomWidth: i < COINS_BASE.length - 1 ? 1 : 0, borderColor: c.border }}
-          />
-        ))}
+        {/* With live sparklines */}
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
+          <Box style={{ padding: 10, paddingBottom: 4 }}>
+            <Label>+ sparkline (live)</Label>
+          </Box>
+          <Divider />
+          {COINS_BASE.map((coin, i) => (
+            <CoinTickerRow
+              key={coin.symbol}
+              symbol={coin.symbol}
+              name={coin.name}
+              price={sparks[i][sparks[i].length - 1]}
+              change24h={coin.change24h}
+              sparkline={sparks[i]}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderBottomWidth: i < COINS_BASE.length - 1 ? 1 : 0,
+                borderColor: c.border,
+              }}
+            />
+          ))}
+        </Box>
       </Box>
     </StorySection>
   );
@@ -250,51 +302,70 @@ function GitHubDemo() {
   const c = useThemeColors();
   return (
     <StorySection index={4} title="GitHub — Profile + Repos + Activity">
-      <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        GitHubUserCard, RepoCard, StatCard, ActivityRow. Populate with useGitHubUser() + useGitHubRepos() + useGitHubEvents().
+      <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
+        {`GitHubUserCard, RepoCard, StatCard, ActivityRow. Populate with useGitHubUser() + useGitHubRepos() + useGitHubEvents().`}
       </Text>
 
-      <GitHubUserCard
-        login="siah"
-        name="Siah"
-        bio="Rendering React as raw geometry. LuaJIT + OpenGL + Love2D."
-        repos={42}
-        followers={380}
-        following={24}
-        style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 12 }}
-      />
+      {/* Profile */}
+      <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 14 }}>
+        <Label>GitHubUserCard</Label>
+        <GitHubUserCard
+          login="siah"
+          name="Siah"
+          bio="Rendering React as raw geometry. LuaJIT + OpenGL + Love2D."
+          repos={42}
+          followers={380}
+          following={24}
+        />
+      </Box>
 
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%', justifyContent: 'center' }}>
+      {/* Stats grid */}
+      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
         {STATS.map((s) => (
-          <StatCard
+          <Box
             key={s.label}
-            label={s.label}
-            value={s.value}
-            trend={s.trend}
-            accent={s.accent}
-            style={{ backgroundColor: c.surface, borderRadius: 8, padding: 12, minWidth: 110 }}
-          />
-        ))}
-      </Box>
-
-      <Box style={{ width: '100%', gap: 8 }}>
-        {REPOS.map((r) => (
-          <RepoCard key={r.name} name={r.name} description={r.description} language={r.language} stars={r.stars} forks={r.forks} />
-        ))}
-      </Box>
-
-      <Box style={{ width: '100%', backgroundColor: c.surface, borderRadius: 8, padding: 8 }}>
-        <Text style={{ color: c.muted, fontSize: 9, marginBottom: 6, paddingLeft: 4, paddingRight: 4 }}>ActivityRow — useGitHubEvents()</Text>
-        {EVENTS.map((e, i) => (
-          <Box key={e.label}>
-            <ActivityRow dot={e.dot} label={e.label} time={e.time} detail={e.detail} style={{ paddingVertical: 6, paddingLeft: 4, paddingRight: 4 }} />
-            {i < EVENTS.length - 1 && (
-              <Box style={{ paddingLeft: 18 }}>
-                <Box style={{ width: 1, height: 6, backgroundColor: c.border, marginLeft: 3 }} />
-              </Box>
-            )}
+            style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 14 }}
+          >
+            <StatCard label={s.label} value={s.value} trend={s.trend} accent={s.accent} />
           </Box>
         ))}
+      </Box>
+
+      {/* Repos + Activity side by side */}
+      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+        <Box style={{ flexGrow: 1, gap: 8 }}>
+          <Label>RepoCard</Label>
+          {REPOS.map((r) => (
+            <RepoCard
+              key={r.name}
+              name={r.name}
+              description={r.description}
+              language={r.language}
+              stars={r.stars}
+              forks={r.forks}
+            />
+          ))}
+        </Box>
+
+        <Box style={{ width: 220, backgroundColor: c.surface, borderRadius: 8, padding: 10, gap: 0 }}>
+          <Label>ActivityRow</Label>
+          {EVENTS.map((e, i) => (
+            <Box key={e.label}>
+              <ActivityRow
+                dot={e.dot}
+                label={e.label}
+                time={e.time}
+                detail={e.detail}
+                style={{ paddingVertical: 7 }}
+              />
+              {i < EVENTS.length - 1 && (
+                <Box style={{ paddingLeft: 4 }}>
+                  <Box style={{ width: 1, height: 8, backgroundColor: c.border, marginLeft: 3 }} />
+                </Box>
+              )}
+            </Box>
+          ))}
+        </Box>
       </Box>
     </StorySection>
   );
@@ -304,8 +375,8 @@ function NASADemo() {
   const c = useThemeColors();
   return (
     <StorySection index={5} title="NASA — Astronomy Picture of the Day">
-      <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        {`APODCard for full-width media + caption. Use the APOD one-liner for zero-config: <APOD />`}
+      <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
+        {`APODCard for full-width image + caption. Use the zero-config one-liner: <APOD /> (DEMO_KEY built-in).`}
       </Text>
       <APODCard
         title={APOD_MOCK.title}
@@ -323,26 +394,32 @@ function HueLightsDemo() {
   const c = useThemeColors();
   return (
     <StorySection index={6} title="Smart Home — Philips Hue">
-      <Text style={{ color: c.muted, fontSize: 10, textAlign: 'center' }}>
-        HueLightBadge shows light color and brightness. Use useHueLights() + hueXYToHex() to populate.
+      <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
+        {`HueLightBadge shows live color and brightness. Use useHueLights() + hueXYToHex() to populate from the bridge.`}
       </Text>
-      <Box style={{ width: '100%', gap: 4 }}>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%' }}>
         {LIGHTS.map((l) => (
-          <HueLightBadge
+          <Box
             key={l.name}
-            name={l.name}
-            on={l.on}
-            color={l.color}
-            brightness={l.brightness}
             style={{
-              paddingVertical: 10,
-              paddingHorizontal: 12,
+              width: '48%',
+              paddingTop: 10,
+              paddingBottom: 10,
+              paddingLeft: 12,
+              paddingRight: 12,
               backgroundColor: l.on ? c.bg : c.bgElevated,
               borderRadius: 8,
               borderWidth: 1,
-              borderColor: l.on ? l.color + '40' : c.border,
+              borderColor: l.on ? `${l.color}40` : c.border,
             }}
-          />
+          >
+            <HueLightBadge
+              name={l.name}
+              on={l.on}
+              color={l.color}
+              brightness={l.brightness}
+            />
+          </Box>
         ))}
       </Box>
     </StorySection>

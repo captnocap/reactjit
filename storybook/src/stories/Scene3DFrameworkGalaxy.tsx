@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, Slider, Switch, Badge, useLoveRPC } from '../../../packages/core/src';
+import React, { useMemo, useState, useRef } from 'react';
+import { Box, Text, Slider, Switch, Badge, useLoveRPC, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 
@@ -109,34 +109,20 @@ export function Scene3DFrameworkGalaxyStory() {
   const [perf, setPerf] = useState<PerfStats>({});
   const getPerf = useLoveRPC<PerfStats>('dev:perf');
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (running) {
-        setTime((prev) => prev + 0.014 * speed);
-      }
-    }, 16);
-    return () => clearInterval(id);
-  }, [running, speed]);
+  useLuaInterval(running ? 16 : null, () => {
+    setTime((prev) => prev + 0.014 * speed);
+  });
 
-  useEffect(() => {
-    let disposed = false;
-    const sample = async () => {
-      try {
-        const next = await getPerf();
-        if (!disposed && next && typeof next === 'object') {
-          setPerf(next);
-        }
-      } catch (_err) {
-        // Non-native bridge can no-op RPC; keep previous values.
+  useLuaInterval(500, async () => {
+    try {
+      const next = await getPerf();
+      if (next && typeof next === 'object') {
+        setPerf(next);
       }
-    };
-    sample();
-    const id = setInterval(sample, 500);
-    return () => {
-      disposed = true;
-      clearInterval(id);
-    };
-  }, [getPerf]);
+    } catch (_err) {
+      // Non-native bridge can no-op RPC; keep previous values.
+    }
+  });
 
   const nodes = useMemo(() => buildGalaxy(cubeCount, arms, radius), [cubeCount, arms, radius]);
   const denseMode = cubeCount >= 320;

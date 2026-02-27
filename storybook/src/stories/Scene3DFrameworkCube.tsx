@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text, Badge, ProgressBar, Sparkline, Switch } from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, Badge, ProgressBar, Sparkline, Switch, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 
@@ -11,15 +11,12 @@ export function Scene3DFrameworkCubeStory() {
   const [displaySpin, setDisplaySpin] = useState(0);
   const [cubeEnabled, setCubeEnabled] = useState(true);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setDisplaySpin((prev) => prev + 0.01);
-      if (cubeEnabled) {
-        setCubeSpin((prev) => prev + 0.02);
-      }
-    }, 16);
-    return () => clearInterval(id);
-  }, [cubeEnabled]);
+  useLuaInterval(16, () => {
+    setDisplaySpin((prev) => prev + 0.01);
+    if (cubeEnabled) {
+      setCubeSpin((prev) => prev + 0.02);
+    }
+  });
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
@@ -30,7 +27,7 @@ export function Scene3DFrameworkCubeStory() {
         g3d cube textured with a 2D framework-style canvas, mounted on a rotating display
       </Text>
 
-      <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1, minHeight: 340 }}>
+      <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1, width: '100%', minHeight: 340 }}>
         <Box
           style={{
             width: 260,

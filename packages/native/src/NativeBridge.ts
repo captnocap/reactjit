@@ -9,6 +9,7 @@
  */
 
 import type { IBridge, Listener, Unsubscribe, BridgeEvent } from '@reactjit/core';
+import { tickAnimations } from '@reactjit/core';
 import { initEventDispatching } from './eventDispatcher';
 import { reportError } from './errorReporter';
 import { setTransportFlush } from './hostConfig';
@@ -190,21 +191,25 @@ export class NativeBridge implements IBridge {
       return;
     }
 
-    if (!events || events.length === 0) return;
-
-    for (let i = 0; i < events.length; i++) {
-      const event = events[i];
-      if (!event || !event.type) continue;
-      const set = this.listeners.get(event.type);
-      if (set) {
-        for (const fn of set) {
-          try {
-            fn(event.payload);
-          } catch (e: any) {
-            reportError(e, 'event handler (' + event.type + ')');
+    if (events && events.length > 0) {
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        if (!event || !event.type) continue;
+        const set = this.listeners.get(event.type);
+        if (set) {
+          for (const fn of set) {
+            try {
+              fn(event.payload);
+            } catch (e: any) {
+              reportError(e, 'event handler (' + event.type + ')');
+            }
           }
         }
       }
     }
+
+    // Advance JS animations in sync with Lua's frame rate.
+    // No independent JS timers — this IS the frame loop.
+    tickAnimations();
   }
 }

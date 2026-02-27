@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box, Text, Divider, Spacer,
-  BarChart, Sparkline,
+  BarChart, Sparkline, useLuaInterval,
 } from '../../../packages/core/src';
 
 /* ── sun pixel grid (11 wide x 11 tall) ──────────────── */
@@ -122,27 +122,24 @@ export function WeatherDemoStory() {
   const [forecast, setForecast] = useState(FORECAST_BASE);
   const [tick, setTick] = useState(0);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTick(t => t + 1);
-      setW(prev => ({
-        ...prev,
-        temp: Math.round(drift(prev.temp, 2)),
-        feelsLike: Math.round(drift(prev.feelsLike, 2)),
-        humidity: Math.round(Math.max(20, Math.min(95, drift(prev.humidity, 4)))),
-        windSpeed: Math.round(Math.max(2, Math.min(30, drift(prev.windSpeed, 3)))),
-        pressure: +(Math.max(29.5, Math.min(30.5, drift(prev.pressure, 0.04)))).toFixed(2),
-        cloudCover: Math.round(Math.max(5, Math.min(95, drift(prev.cloudCover, 5)))),
-        uvIndex: Math.round(Math.max(1, Math.min(11, drift(prev.uvIndex, 1)))),
-      }));
-      setHourly(prev => prev.map(t => Math.round(drift(t, 1.5))));
-      setForecast(prev => prev.map(f => ({
-        ...f,
-        value: Math.round(drift(f.value, 2)),
-      })));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  useLuaInterval(3000, () => {
+    setTick(t => t + 1);
+    setW(prev => ({
+      ...prev,
+      temp: Math.round(drift(prev.temp, 2)),
+      feelsLike: Math.round(drift(prev.feelsLike, 2)),
+      humidity: Math.round(Math.max(20, Math.min(95, drift(prev.humidity, 4)))),
+      windSpeed: Math.round(Math.max(2, Math.min(30, drift(prev.windSpeed, 3)))),
+      pressure: +(Math.max(29.5, Math.min(30.5, drift(prev.pressure, 0.04)))).toFixed(2),
+      cloudCover: Math.round(Math.max(5, Math.min(95, drift(prev.cloudCover, 5)))),
+      uvIndex: Math.round(Math.max(1, Math.min(11, drift(prev.uvIndex, 1)))),
+    }));
+    setHourly(prev => prev.map(t => Math.round(drift(t, 1.5))));
+    setForecast(prev => prev.map(f => ({
+      ...f,
+      value: Math.round(drift(f.value, 2)),
+    })));
+  });
 
   const secondsAgo = tick * 3;
   const timeLabel = secondsAgo === 0 ? 'just now' : `${secondsAgo}s ago`;

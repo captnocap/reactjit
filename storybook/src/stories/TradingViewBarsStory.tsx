@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, Tabs, Switch, Badge, BarChart } from '../../../packages/core/src';
+import { Box, Text, Tabs, Switch, Badge, BarChart, useLuaInterval } from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -197,52 +197,46 @@ export function TradingViewBarsStory() {
     setCandles(makeCandles(timeframe));
   }, [timeframe]);
 
-  useEffect(() => {
-    if (!live) return;
+  useLuaInterval(live ? 750 : null, () => {
+    const cfg = TIMEFRAME_CONFIG[timeframe];
+    setSpin((s) => s + 0.02);
 
-    const id = setInterval(() => {
-      const cfg = TIMEFRAME_CONFIG[timeframe];
-      setSpin((s) => s + 0.02);
+    setCandles((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev.slice();
+      const last = { ...next[next.length - 1] };
 
-      setCandles((prev) => {
-        if (prev.length === 0) return prev;
-        const next = prev.slice();
-        const last = { ...next[next.length - 1] };
+      const intraDrift = (Math.random() - 0.5) * cfg.volatility * 0.7;
+      last.close = Math.max(10, +(last.close + intraDrift).toFixed(2));
+      last.high = Math.max(last.high, +(last.close + Math.random() * cfg.volatility * 0.4).toFixed(2));
+      last.low = Math.min(last.low, +(last.close - Math.random() * cfg.volatility * 0.4).toFixed(2));
+      last.volume = Math.max(90, Math.floor(last.volume + (Math.random() - 0.45) * 160));
+      next[next.length - 1] = last;
 
-        const intraDrift = (Math.random() - 0.5) * cfg.volatility * 0.7;
-        last.close = Math.max(10, +(last.close + intraDrift).toFixed(2));
-        last.high = Math.max(last.high, +(last.close + Math.random() * cfg.volatility * 0.4).toFixed(2));
-        last.low = Math.min(last.low, +(last.close - Math.random() * cfg.volatility * 0.4).toFixed(2));
-        last.volume = Math.max(90, Math.floor(last.volume + (Math.random() - 0.45) * 160));
-        next[next.length - 1] = last;
+      if (Math.random() > 0.58) {
+        const open = last.close;
+        const drift = (Math.random() - 0.5) * cfg.volatility * 1.6;
+        const close = Math.max(10, +(open + drift).toFixed(2));
+        const high = +(Math.max(open, close) + Math.random() * cfg.volatility * 0.9).toFixed(2);
+        const low = +(Math.min(open, close) - Math.random() * cfg.volatility * 0.9).toFixed(2);
+        const volume = Math.floor(220 + Math.random() * 920);
+        const nextId = (next[next.length - 1]?.id || 0) + 1;
 
-        if (Math.random() > 0.58) {
-          const open = last.close;
-          const drift = (Math.random() - 0.5) * cfg.volatility * 1.6;
-          const close = Math.max(10, +(open + drift).toFixed(2));
-          const high = +(Math.max(open, close) + Math.random() * cfg.volatility * 0.9).toFixed(2);
-          const low = +(Math.min(open, close) - Math.random() * cfg.volatility * 0.9).toFixed(2);
-          const volume = Math.floor(220 + Math.random() * 920);
-          const nextId = (next[next.length - 1]?.id || 0) + 1;
+        next.push({
+          id: nextId,
+          label: `${nextId}`,
+          open,
+          high,
+          low,
+          close,
+          volume,
+        });
+        if (next.length > cfg.count) next.shift();
+      }
 
-          next.push({
-            id: nextId,
-            label: `${nextId}`,
-            open,
-            high,
-            low,
-            close,
-            volume,
-          });
-          if (next.length > cfg.count) next.shift();
-        }
-
-        return next;
-      });
-    }, 750);
-
-    return () => clearInterval(id);
-  }, [live, timeframe]);
+      return next;
+    });
+  });
 
   const { minPrice, maxPrice, last, prev } = useMemo(() => {
     const min = Math.min(...candles.map((c) => c.low));

@@ -50,6 +50,8 @@ local RadioModule = nil      -- Lazy-loaded to avoid circular deps
 local SelectModule = nil     -- Lazy-loaded to avoid circular deps
 local PianoKeyboardModule = nil  -- Lazy-loaded to avoid circular deps
 local StepSequencerModule = nil  -- Lazy-loaded to avoid circular deps
+local XYPadModule = nil
+local PitchWheelModule = nil
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -1441,6 +1443,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       StepSequencerModule = require("lua.step_sequencer")
     end
     StepSequencerModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "XYPad" then
+    if not XYPadModule then
+      XYPadModule = require("lua.xypad")
+    end
+    XYPadModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "PitchWheel" then
+    if not PitchWheelModule then
+      PitchWheelModule = require("lua.pitchwheel")
+    end
+    PitchWheelModule.draw(node, effectiveOpacity)
 
   elseif not isHidden then
     -- Generic visual capability dispatch: any registered capability with

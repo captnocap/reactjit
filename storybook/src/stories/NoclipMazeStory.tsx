@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   Box, Text, Badge, ProgressBar, Sparkline,
-  useHotkey, useLoveEvent, useSystemMonitor,
+  useHotkey, useLoveEvent, useSystemMonitor, useLuaInterval,
 } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -226,39 +226,36 @@ export function NoclipMazeStory() {
   }, [sys.cpu.total]);
 
   // Game loop — reads held keys, updates position, syncs to state
-  useEffect(() => {
-    const id = setInterval(() => {
-      const keys = heldKeys.current;
-      const p = playerRef.current;
+  useLuaInterval(16, () => {
+    const keys = heldKeys.current;
+    const p = playerRef.current;
 
-      // Turning (g3d: positive angle = counterclockwise in XY plane)
-      if (keys.has('arrowleft') || keys.has('left')) p.facing -= TURN_SPEED;
-      if (keys.has('arrowright') || keys.has('right')) p.facing += TURN_SPEED;
+    // Turning (g3d: positive angle = counterclockwise in XY plane)
+    if (keys.has('arrowleft') || keys.has('left')) p.facing -= TURN_SPEED;
+    if (keys.has('arrowright') || keys.has('right')) p.facing += TURN_SPEED;
 
-      // Movement
-      const cosF = Math.cos(p.facing);
-      const sinF = Math.sin(p.facing);
-      let nx = p.x;
-      let ny = p.y;
+    // Movement
+    const cosF = Math.cos(p.facing);
+    const sinF = Math.sin(p.facing);
+    let nx = p.x;
+    let ny = p.y;
 
-      if (keys.has('w')) { nx += cosF * MOVE_SPEED; ny += sinF * MOVE_SPEED; }
-      if (keys.has('s')) { nx -= cosF * MOVE_SPEED; ny -= sinF * MOVE_SPEED; }
-      if (keys.has('a')) { nx += sinF * MOVE_SPEED; ny -= cosF * MOVE_SPEED; }
-      if (keys.has('d')) { nx -= sinF * MOVE_SPEED; ny += cosF * MOVE_SPEED; }
+    if (keys.has('w')) { nx += cosF * MOVE_SPEED; ny += sinF * MOVE_SPEED; }
+    if (keys.has('s')) { nx -= cosF * MOVE_SPEED; ny -= sinF * MOVE_SPEED; }
+    if (keys.has('a')) { nx += sinF * MOVE_SPEED; ny -= cosF * MOVE_SPEED; }
+    if (keys.has('d')) { nx -= sinF * MOVE_SPEED; ny += cosF * MOVE_SPEED; }
 
-      // Collision (skip if noclip)
-      if (nx !== p.x || ny !== p.y) {
-        if (noclipRef.current || canMove(maze, CELL_SIZE, p.x, p.y, nx, ny)) {
-          p.x = nx;
-          p.y = ny;
-        }
+    // Collision (skip if noclip)
+    if (nx !== p.x || ny !== p.y) {
+      if (noclipRef.current || canMove(maze, CELL_SIZE, p.x, p.y, nx, ny)) {
+        p.x = nx;
+        p.y = ny;
       }
+    }
 
-      // Sync to React state for rendering
-      setPlayerState({ x: p.x, y: p.y, facing: p.facing });
-    }, 16);
-    return () => clearInterval(id);
-  }, [maze]);
+    // Sync to React state for rendering
+    setPlayerState({ x: p.x, y: p.y, facing: p.facing });
+  });
 
   // Camera derived from player state
   const { x: px, y: py, facing } = playerState;

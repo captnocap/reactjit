@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useBridgeOptional } from './context';
+import { useLuaInterval } from './hooks';
 import type { IBridge } from './bridge';
 
 // ── Types ────────────────────────────────────────────────────
@@ -79,27 +80,25 @@ export function usePorts(interval: number = 2000): PortMonitor {
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => {
-    if (!bridge) return;
+  const fetchData = useCallback(() => {
+    if (!bridge || !mountedRef.current) return;
 
-    let cancelled = false;
+    bridge.rpc<any[]>('sys:ports').then((raw) => {
+      if (!mountedRef.current) return;
+      const ports: PortInfo[] = (raw || []).map((p: any) => ({
+        ...p,
+        toSysLog: (path: string) => logger(path, p),
+      }));
+      setList(ports);
+      setLoading(false);
+    }).catch(() => {});
+  }, [bridge, logger]);
 
-    function fetch() {
-      bridge!.rpc<any[]>('sys:ports').then((raw) => {
-        if (cancelled || !mountedRef.current) return;
-        const ports: PortInfo[] = (raw || []).map((p: any) => ({
-          ...p,
-          toSysLog: (path: string) => logger(path, p),
-        }));
-        setList(ports);
-        setLoading(false);
-      }).catch(() => {});
-    }
+  // Initial fetch
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-    fetch();
-    const id = setInterval(fetch, interval);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [bridge, interval, logger]);
+  // Polling driven by Lua-side timer
+  useLuaInterval(bridge ? interval : null, fetchData);
 
   const kill = useCallback(async (pid: number, signal?: string): Promise<boolean> => {
     if (!bridge) return false;

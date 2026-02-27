@@ -268,7 +268,7 @@ end
 local function findScrollAncestor(node)
   local current = node.parent
   while current do
-    if current.style and current.style.overflow == "scroll" then
+    if current.style and (current.style.overflow == "scroll" or current.style.overflow == "auto") then
       return current
     end
     current = current.parent
@@ -291,6 +291,8 @@ local function loadThemes()
     end
     M.currentTheme = resolvedTheme or M.themes[M.currentThemeName]
     if M.painter then M.painter.setTheme(M.currentTheme) end
+    if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
+    if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -334,8 +336,24 @@ local function applyInteractionStyle(node)
   local anyChange = false
 
   for k in pairs(allKeys) do
-    -- Save base value if not already saved (use sentinel for nil)
-    if base[k] == nil then
+    -- Determine if an interaction overlay is currently active for this key
+    local overrideActive = (isPressed and activeStyle and activeStyle[k] ~= nil)
+      or (isFocused and focusStyle and focusStyle[k] ~= nil)
+      or (isHovered and hoverStyle and hoverStyle[k] ~= nil)
+
+    if overrideActive then
+      -- Save base value before applying overlay (only on first capture)
+      if base[k] == nil then
+        if node.style[k] == nil then
+          base[k] = "__NIL__"
+        else
+          base[k] = node.style[k]
+        end
+      end
+    else
+      -- No overlay active: refresh base from current node.style so React
+      -- UPDATE commands (e.g. active prop toggling backgroundColor) are
+      -- respected instead of restoring a stale captured value.
       if node.style[k] == nil then
         base[k] = "__NIL__"
       else
@@ -495,6 +513,8 @@ function ReactJIT.init(config)
           M.currentThemeName = name
           M.currentTheme = resolvedTheme or M.themes[name]
           if M.painter then M.painter.setTheme(M.currentTheme) end
+          if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
+          if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -569,10 +589,10 @@ function ReactJIT.init(config)
     M.events.setTreeModule(M.tree)
 
     M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure })
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
 
     M.textinput = require("lua.textinput")
-    M.textinput.init({ measure = M.measure })
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -650,10 +670,10 @@ function ReactJIT.init(config)
     M.events.setTreeModule(M.tree)
 
     M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure })
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
 
     M.textinput = require("lua.textinput")
-    M.textinput.init({ measure = M.measure })
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -734,10 +754,10 @@ function ReactJIT.init(config)
     M.events.setTreeModule(M.tree)
 
     M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure })
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
 
     M.textinput = require("lua.textinput")
-    M.textinput.init({ measure = M.measure })
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -870,6 +890,41 @@ function ReactJIT.init(config)
       paintMs = 0,
       nodeCount = 0,
     }
+  end
+
+  -- ── Lua-side interval timer service ──────────────────────────────────
+  -- JS calls timer:create to start a repeating timer. Lua ticks it in
+  -- love.update(dt) and pushes a timer:tick event each interval.
+  -- Eliminates the need for setInterval in JS hooks entirely.
+
+  local luaTimers = {}       -- id -> { interval, elapsed, event }
+  local luaTimerNextId = 0
+
+  rpcHandlers["timer:create"] = function(args)
+    luaTimerNextId = luaTimerNextId + 1
+    local id = luaTimerNextId
+    luaTimers[id] = {
+      interval = (args.interval or 1000) / 1000,  -- ms -> seconds
+      elapsed = 0,
+      event = args.event or ("timer:" .. id),
+      payload = args.payload,   -- optional extra data to pass back
+    }
+    return { id = id }
+  end
+
+  rpcHandlers["timer:cancel"] = function(args)
+    if args and args.id then luaTimers[args.id] = nil end
+  end
+
+  -- Tick all lua timers. Called from ReactJIT.update(dt).
+  M._tickLuaTimers = function(dt)
+    for id, t in pairs(luaTimers) do
+      t.elapsed = t.elapsed + dt
+      if t.elapsed >= t.interval then
+        t.elapsed = t.elapsed - t.interval
+        pushEvent({ type = t.event, payload = t.payload or { timerId = id } })
+      end
+    end
   end
 
   -- App-wide text search RPC handlers
@@ -1330,12 +1385,17 @@ function ReactJIT.update(dt)
         local ok, commands = pcall(json.decode, raw)
         if ok and type(commands) == "table" then
           M.tree.applyCommands(commands)
+          -- Forward mutations to devtools pop-out child
+          if M.inspectorEnabled and devtools.isPoppedOut() then
+            devtools.forwardMutations(commands)
+          end
         end
       end
     end
 
-    -- 3. Tick Lua-side transitions and animations (before layout)
+    -- 3. Tick Lua-side transitions, animations, and interval timers (before layout)
     if M.animate then M.animate.tick(dt) end
+    if M._tickLuaTimers then M._tickLuaTimers(dt) end
 
     -- 4. Relayout if tree changed
     if M.tree.isDirty() then
@@ -1387,6 +1447,7 @@ function ReactJIT.update(dt)
 
     if M.inspectorEnabled then inspector.update(dt) end
     if M.inspectorEnabled then console.update(dt) end
+    if M.inspectorEnabled then devtools.tick(dt) end
     if M.screenshot then M.screenshot.update() end
 
     -- 5. Flush bridge outbox (events back to JS)
@@ -1433,6 +1494,9 @@ function ReactJIT.update(dt)
 
   -- 1. Tick JS timers + microtasks
   M.bridge:tick()
+
+  -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
+  if M._tickLuaTimers then M._tickLuaTimers(dt) end
 
   -- 2. Tell JS to process any pending input events
   local ok, err = pcall(function() M.bridge:callGlobal("_pollAndDispatchEvents") end)
@@ -1630,6 +1694,8 @@ function ReactJIT.update(dt)
             end
             M.currentTheme = resolvedTheme or M.themes[name]
             if M.painter then M.painter.setTheme(M.currentTheme) end
+            if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
+            if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
           end
@@ -1661,6 +1727,36 @@ function ReactJIT.update(dt)
         io.write("[reactjit] First batch: " .. #treeCommands .. " commands\n"); io.flush()
       end
       M.tree.applyCommands(treeCommands)
+
+      -- Forward mutations to devtools pop-out child
+      if M.inspectorEnabled and devtools.isPoppedOut() then
+        devtools.forwardMutations(treeCommands)
+      end
+
+      -- Forward mutations to child window processes
+      local winApi = package.loaded["lua.capabilities.window_api"]
+      if winApi then
+        local IPC = require("lua.window_ipc")
+        local activeChildren = winApi.getChildren()
+        if #activeChildren > 0 then
+          -- Build the set of Window root node IDs → child window IDs
+          local windowRootNodeIds = {}
+          for _, c in ipairs(activeChildren) do
+            windowRootNodeIds[c.nodeId] = c.windowId
+          end
+          -- Rebuild ownership map and route mutations
+          local allNodes = M.tree.getNodes()
+          local windowEntries = {}
+          for _, c in ipairs(activeChildren) do
+            windowEntries[#windowEntries + 1] = { rootNodeId = c.nodeId, id = c.windowId }
+          end
+          IPC.rebuildOwnership(windowEntries, allNodes)
+          local buckets = IPC.routeMutations(treeCommands, windowRootNodeIds)
+          for windowId, cmds in pairs(buckets) do
+            winApi.sendMutations(windowId, cmds)
+          end
+        end
+      end
     end
   end
 
@@ -1901,30 +1997,7 @@ function ReactJIT.update(dt)
     end
     M.tree.clearDirty()
 
-    -- Per-window layout: lay out each child window's subtree with its own dimensions.
-    -- The main layout pass above doesn't know about secondary window sizes, so
-    -- Window capability subtrees need their own layout pass.
-    if wmOk and wmMod then
-      local allWins = wmMod.getAll()
-      for _, win in ipairs(allWins) do
-        if not win.isMain and win.rootNodeId then
-          local allNodes = M.tree.getNodes()
-          local winRoot = allNodes[win.rootNodeId]
-          if winRoot then
-            winRoot._isWindowRoot = true
-            local lok, lerr = pcall(M.layout.layout, winRoot, 0, 0, win.width, win.height)
-            winRoot._isWindowRoot = nil
-            if not lok then
-              errors.push({
-                source = "lua",
-                message = tostring(lerr),
-                context = "layout (window #" .. win.id .. ")",
-              })
-            end
-          end
-        end
-      end
-    end
+    -- Per-window layout removed: child processes handle their own layout.
   end
 
   -- Rebuild focusable node list and process stick navigation
@@ -2013,6 +2086,7 @@ function ReactJIT.update(dt)
 
   if M.inspectorEnabled then inspector.update(dt) end
   if M.inspectorEnabled then console.update(dt) end
+  if M.inspectorEnabled then devtools.tick(dt) end
   if M.screenshot then M.screenshot.update() end
 end
 
@@ -2059,80 +2133,7 @@ function ReactJIT.draw()
       end
     end
 
-    -- Multi-window paint: render each child window's subtree
-    if wmOk and wmMod then
-      local allWins = wmMod.getAll()
-      for _, win in ipairs(allWins) do
-        if not win.isMain and win.rootNodeId then
-          -- Find the root node for this window's subtree
-          local allNodes = M.tree.getNodes()
-          local winRoot = allNodes[win.rootNodeId]
-          if winRoot then
-            -- Debug: log once per window
-            if not win._debugLogged then
-              win._debugLogged = true
-              local c = winRoot.computed
-              local nc = winRoot.children and #winRoot.children or 0
-              io.write("[multiwin] window #" .. win.id .. " rootNode=" .. tostring(win.rootNodeId)
-                .. " type=" .. tostring(winRoot.type)
-                .. " computed=" .. (c and (c.w .. "x" .. c.h .. "@" .. c.x .. "," .. c.y) or "nil")
-                .. " children=" .. nc .. "\n")
-              if winRoot.children then
-                for i = 1, math.min(3, nc) do
-                  local ch = winRoot.children[i]
-                  local cc = ch.computed
-                  io.write("[multiwin]   child[" .. i .. "] type=" .. tostring(ch.type)
-                    .. " computed=" .. (cc and (cc.w .. "x" .. cc.h .. "@" .. cc.x .. "," .. cc.y) or "nil") .. "\n")
-                end
-              end
-              io.flush()
-            end
-
-            wmMod.activate(win)
-
-            -- Re-bind Love2D's graphics state for this context.
-            -- After a context switch, viewport/shader/blend are stale.
-            if love.graphics.prepareWindowContext then
-              love.graphics.prepareWindowContext(win.width, win.height)
-            end
-
-            love.graphics.clear(0.05, 0.05, 0.09, 1.0)
-            love.graphics.setBlendMode("alpha")
-            love.graphics.origin()
-
-            winRoot._isWindowRoot = true
-            local wok, werr = pcall(M.painter.paint, winRoot)
-            winRoot._isWindowRoot = nil
-            if not wok then
-              io.write("[multiwin] PAINT ERROR window #" .. win.id .. ": " .. tostring(werr) .. "\n")
-              io.flush()
-              errors.push({
-                source = "lua",
-                message = tostring(werr),
-                context = "painter.paint (window #" .. win.id .. ")",
-              })
-            end
-
-            -- Flush Love2D's internal draw batch to the GL context before
-            -- swapping. Without this, draws are still in the stream buffer
-            -- and SDL_GL_SwapWindow shows a blank back buffer.
-            if love.graphics.flushBatch then
-              love.graphics.flushBatch()
-            end
-
-            wmMod.swap(win)
-          end
-        end
-      end
-      wmMod.activateMain()
-      -- Restore main window's graphics state
-      if love.graphics.prepareWindowContext then
-        local mw = wmMod.getMain()
-        if mw then
-          love.graphics.prepareWindowContext(mw.width, mw.height)
-        end
-      end
-    end
+    -- Multi-window paint removed: child processes render in their own Love2D instances.
   end
 
   -- Focus rings (after paint, before overlays) — animated, one per group
@@ -2173,6 +2174,7 @@ function ReactJIT.draw()
   end
 
   -- DevTools panel (inspector overlays + bottom panel with tabs)
+  -- When popped out, draw() only renders canvas overlays on the main window
   if M.inspectorEnabled then devtools.draw(root) end
 
   -- System panel (draws over devtools)
@@ -2194,6 +2196,8 @@ function ReactJIT.draw()
 
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
   if M.screenshot then M.screenshot.captureIfReady() end
+
+  -- (Devtools pop-out renders in its own child Love2D process — no GL switch needed)
 end
 
 -- ============================================================================
@@ -2226,7 +2230,7 @@ local function hitTestScrollbar(root, mx, my)
     local node = table.remove(stack)
     local s = node.style or {}
     local c = node.computed
-    if c and s.overflow == "scroll" and node.scrollState then
+    if c and (s.overflow == "scroll" or s.overflow == "auto") and node.scrollState then
       local ss = node.scrollState
       local allowX, allowY = getScrollAxisFlags(node)
       local viewW, viewH = c.w, c.h
@@ -2811,6 +2815,14 @@ function ReactJIT.resize(w, h)
   end
   if M.bridge then
     pushEvent({ type = "viewport", payload = { width = w, height = h } })
+  end
+end
+
+--- Call from love.focus(hasFocus).
+--- Tracks which window has focus for devtools pop-out input routing.
+function ReactJIT.focus(hasFocus)
+  if M.inspectorEnabled then
+    devtools.handleFocus(hasFocus)
   end
 end
 
@@ -3706,9 +3718,34 @@ function ReactJIT.reload()
   io.write("[reactjit] Hot reload complete (" .. #bundleJS .. " bytes)\n"); io.flush()
 end
 
+--- Call when a secondary window's close button is clicked.
+--- Routes the SDL window ID to the Window capability's onClose event.
+--- (Devtools pop-out handles its own close via IPC — no WM entry here.)
+function ReactJIT.windowclose(sdlWindowId)
+  local wmOk, wmMod = pcall(require, "lua.window_manager")
+  if not wmOk then return end
+  local win = wmMod.getBySDLId(sdlWindowId)
+  if not win or win.isMain then return end  -- main window close → love.quit()
+
+  -- Push onClose event to the Window capability via the bridge
+  if win.rootNodeId and M.bridge then
+    M.bridge:pushEvent({
+      type = "capability",
+      payload = {
+        targetId = win.rootNodeId,
+        handler = "onClose",
+      },
+    })
+  end
+end
+
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
 function ReactJIT.quit()
+  -- Clean up devtools pop-out window
+  if M.inspectorEnabled and devtools.isPoppedOut() then
+    devtools.dockBack()
+  end
   if M.dragdrop then M.dragdrop.cleanup() end
   if M.videos then M.videos.shutdown() end
   if M.tor then M.tor.stop() end

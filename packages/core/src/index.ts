@@ -14,6 +14,7 @@ export type {
   ScrollEvent,
   ScrollViewProps,
   ScrollViewRef,
+  InputProps,
   TextInputProps,
   TextEditorProps,
   FlatListProps,
@@ -58,6 +59,7 @@ export {
   usePeerServer,
   useHotkey,
   useClipboard,
+  useLuaInterval,
   type WindowControlOptions,
   type WebSocketStatus,
   type PeerMessage,
@@ -97,7 +99,18 @@ export { Emulator } from './Emulator';
 
 // Terminal (PTY capability + hook)
 export { Terminal, type TerminalProps } from './Terminal';
-export { usePTY, type UsePTYOptions, type UsePTYResult, type TerminalCapabilityProps } from './usePTY';
+export { usePTY, type UsePTYOptions, type UsePTYResult, type TerminalCapabilityProps, type DirtyRow, type CursorState } from './usePTY';
+
+// SemanticTerminal (classified PTY + playback + hook)
+export { SemanticTerminal, type SemanticTerminalProps } from './SemanticTerminal';
+export {
+  useSemanticTerminal,
+  type UseSemanticTerminalOptions,
+  type UseSemanticTerminalResult,
+  type ClassifiedRow,
+  type GraphState,
+  type PlayerState,
+} from './useSemanticTerminal';
 
 // ScrollView
 export { ScrollView } from './ScrollView';
@@ -126,7 +139,9 @@ export {
   type ImageGalleryItem,
 } from './ImageViewerModal';
 
-// TextInput
+// Input (unified text input — replaces TextInput and TextEditor)
+export { Input } from './Input';
+/** @deprecated Use <Input /> */
 export { TextInput } from './TextInput';
 
 // Search components (headless, Lua-owned input lifecycle)
@@ -172,7 +187,7 @@ export {
   type UseAppSearchOptions,
 } from './useAppSearch';
 
-// TextEditor (Lua-owned document editor)
+/** @deprecated Use <Input multiline /> */
 export { TextEditor } from './TextEditor';
 
 // CodeBlock (Lua-owned code renderer)
@@ -237,6 +252,7 @@ export {
   useAnimation,
   useSpring,
   useTransition,
+  tickAnimations,
   Easing,
   parallel,
   sequence,
@@ -326,7 +342,9 @@ export {
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
   Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort, TextEffect,
   Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
+  Sunburst,
   type EffectProps, type SpirographProps, type MirrorProps, type CymaticsProps, type TextEffectProps, type TextEffectType,
+  type SunburstProps,
 } from './effects';
 
 // Post-processing masks (foreground overlays)
@@ -337,3 +355,15 @@ export {
 
 // Cartridge Inspector
 export { CartridgeInspector, type CartridgeInspectorProps } from './CartridgeInspector';
+
+// Fleet (multi-agent Claude Code panel)
+export { Fleet, type FleetProps } from './Fleet';
+export {
+  useFleet,
+  type FleetOptions,
+  type FleetAgentConfig,
+  type FleetAgentState,
+  type FleetPermission,
+  type FleetQuestion,
+  type FleetResult,
+} from './useFleet';

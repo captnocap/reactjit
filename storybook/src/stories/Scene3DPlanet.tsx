@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Slider } from '../../../packages/core/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, Slider, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import type { LoveEvent } from '../../../packages/core/src';
 import { Scene, Camera, Mesh, DirectionalLight, AmbientLight } from '../../../packages/3d/src';
@@ -67,12 +67,9 @@ export function Scene3DPlanetStory() {
     });
   }, []);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTime((prev) => prev + 0.008);
-    }, 16);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(16, () => {
+    setTime((prev) => prev + 0.008);
+  });
 
   // Moon orbits the planet in a tilted ellipse
   const moonDist = 2.2;

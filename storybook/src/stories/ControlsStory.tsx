@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   Knob,
@@ -84,17 +84,14 @@ function MeterDemo() {
   const c = useThemeColors();
   const [levels, setLevels] = useState([0.6, 0.4, 0.8, 0.3]);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setLevels((prev) =>
-        prev.map((l) => {
-          const next = l + (Math.random() - 0.5) * 0.15;
-          return Math.max(0.05, Math.min(0.95, next));
-        }),
-      );
-    }, 100);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(100, () => {
+    setLevels((prev) =>
+      prev.map((l) => {
+        const next = l + (Math.random() - 0.5) * 0.15;
+        return Math.max(0.05, Math.min(0.95, next));
+      }),
+    );
+  });
 
   return (
     <StorySection index={3} title="Meters">
@@ -118,10 +115,7 @@ function LEDDemo() {
   const c = useThemeColors();
   const [blink, setBlink] = useState(false);
 
-  useEffect(() => {
-    const id = setInterval(() => setBlink((b) => !b), 500);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(500, () => setBlink((b) => !b));
 
   return (
     <StorySection index={4} title="LED Indicators">
@@ -187,20 +181,10 @@ function SequencerDemo() {
   });
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    if (playing) {
-      intervalRef.current = setInterval(() => {
-        setStep((s) => (s + 1) % 16);
-      }, 150);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [playing]);
+  useLuaInterval(playing ? 150 : null, () => {
+    setStep((s) => (s + 1) % 16);
+  });
 
   return (
     <StorySection index={6} title="Step Sequencer + Transport">

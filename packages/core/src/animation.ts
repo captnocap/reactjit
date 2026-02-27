@@ -5,8 +5,8 @@
  * composite animations (parallel, sequence, stagger, loop), convenience hooks
  * (useAnimation, useSpring, useTransition), easing functions, and interpolation.
  *
- * Works in both web mode (requestAnimationFrame) and native mode (fallback to
- * setTimeout at ~60fps if requestAnimationFrame is unavailable).
+ * Frame loop is driven by Lua's love.update(dt) via tickAnimations() — no
+ * independent JS timers. setTimeout is only used for one-shot delays.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -42,44 +42,36 @@ export interface InterpolationConfig {
   extrapolate?: 'clamp' | 'extend';
 }
 
-// ── Shared animation frame loop ──────────────────────────
+// ── Shared animation frame loop (driven by Lua's love.update) ───
+//
+// No independent JS timers. Lua calls _pollAndDispatchEvents each frame,
+// which calls tickAnimations(). All animation callbacks are advanced in
+// sync with Love2D's frame rate — zero setTimeout/rAF overhead.
 
 type FrameCallback = (timestamp: number) => void;
 
 const activeCallbacks = new Set<FrameCallback>();
-let loopRunning = false;
-
-function requestFrame(cb: (timestamp: number) => void): void {
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(cb);
-  } else {
-    setTimeout(() => cb(Date.now()), 1000 / 60);
-  }
-}
-
-function tick(timestamp: number): void {
-  // Snapshot the callbacks so removals during iteration are safe
-  const snapshot = Array.from(activeCallbacks);
-  for (const cb of snapshot) {
-    cb(timestamp);
-  }
-  if (activeCallbacks.size > 0) {
-    requestFrame(tick);
-  } else {
-    loopRunning = false;
-  }
-}
 
 function registerFrameCallback(cb: FrameCallback): void {
   activeCallbacks.add(cb);
-  if (!loopRunning) {
-    loopRunning = true;
-    requestFrame(tick);
-  }
 }
 
 function unregisterFrameCallback(cb: FrameCallback): void {
   activeCallbacks.delete(cb);
+}
+
+/**
+ * Advance all active JS animations by one frame.
+ * Called from NativeBridge.pollAndDispatchEvents() — i.e., once per
+ * Lua love.update(dt) frame. No independent JS timer loop.
+ */
+export function tickAnimations(): void {
+  if (activeCallbacks.size === 0) return;
+  const timestamp = Date.now();
+  const snapshot = Array.from(activeCallbacks);
+  for (const cb of snapshot) {
+    cb(timestamp);
+  }
 }
 
 // ── Easing ───────────────────────────────────────────────
@@ -679,26 +671,10 @@ export function useAnimation(
   useEffect(() => {
     const animatedValue = animRef.current!;
 
-    // Batch updates: only schedule a state update once per frame
-    let pendingValue: number | null = null;
-    let frameScheduled = false;
-
-    const scheduleUpdate = (): void => {
-      if (frameScheduled) return;
-      frameScheduled = true;
-      requestFrame(() => {
-        frameScheduled = false;
-        if (pendingValue !== null) {
-          const val = pendingValue;
-          pendingValue = null;
-          setCurrentValue(val);
-        }
-      });
-    };
-
+    // Listener fires once per Lua frame (driven by tickAnimations).
+    // No batching needed — we're already synced to the frame rate.
     const unsubscribe = animatedValue.addListener((value) => {
-      pendingValue = value;
-      scheduleUpdate();
+      setCurrentValue(value);
     });
 
     return () => {

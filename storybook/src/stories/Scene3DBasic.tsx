@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh } from '../../../packages/3d/src';
 
@@ -7,12 +7,9 @@ export function Scene3DBasicStory() {
   const c = useThemeColors();
   const [spin, setSpin] = useState(0);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setSpin((prev) => prev + 0.03);
-    }, 16);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(16, () => {
+    setSpin((prev) => prev + 0.03);
+  });
 
   return (
     <Box style={{ width: '100%', height: '100%', gap: 12, padding: 16 }}>
