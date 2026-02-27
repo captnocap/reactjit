@@ -1,14 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createTerminalApp } from '@reactjit/terminal';
+import { useLuaInterval } from '@reactjit/core';
 import { getSystemInfo } from './sysinfo';
 import App from './App';
 
 function TerminalNeofetch() {
   const [info, setInfo] = useState(getSystemInfo());
-  useEffect(() => {
-    const t = setInterval(() => setInfo(getSystemInfo()), 30_000);
-    return () => clearInterval(t);
-  }, []);
+  useLuaInterval(30_000, () => setInfo(getSystemInfo()));
   return (
     <App
       info={info}
