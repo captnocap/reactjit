@@ -198,11 +198,13 @@ local function classifyRow(text, row, totalRows)
     if after:match("^%d+%.%s") then return "menu_option" end
   end
 
-  -- Banner / version
-  if text:find("Claude Code v", 1, true) or text:find("Claude Code ", 1, true) then return "banner" end
+  -- Banner / version — only match the actual splash banner, not mentions in prose
+  -- "Claude Code v1.2.3" is always banner; "Claude Code" alone needs banner context (art prefix or row<=5)
+  if text:find("Claude Code v%d", 1, false) then return "banner" end
+  if row <= 5 and text:find("Claude Code", 1, true) then return "banner" end
 
-  -- Model indicator
-  if text:match("Opus [%d%.]+") or text:match("Sonnet [%d%.]+") or text:match("Haiku [%d%.]+") then
+  -- Model indicator — only in the splash area (first few rows)
+  if row <= 5 and (text:match("Opus [%d%.]+") or text:match("Sonnet [%d%.]+") or text:match("Haiku [%d%.]+")) then
     return "banner"
   end
 
@@ -471,7 +473,7 @@ local function extractSemantics(state, dirtyRows, pushEvent, nodeId)
     if not found then
       newMode = MODE_IDLE
       state.permissionInfo = nil
-      if R and sid then R.resolvePermissionPrompt(sid, "Resolved") end
+      -- Permission overlay removed; vterm renders natively
       pushCapEvent(pushEvent, nodeId, "onPermissionResolved", {})
     end
   elseif sawThinking and not hasContentActivity and prevMode ~= MODE_SPLASH then
