@@ -417,14 +417,29 @@ local function luaTableToJSLiteral(val)
   return "null"
 end
 
+-- Verbose-only startup log. No-op unless _G._reactjit_verbose is set.
+local function startupLog(msg)
+  if _G._reactjit_verbose then
+    io.write(msg .. "\n"); io.flush()
+  end
+end
+
 --- Initialize reactjit.
 --- config fields:
 ---   mode       : "auto" | "web" | "native" | "canvas"  (default "auto")
 ---   bundlePath : path to the JS bundle       (default "bundle.js")
 ---   namespace  : bridge namespace string     (default "default")
 ---   libpath    : path to libquickjs shared library (default "lib/libquickjs")
+---   verbose    : print all subsystem load messages (default false, or REACTJIT_VERBOSE=1)
 function ReactJIT.init(config)
   config = config or {}
+
+  -- Startup verbosity: quiet by default, verbose via config or env var.
+  -- Subsystems check _G._reactjit_verbose to gate their load messages.
+  local verbose = config.verbose or (os.getenv("REACTJIT_VERBOSE") == "1")
+  M._startupVerbose = verbose
+  _G._reactjit_verbose = verbose
+
   basePath = resolveBasePath()
 
   -- Load cartridge manifest and mint capability permits.
@@ -780,7 +795,7 @@ function ReactJIT.init(config)
           identity = love.filesystem.getIdentity() or "default",
         })
         if ok then
-          io.write("[reactjit] Tor hidden service starting...\n"); io.flush()
+          startupLog("[reactjit] Tor hidden service starting...")
         else
           io.write("[reactjit] Tor failed to start: " .. tostring(err) .. "\n"); io.flush()
         end
@@ -1054,7 +1069,7 @@ function ReactJIT.init(config)
         rpcHandlers[method] = gated("crypto", handler)
       end
     elseif not cok then
-      io.write("[reactjit] crypto module not loaded: " .. tostring(cryptomod) .. "\n"); io.flush()
+      startupLog("[reactjit] crypto module not loaded: " .. tostring(cryptomod))
     end
   end
 
@@ -1109,7 +1124,7 @@ function ReactJIT.init(config)
       M.audioEngine.init(args)
       return true
     end
-    io.write("[reactjit] Audio engine loaded\n"); io.flush()
+    startupLog("[reactjit] Audio engine loaded")
   end
 
   -- Initialize window manager (multi-window support)
@@ -1118,7 +1133,7 @@ function ReactJIT.init(config)
   if wmOk and wmMod then
     wmMod.init()  -- auto-detects Love2D backend
     wmMod.registerMain()
-    io.write("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")\n"); io.flush()
+    startupLog("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")")
 
     -- Helper: resolve window entry from optional windowId (defaults to main)
     local function resolveWindow(args)
@@ -1191,7 +1206,7 @@ function ReactJIT.init(config)
     end
     -- Wire capabilities into events.lua for visual capability hit testing
     if M.events then M.events.setCapabilitiesModule(capMod) end
-    io.write("[reactjit] Capabilities registry loaded\n"); io.flush()
+    startupLog("[reactjit] Capabilities registry loaded")
   end
 
   -- Load HTTP server — gated by network permit (it binds a port)
@@ -1202,7 +1217,7 @@ function ReactJIT.init(config)
       for method, handler in pairs(M.httpserver.getHandlers()) do
         rpcHandlers[method] = gated("network", handler)
       end
-      io.write("[reactjit] HTTP server loaded\n"); io.flush()
+      startupLog("[reactjit] HTTP server loaded")
     end
   end
 
@@ -1212,7 +1227,7 @@ function ReactJIT.init(config)
     if brOk and brMod then
       M.browse = brMod
       M.browse.init()
-      io.write("[reactjit] Browse module loaded\n"); io.flush()
+      startupLog("[reactjit] Browse module loaded")
     end
   end
 
@@ -1222,7 +1237,7 @@ function ReactJIT.init(config)
     for method, handler in pairs(arMod.getHandlers()) do
       rpcHandlers[method] = handler
     end
-    io.write("[reactjit] Archive module loaded\n"); io.flush()
+    startupLog("[reactjit] Archive module loaded")
   end
 
   -- Load media scanner module (optional — directory scanning + indexing)
@@ -1231,7 +1246,7 @@ function ReactJIT.init(config)
     for method, handler in pairs(mdMod.getHandlers()) do
       rpcHandlers[method] = handler
     end
-    io.write("[reactjit] Media scanner loaded\n"); io.flush()
+    startupLog("[reactjit] Media scanner loaded")
   end
 
   -- Register map RPC handlers (panTo, zoomTo, flyTo, fitBounds, etc.)
@@ -1244,7 +1259,7 @@ function ReactJIT.init(config)
     for _, method in ipairs(mapRpcMethods) do
       rpcHandlers[method] = function(args) return M.mapmod.handleRPC(method, args) end
     end
-    io.write("[reactjit] Map module loaded\n"); io.flush()
+    startupLog("[reactjit] Map module loaded")
   end
 
   -- Register permit + audit + quarantine + manifest RPC handlers (always available for inspector queries)
@@ -1409,9 +1424,7 @@ function ReactJIT.update(dt)
   -- instead of eval because JS_Eval hangs after complex React renders.
   if ReactJIT._needsMount then
     ReactJIT._needsMount = nil
-    io.write("[reactjit] Triggering deferred mount...\n"); io.flush()
     M.bridge:callGlobal("__mount")
-    io.write("[reactjit] Mount call returned\n"); io.flush()
     -- Tick immediately to drain any scheduled microtasks/timers
     M.bridge:tick()
     -- Push initial viewport dimensions so useWindowDimensions can pick them up
@@ -1619,7 +1632,6 @@ function ReactJIT.update(dt)
             if M.painter then M.painter.setTheme(M.currentTheme) end
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
-            io.write("[reactjit] Theme switched to: " .. name .. "\n"); io.flush()
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:registry" then
@@ -1627,7 +1639,7 @@ function ReactJIT.update(dt)
           local payload = cmd.payload
           if payload and payload.services and M.settingsEnabled then
             settings.setServices(payload.services)
-            io.write("[reactjit] Settings: registered " .. #payload.services .. " services\n"); io.flush()
+            startupLog("[reactjit] Settings: registered " .. #payload.services .. " services")
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:keys:set" then
@@ -2026,17 +2038,7 @@ function ReactJIT.draw()
       local w = c and c.w or "nil"
       local h = c and c.h or "nil"
       local nc = root.children and #root.children or 0
-      io.write("[reactjit] draw: root " .. w .. "x" .. h .. " children=" .. nc .. "\n"); io.flush()
-      if root.children then
-        for i = 1, math.min(3, #root.children) do
-          local ch = root.children[i]
-          local cc = ch.computed
-          local cw = cc and cc.w or "nil"
-          local chh = cc and cc.h or "nil"
-          local bg = ch.style and ch.style.backgroundColor or "nil"
-          io.write("  child[" .. i .. "] type=" .. tostring(ch.type) .. " " .. tostring(cw) .. "x" .. tostring(chh) .. " bg=" .. tostring(bg) .. "\n"); io.flush()
-        end
-      end
+      Log.log("paint", "draw: root %sx%s children=%d", w, h, nc)
     end
     if M.inspectorEnabled then inspector.beginPaint() end
     local ok, paintErr = pcall(M.painter.paint, root)

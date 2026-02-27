@@ -99,8 +99,7 @@ function WindowManager.init(opts)
   else
     -- Fallback: no multi-window support
     backend = nil
-    io.write("[window_manager] WARNING: no multi-window backend available\n")
-    io.flush()
+    if _G._reactjit_verbose then io.write("[window_manager] WARNING: no multi-window backend available\n"); io.flush() end
   end
 end
 

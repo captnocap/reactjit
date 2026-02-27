@@ -177,9 +177,11 @@ function Tor.start(opts)
     pf:close()
   end
 
-  io.write("[tor] Started Tor on SOCKS port " .. socksPort .. " (PID: " .. (torPid or "unknown") .. ")\n"); io.flush()
-  io.write("[tor] Config: " .. configDir .. "\n"); io.flush()
-  io.write("[tor] Log: " .. logFile .. "\n"); io.flush()
+  if _G._reactjit_verbose then
+    io.write("[tor] Started Tor on SOCKS port " .. socksPort .. " (PID: " .. (torPid or "unknown") .. ")\n"); io.flush()
+    io.write("[tor] Config: " .. configDir .. "\n"); io.flush()
+    io.write("[tor] Log: " .. logFile .. "\n"); io.flush()
+  end
 
   return true
 end

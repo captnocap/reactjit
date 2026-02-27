@@ -130,13 +130,13 @@ for _, path in ipairs(loadPaths) do
   if ok then
     lib = result
     Archive.available = true
-    io.write("[archive] Loaded: " .. path .. "\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[archive] Loaded: " .. path .. "\n"); io.flush() end
     break
   end
 end
 
 if not Archive.available then
-  io.write("[archive] libarchive not found — archive features disabled\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[archive] libarchive not found — archive features disabled\n"); io.flush() end
   Archive.getHandlers = function() return {} end
   return Archive
 end

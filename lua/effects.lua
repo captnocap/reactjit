@@ -317,10 +317,10 @@ function Effects.loadAll()
       loaded[#loaded + 1] = name
     else
       failed[#failed + 1] = name
-      io.write("[effects] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush()
+      if _G._reactjit_verbose then io.write("[effects] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush() end
     end
   end
-  io.write("[effects] " .. #loaded .. " effects registered\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[effects] " .. #loaded .. " effects registered\n"); io.flush() end
 end
 
 return Effects

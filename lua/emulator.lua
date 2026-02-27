@@ -66,7 +66,7 @@ local function loadAgnes()
   local ok, lib = pcall(ffi.load, libpath)
   if ok then
     agnesLib = lib
-    io.write("[emulator] Loaded libagnes from " .. libpath .. "\n"); io.flush()
+    if _G._reactjit_verbose then io.write("[emulator] Loaded libagnes from " .. libpath .. "\n"); io.flush() end
     return agnesLib
   end
 

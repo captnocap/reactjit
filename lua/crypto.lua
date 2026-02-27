@@ -281,23 +281,23 @@ end
 
 sodium = loadSodium()
 if not sodium then
-  io.write("[crypto] libsodium not found — crypto module disabled\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[crypto] libsodium not found — crypto module disabled\n"); io.flush() end
   return Crypto
 end
 
 if sodium.sodium_init() < 0 then
-  io.write("[crypto] sodium_init() failed — crypto module disabled\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[crypto] sodium_init() failed — crypto module disabled\n"); io.flush() end
   return Crypto
 end
 
 crypto_lib = loadCrypto()
 if not crypto_lib then
-  io.write("[crypto] libcrypto (OpenSSL) not found — BLAKE2s and PBKDF2 unavailable\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[crypto] libcrypto (OpenSSL) not found — BLAKE2s and PBKDF2 unavailable\n"); io.flush() end
 end
 
 blake3 = loadBlake3()
 if not blake3 then
-  io.write("[crypto] libblake3 not found — BLAKE3 unavailable\n"); io.flush()
+  if _G._reactjit_verbose then io.write("[crypto] libblake3 not found — BLAKE3 unavailable\n"); io.flush() end
 end
 
 Crypto.available = true
@@ -472,8 +472,7 @@ if sodium.crypto_aead_aes256gcm_is_available() ~= 0 then
     decrypt = sodium.crypto_aead_aes256gcm_decrypt,
   }
 else
-  io.write("[crypto] AES-256-GCM not available (no AES-NI) — using ChaCha20/XChaCha20 only\n")
-  io.flush()
+  if _G._reactjit_verbose then io.write("[crypto] AES-256-GCM not available (no AES-NI) — using ChaCha20/XChaCha20 only\n"); io.flush() end
 end
 
 local function aead_encrypt(plaintext, key, algo)
@@ -944,9 +943,11 @@ function Crypto.getHandlers()
   return handlers
 end
 
-io.write("[crypto] Loaded — libsodium")
-if crypto_lib then io.write(" + libcrypto") end
-if blake3 then io.write(" + libblake3") end
-io.write("\n"); io.flush()
+if _G._reactjit_verbose then
+  io.write("[crypto] Loaded — libsodium")
+  if crypto_lib then io.write(" + libcrypto") end
+  if blake3 then io.write(" + libblake3") end
+  io.write("\n"); io.flush()
+end
 
 return Crypto
