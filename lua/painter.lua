@@ -667,7 +667,7 @@ local function drawVideoFrame(canvas, src, c, objectFit, borderRadius, stencilDe
     local stencilValue = stencilDepth + 1
     love.graphics.stencil(function()
       love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-    end, "replace", stencilValue)
+    end, "replace", stencilValue, stencilDepth > 0)
     love.graphics.setStencilTest("greater", stencilDepth)
   end
 
@@ -748,7 +748,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   local borderRadius = s.borderRadius or 0
   local hasRoundedCorners = tl > 0 or tr > 0 or bl > 0 or br > 0
   local isPerCorner = hasPerCornerRadius(s)
-  local isScroll = s.overflow == "scroll"
+  local isScroll = s.overflow == "scroll" or s.overflow == "auto"
   local needsClipping = s.overflow == "hidden" or isScroll
   local useStencil = needsClipping and hasRoundedCorners
   local useScissor = needsClipping and not hasRoundedCorners
@@ -764,7 +764,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       else
         love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
       end
-    end, "replace", stencilValue)
+    end, "replace", stencilValue, stencilDepth > 0)
     love.graphics.setStencilTest("greater", stencilDepth)
     stencilDepth = stencilValue
   elseif useScissor then
@@ -1164,7 +1164,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
           local stencilValue = stencilDepth + 1
           love.graphics.stencil(function()
             love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-          end, "replace", stencilValue)
+          end, "replace", stencilValue, stencilDepth > 0)
           love.graphics.setStencilTest("greater", stencilDepth)
         end
 
@@ -1248,7 +1248,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
             local stencilValue = stencilDepth + 1
             love.graphics.stencil(function()
               love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-            end, "replace", stencilValue)
+            end, "replace", stencilValue, stencilDepth > 0)
             love.graphics.setStencilTest("greater", stencilDepth)
           end
 
