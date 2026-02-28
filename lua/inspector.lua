@@ -22,6 +22,11 @@
 local ZIndex = require("lua.zindex")
 local console = nil  -- lazy-loaded to avoid circular deps
 
+-- Forward declarations (defined later in the file)
+local handleEditKey
+local handleEditTextInput
+local cancelEdit
+
 local Inspector = {}
 
 -- ============================================================================
@@ -125,6 +130,7 @@ local JSX_CLOSE_BRK = { 0.50, 0.52, 0.58, 0.50 } -- closing tag brackets (dim)
 local JSX_GUIDE     = { 0.25, 0.27, 0.35, 0.35 } -- guide lines (very dim)
 local JSX_DOTS      = { 0.55, 0.55, 0.60, 1 }    -- "..." collapsed indicator
 local JSX_DIMS      = { 0.50, 0.52, 0.58, 0.8 }  -- dimensions on anonymous nodes
+local JSX_HANDLER   = { 0.90, 0.70, 0.20, 0.85 } -- handler badge (amber)
 
 -- Inline edit colors
 local EDIT_BG       = { 0.12, 0.12, 0.20, 1 }
@@ -350,6 +356,25 @@ end
 function Inspector.getSelectedNode()
   return state.selectedNode
 end
+
+--- Select a node directly (used by devtools child process for remote selection).
+function Inspector.selectNode(node)
+  if not node then return end
+  state.selectedNode = node
+  state.detailScrollY = 0
+end
+
+--- Set perf data from external source (used by devtools child process).
+function Inspector.setPerfData(perf)
+  if not perf then return end
+  if perf.fps then state.fps = perf.fps end
+  if perf.layoutMs then state.layoutMs = perf.layoutMs end
+  if perf.paintMs then state.paintMs = perf.paintMs end
+  if perf.nodeCount then state.nodeCount = perf.nodeCount end
+end
+
+--- No-op init for child process compatibility.
+function Inspector.init() end
 
 --- Clear the selected node (used by devtools Escape handling).
 function Inspector.clearSelection()
@@ -606,6 +631,10 @@ function Inspector.wheelmoved(x, y)
        and state.mouseY >= dr.y and state.mouseY < dr.y + dr.h then
       state.detailScrollY = state.detailScrollY - y * 20
       if state.detailScrollY < 0 then state.detailScrollY = 0 end
+      if state.detailContentH then
+        local maxScroll = math.max(0, state.detailContentH - dr.h)
+        if state.detailScrollY > maxScroll then state.detailScrollY = maxScroll end
+      end
       return true
     end
   end
@@ -617,6 +646,10 @@ function Inspector.wheelmoved(x, y)
        and state.mouseY >= tr.y and state.mouseY < tr.y + tr.h then
       state.treeScrollY = state.treeScrollY - y * 20
       if state.treeScrollY < 0 then state.treeScrollY = 0 end
+      if state.treeContentH then
+        local maxScroll = math.max(0, state.treeContentH - tr.h)
+        if state.treeScrollY > maxScroll then state.treeScrollY = maxScroll end
+      end
       return true
     end
   end
@@ -1111,7 +1144,12 @@ function drawTreePanel(root, rx, ry, rw, rh)
 
   -- Walk tree and draw lines
   local drawY = ry - state.treeScrollY
-  drawTreeNode(root, 0, drawY, font, lineH, pad, ry, ry + rh, rx, rw)
+  local endY = drawTreeNode(root, 0, drawY, font, lineH, pad, ry, ry + rh, rx, rw)
+
+  -- Store content height for scroll clamping
+  state.treeContentH = (endY - drawY)
+  local maxTreeScroll = math.max(0, state.treeContentH - rh)
+  if state.treeScrollY > maxTreeScroll then state.treeScrollY = maxTreeScroll end
 
   -- Auto-scroll to selected node (after positions are cached)
   if state.scrollToSelected and state.selectedNode then
@@ -1146,6 +1184,19 @@ local function drawSegments(segs, x, y, font)
     x = x + font:getWidth(seg[2])
   end
   return x
+end
+
+--- Append a handler count badge to a segments list (e.g. " ⚡3")
+local function appendHandlerBadge(segs, node)
+  if node.hasHandlers and node.handlerMeta and type(node.handlerMeta) == "table" then
+    local count = 0
+    for _ in pairs(node.handlerMeta) do count = count + 1 end
+    if count > 0 then
+      segs[#segs + 1] = { JSX_HANDLER, " \xe2\x9a\xa1" .. count }
+    end
+  elseif node.hasHandlers then
+    segs[#segs + 1] = { JSX_HANDLER, " \xe2\x9a\xa1" }
+  end
 end
 
 --- Get the display name for a node (component name or primitive name)
@@ -1290,6 +1341,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
         { dimName, tagName },
         { JSX_CLOSE_BRK, ">" },
       }
+      appendHandlerBadge(segs, node)
       drawSegments(segs, indent, y + 1, font)
 
     elseif not hasChildren then
@@ -1304,6 +1356,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
         segs[#segs + 1] = { JSX_DIMS, " " .. math.floor(node.computed.w) .. "x" .. math.floor(node.computed.h) }
       end
       segs[#segs + 1] = { JSX_BRACKET, " />" }
+      appendHandlerBadge(segs, node)
       drawSegments(segs, indent, y + 1, font)
 
     elseif isCollapsed then
@@ -1316,6 +1369,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
       appendPropSegments(segs, node)
       segs[#segs + 1] = { JSX_BRACKET, ">" }
       segs[#segs + 1] = { JSX_DOTS, " ..." }
+      appendHandlerBadge(segs, node)
       drawSegments(segs, indent, y + 1, font)
 
     else
@@ -1327,6 +1381,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
       }
       appendPropSegments(segs, node)
       segs[#segs + 1] = { JSX_BRACKET, ">" }
+      appendHandlerBadge(segs, node)
       drawSegments(segs, indent, y + 1, font)
     end
   end
@@ -1438,7 +1493,7 @@ commitEdit = function()
 end
 
 --- Cancel the current edit (restore original value if live-applied)
-local function cancelEdit()
+cancelEdit = function()
   if not state.editState then return end
   local es = state.editState
   if es.liveApplied and es.node and es.node.style then
@@ -1461,7 +1516,7 @@ local function applyEditLive()
 end
 
 --- Handle a keypress while in edit mode. Returns true if consumed.
-local function handleEditKey(key)
+handleEditKey = function(key)
   local es = state.editState
   if not es then return false end
 
@@ -1548,7 +1603,7 @@ local function handleEditKey(key)
 end
 
 --- Handle text input while in edit mode. Returns true if consumed.
-local function handleEditTextInput(text)
+handleEditTextInput = function(text)
   local es = state.editState
   if not es then return false end
   es.text = es.text:sub(1, es.cursor) .. text .. es.text:sub(es.cursor + 1)
@@ -1891,18 +1946,70 @@ function drawDetailPanel(rx, ry, rw, rh)
     end
   end
 
-  -- Handlers
+  -- ── Handlers ──
   if node.hasHandlers then
-    y = y + 4
-    love.graphics.setColor(PERF_GOOD)
-    love.graphics.print("event handlers active", x, y)
+    -- Separator
+    love.graphics.setColor(TOOLTIP_BORDER)
+    love.graphics.rectangle("fill", rx + 4, y, rw - 8, 1)
+    y = y + 6
+
+    love.graphics.setColor(SECTION_COL)
+    love.graphics.print("handlers", x, y)
     y = y + lineH
+
+    if node.handlerMeta and type(node.handlerMeta) == "table" then
+      -- Sort handler names for stable ordering
+      local handlerNames = {}
+      for name in pairs(node.handlerMeta) do
+        handlerNames[#handlerNames + 1] = name
+      end
+      table.sort(handlerNames)
+
+      local maxSnipW = rw - pad * 2 - 10  -- available width for snippet
+
+      for _, name in ipairs(handlerNames) do
+        local snippet = node.handlerMeta[name] or ""
+        -- Draw handler name in accent color
+        love.graphics.setColor(PERF_GOOD)
+        local nameStr = name
+        love.graphics.print(nameStr, x, y)
+        -- Draw snippet in dim color, truncated to fit
+        local nameW = font:getWidth(nameStr .. "  ")
+        local snippetX = x + nameW
+        local availW = rx + rw - pad - snippetX
+        if availW > 20 then
+          love.graphics.setColor(TREE_DIM)
+          -- Truncate snippet to fit available width
+          local displaySnip = snippet
+          if font:getWidth(displaySnip) > availW then
+            while #displaySnip > 0 and font:getWidth(displaySnip .. "\xe2\x80\xa6") > availW do
+              displaySnip = displaySnip:sub(1, #displaySnip - 1)
+            end
+            displaySnip = displaySnip .. "\xe2\x80\xa6"
+          end
+          love.graphics.print(displaySnip, snippetX, y)
+        end
+        y = y + lineH
+      end
+    else
+      -- Fallback: no metadata available, just show the flag
+      love.graphics.setColor(PERF_GOOD)
+      love.graphics.print("event handlers active", x, y)
+      y = y + lineH
+    end
   end
 
   -- Hint
   y = y + 8
   love.graphics.setColor(TREE_DIM)
   love.graphics.print("Click values to edit  |  Arrow keys +/-", x, y)
+  y = y + lineH + pad
+
+  -- Store content height for scroll clamping
+  local contentH = (y - ry) + state.detailScrollY
+  state.detailContentH = contentH
+  local maxDetailScroll = math.max(0, contentH - rh)
+  if state.detailScrollY > maxDetailScroll then state.detailScrollY = maxDetailScroll end
 
   love.graphics.setScissor()
 end

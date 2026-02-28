@@ -1244,6 +1244,10 @@ function Console.wheelmoved(x, y)
   if not state.visible then return false end
   state.scrollY = state.scrollY - y * 16
   if state.scrollY < 0 then state.scrollY = 0 end
+  -- Clamp to content (uses last known region from draw)
+  if state.lastMaxScroll then
+    if state.scrollY > state.lastMaxScroll then state.scrollY = state.lastMaxScroll end
+  end
   return true
 end
 
@@ -1354,6 +1358,7 @@ function Console.draw()
 
     local totalContentH = #state.output * lineH
     local maxScroll = math.max(0, totalContentH - outputH)
+    state.lastMaxScroll = maxScroll
     if state.scrollY > maxScroll then state.scrollY = maxScroll end
 
     local startY = outputY - state.scrollY
@@ -1560,6 +1565,7 @@ function Console.drawInRegion(region)
 
     local totalContentH = #state.output * lineH
     local maxScroll = math.max(0, totalContentH - outputH)
+    state.lastMaxScroll = maxScroll
     if state.scrollY > maxScroll then state.scrollY = maxScroll end
 
     local startY = outputY - state.scrollY
