@@ -21,6 +21,8 @@ import { migrateCommand } from '../commands/migrate.mjs';
 import { migrateTkinterCommand } from '../commands/migrate-tkinter.mjs';
 import { migrateSwiftUICommand } from '../commands/migrate-swiftui.mjs';
 import { migrateBlessedCommand } from '../commands/migrate-blessed.mjs';
+import { migratePyQt6Command } from '../commands/migrate-pyqt6.mjs';
+import { migrateFlutterCommand } from '../commands/migrate-flutter.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -41,17 +43,15 @@ const HELP = `
   reactjit (rjit) — CLI for ReactJIT
 
   Development:
-    rjit dev                      Watch + HMR (SDL2, default)
-    rjit dev love                 Watch + HMR (Love2D)
-    rjit build                    Dev build (SDL2, default)
+    rjit dev                      Watch + HMR (Love2D)
+    rjit build                    Dev build (Love2D)
 
   Production builds:
     rjit build linux              Self-extracting Linux binary (x64)
     rjit build macos              macOS bundle (Intel x64)
     rjit build macmseries         macOS bundle (Apple Silicon arm64)
     rjit build windows            Windows archive (x64)
-    rjit build web                WASM bundle for browsers (love.js)
-    rjit build dist:love          Self-extracting Linux binary (Love2D + glibc)
+    rjit build web                WASM bundle for browsers
 
   Apps:
     rjit storybook                Open the storybook
@@ -76,6 +76,8 @@ const HELP = `
     rjit migrate-tkinter <app.py> Convert Python Tkinter app → ReactJIT TSX
     rjit migrate-swiftui <app.swift> Convert SwiftUI app → ReactJIT TSX
     rjit migrate-blessed <app.js>   Convert Blessed terminal UI → ReactJIT TSX
+    rjit migrate-pyqt6 <app.py>     Convert PyQt6/PySide6 app → ReactJIT TSX
+    rjit migrate-flutter <app.dart>  Convert Flutter/Dart app → ReactJIT TSX
 
   Tools:
     rjit convert <file>           Convert HTML/React div-soup → ReactJIT
@@ -144,6 +146,12 @@ switch (command) {
     break;
   case 'migrate-blessed':
     migrateBlessedCommand(args);
+    break;
+  case 'migrate-pyqt6':
+    migratePyQt6Command(args);
+    break;
+  case 'migrate-flutter':
+    migrateFlutterCommand(args);
     break;
   case '--version':
   case '-v':

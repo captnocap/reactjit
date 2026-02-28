@@ -198,6 +198,7 @@
 │   │   │   ├── SearchResults.tsx
 │   │   │   └── SearchSchemaHint.tsx
 │   │   ├── Select.tsx
+│   │   ├── SemanticTerminal.tsx
 │   │   ├── Slider.tsx
 │   │   ├── Spacer.tsx
 │   │   ├── Sparkline.tsx
@@ -209,9 +210,11 @@
 │   │   ├── TextEditor.tsx
 │   │   ├── TextInput.tsx
 │   │   ├── Toolbar.tsx
+│   │   ├── tw.ts
 │   │   ├── types.ts
 │   │   ├── Typography.tsx
 │   │   ├── useAppSearch.ts
+│   │   ├── useBreakpoint.ts
 │   │   ├── useCapabilities.ts
 │   │   ├── useDebug.ts
 │   │   ├── useGPIO.tsx
@@ -220,6 +223,7 @@
 │   │   ├── usePorts.ts
 │   │   ├── usePTY.ts
 │   │   ├── useSearch.ts
+│   │   ├── useSemanticTerminal.ts
 │   │   ├── useSystemInfo.ts
 │   │   ├── useSystemMonitor.ts
 │   │   ├── VideoPlayer.tsx
@@ -349,4 +353,4 @@
     │   └── types.ts
     └── tsconfig.json
 
-44 directories, 306 files
+44 directories, 310 files

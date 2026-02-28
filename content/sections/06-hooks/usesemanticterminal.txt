@@ -1,0 +1,182 @@
+=== METADATA ===
+title: useSemanticTerminal
+description: React hook for managing SemanticTerminal state, classification tracking, and playback controls
+category: Hooks
+platforms: love2d
+keywords: semantic, terminal, classifier, playback, recording, graph, hook
+related: SemanticTerminal, Terminal, usePTY, session-recording
+difficulty: advanced
+
+=== OVERVIEW ===
+useSemanticTerminal manages all React-side state for a SemanticTerminal session. It tracks classified rows, the semantic graph state, and playback transport position. It also provides the full set of playback control methods: play, pause, seek, step, stepBack, setSpeed, and saveRecording.
+
+The hook does not render anything. Spread terminalProps onto a SemanticTerminal element in your JSX tree — that element is the visual capability node that owns the PTY lifecycle and renders the classified terminal.
+
+Use this hook whenever you need to read classification data or drive playback from React. For simple one-liner use cases where you only want the visual terminal and don't need access to classified rows or transport controls, use SemanticTerminal directly without the hook.
+
+classifiedRows is an array of all rows seen in the current session, updated as each row is classified. graphState tracks the structural state of the semantic graph — how many turns and nodes the classifier has identified. playerState contains the playback timeline — only non-null in playback mode.
+
+=== API / SYNTAX ===
+```tsx
+import { useSemanticTerminal } from '@reactjit/core';
+import type {
+  UseSemanticTerminalOptions,
+  UseSemanticTerminalResult,
+  ClassifiedRow,
+  GraphState,
+  PlayerState,
+} from '@reactjit/core';
+```
+
+Options (UseSemanticTerminalOptions):
+| Option        | Type                           | Default   | Description                                                  |
+|---------------|--------------------------------|-----------|--------------------------------------------------------------|
+| mode          | 'live' \| 'playback'           | 'live'    | Live PTY session or recorded session playback                |
+| command       | string                         | 'bash'    | Command to run in live mode                                  |
+| args          | string                         | undefined | Command arguments (space-separated)                          |
+| cwd           | string                         | undefined | Working directory                                            |
+| rows          | number                         | 40        | Terminal rows                                                |
+| cols          | number                         | 120       | Terminal columns                                             |
+| classifier    | string                         | 'basic'   | Classifier name from lua/classifiers/                        |
+| recording     | boolean                        | false     | Record PTY output for later playback                         |
+| playbackSrc   | string                         | undefined | Path to .rec.lua file for playback mode                      |
+| playbackSpeed | number                         | 1.0       | Playback speed multiplier                                    |
+| showTokens    | boolean                        | false     | Show token type badges on each row                           |
+| showGraph     | boolean                        | false     | Show semantic graph panel                                    |
+| showTimeline  | boolean                        | false     | Show timeline scrubber (playback mode)                       |
+
+Return value (UseSemanticTerminalResult):
+| Field          | Type                           | Description                                                  |
+|----------------|--------------------------------|--------------------------------------------------------------|
+| classifiedRows | ClassifiedRow[]                | All classified rows received so far                          |
+| graphState     | GraphState \| null             | Current semantic graph state, or null until first update     |
+| playerState    | PlayerState \| null            | Current playback state, or null if not in playback mode      |
+| play           | () => void                     | Resume or start playback                                     |
+| pause          | () => void                     | Pause playback                                               |
+| seek           | (timeSeconds: number) => void  | Seek to a specific time in seconds                           |
+| step           | () => void                     | Advance one frame forward                                    |
+| stepBack       | () => void                     | Go back one frame                                            |
+| setSpeed       | (speed: number) => void        | Set playback speed multiplier                                |
+| saveRecording  | (path: string) => void         | Save the current recording to a file path                    |
+| terminalProps  | SemanticTerminalProps          | Spread onto a SemanticTerminal element                       |
+
+ClassifiedRow:
+| Field | Type   | Description                          |
+|-------|--------|--------------------------------------|
+| row   | number | Row index in the terminal buffer     |
+| token | string | Classifier token (e.g. 'command')    |
+| text  | string | Plain text content of the row        |
+
+GraphState:
+| Field     | Type    | Description                                               |
+|-----------|---------|-----------------------------------------------------------|
+| nodeCount | number  | Total nodes in the semantic graph                         |
+| turnCount | number  | Number of turns identified (each isTurnStart = new turn)  |
+| mode      | string  | Current mode string from the capability                   |
+| streaming | boolean | Whether output is currently streaming                     |
+
+PlayerState:
+| Field       | Type    | Description                                         |
+|-------------|---------|-----------------------------------------------------|
+| playing     | boolean | Whether playback is currently running               |
+| time        | number  | Current playback position in seconds                |
+| duration    | number  | Total recording duration in seconds                 |
+| progress    | number  | Normalized position 0.0–1.0                         |
+| frame       | number  | Current frame index                                 |
+| totalFrames | number  | Total frames in the recording                       |
+| speed       | number  | Current playback speed multiplier                   |
+
+=== EXAMPLES ===
+Example 1: Live session with classification tracking
+---
+```tsx
+import { Box, Text, SemanticTerminal } from '@reactjit/core';
+import { useSemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  const { classifiedRows, graphState, terminalProps } = useSemanticTerminal({
+    mode: 'live',
+    command: 'claude',
+    classifier: 'claude_code',
+    showTokens: true,
+  });
+
+  const errorCount = classifiedRows.filter(r => r.token === 'error').length;
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <Box style={{ flexDirection: 'row', gap: 16, padding: 8, backgroundColor: '#313244' }}>
+        <Text style={{ fontSize: 11, color: '#a6adc8' }}>
+          Turns: {graphState?.turnCount ?? 0}
+        </Text>
+        <Text style={{ fontSize: 11, color: errorCount > 0 ? '#f38ba8' : '#a6adc8' }}>
+          Errors: {errorCount}
+        </Text>
+      </Box>
+      <SemanticTerminal {...terminalProps} style={{ flexGrow: 1 }} />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Playback with full transport controls
+---
+```tsx
+import { Box, Text, Pressable, SemanticTerminal } from '@reactjit/core';
+import { useSemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  const { playerState, play, pause, seek, step, stepBack, setSpeed, terminalProps } =
+    useSemanticTerminal({
+      mode: 'playback',
+      playbackSrc: '/tmp/session.rec.lua',
+      classifier: 'claude_code',
+      showTimeline: true,
+      showTokens: true,
+    });
+
+  const playing = playerState?.playing ?? false;
+  const pct = Math.round((playerState?.progress ?? 0) * 100);
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <SemanticTerminal {...terminalProps} style={{ flexGrow: 1 }} />
+
+      <Box style={{ flexDirection: 'row', gap: 8, padding: 8, backgroundColor: '#313244', alignItems: 'center' }}>
+        <Pressable onPress={stepBack}>
+          <Text style={{ fontSize: 12, color: '#89b4fa' }}>◀</Text>
+        </Pressable>
+        <Pressable onPress={playing ? pause : play}>
+          <Text style={{ fontSize: 12, color: '#89b4fa' }}>{playing ? '⏸' : '▶'}</Text>
+        </Pressable>
+        <Pressable onPress={step}>
+          <Text style={{ fontSize: 12, color: '#89b4fa' }}>▶</Text>
+        </Pressable>
+        <Text style={{ fontSize: 11, color: '#a6adc8', flexGrow: 1, textAlign: 'center' }}>
+          {pct}% · {playerState?.time?.toFixed(1) ?? '0.0'}s / {playerState?.duration?.toFixed(1) ?? '?'}s
+        </Text>
+        <Pressable onPress={() => setSpeed(2)}>
+          <Text style={{ fontSize: 11, color: '#cba6f7' }}>2×</Text>
+        </Pressable>
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- Include a SemanticTerminal element with {...terminalProps} spread. Without it, the hook has no visual node and all controls are no-ops.
+- In playback mode, playerState is null until the recording is loaded. Always null-check before reading playerState fields.
+- classifiedRows can grow large in long sessions. If you only need counts, derive from graphState instead of scanning the array on every render.
+- saveRecording requires recording: true on the options. Calling it when recording is disabled is a no-op.
+- seek takes a time in seconds (absolute, not relative). Read playerState.duration to know the valid seek range.
+
+=== SEE ALSO ===
+- SemanticTerminal
+- Terminal
+- session-recording
+- semantic-classification

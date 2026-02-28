@@ -1,0 +1,198 @@
+=== METADATA ===
+title: Session Recording
+description: Recording and playback of PTY sessions as .rec.lua files — classifier-independent capture
+category: Advanced
+platforms: love2d
+keywords: recording, playback, session, pty, rec.lua, replay, transport, seek, timeline
+related: SemanticTerminal, useSemanticTerminal, semantic-classification, Terminal
+difficulty: intermediate
+
+=== OVERVIEW ===
+Session recording captures raw PTY output bytes with high-resolution timestamps into a .rec.lua file. The recording is classifier-independent: it stores the raw terminal stream, not classified tokens. Classification happens at playback time, so you can replay the same recording through different classifiers and see different semantic interpretations.
+
+The .rec.lua format is plain Lua source that returns a table with a meta section (CLI name, dimensions, timestamp, duration, frame count) and a frames array (each frame: { t = seconds, data = "raw bytes" }). The Lua format needs no JSON parser and loads with a plain loadfile() call.
+
+Recording is controlled via two props on SemanticTerminal: recording={true} enables capture during a live session, and saveRecording(path) on the useSemanticTerminal hook flushes the buffer to disk. Playback is controlled via mode="playback" and playbackSrc pointing to a .rec.lua file.
+
+=== API / SYNTAX ===
+Enable recording on a live session:
+```tsx
+<SemanticTerminal
+  command="claude"
+  classifier="claude_code"
+  recording               // enable capture
+  onRecordingDone={e => console.log('Saved:', e.path, e.frames, 'frames')}
+  style={{ flexGrow: 1 }}
+/>
+```
+
+Save from the hook:
+```tsx
+const { saveRecording, terminalProps } = useSemanticTerminal({
+  command: 'bash',
+  recording: true,
+});
+// Later:
+saveRecording('/home/user/sessions/my-session.rec.lua');
+```
+
+Play back a recording:
+```tsx
+<SemanticTerminal
+  mode="playback"
+  playbackSrc="/home/user/sessions/my-session.rec.lua"
+  classifier="claude_code"
+  showTimeline
+  style={{ flexGrow: 1 }}
+/>
+```
+
+Playback transport controls (via useSemanticTerminal):
+```tsx
+const { playerState, play, pause, seek, step, stepBack, setSpeed, terminalProps } =
+  useSemanticTerminal({
+    mode: 'playback',
+    playbackSrc: '/tmp/session.rec.lua',
+    classifier: 'claude_code',
+    showTimeline: true,
+  });
+```
+
+PlayerState fields:
+| Field       | Type    | Description                                         |
+|-------------|---------|-----------------------------------------------------|
+| playing     | boolean | Whether playback is currently running               |
+| time        | number  | Current position in seconds                         |
+| duration    | number  | Total recording duration in seconds                 |
+| progress    | number  | Normalized position 0.0–1.0                         |
+| frame       | number  | Current frame index                                 |
+| totalFrames | number  | Total frames in the recording                       |
+| speed       | number  | Current playback speed multiplier                   |
+
+.rec.lua format:
+```lua
+-- SemanticTerminal recording: claude (2026-01-15T10:23:44Z)
+-- Duration: 42.3s, Frames: 1847
+return {
+  meta = {
+    cli = "claude",
+    rows = 40,
+    cols = 120,
+    recorded = "2026-01-15T10:23:44Z",
+    duration = 42.300000,
+    frameCount = 1847,
+  },
+  frames = {
+    { t = 0.000000, data = "\027[?2004h\027[?25h" },
+    { t = 0.081234, data = "\027[1m\027[34mClaude Code v1.0.0\027[0m\r\n" },
+    -- ...
+  }
+}
+```
+
+=== EXAMPLES ===
+Example 1: Live session with recording + save button
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text, Pressable, SemanticTerminal } from '@reactjit/core';
+import { useSemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  const [saved, setSaved] = useState(false);
+  const { saveRecording, terminalProps } = useSemanticTerminal({
+    command: 'claude',
+    classifier: 'claude_code',
+    recording: true,
+  });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <SemanticTerminal {...terminalProps} style={{ flexGrow: 1 }} />
+      <Box style={{ flexDirection: 'row', gap: 8, padding: 8, backgroundColor: '#313244' }}>
+        <Pressable onPress={() => {
+          saveRecording('/tmp/session.rec.lua');
+          setSaved(true);
+        }}>
+          <Box style={{ padding: '4 12', backgroundColor: '#a6e3a1', borderRadius: 4 }}>
+            <Text style={{ fontSize: 12, color: '#1e1e2e' }}>Save Recording</Text>
+          </Box>
+        </Pressable>
+        {saved && <Text style={{ fontSize: 11, color: '#a6adc8', alignSelf: 'center' }}>Saved to /tmp/session.rec.lua</Text>}
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Full playback player with transport controls
+---
+```tsx
+import { Box, Text, Pressable, SemanticTerminal } from '@reactjit/core';
+import { useSemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  const { playerState, play, pause, seek, step, stepBack, setSpeed, terminalProps } =
+    useSemanticTerminal({
+      mode: 'playback',
+      playbackSrc: '/tmp/session.rec.lua',
+      classifier: 'claude_code',
+      showTimeline: true,
+      showTokens: true,
+    });
+
+  const playing = playerState?.playing ?? false;
+  const progress = playerState?.progress ?? 0;
+  const pct = Math.round(progress * 100);
+  const time = playerState?.time?.toFixed(1) ?? '0.0';
+  const duration = playerState?.duration?.toFixed(1) ?? '?';
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <SemanticTerminal {...terminalProps} style={{ flexGrow: 1 }} />
+      <Box style={{ flexDirection: 'row', gap: 8, padding: 8, backgroundColor: '#313244', alignItems: 'center' }}>
+        <Pressable onPress={stepBack}>
+          <Text style={{ fontSize: 14, color: '#89b4fa' }}>◀</Text>
+        </Pressable>
+        <Pressable onPress={playing ? pause : play}>
+          <Text style={{ fontSize: 14, color: '#89b4fa' }}>{playing ? '⏸' : '▶'}</Text>
+        </Pressable>
+        <Pressable onPress={step}>
+          <Text style={{ fontSize: 14, color: '#89b4fa' }}>▶</Text>
+        </Pressable>
+        <Text style={{ fontSize: 11, color: '#a6adc8', flexGrow: 1, textAlign: 'center' }}>
+          {`${pct}% · ${time}s / ${duration}s`}
+        </Text>
+        <Pressable onPress={() => setSpeed(0.5)}>
+          <Text style={{ fontSize: 11, color: '#cba6f7' }}>0.5×</Text>
+        </Pressable>
+        <Pressable onPress={() => setSpeed(1)}>
+          <Text style={{ fontSize: 11, color: '#cba6f7' }}>1×</Text>
+        </Pressable>
+        <Pressable onPress={() => setSpeed(2)}>
+          <Text style={{ fontSize: 11, color: '#cba6f7' }}>2×</Text>
+        </Pressable>
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- recording: true is required to enable capture. Calling saveRecording() when recording is disabled is a no-op.
+- playbackSrc must be an absolute path or a path relative to the app's working directory. Relative paths resolve from where the Lua entry point was launched, not from the React source.
+- playerState is null until the recording loads. Always null-check before reading any playerState fields.
+- seek takes an absolute time in seconds, not a delta. Read playerState.duration to know the valid range (0 to duration).
+- Recordings can grow large. A one-hour terminal session at typical output rates produces tens of megabytes. Recordings are intended for short sessions (minutes), not continuous background capture.
+- The recording stores raw PTY bytes including all ANSI escape sequences. Classification is applied fresh at playback time. Changing the classifier prop on a playback session reclassifies the same raw bytes differently — this is by design.
+
+=== SEE ALSO ===
+- SemanticTerminal
+- useSemanticTerminal
+- semantic-classification
+- Terminal
+

@@ -207,9 +207,9 @@ Web:
   - Events normalized to match Love2D API (onTimeUpdate receives { currentTime, duration })
 
 === CRITICAL RULES ===
-- **Always specify explicit width and height** — VideoPlayer has no intrinsic dimensions. Use `w` and `h` props or `style={{ width, height }}`.
+- **Specify width and height for precise control** — VideoPlayer is a surface node. Without explicit dimensions it falls back to 1/4 of parent, which is rarely the right size for video. Use `w` and `h` props or `style={{ width, height }}` or `flexGrow: 1`.
 - **Any mpv-supported format works directly on Love2D** — Use whichever source format matches your pipeline (mp4/webm/mkv/ogv, etc.).
-- **Don't nest VideoPlayer in auto-sized containers** — It needs explicit dimensions. Put it in a Box with `width: '100%'` or fixed dimensions.
+- **Give the parent a known size for percentage-based dimensions** — `w="100%"` requires the parent Box to have a resolved width. Root containers need `width: '100%', height: '100%'`.
 - **onTimeUpdate fires frequently** — Throttle expensive operations in the handler (e.g., setState only when seconds change, not on every frame).
 - **M3U8 streams require network availability** — They are streamed by mpv at runtime. Always handle onError for failed streams.
 - **Controls are Lua-owned on Love2D** — Don't try to implement custom controls using React components overlaid with position:absolute — that fights the layout engine. Use controls={false} and implement your own Lua-side controls module if needed, or use the bare Video primitive.

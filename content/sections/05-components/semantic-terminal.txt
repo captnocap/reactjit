@@ -1,0 +1,144 @@
+=== METADATA ===
+title: SemanticTerminal
+description: Visual terminal with semantic row classification, session recording, and playback support
+category: Components
+platforms: love2d
+keywords: terminal, semantic, classification, pty, playback, recording, classifier
+related: useSemanticTerminal, Terminal, usePTY
+difficulty: advanced
+
+=== OVERVIEW ===
+SemanticTerminal is a visual capability node that renders a terminal whose output rows are classified into semantic tokens by a Lua-side classifier. Each row is labeled — "command", "error", "assistant_text", "tool" — and rendered in a token-appropriate color. The result is a terminal that communicates meaning through color, not just raw ANSI escape codes.
+
+Unlike the non-visual Terminal component, SemanticTerminal renders and accepts a style prop. Use flexGrow: 1 to fill available space — sizing is required because this is a visual node, not a text container.
+
+Two modes are supported. In live mode (default), SemanticTerminal spawns a PTY and feeds output through the classifier in real time. In playback mode, it replays a recorded .rec.lua session through the same classification pipeline. Switching between modes is a prop change — the rendering pipeline is identical.
+
+The framework ships two classifiers: basic covers any shell session with seven tokens (command, output, error, success, heading, separator, progress). claude_code covers the full Claude Code CLI with 25+ tokens for conversation turns, tool calls, thinking, permissions, diffs, and all other UI states.
+
+For controlled state — tracking classified rows, reading graph state, driving playback — use the useSemanticTerminal hook and spread terminalProps onto this component.
+
+=== API / SYNTAX ===
+```tsx
+import { SemanticTerminal } from '@reactjit/core';
+import type { SemanticTerminalProps } from '@reactjit/core';
+```
+
+Props:
+| Prop            | Type                                                      | Default   | Description                                                       |
+|-----------------|-----------------------------------------------------------|-----------|-------------------------------------------------------------------|
+| mode            | 'live' \| 'playback'                                      | 'live'    | Live PTY session or recorded session playback                     |
+| command         | string                                                    | 'bash'    | Command to run in live mode                                       |
+| args            | string                                                    | undefined | Command arguments (space-separated)                               |
+| cwd             | string                                                    | undefined | Working directory                                                 |
+| rows            | number                                                    | 40        | Terminal rows                                                     |
+| cols            | number                                                    | 120       | Terminal columns                                                  |
+| classifier      | string                                                    | 'basic'   | Classifier name from lua/classifiers/ (e.g. 'claude_code')       |
+| recording       | boolean                                                   | false     | Record PTY output for later playback                              |
+| playbackSrc     | string                                                    | undefined | Path to .rec.lua file for playback mode                           |
+| playbackSpeed   | number                                                    | 1.0       | Playback speed multiplier (0.25 = slow, 2.0 = fast)              |
+| showTokens      | boolean                                                   | false     | Show token type badges on each row                                |
+| showGraph       | boolean                                                   | false     | Show semantic graph panel (turn tree)                             |
+| showTimeline    | boolean                                                   | false     | Show timeline scrubber (playback mode)                            |
+| style           | Style                                                     | undefined | Layout style — use flexGrow: 1 to fill available space            |
+| onClassifiedRow | (event: { row: number; token: string; text: string }) => void | undefined | Fires when a row is classified                          |
+| onGraphUpdate   | (event: { nodeCount: number; turnCount: number }) => void | undefined | Fires when the semantic graph updates                             |
+| onStateChange   | (event: { mode: string; streaming: boolean }) => void     | undefined | Fires when session state changes                                  |
+| onRecordingDone | (event: { path: string; frames: number }) => void         | undefined | Fires when a recording is saved                                   |
+| onPlaybackEnd   | (event: {}) => void                                       | undefined | Fires when playback reaches the end                               |
+
+=== EXAMPLES ===
+Example 1: Live classified terminal (one-liner)
+---
+```tsx
+import { Box, SemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%' }}>
+      <SemanticTerminal
+        command="bash"
+        classifier="basic"
+        style={{ flexGrow: 1 }}
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Claude Code with claude_code classifier + token badges
+---
+```tsx
+import { Box, SemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%' }}>
+      <SemanticTerminal
+        command="claude"
+        classifier="claude_code"
+        showTokens
+        showGraph
+        recording
+        style={{ flexGrow: 1 }}
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 3: Playback with hook for full transport controls
+---
+```tsx
+import { Box, Text, SemanticTerminal, Pressable } from '@reactjit/core';
+import { useSemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  const { playerState, play, pause, seek, terminalProps } = useSemanticTerminal({
+    mode: 'playback',
+    playbackSrc: '/home/user/sessions/latest.rec.lua',
+    classifier: 'claude_code',
+    showTimeline: true,
+  });
+
+  const playing = playerState?.playing ?? false;
+  const progress = playerState?.progress ?? 0;
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <SemanticTerminal {...terminalProps} style={{ flexGrow: 1 }} />
+      <Box style={{ flexDirection: 'row', gap: 8, padding: 8, backgroundColor: '#313244' }}>
+        <Pressable onPress={playing ? pause : play}>
+          <Text style={{ fontSize: 12, color: '#89b4fa' }}>{playing ? 'Pause' : 'Play'}</Text>
+        </Pressable>
+        <Text style={{ fontSize: 11, color: '#a6adc8' }}>
+          {Math.round(progress * 100)}%
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== PLATFORM NOTES ===
+Love2D:
+  Full support — live PTY, recording, playback, and all classifiers.
+
+=== CRITICAL RULES ===
+- Always set style={{ flexGrow: 1 }} or an explicit height. SemanticTerminal is a visual node — it has no implicit height and will collapse to zero if unsized.
+- Classifiers are files in lua/classifiers/. The classifier prop is the filename without .lua. The framework ships 'basic' and 'claude_code'.
+- playbackSrc must be a .rec.lua file path (absolute or relative to the app). The recording prop on a live session creates these files.
+- Recording stores raw PTY bytes. Classification happens at playback time — you can replay a recording with a different classifier without re-recording.
+- Use the useSemanticTerminal hook to access classifiedRows, graphState, playerState, and transport controls. SemanticTerminal alone only fires events.
+
+=== SEE ALSO ===
+- useSemanticTerminal
+- Terminal
+- semantic-classification
+- session-recording

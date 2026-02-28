@@ -192,7 +192,7 @@
 </head>
 <body>
 
-  <canvas id="loadingCanvas" oncontextmenu="event.preventDefault()" width="800" height="600"></canvas>
+  <canvas id="loadingCanvas" oncontextmenu="event.preventDefault()"></canvas>
   <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
   <!-- Boot sequence overlay -->
@@ -372,6 +372,30 @@
       if (!skipBoot) runBootSequence();
     })();
 
+    // ── HiDPI canvas sizing ──────────────────────────────────
+    // love.js initializes the canvas at conf.lua's 800×600, but CSS stretches
+    // it to fill the viewport. This syncs the backing store to match, preventing
+    // a blurry upscale on HiDPI displays.
+    (function() {
+      function syncCanvasSize() {
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        var canvas = document.getElementById('canvas');
+        if (canvas && (canvas.width !== w || canvas.height !== h)) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        var loading = document.getElementById('loadingCanvas');
+        if (loading && (loading.width !== w || loading.height !== h)) {
+          loading.width = w;
+          loading.height = h;
+        }
+      }
+      window.addEventListener('resize', syncCanvasSize);
+      syncCanvasSize();
+      window._syncCanvasSize = syncCanvasSize;
+    })();
+
     // ── Love.js Module config ──────────────────────────────
     var Module = {
       arguments: ['./'],
@@ -414,6 +438,10 @@
           console.log('[ReactJIT] FS exposed via postRun fallback');
         }
         console.log('[ReactJIT] WASM runtime initialized, FS=' + !!Module.FS);
+        // Sync canvas backing store to viewport (overrides conf.lua's 800×600)
+        if (window._syncCanvasSize) window._syncCanvasSize();
+        // Force love.js/Emscripten to recognize the new canvas dimensions
+        window.dispatchEvent(new Event('resize'));
       }],
     };
     Module.setStatus('Downloading...');

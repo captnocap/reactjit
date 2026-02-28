@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runLint, runBundleChecks } from './lint.mjs';
 import { updateCommand } from './update.mjs';
-import { TARGETS, TARGET_NAMES, esbuildArgs, PLATFORMS, PLATFORM_NAMES, BUILD_ALIASES, detectHostPlatform } from '../targets.mjs';
+import { TARGETS, esbuildArgs, PLATFORMS, BUILD_ALIASES, detectHostPlatform } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
 import { transpile } from '../lib/tsl.mjs';
 
@@ -154,7 +154,7 @@ export async function buildCommand(args) {
   const targetPlatform = targetPlatformIdx !== -1 ? args[targetPlatformIdx + 1] : null;
   let rawTarget = args.filter(a => !a.startsWith('--') && a !== targetPlatform)[0]; // e.g. "dist:love", "linux", or undefined
 
-  // Resolve friendly build aliases (e.g. "linux" → dist:sdl2 --target linux-x64)
+  // Resolve friendly build aliases (e.g. "linux" → dist:love --target linux-x64)
   const alias = rawTarget && BUILD_ALIASES[rawTarget];
   let resolvedPlatform = targetPlatform;
   if (alias) {
@@ -162,9 +162,9 @@ export async function buildCommand(args) {
     resolvedPlatform = resolvedPlatform || alias.platform;
   }
 
-  // Auto-update runtime files before building (love + sdl2 + web — all use lua/ runtime)
+  // Auto-update runtime files before building (love + web — all use lua/ runtime)
   // Skip for storybook — it reads from source via symlinks, no update needed
-  const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2', 'web', 'dist:web'].includes(rawTarget);
+  const isLuaTarget = !rawTarget || ['love', 'dist:love', 'web', 'dist:web'].includes(rawTarget);
   const isStorybook = existsSync(join(cwd, '..', 'packages', 'core')) &&
     existsSync(join(cwd, '..', 'lua')) &&
     existsSync(join(cwd, 'love'));
@@ -188,9 +188,9 @@ export async function buildCommand(args) {
   const isDist = rawTarget && rawTarget.startsWith('dist:');
   const targetName = isDist ? rawTarget.slice(5) : rawTarget;
 
-  // No target → SDL2 dev build (primary target)
+  // No target → Love2D dev build (primary target)
   if (!rawTarget) {
-    await buildDevTarget(cwd, projectName, 'sdl2', { skipLint });
+    await buildDevTarget(cwd, projectName, 'love', { skipLint });
     return;
   }
 
@@ -207,7 +207,7 @@ export async function buildCommand(args) {
     console.error('    rjit build dist:love             Self-extracting Love2D binary');
     console.error('');
     console.error('  Dev builds:');
-    console.error('    rjit build                       SDL2 dev build (default)');
+    console.error('    rjit build                       Love2D dev build (default)');
     console.error('    rjit build love                  Love2D dev build');
     process.exit(1);
   }
@@ -216,9 +216,7 @@ export async function buildCommand(args) {
 
   if (isDist) {
     if (target.kind === 'love') {
-      await buildDistLove(cwd, projectName, { debug: hasDebugFlag, skipLint });
-    } else if (target.kind === 'sdl2') {
-      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag, targetPlatform: resolvedPlatform, skipLint });
+      await buildDistLove(cwd, projectName, { debug: hasDebugFlag, skipLint, targetPlatform: resolvedPlatform });
     } else if (target.kind === 'web') {
       await buildDistWeb(cwd, projectName, { debug: hasDebugFlag, skipLint });
     } else {
@@ -608,359 +606,274 @@ async function buildDistLove(cwd, projectName, opts = {}) {
   console.log('  [3/6] Creating .love archive...');
   execSync(`cd "${stagingDir}" && zip -9 -r "${loveArchive}" .`, { stdio: 'pipe' });
 
-  // 4. Find love binary and bundle shared libraries
-  console.log('  [4/6] Bundling Love2D + shared libraries...');
-  let loveBin;
-  try {
-    loveBin = execSync('readlink -f $(which love)', { encoding: 'utf-8' }).trim();
-  } catch {
-    console.error('  Love2D not found. Install it: https://love2d.org');
-    process.exit(1);
-  }
+  // 4. Resolve target platform and branch packaging
+  const targetPlatform = opts.targetPlatform || detectHostPlatform() || 'linux-x64';
+  const plat = PLATFORMS[targetPlatform] || PLATFORMS['linux-x64'];
+
+  console.log(`  [4/6] Bundling Love2D for ${plat.os}...`);
 
   rmSync(payloadDir, { recursive: true, force: true });
   mkdirSync(join(payloadDir, 'lib'), { recursive: true });
-
-  cpSync(loveBin, join(payloadDir, 'love.bin'));
-  cpSync(loveArchive, join(payloadDir, 'game.love'));
-  cpSync(libquickjs, join(payloadDir, 'lib', 'libquickjs.so'));
-
-  // Bundle libmpv if available (optional — video playback)
-  const libmpv = findLibMpv(cwd);
-  if (libmpv) {
-    cpSync(libmpv, join(payloadDir, 'lib', 'libmpv.so.2'));
-    // Bundle libmpv's transitive deps, skipping encoders/niche libs
-    let mpvIncluded = 0, mpvSkipped = 0;
-    try {
-      const mpvLdd = execSync(`ldd "${libmpv}"`, { encoding: 'utf-8' });
-      for (const line of mpvLdd.split('\n')) {
-        if (line.includes('linux-vdso')) continue;
-        const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
-        if (match) {
-          const [, soname, path] = match;
-          if (MPV_DEP_SKIPLIST.has(soname)) { mpvSkipped++; continue; }
-          const dest = join(payloadDir, 'lib', soname);
-          if (!existsSync(dest)) {
-            try {
-              const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
-              cpSync(real, dest);
-              mpvIncluded++;
-            } catch { /* skip unresolvable */ }
-          }
-        }
-      }
-    } catch { /* ldd failed — still have the .so itself */ }
-    console.log(`  Bundled libmpv + ${mpvIncluded} deps (skipped ${mpvSkipped} non-essential)`);
-  }
-
-  // Bundle libsqlite3 if available (optional — SQLite features)
-  const libsqlite3 = findLibSqlite3(cwd);
-  if (libsqlite3) {
-    cpSync(libsqlite3, join(payloadDir, 'lib', 'libsqlite3.so.0'));
-    console.log('  Bundled libsqlite3.so.0');
-  }
-
-  // Bundle tor binary if available (optional — .onion hosting)
-  const torBin = findTorBinary(cwd);
-  if (torBin) {
-    mkdirSync(join(payloadDir, 'bin'), { recursive: true });
-    cpSync(torBin, join(payloadDir, 'bin', 'tor'));
-    execSync(`chmod +x "${join(payloadDir, 'bin', 'tor')}"`);
-    // Bundle tor's transitive deps
-    try {
-      const torLdd = execSync(`ldd "${torBin}"`, { encoding: 'utf-8' });
-      for (const line of torLdd.split('\n')) {
-        if (line.includes('linux-vdso')) continue;
-        const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
-        if (match) {
-          const [, soname, path] = match;
-          const dest = join(payloadDir, 'lib', soname);
-          if (!existsSync(dest)) {
-            try {
-              const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
-              cpSync(real, dest);
-            } catch { /* skip unresolvable */ }
-          }
-        }
-      }
-    } catch { /* ldd failed — still have the binary itself */ }
-    console.log('  Bundled tor + dependencies');
-  }
-
-  // Bundle ALL shared libraries (same technique as Steam Runtime / AppImage)
-  const lddOutput = execSync(`ldd "${loveBin}"`, { encoding: 'utf-8' });
-  for (const line of lddOutput.split('\n')) {
-    if (line.includes('linux-vdso')) continue;
-    const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
-    if (match) {
-      const [, soname, path] = match;
-      try {
-        const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
-        cpSync(real, join(payloadDir, 'lib', soname));
-      } catch { /* skip unresolvable */ }
-    }
-  }
-
-  // Bundle the dynamic linker itself
-  try {
-    const ldLinux = execSync('readlink -f /lib64/ld-linux-x86-64.so.2', { encoding: 'utf-8' }).trim();
-    cpSync(ldLinux, join(payloadDir, 'lib', 'ld-linux-x86-64.so.2'));
-  } catch {
-    console.error('  Could not find ld-linux. Are you on x86_64 Linux?');
-    process.exit(1);
-  }
-
-  // 5. Create launcher script
-  console.log('  [5/6] Creating launcher...');
-  const launcher =
-    '#!/bin/sh\n' +
-    'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
-    'exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache --library-path "$DIR/lib" "$DIR/love.bin" "$DIR/game.love" "$@"\n';
-  writeFileSync(join(payloadDir, 'run'), launcher, { mode: 0o755 });
-
-  // 6. Pack into single self-extracting binary
-  console.log('  [6/6] Packing self-extracting binary...');
   mkdirSync(distDir, { recursive: true });
 
-  const tarball = join('/tmp', `${projectName}-payload.tar.gz`);
-  execSync(`cd "${payloadDir}" && tar czf "${tarball}" .`, { stdio: 'pipe' });
+  cpSync(loveArchive, join(payloadDir, 'game.love'));
 
-  const header =
-    '#!/bin/sh\n' +
-    'set -e\n' +
-    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/reactjit-${projectName}\n` +
-    'SIG=$(md5sum "$0" 2>/dev/null | cut -c1-8 || cksum "$0" | cut -d" " -f1)\n' +
-    'CACHE="$APP_DIR/$SIG"\n' +
-    'if [ ! -f "$CACHE/.ready" ]; then\n' +
-    '  rm -rf "$APP_DIR"\n' +
-    '  mkdir -p "$CACHE"\n' +
-    '  SKIP=$(awk \'/^__ARCHIVE__$/{print NR + 1; exit}\' "$0")\n' +
-    '  tail -n+"$SKIP" "$0" | tar xz -C "$CACHE"\n' +
-    '  touch "$CACHE/.ready"\n' +
-    'fi\n' +
-    'exec "$CACHE/run" "$@"\n' +
-    '__ARCHIVE__\n';
+  if (plat.os === 'linux') {
+    // ── Linux: self-extracting binary with bundled Love2D + glibc ──
+    let loveBin;
+    try {
+      loveBin = execSync('readlink -f $(which love)', { encoding: 'utf-8' }).trim();
+    } catch {
+      console.error('  Love2D not found. Install it: https://love2d.org');
+      process.exit(1);
+    }
 
-  const headerBuf = Buffer.from(header);
-  const tarBuf = readFileSync(tarball);
-  const out = Buffer.concat([headerBuf, tarBuf]);
-  writeFileSync(outFile, out, { mode: 0o755 });
+    cpSync(loveBin, join(payloadDir, 'love.bin'));
+    cpSync(libquickjs, join(payloadDir, 'lib', 'libquickjs.so'));
+
+    // Bundle libmpv if available (optional — video playback)
+    const libmpv = findLibMpv(cwd);
+    if (libmpv) {
+      cpSync(libmpv, join(payloadDir, 'lib', 'libmpv.so.2'));
+      let mpvIncluded = 0, mpvSkipped = 0;
+      try {
+        const mpvLdd = execSync(`ldd "${libmpv}"`, { encoding: 'utf-8' });
+        for (const line of mpvLdd.split('\n')) {
+          if (line.includes('linux-vdso')) continue;
+          const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
+          if (match) {
+            const [, soname, path] = match;
+            if (MPV_DEP_SKIPLIST.has(soname)) { mpvSkipped++; continue; }
+            const dest = join(payloadDir, 'lib', soname);
+            if (!existsSync(dest)) {
+              try {
+                const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
+                cpSync(real, dest);
+                mpvIncluded++;
+              } catch { /* skip unresolvable */ }
+            }
+          }
+        }
+      } catch { /* ldd failed — still have the .so itself */ }
+      console.log(`  Bundled libmpv + ${mpvIncluded} deps (skipped ${mpvSkipped} non-essential)`);
+    }
+
+    // Bundle libsqlite3 if available (optional — SQLite features)
+    const libsqlite3 = findLibSqlite3(cwd);
+    if (libsqlite3) {
+      cpSync(libsqlite3, join(payloadDir, 'lib', 'libsqlite3.so.0'));
+      console.log('  Bundled libsqlite3.so.0');
+    }
+
+    // Bundle tor binary if available (optional — .onion hosting)
+    const torBin = findTorBinary(cwd);
+    if (torBin) {
+      mkdirSync(join(payloadDir, 'bin'), { recursive: true });
+      cpSync(torBin, join(payloadDir, 'bin', 'tor'));
+      execSync(`chmod +x "${join(payloadDir, 'bin', 'tor')}"`);
+      try {
+        const torLdd = execSync(`ldd "${torBin}"`, { encoding: 'utf-8' });
+        for (const line of torLdd.split('\n')) {
+          if (line.includes('linux-vdso')) continue;
+          const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
+          if (match) {
+            const [, soname, path] = match;
+            const dest = join(payloadDir, 'lib', soname);
+            if (!existsSync(dest)) {
+              try {
+                const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
+                cpSync(real, dest);
+              } catch { /* skip unresolvable */ }
+            }
+          }
+        }
+      } catch { /* ldd failed — still have the binary itself */ }
+      console.log('  Bundled tor + dependencies');
+    }
+
+    // Bundle ALL shared libraries (same technique as Steam Runtime / AppImage)
+    const lddOutput = execSync(`ldd "${loveBin}"`, { encoding: 'utf-8' });
+    for (const line of lddOutput.split('\n')) {
+      if (line.includes('linux-vdso')) continue;
+      const match = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
+      if (match) {
+        const [, soname, path] = match;
+        try {
+          const real = execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim();
+          cpSync(real, join(payloadDir, 'lib', soname));
+        } catch { /* skip unresolvable */ }
+      }
+    }
+
+    // Bundle the dynamic linker itself
+    try {
+      const ldLinux = execSync('readlink -f /lib64/ld-linux-x86-64.so.2', { encoding: 'utf-8' }).trim();
+      cpSync(ldLinux, join(payloadDir, 'lib', 'ld-linux-x86-64.so.2'));
+    } catch {
+      console.error('  Could not find ld-linux. Are you on x86_64 Linux?');
+      process.exit(1);
+    }
+
+    // 5. Create launcher script
+    console.log('  [5/6] Creating launcher...');
+    const launcher =
+      '#!/bin/sh\n' +
+      'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
+      'exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache --library-path "$DIR/lib" "$DIR/love.bin" "$DIR/game.love" "$@"\n';
+    writeFileSync(join(payloadDir, 'run'), launcher, { mode: 0o755 });
+
+    // 6. Pack into single self-extracting binary
+    console.log('  [6/6] Packing self-extracting binary...');
+    const tarball = join('/tmp', `${projectName}-payload.tar.gz`);
+    execSync(`cd "${payloadDir}" && tar czf "${tarball}" .`, { stdio: 'pipe' });
+
+    const header =
+      '#!/bin/sh\n' +
+      'set -e\n' +
+      `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/reactjit-${projectName}\n` +
+      'SIG=$(md5sum "$0" 2>/dev/null | cut -c1-8 || cksum "$0" | cut -d" " -f1)\n' +
+      'CACHE="$APP_DIR/$SIG"\n' +
+      'if [ ! -f "$CACHE/.ready" ]; then\n' +
+      '  rm -rf "$APP_DIR"\n' +
+      '  mkdir -p "$CACHE"\n' +
+      '  SKIP=$(awk \'/^__ARCHIVE__$/{print NR + 1; exit}\' "$0")\n' +
+      '  tail -n+"$SKIP" "$0" | tar xz -C "$CACHE"\n' +
+      '  touch "$CACHE/.ready"\n' +
+      'fi\n' +
+      'exec "$CACHE/run" "$@"\n' +
+      '__ARCHIVE__\n';
+
+    const headerBuf = Buffer.from(header);
+    const tarBuf = readFileSync(tarball);
+    const out = Buffer.concat([headerBuf, tarBuf]);
+    writeFileSync(outFile, out, { mode: 0o755 });
+    rmSync(tarball, { force: true });
+
+    const size = (out.length / (1024 * 1024)).toFixed(1);
+    console.log(`\n  Done! ${size} MB → dist/${projectName}`);
+    console.log(`  Run:  ./dist/${projectName}\n`);
+
+  } else if (plat.os === 'macos') {
+    // ── macOS: .app bundle with fused Love2D ──
+    // Look for a vendored Love2D.app at known paths
+    const monoRoot = join(CLI_ROOT, '..');
+    const vendorAppCandidates = [
+      join(cwd, 'vendor', 'love.app'),
+      join(cwd, 'vendor', 'Love.app'),
+      join(monoRoot, 'vendor', 'love.app'),
+      join(monoRoot, 'vendor', 'Love.app'),
+      '/Applications/love.app',
+      '/Applications/Love.app',
+    ];
+    const vendorApp = vendorAppCandidates.find(p => existsSync(p));
+    if (!vendorApp) {
+      console.error('  macOS Love2D.app not found.');
+      console.error('  Place Love.app in one of these locations:');
+      console.error('    <project>/vendor/Love.app');
+      console.error('    <monorepo>/vendor/Love.app');
+      console.error('    /Applications/Love.app');
+      console.error('  Download from: https://love2d.org');
+      process.exit(1);
+    }
+
+    console.log(`  [5/6] Creating .app bundle from ${vendorApp}...`);
+    const appName = `${projectName}.app`;
+    const appDir = join(distDir, appName);
+    rmSync(appDir, { recursive: true, force: true });
+
+    // Copy the Love2D.app template
+    cpSync(vendorApp, appDir, { recursive: true });
+
+    // Inject the .love archive into Resources/
+    const resourcesDir = join(appDir, 'Contents', 'Resources');
+    mkdirSync(resourcesDir, { recursive: true });
+    cpSync(loveArchive, join(resourcesDir, 'game.love'));
+
+    // Copy libquickjs into Frameworks/ so the app can find it at runtime
+    const frameworksDir = join(appDir, 'Contents', 'Frameworks');
+    mkdirSync(frameworksDir, { recursive: true });
+    if (existsSync(libquickjs)) {
+      cpSync(libquickjs, join(frameworksDir, 'libquickjs.dylib'));
+    }
+
+    // Update Info.plist to set the app name
+    const plistPath = join(appDir, 'Contents', 'Info.plist');
+    if (existsSync(plistPath)) {
+      let plist = readFileSync(plistPath, 'utf-8');
+      // Replace bundle name with project name
+      plist = plist.replace(/<key>CFBundleName<\/key>\s*<string>[^<]*<\/string>/,
+        `<key>CFBundleName</key>\n\t<string>${projectName}</string>`);
+      writeFileSync(plistPath, plist);
+    }
+
+    console.log('  [6/6] Packaging...');
+    // Create a tar.gz of the .app for distribution
+    const archivePath = join(distDir, `${projectName}-macos.tar.gz`);
+    execSync(`cd "${distDir}" && tar czf "${basename(archivePath)}" "${appName}"`, { stdio: 'pipe' });
+
+    const sizeMb = (statSync(archivePath).size / (1024 * 1024)).toFixed(1);
+    console.log(`\n  Done! ${sizeMb} MB → ${archivePath}`);
+    console.log(`  Extract and run: open ${appName}\n`);
+
+  } else if (plat.os === 'windows') {
+    // ── Windows: fuse love.exe + .love into single exe ──
+    const monoRoot = join(CLI_ROOT, '..');
+    const vendorExeCandidates = [
+      join(cwd, 'vendor', 'love.exe'),
+      join(monoRoot, 'vendor', 'love.exe'),
+    ];
+    const vendorExe = vendorExeCandidates.find(p => existsSync(p));
+    if (!vendorExe) {
+      console.error('  Windows love.exe not found.');
+      console.error('  Place love.exe (and its DLLs) in one of these locations:');
+      console.error('    <project>/vendor/love.exe');
+      console.error('    <monorepo>/vendor/love.exe');
+      console.error('  Download from: https://love2d.org');
+      process.exit(1);
+    }
+
+    const vendorDir = dirname(vendorExe);
+
+    console.log('  [5/6] Fusing love.exe + game.love...');
+    // Fuse: cat love.exe + game.love > output.exe
+    const fusedExe = join(distDir, `${projectName}.exe`);
+    const loveBuf = readFileSync(vendorExe);
+    const gameBuf = readFileSync(loveArchive);
+    writeFileSync(fusedExe, Buffer.concat([loveBuf, gameBuf]));
+
+    // Copy DLLs from vendor directory alongside the exe
+    console.log('  [6/6] Copying DLLs...');
+    let dllCount = 0;
+    if (existsSync(vendorDir)) {
+      for (const entry of readdirSync(vendorDir)) {
+        if (entry.toLowerCase().endsWith('.dll')) {
+          cpSync(join(vendorDir, entry), join(distDir, entry));
+          dllCount++;
+        }
+      }
+    }
+
+    // Copy libquickjs.dll if available
+    const quickjsDll = join(vendorDir, 'libquickjs.dll');
+    if (existsSync(quickjsDll)) {
+      cpSync(quickjsDll, join(distDir, 'libquickjs.dll'));
+    }
+
+    const sizeMb = (statSync(fusedExe).size / (1024 * 1024)).toFixed(1);
+    console.log(`\n  Done! ${sizeMb} MB → ${fusedExe} (+ ${dllCount} DLLs)`);
+    console.log(`  Run:  ${projectName}.exe\n`);
+
+  } else {
+    console.error(`  Unsupported platform for dist:love: ${plat.os}`);
+    process.exit(1);
+  }
 
   // Cleanup
   rmSync(stagingDir, { recursive: true, force: true });
   rmSync(payloadDir, { recursive: true, force: true });
   rmSync(loveArchive, { force: true });
-  rmSync(tarball, { force: true });
-
-  const size = (out.length / (1024 * 1024)).toFixed(1);
-  console.log(`\n  Done! ${size} MB → dist/${projectName}`);
-  console.log(`  Run:  ./dist/${projectName}\n`);
 }
 
-// ── reactjit build dist:sdl2 ────────────────────────────
-//
-// Cross-compilable dist pipeline using zig-built artifacts.
-// All native deps (SDL2, FreeType, QuickJS, BLAKE3, LuaJIT) are compiled
-// from source via zig build / build-luajit-cross.sh.
-//
-// Usage:
-//   reactjit build dist:sdl2                     → host platform (auto-detect)
-//   reactjit build dist:sdl2 --target linux-x64  → cross-compile
-//   reactjit build dist:sdl2 --target windows-x64
-//
-// Targets: linux-x64, linux-arm64, windows-x64, macos-x64, macos-arm64
-
-async function buildDistSdl2(cwd, projectName, opts = {}) {
-  const target = TARGETS.sdl2;
-  const entryCandidates = target.entries.map(e => `src/${e}`);
-  const entry = findEntry(cwd, ...entryCandidates);
-  const luaDir = findLuaRuntime(cwd);
-
-  // Parse --target flag
-  const targetFlag = opts.targetPlatform || detectHostPlatform();
-  if (!targetFlag) {
-    console.error('  Cannot detect host platform. Use --target <platform>.');
-    console.error('  Platforms: ' + PLATFORM_NAMES.join(', '));
-    process.exit(1);
-  }
-  const plat = PLATFORMS[targetFlag];
-  if (!plat) {
-    console.error(`  Unknown platform: ${targetFlag}`);
-    console.error('  Platforms: ' + PLATFORM_NAMES.join(', '));
-    process.exit(1);
-  }
-
-  const monoRoot  = join(CLI_ROOT, '..');
-  const zigOut    = join(monoRoot, 'zig-out');
-  const distDir   = join(cwd, 'dist');
-  const suffix    = plat.os === 'windows' ? '.exe' : '';
-  const outFile   = join(distDir, `${projectName}-sdl2${suffix}`);
-  const stagingDir = join('/tmp', `reactjit-sdl2-${projectName}`);
-  const payloadDir = join('/tmp', `reactjit-sdl2-payload-${projectName}`);
-
-  console.log(`\n  Building dist:sdl2 for ${projectName} (${targetFlag})...\n`);
-
-  // 1. Lint gate
-  if (!opts.skipLint) {
-    const { errors } = await runLint(cwd, { silent: false });
-    if (errors > 0) {
-      console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
-      process.exit(1);
-    }
-  }
-
-  // 2. Ensure zig artifacts exist
-  console.log(`  [1/6] Building native artifacts for ${targetFlag}...`);
-  const zigTriple = plat.zigTriple;
-  // When building for the host platform, omit -Dtarget so zig uses native
-  // compilation. On macOS this is critical: explicit -Dtarget=aarch64-macos
-  // makes zig treat it as cross-compilation and lose framework search paths
-  // (OpenGL, Metal, Cocoa, etc.), causing SDL2 to fail to link.
-  const isNative = targetFlag === detectHostPlatform();
-  const zigCmd = isNative
-    ? 'zig build all'
-    : `zig build all -Dtarget=${zigTriple}`;
-  try {
-    execSync(zigCmd, { cwd: monoRoot, stdio: 'pipe' });
-  } catch (e) {
-    console.error(`  zig build failed for ${zigTriple}:`);
-    console.error(e.stderr?.toString() || e.message);
-    process.exit(1);
-  }
-
-  // 3. Ensure LuaJIT exists
-  // When building for the host, use 'native' mode — direct cc, no zig cross-compiler.
-  // zig cc as a macOS cross-compiler hits "unexpected pointer encoding" in LuaJIT's linker.
-  console.log(`  [2/6] Building LuaJIT for ${targetFlag}...`);
-  const luajitBuildTriple = isNative ? 'native' : zigTriple;
-  const luajitDir = join(zigOut, 'luajit', luajitBuildTriple);
-  if (!existsSync(join(luajitDir, plat.luajitBin))) {
-    try {
-      execSync(`bash scripts/build-luajit-cross.sh ${luajitBuildTriple}`, { cwd: monoRoot, stdio: 'pipe' });
-    } catch (e) {
-      console.error(`  LuaJIT build failed for ${luajitBuildTriple}:`);
-      console.error(e.stderr?.toString() || e.message);
-      process.exit(1);
-    }
-  }
-
-  // Verify all artifacts exist
-  const libPrefix = plat.os === 'windows' ? '' : 'lib';
-  const artifacts = {
-    luajit:   join(luajitDir, plat.luajitBin),
-    SDL2:     join(zigOut, 'lib', `${libPrefix}SDL2${plat.ext}`),
-    quickjs:  join(zigOut, 'lib', `${libPrefix}quickjs${plat.ext}`),
-    ft_helper: join(zigOut, 'lib', `${libPrefix}ft_helper${plat.ext}`),
-    blake3:   join(zigOut, 'lib', `${libPrefix}blake3${plat.ext}`),
-  };
-  // Windows LuaJIT also produces lua51.dll
-  if (plat.os === 'windows') {
-    artifacts.lua51 = join(luajitDir, 'lua51.dll');
-  }
-
-  for (const [name, path] of Object.entries(artifacts)) {
-    if (!existsSync(path)) {
-      console.error(`  Missing artifact: ${name} (${path})`);
-      console.error('  Run: zig build all && scripts/build-luajit-cross.sh ' + zigTriple);
-      process.exit(1);
-    }
-  }
-
-  // 4. Bundle JS
-  console.log('  [3/6] Bundling JS...');
-  rmSync(stagingDir, { recursive: true, force: true });
-  mkdirSync(stagingDir, { recursive: true });
-  mkdirSync(join(stagingDir, 'sdl2'), { recursive: true });
-  mkdirSync(join(stagingDir, 'lib'),  { recursive: true });
-
-  const bundlePath = join(stagingDir, 'sdl2', 'bundle.js');
-  execSync([
-    'npx', 'esbuild',
-    ...esbuildArgs(target),
-    `--outfile=${bundlePath}`,
-    ...getEsbuildAliases(cwd),
-    entry,
-  ].join(' '), { cwd, stdio: 'pipe' });
-
-  const bundleCheck = runBundleChecks(bundlePath);
-  if (bundleCheck.errors > 0) {
-    console.error(`\n  Build blocked: ${bundleCheck.errors} bundle error(s).\n`);
-    rmSync(stagingDir, { recursive: true, force: true });
-    process.exit(1);
-  }
-
-  // 5. Stage lua runtime + entry point
-  console.log('  [4/6] Staging Lua runtime + native libs...');
-  cpSync(luaDir, join(stagingDir, 'lua'), { recursive: true });
-
-  // Project entry point
-  const sdl2MainCandidates = [
-    join(cwd, 'sdl2_main.lua'),
-    join(cwd, 'main-sdl2.lua'),
-  ];
-  const sdl2Main = sdl2MainCandidates.find(p => existsSync(p));
-  if (sdl2Main) {
-    cpSync(sdl2Main, join(stagingDir, 'main.lua'));
-  } else {
-    const stub =
-      'require("lua.sdl2_init").run({\n' +
-      '  bundle = "sdl2/bundle.js",\n' +
-      `  title  = "${projectName}",\n` +
-      '})\n';
-    writeFileSync(join(stagingDir, 'main.lua'), stub);
-  }
-
-  // Manifest
-  const manifestPath = join(cwd, 'manifest.json');
-  if (existsSync(manifestPath)) {
-    cpSync(manifestPath, join(stagingDir, 'manifest.json'));
-    console.log('  Embedded manifest.json');
-  }
-
-  // 6. Assemble payload from zig artifacts
-  console.log('  [5/6] Assembling payload...');
-  rmSync(payloadDir, { recursive: true, force: true });
-  mkdirSync(join(payloadDir, 'lib'), { recursive: true });
-  cpSync(stagingDir, payloadDir, { recursive: true });
-
-  // Copy all shared libraries
-  cpSync(artifacts.SDL2,      join(payloadDir, 'lib', `${libPrefix}SDL2${plat.ext}`));
-  cpSync(artifacts.quickjs,   join(payloadDir, 'lib', `${libPrefix}quickjs${plat.ext}`));
-  cpSync(artifacts.ft_helper, join(payloadDir, 'lib', `${libPrefix}ft_helper${plat.ext}`));
-  cpSync(artifacts.blake3,    join(payloadDir, 'lib', `${libPrefix}blake3${plat.ext}`));
-
-  // LuaJIT binary
-  cpSync(artifacts.luajit, join(payloadDir, plat.luajitBin));
-  if (plat.os === 'windows') {
-    cpSync(artifacts.lua51, join(payloadDir, 'lua51.dll'));
-  }
-
-  // Copy LuaJIT jit/ library if present
-  const jitLib = join(luajitDir, 'jit');
-  if (existsSync(jitLib)) {
-    cpSync(jitLib, join(payloadDir, 'jit'), { recursive: true });
-  }
-
-  // 7. Package per platform
-  console.log('  [6/6] Packaging...');
-  mkdirSync(distDir, { recursive: true });
-
-  if (plat.os === 'linux') {
-    packageLinux(payloadDir, outFile, projectName);
-  } else if (plat.os === 'windows') {
-    packageWindows(payloadDir, outFile, projectName);
-  } else if (plat.os === 'macos') {
-    packageMacOS(payloadDir, outFile, projectName);
-  }
-
-  rmSync(stagingDir, { recursive: true, force: true });
-  rmSync(payloadDir, { recursive: true, force: true });
-
-  // macOS packages as .tar.gz, Windows as .exe with embedded zip
-  const actualOutFile = plat.os === 'macos' ? outFile + '.tar.gz' : outFile;
-  const sizeMb = (statSync(actualOutFile).size / (1024 * 1024)).toFixed(1);
-  console.log(`\n  Done! ${sizeMb} MB → ${actualOutFile}`);
-}
 
 // ── reactjit build web / dist:web ───────────────────────────────────
 //
@@ -978,13 +891,6 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
 
 const WEB_FFI_EXCLUDES = [
   'bridge_quickjs.lua',
-  'sdl2_init.lua',
-  'sdl2_painter.lua',
-  'sdl2_measure.lua',
-  'sdl2_font.lua',
-  'sdl2_gl.lua',
-  'sdl2_images.lua',
-  'sdl2_love_shim.lua',
   'lib_loader.lua',
   'videos.lua',
   'sqlite.lua',
@@ -1239,77 +1145,3 @@ async function buildDistWeb(cwd, projectName, opts = {}) {
   console.log(`\n  Serve: cd dist/web && python3 -m http.server\n`);
 }
 
-// ── Per-platform packaging helpers ──────────────────────────────────────
-
-function packageLinux(payloadDir, outFile, projectName) {
-  // Launcher script — no ld-linux bundling needed since we compile SDL2/FreeType
-  // ourselves, their only transitive dep is glibc (always present on target).
-  // OpenGL (ffi.load("GL")) comes from the target's GPU driver.
-  const launcher =
-    '#!/bin/sh\n' +
-    'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
-    'export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"\n' +
-    'exec "$DIR/luajit" "$DIR/main.lua" "$@"\n';
-  writeFileSync(join(payloadDir, 'run'), launcher, { mode: 0o755 });
-
-  // Self-extracting binary
-  const tarball = join('/tmp', `${projectName}-sdl2-payload.tar.gz`);
-  execSync(`cd "${payloadDir}" && tar czf "${tarball}" .`, { stdio: 'pipe' });
-
-  const header =
-    '#!/bin/sh\n' +
-    'set -e\n' +
-    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/reactjit-${projectName}-sdl2\n` +
-    'SIG=$(md5sum "$0" 2>/dev/null | cut -c1-8 || cksum "$0" | cut -d" " -f1)\n' +
-    'CACHE="$APP_DIR/$SIG"\n' +
-    'if [ ! -f "$CACHE/.ready" ]; then\n' +
-    '  rm -rf "$APP_DIR"\n' +
-    '  mkdir -p "$CACHE"\n' +
-    '  SKIP=$(awk \'/^__ARCHIVE__$/{print NR + 1; exit}\' "$0")\n' +
-    '  tail -n+"$SKIP" "$0" | tar xz -C "$CACHE"\n' +
-    '  touch "$CACHE/.ready"\n' +
-    'fi\n' +
-    'exec "$CACHE/run" "$@"\n' +
-    '__ARCHIVE__\n';
-
-  const headerBuf = Buffer.from(header);
-  const tarBuf = readFileSync(tarball);
-  const out = Buffer.concat([headerBuf, tarBuf]);
-  writeFileSync(outFile, out, { mode: 0o755 });
-  rmSync(tarball, { force: true });
-
-  console.log(`  Run:  ./${basename(outFile)}`);
-  console.log('  Note: Requires OpenGL + display server (X11/Wayland/KMS).');
-}
-
-function packageWindows(payloadDir, outFile, projectName) {
-  // Windows: tar.gz archive (self-extracting .exe is Phase 6 follow-up)
-  // For now, produce a zip-like archive that extracts to a directory.
-  // The user runs luajit.exe main.lua from the extracted directory.
-  const launcher =
-    '@echo off\r\n' +
-    'cd /d "%~dp0"\r\n' +
-    'luajit.exe main.lua %*\r\n';
-  writeFileSync(join(payloadDir, 'run.bat'), launcher);
-
-  // Pack as tar.gz (Windows users can use 7-Zip or built-in tar)
-  const archivePath = outFile.replace(/\.exe$/, '.tar.gz');
-  execSync(`cd "${payloadDir}" && tar czf "${archivePath}" .`, { stdio: 'pipe' });
-
-  console.log(`  Extract and run: run.bat`);
-}
-
-function packageMacOS(payloadDir, outFile, projectName) {
-  // macOS: tar.gz with launcher script
-  const launcher =
-    '#!/bin/sh\n' +
-    'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
-    'export DYLD_LIBRARY_PATH="$DIR/lib:$DYLD_LIBRARY_PATH"\n' +
-    'exec "$DIR/luajit" "$DIR/main.lua" "$@"\n';
-  writeFileSync(join(payloadDir, 'run.sh'), launcher, { mode: 0o755 });
-
-  const archivePath = outFile + '.tar.gz';
-  execSync(`cd "${payloadDir}" && tar czf "${archivePath}" .`, { stdio: 'pipe' });
-
-  console.log(`  Extract and run: ./run.sh`);
-}

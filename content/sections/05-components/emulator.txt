@@ -1,0 +1,125 @@
+=== METADATA ===
+title: Emulator
+description: NES emulation surface — runs a .nes ROM in a canvas at layout position via Agnes
+category: Components
+platforms: love2d
+keywords: emulator, nes, rom, games, agnes, canvas, retro, gaming
+related: Scene3D, Image, capabilities
+difficulty: intermediate
+
+=== OVERVIEW ===
+Emulator renders a NES game into the layout tree using the Agnes emulation core. It is a visual surface node — without explicit dimensions it uses the proportional fallback (1/4 of parent). Use explicit dimensions or flexGrow: 1 for the right canvas size. In web mode it returns null silently.
+
+ROM loading uses the src prop for Love2D filesystem paths. If no src is given, you can drop a .nes file directly onto the Emulator surface and it loads immediately. Lua handles file drops without a bridge round-trip, so load latency is near-zero.
+
+playing controls whether the emulation loop is running. Set playing={false} to pause without unmounting. The onROMLoaded callback fires once the ROM is parsed and ready.
+
+=== API / SYNTAX ===
+```tsx
+import { Emulator } from '@reactjit/core';
+import type { EmulatorProps } from '@reactjit/core';
+```
+
+Props:
+| Prop        | Type                                    | Default   | Description                                       |
+|-------------|-----------------------------------------|-----------|---------------------------------------------------|
+| src         | string                                  | undefined | Path to a .nes ROM file (Love2D filesystem path)  |
+| playing     | boolean                                 | true      | Whether the emulation loop is running             |
+| w           | number                                  | undefined | Shorthand for style.width                         |
+| h           | number                                  | undefined | Shorthand for style.height                        |
+| style       | Style                                   | undefined | Layout and positioning style                      |
+| onROMLoaded | (event: { filename: string }) => void   | undefined | Fires once the ROM is parsed and ready            |
+
+=== EXAMPLES ===
+Example 1: Load a ROM from the filesystem
+---
+```tsx
+import { Box, Emulator } from '@reactjit/core';
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e1e2e' }}>
+      <Emulator
+        src="roms/smb.nes"
+        style={{ width: 512, height: 480 }}
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Drag-and-drop ROM loader
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text, Emulator } from '@reactjit/core';
+
+export default function App() {
+  const [romName, setRomName] = useState<string | null>(null);
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', backgroundColor: '#1e1e2e' }}>
+      <Box style={{ padding: 8, backgroundColor: '#313244' }}>
+        <Text style={{ fontSize: 12, color: '#a6adc8' }}>
+          {romName ? `Playing: ${romName}` : 'Drop a .nes file to play'}
+        </Text>
+      </Box>
+      <Emulator
+        style={{ flexGrow: 1 }}
+        onROMLoaded={e => setRomName(e.filename)}
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 3: Pause / resume control
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text, Pressable, Emulator } from '@reactjit/core';
+
+export default function App() {
+  const [playing, setPlaying] = useState(true);
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', backgroundColor: '#1e1e2e' }}>
+      <Emulator
+        src="roms/game.nes"
+        playing={playing}
+        style={{ flexGrow: 1 }}
+      />
+      <Pressable onPress={() => setPlaying(p => !p)}>
+        <Box style={{ padding: 12, backgroundColor: '#313244', alignItems: 'center' }}>
+          <Text style={{ fontSize: 13, color: '#89b4fa' }}>{playing ? 'Pause' : 'Resume'}</Text>
+        </Box>
+      </Pressable>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== PLATFORM NOTES ===
+Love2D:
+  Full support. Agnes runs as a native Lua module. Emulator uses the canvas API for per-pixel PPU output and maps Love2D keyboard events to NES controller inputs automatically.
+
+Web:
+  Not supported — returns null. The NES emulator requires native Lua/FFI access.
+
+=== CRITICAL RULES ===
+- Provide explicit dimensions or flexGrow: 1 for game canvases. Emulator is a surface node — without sizing it uses the proportional fallback (1/4 of parent), which is rarely the right size for a game canvas.
+- The native NES resolution is 256×240. Use integer scale factors (256×2=512, 240×2=480) to avoid blurry upscaling.
+- Emulator is native-only. Do not conditionally render it based on platform — it returns null on web automatically.
+- onROMLoaded fires once per ROM load, not on every frame. Do not rely on it for frame callbacks.
+
+=== SEE ALSO ===
+- Scene3D
+- Image
+- capabilities
+

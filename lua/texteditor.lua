@@ -19,11 +19,21 @@ local Syntax  = require("lua.syntax")
 
 local TextEditor = {}
 
+local currentTheme = nil
+
 -- ============================================================================
--- Default colors (dark editor theme)
+-- Theme helpers
 -- ============================================================================
 
-local colors = {
+local function themeColor(key, fallback)
+  if currentTheme and currentTheme.colors and currentTheme.colors[key] then
+    return Color.toTable(currentTheme.colors[key], fallback)
+  end
+  return fallback
+end
+
+-- Hardcoded fallbacks only used when no theme is set
+local fallbackColors = {
   bg         = { 0.12, 0.12, 0.14, 1 },
   gutter     = { 0.15, 0.15, 0.17, 1 },
   gutterText = { 0.45, 0.45, 0.50, 1 },
@@ -38,6 +48,28 @@ local colors = {
   tooltipText= { 0.82, 0.84, 0.88, 1 },
   tooltipBorder = { 0.25, 0.25, 0.30, 0.8 },
 }
+
+-- Resolve editor colors from theme tokens with hardcoded fallbacks
+local function resolveColors()
+  return {
+    bg         = themeColor("bgElevated", fallbackColors.bg),
+    gutter     = themeColor("surface", fallbackColors.gutter),
+    gutterText = themeColor("textDim", fallbackColors.gutterText),
+    lineNum    = themeColor("textSecondary", fallbackColors.lineNum),
+    text       = themeColor("text", fallbackColors.text),
+    cursor     = themeColor("primary", fallbackColors.cursor),
+    selection  = (function()
+      local p = themeColor("primary", fallbackColors.selection)
+      return { p[1], p[2], p[3], 0.25 }
+    end)(),
+    activeLine = themeColor("surface", fallbackColors.activeLine),
+    scrollbar  = themeColor("border", fallbackColors.scrollbar),
+    placeholder= themeColor("textDim", fallbackColors.placeholder),
+    tooltipBg  = themeColor("bgElevated", fallbackColors.tooltipBg),
+    tooltipText= themeColor("text", fallbackColors.tooltipText),
+    tooltipBorder = themeColor("border", fallbackColors.tooltipBorder),
+  }
+end
 
 -- ============================================================================
 -- Syntax highlighting (shared tokenizer from lua/syntax.lua)
@@ -54,6 +86,11 @@ local tokenizeLine = Syntax.tokenizeLine
 function TextEditor.init(config)
   config = config or {}
   Measure = config.measure
+  if config.theme then currentTheme = config.theme end
+end
+
+function TextEditor.setTheme(theme)
+  currentTheme = theme
 end
 
 -- ============================================================================
@@ -982,18 +1019,23 @@ function TextEditor.draw(node, effectiveOpacity)
 
   love.graphics.setFont(font)
 
-  -- Background
-  local bgColor = colors.bg
+  local colors = resolveColors()
   local s = node.style or {}
+
+  -- Background (only if explicitly set — transparent by default)
+  local br = s.borderRadius or 0
   if s.backgroundColor then
-    -- Use node's background color if set
+    local bgColor
     if type(s.backgroundColor) == "table" then
       bgColor = s.backgroundColor
+    else
+      bgColor = Color.toTable(s.backgroundColor, nil)
+    end
+    if bgColor then
+      setColorWithOpacity(bgColor, effectiveOpacity)
+      love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, br, br)
     end
   end
-  setColorWithOpacity(bgColor, effectiveOpacity)
-  local br = s.borderRadius or 0
-  love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, br, br)
 
   -- Save parent scissor and intersect (so parent overflow clips are respected)
   local prevScissor = {love.graphics.getScissor()}
@@ -1131,10 +1173,20 @@ function TextEditor.draw(node, effectiveOpacity)
     love.graphics.rectangle("fill", c.x + c.w - 6, barY, 4, barH, 2, 2)
   end
 
-  -- Border when focused
+  -- Border (theme-aware: always thin, focus color on focus)
+  local bw = s.borderWidth or 1
+  local borderColor
   if isFocused then
-    love.graphics.setColor(0.27, 0.53, 0.85, 0.8 * effectiveOpacity)
-    love.graphics.setLineWidth(1.5)
+    borderColor = themeColor("borderFocus", { 0.29, 0.56, 0.85, 0.9 })
+  else
+    borderColor = themeColor("border", nil)
+  end
+  if s.borderColor then
+    borderColor = Color.toTable(s.borderColor, borderColor)
+  end
+  if borderColor then
+    setColorWithOpacity(borderColor, effectiveOpacity)
+    love.graphics.setLineWidth(bw)
     love.graphics.rectangle("line", c.x, c.y, c.w, c.h, br, br)
   end
 

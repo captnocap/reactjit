@@ -4,6 +4,7 @@ import {
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
   Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
   Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
+  Sunburst,
 } from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -31,6 +32,7 @@ const effects = [
   { name: 'EdgeGravity', Component: EdgeGravity, cat: 'Physics' },
   { name: 'Feedback', Component: Feedback, cat: 'Glitch' },
   { name: 'PixelSort', Component: PixelSort, cat: 'Glitch' },
+  { name: 'Sunburst', Component: Sunburst, cat: 'Classic' },
 ] as const;
 
 const categories = ['All', 'Classic', 'Nature', 'Generative', 'Simulation', 'Physics', 'Glitch'] as const;

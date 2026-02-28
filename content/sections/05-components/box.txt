@@ -29,35 +29,54 @@ import { Box } from '@reactjit/core';
 ```
 
 Props:
-| Prop            | Type                            | Default   | Description                          |
-|-----------------|---------------------------------|-----------|--------------------------------------|
-| style           | Style                           | undefined | Flexbox layout and visual styling    |
-| hoverStyle      | Style                           | undefined | Style merged on pointer hover        |
-| activeStyle     | Style                           | undefined | Style merged on press/active         |
-| onClick         | (event: LoveEvent) => void      | undefined | Click/press handler                  |
-| onRelease       | (event: LoveEvent) => void      | undefined | Release handler                      |
-| onPointerEnter  | (event: LoveEvent) => void      | undefined | Pointer enters the box               |
-| onPointerLeave  | (event: LoveEvent) => void      | undefined | Pointer leaves the box               |
-| onKeyDown       | (event: LoveEvent) => void      | undefined | Key pressed while focused            |
-| onKeyUp         | (event: LoveEvent) => void      | undefined | Key released while focused           |
-| onTextInput     | (event: LoveEvent) => void      | undefined | Text input while focused             |
-| onWheel         | (event: LoveEvent) => void      | undefined | Mouse wheel / scroll wheel           |
-| onTouchStart    | (event: LoveEvent) => void      | undefined | Touch began                          |
-| onTouchEnd      | (event: LoveEvent) => void      | undefined | Touch ended                          |
-| onTouchMove     | (event: LoveEvent) => void      | undefined | Touch moved                          |
-| onGamepadPress  | (event: LoveEvent) => void      | undefined | Gamepad button pressed               |
-| onGamepadRelease| (event: LoveEvent) => void      | undefined | Gamepad button released              |
-| onGamepadAxis   | (event: LoveEvent) => void      | undefined | Gamepad axis moved                   |
-| onDragStart     | (event: LoveEvent) => void      | undefined | Drag gesture began                   |
-| onDrag          | (event: LoveEvent) => void      | undefined | Drag gesture moved                   |
-| onDragEnd       | (event: LoveEvent) => void      | undefined | Drag gesture ended                   |
-| onFileDrop      | (event: LoveEvent) => void      | undefined | File dropped on the box              |
-| onDirectoryDrop | (event: LoveEvent) => void      | undefined | Directory dropped on the box         |
-| onFileDragEnter | (event: LoveEvent) => void      | undefined | File drag enters the box             |
-| onFileDragLeave | (event: LoveEvent) => void      | undefined | File drag leaves the box             |
-| onFocus         | (event: LoveEvent) => void      | undefined | Box gained focus                     |
-| onBlur          | (event: LoveEvent) => void      | undefined | Box lost focus                       |
-| children        | ReactNode                       | undefined | Child elements                       |
+| Prop                | Type                                       | Default   | Description                                            |
+|---------------------|--------------------------------------------|-----------|--------------------------------------------------------|
+| style               | Style                                      | undefined | Flexbox layout and visual styling                      |
+| hoverStyle          | Style                                      | undefined | Style merged on pointer hover                          |
+| activeStyle         | Style                                      | undefined | Style merged on press/active                           |
+| backgroundVideo     | string                                     | undefined | Path to a video file to play as background             |
+| backgroundVideoFit  | 'fill' \| 'contain' \| 'cover'             | undefined | How the background video fits the box                  |
+| hoverVideo          | string                                     | undefined | Video to play on hover (swaps backgroundVideo)         |
+| hoverVideoFit       | 'fill' \| 'contain' \| 'cover'             | undefined | Fit mode for the hover video                           |
+| focusable           | boolean                                    | undefined | Make this box focusable (receives keyboard events)     |
+| focusGroup          | boolean                                    | undefined | Make this box a focus group (arrow-key navigation)     |
+| fileDropMode        | 'upload' \| 'preview'                      | undefined | How file drops are handled — 'upload' for metadata only, 'preview' reads text content |
+| onClick             | (event: LoveEvent) => void                 | undefined | Click/press handler                                    |
+| onRelease           | (event: LoveEvent) => void                 | undefined | Release handler                                        |
+| onPointerEnter      | (event: LoveEvent) => void                 | undefined | Pointer enters the box                                 |
+| onPointerLeave      | (event: LoveEvent) => void                 | undefined | Pointer leaves the box                                 |
+| onKeyDown           | (event: LoveEvent) => void                 | undefined | Key pressed while focused                              |
+| onKeyUp             | (event: LoveEvent) => void                 | undefined | Key released while focused                             |
+| onTextInput         | (event: LoveEvent) => void                 | undefined | Text input while focused                               |
+| onWheel             | (event: LoveEvent) => void                 | undefined | Mouse wheel / scroll wheel                             |
+| onTouchStart        | (event: LoveEvent) => void                 | undefined | Touch began                                            |
+| onTouchEnd          | (event: LoveEvent) => void                 | undefined | Touch ended                                            |
+| onTouchMove         | (event: LoveEvent) => void                 | undefined | Touch moved                                            |
+| onGamepadPress      | (event: LoveEvent) => void                 | undefined | Gamepad button pressed                                 |
+| onGamepadRelease    | (event: LoveEvent) => void                 | undefined | Gamepad button released                                |
+| onGamepadAxis       | (event: LoveEvent) => void                 | undefined | Gamepad axis moved                                     |
+| onMidiNote          | (event: LoveEvent) => void                 | undefined | MIDI note on/off event                                 |
+| onMidiCC            | (event: LoveEvent) => void                 | undefined | MIDI control change event                              |
+| onDragStart         | (event: LoveEvent) => void                 | undefined | Drag gesture began                                     |
+| onDrag              | (event: LoveEvent) => void                 | undefined | Drag gesture moved                                     |
+| onDragEnd           | (event: LoveEvent) => void                 | undefined | Drag gesture ended                                     |
+| onFileDrop          | (event: LoveEvent) => void                 | undefined | File dropped on the box                                |
+| onDirectoryDrop     | (event: LoveEvent) => void                 | undefined | Directory dropped on the box                           |
+| onFileDragEnter     | (event: LoveEvent) => void                 | undefined | File drag enters the box                               |
+| onFileDragLeave     | (event: LoveEvent) => void                 | undefined | File drag leaves the box                               |
+| onFocus             | (event: LoveEvent) => void                 | undefined | Box gained focus                                       |
+| onBlur              | (event: LoveEvent) => void                 | undefined | Box lost focus                                         |
+| onLayout            | (event: LayoutEvent) => void               | undefined | Fires after layout with computed x, y, width, height   |
+| children            | ReactNode                                  | undefined | Child elements                                         |
+
+LayoutEvent fields:
+| Field    | Type   | Description                              |
+|----------|--------|------------------------------------------|
+| targetId | number | Internal node ID                         |
+| x        | number | Computed x position in parent            |
+| y        | number | Computed y position in parent            |
+| width    | number | Computed width after layout              |
+| height   | number | Computed height after layout             |
 
 The `style` prop accepts the full Style type, which includes flexbox properties (flexDirection, justifyContent, alignItems, flexGrow, flexShrink, flexBasis, flexWrap, gap), sizing (width, height, minWidth, minHeight, maxWidth, maxHeight, aspectRatio), spacing (padding*, margin*), visual (backgroundColor, borderRadius, borderWidth, borderColor, opacity, overflow, boxShadow), positioning (position, top/right/bottom/left, zIndex), gradients, transforms, transitions, and animations.
 
@@ -143,7 +162,7 @@ Terminal:
 
 === CRITICAL RULES ===
 - Root containers MUST have width: '100%' and height: '100%'. Using flexGrow: 1 on the root will produce a zero-height container because there is no parent with a known size to grow into.
-- Row-direction Boxes (flexDirection: 'row') MUST have an explicit width for justifyContent to work. Box nodes have no intrinsic width (only Text nodes do), so without a width the container collapses and justifyContent has nothing to distribute.
+- Row-direction Boxes (flexDirection: 'row') need a known width for justifyContent to distribute space. Use explicit width, '100%', or flexGrow to ensure the container has resolved width.
 - Do not use flexGrow without sibling sizing context. flexGrow only works when the parent has a known size and there are siblings that establish the remaining space.
 - Default flexDirection is 'column'. If you expect horizontal layout, set flexDirection: 'row' explicitly.
 - Keep flex trees shallow. Prefer a single Box with flexDirection: 'row' over multiple nested wrapper Boxes. Deep hierarchies slow down layout computation.

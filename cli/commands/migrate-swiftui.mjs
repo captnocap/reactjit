@@ -26,7 +26,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { deriveProjectName } from '../lib/migration-core.mjs';
+import { deriveProjectName, capitalize, formatStyleObj, formatStyleAttr } from '../lib/migration-core.mjs';
 import { scaffoldProject } from './init.mjs';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1291,7 +1291,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
         const withStrike = { ...baseStyle, textDecorationLine: 'line-through' };
         out.push(`${ind(depth)}<Text style={${cond} ? ${formatStyleObj(withStrike)} : ${formatStyleObj(baseStyle)}}>${textContent}</Text>`);
       } else {
-        const styleStr = formatStyle(style);
+        const styleStr = formatStyleAttr(style);
         out.push(`${ind(depth)}<Text${styleStr}>${textContent}</Text>`);
       }
       continue;
@@ -1301,7 +1301,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
     if (node.type === 'Image') {
       components.add('Image');
       const imgSrc = resolveImageSource(node.args);
-      const styleStr = formatStyle(style);
+      const styleStr = formatStyleAttr(style);
       if (imgSrc.systemName) {
         // SF Symbol → emoji fallback or comment
         components.add('Text');
@@ -1317,7 +1317,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
       components.add('Pressable');
       components.add('Text');
       const handler = resolveButtonAction(node.args, node.children, props);
-      const styleStr = formatStyle(style);
+      const styleStr = formatStyleAttr(style);
       out.push(`${ind(depth)}<Pressable onClick={${handler}}${styleStr}>`);
       if (node.children.length > 0) {
         out.push(...generateViewTree(node.children, depth + 1, components, warnings, props));
@@ -1334,7 +1334,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
     if (node.type === 'TextField' || node.type === 'SecureField') {
       components.add('TextInput');
       const { placeholder, binding } = resolveTextFieldArgs(node.args);
-      const styleStr = formatStyle(style);
+      const styleStr = formatStyleAttr(style);
       let valueStr = '';
       if (binding) {
         valueStr = ` value={${binding}} onTextInput={(e) => set${capitalize(binding)}(e.text)}`;
@@ -1350,7 +1350,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
       components.add('Pressable');
       components.add('Text');
       const { label, binding } = resolveToggleArgs(node.args);
-      const styleStr = formatStyle(style);
+      const styleStr = formatStyleAttr(style);
       out.push(`${ind(depth)}<Pressable onClick={() => set${capitalize(binding || 'toggle')}(prev => !prev)}${styleStr}>`);
       out.push(`${ind(depth + 1)}<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>`);
       out.push(`${ind(depth + 2)}<Box style={{ width: 44, height: 24, borderRadius: 12, backgroundColor: ${binding || 'toggle'} ? '#3B82F6' : '#555' }} />`);
@@ -1363,7 +1363,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
     // ── NavigationLink ───────────────
     if (mapping.navLink) {
       components.add('Pressable');
-      out.push(`${ind(depth)}<Pressable${formatStyle(style)}>`);
+      out.push(`${ind(depth)}<Pressable${formatStyleAttr(style)}>`);
       out.push(`${ind(depth + 1)}{/* NavigationLink — destination needs manual routing */}`);
       if (node.children.length > 0) {
         out.push(...generateViewTree(node.children, depth + 1, components, warnings, props));
@@ -1374,7 +1374,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
 
     // ── Progress ─────────────────────
     if (mapping.progress) {
-      const styleStr = formatStyle({ ...style, backgroundColor: '#333', borderRadius: 4, height: 8, overflow: 'hidden' });
+      const styleStr = formatStyleAttr({ ...style, backgroundColor: '#333', borderRadius: 4, height: 8, overflow: 'hidden' });
       out.push(`${ind(depth)}<Box${styleStr}>`);
       out.push(`${ind(depth + 1)}<Box style={{ width: '50%', height: '100%', backgroundColor: '#3B82F6', borderRadius: 4 }} />`);
       out.push(`${ind(depth)}</Box>`);
@@ -1386,7 +1386,7 @@ function generateViewTree(nodes, depth, components, warnings, props) {
       const color = resolveSwiftColor(node.args || node.type);
       const fillStyle = { ...style, backgroundColor: color || '#888' };
       if (!fillStyle.width) fillStyle.flexGrow = 1;
-      out.push(`${ind(depth)}<Box${formatStyle(fillStyle)} />`);
+      out.push(`${ind(depth)}<Box${formatStyleAttr(fillStyle)} />`);
       continue;
     }
 
@@ -1420,14 +1420,14 @@ function generateViewTree(nodes, depth, components, warnings, props) {
     // Add onClick from events
     const evStr = events.map(e => ` ${e.name}={${convertSwiftClosure(e.handler, props)}}`).join('');
 
-    const styleStr = formatStyle(style);
+    const styleStr = formatStyleAttr(style);
     const hasKids = node.children.length > 0;
 
     if (comp === 'ScrollView') {
       components.add('ScrollView');
       const scrollStyle = { ...style };
       if (!scrollStyle.height && !scrollStyle.flexGrow) scrollStyle.flexGrow = 1;
-      out.push(`${ind(depth)}<ScrollView${formatStyle(scrollStyle)}${evStr}>`);
+      out.push(`${ind(depth)}<ScrollView${formatStyleAttr(scrollStyle)}${evStr}>`);
       if (hasKids) out.push(...generateViewTree(node.children, depth + 1, components, warnings, props));
       out.push(`${ind(depth)}</ScrollView>`);
     } else if (mapping.section) {
@@ -1563,11 +1563,6 @@ function swiftValueToJS(val, type) {
   if (/^-?\d+(\.\d+)?$/.test(v)) return v;
   // Pass through
   return v;
-}
-
-function capitalize(str) {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function convertSwiftArgs(args) {
@@ -1786,36 +1781,6 @@ function extractStringArg(args) {
   if (!args) return null;
   const match = args.match(/"([^"]+)"/);
   return match?.[1] || null;
-}
-
-
-/** Format a style object as a plain JS object literal string */
-function formatStyleObj(style) {
-  const entries = Object.entries(style).filter(([k]) => !k.startsWith('_'));
-  if (entries.length === 0) return '{}';
-  const parts = entries.map(([k, v]) => {
-    if (typeof v === 'number') return `${k}: ${v}`;
-    if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)) return `${k}: ${Number(v)}`;
-    if (typeof v === 'string') return `${k}: '${v}'`;
-    return `${k}: ${v}`;
-  });
-  return `{ ${parts.join(', ')} }`;
-}
-
-/** Format a style object as a JSX style attribute */
-function formatStyle(style) {
-  const entries = Object.entries(style).filter(([k]) => !k.startsWith('_'));
-  if (entries.length === 0) return '';
-
-  const parts = entries.map(([k, v]) => {
-    if (typeof v === 'number') return `${k}: ${v}`;
-    if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)) return `${k}: ${Number(v)}`;
-    if (typeof v === 'string') return `${k}: '${v}'`;
-    return `${k}: ${v}`;
-  });
-
-  if (parts.length <= 3) return ` style={{ ${parts.join(', ')} }}`;
-  return ` style={{\n    ${parts.join(',\n    ')}\n  }}`;
 }
 
 

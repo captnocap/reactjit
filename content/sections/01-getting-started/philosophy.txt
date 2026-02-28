@@ -9,13 +9,14 @@ difficulty: beginner
 
 === OVERVIEW ===
 ReactJIT is React stripped of browser magic and rendered as raw geometry. There is no
-DOM, no CSS cascade, no implicit sizing, no inherited font stacks, no default margins.
-Every pixel on screen exists because your code explicitly put it there.
+DOM, no CSS cascade, no inherited font stacks, no default margins. Every pixel on screen
+exists because your code put it there — or the layout engine resolved it for you.
 
-If you did not say how wide it is, it is zero. If you said grow, it grows exactly. If
-you nested flex containers, you own the consequences. If text wraps, it is because you
-gave it nowhere to go. This is not a browser abstraction layer. This is direct rendering
--- React's component model driving actual draw calls on real hardware.
+Containers auto-size from their children. Empty surface nodes (Box, Image, Video, Scene3D)
+fall back to 1/4 of their parent when unsized. If you said grow, it grows exactly. If you
+nested flex containers, you own the consequences. If text wraps, it is because you gave it
+nowhere to go. This is not a browser abstraction layer. This is direct rendering — React's
+component model driving actual draw calls on real hardware.
 
 === EXAMPLES ===
 Example 1: The Multi-Target Promise
@@ -59,7 +60,7 @@ engine are shared across all of them.
 Platforms: All
 
 === CRITICAL RULES ===
-- There is no implicit sizing. A Box without width and height is zero by zero.
+- Containers auto-size from content. Empty surface nodes get the proportional fallback (1/4 of parent). ScrollView and TextInput still need explicit sizing.
 - There is no CSS cascade. Style properties do not inherit from parent to child
   (except fontSize and color on nested Text nodes).
 - Every Text node MUST have an explicit fontSize. The linter enforces this.

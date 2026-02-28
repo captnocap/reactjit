@@ -93,7 +93,7 @@ function Dashboard() {
 Platforms: love2d
 
 === CRITICAL RULES ===
-- Scene must be given an explicit width and height via the style prop — it does not auto-size from its 3D children
+- Scene is a surface node — without explicit dimensions it uses the proportional fallback (1/4 of parent). For precise viewport control, set width and height explicitly or use flexGrow
 - All direct children must be 3D elements (Camera, Mesh, AmbientLight, DirectionalLight); mixing 2D Box/Text children inside Scene is not supported
 - Scene renders nothing useful on web targets — it shows a placeholder div with text
 - Only one Scene can own a given region of the layout; nested Scenes are not supported

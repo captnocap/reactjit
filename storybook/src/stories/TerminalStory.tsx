@@ -1,17 +1,20 @@
 /**
- * TerminalStory — PTY terminal sessions
+ * TerminalStory — PTY terminal sessions (vterm-backed)
  *
  * Demonstrates all three Terminal archetypes:
  *   user     — interactive bash/zsh, current user
  *   root     — sudo -i bash (shows password prompt if NOPASSWD not set)
  *   template — ephemeral bash -c per command, sandboxed environment
  *
- * Also shows the usePTY hook pattern vs raw <Terminal> one-liner.
+ * Two display modes:
+ *   Raw    — accumulated onData output (ANSI-stripped), backward compat
+ *   VTerm  — structured dirty rows from vterm damage callbacks
  */
 import React, { useState, useCallback } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput,
   Terminal, usePTY,
+  type DirtyRow,
 } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 
@@ -30,20 +33,43 @@ function TerminalPane({
   type,
   session,
   label,
+  mode,
 }: {
   type: 'user' | 'root' | 'template';
   session: string;
   label: string;
+  mode: 'raw' | 'vterm';
 }) {
   const c = useThemeColors();
   const [input, setInput] = useState('');
 
+  // Accumulate vterm rows into a stable screen buffer
+  const [screenRows, setScreenRows] = useState<Map<number, string>>(new Map());
+
   const {
-    output, connected, sendLine, interrupt, sendEOF, runCommand, clearOutput, terminalProps,
+    output, dirtyRows, cursor, connected,
+    sendLine, interrupt, runCommand, clearOutput, terminalProps,
   } = usePTY({
     type, shell: 'bash', session, rows: 28, cols: 90,
     env: type === 'template' ? { TEMPLATE_SESSION: session } : undefined,
   });
+
+  // Merge dirty rows into the screen buffer when they arrive
+  const prevDirtyRef = React.useRef<DirtyRow[]>([]);
+  if (dirtyRows !== prevDirtyRef.current && dirtyRows.length > 0) {
+    prevDirtyRef.current = dirtyRows;
+    setScreenRows(prev => {
+      const next = new Map(prev);
+      for (const r of dirtyRows) {
+        if (r.text.length > 0) {
+          next.set(r.row, r.text);
+        } else {
+          next.delete(r.row);
+        }
+      }
+      return next;
+    });
+  }
 
   const handleSubmit = useCallback(() => {
     const cmd = input.trim();
@@ -51,6 +77,18 @@ function TerminalPane({
     setInput('');
     type === 'template' ? runCommand(cmd) : sendLine(cmd);
   }, [input, type, sendLine, runCommand]);
+
+  const handleClear = useCallback(() => {
+    clearOutput();
+    setScreenRows(new Map());
+  }, [clearOutput]);
+
+  // Build vterm screen text from row map
+  const vtermText = React.useMemo(() => {
+    if (screenRows.size === 0) return '';
+    const sorted = Array.from(screenRows.entries()).sort((a, b) => a[0] - b[0]);
+    return sorted.map(([, text]) => text).join('\n');
+  }, [screenRows]);
 
   return (
     <Box style={{ flexGrow: 1, backgroundColor: c.bgElevated, borderRadius: 8, padding: 10 }}>
@@ -65,8 +103,13 @@ function TerminalPane({
         <Text fontSize={11} style={{ color: c.muted }}>
           {type === 'template' ? '(ephemeral per cmd)' : `(${type})`}
         </Text>
+        {mode === 'vterm' && (
+          <Text fontSize={10} style={{ color: c.muted }}>
+            {`cursor ${cursor.row}:${cursor.col}`}
+          </Text>
+        )}
         <Box style={{ flexGrow: 1 }} />
-        <Pressable onPress={clearOutput}>
+        <Pressable onPress={handleClear}>
           <Text fontSize={11} style={{ color: c.muted }}>clear</Text>
         </Pressable>
       </Box>
@@ -74,7 +117,10 @@ function TerminalPane({
       {/* Output */}
       <ScrollView style={{ flexGrow: 1, backgroundColor: c.bg, borderRadius: 4, padding: 8 }}>
         <Text fontSize={12} style={{ color: c.text }}>
-          {stripAnsi(output) || (connected ? '' : 'connecting...')}
+          {mode === 'vterm'
+            ? (vtermText || (connected ? '' : 'connecting...'))
+            : (stripAnsi(output) || (connected ? '' : 'connecting...'))
+          }
         </Text>
       </ScrollView>
 
@@ -109,6 +155,7 @@ function TerminalPane({
 export function TerminalStory() {
   const c = useThemeColors();
   const [tab, setTab] = useState<'split' | 'user' | 'root' | 'template'>('split');
+  const [displayMode, setDisplayMode] = useState<'raw' | 'vterm'>('vterm');
 
   const tabs = [
     { id: 'split',    label: 'User + Template' },
@@ -136,19 +183,32 @@ export function TerminalStory() {
             <Text fontSize={12} style={{ color: tab === t.id ? c.text : c.muted }}>{t.label}</Text>
           </Pressable>
         ))}
+        <Box style={{ flexGrow: 1 }} />
+        {/* Display mode toggle */}
+        <Pressable
+          onPress={() => setDisplayMode(m => m === 'raw' ? 'vterm' : 'raw')}
+          style={{
+            paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4,
+            backgroundColor: c.bgElevated, borderRadius: 4,
+          }}
+        >
+          <Text fontSize={11} style={{ color: displayMode === 'vterm' ? '#3fb950' : c.muted }}>
+            {displayMode === 'vterm' ? 'vterm' : 'raw'}
+          </Text>
+        </Pressable>
       </Box>
 
       {/* Content */}
       <Box style={{ flexGrow: 1, padding: 10 }}>
         {tab === 'split' && (
           <Box style={{ flexDirection: 'row', flexGrow: 1, gap: 10 }}>
-            <TerminalPane type="user"     session="story-user"  label="User Shell" />
-            <TerminalPane type="template" session="story-tmpl"  label="Template" />
+            <TerminalPane type="user"     session="story-user"  label="User Shell"  mode={displayMode} />
+            <TerminalPane type="template" session="story-tmpl"  label="Template"    mode={displayMode} />
           </Box>
         )}
-        {tab === 'user'     && <TerminalPane type="user"     session="story-user-solo"  label="User Shell" />}
-        {tab === 'root'     && <TerminalPane type="root"     session="story-root-solo"  label="Root Shell" />}
-        {tab === 'template' && <TerminalPane type="template" session="story-tmpl-solo"  label="Template Shell" />}
+        {tab === 'user'     && <TerminalPane type="user"     session="story-user-solo"  label="User Shell"    mode={displayMode} />}
+        {tab === 'root'     && <TerminalPane type="root"     session="story-root-solo"  label="Root Shell"    mode={displayMode} />}
+        {tab === 'template' && <TerminalPane type="template" session="story-tmpl-solo"  label="Template Shell" mode={displayMode} />}
       </Box>
     </Box>
   );

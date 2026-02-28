@@ -29,9 +29,9 @@ Flexbox style properties (all set via the `style` prop on Box):
   justifyContent: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly'
     Default: 'start'
     Distributes children along the main axis.
-    IMPORTANT: For row containers, justifyContent only works when the Box has an explicit
-    width. Box nodes have no intrinsic width, so without one the engine cannot distribute
-    space. The linter enforces this.
+    IMPORTANT: For row containers, justifyContent only works when the Box has a known
+    width (explicit value, '100%', or via flexGrow). Without a resolved width the engine
+    cannot distribute space. The linter enforces this.
 
   alignItems: 'start' | 'center' | 'end' | 'stretch'
     Default: 'stretch'
@@ -134,9 +134,9 @@ Platforms: All
 
 === PLATFORM NOTES ===
 Love2D: The Lua layout engine (layout.lua) performs the flex calculation. flexDirection
-defaults to 'column'. Text nodes have intrinsic width based on font measurement, but Box
-nodes have zero intrinsic width -- they must be given explicit dimensions or use flexGrow
-with properly sized siblings.
+defaults to 'column'. Text nodes have intrinsic width based on font measurement. Containers
+with children auto-size from content. Empty surface nodes (Box, Image, Video, etc.) without
+children or explicit sizing use the proportional fallback (1/4 of parent).
 
 Web: Style values are converted to CSS Flexbox via styleToCSS(). The conversion maps
 'start' to 'flex-start' and 'end' to 'flex-end'. Box renders as a <div> with display:flex.
@@ -146,7 +146,7 @@ property adds character cells of spacing between children.
 
 === CRITICAL RULES ===
 - flexDirection defaults to 'column', not 'row' -- this is the opposite of CSS default
-- justifyContent on a row Box REQUIRES explicit width -- Box nodes have no intrinsic width
+- justifyContent on a row Box REQUIRES a known width -- use explicit width, '100%', or flexGrow
 - flexGrow without sibling sizing context produces unreliable layout
 - All siblings using flexGrow without any explicit main-axis size causes content-dependent layout
 - Use 'start'/'end', not 'flex-start'/'flex-end' -- the framework handles the conversion

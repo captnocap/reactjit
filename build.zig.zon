@@ -3,14 +3,5 @@
     .version = "0.1.0",
     .fingerprint = 0xda9e752d9eaebd0,
     .paths = .{"."},
-    .dependencies = .{
-        .freetype = .{
-            .url = "https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz",
-            .hash = "N-V-__8AAK-ZJgGK3AtcJ7nDUwlNM53dDwX6rHJ_YgEhdGqj",
-        },
-        .sdl2 = .{
-            .url = "git+https://github.com/allyourcodebase/SDL?ref=main#b4c5cd25203255cf705f63fb8a725dcb54655f3e",
-            .hash = "SDL-2.32.10-JToi3yC3EgF2Z9jT2Zfq0y0xzmb0QxnaIfFDn0qPrzxB",
-        },
-    },
+    .dependencies = .{},
 }

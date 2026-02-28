@@ -37,7 +37,7 @@
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename, dirname, extname, relative, resolve } from 'node:path';
-import { deriveProjectName } from '../lib/migration-core.mjs';
+import { deriveProjectName, capitalize, formatStyleObj, formatStyleAttr, indent } from '../lib/migration-core.mjs';
 import { scaffoldProject } from './init.mjs';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1024,7 +1024,6 @@ export function generateReactJIT(parsed) {
   // Returns an array of indented JSX lines (no shared mutable state)
   function generateWidget(widgetName, depth) {
     const out = [];
-    const ind = (d) => '  '.repeat(d);
 
     const w = widgetMap[widgetName];
     if (!w) return out; // root or unknown
@@ -1107,8 +1106,8 @@ export function generateReactJIT(parsed) {
         const textContent = isVar ? `{${text}}` :
           text.startsWith("f'") || text.startsWith('f"') ? `{\`${text.slice(2, -1)}\`}` :
           text;
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<Text${styleStr}${evStr}>${textContent}</Text>`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<Text${styleStr}${evStr}>${textContent}</Text>`);
         break;
       }
 
@@ -1116,35 +1115,35 @@ export function generateReactJIT(parsed) {
         const text = w.kwargs.text || 'Button';
         const isVar = parsed.variables.some(v => v.name === text);
         const textContent = isVar ? `{${text}}` : text;
-        const styleStr = formatStyle(mergedStyle);
+        const styleStr = formatStyleAttr(mergedStyle);
         let hoverStr = '';
         if (activeBg || activeFg) {
           const hs = {};
           if (activeBg) hs.backgroundColor = activeBg;
           if (activeFg) hs.color = activeFg;
-          hoverStr = ` hoverStyle={${inlineStyle(hs)}}`;
+          hoverStr = ` hoverStyle={${formatStyleObj(hs)}}`;
         }
-        out.push(`${ind(depth)}<Pressable${styleStr}${hoverStr}${evStr}>`);
-        out.push(`${ind(depth + 1)}<Text${mergedStyle.color ? ` style={{ color: '${mergedStyle.color}' }}` : ''}>${textContent}</Text>`);
-        out.push(`${ind(depth)}</Pressable>`);
+        out.push(`${indent(depth)}<Pressable${styleStr}${hoverStr}${evStr}>`);
+        out.push(`${indent(depth + 1)}<Text${mergedStyle.color ? ` style={{ color: '${mergedStyle.color}' }}` : ''}>${textContent}</Text>`);
+        out.push(`${indent(depth)}</Pressable>`);
         break;
       }
 
       case 'input': {
-        const styleStr = formatStyle(mergedStyle);
+        const styleStr = formatStyleAttr(mergedStyle);
         let valueStr = '';
         if (valueBinding) {
           valueStr = ` value={${valueBinding}} onTextInput={(e) => set${capitalize(valueBinding)}(e.text)}`;
         }
         const placeholder = w.kwargs.placeholder || '';
         const placeholderStr = placeholder ? ` placeholder="${placeholder}"` : '';
-        out.push(`${ind(depth)}<TextInput${styleStr}${valueStr}${placeholderStr}${evStr} />`);
+        out.push(`${indent(depth)}<TextInput${styleStr}${valueStr}${placeholderStr}${evStr} />`);
         break;
       }
 
       case 'multiline': {
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<TextInput${styleStr} multiline${evStr} />`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<TextInput${styleStr} multiline${evStr} />`);
         warnings.push(`tk.Text "${widgetName}" → TextInput multiline — rich text features need manual conversion`);
         break;
       }
@@ -1155,27 +1154,27 @@ export function generateReactJIT(parsed) {
         if (gridLayout) {
           const containerStyle = { ...mergedStyle };
           if (!containerStyle.flexDirection) containerStyle.flexDirection = 'column';
-          const styleStr = formatStyle(containerStyle);
+          const styleStr = formatStyleAttr(containerStyle);
 
           if (mapping.hasLabel && w.kwargs.text) {
-            out.push(`${ind(depth)}{/* ${w.kwargs.text} */}`);
+            out.push(`${indent(depth)}{/* ${w.kwargs.text} */}`);
           }
-          out.push(`${ind(depth)}<Box${styleStr}>`);
+          out.push(`${indent(depth)}<Box${styleStr}>`);
 
           for (const rowIdx of gridLayout.sortedRows) {
             const cols = gridLayout.rows[rowIdx];
             if (cols.length === 1) {
               out.push(...generateWidget(cols[0].name, depth + 1));
             } else {
-              out.push(`${ind(depth + 1)}<Box style={{ flexDirection: 'row', gap: 8 }}>`);
+              out.push(`${indent(depth + 1)}<Box style={{ flexDirection: 'row', gap: 8 }}>`);
               for (const col of cols) {
                 out.push(...generateWidget(col.name, depth + 2));
               }
-              out.push(`${ind(depth + 1)}</Box>`);
+              out.push(`${indent(depth + 1)}</Box>`);
             }
           }
 
-          out.push(`${ind(depth)}</Box>`);
+          out.push(`${indent(depth)}</Box>`);
         } else {
           const dir = getPackDirection(widgetName);
           const containerStyle = { ...mergedStyle };
@@ -1189,14 +1188,14 @@ export function generateReactJIT(parsed) {
             if (avgPad > 0) containerStyle.gap = Math.round(avgPad);
           }
 
-          const styleStr = formatStyle(containerStyle);
+          const styleStr = formatStyleAttr(containerStyle);
 
           if (mapping.hasLabel && w.kwargs.text) {
-            out.push(`${ind(depth)}{/* ${w.kwargs.text} */}`);
+            out.push(`${indent(depth)}{/* ${w.kwargs.text} */}`);
           }
-          out.push(`${ind(depth)}<Box${styleStr}>`);
+          out.push(`${indent(depth)}<Box${styleStr}>`);
           out.push(...childLines(kids, depth + 1));
-          out.push(`${ind(depth)}</Box>`);
+          out.push(`${indent(depth)}</Box>`);
         }
         break;
       }
@@ -1204,23 +1203,23 @@ export function generateReactJIT(parsed) {
       case 'list': {
         components.add('ScrollView');
         components.add('Pressable');
-        const styleStr = formatStyle({ ...mergedStyle, overflow: 'scroll' });
-        out.push(`${ind(depth)}<ScrollView${styleStr}>`);
-        out.push(`${ind(depth + 1)}{/* TODO: populate list items from data */}`);
-        out.push(`${ind(depth + 1)}{items.map((item, i) => (`);
-        out.push(`${ind(depth + 2)}<Pressable key={i} onClick={() => onSelect(i)}>`);
-        out.push(`${ind(depth + 3)}<Text>{item}</Text>`);
-        out.push(`${ind(depth + 2)}</Pressable>`);
-        out.push(`${ind(depth + 1)}))}`);
-        out.push(`${ind(depth)}</ScrollView>`);
+        const styleStr = formatStyleAttr({ ...mergedStyle, overflow: 'scroll' });
+        out.push(`${indent(depth)}<ScrollView${styleStr}>`);
+        out.push(`${indent(depth + 1)}{/* TODO: populate list items from data */}`);
+        out.push(`${indent(depth + 1)}{items.map((item, i) => (`);
+        out.push(`${indent(depth + 2)}<Pressable key={i} onClick={() => onSelect(i)}>`);
+        out.push(`${indent(depth + 3)}<Text>{item}</Text>`);
+        out.push(`${indent(depth + 2)}</Pressable>`);
+        out.push(`${indent(depth + 1)}))}`);
+        out.push(`${indent(depth)}</ScrollView>`);
         break;
       }
 
       case 'canvas': {
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<Box${styleStr}>`);
-        out.push(`${ind(depth + 1)}{/* TODO: Canvas "${widgetName}" — use Scene3D or manual drawing */}`);
-        out.push(`${ind(depth)}</Box>`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<Box${styleStr}>`);
+        out.push(`${indent(depth + 1)}{/* TODO: Canvas "${widgetName}" — use Scene3D or manual drawing */}`);
+        out.push(`${indent(depth)}</Box>`);
         warnings.push(`Canvas "${widgetName}" → Box placeholder — canvas drawing needs manual conversion`);
         break;
       }
@@ -1228,13 +1227,13 @@ export function generateReactJIT(parsed) {
       case 'checkbox': {
         const text = w.kwargs.text || '';
         const variable = w.kwargs.variable;
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<Pressable${styleStr} onClick={() => set${capitalize(variable || widgetName)}(prev => !prev)}>`);
-        out.push(`${ind(depth + 1)}<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>`);
-        out.push(`${ind(depth + 2)}<Box style={{ width: 18, height: 18, borderWidth: 2, borderColor: '#666', borderRadius: 3, backgroundColor: ${variable || widgetName} ? '#3b82f6' : 'transparent' }} />`);
-        out.push(`${ind(depth + 2)}<Text>${text}</Text>`);
-        out.push(`${ind(depth + 1)}</Box>`);
-        out.push(`${ind(depth)}</Pressable>`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<Pressable${styleStr} onClick={() => set${capitalize(variable || widgetName)}(prev => !prev)}>`);
+        out.push(`${indent(depth + 1)}<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>`);
+        out.push(`${indent(depth + 2)}<Box style={{ width: 18, height: 18, borderWidth: 2, borderColor: '#666', borderRadius: 3, backgroundColor: ${variable || widgetName} ? '#3b82f6' : 'transparent' }} />`);
+        out.push(`${indent(depth + 2)}<Text>${text}</Text>`);
+        out.push(`${indent(depth + 1)}</Box>`);
+        out.push(`${indent(depth)}</Pressable>`);
         break;
       }
 
@@ -1242,13 +1241,13 @@ export function generateReactJIT(parsed) {
         const text = w.kwargs.text || '';
         const variable = w.kwargs.variable;
         const value = w.kwargs.value || `'${text}'`;
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<Pressable${styleStr} onClick={() => set${capitalize(variable || widgetName)}(${value})}>`);
-        out.push(`${ind(depth + 1)}<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>`);
-        out.push(`${ind(depth + 2)}<Box style={{ width: 18, height: 18, borderWidth: 2, borderColor: '#666', borderRadius: 9, backgroundColor: ${variable || widgetName} === ${value} ? '#3b82f6' : 'transparent' }} />`);
-        out.push(`${ind(depth + 2)}<Text>${text}</Text>`);
-        out.push(`${ind(depth + 1)}</Box>`);
-        out.push(`${ind(depth)}</Pressable>`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<Pressable${styleStr} onClick={() => set${capitalize(variable || widgetName)}(${value})}>`);
+        out.push(`${indent(depth + 1)}<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>`);
+        out.push(`${indent(depth + 2)}<Box style={{ width: 18, height: 18, borderWidth: 2, borderColor: '#666', borderRadius: 9, backgroundColor: ${variable || widgetName} === ${value} ? '#3b82f6' : 'transparent' }} />`);
+        out.push(`${indent(depth + 2)}<Text>${text}</Text>`);
+        out.push(`${indent(depth + 1)}</Box>`);
+        out.push(`${indent(depth)}</Pressable>`);
         break;
       }
 
@@ -1258,23 +1257,23 @@ export function generateReactJIT(parsed) {
         const to = w.kwargs.to || '100';
         const orient = (w.kwargs.orient || 'HORIZONTAL').replace(/^tk\./, '').toUpperCase();
         const isHoriz = orient === 'HORIZONTAL';
-        const styleStr = formatStyle({ ...mergedStyle, flexDirection: isHoriz ? 'row' : 'column', alignItems: 'center', gap: 8 });
-        out.push(`${ind(depth)}<Box${styleStr}>`);
-        out.push(`${ind(depth + 1)}<Text>{${variable || widgetName}}</Text>`);
-        out.push(`${ind(depth + 1)}{/* TODO: implement slider — range ${from} to ${to} */}`);
-        out.push(`${ind(depth + 1)}<Box style={{ ${isHoriz ? 'width: 200, height: 4' : 'width: 4, height: 200'}, backgroundColor: '#444', borderRadius: 2 }}>`);
-        out.push(`${ind(depth + 2)}<Box style={{ ${isHoriz ? `width: \`\${((${variable || widgetName} - ${from}) / (${to} - ${from})) * 100}%\`` : `height: \`\${((${variable || widgetName} - ${from}) / (${to} - ${from})) * 100}%\``}, ${isHoriz ? 'height' : 'width'}: '100%', backgroundColor: '#3b82f6', borderRadius: 2 }} />`);
-        out.push(`${ind(depth + 1)}</Box>`);
-        out.push(`${ind(depth)}</Box>`);
+        const styleStr = formatStyleAttr({ ...mergedStyle, flexDirection: isHoriz ? 'row' : 'column', alignItems: 'center', gap: 8 });
+        out.push(`${indent(depth)}<Box${styleStr}>`);
+        out.push(`${indent(depth + 1)}<Text>{${variable || widgetName}}</Text>`);
+        out.push(`${indent(depth + 1)}{/* TODO: implement slider — range ${from} to ${to} */}`);
+        out.push(`${indent(depth + 1)}<Box style={{ ${isHoriz ? 'width: 200, height: 4' : 'width: 4, height: 200'}, backgroundColor: '#444', borderRadius: 2 }}>`);
+        out.push(`${indent(depth + 2)}<Box style={{ ${isHoriz ? `width: \`\${((${variable || widgetName} - ${from}) / (${to} - ${from})) * 100}%\`` : `height: \`\${((${variable || widgetName} - ${from}) / (${to} - ${from})) * 100}%\``}, ${isHoriz ? 'height' : 'width'}: '100%', backgroundColor: '#3b82f6', borderRadius: 2 }} />`);
+        out.push(`${indent(depth + 1)}</Box>`);
+        out.push(`${indent(depth)}</Box>`);
         break;
       }
 
       case 'separator': {
         const orient = (w.kwargs.orient || 'HORIZONTAL').replace(/^tk\./, '').toUpperCase();
         if (orient === 'HORIZONTAL') {
-          out.push(`${ind(depth)}<Box style={{ width: '100%', height: 1, backgroundColor: '#444' }} />`);
+          out.push(`${indent(depth)}<Box style={{ width: '100%', height: 1, backgroundColor: '#444' }} />`);
         } else {
-          out.push(`${ind(depth)}<Box style={{ width: 1, height: '100%', backgroundColor: '#444' }} />`);
+          out.push(`${indent(depth)}<Box style={{ width: 1, height: '100%', backgroundColor: '#444' }} />`);
         }
         break;
       }
@@ -1282,27 +1281,27 @@ export function generateReactJIT(parsed) {
       case 'progressbar': {
         const variable = w.kwargs.variable || 'progress';
         const max = w.kwargs.maximum || '100';
-        const styleStr = formatStyle({ ...mergedStyle, backgroundColor: '#333', borderRadius: 4, overflow: 'hidden' });
-        out.push(`${ind(depth)}<Box${styleStr}>`);
-        out.push(`${ind(depth + 1)}<Box style={{ width: \`\${(${variable} / ${max}) * 100}%\`, height: '100%', backgroundColor: '#3b82f6', borderRadius: 4 }} />`);
-        out.push(`${ind(depth)}</Box>`);
+        const styleStr = formatStyleAttr({ ...mergedStyle, backgroundColor: '#333', borderRadius: 4, overflow: 'hidden' });
+        out.push(`${indent(depth)}<Box${styleStr}>`);
+        out.push(`${indent(depth + 1)}<Box style={{ width: \`\${(${variable} / ${max}) * 100}%\`, height: '100%', backgroundColor: '#3b82f6', borderRadius: 4 }} />`);
+        out.push(`${indent(depth)}</Box>`);
         break;
       }
 
       case 'notebook': {
         components.add('Pressable');
-        out.push(`${ind(depth)}{/* Notebook "${widgetName}" — tabbed interface */}`);
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<Box${styleStr}>`);
-        out.push(`${ind(depth + 1)}<Box style={{ flexDirection: 'row', gap: 0, borderBottomWidth: 1, borderColor: '#444' }}>`);
-        out.push(`${ind(depth + 2)}{tabs.map((tab, i) => (`);
-        out.push(`${ind(depth + 3)}<Pressable key={i} onClick={() => setActiveTab(i)} style={{ padding: 8, backgroundColor: activeTab === i ? '#333' : 'transparent' }}>`);
-        out.push(`${ind(depth + 4)}<Text style={{ color: activeTab === i ? '#fff' : '#888' }}>{tab.label}</Text>`);
-        out.push(`${ind(depth + 3)}</Pressable>`);
-        out.push(`${ind(depth + 2)}))}`);
-        out.push(`${ind(depth + 1)}</Box>`);
-        out.push(`${ind(depth + 1)}{/* Tab content renders here based on activeTab */}`);
-        out.push(`${ind(depth)}</Box>`);
+        out.push(`${indent(depth)}{/* Notebook "${widgetName}" — tabbed interface */}`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<Box${styleStr}>`);
+        out.push(`${indent(depth + 1)}<Box style={{ flexDirection: 'row', gap: 0, borderBottomWidth: 1, borderColor: '#444' }}>`);
+        out.push(`${indent(depth + 2)}{tabs.map((tab, i) => (`);
+        out.push(`${indent(depth + 3)}<Pressable key={i} onClick={() => setActiveTab(i)} style={{ padding: 8, backgroundColor: activeTab === i ? '#333' : 'transparent' }}>`);
+        out.push(`${indent(depth + 4)}<Text style={{ color: activeTab === i ? '#fff' : '#888' }}>{tab.label}</Text>`);
+        out.push(`${indent(depth + 3)}</Pressable>`);
+        out.push(`${indent(depth + 2)}))}`);
+        out.push(`${indent(depth + 1)}</Box>`);
+        out.push(`${indent(depth + 1)}{/* Tab content renders here based on activeTab */}`);
+        out.push(`${indent(depth)}</Box>`);
         warnings.push(`Notebook "${widgetName}" → manual tab state management needed`);
         break;
       }
@@ -1310,56 +1309,56 @@ export function generateReactJIT(parsed) {
       case 'modal': {
         components.add('Modal');
         const title = w.kwargs.title || '';
-        out.push(`${ind(depth)}{${widgetName}Visible && (`);
-        out.push(`${ind(depth + 1)}<Modal visible={${widgetName}Visible} onClose={() => set${capitalize(widgetName)}Visible(false)}>`);
-        if (title) out.push(`${ind(depth + 2)}<Text style={{ fontSize: 18, fontWeight: 'bold' }}>${title}</Text>`);
+        out.push(`${indent(depth)}{${widgetName}Visible && (`);
+        out.push(`${indent(depth + 1)}<Modal visible={${widgetName}Visible} onClose={() => set${capitalize(widgetName)}Visible(false)}>`);
+        if (title) out.push(`${indent(depth + 2)}<Text style={{ fontSize: 18, fontWeight: 'bold' }}>${title}</Text>`);
         out.push(...childLines(kids, depth + 2));
-        out.push(`${ind(depth + 1)}</Modal>`);
-        out.push(`${ind(depth)})}`);
+        out.push(`${indent(depth + 1)}</Modal>`);
+        out.push(`${indent(depth)})}`);
         break;
       }
 
       case 'menu': {
         const items = parsed.menuItems.filter(mi => mi.menu === widgetName);
         if (items.length > 0) {
-          out.push(`${ind(depth)}<Box style={{ flexDirection: 'row', backgroundColor: '#2a2a2a', padding: 4, gap: 2 }}>`);
+          out.push(`${indent(depth)}<Box style={{ flexDirection: 'row', backgroundColor: '#2a2a2a', padding: 4, gap: 2 }}>`);
           for (const item of items) {
             if (item.type === 'add_separator') {
-              out.push(`${ind(depth + 1)}<Box style={{ width: 1, height: 20, backgroundColor: '#555' }} />`);
+              out.push(`${indent(depth + 1)}<Box style={{ width: 1, height: 20, backgroundColor: '#555' }} />`);
             } else if (item.type === 'add_cascade') {
-              out.push(`${ind(depth + 1)}{/* Menu cascade: ${item.kwargs.label || 'submenu'} */}`);
-              out.push(`${ind(depth + 1)}<Pressable style={{ padding: 4, paddingLeft: 12, paddingRight: 12, borderRadius: 3 }}>`);
-              out.push(`${ind(depth + 2)}<Text style={{ color: '#ccc', fontSize: 13 }}>${item.kwargs.label || 'Menu'}</Text>`);
-              out.push(`${ind(depth + 1)}</Pressable>`);
+              out.push(`${indent(depth + 1)}{/* Menu cascade: ${item.kwargs.label || 'submenu'} */}`);
+              out.push(`${indent(depth + 1)}<Pressable style={{ padding: 4, paddingLeft: 12, paddingRight: 12, borderRadius: 3 }}>`);
+              out.push(`${indent(depth + 2)}<Text style={{ color: '#ccc', fontSize: 13 }}>${item.kwargs.label || 'Menu'}</Text>`);
+              out.push(`${indent(depth + 1)}</Pressable>`);
             } else {
               const label = item.kwargs.label || '';
               const cmd = item.kwargs.command || '() => {}';
-              out.push(`${ind(depth + 1)}<Pressable onClick={${cmd}} style={{ padding: 4, paddingLeft: 12, paddingRight: 12, borderRadius: 3 }}>`);
-              out.push(`${ind(depth + 2)}<Text style={{ color: '#ccc', fontSize: 13 }}>${label}</Text>`);
-              out.push(`${ind(depth + 1)}</Pressable>`);
+              out.push(`${indent(depth + 1)}<Pressable onClick={${cmd}} style={{ padding: 4, paddingLeft: 12, paddingRight: 12, borderRadius: 3 }}>`);
+              out.push(`${indent(depth + 2)}<Text style={{ color: '#ccc', fontSize: 13 }}>${label}</Text>`);
+              out.push(`${indent(depth + 1)}</Pressable>`);
             }
           }
-          out.push(`${ind(depth)}</Box>`);
+          out.push(`${indent(depth)}</Box>`);
         }
         break;
       }
 
       case 'dropdown': {
         const variable = w.kwargs.textvariable || w.kwargs.variable;
-        const styleStr = formatStyle({ ...mergedStyle, borderWidth: 1, borderColor: '#555', borderRadius: 4, padding: 8 });
-        out.push(`${ind(depth)}<Pressable${styleStr} onClick={() => set${capitalize(widgetName)}Open(prev => !prev)}>`);
-        out.push(`${ind(depth + 1)}<Text>{${variable || `'Select...'`}}</Text>`);
-        out.push(`${ind(depth)}</Pressable>`);
-        out.push(`${ind(depth)}{/* TODO: dropdown menu for "${widgetName}" — render options list when open */}`);
+        const styleStr = formatStyleAttr({ ...mergedStyle, borderWidth: 1, borderColor: '#555', borderRadius: 4, padding: 8 });
+        out.push(`${indent(depth)}<Pressable${styleStr} onClick={() => set${capitalize(widgetName)}Open(prev => !prev)}>`);
+        out.push(`${indent(depth + 1)}<Text>{${variable || `'Select...'`}}</Text>`);
+        out.push(`${indent(depth)}</Pressable>`);
+        out.push(`${indent(depth)}{/* TODO: dropdown menu for "${widgetName}" — render options list when open */}`);
         break;
       }
 
       default: {
-        const styleStr = formatStyle(mergedStyle);
-        out.push(`${ind(depth)}<Box${styleStr}>`);
+        const styleStr = formatStyleAttr(mergedStyle);
+        out.push(`${indent(depth)}<Box${styleStr}>`);
         out.push(...childLines(kids, depth + 1));
-        if (!hasKids) out.push(`${ind(depth + 1)}{/* ${w.widgetType} "${widgetName}" */}`);
-        out.push(`${ind(depth)}</Box>`);
+        if (!hasKids) out.push(`${indent(depth + 1)}{/* ${w.widgetType} "${widgetName}" */}`);
+        out.push(`${indent(depth)}</Box>`);
       }
     }
 
@@ -1433,7 +1432,6 @@ export function generateReactJIT(parsed) {
   const rootGrid = getGridLayout(parsed._rootName);
 
   const jsxLines = [];
-  const ind = (d) => '  '.repeat(d);
 
   // Root container
   const rootStyleParts = Object.entries(rootStyle).map(([k, v]) => {
@@ -1443,23 +1441,23 @@ export function generateReactJIT(parsed) {
   });
   if (rootDir === 'row') rootStyleParts.push("flexDirection: 'row'");
 
-  jsxLines.push(`${ind(2)}<Box style={{ ${rootStyleParts.join(', ')} }}>`);
+  jsxLines.push(`${indent(2)}<Box style={{ ${rootStyleParts.join(', ')} }}>`);
 
   // Menu bar (if root has a menu configured)
   const rootMenuConfig = parsed.widgets.find(w => w.widgetType === 'Menu' && (w.parent === parsed._rootName || w.parent === ''));
   if (rootMenuConfig) {
     const rootMenuItems = parsed.menuItems.filter(mi => mi.menu === rootMenuConfig.name);
     if (rootMenuItems.length > 0) {
-      jsxLines.push(`${ind(3)}<Box style={{ flexDirection: 'row', backgroundColor: '#2a2a2a', padding: 4, gap: 2 }}>`);
+      jsxLines.push(`${indent(3)}<Box style={{ flexDirection: 'row', backgroundColor: '#2a2a2a', padding: 4, gap: 2 }}>`);
       for (const item of rootMenuItems) {
         if (item.type === 'add_cascade') {
-          jsxLines.push(`${ind(4)}<Pressable style={{ padding: 4, paddingLeft: 12, paddingRight: 12, borderRadius: 3 }}>`);
-          jsxLines.push(`${ind(5)}<Text style={{ color: '#ccc', fontSize: 13 }}>${item.kwargs.label || 'Menu'}</Text>`);
-          jsxLines.push(`${ind(4)}</Pressable>`);
+          jsxLines.push(`${indent(4)}<Pressable style={{ padding: 4, paddingLeft: 12, paddingRight: 12, borderRadius: 3 }}>`);
+          jsxLines.push(`${indent(5)}<Text style={{ color: '#ccc', fontSize: 13 }}>${item.kwargs.label || 'Menu'}</Text>`);
+          jsxLines.push(`${indent(4)}</Pressable>`);
           components.add('Pressable');
         }
       }
-      jsxLines.push(`${ind(3)}</Box>`);
+      jsxLines.push(`${indent(3)}</Box>`);
     }
   }
 
@@ -1469,11 +1467,11 @@ export function generateReactJIT(parsed) {
       if (cols.length === 1) {
         jsxLines.push(...generateWidget(cols[0].name, 3));
       } else {
-        jsxLines.push(`${ind(3)}<Box style={{ flexDirection: 'row', gap: 8 }}>`);
+        jsxLines.push(`${indent(3)}<Box style={{ flexDirection: 'row', gap: 8 }}>`);
         for (const col of cols) {
           jsxLines.push(...generateWidget(col.name, 4));
         }
-        jsxLines.push(`${ind(3)}</Box>`);
+        jsxLines.push(`${indent(3)}</Box>`);
       }
     }
   } else {
@@ -1482,7 +1480,7 @@ export function generateReactJIT(parsed) {
     }
   }
 
-  jsxLines.push(`${ind(2)}</Box>`);
+  jsxLines.push(`${indent(2)}</Box>`);
 
   // ── Assemble final output ───────────────────
   const output = [];
@@ -1532,41 +1530,6 @@ export function generateReactJIT(parsed) {
       routes: parsed.menuItems.length,
     },
   };
-}
-
-
-/** Format a style object as a JSX style attribute */
-function formatStyle(style) {
-  const entries = Object.entries(style).filter(([k]) => !k.startsWith('_'));
-  if (entries.length === 0) return '';
-
-  const parts = entries.map(([k, v]) => {
-    if (typeof v === 'number') return `${k}: ${v}`;
-    // Coerce pure-numeric strings to numbers (e.g. '200' → 200, but keep '100%')
-    if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)) return `${k}: ${Number(v)}`;
-    if (typeof v === 'string') return `${k}: '${v}'`;
-    return `${k}: ${v}`;
-  });
-
-  if (parts.length <= 3) {
-    return ` style={{ ${parts.join(', ')} }}`;
-  }
-  return ` style={{\n    ${parts.join(',\n    ')}\n  }}`;
-}
-
-/** Format style as inline object (no style= wrapper) */
-function inlineStyle(obj) {
-  const parts = Object.entries(obj).map(([k, v]) => {
-    if (typeof v === 'string') return `${k}: '${v}'`;
-    return `${k}: ${v}`;
-  });
-  return `{ ${parts.join(', ')} }`;
-}
-
-/** Capitalize first letter */
-function capitalize(str) {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 

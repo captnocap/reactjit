@@ -1,7 +1,10 @@
 --[[
-  capabilities/terminal.lua — PTY terminal sessions as a declarative capability
+  capabilities/terminal.lua — PTY terminal sessions with damage-driven vterm
 
-  Three archetypes, pluggable transports, many simultaneous sessions.
+  Spawns shells over a PTY and feeds output through libvterm for structured,
+  damage-driven updates. Only dirty rows are extracted — no naive per-frame
+  full reads. Architecture lifted from claude_session.lua, minus the semantic
+  classification layer.
 
   ── Terminal types ────────────────────────────────────────────────────────────
 
@@ -17,26 +20,25 @@
              PTY: `bash --norc --noprofile -c "<cmd>"`. Exits when done, fires
              onExit. Perfect for sandboxed one-shot commands.
 
-  ── Transports ───────────────────────────────────────────────────────────────
+  ── Architecture ─────────────────────────────────────────────────────────────
 
-  "bridge"   Default. PTY output pushed as onData events through the QuickJS
-             bridge. Input via bridge.rpc('pty:write', ...). Zero config.
+  WRITES (you -> shell): direct to PTY stdin via bridge.rpc('pty:write')
+  READS  (shell -> you): PTY stdout -> vterm:feed() -> damage callbacks ->
+                         settle timer -> extract dirty rows -> onDirtyRows event
 
-  "ws"       (planned) Stream PTY over a WebSocket so a browser can connect.
-  "http"     (planned) Buffer + expose via HTTP for polling clients.
-  "tor"      (planned) Route through Tor SOCKS5 for anonymized remote access.
+  The settle timer (SETTLE_MS) batches rapid terminal output. Damage resets
+  the timer; rows are only extracted once the screen is calm. This prevents
+  flooding React with per-character updates during fast output.
+
+  Raw PTY bytes are still pushed as onData for backward compatibility.
 
   ── React usage ──────────────────────────────────────────────────────────────
 
     -- Interactive user shell (one-liner):
     <Terminal type="user" onData={(e) => append(e.data)} />
 
-    -- Root shell (shows sudo password prompt if NOPASSWD not set):
-    <Terminal type="root" shell="bash" onData={(e) => append(e.data)} />
-
-    -- Sandboxed ephemeral command (new PTY per command sent):
-    <Terminal type="template" env={{ MY_KEY: "abc" }}
-      onData={(e) => append(e.data)} onExit={(e) => done(e.exitCode)} />
+    -- Structured row updates (vterm-backed):
+    <Terminal type="user" onDirtyRows={(e) => setRows(e.rows)} />
 
     -- Hook pattern (managed state + send/resize helpers):
     const { output, send, resize, terminalProps } = usePTY({ type: 'user' })
@@ -49,6 +51,7 @@
     bridge.rpc('pty:kill',   { session, signal? })      → { ok }
     bridge.rpc('pty:focus',  { session })               → { ok }
     bridge.rpc('pty:list')                              → [{ id, session, ... }]
+    bridge.rpc('pty:screen', { session })               → { rows: [...], cursor: {...} }
 
     `session` is the string session name or numeric nodeId.
     Omit to target the focused session.
@@ -56,6 +59,20 @@
 
 local Capabilities = require("lua.capabilities")
 local PTY          = require("lua.pty")
+local VTerm        = require("lua.vterm")
+
+-- ── Constants ───────────────────────────────────────────────────────────────
+
+local SETTLE_MS = 120  -- ms after last damage before extracting dirty rows
+
+-- ── Clock (monotonic, milliseconds) ─────────────────────────────────────────
+
+local function now_ms()
+  if love and love.timer then
+    return love.timer.getTime() * 1000
+  end
+  return os.clock() * 1000
+end
 
 -- ── Session registry ─────────────────────────────────────────────────────────
 
@@ -83,7 +100,7 @@ local function pushCap(pushEvent, nodeId, handler, data)
   pushEvent({ type = "capability", payload = payload })
 end
 
--- ── Spawn helpers ─────────────────────────────────────────────────────────────
+-- ── Spawn helpers ────────────────────────────────────────────────────────────
 
 local function buildEnv(props)
   local env = {}
@@ -101,12 +118,10 @@ local function spawnPTY(props, command)
   local args    = {}
 
   if ptyType == "root" then
-    -- Escalate via sudo -i; shows password prompt if NOPASSWD not configured
     shell = "sudo"
     args  = { "-i", props.shell or "bash" }
 
   elseif ptyType == "template" then
-    -- Ephemeral: run one command in a clean shell, then exit
     shell = props.shell or "bash"
     if command then
       args = { "--norc", "--noprofile", "-c", command }
@@ -125,7 +140,7 @@ local function spawnPTY(props, command)
   })
 end
 
--- ── Capability registration ───────────────────────────────────────────────────
+-- ── Capability registration ─────────────────────────────────────────────────
 
 Capabilities.register("Terminal", {
   visual = false,
@@ -142,17 +157,26 @@ Capabilities.register("Terminal", {
     transport   = { type = "string",  default = "bridge", desc = "bridge | ws | http | tor" },
   },
 
-  events = { "onData", "onConnect", "onExit", "onError" },
+  events = { "onData", "onDirtyRows", "onCursorMove", "onConnect", "onExit", "onError" },
 
   create = function(nodeId, props)
+    local rows = props.rows or 24
+    local cols = props.cols or 80
+
     local state = {
-      pty       = nil,
-      connected = false,
-      rows      = props.rows or 24,
-      cols      = props.cols or 80,
-      session   = props.session,
-      ptyType   = props.type or "user",
+      pty           = nil,
+      vterm         = nil,
+      connected     = false,
+      rows          = rows,
+      cols          = cols,
+      session       = props.session,
+      ptyType       = props.type or "user",
+      -- Damage tracking
+      _pendingDirty = {},
+      _lastDamageAt = nil,
+      settleAt      = nil,
     }
+
     _sessions[nodeId] = state
     if props.session then _sessionNames[props.session] = nodeId end
     if not _focusedId then _focusedId = nodeId end
@@ -160,13 +184,20 @@ Capabilities.register("Terminal", {
   end,
 
   update = function(nodeId, props, prev, state)
-    -- Live resize when layout changes
-    if state.pty and (props.rows ~= prev.rows or props.cols ~= prev.cols) then
+    -- Live resize: update both PTY and vterm together
+    if props.rows ~= prev.rows or props.cols ~= prev.cols then
       local r = props.rows or 24
       local c = props.cols or 80
-      state.pty:resize(r, c)
+      if state.vterm then
+        state.vterm:resize(r, c)
+      end
+      if state.pty then
+        state.pty:resize(r, c)
+      end
       state.rows = r
       state.cols = c
+      -- Clear pending dirty — grid reflows after resize
+      state._pendingDirty = {}
     end
     -- Update named session mapping if session prop changed
     if props.session ~= state.session then
@@ -180,8 +211,15 @@ Capabilities.register("Terminal", {
   tick = function(nodeId, state, dt, pushEvent, props)
     if not pushEvent then return end
 
-    -- Auto-connect on first tick
+    -- Auto-connect on first tick: spawn PTY + create vterm
     if not state.connected and props.autoConnect ~= false then
+      local rows = props.rows or 24
+      local cols = props.cols or 80
+
+      -- Create vterm first
+      state.vterm = VTerm.new(rows, cols)
+
+      -- Spawn PTY
       local pty, err = spawnPTY(props)
       if pty then
         state.pty       = pty
@@ -192,33 +230,95 @@ Capabilities.register("Terminal", {
           session = props.session,
         })
       else
+        -- Clean up vterm on spawn failure
+        if state.vterm then state.vterm:free(); state.vterm = nil end
         pushCap(pushEvent, nodeId, "onError", { error = tostring(err) })
       end
       return
     end
 
-    -- Drain PTY output every frame (non-blocking)
-    if state.pty and state.connected then
-      local data = state.pty:read()
-      if data then
-        pushCap(pushEvent, nodeId, "onData", { data = data })
+    if not state.pty or not state.connected then return end
+
+    -- Read PTY output -> feed into vterm
+    local data = state.pty:read()
+    if data and #data > 0 then
+      -- Push raw bytes for backward compat (onData still fires)
+      pushCap(pushEvent, nodeId, "onData", { data = data })
+
+      -- Feed into vterm for structured damage tracking
+      if state.vterm then
+        state.vterm:feed(data)
+      end
+    end
+
+    -- Drain damage events from vterm
+    if state.vterm then
+      local events = state.vterm:drain()
+
+      if events.damaged then
+        -- Accumulate dirty rows
+        for _, row in ipairs(events.dirtyRows) do
+          state._pendingDirty[row] = true
+        end
+        state.settleAt = now_ms() + SETTLE_MS
+        state._lastDamageAt = now_ms()
       end
 
-      -- Check for process exit
-      if not state.pty:alive() then
-        local code = state.pty:exitCode()
-        state.connected = false
-        state.pty:close()
-        state.pty = nil
-        pushCap(pushEvent, nodeId, "onExit", { exitCode = code })
+      -- Cursor movement events (fire immediately, no settle needed)
+      if events.cursorMoved then
+        local cursor = state.vterm:getCursor()
+        if cursor then
+          pushCap(pushEvent, nodeId, "onCursorMove", {
+            row     = cursor.row,
+            col     = cursor.col,
+            visible = cursor.visible,
+          })
+        end
       end
+    end
+
+    -- Settle: extract dirty rows once screen is calm
+    if state.settleAt and now_ms() >= state.settleAt then
+      state.settleAt = nil
+
+      local dirtyList = {}
+      for r in pairs(state._pendingDirty) do
+        dirtyList[#dirtyList + 1] = r
+      end
+      table.sort(dirtyList)
+
+      if #dirtyList > 0 and state.vterm then
+        local rowData = {}
+        for _, r in ipairs(dirtyList) do
+          rowData[#rowData + 1] = {
+            row  = r,
+            text = state.vterm:getRowText(r),
+          }
+        end
+        pushCap(pushEvent, nodeId, "onDirtyRows", { rows = rowData })
+        state._pendingDirty = {}
+      end
+    end
+
+    -- Check for process exit
+    if not state.pty:alive() then
+      local code = state.pty:exitCode()
+      state.connected = false
+      state.pty:close()
+      state.pty = nil
+      pushCap(pushEvent, nodeId, "onExit", { exitCode = code })
     end
   end,
 
   destroy = function(nodeId, state)
     if state.pty then
+      state.pty:kill()
       state.pty:close()
       state.pty = nil
+    end
+    if state.vterm then
+      state.vterm:free()
+      state.vterm = nil
     end
     if state.session then _sessionNames[state.session] = nil end
     _sessions[nodeId] = nil
@@ -228,7 +328,7 @@ Capabilities.register("Terminal", {
   end,
 })
 
--- ── RPC handlers ──────────────────────────────────────────────────────────────
+-- ── RPC handlers ─────────────────────────────────────────────────────────────
 
 local rpc = {}
 
@@ -241,6 +341,10 @@ rpc["pty:write"] = function(args)
 
   -- Template mode: "command" spawns a fresh ephemeral PTY
   if state.ptyType == "template" and not state.pty and args.command then
+    -- Create vterm for the ephemeral session if needed
+    if not state.vterm then
+      state.vterm = VTerm.new(state.rows, state.cols)
+    end
     local pty, err = spawnPTY({ type = "template", shell = "bash", env = args.env }, args.command)
     if pty then
       state.pty       = pty
@@ -258,15 +362,17 @@ rpc["pty:write"] = function(args)
   return { ok = ok }
 end
 
--- Resize the terminal window (sends SIGWINCH to the shell)
+-- Resize the terminal window (sends SIGWINCH to the shell + resizes vterm)
 rpc["pty:resize"] = function(args)
   local state = resolveSession(args.session or args.id)
   if not state then return { error = "No PTY session" } end
   local r = args.rows or 24
   local c = args.cols or 80
+  if state.vterm then state.vterm:resize(r, c) end
   if state.pty then state.pty:resize(r, c) end
   state.rows = r
   state.cols = c
+  state._pendingDirty = {}  -- clear — grid reflows
   return { ok = true }
 end
 
@@ -311,7 +417,17 @@ rpc["pty:list"] = function()
   return list
 end
 
--- ── Register RPC handlers ─────────────────────────────────────────────────────
+-- Read the full vterm screen state (for debugging or screen dump)
+rpc["pty:screen"] = function(args)
+  local state = resolveSession(args and (args.session or args.id))
+  if not state or not state.vterm then return { error = "No vterm" } end
+  return {
+    rows   = state.vterm:getRows(),
+    cursor = state.vterm:getCursor(),
+  }
+end
+
+-- ── Register RPC handlers ────────────────────────────────────────────────────
 
 local Caps     = require("lua.capabilities")
 local _origGet = Caps.getHandlers
@@ -320,5 +436,3 @@ Caps.getHandlers = function()
   for method, fn in pairs(rpc) do h[method] = fn end
   return h
 end
-
--- (registration logged by capabilities.loadAll summary)

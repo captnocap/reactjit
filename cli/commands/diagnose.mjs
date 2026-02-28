@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { join, basename, dirname, resolve } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { TARGETS } from '../targets.mjs';
+import { TARGETS, esbuildArgs } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
 import { runLint } from './lint.mjs';
 
@@ -23,39 +23,29 @@ export async function diagnoseCommand(args) {
     process.exit(1);
   }
 
-  // 2. Build SDL2 bundle
-  console.log('  [2/3] Bundling (sdl2)...');
-  const target = TARGETS.sdl2;
+  // 2. Build Love2D bundle
+  console.log('  [2/3] Bundling (love)...');
+  const target = TARGETS.love;
   const entry = findEntry(cwd, ...target.entries.map(e => `src/${e}`));
   const outfile = join(cwd, target.output);
   const outdir = dirname(outfile);
   if (!existsSync(outdir)) mkdirSync(outdir, { recursive: true });
 
-  const aliasFlags = [];
-  const aliases = getEsbuildAliases(cwd);
-  for (const [from, to] of Object.entries(aliases)) {
-    aliasFlags.push(`--alias:${from}=${to}`);
-  }
-
   execSync([
     'npx', 'esbuild',
-    '--bundle',
-    `--format=${target.format}`,
-    `--global-name=${target.globalName}`,
-    '--target=es2020',
-    '--jsx=automatic',
+    ...esbuildArgs(target),
     `--outfile=${outfile}`,
-    ...aliasFlags,
+    ...getEsbuildAliases(cwd),
     entry,
   ].join(' '), { cwd, stdio: 'inherit' });
 
-  // 3. Launch LuaJIT with diagnostic env var
+  // 3. Launch Love2D with diagnostic env var
   console.log('  [3/3] Running ghost node diagnostic...\n');
 
-  const sdl2Main = findSdl2Main(cwd);
-  if (!sdl2Main) {
-    console.error('  No SDL2 entry point found (sdl2/main.lua or lua/sdl2_init.lua).');
-    console.error('  Diagnose requires the SDL2 target.\n');
+  const loveDir = findLoveDir(cwd);
+  if (!loveDir) {
+    console.error('  No Love2D entry point found (love/main.lua or main.lua).');
+    console.error('  Diagnose requires the Love2D target.\n');
     process.exit(1);
   }
 
@@ -72,8 +62,8 @@ export async function diagnoseCommand(args) {
   } catch { /* not available */ }
 
   const cmd = useXvfb
-    ? ['xvfb-run', '-a', 'luajit', sdl2Main]
-    : ['luajit', sdl2Main];
+    ? ['xvfb-run', '-a', 'love', loveDir]
+    : ['love', loveDir];
 
   return new Promise((resolveP) => {
     const proc = spawn(cmd[0], cmd.slice(1), {
@@ -84,12 +74,11 @@ export async function diagnoseCommand(args) {
 
     let stdout = '';
     let stderr = '';
-    let diagLines = [];
 
     proc.on('error', (err) => {
       console.error(`  Failed to launch: ${cmd[0]}`);
       if (err.code === 'ENOENT') {
-        console.error('  luajit not found in PATH. Install LuaJIT first.');
+        console.error('  love not found in PATH. Install Love2D first.');
       } else {
         console.error(`  ${err.message}`);
       }
@@ -109,7 +98,7 @@ export async function diagnoseCommand(args) {
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
       console.error('  Diagnostic timed out after 20 seconds.');
-      console.error('  This usually means the SDL2 runtime failed to initialize.\n');
+      console.error('  This usually means the Love2D runtime failed to initialize.\n');
       if (stderr) console.error('  stderr:', stderr.trim());
       process.exit(1);
     }, 20000);
@@ -164,7 +153,6 @@ export async function diagnoseCommand(args) {
 
 function parseNodeLine(str) {
   const result = {};
-  // Parse key=value pairs (values may not contain spaces)
   const regex = /(\w+)=([^\s]+)/g;
   let match;
   while ((match = regex.exec(str)) !== null) {
@@ -217,14 +205,8 @@ function findEntry(cwd, ...candidates) {
   process.exit(1);
 }
 
-function findSdl2Main(cwd) {
-  // Check common SDL2 entry points
-  const candidates = [
-    join('sdl2', 'main.lua'),
-    join('lua', 'sdl2_init.lua'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(join(cwd, c))) return c;
-  }
+function findLoveDir(cwd) {
+  if (existsSync(join(cwd, 'love', 'main.lua'))) return 'love';
+  if (existsSync(join(cwd, 'main.lua'))) return '.';
   return null;
 }

@@ -303,7 +303,7 @@ Background and hover videos on Box nodes are managed by the same system — Vide
 - hoverVideo: loads on mount, plays only when Box.hovered is true, pauses when hover ends
 
 === CRITICAL RULES ===
-- Video has no intrinsic size. You must provide width and height via the style prop (or w/h shorthand), or constrain the video via a parent Box with known dimensions. A Video without sizing will collapse to zero.
+- Video is a surface node. Without explicit dimensions, it uses the proportional fallback (1/4 of parent). For precise layouts, provide width and height via the style prop (or w/h shorthand) or use flexGrow.
 - The src prop is required. Omitting it will produce an error.
 - Video paths in Love2D are relative to the project root directory (where main.lua lives), or can be absolute paths or HTTP/HTTPS URLs.
 - Video accepts no children. It is a leaf element.

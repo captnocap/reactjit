@@ -8,7 +8,7 @@ related: Box, Text
 difficulty: beginner
 
 === OVERVIEW ===
-Image displays an image from a file path or URL. It supports sizing via width/height style properties and content fitting via the objectFit style property. Unlike Box, Image has no children. Unlike Text, Image has no intrinsic size derived from content -- you must specify width and height explicitly or let the parent constrain it.
+Image displays an image from a file path or URL. It supports sizing via width/height style properties and content fitting via the objectFit style property. Unlike Box, Image has no children. Image is a surface node — without explicit dimensions, it falls back to 1/4 of its parent's available space (the proportional fallback). For precise control, set width and height explicitly or use flexGrow.
 
 In web mode, Image renders as an `<img>` element. In native mode, it outputs an `'Image'` host element that the Lua painter draws using love.graphics.draw() with the image loaded from the src path.
 
@@ -104,7 +104,7 @@ Terminal:
   Image is not supported on grid targets. Terminal, ComputerCraft, Neovim, and other character-grid renderers cannot display raster images. Use colored Box elements to approximate pixel art if needed.
 
 === CRITICAL RULES ===
-- Image has no intrinsic size. You must provide width and height via the style prop, or constrain the image via a parent Box with known dimensions. An Image without sizing will collapse to zero.
+- Image is a surface node. Without explicit dimensions, it uses the proportional fallback (1/4 of parent). For precise layouts, provide width and height via the style prop or use flexGrow.
 - The src prop is required. Omitting it will produce an error.
 - Image paths in Love2D are relative to the project root directory, not the source file. Use paths like "assets/image.png", not "../assets/image.png".
 - Image accepts no children. It is a leaf element.

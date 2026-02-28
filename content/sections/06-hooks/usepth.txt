@@ -1,0 +1,140 @@
+=== METADATA ===
+title: usePTY
+description: React hook for spawning and communicating with PTY (pseudo-terminal) processes
+category: Hooks
+platforms: love2d
+keywords: pty, terminal, shell, process, command, output, hook
+related: Terminal, SemanticTerminal, useSemanticTerminal
+difficulty: intermediate
+
+=== OVERVIEW ===
+usePTY manages a PTY session paired with a Terminal capability node. It accumulates output, tracks connection state, and provides stable send helpers — all backed by a named session ID that stays consistent across re-renders.
+
+The hook does not render anything. Spread terminalProps onto a Terminal element in your JSX tree — that element owns the PTY lifecycle on the Lua side, and the hook receives its events.
+
+Three send helpers cover common patterns: sendLine appends a newline (most commands), interrupt sends Ctrl+C (kill foreground process), sendEOF sends Ctrl+D (logout). For template sessions, use runCommand to spawn a fresh bash -c process per invocation.
+
+output accumulates all PTY data chunks in a rolling buffer. The buffer is trimmed to maxOutput characters (default 100,000) so long-running sessions do not consume unbounded memory. Call clearOutput to reset it.
+
+=== API / SYNTAX ===
+```tsx
+import { usePTY } from '@reactjit/core';
+import type { UsePTYOptions, UsePTYResult } from '@reactjit/core';
+```
+
+Options (UsePTYOptions):
+| Option      | Type                            | Default     | Description                                                        |
+|-------------|---------------------------------|-------------|--------------------------------------------------------------------|
+| type        | 'user' \| 'root' \| 'template' | 'user'      | Session archetype                                                  |
+| shell       | string                          | 'bash'      | Shell executable (any PATH-resolvable binary)                      |
+| cwd         | string                          | undefined   | Working directory for the shell process                            |
+| env         | Record<string, string \| false> | undefined   | Environment overrides. false = unset the variable.                 |
+| rows        | number                          | 24          | Terminal rows                                                      |
+| cols        | number                          | 80          | Terminal columns                                                   |
+| session     | string                          | auto        | Stable session name for pty:write / pty:resize RPCs                |
+| transport   | 'bridge' \| 'ws' \| 'http' \| 'tor' | 'bridge' | Transport backend                                              |
+| autoConnect | boolean                         | true        | Auto-spawn shell on mount                                          |
+| maxOutput   | number                          | 100_000     | Max output buffer size in characters (rolling window)              |
+
+Return value (UsePTYResult):
+| Field         | Type                              | Description                                                  |
+|---------------|-----------------------------------|--------------------------------------------------------------|
+| output        | string                            | Accumulated PTY output (rolling, trimmed to maxOutput)       |
+| connected     | boolean                           | Whether the shell process is currently running               |
+| send          | (data: string) => void            | Write raw bytes to the PTY                                   |
+| sendLine      | (command: string) => void         | Send a command followed by newline                           |
+| interrupt     | () => void                        | Send Ctrl+C (interrupt running process)                      |
+| sendEOF       | () => void                        | Send Ctrl+D (EOF / logout)                                   |
+| runCommand    | (command: string) => void         | Template mode: run command in a fresh ephemeral PTY          |
+| resize        | (rows, cols) => void              | Notify PTY of window size change (sends SIGWINCH)            |
+| clearOutput   | () => void                        | Clear the accumulated output buffer                          |
+| terminalProps | TerminalCapabilityProps           | Spread onto a Terminal element in JSX                        |
+
+=== EXAMPLES ===
+Example 1: Capture command output
+---
+```tsx
+import { Terminal, Box, Text, Pressable } from '@reactjit/core';
+import { usePTY } from '@reactjit/core';
+
+export default function App() {
+  const { output, sendLine, connected, terminalProps } = usePTY({
+    type: 'user',
+    session: 'shell',
+    maxOutput: 50_000,
+  });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 8 }}>
+      <Terminal {...terminalProps} />
+      <Box style={{ flexGrow: 1, padding: 8, backgroundColor: '#1e1e2e', borderRadius: 6, overflow: 'scroll' }}>
+        <Text style={{ fontFamily: 'monospace', fontSize: 11, color: '#cdd6f4' }}>
+          {output}
+        </Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 8 }}>
+        <Pressable onPress={() => sendLine('ls -la')}>
+          <Box style={{ padding: '4 8', backgroundColor: '#313244', borderRadius: 4 }}>
+            <Text style={{ fontSize: 12, color: '#89b4fa' }}>ls</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={() => sendLine('df -h')}>
+          <Box style={{ padding: '4 8', backgroundColor: '#313244', borderRadius: 4 }}>
+            <Text style={{ fontSize: 12, color: '#89b4fa' }}>df</Text>
+          </Box>
+        </Pressable>
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Interactive shell with interrupt control
+---
+```tsx
+import { useState } from 'react';
+import { Terminal, Box, Text, Pressable } from '@reactjit/core';
+import { usePTY } from '@reactjit/core';
+
+export default function App() {
+  const [cmd, setCmd] = useState('');
+  const { output, sendLine, interrupt, connected, terminalProps } = usePTY({
+    type: 'user',
+    shell: 'zsh',
+    session: 'interactive',
+  });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <Terminal {...terminalProps} />
+      <Text style={{ fontSize: 10, color: connected ? '#a6e3a1' : '#f38ba8', padding: 4 }}>
+        {connected ? 'Connected' : 'Disconnected'}
+      </Text>
+      <Box style={{ flexGrow: 1, padding: 8, backgroundColor: '#1e1e2e', overflow: 'scroll' }}>
+        <Text style={{ fontFamily: 'monospace', fontSize: 11, color: '#cdd6f4' }}>{output}</Text>
+      </Box>
+      <Pressable onPress={interrupt}>
+        <Box style={{ padding: '4 12', backgroundColor: '#f38ba8', borderRadius: 4 }}>
+          <Text style={{ fontSize: 12, color: '#1e1e2e' }}>Ctrl+C</Text>
+        </Box>
+      </Pressable>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- Always include a Terminal element in your JSX tree with {...terminalProps} spread onto it. Without the Terminal node, usePTY has no PTY to manage and all sends are no-ops.
+- session must be unique per app. Two Terminal nodes with the same session ID will collide.
+- output grows until clearOutput() is called or it is trimmed by maxOutput. For long-running sessions, set maxOutput explicitly.
+- PTY is native only. Web builds will have connected=false and output will never update.
+- type="template" keeps a persistent shell open but spawns a fresh bash -c per runCommand call. Use sendLine for interactive commands; use runCommand for isolated one-shot invocations.
+
+=== SEE ALSO ===
+- Terminal
+- SemanticTerminal
+- useSemanticTerminal

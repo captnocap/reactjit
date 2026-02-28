@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Box, Text, Pressable } from '@reactjit/core';
+import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
 import { Map, TileLayer, Marker, Polyline, Polygon, GeoJSON, useProjection, type LatLng } from '@reactjit/geo';
 
 type MapPreset = {
@@ -7,22 +7,8 @@ type MapPreset = {
   label: string;
   center: LatLng;
   zoom: number;
-  pitch: number;
-  bearing: number;
   route: LatLng[];
   zone: LatLng[];
-};
-
-type CameraState = {
-  center: LatLng;
-  zoom: number;
-  pitch: number;
-  bearing: number;
-};
-
-type Tone = {
-  bg: string;
-  fg: string;
 };
 
 const PRESETS: MapPreset[] = [
@@ -31,8 +17,6 @@ const PRESETS: MapPreset[] = [
     label: 'San Francisco',
     center: [37.7749, -122.4194],
     zoom: 12.2,
-    pitch: 0,
-    bearing: 0,
     route: [
       [37.7938, -122.3965],
       [37.7842, -122.4072],
@@ -52,8 +36,6 @@ const PRESETS: MapPreset[] = [
     label: 'Tokyo',
     center: [35.6895, 139.6917],
     zoom: 11.8,
-    pitch: 0,
-    bearing: 0,
     route: [
       [35.7098, 139.7745],
       [35.7007, 139.7589],
@@ -73,8 +55,6 @@ const PRESETS: MapPreset[] = [
     label: 'London',
     center: [51.5072, -0.1276],
     zoom: 11.7,
-    pitch: 0,
-    bearing: 0,
     route: [
       [51.5182, -0.0786],
       [51.5121, -0.0995],
@@ -91,77 +71,49 @@ const PRESETS: MapPreset[] = [
   },
 ];
 
-const tones: Record<string, Tone> = {
-  blue: { bg: '#2543a780', fg: '#b5ceff' },
-  green: { bg: '#1a7f4980', fg: '#a5f3c7' },
-  amber: { bg: '#94620080', fg: '#ffe7a3' },
-  red: { bg: '#93303680', fg: '#ffc8cc' },
+const C = {
+  bg: '#040d22',
+  panel: '#091430',
+  panelBorder: '#ffffff22',
+  sectionBg: '#0d1835',
+  sectionBorder: '#ffffff1a',
+  btnBg: '#1a2649',
+  btnBgActive: '#1d4ed8',
+  btnBorder: '#ffffff20',
+  btnBorderActive: '#60a5fa90',
+  textPrimary: '#eef4ff',
+  textSecondary: '#90a4cf',
+  textMuted: '#8ea0c8',
+  accent: '#f97316',
+  mapBorder: '#ffffff24',
+  hudBg: '#07132bcf',
+  hudBorder: '#ffffff26',
 };
 
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v));
-}
-
-function wrapBearing(deg: number) {
-  const wrapped = deg % 360;
-  return wrapped < 0 ? wrapped + 360 : wrapped;
-}
-
-function clonePoint(point: LatLng): LatLng {
-  return [point[0], point[1]];
-}
-
-function cloneRoute(points: LatLng[]): LatLng[] {
-  return points.map(clonePoint);
-}
-
-function estimateZoom(points: LatLng[]) {
-  if (points.length <= 1) return 13;
-  let minLat = points[0][0];
-  let maxLat = points[0][0];
-  let minLng = points[0][1];
-  let maxLng = points[0][1];
-  for (let i = 1; i < points.length; i += 1) {
-    const p = points[i];
-    minLat = Math.min(minLat, p[0]);
-    maxLat = Math.max(maxLat, p[0]);
-    minLng = Math.min(minLng, p[1]);
-    maxLng = Math.max(maxLng, p[1]);
-  }
-  const span = Math.max(maxLat - minLat, maxLng - minLng);
-  if (span < 0.02) return 14.5;
-  if (span < 0.045) return 13.4;
-  if (span < 0.09) return 12.4;
-  if (span < 0.22) return 11.2;
-  if (span < 0.55) return 10.3;
-  if (span < 1.2) return 9.2;
-  return 8.2;
-}
-
 function makeFleet(center: LatLng, count: number) {
-  const markers: { id: string; position: LatLng }[] = [];
+  const out: { id: string; position: LatLng }[] = [];
   for (let i = 0; i < count; i += 1) {
     const angle = (i / count) * Math.PI * 2;
     const wave = 0.005 + (i % 4) * 0.002;
-    const latOffset = Math.sin(angle) * (0.018 + wave);
-    const lngOffset = Math.cos(angle * 1.1) * (0.026 + wave);
-    markers.push({
+    out.push({
       id: `fleet-${i}`,
-      position: [center[0] + latOffset, center[1] + lngOffset],
+      position: [
+        center[0] + Math.sin(angle) * (0.018 + wave),
+        center[1] + Math.cos(angle * 1.1) * (0.026 + wave),
+      ],
     });
   }
-  return markers;
+  return out;
 }
 
 function makeBuildings(center: LatLng) {
-  const lat = center[0];
-  const lng = center[1];
+  const [lat, lng] = center;
   const pads = [
-    { dx: -0.018, dy: 0.013, w: 0.006, h: 0.004, c: '#22c55ecc', s: '#15803d', e: 120 },
-    { dx: -0.008, dy: 0.015, w: 0.005, h: 0.0035, c: '#38bdf8cc', s: '#0369a1', e: 180 },
-    { dx: 0.002, dy: 0.013, w: 0.004, h: 0.0038, c: '#f97316cc', s: '#c2410c', e: 220 },
-    { dx: 0.009, dy: 0.010, w: 0.005, h: 0.0042, c: '#a78bfa99', s: '#6d28d9', e: 96 },
-    { dx: -0.001, dy: 0.004, w: 0.008, h: 0.004, c: '#34d39955', s: '#059669', e: 0 },
+    { dx: -0.018, dy: 0.013, w: 0.006, h: 0.004, fill: '#22c55ecc', stroke: '#15803d' },
+    { dx: -0.008, dy: 0.015, w: 0.005, h: 0.0035, fill: '#38bdf8cc', stroke: '#0369a1' },
+    { dx: 0.002, dy: 0.013, w: 0.004, h: 0.0038, fill: '#f97316cc', stroke: '#c2410c' },
+    { dx: 0.009, dy: 0.010, w: 0.005, h: 0.0042, fill: '#a78bfa99', stroke: '#6d28d9' },
+    { dx: -0.001, dy: 0.004, w: 0.008, h: 0.004, fill: '#34d39955', stroke: '#059669' },
   ];
   return {
     type: 'FeatureCollection' as const,
@@ -179,72 +131,15 @@ function makeBuildings(center: LatLng) {
       },
       properties: {
         name: `Asset-${i + 1}`,
-        fillColor: p.c,
-        strokeColor: p.s,
+        fillColor: p.fill,
+        strokeColor: p.stroke,
         strokeWidth: 2,
-        extrude: p.e,
       },
     })),
   };
 }
 
-function StatChip({ label, value, tone }: { label: string; value: string; tone: Tone }) {
-  return (
-    <Box
-      style={{
-        paddingLeft: 8,
-        paddingRight: 8,
-        paddingTop: 4,
-        paddingBottom: 4,
-        borderRadius: 999,
-        backgroundColor: tone.bg,
-        borderWidth: 1,
-        borderColor: '#ffffff20',
-      }}
-    >
-      <Text style={{ fontSize: 11, color: tone.fg, fontWeight: 'bold' }}>
-        {`${label} ${value}`}
-      </Text>
-    </Box>
-  );
-}
-
-function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Box
-      style={{
-        backgroundColor: '#0d1835',
-        borderWidth: 1,
-        borderColor: '#ffffff1a',
-        borderRadius: 10,
-        padding: 10,
-        gap: 8,
-      }}
-    >
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 12, color: '#e4edff', fontWeight: 'bold' }}>
-          {title}
-        </Text>
-        {subtitle && (
-          <Text style={{ fontSize: 10, color: '#8ea0c8' }}>
-            {subtitle}
-          </Text>
-        )}
-      </Box>
-      {children}
-    </Box>
-  );
-}
-
-function ToggleButton({
+function Btn({
   label,
   active,
   onPress,
@@ -257,398 +152,266 @@ function ToggleButton({
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: active ? '#1d4ed8' : '#1a2649',
+        backgroundColor: active ? C.btnBgActive : C.btnBg,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: active ? '#60a5fa90' : '#ffffff20',
-        paddingLeft: 8,
-        paddingRight: 8,
+        borderColor: active ? C.btnBorderActive : C.btnBorder,
+        paddingLeft: 10,
+        paddingRight: 10,
         paddingTop: 6,
         paddingBottom: 6,
       }}
     >
-      <Text style={{ fontSize: 10, color: '#f8fbff' }}>
-        {label}
-      </Text>
+      <Text style={{ fontSize: 11, color: C.textPrimary }}>{label}</Text>
     </Pressable>
   );
 }
 
+function SectionBox({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Box
+      style={{
+        backgroundColor: C.sectionBg,
+        borderWidth: 1,
+        borderColor: C.sectionBorder,
+        borderRadius: 10,
+        padding: 10,
+        gap: 8,
+      }}
+    >
+      <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: 'bold' }}>{title}</Text>
+      {children}
+    </Box>
+  );
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return (
+    <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+      {children}
+    </Box>
+  );
+}
+
 export function MapBasicStory() {
-  const firstPreset = PRESETS[0];
-  const [presetId, setPresetId] = useState(firstPreset.id);
+  const first = PRESETS[0];
+  const [presetId, setPresetId] = useState(first.id);
   const [tileSource, setTileSource] = useState<'osm' | 'osm-cycle'>('osm');
   const [showRoute, setShowRoute] = useState(true);
   const [showZone, setShowZone] = useState(true);
   const [showBuildings, setShowBuildings] = useState(true);
   const [showFleet, setShowFleet] = useState(true);
   const [showStops, setShowStops] = useState(true);
-  const [loopRoute, setLoopRoute] = useState(false);
-  const [selectedStop, setSelectedStop] = useState<number | null>(null);
-  const [view, setView] = useState<CameraState>({
-    center: clonePoint(firstPreset.center),
-    zoom: firstPreset.zoom,
-    pitch: firstPreset.pitch,
-    bearing: firstPreset.bearing,
-  });
-  const [waypoints, setWaypoints] = useState<LatLng[]>(() => cloneRoute(firstPreset.route));
+  const [center, setCenter] = useState<LatLng>([...first.center]);
+  const [zoom, setZoom] = useState(first.zoom);
+  const [pitch, setPitch] = useState(0);
+  const [bearing, setBearing] = useState(0);
 
   const { distance } = useProjection();
 
   const preset = useMemo(
-    () => PRESETS.find((p) => p.id === presetId) ?? firstPreset,
-    [presetId, firstPreset],
+    () => PRESETS.find((p) => p.id === presetId) ?? first,
+    [presetId],
   );
-
-  const renderedRoute = useMemo(() => {
-    if (!loopRoute || waypoints.length < 3) return waypoints;
-    return [...waypoints, clonePoint(waypoints[0])];
-  }, [loopRoute, waypoints]);
-
-  const routeDistanceKm = useMemo(() => {
-    if (renderedRoute.length < 2) return 0;
-    let meters = 0;
-    for (let i = 1; i < renderedRoute.length; i += 1) {
-      const a = renderedRoute[i - 1];
-      const b = renderedRoute[i];
-      meters += distance(a[0], a[1], b[0], b[1]);
-    }
-    return meters / 1000;
-  }, [distance, renderedRoute]);
 
   const fleetMarkers = useMemo(() => makeFleet(preset.center, 16), [preset.center]);
   const buildingData = useMemo(() => makeBuildings(preset.center), [preset.center]);
 
-  const handleViewChange = useCallback((event: any) => {
-    setView((prev) => {
-      const next: CameraState = { ...prev };
-      if (Array.isArray(event?.center) && event.center.length >= 2) {
-        const lat = Number(event.center[0]);
-        const lng = Number(event.center[1]);
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          next.center = [lat, lng];
-        }
-      }
-      if (typeof event?.zoom === 'number' && Number.isFinite(event.zoom)) {
-        next.zoom = event.zoom;
-      }
-      if (typeof event?.bearing === 'number' && Number.isFinite(event.bearing)) {
-        next.bearing = event.bearing;
-      }
-      if (typeof event?.pitch === 'number' && Number.isFinite(event.pitch)) {
-        next.pitch = event.pitch;
-      }
-      return next;
-    });
-  }, []);
-
-  const jumpToPreset = useCallback((nextId: string) => {
-    const next = PRESETS.find((p) => p.id === nextId);
-    if (!next) return;
-    setPresetId(next.id);
-    setSelectedStop(null);
-    setWaypoints(cloneRoute(next.route));
-    setView({
-      center: clonePoint(next.center),
-      zoom: next.zoom,
-      pitch: next.pitch,
-      bearing: next.bearing,
-    });
-  }, []);
-
-  const rotate = useCallback((delta: number) => {
-    setView((prev) => ({ ...prev, bearing: wrapBearing(prev.bearing + delta) }));
-  }, []);
-
-  const adjustPitch = useCallback((delta: number) => {
-    setView((prev) => ({ ...prev, pitch: clamp(prev.pitch + delta, 0, 60) }));
-  }, []);
-
-  const adjustZoom = useCallback((delta: number) => {
-    setView((prev) => ({ ...prev, zoom: clamp(prev.zoom + delta, 2, 18.8) }));
-  }, []);
-
-  const fitRoute = useCallback(() => {
-    if (waypoints.length === 0) return;
-    let minLat = waypoints[0][0];
-    let maxLat = waypoints[0][0];
-    let minLng = waypoints[0][1];
-    let maxLng = waypoints[0][1];
-    for (let i = 1; i < waypoints.length; i += 1) {
-      const p = waypoints[i];
-      minLat = Math.min(minLat, p[0]);
-      maxLat = Math.max(maxLat, p[0]);
-      minLng = Math.min(minLng, p[1]);
-      maxLng = Math.max(maxLng, p[1]);
+  const routeDistanceKm = useMemo(() => {
+    const pts = preset.route;
+    if (pts.length < 2) return 0;
+    let m = 0;
+    for (let i = 1; i < pts.length; i += 1) {
+      m += distance(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
     }
-    setView((prev) => ({
-      ...prev,
-      center: [(minLat + maxLat) / 2, (minLng + maxLng) / 2],
-      zoom: estimateZoom(waypoints),
-    }));
-  }, [waypoints]);
+    return m / 1000;
+  }, [distance, preset.route]);
 
-  const addStopAtCenter = useCallback(() => {
-    const nextPoint: LatLng = [view.center[0], view.center[1]];
-    setWaypoints((prev) => [...prev, nextPoint]);
-    setSelectedStop(waypoints.length);
-  }, [view.center, waypoints.length]);
-
-  const trimRoute = useCallback(() => {
-    setWaypoints((prev) => (prev.length > 2 ? prev.slice(0, prev.length - 1) : prev));
-    setSelectedStop((prev) => {
-      if (prev == null) return null;
-      return Math.max(0, prev - 1);
-    });
+  const handleViewChange = useCallback((event: any) => {
+    if (Array.isArray(event?.center) && event.center.length >= 2) {
+      const lat = Number(event.center[0]);
+      const lng = Number(event.center[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) setCenter([lat, lng]);
+    }
+    if (typeof event?.zoom === 'number' && Number.isFinite(event.zoom)) setZoom(event.zoom);
+    if (typeof event?.bearing === 'number' && Number.isFinite(event.bearing)) setBearing(event.bearing);
+    if (typeof event?.pitch === 'number' && Number.isFinite(event.pitch)) setPitch(event.pitch);
   }, []);
 
-  const resetRoute = useCallback(() => {
-    setWaypoints(cloneRoute(preset.route));
-    setSelectedStop(null);
-  }, [preset.route]);
-
-  const nudgeStop = useCallback((index: number, latDelta: number, lngDelta: number) => {
-    setWaypoints((prev) => prev.map((p, i) => (i === index ? [p[0] + latDelta, p[1] + lngDelta] : p)));
+  const jumpTo = useCallback((id: string) => {
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    setPresetId(p.id);
+    setCenter([...p.center]);
+    setZoom(p.zoom);
+    setPitch(0);
+    setBearing(0);
   }, []);
 
-  const etaMinutes = Math.max(1, Math.round((routeDistanceKm / 33) * 60));
-  const modeText = view.pitch > 2 ? '3D' : '2D';
-  const primitiveCount =
-    (showRoute ? 1 : 0) +
-    (showZone ? 1 : 0) +
-    (showBuildings ? 1 : 0) +
-    (showStops ? renderedRoute.length : 0) +
-    (showFleet ? fleetMarkers.length : 0);
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#040d22' }}>
-      <Box style={{ width: '100%', height: '100%', flexDirection: 'row', gap: 10, padding: 10 }}>
-        <Box
-          style={{
-            width: 326,
-            height: '100%',
-            flexShrink: 0,
-            gap: 8,
-            backgroundColor: '#091430',
-            borderWidth: 1,
-            borderColor: '#ffffff22',
-            borderRadius: 12,
-            padding: 10,
-          }}
-        >
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 16, color: '#eef4ff', fontWeight: 'bold' }}>
-              Mission Map Console
-            </Text>
-            <Text style={{ fontSize: 11, color: '#90a4cf' }}>
-              Dispatch planning with route shaping, scene overlays, and 3D context.
-            </Text>
-          </Box>
-
-          <Section title="Preset Cities" subtitle="Load different operating environments">
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {PRESETS.map((p) => (
-                <ToggleButton
-                  key={p.id}
-                  label={p.label}
-                  active={preset.id === p.id}
-                  onPress={() => jumpToPreset(p.id)}
-                />
-              ))}
-            </Box>
-          </Section>
-
-          <Section title="Layers" subtitle="Compose overlays and base map">
-            <Box style={{ flexDirection: 'row', gap: 6 }}>
-              <ToggleButton label="OSM" active={tileSource === 'osm'} onPress={() => setTileSource('osm')} />
-              <ToggleButton
-                label="Cycle"
-                active={tileSource === 'osm-cycle'}
-                onPress={() => setTileSource('osm-cycle')}
-              />
-            </Box>
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              <ToggleButton label="Route" active={showRoute} onPress={() => setShowRoute((v) => !v)} />
-              <ToggleButton label="Fleet" active={showFleet} onPress={() => setShowFleet((v) => !v)} />
-              <ToggleButton label="Stops" active={showStops} onPress={() => setShowStops((v) => !v)} />
-              <ToggleButton label="Zone" active={showZone} onPress={() => setShowZone((v) => !v)} />
-              <ToggleButton label="Buildings" active={showBuildings} onPress={() => setShowBuildings((v) => !v)} />
-              <ToggleButton label="Loop" active={loopRoute} onPress={() => setLoopRoute((v) => !v)} />
-            </Box>
-          </Section>
-
-          <Section title="Camera" subtitle="Direct control without leaving the map">
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              <ToggleButton label="Zoom +" active={false} onPress={() => adjustZoom(0.6)} />
-              <ToggleButton label="Zoom -" active={false} onPress={() => adjustZoom(-0.6)} />
-              <ToggleButton label="Pitch +" active={false} onPress={() => adjustPitch(8)} />
-              <ToggleButton label="Pitch -" active={false} onPress={() => adjustPitch(-8)} />
-              <ToggleButton label="Rotate L" active={false} onPress={() => rotate(-15)} />
-              <ToggleButton label="Rotate R" active={false} onPress={() => rotate(15)} />
-              <ToggleButton label="North Up" active={false} onPress={() => setView((prev) => ({ ...prev, bearing: 0 }))} />
-              <ToggleButton label="Fit Route" active={false} onPress={fitRoute} />
-            </Box>
-          </Section>
-
-          <Section title="Route Builder" subtitle="Seed and refine route geometry quickly">
-            <Box style={{ flexDirection: 'row', gap: 6 }}>
-              <ToggleButton label="Add Center" active={false} onPress={addStopAtCenter} />
-              <ToggleButton label="Remove Last" active={false} onPress={trimRoute} />
-              <ToggleButton label="Reset" active={false} onPress={resetRoute} />
-            </Box>
-            <Box style={{ gap: 4 }}>
-              {waypoints.slice(0, 4).map((stop, i) => (
-                <Box
-                  key={`stop-${i}`}
-                  style={{
-                    backgroundColor: selectedStop === i ? '#2b3f75' : '#132247',
-                    borderRadius: 6,
-                    borderWidth: 1,
-                    borderColor: '#ffffff1f',
-                    padding: 6,
-                    gap: 4,
-                  }}
-                >
-                  <Pressable onPress={() => setSelectedStop(i)}>
-                    <Text style={{ fontSize: 10, color: '#cddafd' }}>
-                      {`Stop ${i + 1}  ${stop[0].toFixed(4)}, ${stop[1].toFixed(4)}`}
-                    </Text>
-                  </Pressable>
-                  <Box style={{ flexDirection: 'row', gap: 4 }}>
-                    <ToggleButton label="N" active={false} onPress={() => nudgeStop(i, 0.002, 0)} />
-                    <ToggleButton label="S" active={false} onPress={() => nudgeStop(i, -0.002, 0)} />
-                    <ToggleButton label="E" active={false} onPress={() => nudgeStop(i, 0, 0.002)} />
-                    <ToggleButton label="W" active={false} onPress={() => nudgeStop(i, 0, -0.002)} />
-                  </Box>
-                </Box>
-              ))}
-              {waypoints.length > 4 && (
-                <Text style={{ fontSize: 10, color: '#8ea0c8' }}>
-                  {`+${waypoints.length - 4} additional stops`}
-                </Text>
-              )}
-            </Box>
-          </Section>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg, flexDirection: 'row', gap: 10, padding: 10 }}>
+      {/* Sidebar */}
+      <Box
+        style={{
+          width: 230,
+          flexShrink: 0,
+          height: '100%',
+          backgroundColor: C.panel,
+          borderWidth: 1,
+          borderColor: C.panelBorder,
+          borderRadius: 12,
+          padding: 10,
+          gap: 8,
+        }}
+      >
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 15, color: C.textPrimary, fontWeight: 'bold' }}>Map</Text>
+          <Text style={{ fontSize: 10, color: C.textSecondary }}>
+            Tiles · Markers · Polylines · Polygons · GeoJSON
+          </Text>
         </Box>
 
+        <ScrollView style={{ flexGrow: 1 }}>
+          <Box style={{ gap: 8 }}>
+            <SectionBox title="CITY">
+              <Row>
+                {PRESETS.map((p) => (
+                  <Btn key={p.id} label={p.label} active={preset.id === p.id} onPress={() => jumpTo(p.id)} />
+                ))}
+              </Row>
+            </SectionBox>
+
+            <SectionBox title="BASE MAP">
+              <Row>
+                <Btn label="Streets" active={tileSource === 'osm'} onPress={() => setTileSource('osm')} />
+                <Btn label="Cycle" active={tileSource === 'osm-cycle'} onPress={() => setTileSource('osm-cycle')} />
+              </Row>
+            </SectionBox>
+
+            <SectionBox title="LAYERS">
+              <Row>
+                <Btn label="Route" active={showRoute} onPress={() => setShowRoute((v) => !v)} />
+                <Btn label="Stops" active={showStops} onPress={() => setShowStops((v) => !v)} />
+                <Btn label="Zone" active={showZone} onPress={() => setShowZone((v) => !v)} />
+                <Btn label="Fleet" active={showFleet} onPress={() => setShowFleet((v) => !v)} />
+                <Btn label="Assets" active={showBuildings} onPress={() => setShowBuildings((v) => !v)} />
+              </Row>
+            </SectionBox>
+
+            <SectionBox title="CAMERA">
+              <Row>
+                <Btn label="Z+" active={false} onPress={() => setZoom((z) => clamp(z + 0.8, 2, 18.8))} />
+                <Btn label="Z−" active={false} onPress={() => setZoom((z) => clamp(z - 0.8, 2, 18.8))} />
+                <Btn label="P+" active={false} onPress={() => setPitch((p) => clamp(p + 8, 0, 60))} />
+                <Btn label="P−" active={false} onPress={() => setPitch((p) => clamp(p - 8, 0, 60))} />
+                <Btn label="◀" active={false} onPress={() => setBearing((b) => (b - 15 + 360) % 360)} />
+                <Btn label="▶" active={false} onPress={() => setBearing((b) => (b + 15) % 360)} />
+                <Btn label="N↑" active={false} onPress={() => setBearing(0)} />
+              </Row>
+            </SectionBox>
+
+            <SectionBox title="STATS">
+              <Box style={{ gap: 4 }}>
+                <Text style={{ fontSize: 11, color: C.textMuted }}>
+                  {`Route  ${routeDistanceKm.toFixed(1)} km`}
+                </Text>
+                <Text style={{ fontSize: 11, color: C.textMuted }}>
+                  {`ETA  ~${Math.max(1, Math.round((routeDistanceKm / 33) * 60))} min`}
+                </Text>
+                <Text style={{ fontSize: 11, color: C.textMuted }}>
+                  {`Stops  ${preset.route.length}`}
+                </Text>
+                <Text style={{ fontSize: 11, color: C.textMuted }}>
+                  {`Fleet  ${showFleet ? fleetMarkers.length : 0}`}
+                </Text>
+                <Text style={{ fontSize: 11, color: C.textMuted }}>
+                  {`Mode  ${pitch > 2 ? '3D' : '2D'}`}
+                </Text>
+              </Box>
+            </SectionBox>
+          </Box>
+        </ScrollView>
+      </Box>
+
+      {/* Map */}
+      <Box
+        style={{
+          flexGrow: 1,
+          height: '100%',
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: C.mapBorder,
+          overflow: 'hidden',
+          position: 'relative',
+          backgroundColor: '#0a1531',
+        }}
+      >
+        <Map
+          center={center}
+          zoom={zoom}
+          pitch={pitch}
+          bearing={bearing}
+          minZoom={2}
+          maxZoom={18.8}
+          style={{ width: '100%', height: '100%' }}
+          onViewChange={handleViewChange}
+        >
+          <TileLayer source={tileSource} />
+
+          {showZone && (
+            <Polygon
+              positions={preset.zone}
+              fillColor="#3b82f640"
+              strokeColor="#60a5fa"
+              strokeWidth={2}
+            />
+          )}
+
+          {showRoute && (
+            <Polyline
+              positions={preset.route}
+              color={C.accent}
+              width={4}
+              arrowheads
+            />
+          )}
+
+          {showStops && preset.route.map((stop, i) => (
+            <Marker key={`stop-${i}`} position={stop} anchor="bottom-center" />
+          ))}
+
+          {showFleet && fleetMarkers.map((m) => (
+            <Marker key={m.id} position={m.position} anchor="center" />
+          ))}
+
+          {showBuildings && <GeoJSON data={buildingData} />}
+        </Map>
+
+        {/* HUD */}
         <Box
           style={{
-            flexGrow: 1,
-            height: '100%',
-            borderRadius: 12,
+            position: 'absolute',
+            top: 10,
+            left: 10,
+            backgroundColor: C.hudBg,
             borderWidth: 1,
-            borderColor: '#ffffff24',
-            overflow: 'hidden',
-            position: 'relative',
-            backgroundColor: '#0a1531',
+            borderColor: C.hudBorder,
+            borderRadius: 8,
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 8,
+            paddingBottom: 8,
+            gap: 2,
           }}
         >
-          <Map
-            center={view.center}
-            zoom={view.zoom}
-            pitch={view.pitch}
-            bearing={view.bearing}
-            minZoom={2}
-            maxZoom={18.8}
-            style={{ width: '100%', height: '100%' }}
-            onViewChange={handleViewChange}
-          >
-            <TileLayer source={tileSource} />
-
-            {showZone && (
-              <Polygon
-                positions={preset.zone}
-                fillColor="#3b82f640"
-                strokeColor="#60a5fa"
-                strokeWidth={2}
-              />
-            )}
-
-            {showRoute && (
-              <Polyline
-                positions={renderedRoute}
-                color="#f97316"
-                width={4}
-                arrowheads
-              />
-            )}
-
-            {showStops && renderedRoute.map((stop, i) => (
-              <Marker key={`route-stop-${i}`} position={stop} anchor="bottom-center" />
-            ))}
-
-            {showFleet && fleetMarkers.map((m) => (
-              <Marker key={m.id} position={m.position} anchor="center" />
-            ))}
-
-            {showBuildings && <GeoJSON data={buildingData} />}
-          </Map>
-
-          <Box
-            style={{
-              position: 'absolute',
-              top: 10,
-              left: 10,
-              right: 10,
-              backgroundColor: '#07132bcf',
-              borderWidth: 1,
-              borderColor: '#ffffff26',
-              borderRadius: 10,
-              padding: 10,
-              gap: 8,
-            }}
-          >
-            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Box>
-                <Text style={{ fontSize: 22, color: '#eff6ff', fontWeight: 'bold' }}>
-                  Geo Operations Workspace
-                </Text>
-                <Text style={{ fontSize: 12, color: '#93a7d4' }}>
-                  {`${preset.label} · ${tileSource === 'osm' ? 'Streets' : 'Cycle'} tiles · ${modeText} mode`}
-                </Text>
-              </Box>
-              <Box style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 11, color: '#dce8ff' }}>
-                  {`Center ${view.center[0].toFixed(4)}, ${view.center[1].toFixed(4)}`}
-                </Text>
-                <Text style={{ fontSize: 10, color: '#97acd8' }}>
-                  {`Zoom ${view.zoom.toFixed(2)} · Bearing ${Math.round(view.bearing)}° · Pitch ${Math.round(view.pitch)}°`}
-                </Text>
-              </Box>
-            </Box>
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              <StatChip label="Route" value={`${routeDistanceKm.toFixed(1)}km`} tone={tones.blue} />
-              <StatChip label="ETA" value={`${etaMinutes}m`} tone={tones.green} />
-              <StatChip label="Stops" value={`${waypoints.length}`} tone={tones.amber} />
-              <StatChip label="Fleet" value={showFleet ? `${fleetMarkers.length}` : '0'} tone={tones.green} />
-              <StatChip label="Primitives" value={`${primitiveCount}`} tone={tones.red} />
-            </Box>
-          </Box>
-
-          <Box
-            style={{
-              position: 'absolute',
-              right: 10,
-              bottom: 10,
-              width: 260,
-              backgroundColor: '#06112abf',
-              borderWidth: 1,
-              borderColor: '#ffffff24',
-              borderRadius: 8,
-              padding: 8,
-              gap: 4,
-            }}
-          >
-            <Text style={{ fontSize: 11, color: '#dbeafe', fontWeight: 'bold' }}>
-              Operator Notes
-            </Text>
-            <Text style={{ fontSize: 10, color: '#9eb4de' }}>
-              Pan and zoom directly on the map. Use presets to switch cities, then use route controls to reshape paths in place.
-            </Text>
-            <Text style={{ fontSize: 10, color: '#9eb4de' }}>
-              Toggle loop mode to simulate patrol circuits and switch to cycle tiles for terrain-aware lane planning.
-            </Text>
-          </Box>
+          <Text style={{ fontSize: 13, color: C.textPrimary, fontWeight: 'bold' }}>
+            {`${preset.label} · ${tileSource === 'osm' ? 'Streets' : 'Cycle'}`}
+          </Text>
+          <Text style={{ fontSize: 10, color: C.textSecondary }}>
+            {`${center[0].toFixed(4)}, ${center[1].toFixed(4)}  ·  z${zoom.toFixed(1)}  ·  ${Math.round(bearing)}°  ·  ${Math.round(pitch)}°p`}
+          </Text>
         </Box>
       </Box>
     </Box>

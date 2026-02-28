@@ -15,10 +15,10 @@ Lua side (layout.lua), computing absolute positions and sizes from the style tre
 React produces.
 
 Because Love2D renders to a fixed canvas (not a scrolling web page), the layout system
-demands explicit sizing at the root level and encourages explicit dimensions throughout.
-The static linter (reactjit lint) enforces critical layout rules at build time, catching
-the most common mistakes before they reach the renderer. Understanding these rules is
-essential for productive development with ReactJIT.
+demands explicit sizing at the root level. Beyond that, containers auto-size from their
+children, and empty surface nodes use a proportional fallback (1/4 of parent). The static
+linter (reactjit lint) enforces critical layout rules at build time, catching the most
+common mistakes before they reach the renderer.
 
 === API / SYNTAX ===
 The layout system is configured entirely through the `style` prop on Box, Text, and Image
@@ -78,7 +78,7 @@ operates on grid dimensions rather than pixel dimensions.
 - Every Text MUST have explicit fontSize -- the linter enforces this
 - Row Boxes with justifyContent MUST have explicit width
 - No flexGrow without sibling sizing context
-- Keep flex trees shallow -- prefer explicit dimensions over deep nesting
+- Keep flex trees shallow -- fewer nesting levels means faster layout
 - Fill the viewport -- Love2D is a fixed canvas, not a scrolling page
 - See critical-rules.txt for the complete list
 

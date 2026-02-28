@@ -1,0 +1,108 @@
+=== METADATA ===
+title: useCapabilities
+description: AI discovery hook that lists all registered native capabilities and their schemas
+category: Hooks
+platforms: love2d
+keywords: capabilities, discovery, schema, ai, agent, native, registration, introspection
+related: capabilities, Capabilities system, architecture
+difficulty: intermediate
+
+=== OVERVIEW ===
+useCapabilities queries the Lua-side capability registry and returns every registered native capability with its full schema. The primary use case is AI agent introspection: an agent calls this hook once to discover what components exist, what props they accept, what events they emit, and then generates JSX accordingly — without needing hardcoded knowledge of the framework's capabilities.
+
+The hook fires one RPC call on mount (capabilities:list) and caches the result. It does not poll for changes. During the initial load, loading is true and capabilities is null.
+
+Capabilities are registered on the Lua side via Capabilities.register() in lua/capabilities.lua. The schema describes every prop, its type, default value, and description, plus the events the capability emits. Any new Lua capability automatically appears in useCapabilities results without framework changes.
+
+=== API / SYNTAX ===
+```tsx
+import { useCapabilities } from '@reactjit/core';
+import type { CapabilitySchema } from '@reactjit/core';
+```
+
+Return value:
+| Field        | Type                                    | Description                             |
+|--------------|-----------------------------------------|-----------------------------------------|
+| capabilities | Record<string, CapabilitySchema> \| null | Map of capability name to schema, null until loaded |
+| loading      | boolean                                 | True while the RPC call is in flight    |
+
+CapabilitySchema shape (per capability entry):
+| Field  | Type                              | Description                                       |
+|--------|-----------------------------------|---------------------------------------------------|
+| schema | Record<string, PropDef>           | Map of prop name to type, default, and description|
+| events | string[]                          | Names of events the capability emits              |
+
+=== EXAMPLES ===
+Example 1: Log all available capabilities
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useCapabilities } from '@reactjit/core';
+
+export default function App() {
+  const { capabilities, loading } = useCapabilities();
+
+  if (loading) {
+    return (
+      <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: '#a6adc8' }}>Loading capabilities…</Text>
+      </Box>
+    );
+  }
+
+  const names = capabilities ? Object.keys(capabilities) : [];
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 8, padding: 16 }}>
+      <Text style={{ fontSize: 14, color: '#a6adc8' }}>{names.length} capabilities registered</Text>
+      {names.map(name => (
+        <Box key={name} style={{ padding: '6 12', backgroundColor: '#313244', borderRadius: 4 }}>
+          <Text style={{ fontSize: 13, color: '#89b4fa' }}>{name}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: AI agent that generates JSX from discovered capabilities
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useCapabilities } from '@reactjit/core';
+
+export default function App() {
+  const { capabilities, loading } = useCapabilities();
+
+  // Expose schema as JSON for an LLM to read
+  const schemaJson = capabilities
+    ? JSON.stringify(capabilities, null, 2)
+    : null;
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 16 }}>
+      {loading && <Text style={{ color: '#a6adc8', fontSize: 12 }}>Discovering capabilities…</Text>}
+      {schemaJson && (
+        <Box style={{ flexGrow: 1, backgroundColor: '#1e1e2e', padding: 12, borderRadius: 6, overflow: 'scroll' }}>
+          <Text style={{ fontFamily: 'monospace', fontSize: 11, color: '#a6e3a1' }}>{schemaJson}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- capabilities is null until the RPC call completes — always check for null or check loading before accessing capability entries.
+- This hook is native-only. In web mode the bridge is unavailable and the hook returns { capabilities: null, loading: false } immediately.
+- The schema reflects capabilities registered at the time of the query. If you register capabilities dynamically after the component mounts, remount the component to re-query.
+- useCapabilities is a discovery tool, not a control surface. Calling a capability requires JSX, not direct RPC.
+
+=== SEE ALSO ===
+- capabilities architecture
+- lua/capabilities.lua
+

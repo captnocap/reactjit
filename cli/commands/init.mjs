@@ -166,6 +166,8 @@ const MIGRATION_FRAMEWORKS = [
   { name: 'Blessed (Node.js TUI)', command: 'migrate-blessed', extensions: ['.js', '.cjs', '.mjs'] },
   { name: 'Tkinter (Python GUI)', command: 'migrate-tkinter', extensions: ['.py'] },
   { name: 'SwiftUI (iOS/macOS)', command: 'migrate-swiftui', extensions: ['.swift'] },
+  { name: 'PyQt6/PySide6 (Python GUI)', command: 'migrate-pyqt6', extensions: ['.py'] },
+  { name: 'Flutter (Dart)', command: 'migrate-flutter', extensions: ['.dart'] },
   { name: 'HTML / React (Web)', command: 'convert', extensions: ['.html', '.htm', '.tsx', '.jsx'] },
 ];
 
@@ -529,6 +531,14 @@ async function runConverter(command, source) {
     const { parseSwiftUISource, generateReactJIT } = await import('./migrate-swiftui.mjs');
     return generateReactJIT(parseSwiftUISource(source)).code;
   }
+  if (command === 'migrate-pyqt6') {
+    const { parsePyQt6Source, generateReactJIT } = await import('./migrate-pyqt6.mjs');
+    return generateReactJIT(parsePyQt6Source(source)).code;
+  }
+  if (command === 'migrate-flutter') {
+    const { parseFlutterSource, generateReactJIT } = await import('./migrate-flutter.mjs');
+    return generateReactJIT(parseFlutterSource(source)).code;
+  }
   // convert (HTML/React)
   const { convertToReactJIT } = await import('./convert.mjs');
   const result = convertToReactJIT(source);
@@ -543,6 +553,8 @@ async function runConvertFlow(name) {
     { label: 'Blessed (Node.js TUI)', description: '.js / .cjs / .mjs' },
     { label: 'Tkinter (Python GUI)', description: '.py' },
     { label: 'SwiftUI (iOS/macOS)', description: '.swift' },
+    { label: 'PyQt6/PySide6 (Python GUI)', description: '.py' },
+    { label: 'Flutter (Dart)', description: '.dart' },
     { label: 'HTML / React (Web)', description: '.html / .tsx / .jsx' },
   ]);
 

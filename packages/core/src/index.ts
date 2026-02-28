@@ -84,6 +84,12 @@ export { tw } from './tw';
 // Local store (persistent useState backed by SQLite)
 export { useLocalStore, type UseLocalStoreOptions } from './useLocalStore';
 
+// Hot state (useState that survives HMR — Lua memory, not disk)
+export { useHotState } from './useHotState';
+
+// GIF recorder (capture Love2D window as animated GIF via ffmpeg)
+export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
+
 // Primitives
 export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from './primitives';
 

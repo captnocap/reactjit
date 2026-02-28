@@ -12,7 +12,7 @@ import {
 
 export async function devCommand(args) {
   const cwd = process.cwd();
-  const targetName = args.filter(a => !a.startsWith('--'))[0] || 'sdl2';
+  const targetName = args.filter(a => !a.startsWith('--'))[0] || 'love';
 
   if (!TARGETS[targetName]) {
     fail(`Unknown target: ${bold(targetName)}`);
@@ -36,7 +36,7 @@ export async function devCommand(args) {
   if (!existsSync(outdir)) mkdirSync(outdir, { recursive: true });
 
   // ── TSL pre-build ───────────────────────────────────────
-  if (targetName === 'love' || targetName === 'sdl2') {
+  if (targetName === 'love') {
     const tslResult = transpileTslInSrc(cwd);
     if (tslResult.errors > 0) {
       fail(`${tslResult.errors} TSL error(s) — fix before continuing.`);
@@ -52,8 +52,6 @@ export async function devCommand(args) {
 
   const targetLabel = {
     love: `${bold('Love2D')} ${dim('— HMR reloads in-place on rebuild')}`,
-    sdl2: `${bold('SDL2')}  ${dim(`— output: ${cyan(target.output)}`)}`,
-    terminal: `${bold('Terminal')} ${dim('— auto-reloads on save')}`,
     web: `${bold('Web')}  ${dim('— serve dist/ with any HTTP server')}`,
   }[targetName] || bold(targetName);
 
@@ -68,9 +66,6 @@ export async function devCommand(args) {
   // Determine Love2D directory (some projects use love/ subdirectory)
   const loveDir = existsSync(join(cwd, 'love', 'main.lua')) ? 'love' : '.';
 
-  // Determine SDL2 entry point
-  const sdl2Main = existsSync(join(cwd, 'sdl2', 'main.lua')) ? join('sdl2', 'main.lua') : null;
-
   const launchRuntime = () => {
     if (runtimeHasLaunched || isShuttingDown) return;
     runtimeHasLaunched = true;
@@ -78,9 +73,6 @@ export async function devCommand(args) {
     if (targetName === 'love') {
       log(magenta('>>'), `Launching ${boldCyan('Love2D')}...`);
       runtimeProcess = spawn('love', [loveDir], { cwd, stdio: 'inherit' });
-    } else if (targetName === 'sdl2' && sdl2Main) {
-      log(magenta('>>'), `Launching ${boldCyan('SDL2')} ${dim(`(luajit ${sdl2Main})`)}...`);
-      runtimeProcess = spawn('luajit', [sdl2Main], { cwd, stdio: 'inherit' });
     } else {
       return;
     }
@@ -107,7 +99,7 @@ export async function devCommand(args) {
       }
       buildStart = Date.now();
 
-      if (targetName === 'love' || targetName === 'sdl2') {
+      if (targetName === 'love') {
         launchRuntime();
       }
     } else if (output.includes('[ERROR]') || output.includes('error:')) {

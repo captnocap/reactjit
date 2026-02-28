@@ -8,18 +8,10 @@
  *   external   – esbuild --external:X packages
  *   entries    – entry point candidates in priority order (resolved under src/)
  *   output     – dev build output path (relative to project root)
- *   kind       – 'sdl2' | 'love' | 'web' (determines dist strategy)
+ *   kind       – 'love' | 'web' (determines dist strategy)
  */
 
 export const TARGETS = {
-  sdl2: {
-    format: 'iife',
-    globalName: 'ReactJIT',
-    external: ['react-dom', 'child_process'],
-    entries: ['main-sdl2.tsx', 'main-love.tsx', 'native-main.tsx', 'main.tsx'],
-    output: 'sdl2/bundle.js',
-    kind: 'sdl2',
-  },
   love: {
     format: 'iife',
     globalName: 'ReactJIT',
@@ -41,28 +33,28 @@ export const TARGETS = {
 export const TARGET_NAMES = Object.keys(TARGETS);
 
 // ── Cross-compilation platform registry ────────────────────────────────
-// Maps user-facing CLI names to zig triples and platform metadata.
-// Used by `reactjit build dist:sdl2 --target <name>`.
+// Maps user-facing CLI names to platform metadata.
+// Used by `reactjit build linux`, `reactjit build macos`, etc.
 
 export const PLATFORMS = {
-  'linux-x64':   { zigTriple: 'x86_64-linux-gnu',   os: 'linux',   arch: 'x64',   ext: '.so',    exeExt: '',     luajitBin: 'luajit' },
-  'linux-arm64': { zigTriple: 'aarch64-linux-gnu',   os: 'linux',   arch: 'arm64', ext: '.so',    exeExt: '',     luajitBin: 'luajit' },
-  'windows-x64': { zigTriple: 'x86_64-windows-gnu',  os: 'windows', arch: 'x64',   ext: '.dll',   exeExt: '.exe', luajitBin: 'luajit.exe' },
-  'macos-x64':   { zigTriple: 'x86_64-macos',        os: 'macos',   arch: 'x64',   ext: '.dylib', exeExt: '',     luajitBin: 'luajit' },
-  'macos-arm64': { zigTriple: 'aarch64-macos',        os: 'macos',   arch: 'arm64', ext: '.dylib', exeExt: '',     luajitBin: 'luajit' },
+  'linux-x64':   { os: 'linux',   arch: 'x64',   ext: '.so',    exeExt: '' },
+  'linux-arm64': { os: 'linux',   arch: 'arm64', ext: '.so',    exeExt: '' },
+  'windows-x64': { os: 'windows', arch: 'x64',   ext: '.dll',   exeExt: '.exe' },
+  'macos-x64':   { os: 'macos',   arch: 'x64',   ext: '.dylib', exeExt: '' },
+  'macos-arm64': { os: 'macos',   arch: 'arm64', ext: '.dylib', exeExt: '' },
 };
 
 export const PLATFORM_NAMES = Object.keys(PLATFORMS);
 
 // ── Friendly build aliases ───────────────────────────────────────────────
-// Maps short names (rjit build linux) to dist:sdl2 + platform combos.
+// Maps short names (rjit build linux) to dist:love + platform combos.
 
 export const BUILD_ALIASES = {
-  'linux':      { target: 'sdl2', platform: 'linux-x64',  dist: true },
-  'macos':      { target: 'sdl2', platform: 'macos-x64',  dist: true },
-  'macmseries': { target: 'sdl2', platform: 'macos-arm64', dist: true },
-  'windows':    { target: 'sdl2', platform: 'windows-x64', dist: true },
-  'web':        { target: 'web',  platform: null,           dist: true },
+  'linux':      { target: 'love', platform: 'linux-x64',   dist: true },
+  'macos':      { target: 'love', platform: 'macos-x64',   dist: true },
+  'macmseries': { target: 'love', platform: 'macos-arm64',  dist: true },
+  'windows':    { target: 'love', platform: 'windows-x64',  dist: true },
+  'web':        { target: 'web',  platform: null,            dist: true },
 };
 
 /** Detect the host platform as a PLATFORMS key. */

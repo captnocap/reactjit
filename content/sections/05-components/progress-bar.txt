@@ -97,7 +97,7 @@ Platforms: love2d, web
 
 === CRITICAL RULES ===
 - The `value` prop is required and is clamped to [0, 1] internally. Values outside this range are silently clamped — no error is thrown.
-- ProgressBar needs an explicit `width` either via the `style` prop or from its parent layout. Without width the track collapses to zero.
+- ProgressBar needs a known `width` for the fill bar to render correctly. Use explicit width, '100%', or flexGrow to ensure the track has resolved dimensions.
 - The `showLabel` prop is silently ignored when `height < 14` — the text physically does not fit within the bar at that height.
 - When `animated` is true, the fill width is driven by `useSpring` targeting `value * 100`. The hook is called unconditionally, so animated cannot be toggled conditionally at runtime.
 - Label text is positioned absolutely and centered over the full track width. It is always white (`color: '#ffffff'`) with `fontWeight: 'bold'`.

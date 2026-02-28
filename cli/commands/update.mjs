@@ -49,9 +49,10 @@ export async function updateCommand(args) {
   const cwd = process.cwd();
 
   // Block running from the storybook directory — it reads from source via symlinks
+  // The storybook's distinguishing feature is love/lua being a symlink to ../../lua
   const isStorybook = existsSync(join(cwd, '..', 'packages', 'core')) &&
     existsSync(join(cwd, '..', 'lua')) &&
-    existsSync(join(cwd, 'love'));
+    isSymlink(join(cwd, 'love', 'lua'));
   if (isStorybook) {
     console.error('  ERROR: Cannot run `reactjit update` from the storybook directory.');
     console.error('  The storybook reads from source-of-truth via symlinks.');

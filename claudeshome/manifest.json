@@ -1,0 +1,15 @@
+{
+  "name": "workspace",
+  "version": "0.1.0",
+  "capabilities": {
+    "storage": true,
+    "clipboard": true,
+    "gpu": true,
+    "sysmon": true,
+    "browse": true,
+    "network": ["*"],
+    "filesystem": { "./": "rw", "/home/": "r", "/tmp/": "rw" },
+    "process": ["*"],
+    "ipc": ["*"]
+  }
+}

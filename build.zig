@@ -4,12 +4,10 @@
 //! Replaces the gcc-based Makefile targets for C code.
 //!
 //! Usage:
-//!   zig build                          → libquickjs + ft_helper + blake3 for native host (debug)
+//!   zig build                          → libquickjs + blake3 for native host (debug)
 //!   zig build -Doptimize=ReleaseFast   → optimized
 //!   zig build libquickjs               → QuickJS shared library only
-//!   zig build ft-helper                → FreeType bridge (FreeType compiled from source)
 //!   zig build blake3                   → BLAKE3 hash library
-//!   zig build sdl2                     → SDL2 shared library (from vendored source)
 //!   zig build cartridge                → CartridgeOS PID 1 (x86_64-linux-musl, static)
 //!   zig build all                      → all of the above
 //!
@@ -24,18 +22,12 @@
 //! The Makefile cli-setup target copies from zig-out/lib/ into cli/runtime/lib/.
 
 const std = @import("std");
-const sdl2_build = @import("build_sdl2.zig");
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
     const all_step = b.step("all", "Build all native artifacts");
-
-    // ── libSDL2 ──────────────────────────────────────────────────────────
-    // SDL2 compiled from vendored source (allyourcodebase/SDL 2.32.10) as a
-    // shared library for LuaJIT FFI. Cross-compilable to all desktop targets.
-    sdl2_build.addStep(b, target, optimize, all_step);
 
     // ── libquickjs ────────────────────────────────────────────────────────
     // QuickJS JS engine + FFI shim. Loaded by LuaJIT via ffi.load() in
@@ -91,126 +83,6 @@ pub fn build(b: *std.Build) void {
         const step = b.step("libquickjs", "Build libquickjs shared library");
         step.dependOn(&install.step);
         all_step.dependOn(&install.step);
-    }
-
-    // ── ft_helper ─────────────────────────────────────────────────────────
-    // Thin FreeType wrapper for LuaJIT FFI — glyph rasterization and text
-    // measurement for the SDL2 rendering target.
-    //
-    // FreeType is compiled from source (fetched via build.zig.zon) so that
-    // ft_helper cross-compiles to any target without a system FreeType install.
-    {
-        // FreeType 2.13.3 source fetched by zig fetch --save
-        const ft_src = b.dependency("freetype", .{});
-        const ft_root = ft_src.path(".");
-
-        const mod = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        });
-
-        const lib = b.addLibrary(.{
-            .name = "ft_helper",
-            .linkage = .dynamic,
-            .root_module = mod,
-        });
-
-        // FreeType minimal build — only the modules ft_helper.c actually uses:
-        //   FT_Init_FreeType, FT_New_Face, FT_Set_Pixel_Sizes,
-        //   FT_Load_Char (FT_LOAD_RENDER / FT_LOAD_ADVANCE_ONLY), FT_Render_Glyph
-        // Custom ftmodule.h must come BEFORE FreeType's own include dir so the
-        // preprocessor finds our module list (only TTF/OTF drivers) first.
-        // See vendor/freetype-config/freetype/config/ftmodule.h.
-        lib.addIncludePath(b.path("vendor/freetype-config"));
-        lib.addIncludePath(ft_root.path(b, "include"));
-        // Stub hb.h: satisfies FreeType 2.13.3's unconditional #include <hb.h>
-        // in autofit/ft-hb.h. HarfBuzz is disabled (not defined in ftoption.h).
-        lib.addIncludePath(b.path("vendor/stubs"));
-        lib.addCSourceFiles(.{
-            .root = ft_root,
-            .files = &.{
-                // Base layer
-                "src/base/ftsystem.c",
-                "src/base/ftinit.c",
-                "src/base/ftdebug.c",
-                "src/base/ftbase.c",
-                "src/base/ftbitmap.c",
-                "src/base/ftglyph.c",
-                "src/base/ftmm.c",       // FT_Set_Named_Instance (variable fonts)
-                // Gzip support (many system fonts are gzip-compressed)
-                "src/gzip/ftgzip.c",
-                // Font drivers (TTF/OTF + PostScript)
-                "src/truetype/truetype.c",
-                "src/cff/cff.c",
-                "src/type1/type1.c",
-                "src/sfnt/sfnt.c",
-                // Rasterizers
-                "src/smooth/smooth.c",
-                "src/raster/raster.c",
-                // Hinting + PostScript support
-                "src/autofit/autofit.c",
-                "src/psaux/psaux.c",
-                "src/psnames/psnames.c",
-                "src/pshinter/pshinter.c",
-            },
-            .flags = &.{
-                "-O2",
-                // FT2_BUILD_LIBRARY: required when building FreeType from source
-                // (as opposed to using it as a consumer).
-                "-DFT2_BUILD_LIBRARY",
-                // Optional deps (PNG, Bzip2, Brotli, HarfBuzz) are all commented
-                // out in FreeType's default ftoption.h — do NOT define them at
-                // all. -DX=0 would *define* the macro, making #ifdef X true.
-            },
-        });
-
-        // ft_helper.c itself
-        lib.addIncludePath(ft_root.path(b, "include"));
-        lib.addCSourceFile(.{
-            .file = b.path("lua/sdl2_ft_helper.c"),
-            .flags = &.{"-O2"},
-        });
-
-        lib.linkLibC();
-
-        const install = b.addInstallArtifact(lib, .{});
-        b.getInstallStep().dependOn(&install.step);
-
-        const step = b.step("ft-helper", "Build ft_helper + FreeType from source (fully cross-compilable)");
-        step.dependOn(&install.step);
-        all_step.dependOn(&install.step);
-    }
-
-    // ── image_helper ─────────────────────────────────────────────────────
-    // Thin stb_image wrapper for LuaJIT FFI — loads images into RGBA8 pixel
-    // buffers for the SDL2 rendering target and image processing capabilities.
-    // stb_image is a single-header library (vendored in vendor/stb/).
-    {
-        const img_mod = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        });
-
-        const img_lib = b.addLibrary(.{
-            .name = "image_helper",
-            .linkage = .dynamic,
-            .root_module = img_mod,
-        });
-
-        img_lib.addIncludePath(b.path("vendor/stb"));
-        img_lib.addCSourceFile(.{
-            .file = b.path("lua/sdl2_image_helper.c"),
-            .flags = &.{"-O2"},
-        });
-
-        img_lib.linkLibC();
-
-        const img_install = b.addInstallArtifact(img_lib, .{});
-        b.getInstallStep().dependOn(&img_install.step);
-
-        const img_step = b.step("image-helper", "Build image_helper (stb_image wrapper for LuaJIT FFI)");
-        img_step.dependOn(&img_install.step);
-        all_step.dependOn(&img_install.step);
     }
 
     // ── libblake3 ───────────────────────────────────────────────────────

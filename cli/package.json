@@ -1,7 +1,7 @@
 {
   "name": "reactjit",
   "version": "0.1.0",
-  "description": "CLI for ReactJIT — React rendered through LuaJIT + SDL2 + OpenGL",
+  "description": "CLI for ReactJIT — React rendered through LuaJIT + Love2D",
   "type": "module",
   "scripts": {
     "test": "node --test test/cli.test.mjs"

@@ -873,10 +873,37 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register hot state RPC handlers (in-memory atoms that survive HMR)
+  do
+    local hsOk, hotstate = pcall(require, "lua.hotstate")
+    if hsOk then
+      for method, handler in pairs(hotstate.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
+  -- Register GIF recorder RPC handlers
+  do
+    local gifOk, gif = pcall(require, "lua.gif")
+    if gifOk then
+      M.gif = gif
+      for method, handler in pairs(gif.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
     if M.gamemod then return M.gamemod.handleCommand(args) end
+  end
+
+  -- Trigger a hot reload programmatically (dev tooling, demo, devtools button)
+  rpcHandlers["dev:reload"] = function()
+    ReactJIT.reload()
+    return true
   end
 
   -- Expose current inspector perf counters for stress-test dashboards.
@@ -1449,6 +1476,7 @@ function ReactJIT.update(dt)
     if M.inspectorEnabled then console.update(dt) end
     if M.inspectorEnabled then devtools.tick(dt) end
     if M.screenshot then M.screenshot.update() end
+    if M.gif then M.gif.update(dt) end
 
     -- 5. Flush bridge outbox (events back to JS)
     M.bridge.flush()
@@ -1739,10 +1767,18 @@ function ReactJIT.update(dt)
         local IPC = require("lua.window_ipc")
         local activeChildren = winApi.getChildren()
         if #activeChildren > 0 then
+          if not ReactJIT._winRouteDbg then ReactJIT._winRouteDbg = 0 end
+          ReactJIT._winRouteDbg = ReactJIT._winRouteDbg + 1
+          local dbgRoute = ReactJIT._winRouteDbg <= 10
+
           -- Build the set of Window root node IDs → child window IDs
           local windowRootNodeIds = {}
           for _, c in ipairs(activeChildren) do
             windowRootNodeIds[c.nodeId] = c.windowId
+            if dbgRoute then
+              io.write(string.format("[ROUTE-DBG] windowRoot nodeId=%s → childWindow=%d\n", tostring(c.nodeId), c.windowId))
+              io.flush()
+            end
           end
           -- Rebuild ownership map and route mutations
           local allNodes = M.tree.getNodes()
@@ -1752,6 +1788,17 @@ function ReactJIT.update(dt)
           end
           IPC.rebuildOwnership(windowEntries, allNodes)
           local buckets = IPC.routeMutations(treeCommands, windowRootNodeIds)
+          if dbgRoute then
+            local totalRouted = 0
+            for windowId, cmds in pairs(buckets) do
+              totalRouted = totalRouted + #cmds
+              io.write(string.format("[ROUTE-DBG] → window#%d: %d mutations\n", windowId, #cmds))
+              io.flush()
+            end
+            io.write(string.format("[ROUTE-DBG] total=%d routed=%d kept-by-main=%d\n",
+              #treeCommands, totalRouted, #treeCommands - totalRouted))
+            io.flush()
+          end
           for windowId, cmds in pairs(buckets) do
             winApi.sendMutations(windowId, cmds)
           end
@@ -2049,8 +2096,23 @@ function ReactJIT.update(dt)
     end
   end
 
-  -- Update TextEditor/TextInput blink timer if one has focus
+  -- autoFocus: if nothing has focus, find a TextInput with autoFocus prop and grab it
   local focusedNode = focus.get()
+  if not focusedNode then
+    local allNodes = M.tree and M.tree.getNodes()
+    if allNodes then
+      for _, node in pairs(allNodes) do
+        if node.type == "TextInput" and node.props and node.props.autoFocus then
+          focus.set(node)
+          M.textinput.focus(node)
+          focusedNode = node
+          break
+        end
+      end
+    end
+  end
+
+  -- Update TextEditor/TextInput blink timer if one has focus
   if focusedNode and focusedNode.type == "TextEditor" then
     local result = M.texteditor.update(focusedNode, dt)
     if result == "change" then
@@ -2088,6 +2150,7 @@ function ReactJIT.update(dt)
   if M.inspectorEnabled then console.update(dt) end
   if M.inspectorEnabled then devtools.tick(dt) end
   if M.screenshot then M.screenshot.update() end
+  if M.gif then M.gif.update(dt) end
 end
 
 --- Call once per frame from love.draw().
@@ -2196,6 +2259,9 @@ function ReactJIT.draw()
 
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
   if M.screenshot then M.screenshot.captureIfReady() end
+
+  -- GIF recorder frame capture
+  if M.gif then M.gif.captureIfReady() end
 
   -- (Devtools pop-out renders in its own child Love2D process — no GL switch needed)
 end
@@ -2826,6 +2892,74 @@ function ReactJIT.focus(hasFocus)
   end
 end
 
+-- Find first node in tree matching a type string (for keystrokeTarget)
+local function findNodeByType(nodeType)
+  local allNodes = M.tree and M.tree.getNodes()
+  if not allNodes then return nil end
+  for _, node in pairs(allNodes) do
+    if node.type == nodeType then return node end
+  end
+  return nil
+end
+
+-- Forward a key event to a keystrokeTarget (Lua → Lua by node type)
+local function forwardKeystroke(srcNode, key, scancode, isrepeat)
+  local targetType = srcNode.props and srcNode.props.keystrokeTarget
+  if not targetType then return end
+  local targetNode = findNodeByType(targetType)
+  if not targetNode then return end
+  if targetNode.type == "TextInput" then
+    M.textinput.handleKeyPressed(targetNode, key, scancode, isrepeat)
+  elseif targetNode.type == "TextEditor" then
+    M.texteditor.handleKeyPressed(targetNode, key, scancode, isrepeat)
+  elseif M.capabilities and M.capabilities.isHittable(targetNode.type) then
+    local capDef = M.capabilities.getDefinition(targetNode.type)
+    if capDef and capDef.handleKeyPressed then
+      capDef.handleKeyPressed(targetNode, key, scancode, isrepeat)
+    end
+  end
+end
+
+-- Forward text input to a keystrokeTarget (Lua → Lua by node type)
+local function forwardTextInput(srcNode, text)
+  local targetType = srcNode.props and srcNode.props.keystrokeTarget
+  if not targetType then return end
+  local targetNode = findNodeByType(targetType)
+  if not targetNode then return end
+  if targetNode.type == "TextInput" then
+    M.textinput.handleTextInput(targetNode, text)
+    M.textinput.markChanged(targetNode)
+  elseif targetNode.type == "TextEditor" then
+    M.texteditor.handleTextInput(targetNode, text)
+  elseif M.capabilities and M.capabilities.isHittable(targetNode.type) then
+    local capDef = M.capabilities.getDefinition(targetNode.type)
+    if capDef and capDef.handleTextInput then
+      capDef.handleTextInput(targetNode, text)
+    end
+  end
+end
+
+-- On submit: send enter to the target, clear the source input.
+-- Text is already there from keystrokeTarget forwarding.
+local function forwardSubmit(srcNode)
+  local targetType = srcNode.props and srcNode.props.submitTarget
+  if not targetType then return false end
+  local targetNode = findNodeByType(targetType)
+  if not targetNode then return false end
+  if targetNode.type == "TextInput" then
+    M.textinput.handleKeyPressed(targetNode, "return", nil, false)
+  elseif targetNode.type == "TextEditor" then
+    M.texteditor.handleKeyPressed(targetNode, "return", nil, false)
+  elseif M.capabilities and M.capabilities.isHittable(targetNode.type) then
+    local capDef = M.capabilities.getDefinition(targetNode.type)
+    if capDef and capDef.handleKeyPressed then
+      capDef.handleKeyPressed(targetNode, "return", nil, false)
+    end
+  end
+  M.textinput.clear(srcNode)
+  return true
+end
+
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
@@ -2919,6 +3053,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       })
     elseif result == "submit" then
       local value = M.texteditor.getValue(focusedNode)
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
       pushEvent({
         type = "texteditor:submit",
         payload = {
@@ -2930,12 +3065,41 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       return
     elseif result == false then
       -- TextEditor didn't handle this key combo, let it through to bridge
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
       -- (falls through to pushEvent below)
     else
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
       return  -- consumed by TextEditor
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
+    local isProxy = focusedNode.props and focusedNode.props.keystrokeTarget
+
+    if isProxy then
+      -- Proxy mode: forward all keystrokes to target, don't interpret locally.
+      if key == "return" or key == "kpenter" then
+        forwardSubmit(focusedNode)
+        return
+      end
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
+      return
+    end
+
+    -- escapeTarget: forward Escape to a capability (e.g. ClaudeCanvas to stop Claude)
+    local escTarget = focusedNode.props and focusedNode.props.escapeTarget
+    if escTarget and key == "escape" then
+      local targetNode = findNodeByType(escTarget)
+      if targetNode and M.capabilities and M.capabilities.isHittable(targetNode.type) then
+        local capDef = M.capabilities.getDefinition(targetNode.type)
+        if capDef and capDef.handleKeyPressed then
+          capDef.handleKeyPressed(targetNode, key, scancode, isrepeat)
+        end
+      end
+      return
+    end
+
     local result = M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+
+    -- Normal TextInput (no proxy) — original behavior
     if result == "blur" then
       local value = M.textinput.blur(focusedNode)
       M.textinput.cancelChange(focusedNode)
@@ -2951,6 +3115,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     elseif result == "submit" then
       local value = M.textinput.getValue(focusedNode)
       M.textinput.cancelChange(focusedNode)
+      M.textinput.clear(focusedNode)
       pushEvent({
         type = "textinput:submit",
         payload = {
@@ -2961,11 +3126,11 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       })
       return
     elseif result == false then
-      -- TextInput didn't handle this key combo, let it through to bridge
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
     else
-      -- Key was consumed. Check if text may have changed (backspace, delete, paste, etc.)
       M.textinput.markChanged(focusedNode)
-      return  -- consumed by TextInput
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
+      return
     end
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with keyboard handling
@@ -3065,10 +3230,18 @@ function ReactJIT.textinput(text)
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     M.texteditor.handleTextInput(focusedNode, text)
+    forwardTextInput(focusedNode, text)
     return  -- consumed, no bridge traffic
   elseif focusedNode and focusedNode.type == "TextInput" then
-    M.textinput.handleTextInput(focusedNode, text)
-    M.textinput.markChanged(focusedNode)  -- start liveChange debounce
+    local isProxy = focusedNode.props and focusedNode.props.keystrokeTarget
+    if isProxy then
+      -- Proxy mode: forward text to target, don't insert locally.
+      forwardTextInput(focusedNode, text)
+    else
+      M.textinput.handleTextInput(focusedNode, text)
+      M.textinput.markChanged(focusedNode)
+      forwardTextInput(focusedNode, text)
+    end
     return  -- consumed, no bridge traffic
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with text input handling
@@ -3685,11 +3858,21 @@ function ReactJIT.reload()
     return
   end
 
-  -- 5. Set up deferred mount + inject cached dev state
+  -- 5. Set up deferred mount + inject cached dev state + hot state atoms
   M.bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
   if devStateCache then
     local jsLiteral = luaTableToJSLiteral(devStateCache)
     M.bridge:eval("globalThis.__devState = " .. jsLiteral .. ";", "<hmr-state>")
+  end
+
+  -- Inject hot state atoms so useHotState can restore synchronously
+  local hsOk2, hotstate2 = pcall(require, "lua.hotstate")
+  if hsOk2 then
+    local allAtoms = hotstate2.getAll()
+    if next(allAtoms) then
+      local hsLiteral = luaTableToJSLiteral(allAtoms)
+      M.bridge:eval("globalThis.__hotstateCache = " .. hsLiteral .. ";", "<hmr-hotstate>")
+    end
   end
 
   -- 6. Evaluate new bundle

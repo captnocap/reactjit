@@ -27,6 +27,20 @@ local Color   = require("lua.color")
 
 local TextInput = {}
 
+local currentTheme = nil
+local SpellCheck = nil  -- injected via init()
+
+-- ============================================================================
+-- Theme helpers
+-- ============================================================================
+
+local function themeColor(key, fallback)
+  if currentTheme and currentTheme.colors and currentTheme.colors[key] then
+    return Color.toTable(currentTheme.colors[key], fallback)
+  end
+  return fallback
+end
+
 -- ============================================================================
 -- Init
 -- ============================================================================
@@ -34,6 +48,12 @@ local TextInput = {}
 function TextInput.init(config)
   config = config or {}
   Measure = config.measure
+  if config.theme then currentTheme = config.theme end
+  if config.spellcheck then SpellCheck = config.spellcheck end
+end
+
+function TextInput.setTheme(theme)
+  currentTheme = theme
 end
 
 -- ============================================================================
@@ -59,6 +79,9 @@ function TextInput.initState(node)
     changeDebounce = 0,     -- seconds remaining in debounce window
     changePending = false,  -- true when text changed and event not yet emitted
     lastEmittedText = initialText, -- last text sent via textinput:change
+    -- spellcheck: cached errors for current text
+    spellErrors = {},       -- { {word, start, stop}, ... }
+    spellText = "",         -- text that was last spell-checked (cache key)
   }
 end
 
@@ -68,6 +91,7 @@ local function ensureState(node)
   end
   return node.inputState
 end
+TextInput.ensureState = ensureState
 
 -- ============================================================================
 -- Style / prop helpers
@@ -405,6 +429,16 @@ function TextInput.getValue(node)
   return is.text
 end
 
+function TextInput.clear(node)
+  local is = ensureState(node)
+  is.text = ""
+  is.lastValue = ""
+  is.cursorPos = 0
+  is.selectStart = nil
+  is.selectEnd = nil
+  is.scrollX = 0
+end
+
 -- ============================================================================
 -- Public API: update (call each frame for blink timer)
 -- ============================================================================
@@ -429,6 +463,11 @@ function TextInput.syncValue(node)
   if props.value ~= nil and props.value ~= is.lastValue then
     is.text = props.value
     is.lastValue = props.value
+    clampCursor(is)
+  end
+  -- External cursor position (proxy input mirrors PTY cursor)
+  if props.cursorPosition ~= nil and props.cursorPosition >= 0 then
+    is.cursorPos = props.cursorPosition
     clampCursor(is)
   end
 end
@@ -550,14 +589,27 @@ function TextInput.handleKeyPressed(node, key, scancode, isRepeat)
     return "blur"
   end
 
-  -- Tab = blur
+  -- Tab: fill placeholder if input is empty, otherwise blur
   if key == "tab" then
+    local is = ensureState(node)
+    local props = node.props or {}
+    if #is.text == 0 and props.placeholder and #props.placeholder > 0 then
+      is.text = props.placeholder
+      is.cursorPos = #is.text
+      is.lastValue = is.text
+      return "changed"
+    end
     return "blur"
   end
 
   -- Enter
   if key == "return" then
+    local props = node.props or {}
     if isMultiline(node) and isEditable(node) then
+      -- submitOnEnter: Enter submits, Shift+Enter inserts newline
+      if props.submitOnEnter and not shift then
+        return "submit"
+      end
       if hasSelection(is) then deleteSelection(is) end
       insertAtCursor(node, is, "\n")
       clearSelection(is)
@@ -741,17 +793,15 @@ function TextInput.draw(node, effectiveOpacity)
 
   local padding = s.paddingLeft or s.padding or 6
   local paddingTop = s.paddingTop or s.padding or 4
-  local borderRadius = s.borderRadius or 4
+  local borderRadius = s.borderRadius or 0
 
-  -- Background
-  local bgColor = parseColor(s.backgroundColor, { 0.10, 0.10, 0.12, 1 })
-  setColorWithOpacity(bgColor, effectiveOpacity)
-  love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-
-  -- Focused background tint (subtle overlay to signal active state)
-  if isFocused then
-    love.graphics.setColor(0.15, 0.25, 0.45, 0.12 * effectiveOpacity)
-    love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+  -- Background (only if explicitly set — transparent by default)
+  if s.backgroundColor then
+    local bgColor = parseColor(s.backgroundColor, nil)
+    if bgColor then
+      setColorWithOpacity(bgColor, effectiveOpacity)
+      love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+    end
   end
 
   -- Save parent scissor and intersect (so parent overflow clips are respected)
@@ -797,7 +847,8 @@ function TextInput.draw(node, effectiveOpacity)
     end
     local sx = font:getWidth(dt:sub(1, dSelS))
     local ex = font:getWidth(dt:sub(1, dSelE))
-    love.graphics.setColor(0.22, 0.35, 0.55, 0.55 * effectiveOpacity)
+    local selColor = themeColor("primary", { 0.29, 0.56, 0.85, 1 })
+    love.graphics.setColor(selColor[1], selColor[2], selColor[3], 0.25 * effectiveOpacity)
     love.graphics.rectangle("fill",
       textAreaX + sx - is.scrollX, textY,
       ex - sx, lineH)
@@ -808,22 +859,59 @@ function TextInput.draw(node, effectiveOpacity)
     -- Show placeholder (dimmed when focused, normal when unfocused)
     local ph = getPlaceholder(node)
     if ph ~= "" then
-      local phColor = parseColor(props.placeholderColor, { 0.45, 0.45, 0.50, 1 })
+      local phFallback = themeColor("textDim", { 0.45, 0.45, 0.50, 1 })
+      local phColor = parseColor(props.placeholderColor, phFallback)
       local phOpacity = isFocused and (effectiveOpacity * 0.45) or effectiveOpacity
       setColorWithOpacity(phColor, phOpacity)
       love.graphics.print(ph, textAreaX, textY)
     end
   else
     -- Actual text
-    local textColor = parseColor(s.color, { 0.90, 0.90, 0.95, 1 })
+    local textFallback = themeColor("text", { 0.90, 0.90, 0.95, 1 })
+    local textColor = parseColor(s.color, textFallback)
     setColorWithOpacity(textColor, effectiveOpacity)
     love.graphics.print(dt, textAreaX - is.scrollX, textY)
+  end
+
+  -- Spell check underlines
+  if props.spellCheck and SpellCheck and SpellCheck.available and not isEmpty and not isSecure(node) then
+    -- Re-check if text changed since last check
+    if is.text ~= is.spellText then
+      is.spellErrors = SpellCheck.checkText(is.text)
+      is.spellText = is.text
+    end
+    if #is.spellErrors > 0 then
+      local errColor = themeColor("error", { 0.97, 0.47, 0.47, 1 })
+      love.graphics.setColor(errColor[1], errColor[2], errColor[3], 0.85 * effectiveOpacity)
+      love.graphics.setLineWidth(1)
+      local underY = textY + lineH - 2
+      for _, err in ipairs(is.spellErrors) do
+        local sx = font:getWidth(is.text:sub(1, err.start - 1))
+        local ex = font:getWidth(is.text:sub(1, err.stop))
+        local startX = textAreaX + sx - is.scrollX
+        local endX = textAreaX + ex - is.scrollX
+        -- Draw squiggly underline (small sine wave)
+        local amp, period = 1.5, 4
+        local points = {}
+        for px = startX, endX, 2 do
+          points[#points + 1] = px
+          points[#points + 1] = underY + math.sin((px - startX) / period * math.pi) * amp
+        end
+        -- Ensure we end at the right edge
+        points[#points + 1] = endX
+        points[#points + 1] = underY + math.sin((endX - startX) / period * math.pi) * amp
+        if #points >= 4 then
+          love.graphics.line(points)
+        end
+      end
+    end
   end
 
   -- Cursor
   if isFocused and is.blinkOn then
     local cursorX = textAreaX + font:getWidth(dt:sub(1, displayCursorPos)) - is.scrollX
-    local cursorColor = parseColor(props.cursorColor, { 0.29, 0.56, 0.85, 1 })
+    local cursorFallback = themeColor("primary", { 0.29, 0.56, 0.85, 1 })
+    local cursorColor = parseColor(props.cursorColor, cursorFallback)
     setColorWithOpacity(cursorColor, effectiveOpacity)
     love.graphics.rectangle("fill", cursorX, textY + 1, 2, lineH - 2)
   end
@@ -835,17 +923,15 @@ function TextInput.draw(node, effectiveOpacity)
     love.graphics.setScissor()
   end
 
-  -- Border
-  local borderColor
+  -- Border (theme-aware: thin border always, focus color on focus)
   local bw = s.borderWidth or 1
+  local borderColor
   if isFocused then
-    borderColor = parseColor(props.cursorColor, { 0.29, 0.56, 0.85, 0.9 })
-    bw = math.max(bw, 2)  -- at least 2px when focused
+    local focusFallback = themeColor("borderFocus", { 0.29, 0.56, 0.85, 0.9 })
+    borderColor = parseColor(s.borderColor, focusFallback)
   else
-    local bc = parseColor(s.borderColor, nil)
-    if bc then
-      borderColor = bc
-    end
+    local normalFallback = themeColor("border", nil)
+    borderColor = parseColor(s.borderColor, normalFallback)
   end
   if borderColor then
     setColorWithOpacity(borderColor, effectiveOpacity)

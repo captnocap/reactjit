@@ -1,0 +1,240 @@
+=== METADATA ===
+title: useSearch / Search Hooks
+description: Family of 7 pure React hooks for in-memory, fuzzy, async, and command-palette search
+category: Hooks
+platforms: love2d, web
+keywords: search, filter, fuzzy, async, highlight, history, command, palette, hooks
+related: SearchBar, CommandPalette, SearchResults, useSearchHistory
+difficulty: intermediate
+
+=== OVERVIEW ===
+The search hooks are a family of seven pure React hooks that deal with data filtering and matching. They contain no input lifecycle logic — debouncing and keystroke handling live in the Lua-owned SearchBar component. Each hook is a stateless transformation that you compose with your data and a query string.
+
+useSearch performs synchronous substring matching on an array of items. useFuzzySearch adds fuzzy scoring so results are ranked by match quality. useAsyncSearch fetches from any async source and manages loading and error state. useSearchHistory persists recent queries to SQLite via useLocalStore. useSearchHighlight splits a string into matched and unmatched segments for highlight rendering. useCommandSearch filters CommandDef arrays for a CommandPalette. useSearchSchema introspects a dataset to describe which fields are being searched.
+
+Field detection is automatic: if you do not specify a key option, the hooks detect all short string and number fields on the first item, skipping known ID-like keys (id, uuid, href, url, etc.).
+
+=== API / SYNTAX ===
+```tsx
+import {
+  useSearch,
+  useFuzzySearch,
+  useAsyncSearch,
+  useSearchHistory,
+  useSearchHighlight,
+  useCommandSearch,
+  useSearchSchema,
+  detectSearchableFields,
+} from '@reactjit/core';
+
+import type {
+  UseSearchOptions,
+  UseFuzzySearchOptions,
+  FuzzySearchResult,
+  UseAsyncSearchOptions,
+  UseSearchHistoryOptions,
+  HighlightPart,
+  UseCommandSearchOptions,
+  SearchSchema,
+} from '@reactjit/core';
+```
+
+useSearch<T>(items, query, options?): T[]
+| Option        | Type                          | Default    | Description                                            |
+|---------------|-------------------------------|------------|--------------------------------------------------------|
+| key           | keyof T \| (keyof T)[]        | auto       | Field(s) to search. Auto-detects if omitted.           |
+| matcher       | (item, query) => boolean      | undefined  | Custom match function. Overrides key.                  |
+| limit         | number                        | unlimited  | Max results to return.                                 |
+| minLength     | number                        | 0          | Minimum query length before filtering begins.          |
+| showAllOnEmpty| boolean                       | true       | Return all items when query is empty.                  |
+
+useFuzzySearch<T>(items, query, options?): { results: FuzzySearchResult<T>[], items: T[] }
+| Option        | Type     | Default | Description                                            |
+|---------------|----------|---------|--------------------------------------------------------|
+| sortByScore   | boolean  | true    | Sort results by match score descending.                |
+| minScore      | number   | 1       | Minimum score to include (0 = always include).         |
+| ...           |          |         | All useSearch options also apply.                      |
+
+FuzzySearchResult<T>:
+| Field | Type   | Description                                |
+|-------|--------|--------------------------------------------|
+| item  | T      | The original item                          |
+| score | number | Match score (higher = better match)        |
+| index | number | Index in the original items array          |
+
+useAsyncSearch<T>(fetcher, query, options?): { results: T[], loading: boolean, error: Error | null }
+| Option    | Type   | Default | Description                                              |
+|-----------|--------|---------|----------------------------------------------------------|
+| debounce  | number | 0       | Optional React-side debounce in ms (for non-SearchBar use)|
+| minLength | number | 1       | Minimum query length before fetching.                    |
+
+useSearchHistory(options?): { history: string[], push, remove, clear }
+| Option      | Type   | Default         | Description                           |
+|-------------|--------|-----------------|---------------------------------------|
+| maxEntries  | number | 20              | Maximum entries to store.             |
+| storeKey    | string | 'searchHistory' | SQLite store key.                     |
+
+useSearchHighlight(text, query): HighlightPart[]
+HighlightPart: { text: string, match: boolean }
+
+useCommandSearch(commands, query, options?): CommandDef[]
+| Option | Type   | Default   | Description        |
+|--------|--------|-----------|--------------------|
+| limit  | number | unlimited | Max results.       |
+
+useSearchSchema<T>(items, options?): SearchSchema
+SearchSchema: { allFields: string[], activeFields: string[], description: string, isAutoDetected: boolean }
+
+=== EXAMPLES ===
+Example 1: Basic substring search over a list
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text } from '@reactjit/core';
+import { useSearch } from '@reactjit/core';
+
+const USERS = [
+  { id: 1, name: 'Alice Chen', role: 'Engineer' },
+  { id: 2, name: 'Bob Smith', role: 'Designer' },
+  { id: 3, name: 'Carol White', role: 'Engineer' },
+];
+
+export default function App() {
+  const [query, setQuery] = useState('');
+  const results = useSearch(USERS, query, { key: ['name', 'role'] });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 16, gap: 8 }}>
+      <Text style={{ fontSize: 11, color: '#a6adc8' }}>{results.length} results</Text>
+      {results.map(u => (
+        <Box key={u.id} style={{ padding: 8, backgroundColor: '#313244', borderRadius: 4 }}>
+          <Text style={{ fontSize: 13, color: '#cdd6f4' }}>{u.name}</Text>
+          <Text style={{ fontSize: 11, color: '#a6adc8' }}>{u.role}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web
+
+Example 2: Fuzzy search with score-ranked results
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text } from '@reactjit/core';
+import { useFuzzySearch } from '@reactjit/core';
+
+const COMMANDS = [
+  { id: 'new-file', label: 'New File', group: 'File' },
+  { id: 'open-file', label: 'Open File', group: 'File' },
+  { id: 'run-tests', label: 'Run Tests', group: 'Dev' },
+  { id: 'toggle-sidebar', label: 'Toggle Sidebar', group: 'View' },
+];
+
+export default function App() {
+  const [query, setQuery] = useState('file');
+  const { results } = useFuzzySearch(COMMANDS, query, { key: 'label', limit: 5 });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 16, gap: 4 }}>
+      {results.map(({ item, score }) => (
+        <Box key={item.id} style={{ flexDirection: 'row', justifyContent: 'space-between', padding: '6 12', backgroundColor: '#313244', borderRadius: 4 }}>
+          <Text style={{ fontSize: 13, color: '#cdd6f4' }}>{item.label}</Text>
+          <Text style={{ fontSize: 10, color: '#6c7086' }}>{score}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web
+
+Example 3: Async search with loading state
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text } from '@reactjit/core';
+import { useAsyncSearch } from '@reactjit/core';
+
+async function searchGitHub(q: string) {
+  const res = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&per_page=5`);
+  const data = await res.json();
+  return data.items as { id: number; full_name: string; stargazers_count: number }[];
+}
+
+export default function App() {
+  const [query, setQuery] = useState('reactjit');
+  const { results, loading, error } = useAsyncSearch(searchGitHub, query, { minLength: 3 });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 8, padding: 16 }}>
+      {loading && <Text style={{ fontSize: 12, color: '#a6adc8' }}>Searching…</Text>}
+      {error && <Text style={{ fontSize: 12, color: '#f38ba8' }}>{error.message}</Text>}
+      {results.map(r => (
+        <Box key={r.id} style={{ padding: 8, backgroundColor: '#313244', borderRadius: 4, flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13, color: '#cdd6f4' }}>{r.full_name}</Text>
+          <Text style={{ fontSize: 11, color: '#f9e2af' }}>★ {r.stargazers_count}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web
+
+Example 4: Highlight matching text in results
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useSearch, useSearchHighlight } from '@reactjit/core';
+
+function HighlightedLabel({ text, query }: { text: string; query: string }) {
+  const parts = useSearchHighlight(text, query);
+  return (
+    <Box style={{ flexDirection: 'row' }}>
+      {parts.map((p, i) => (
+        <Text key={i} style={{ fontSize: 13, color: p.match ? '#f9e2af' : '#cdd6f4' }}>
+          {p.text}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+const ITEMS = [{ id: 1, label: 'Open Terminal' }, { id: 2, label: 'Toggle Sidebar' }];
+
+export default function App() {
+  const query = 'ter';
+  const results = useSearch(ITEMS, query, { key: 'label' });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 6, padding: 16 }}>
+      {results.map(item => (
+        <Box key={item.id} style={{ padding: 8, backgroundColor: '#313244', borderRadius: 4 }}>
+          <HighlightedLabel text={item.label} query={query} />
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web
+
+=== CRITICAL RULES ===
+- These hooks deal with data — they are not input components. The query string comes from your state, typically driven by a SearchBar's onSearch event. Do not try to wire TextInput onChange directly to useFuzzySearch — let SearchBar do the debouncing and call onSearch with the final value.
+- useSearch is case-insensitive substring matching. useFuzzySearch allows non-contiguous character matching with ranking. Use fuzzy for command palettes; use plain for lists where users type exact substrings.
+- Auto field detection inspects only the first item in the array. It skips keys that look like IDs (id, uuid, href, url, etc.) and keys with values longer than 200 characters. If your data has non-obvious searchable fields, specify them explicitly with key.
+- useAsyncSearch cancels stale requests on query change. You do not need to manage AbortController manually — but you must ensure your fetcher handles cancellation gracefully if it uses external abort signals.
+- useSearchHistory is native-only (backed by useLocalStore which requires the bridge). In web mode history will not persist.
+
+=== SEE ALSO ===
+- SearchBar
+- CommandPalette
+- SearchResults
+- useLocalStore
+

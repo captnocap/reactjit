@@ -58,7 +58,7 @@ export interface Style {
   borderBottomWidth?: number;
   borderLeftWidth?: number;
   borderColor?: Color;
-  overflow?: 'visible' | 'hidden' | 'scroll';
+  overflow?: 'visible' | 'hidden' | 'scroll' | 'auto';
   opacity?: number;
   zIndex?: number;
   scrollX?: number;
@@ -451,13 +451,14 @@ export interface ScrollViewRef {
   scrollTo(options: { x?: number; y?: number; animated?: boolean }): void;
 }
 
-export interface TextInputProps {
+export interface InputProps {
   value?: string;
   defaultValue?: string;
   onChangeText?: (text: string) => void;
   onSubmit?: (text: string) => void;
   onFocus?: () => void;
-  onBlur?: () => void;
+  /** Called when focus is lost. Receives the current text value. */
+  onBlur?: (text: string) => void;
   /**
    * Fired per-keystroke after a debounce delay (default 300ms). The entire
    * debounce runs in Lua — no per-keystroke bridge traffic. Use this for
@@ -467,20 +468,52 @@ export interface TextInputProps {
   onLiveChange?: (text: string) => void;
   /** Debounce delay in ms for onLiveChange. Default: 300. */
   liveChangeDebounce?: number;
+  /** Called after the user stops typing for `changeDelay` seconds (idle detection). */
+  onChange?: (text: string) => void;
+  /** Seconds of idle time before onChange fires (default: 3). */
+  changeDelay?: number;
   placeholder?: string;
   placeholderColor?: Color;
   maxLength?: number;
+  /** Enable multi-line editing. Implied by lineNumbers, syntaxHighlight, or tooltipLevel. */
   multiline?: boolean;
   editable?: boolean;
   secureTextEntry?: boolean;
+  /**
+   * When true, keystrokes are forwarded live (via onLiveChange / onChange).
+   * When false (default), the value only crosses the bridge on submit or blur.
+   */
+  live?: boolean;
   /** Hint for on-screen keyboard layout. Default: 'default'. */
   keyboardType?: 'default' | 'numeric' | 'email' | 'phone-pad' | 'url';
+  /** Node type to forward raw keystrokes to (Lua → Lua, no bridge). e.g. "ClaudeCanvas" */
+  keystrokeTarget?: string;
+  /** Node type to dump submitted text to on enter (Lua → Lua, no bridge). Clears input after. */
+  submitTarget?: string;
+  /** Node type to forward Escape key to (Lua → Lua, no bridge). */
+  escapeTarget?: string;
+  /** When true on a multiline input, Enter submits and Shift+Enter inserts a newline. */
+  submitOnEnter?: boolean;
+  /** Enable inline spell checking with red underlines (default: false). */
+  spellCheck?: boolean;
+  /** Show line numbers in the gutter (default: false). Implies multiline. */
+  lineNumbers?: boolean;
+  /** Enable JSX syntax highlighting (default: false). Implies multiline. */
+  syntaxHighlight?: boolean;
+  /** Hover tooltip verbosity for known identifiers. Implies multiline. */
+  tooltipLevel?: 'beginner' | 'guided' | 'clean';
+  /** PTY session ID for real-time keystroke passthrough. Implies multiline. */
+  sessionId?: string;
   style?: Style;
   textStyle?: Style;
   autoFocus?: boolean;
   cursorColor?: Color;
   key?: string | number;
 }
+
+/** @deprecated Use InputProps */
+export type TextInputProps = InputProps;
+
 
 export interface FlatListProps<T> {
   data: T[];
@@ -527,39 +560,8 @@ export interface FlatListRef {
   scrollToOffset(params: { offset: number; animated?: boolean }): void;
 }
 
-export interface TextEditorProps {
-  /** Initial text content (used on first render). */
-  initialValue?: string;
-  /** Controlled value — updates the editor text when changed. */
-  value?: string;
-  /** Called on blur/submit with the final text value. */
-  onChangeText?: (text: string) => void;
-  /** Called on Ctrl+Enter with the current text value. */
-  onSubmit?: (text: string) => void;
-  /** Called when the editor gains focus. */
-  onFocus?: () => void;
-  /** Called when the editor loses focus, with the final text value. */
-  onBlur?: (text: string) => void;
-  /** Called after the user stops typing for `changeDelay` seconds. */
-  onChange?: (text: string) => void;
-  /** Seconds of idle time before onChange fires (default: 3). */
-  changeDelay?: number;
-  /** Placeholder text shown when empty and unfocused. */
-  placeholder?: string;
-  /** Whether the editor is read-only. */
-  readOnly?: boolean;
-  /** Whether to show line numbers in the gutter (default: true). */
-  lineNumbers?: boolean;
-  /** Enable JSX syntax highlighting (default: false). */
-  syntaxHighlight?: boolean;
-  /** Hover tooltip verbosity level for known identifiers (default: none). */
-  tooltipLevel?: 'beginner' | 'guided' | 'clean';
-  /** Container style (sizing, layout). */
-  style?: Style;
-  /** Text style (fontSize, color, fontFamily). */
-  textStyle?: Style;
-  key?: string | number;
-}
+/** @deprecated Use InputProps */
+export type TextEditorProps = InputProps;
 
 export interface ContextMenuItem {
   /** Display label for the menu item. */

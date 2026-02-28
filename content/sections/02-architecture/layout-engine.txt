@@ -87,10 +87,11 @@ If flex-grow changes the node's width after initial measurement:
 Platforms: love2d
 
 === CRITICAL RULES ===
-- Nodes without explicit width default to their parent's width (not zero).
-- Nodes without explicit height auto-size to their content.
-- Scroll containers without explicit height default to 0 (they need explicit
-  height or flex-grow to be visible).
+- Containers with children auto-size from content (width = max child, height = sum of children).
+- Empty surface nodes (Box, Image, Video, Scene3D, Emulator) without children or explicit sizing
+  use the proportional fallback: 1/4 of parent's available space. This cascades with nesting.
+- Non-surface nodes (Text, TextInput, ScrollView) without explicit sizing depend on content
+  measurement or collapse. ScrollView needs explicit height or flex-grow to be visible.
 - flexGrow only distributes positive free space. If the parent has no definite
   size on the main axis, there is no free space to distribute.
 - The layout engine runs synchronously on every frame where the tree is dirty.

@@ -162,7 +162,6 @@ export async function manifestCommand(args) {
   const bundlePaths = [
     join(cwd, 'love', 'bundle.js'),
     join(cwd, 'bundle.js'),
-    join(cwd, 'sdl2', 'bundle.js'),
   ];
   for (const bp of bundlePaths) {
     if (existsSync(bp)) {

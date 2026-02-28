@@ -1,5 +1,5 @@
 # reactjit Makefile
-# Builds: QuickJS shared library + bundled React apps for both targets
+# Builds: QuickJS shared library + bundled React apps for Love2D target
 # Cross-platform: works on Linux (x86_64/aarch64) and macOS (Intel/Apple Silicon)
 
 # ── Platform detection ─────────────────────────────────
@@ -24,10 +24,8 @@ NATIVE_GAME = examples/native-hud/game
 LIB_DIR = $(NATIVE_GAME)/lib
 STORYBOOK_LOVE = storybook/love
 STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
-STORYBOOK_SDL2 = storybook/sdl2
-STORYBOOK_SDL2_LIB = $(STORYBOOK_SDL2)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native build-storybook-sdl2 run dev dev-storybook storybook storybook-sdl2 storybook-sdl2-libs storybook-web install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-natives build-luajit build-all-platforms
+.PHONY: all clean dist-clean setup build build-web build-storybook-love build-storybook-web dev-storybook-love storybook-love storybook-web install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-natives build-luajit build-all-platforms
 
 all: setup build
 
@@ -38,7 +36,7 @@ install: node_modules
 node_modules:
 	npm install
 
-# ── QuickJS setup (native target only) ──────────────────
+# ── QuickJS setup ─────────────────────────────────────────
 # All C compilation is handled by build.zig (zig build).
 # build.zig references native/quickjs-shim/qjs_ffi_shim.c directly —
 # no manual copy into the quickjs/ source tree needed.
@@ -74,17 +72,7 @@ $(STORYBOOK_LIB)/libquickjs$(LIB_EXT): $(LIB_DIR)/libquickjs$(LIB_EXT)
 
 # ── Build targets ───────────────────────────────────────
 
-build: build-native build-web build-storybook-native build-storybook
-
-build-native: node_modules
-	npx esbuild \
-		--bundle \
-		--format=iife \
-		--global-name=ReactJIT \
-		--target=es2020 \
-		--jsx=automatic \
-		--outfile=$(NATIVE_GAME)/bundle.js \
-		examples/native-hud/src/main.tsx
+build: build-web build-storybook-love build-storybook-web
 
 build-web: node_modules
 	npx esbuild \
@@ -95,7 +83,7 @@ build-web: node_modules
 		--outfile=examples/web-overlay/dist/app.js \
 		examples/web-overlay/src/main.tsx
 
-build-storybook: node_modules
+build-storybook-web: node_modules
 	npx esbuild \
 		--bundle \
 		--format=esm \
@@ -104,7 +92,7 @@ build-storybook: node_modules
 		--outfile=storybook/dist/storybook.js \
 		storybook/src/main.tsx
 
-build-storybook-native: node_modules
+build-storybook-love: node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
@@ -116,111 +104,15 @@ build-storybook-native: node_modules
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
 		storybook/src/native-main.tsx
 
-build-storybook-sdl2: node_modules
-	npx esbuild \
-		--bundle \
-		--format=iife \
-		--global-name=ReactJITStorybook \
-		--target=es2020 \
-		--jsx=automatic \
-		--external:child_process \
-		--external:ws \
-		--outfile=$(STORYBOOK_SDL2)/bundle.js \
-		storybook/src/native-main.tsx
-
 # ── Storybook ──────────────────────────────────────────
 
-storybook-sdl2: build-storybook-sdl2 storybook-sdl2-libs
+storybook-love: setup build-storybook-love $(STORYBOOK_LIB)/libquickjs$(LIB_EXT)
 	@echo ""
-	@echo "=== SDL2 Storybook ready ==="
-	@echo "  Run:  cd $(STORYBOOK_SDL2) && luajit main.lua"
-	@echo ""
-
-# Copy all zig-built libraries + optional system libraries into storybook/sdl2/lib/.
-# Mirrors cli-setup so the storybook SDL2 target has full parity with consumer projects.
-storybook-sdl2-libs: $(STORYBOOK_SDL2_LIB)/libquickjs$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libft_helper$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libimage_helper$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libSDL2$(LIB_EXT) $(STORYBOOK_SDL2_LIB)/libblake3$(LIB_EXT)
-ifeq ($(UNAME_S),Darwin)
-	@LIBMPV=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libmpv.2.dylib' -o -name 'libmpv.dylib' 2>/dev/null | head -1); \
-	if [ -n "$$LIBMPV" ]; then \
-		cp "$$LIBMPV" $(STORYBOOK_SDL2_LIB)/libmpv.2.dylib; \
-		echo "  [sdl2-storybook] Bundled libmpv.2.dylib"; \
-	fi
-	@LIBSQLITE=$$(find /opt/homebrew/opt/sqlite/lib /opt/homebrew/lib /usr/local/opt/sqlite/lib /usr/local/lib /usr/lib 2>/dev/null -name 'libsqlite3.0.dylib' -o -name 'libsqlite3.dylib' 2>/dev/null | head -1); \
-	if [ -n "$$LIBSQLITE" ]; then \
-		cp "$$LIBSQLITE" $(STORYBOOK_SDL2_LIB)/libsqlite3.0.dylib; \
-		echo "  [sdl2-storybook] Bundled libsqlite3.0.dylib"; \
-	fi
-	@LIBARCHIVE=$$(find /opt/homebrew/opt/libarchive/lib /opt/homebrew/lib /usr/local/opt/libarchive/lib /usr/local/lib 2>/dev/null -name 'libarchive.13.dylib' -o -name 'libarchive.dylib' 2>/dev/null | head -1); \
-	if [ -n "$$LIBARCHIVE" ]; then \
-		cp "$$LIBARCHIVE" $(STORYBOOK_SDL2_LIB)/libarchive.13.dylib; \
-		echo "  [sdl2-storybook] Bundled libarchive.13.dylib"; \
-	fi
-	@LIBSODIUM=$$(find /opt/homebrew/lib /usr/local/lib 2>/dev/null -name 'libsodium.dylib' 2>/dev/null | head -1); \
-	if [ -n "$$LIBSODIUM" ]; then \
-		cp "$$LIBSODIUM" $(STORYBOOK_SDL2_LIB)/libsodium.dylib; \
-		echo "  [sdl2-storybook] Bundled libsodium.dylib"; \
-	fi
-	@LIBCRYPTO=$$(find /opt/homebrew/opt/openssl/lib /opt/homebrew/lib /usr/local/opt/openssl/lib /usr/local/lib 2>/dev/null -name 'libcrypto.dylib' 2>/dev/null | head -1); \
-	if [ -n "$$LIBCRYPTO" ]; then \
-		cp "$$LIBCRYPTO" $(STORYBOOK_SDL2_LIB)/libcrypto.dylib; \
-		echo "  [sdl2-storybook] Bundled libcrypto.dylib"; \
-	fi
-else
-	@LIBMPV=$$(ldconfig -p 2>/dev/null | grep 'libmpv.so.2 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
-	if [ -n "$$LIBMPV" ]; then \
-		cp "$$LIBMPV" $(STORYBOOK_SDL2_LIB)/libmpv.so.2; \
-		echo "  [sdl2-storybook] Bundled libmpv.so.2"; \
-	fi
-	@LIBSQLITE=$$(ldconfig -p 2>/dev/null | grep 'libsqlite3.so.0 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
-	if [ -n "$$LIBSQLITE" ]; then \
-		cp "$$LIBSQLITE" $(STORYBOOK_SDL2_LIB)/libsqlite3.so.0; \
-		echo "  [sdl2-storybook] Bundled libsqlite3.so.0"; \
-	fi
-	@LIBARCHIVE=$$(ldconfig -p 2>/dev/null | grep 'libarchive.so.13 ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
-	if [ -n "$$LIBARCHIVE" ]; then \
-		cp "$$LIBARCHIVE" $(STORYBOOK_SDL2_LIB)/libarchive.so.13; \
-		echo "  [sdl2-storybook] Bundled libarchive.so.13"; \
-	fi
-	@LIBSODIUM=$$(ldconfig -p 2>/dev/null | grep 'libsodium.so ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
-	if [ -n "$$LIBSODIUM" ]; then \
-		cp "$$LIBSODIUM" $(STORYBOOK_SDL2_LIB)/libsodium.so; \
-		echo "  [sdl2-storybook] Bundled libsodium.so"; \
-	fi
-	@LIBCRYPTO=$$(ldconfig -p 2>/dev/null | grep 'libcrypto.so ' | grep 'x86-64' | head -1 | sed 's/.*=> //'); \
-	if [ -n "$$LIBCRYPTO" ]; then \
-		cp "$$LIBCRYPTO" $(STORYBOOK_SDL2_LIB)/libcrypto.so; \
-		echo "  [sdl2-storybook] Bundled libcrypto.so"; \
-	fi
-endif
-
-$(STORYBOOK_SDL2_LIB)/libquickjs$(LIB_EXT): zig-out/lib/libquickjs$(LIB_EXT)
-	mkdir -p $(STORYBOOK_SDL2_LIB)
-	cp $< $@
-
-$(STORYBOOK_SDL2_LIB)/libft_helper$(LIB_EXT): zig-out/lib/libft_helper$(LIB_EXT)
-	mkdir -p $(STORYBOOK_SDL2_LIB)
-	cp $< $@
-
-$(STORYBOOK_SDL2_LIB)/libimage_helper$(LIB_EXT): zig-out/lib/libimage_helper$(LIB_EXT)
-	mkdir -p $(STORYBOOK_SDL2_LIB)
-	cp $< $@
-
-$(STORYBOOK_SDL2_LIB)/libSDL2$(LIB_EXT): zig-out/lib/libSDL2$(LIB_EXT)
-	mkdir -p $(STORYBOOK_SDL2_LIB)
-	cp $< $@
-
-$(STORYBOOK_SDL2_LIB)/libblake3$(LIB_EXT): zig-out/lib/libblake3$(LIB_EXT)
-	mkdir -p $(STORYBOOK_SDL2_LIB)
-	cp $< $@
-
-storybook: setup build-storybook-native build-storybook $(STORYBOOK_LIB)/libquickjs$(LIB_EXT)
-	@echo ""
-	@echo "=== Storybook ready ==="
-	@echo "  Native:  cd $(STORYBOOK_LOVE) && love ."
-	@echo "  Web:     cd storybook && python3 -m http.server 8080"
+	@echo "=== Love2D Storybook ready ==="
+	@echo "  Run:  cd $(STORYBOOK_LOVE) && love ."
 	@echo ""
 
-storybook-web: build-storybook
+storybook-web: build-storybook-web
 	@echo "Web storybook built. Serve with: cd storybook && python3 -m http.server 8080"
 
 # ── Dist (consumer-facing distributable) ─────────────────
@@ -251,11 +143,11 @@ LOVE_WIN_ZIP     = vendor/love-$(LOVE_WIN_VERSION)-win64.zip
 LOVE_WIN_DIR     = vendor/love-$(LOVE_WIN_VERSION)-win64
 WIN_STAGING      = /tmp/reactjit-demo-win
 
-dist-storybook: build-storybook-native setup
+dist-storybook: build-storybook-love setup
 ifneq ($(UNAME_S),Linux)
 	@echo "Error: dist-storybook produces a self-extracting Linux binary."
 	@echo "  This target can only run on Linux (requires ldd, ldconfig, ld-linux)."
-	@echo "  Use 'rjit build linux' for cross-compiled SDL2 builds from any host."
+	@echo "  Use 'rjit build linux' for cross-compiled builds from any host."
 	@exit 1
 endif
 	@echo "=== Packaging single-file binary ==="
@@ -264,7 +156,7 @@ endif
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
 	# Bundle goes into love/ subdir — matches bundlePath = "love/bundle.js" in main.lua.
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -273,6 +165,8 @@ endif
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
+	cp lua/capabilities/*.lua $(STAGING_DIR)/lua/capabilities/
+	cp lua/classifiers/*.lua $(STAGING_DIR)/lua/classifiers/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	# ── Assemble payload directory ──
 	# Don't fuse — ld-linux invocation breaks /proc/self/exe detection.
@@ -371,12 +265,12 @@ zig-out/bin/ilr-launcher.exe:
 vendor/mpv-win64/mpv-2.dll:
 	bash scripts/build-libmpv-windows.sh
 
-dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/ilr-launcher.exe vendor/mpv-win64/mpv-2.dll
+dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/ilr-launcher.exe vendor/mpv-win64/mpv-2.dll
 	@echo "=== Packaging single-file Windows exe ==="
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -385,6 +279,8 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
+	cp lua/capabilities/*.lua $(STAGING_DIR)/lua/capabilities/
+	cp lua/classifiers/*.lua $(STAGING_DIR)/lua/classifiers/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	rm -rf $(STAGING_DIR)
 	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll + mpv-2.dll ──
@@ -404,25 +300,9 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	@echo "  Size: $$(du -h $(DIST_DIR)/reactjit-demo.exe | cut -f1)"
 	@echo "  Single file — send reactjit-demo.exe, double-click to run"
 
-# ── Run ─────────────────────────────────────────────────
-
-run: build-native setup
-	cd $(NATIVE_GAME) && love .
-
 # ── Dev mode (watch + run) ──────────────────────────────
 
-dev:
-	npx esbuild \
-		--bundle \
-		--format=iife \
-		--global-name=ReactJIT \
-		--target=es2020 \
-		--jsx=automatic \
-		--outfile=$(NATIVE_GAME)/bundle.js \
-		--watch \
-		examples/native-hud/src/main.tsx
-
-dev-storybook: setup $(STORYBOOK_LIB)/libquickjs$(LIB_EXT) node_modules
+dev-storybook-love: setup $(STORYBOOK_LIB)/libquickjs$(LIB_EXT) node_modules
 	npx esbuild \
 		--bundle \
 		--format=iife \
@@ -447,22 +327,15 @@ cli-setup: setup
 	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/
 	mkdir -p cli/runtime/lua/capabilities
 	cp lua/capabilities/*.lua cli/runtime/lua/capabilities/
+	mkdir -p cli/runtime/lua/classifiers
+	cp lua/classifiers/*.lua cli/runtime/lua/classifiers/
 	mkdir -p cli/runtime/lua/effects
 	cp lua/effects/*.lua cli/runtime/lua/effects/
+	mkdir -p cli/runtime/lua/child_window
+	cp lua/child_window/*.lua cli/runtime/lua/child_window/
+	mkdir -p cli/runtime/lua/devtools_window
+	cp lua/devtools_window/*.lua cli/runtime/lua/devtools_window/
 	cp zig-out/lib/libquickjs$(LIB_EXT) cli/runtime/lib/
-	@echo "  Compiling ft_helper (FreeType bridge for SDL2 target)..."
-	@zig build ft-helper \
-		&& cp zig-out/lib/libft_helper$(LIB_EXT) cli/runtime/lib/libft_helper$(LIB_EXT) \
-		&& echo "  Bundled libft_helper$(LIB_EXT)" \
-		|| echo "  Warning: ft_helper build failed — SDL2 target text rendering unavailable"
-	@zig build image-helper \
-		&& cp zig-out/lib/libimage_helper$(LIB_EXT) cli/runtime/lib/libimage_helper$(LIB_EXT) \
-		&& echo "  Bundled libimage_helper$(LIB_EXT)" \
-		|| echo "  Warning: image_helper build failed — SDL2 image loading unavailable"
-	@zig build sdl2 \
-		&& cp zig-out/lib/libSDL2$(LIB_EXT) cli/runtime/lib/libSDL2$(LIB_EXT) \
-		&& echo "  Bundled libSDL2$(LIB_EXT) (via zig)" \
-		|| echo "  Warning: libSDL2 build failed — SDL2 target unavailable"
 	@# ── Optional system libraries (platform-aware discovery) ──
 ifeq ($(UNAME_S),Darwin)
 	@# macOS: search Homebrew and system paths
@@ -619,10 +492,10 @@ build-all-platforms:
 #   make dist-cli-full PLATFORM=macos-arm64
 #   make dist-cli-light PLATFORM=linux-x64
 
-dist-cli-full: cli-setup build-storybook-native
+dist-cli-full: cli-setup build-storybook-love
 	bash scripts/build-cli-dist.sh $(or $(PLATFORM),linux-x64)
 
-dist-cli-light: cli-setup build-storybook-native
+dist-cli-light: cli-setup build-storybook-love
 	bash scripts/build-cli-dist.sh $(or $(PLATFORM),linux-x64) --no-node
 
 dist-cli: dist-cli-full dist-cli-light dist-storybook ## Build all 3 tier artifacts
@@ -650,7 +523,6 @@ dist-clean:
 	rm -rf $${XDG_CACHE_HOME:-$$HOME/.cache}/reactjit-demo
 
 clean: dist-clean
-	rm -f $(NATIVE_GAME)/bundle.js
 	rm -f examples/web-overlay/dist/app.js
 	rm -f storybook/dist/storybook.js
 	rm -f $(STORYBOOK_LOVE)/bundle.js

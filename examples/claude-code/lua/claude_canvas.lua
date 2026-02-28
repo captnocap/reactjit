@@ -18,6 +18,7 @@
 local Capabilities = require("lua.capabilities")
 local Renderer     = require("lua.claude_renderer")
 local Session      = require("lua.claude_session")
+local Graph        = require("lua.claude_graph")
 local Color        = require("lua.color")
 local Focus        = require("lua.focus")
 local Tree         = require("lua.tree")
@@ -43,7 +44,19 @@ local function getInputState(nodeId)
 end
 
 -- Cached classified rows from last render frame (for clipboard dump)
-local _lastClassified = {}  -- nodeId -> { rows = { { row, kind, text, turnId, groupId, groupType, colors } } }
+local _lastClassified = {}  -- nodeId -> { rows = { { row, kind, text, nodeId, turnId, groupId, groupType, colors } } }
+
+-- Per-row classification history: tracks every kind transition (persistent across frames)
+local _rowHistory = {}      -- nodeId -> { [row] = { {kind, nodeId, frame}, ... } }
+local _frameCounter = 0     -- monotonic frame counter for history timestamps
+local _lastRowKind = {}     -- nodeId -> { [row] = lastKind } for change detection
+
+-- Semantic graph (persistent across frames, rebuilt each frame, diffed)
+local _lastGraph = {}       -- nodeId -> SemanticGraph
+local _lastDiff = {}        -- nodeId -> diff ops from previous frame
+
+-- sessionId -> nodeId reverse lookup (populated in create)
+local _sessionNodeMap = {}  -- "default" -> numeric nodeId
 
 -- Scroll step sizes
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
@@ -93,6 +106,7 @@ Capabilities.register("ClaudeCanvas", {
 
     local sessionId = props.sessionId or "default"
     Renderer.getSession(sessionId)
+    _sessionNodeMap[sessionId] = nodeId
 
     return {
       sessionId = sessionId,
@@ -106,26 +120,64 @@ Capabilities.register("ClaudeCanvas", {
   end,
 
   tick = function(nodeId, state, dt, pushEvent, props)
-    -- Auto-focus on first tick so keyboard events route here immediately
-    if not state._focusGrabbed then
-      local nodes = Tree.getNodes()
-      local node = nodes[nodeId]
-      if node then
-        io.write(string.format("[FOCUS] Setting focus: nodeId=%s type='%s' hittable=%s\n",
-          tostring(nodeId), tostring(node.type), tostring(node._capHittable)))
-        io.flush()
-        Focus.set(node)
-        state._focusGrabbed = true
-      else
-        io.write("[FOCUS] No node found for " .. tostring(nodeId) .. "\n"); io.flush()
-      end
-    end
+    -- Don't grab focus — the Input bar owns focus and forwards keystrokes here
+    -- via keystrokeTarget/submitTarget props.
+    state._focusGrabbed = true
 
     local inputState = getInputState(nodeId)
     inputState.blinkTimer = inputState.blinkTimer + dt
     if inputState.blinkTimer >= 0.53 then
       inputState.blinkTimer = 0
       inputState.blinkOn = not inputState.blinkOn
+    end
+
+    -- Sync proxy input cursor directly from vterm cursor position.
+    -- getPromptState() fails in splash mode — bypass it entirely.
+    -- The vterm cursor IS the SSoT for cursor position.
+    local sessionId = props and props.sessionId or "default"
+    local vt = Session.getVTerm(sessionId)
+    if vt then
+      local cursor = vt:getCursor()
+      if cursor then
+        -- Find the prompt prefix width by scanning for ❯/>/! symbol + space
+        local promptWidth = 0
+        local boundary = Session.getInputBoundary(sessionId) or 0
+        if cursor.row >= boundary then
+          for col = 0, math.min(15, cursor.col) do
+            local cell = vt:getCell(cursor.row, col)
+            if cell and cell.char then
+              local ch = cell.char
+              if ch:find("❯", 1, true) or ch == "!" or ch == ">" or ch == "›" then
+                -- Prompt symbol found. Skip it + the space/NBSP after it.
+                promptWidth = col + 2
+                break
+              end
+            end
+          end
+        end
+
+        local cursorCol = math.max(0, cursor.col - promptWidth)
+
+        local allNodes = Tree.getNodes()
+        if allNodes then
+          for _, n in pairs(allNodes) do
+            if n.type == "TextInput" and n.props and n.props.keystrokeTarget == "ClaudeCanvas" then
+              if n.inputState then
+                -- Convert cell column to byte offset
+                local bytePos = 0
+                local cellCount = 0
+                for char in n.inputState.text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+                  if cellCount >= cursorCol then break end
+                  bytePos = bytePos + #char
+                  cellCount = cellCount + 1
+                end
+                n.inputState.cursorPos = math.min(bytePos, #n.inputState.text)
+              end
+              break
+            end
+          end
+        end
+      end
     end
   end,
 
@@ -148,94 +200,24 @@ Capabilities.register("ClaudeCanvas", {
     local inputState = getInputState(nodeId)
     inputState.viewportH = c.h
 
-    -- Compute desired column count — applied next tick (row resize segfaults libvterm)
-    -- Must match the visible cell area: canvas width minus tag prefix and right-side debug info
-    if Measure then
-      local sizeFont = Measure.getFont(13, nil, nil)
-      local tagSizeFont = Measure.getFont(9, nil, nil)
-      local charW = sizeFont:getWidth("M")
-      local leftReserve = tagSizeFont:getWidth("[list_selectable] ") + 4
-      local rightReserve = 180  -- row numbers + color debug labels
-      local cellArea = c.w - leftReserve - rightReserve
-      local fitCols = math.max(20, math.floor(cellArea / charW))
-      Session.setDesiredSize(fitCols, nil)
-    end
+    -- Keep vterm at a fixed width so the CLI renders full-width content.
+    -- The debug canvas clips visually, but the semantic panel gets full text.
+    -- (Previously resized to fit canvas pixel width, which truncated everything to ~30 cols)
 
-    -- ── Compute bottom reserved area (input + debug) FIRST ────────
+    -- ── Compute bottom reserved area (debug overlay only) ─────────
     local inputState = getInputState(nodeId)
     if not Measure then return end
 
     local fontSize = 13
     local font = Measure.getFont(fontSize, nil, nil)
     local lineHeight = font:getHeight()
-    local promptX = c.x + 16
-    local prefixW = font:getWidth("> ")
-    local textAreaW = c.w - 32 - prefixW
-    if textAreaW < 20 then textAreaW = 20 end
 
-    -- Word-wrap helper
-    local function wrapText(text, maxW)
-      if #text == 0 then return { "" }, { 0 } end
-      local lines = {}
-      local lineStarts = { 1 }
-      local lineStart = 1
-      local lastSpace = nil
-      local x = 0
-      local i = 1
-      while i <= #text do
-        local ch = text:sub(i, i)
-        local chW = font:getWidth(ch)
-        if ch == " " then lastSpace = i end
-        if x + chW > maxW and i > lineStart then
-          local breakAt
-          if lastSpace and lastSpace > lineStart then
-            breakAt = lastSpace
-            lines[#lines + 1] = text:sub(lineStart, breakAt - 1)
-            lineStart = breakAt + 1
-          else
-            breakAt = i
-            lines[#lines + 1] = text:sub(lineStart, breakAt - 1)
-            lineStart = breakAt
-          end
-          lineStarts[#lineStarts + 1] = lineStart
-          lastSpace = nil
-          x = 0
-        else
-          x = x + chW
-          i = i + 1
-        end
-      end
-      lines[#lines + 1] = text:sub(lineStart)
-      return lines, lineStarts
-    end
-
-    -- Read vterm prompt state FIRST so we compute input height from reality
-    local prompt = Session.getPromptState()
-    local promptText = prompt and prompt.text or ""
-    -- Strip leading whitespace (NBSP and regular)
-    promptText = promptText:gsub("^\194\160", ""):gsub("^%s+", "")
-    local promptCursorCol = prompt and prompt.cursorCol or 0
-
-
-    -- Compute wrapped lines from vterm prompt (not local inputState.text)
-    local displayLines, displayStarts
-    if #promptText > 0 then
-      displayLines, displayStarts = wrapText(promptText, textAreaW)
-    else
-      displayLines = { "" }
-      displayStarts = { 1 }
-    end
-    local displayNumLines = #displayLines
-
-    local inputH = displayNumLines * lineHeight + 8
-    local bottomMargin = 20
-    local inputTop = c.y + c.h - inputH - bottomMargin
-
-    -- Debug overlay height (3 lines of debug text + 5px gap above input)
+    -- Debug overlay height (3 lines of debug text + margin)
     local df = Measure.getFont(10, nil, nil)
     local dfH = df:getHeight()
     local debugH = dfH * 3 + 5  -- 3 lines + gap
-    local debugTop = inputTop - 5 - debugH
+    local bottomMargin = 10
+    local debugTop = c.y + c.h - debugH - bottomMargin
 
     -- The content area stops at the debug overlay top
     local contentBottom = debugTop
@@ -243,6 +225,7 @@ Capabilities.register("ClaudeCanvas", {
 
     -- ── Render ALL vterm rows with semantic tags ─────────────────
     -- No boundary cutoff. Every row gets classified. React layer decides display.
+    _frameCounter = _frameCounter + 1
     local vterm = Session.getVTerm()
     local boundary = Session.getInputBoundary()
 
@@ -298,9 +281,10 @@ Capabilities.register("ClaudeCanvas", {
 
       local scrollY = inputState.scrollY
       local prevKind = nil
+      local blockKind = nil  -- first semantic kind in current blank-line-delimited block
       local inMenu = false
       local rowColors = {}  -- row -> { fg, hasText }
-      local rowMeta = {}    -- row -> { turnId, groupId, groupType }
+      local rowMeta = {}    -- row -> { nodeId, turnId, groupId, groupType }
 
       -- Turn and group counters
       local currentTurnId = 0
@@ -318,8 +302,35 @@ Capabilities.register("ClaudeCanvas", {
         picker_selected = "picker", picker_meta = "picker",
         task_summary = "task", task_done = "task", task_open = "task", task_active = "task",
         permission = "permission",
-        plan_border = "plan", wizard_step = "plan",
+        plan_border = "plan", plan_mode = "plan", wizard_step = "plan",
       }
+
+      -- Block types: consecutive rows of same kind share one nodeId
+      local BLOCK_TYPES = {
+        assistant_text = true, user_text = true, diff = true,
+        text = true, banner = true, thinking = true, plan_mode = true,
+        status_bar = true, input_border = true,
+        tool = true, result = true,
+      }
+
+      -- Per-turn sequence counters (reset on turn change)
+      local turnThinkSeq = 0
+      local turnToolSeq = 0
+      local turnResultSeq = 0
+      local turnAsstSeq = 0
+      local turnDiffSeq = 0
+      local turnErrorSeq = 0
+      local turnBoxSeq = 0
+      local turnPlanSeq = 0
+      local turnWizardSeq = 0
+      local turnImageSeq = 0
+
+      -- Per-group item counters (reset on group change)
+      local groupItemIndex = 0
+      local groupMetaIndex = 0
+
+      -- Current node tracking
+      local currentNodeId = nil
 
       for row = 0, lastNonEmpty do
         local py = c.y + 8 + row * lineH - scrollY
@@ -332,6 +343,9 @@ Capabilities.register("ClaudeCanvas", {
         end
 
         local rowText = vterm:getRowText(row)
+        if #rowText == 0 or rowText:match("^%s*$") then
+          blockKind = nil  -- blank line resets the block
+        end
         if #rowText > 0 then
           -- Classify with zone awareness
           local kind = Session.classifyRow(rowText, row, rows)
@@ -399,17 +413,21 @@ Capabilities.register("ClaudeCanvas", {
             kind = "user_text"
           end
 
-          -- Adjacency: text/menu_option after assistant-attributed tokens = assistant_text
-          -- State machine: ● tool / thinking / thought_complete / result / task_* = assistant owns stream
-          -- All subsequent def-colored text belongs to assistant until next user marker
-          -- menu_option (numbered list "1. Foo") also gets absorbed — it's a list in prose, not an interactive menu
-          if (kind == "text" or kind == "menu_option") and (prevKind == "tool" or prevKind == "thinking"
-             or prevKind == "thought_complete" or prevKind == "result"
-             or prevKind == "assistant_text" or prevKind == "task_done"
-             or prevKind == "task_open" or prevKind == "task_summary"
-             or prevKind == "task_active" or prevKind == "diff"
-             or prevKind == "plan_border") then
-            kind = "assistant_text"
+          -- Block inheritance: blank lines delimit blocks, first major semantic
+          -- row sets the kind for ALL other rows in the same block.
+          -- Major kinds that SET the block (everything else inherits):
+          local BLOCK_SETTERS = {
+            banner = true, user_prompt = true, thinking = true,
+            tool = true, result = true, diff = true,
+            plan_mode = true, permission = true, error = true,
+            status_bar = true, input_border = true, input_zone = true,
+            idle_prompt = true, thought_complete = true, task_active = true,
+            image_attachment = true,
+          }
+          if BLOCK_SETTERS[kind] then
+            blockKind = kind
+          elseif blockKind then
+            kind = blockKind
           end
 
           -- Adjacency: text after menu_option = menu_desc (option description)
@@ -488,6 +506,10 @@ Capabilities.register("ClaudeCanvas", {
           -- turnId: increments on user_prompt (new conversation turn)
           if kind == "user_prompt" then
             currentTurnId = currentTurnId + 1
+            -- Reset per-turn sequence counters
+            turnThinkSeq = 0; turnToolSeq = 0; turnResultSeq = 0; turnAsstSeq = 0
+            turnDiffSeq = 0; turnErrorSeq = 0; turnBoxSeq = 0
+            turnPlanSeq = 0; turnWizardSeq = 0; turnImageSeq = 0
           end
 
           -- groupId: increments when entering a new interactive group
@@ -495,11 +517,102 @@ Capabilities.register("ClaudeCanvas", {
           if groupType ~= currentGroupType then
             if groupType then
               currentGroupId = currentGroupId + 1
+              -- Reset per-group counters
+              groupItemIndex = 0; groupMetaIndex = 0
             end
             currentGroupType = groupType
           end
 
+          -- ── nodeId minting ─────────────────────────────────────
+          local continues = BLOCK_TYPES[kind] and kind == prevKind
+          if not continues then
+            local nid
+            -- Session singletons
+            if kind == "banner" then nid = "s:banner"
+            elseif kind == "input_zone" or kind == "user_input" or kind == "input_border" then nid = "s:input"
+            elseif kind == "status_bar" then nid = "s:status"
+            -- Turn-scoped
+            elseif kind == "user_prompt" then nid = "t" .. currentTurnId .. ":prompt"
+            elseif kind == "user_text" then nid = "t" .. currentTurnId .. ":utext"
+            elseif kind == "thinking" then
+              turnThinkSeq = turnThinkSeq + 1
+              nid = "t" .. currentTurnId .. ":think:" .. turnThinkSeq
+            elseif kind == "thought_complete" then nid = "t" .. currentTurnId .. ":thought"
+            elseif kind == "tool" then
+              turnToolSeq = turnToolSeq + 1
+              nid = "t" .. currentTurnId .. ":tool:" .. turnToolSeq
+            elseif kind == "result" then
+              turnResultSeq = turnResultSeq + 1
+              nid = "t" .. currentTurnId .. ":result:" .. turnResultSeq
+            elseif kind == "assistant_text" then
+              turnAsstSeq = turnAsstSeq + 1
+              nid = "t" .. currentTurnId .. ":asst:" .. turnAsstSeq
+            elseif kind == "diff" then
+              turnDiffSeq = turnDiffSeq + 1
+              nid = "t" .. currentTurnId .. ":diff:" .. turnDiffSeq
+            elseif kind == "error" then
+              turnErrorSeq = turnErrorSeq + 1
+              nid = "t" .. currentTurnId .. ":error:" .. turnErrorSeq
+            elseif kind == "plan_mode" then
+              nid = "t" .. currentTurnId .. ":plan_mode"
+            elseif kind == "plan_border" then
+              turnPlanSeq = turnPlanSeq + 1
+              nid = "t" .. currentTurnId .. ":plan:" .. turnPlanSeq
+            elseif kind == "wizard_step" then
+              turnWizardSeq = turnWizardSeq + 1
+              nid = "t" .. currentTurnId .. ":wizard:" .. turnWizardSeq
+            elseif kind == "image_attachment" then
+              turnImageSeq = turnImageSeq + 1
+              nid = "t" .. currentTurnId .. ":image:" .. turnImageSeq
+            elseif kind == "permission" then
+              nid = "t" .. currentTurnId .. ":perm"
+            elseif kind == "box_drawing" then
+              turnBoxSeq = turnBoxSeq + 1
+              nid = "t" .. currentTurnId .. ":box:" .. turnBoxSeq
+            -- Group-scoped
+            elseif kind == "menu_title" then nid = "g" .. currentGroupId .. ":menu:title"
+            elseif kind == "menu_option" then
+              groupItemIndex = groupItemIndex + 1
+              nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
+            elseif kind == "menu_desc" then
+              nid = "g" .. currentGroupId .. ":menu:desc:" .. groupItemIndex
+            elseif kind == "list_selectable" then
+              groupItemIndex = groupItemIndex + 1
+              nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
+            elseif kind == "list_selected" then
+              nid = "g" .. currentGroupId .. ":menu:sel"
+            elseif kind == "list_info" then
+              nid = "g" .. currentGroupId .. ":menu:info:" .. groupItemIndex
+            elseif kind == "search_box" then
+              nid = "g" .. currentGroupId .. ":search"
+            elseif kind == "confirmation" then
+              nid = "g" .. currentGroupId .. ":confirm"
+            elseif kind == "hint" then
+              local gid = currentGroupId > 0 and currentGroupId or 0
+              nid = "g" .. gid .. ":hint"
+            elseif kind == "selector" then
+              nid = "g" .. currentGroupId .. ":selector"
+            elseif kind == "picker_title" then
+              nid = "g" .. currentGroupId .. ":pick:title"
+            elseif kind == "picker_selected" then
+              nid = "g" .. currentGroupId .. ":pick:sel"
+            elseif kind == "picker_item" then
+              groupItemIndex = groupItemIndex + 1
+              nid = "g" .. currentGroupId .. ":pick:item:" .. groupItemIndex
+            elseif kind == "picker_meta" then
+              groupMetaIndex = groupMetaIndex + 1
+              nid = "g" .. currentGroupId .. ":pick:meta:" .. groupMetaIndex
+            elseif kind == "slash_menu" then
+              nid = "g" .. currentGroupId .. ":slash"
+            -- Fallback
+            else
+              nid = "t" .. currentTurnId .. ":" .. kind
+            end
+            currentNodeId = nid
+          end
+
           rowMeta[row] = {
+            nodeId = currentNodeId,
             turnId = currentTurnId,
             groupId = groupType and currentGroupId or nil,
             groupType = groupType,
@@ -511,12 +624,24 @@ Capabilities.register("ClaudeCanvas", {
             row = row,
             kind = kind,
             text = rowText,
+            nodeId = currentNodeId,
             turnId = currentTurnId,
             groupId = groupType and currentGroupId or nil,
             groupType = groupType,
             colors = rc and rc.colors or {},
           }
 
+          -- Track classification history (persistent across frames)
+          if not _lastRowKind[nodeId] then _lastRowKind[nodeId] = {} end
+          if not _rowHistory[nodeId] then _rowHistory[nodeId] = {} end
+          if _lastRowKind[nodeId][row] ~= kind then
+            if not _rowHistory[nodeId][row] then _rowHistory[nodeId][row] = {} end
+            local hist = _rowHistory[nodeId][row]
+            hist[#hist + 1] = { kind = kind, nid = currentNodeId, frame = _frameCounter }
+            _lastRowKind[nodeId][row] = kind
+          end
+
+          -- blockKind already updated by BLOCK_SETTERS above
           prevKind = kind
 
           -- Drawing: only for visible rows
@@ -552,8 +677,47 @@ Capabilities.register("ClaudeCanvas", {
       end
       love.graphics.setScissor()
 
+      -- ── Prompt cursor ─────────────────────────────────────────
+      -- The CLI (Ink) parks the vterm cursor below visible content.
+      -- Find the prompt row by scanning for ❯ in the input zone,
+      -- then draw cursor after the last non-empty cell on that row.
+      if inputState.blinkOn and boundary > 0 then
+        local promptRow = nil
+        local promptCol = nil
+        for row = boundary, lastNonEmpty do
+          local rowText = vterm:getRowText(row)
+          if rowText:find("❯", 1, true) or rowText:match("^>%s") then
+            promptRow = row
+            -- Find the last non-empty cell to place cursor after text
+            local lastCell = 0
+            for col = 0, cols - 1 do
+              local cell = vterm:getCell(row, col)
+              if cell and cell.char and #cell.char > 0 and cell.char ~= " " then
+                lastCell = col + 1
+              end
+            end
+            promptCol = lastCell
+            break
+          end
+        end
+        if promptRow then
+          local cy = c.y + 8 + promptRow * lineH - scrollY
+          local cx = c.x + cellOffsetX + promptCol * charW
+          if cy >= c.y and cy + lineH <= contentBottom then
+            love.graphics.setColor(0.9, 0.9, 0.95, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", cx, cy, charW, lineH)
+          end
+        end
+      end
+
       -- Store classified cache for clipboard dump hotkey
       _lastClassified[nodeId] = classifiedCache
+
+      -- Build semantic graph from classified cache
+      local prevGraph = _lastGraph[nodeId]
+      local graph = Graph.build(classifiedCache, _rowHistory[nodeId], _frameCounter)
+      _lastDiff[nodeId] = Graph.diff(prevGraph, graph)
+      _lastGraph[nodeId] = graph
 
       -- Row numbers
       local numFont = Measure.getFont(9, nil, nil)
@@ -571,27 +735,20 @@ Capabilities.register("ClaudeCanvas", {
           love.graphics.setColor(1, 1, 1, 0.15)
         end
         love.graphics.print(string.format("%3d", row), c.x + c.w - 30, py)
-        -- Show turnId:groupId next to row number
+        -- Show nodeId next to row number
         local rm = rowMeta[row]
-        if rm then
-          local metaStr = "t" .. rm.turnId
-          if rm.groupId then
-            metaStr = metaStr .. " g" .. rm.groupId
-            if rm.groupType then metaStr = metaStr .. ":" .. rm.groupType end
-          end
+        if rm and rm.nodeId then
           love.graphics.setColor(0.6, 0.8, 0.4, 0.6)
-          local mw = numFont:getWidth(metaStr .. "  ")
-          love.graphics.print(metaStr, c.x + c.w - 34 - mw, py)
+          local mw = numFont:getWidth(rm.nodeId .. "  ")
+          love.graphics.print(rm.nodeId, c.x + c.w - 34 - mw, py)
         end
         -- Show all distinct fg colors further left
         local rc = rowColors[row]
         if rc and rc.colors and #rc.colors > 0 then
           love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
           local rmWidth = 0
-          if rm then
-            local ms = "t" .. rm.turnId
-            if rm.groupId then ms = ms .. " g" .. rm.groupId .. ":" .. (rm.groupType or "") end
-            rmWidth = numFont:getWidth(ms .. "    ")
+          if rm and rm.nodeId then
+            rmWidth = numFont:getWidth(rm.nodeId .. "    ")
           end
           local colorStr = table.concat(rc.colors, " ")
           local cw = numFont:getWidth(colorStr .. "  ")
@@ -620,96 +777,6 @@ Capabilities.register("ClaudeCanvas", {
         dbg.lastDmg, dbg.settle, dbg.streaming, dbg.vtContent or 0),
       c.x + 8, debugTop + dfH * 2)
 
-    -- ── Input bar (reads from vterm prompt, computed above) ────
-    -- Input background
-    love.graphics.setColor(COLORS.inputBg[1], COLORS.inputBg[2], COLORS.inputBg[3],
-                           (COLORS.inputBg[4] or 1) * effectiveOpacity)
-    love.graphics.rectangle("fill", c.x + 8, inputTop, c.w - 16, inputH, 4, 4)
-
-    -- "> " prefix on first line
-    love.graphics.setFont(font)
-    love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
-                           (COLORS.inputPrompt[4] or 1) * effectiveOpacity)
-    love.graphics.print("> ", promptX, inputTop + 4)
-
-    if #promptText == 0 then
-      -- Show placeholder from CLI (tab to accept)
-      local ph = Session.getPlaceholder()
-      if ph and #ph > 0 then
-        love.graphics.setScissor(promptX + prefixW, inputTop, textAreaW, inputH)
-        love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
-                               0.4 * effectiveOpacity)
-        love.graphics.print(ph, promptX + prefixW, inputTop + 4)
-        local phW = font:getWidth(ph)
-        love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
-                               0.25 * effectiveOpacity)
-        love.graphics.print("  tab", promptX + prefixW + phW, inputTop + 4)
-        love.graphics.setScissor()
-      end
-    else
-      -- Draw wrapped prompt text
-      love.graphics.setScissor(c.x + 8, inputTop, c.w - 16, inputH)
-      love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2], COLORS.inputText[3],
-                             (COLORS.inputText[4] or 1) * effectiveOpacity)
-      for i, line in ipairs(displayLines) do
-        local lx = promptX + (i == 1 and prefixW or 0)
-        local ly = inputTop + 4 + (i - 1) * lineHeight
-        love.graphics.print(line, lx, ly)
-      end
-      love.graphics.setScissor()
-    end
-
-    -- Cursor: position from vterm cursor column
-    if inputState.blinkOn and #promptText > 0 then
-      local cursorByte = math.min(promptCursorCol, #promptText)
-      local cursorLine = 1
-      for i = 2, #displayStarts do
-        if cursorByte >= displayStarts[i] then
-          cursorLine = i
-        else
-          break
-        end
-      end
-      local lineOffset = cursorByte - displayStarts[cursorLine] + 1
-      local textBefore = displayLines[cursorLine]:sub(1, math.max(0, lineOffset))
-      local cursorPx = font:getWidth(textBefore)
-      local cursorX = promptX + (cursorLine == 1 and prefixW or 0) + cursorPx
-      local cursorY = inputTop + 4 + (cursorLine - 1) * lineHeight
-      love.graphics.setColor(COLORS.inputCaret[1], COLORS.inputCaret[2], COLORS.inputCaret[3],
-                             (COLORS.inputCaret[4] or 1) * effectiveOpacity)
-      love.graphics.rectangle("fill", cursorX, cursorY, 2, lineHeight)
-    elseif inputState.blinkOn then
-      -- Empty prompt: cursor at the start
-      love.graphics.setColor(COLORS.inputCaret[1], COLORS.inputCaret[2], COLORS.inputCaret[3],
-                             (COLORS.inputCaret[4] or 1) * effectiveOpacity)
-      love.graphics.rectangle("fill", promptX + prefixW, inputTop + 4, 2, lineHeight)
-    end
-
-    -- ── Dropdown rows below input (for @ picker, slash menus, etc.) ──
-    local dropdownRows = Session.getDropdownRows()
-    if #dropdownRows > 0 then
-      local dropdownTop = inputTop + inputH + 4
-      local dropFont = Measure.getFont(11, nil, nil)
-      local dropLineH = dropFont:getHeight()
-      love.graphics.setFont(dropFont)
-
-      -- Background for dropdown area
-      local dropH = #dropdownRows * dropLineH + 8
-      love.graphics.setColor(0.08, 0.12, 0.2, 0.95 * effectiveOpacity)
-      love.graphics.rectangle("fill", c.x + 8, dropdownTop, c.w - 16, dropH, 4, 4)
-
-      for i, dr in ipairs(dropdownRows) do
-        local dy = dropdownTop + 4 + (i - 1) * dropLineH
-        if dy + dropLineH > c.y + c.h then break end
-        -- Prefix with kind tag
-        love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
-        love.graphics.print("[" .. dr.kind .. "]", c.x + 12, dy)
-        -- Row text
-        love.graphics.setColor(0.9, 0.9, 0.9, 0.9 * effectiveOpacity)
-        local tagW = dropFont:getWidth("[" .. dr.kind .. "] ")
-        love.graphics.print(dr.text, c.x + 12 + tagW, dy)
-      end
-    end
   end,
 
   -- ── Keyboard event routing (called by init.lua) ───────────────
@@ -782,15 +849,79 @@ Capabilities.register("ClaudeCanvas", {
             meta = meta .. " g" .. entry.groupId .. ":" .. entry.groupType
           end
           local colors = #entry.colors > 0 and table.concat(entry.colors, " ") or ""
-          lines[#lines + 1] = string.format("%3d %-20s %-16s %-30s %s",
+          -- Build transition history suffix for rows that flapped
+          local histSuffix = ""
+          local hist = _rowHistory[nodeId] and _rowHistory[nodeId][entry.row]
+          if hist and #hist > 1 then
+            local kinds = {}
+            for _, h in ipairs(hist) do kinds[#kinds + 1] = h.kind end
+            histSuffix = "  [" .. #hist .. "x: " .. table.concat(kinds, "→") .. "]"
+          end
+          lines[#lines + 1] = string.format("%3d %-20s %-28s %-16s %-30s %s%s",
             entry.row,
             "[" .. entry.kind .. "]",
+            entry.nodeId or "",
             meta,
             colors,
-            entry.text)
+            entry.text,
+            histSuffix)
         end
         love.system.setClipboardText(table.concat(lines, "\n"))
         io.write("[CLIPBOARD] Copied " .. #lines .. " classified rows\n"); io.flush()
+      end
+      return true
+    end
+
+    -- Ctrl+Shift+G: dump semantic graph tree to clipboard
+    if key == "g" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
+      local graph = _lastGraph[nodeId]
+      if graph then
+        local lines = {}
+        -- Header: state flags
+        lines[#lines + 1] = "=== SEMANTIC GRAPH (frame " .. graph.frame .. ") ==="
+        lines[#lines + 1] = string.format("state: mode=%s streaming=%s streamingKind=%s awaitingInput=%s awaitingDecision=%s focus=%s",
+          graph.state.mode,
+          tostring(graph.state.streaming),
+          graph.state.streamingKind or "none",
+          tostring(graph.state.awaitingInput),
+          tostring(graph.state.awaitingDecision),
+          graph.state.focus or "nil")
+        if graph.state.modeNodeId then
+          lines[#lines + 1] = "  modeNodeId: " .. graph.state.modeNodeId
+        end
+        if graph.state.interruptPending then
+          lines[#lines + 1] = "  interruptPending: " .. (graph.state.interruptNodeId or "?")
+        end
+        if graph.state.modalOpen then
+          lines[#lines + 1] = "  modalOpen: " .. (graph.state.modalNodeId or "?")
+        end
+        lines[#lines + 1] = ""
+
+        -- Tree view
+        lines[#lines + 1] = Graph.formatTree(graph)
+        lines[#lines + 1] = ""
+
+        -- Diff summary
+        local diff = _lastDiff[nodeId]
+        if diff and #diff > 0 then
+          lines[#lines + 1] = "=== DIFF (" .. #diff .. " ops) ==="
+          for _, op in ipairs(diff) do
+            if op.op == "add" then
+              lines[#lines + 1] = "  + " .. op.id .. " (" .. (op.node and op.node.type or "?") .. ")"
+            elseif op.op == "remove" then
+              lines[#lines + 1] = "  - " .. op.id
+            elseif op.op == "update" then
+              lines[#lines + 1] = "  ~ " .. op.id .. " (" .. (op.node and op.node.type or "?") .. ")"
+            elseif op.op == "setState" then
+              lines[#lines + 1] = "  ! state: mode=" .. op.state.mode
+            end
+          end
+        else
+          lines[#lines + 1] = "=== DIFF: no changes ==="
+        end
+
+        love.system.setClipboardText(table.concat(lines, "\n"))
+        io.write("[CLIPBOARD] Copied semantic graph (" .. #graph.nodeOrder .. " nodes, " .. #(diff or {}) .. " diff ops)\n"); io.flush()
       end
       return true
     end
@@ -846,12 +977,38 @@ Capabilities.register("ClaudeCanvas", {
     -- Ctrl+key combos → send as control characters
     -- Skip if Shift is also held — those are UI hotkeys (Ctrl+Shift+D, etc.)
     if love.keyboard.isDown("lctrl", "rctrl") and not love.keyboard.isDown("lshift", "rshift") then
-      -- Ctrl+V: paste clipboard text into PTY
+      -- Ctrl+V: paste (image or text) into PTY
       if key == "v" then
-        local clipboard = love.system.getClipboardText()
-        if clipboard then
-          -- Send clipboard text directly to PTY
-          Session.writeRaw(clipboard)
+        -- Check if clipboard has image data
+        local hasImage = false
+        local imgCheck = io.popen("xclip -selection clipboard -target TARGETS -o 2>/dev/null")
+        if imgCheck then
+          local targets = imgCheck:read("*a") or ""
+          imgCheck:close()
+          if targets:find("image/png") or targets:find("image/jpeg") then
+            -- Generate UUID-ish filename
+            local f = io.open("/proc/sys/kernel/random/uuid", "r")
+            local uuid = f and f:read("*l") or tostring(os.clock()):gsub("%.", "")
+            if f then f:close() end
+            -- Save to Claude's image cache
+            local cacheDir = os.getenv("HOME") .. "/.claude/image-cache"
+            os.execute("mkdir -p " .. cacheDir)
+            local imgType = targets:find("image/png") and "image/png" or "image/jpeg"
+            local ext = imgType == "image/png" and ".png" or ".jpg"
+            local imgPath = cacheDir .. "/" .. uuid .. ext
+            os.execute("xclip -selection clipboard -target " .. imgType .. " -o > " .. imgPath .. " 2>/dev/null")
+            io.write("[PASTE] Saved clipboard image to " .. imgPath .. "\n"); io.flush()
+            hasImage = true
+            -- Send Ctrl+V (0x16) to PTY so Claude Code's own handler detects the image
+            Session.writeRaw("\x16")
+          end
+        end
+        -- Fall back to text paste if no image
+        if not hasImage then
+          local clipboard = love.system.getClipboardText()
+          if clipboard then
+            Session.writeRaw(clipboard)
+          end
         end
         return true
       end
@@ -921,6 +1078,30 @@ local Canvas = {}
 --- Get the current input text for a canvas node (for testing)
 function Canvas.getInputText(nodeId)
   return getInputState(nodeId).text
+end
+
+--- Resolve a sessionId to the canvas nodeId
+local function resolveNodeId(sessionId)
+  return _sessionNodeMap[sessionId or "default"]
+end
+
+--- Get the semantic graph for a session
+function Canvas.getGraphForSession(sessionId)
+  local nid = resolveNodeId(sessionId)
+  if not nid then return nil end
+  return _lastGraph[nid]
+end
+
+--- Get the classified rows cache for a session
+function Canvas.getClassifiedForSession(sessionId)
+  local nid = resolveNodeId(sessionId)
+  if not nid then return nil end
+  return _lastClassified[nid]
+end
+
+--- Get the canvas nodeId for a session (for direct access)
+function Canvas.getNodeIdForSession(sessionId)
+  return resolveNodeId(sessionId)
 end
 
 return Canvas

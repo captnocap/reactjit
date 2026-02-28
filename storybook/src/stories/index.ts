@@ -45,10 +45,12 @@ import { APIsStory } from './APIsStory';
 import { LayoutsStory } from './LayoutsStory';
 import { SearchStory } from './SearchStory';
 import { TerminalStory } from './TerminalStory';
+import { SemanticTerminalStory } from './SemanticTerminalStory';
 import { NoclipMazeStory } from './NoclipMazeStory';
 import { GridStory } from './GridStory';
 import { TailwindStory } from './TailwindStory';
 import { HtmlCompatStory } from './HtmlCompatStory';
+import { FleetStory } from './FleetStory';
 
 
 export const stories: StoryDef[] = [
@@ -82,6 +84,8 @@ export const stories: StoryDef[] = [
   { id: 'apis', title: 'APIs', section: 'Packages', component: APIsStory },
   { id: 'layouts', title: 'Layouts', section: 'Packages', component: LayoutsStory },
   { id: 'terminal', title: 'Terminal (PTY)', section: 'Packages', component: TerminalStory },
+  { id: 'semantic-terminal', title: 'Semantic Terminal', section: 'Packages', component: SemanticTerminalStory },
+  { id: 'fleet', title: 'Fleet', section: 'Packages', component: FleetStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },

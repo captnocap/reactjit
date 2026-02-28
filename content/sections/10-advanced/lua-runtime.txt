@@ -1,6 +1,6 @@
 === METADATA ===
 title: Lua Runtime Internals
-description: Complete inventory of all 27 Lua modules that power the Love2D target
+description: Complete inventory of all Lua modules that power the Love2D target
 category: Advanced
 platforms: love2d
 keywords: lua, runtime, modules, init, layout, painter, tree, events, bridge, measure, animate, http, networking, tor, json
@@ -8,7 +8,7 @@ related: pipeline, layout-engine, painter, event-handling, networking, tor
 difficulty: advanced
 
 === OVERVIEW ===
-The Lua runtime consists of 27 modules that collectively implement the rendering
+The Lua runtime consists of a collection of modules that collectively implement the rendering
 pipeline for the Love2D target. The entry point is init.lua, which detects the
 operating mode, loads the appropriate bridge, and initializes all submodules. On every
 frame, the runtime ticks the JavaScript engine, drains mutation commands, advances
@@ -119,6 +119,65 @@ Module Inventory:
                        global selection state, drag-to-select, multi-line extraction,
                        Ctrl+C / Cmd+C copy support.
 
+  log_colors.lua     - ANSI color tag library for Lua-side logging. Provides color-
+                       coded print() wrappers (log.info, log.warn, log.error, etc.)
+                       for readable terminal output from Lua modules.
+
+  debug_log.lua      - Structured debug logging with source location. Wraps log_colors
+                       and adds file:line prefixes. Used internally by runtime modules;
+                       toggle verbosity without editing call sites.
+
+  devtools.lua       - Developer tools aggregator. Coordinates inspector, console,
+                       screenshot, and debug_log. Loaded automatically in dev mode;
+                       stripped from production builds.
+
+  settings.lua       - Persistent key-value store for framework settings (inspector
+                       position, theme selection, window state). Backed by love.filesystem.
+
+  theme_menu.lua     - In-app theme switcher overlay (Ctrl+T). Lists all registered
+                       themes, applies them live, and persists the selection via settings.lua.
+
+  system_panel.lua   - System info overlay. Shows frame time, memory usage, node count,
+                       layout timing, and paint timing. Toggled via a dev shortcut.
+
+  permit.lua         - Runtime permission guard. Enforces capability-level permissions
+                       declared in the app manifest. Blocks RPC calls that exceed
+                       declared scope and logs violations via audit.lua.
+
+  audit.lua          - Security audit log. Records all RPC calls, capability invocations,
+                       and permission decisions to a local audit trail. Used with permit.lua.
+
+  manifest.lua       - App manifest loader. Reads the app's capability declarations,
+                       metadata, and permission scope. Feeds permit.lua and the
+                       capability registry.
+
+  cart_reader.lua    - Cartridge reader for self-contained .rjit bundles. Extracts
+                       embedded Lua runtime, JS bundle, and assets from a single-file
+                       distribution. Enables the portable cart deployment format.
+
+  capabilities.lua   - Capability registry. All native capabilities register here
+                       via Capabilities.register(). Provides the capabilities:list
+                       RPC used by useCapabilities().
+
+  pty.lua            - PTY process manager. Spawns pseudo-terminal processes, pipes
+                       output to the bridge, handles resize (SIGWINCH), and manages
+                       session lifecycles for Terminal and SemanticTerminal.
+
+  vterm.lua          - VT100/VT220 terminal emulator (pure Lua). Decodes raw PTY
+                       byte streams into a Unicode text buffer. Used by SemanticTerminal
+                       to strip ANSI codes before classification.
+
+  semantic_graph.lua - Semantic graph builder. Aggregates classified rows into turns,
+                       nodes, and state transitions. Emits onGraphUpdate and onStateChange
+                       events to the React layer.
+
+  session_recorder.lua - PTY output recorder. Captures raw PTY bytes with timestamps
+                         into a .rec.lua file for later playback. See session-recording docs.
+
+  session_player.lua - Playback engine for .rec.lua recordings. Drives the vterm +
+                       classifier pipeline at recorded timing (with speed control and
+                       seeking). Used by SemanticTerminal in playback mode.
+
 === EXAMPLES ===
 Example 1: Module Loading Order (Native Mode)
 ---
@@ -148,6 +207,16 @@ When ReactLove.init() is called in native mode:
   - require("lua.inspector")           -- F12 inspector
   - require("lua.console")             -- Backtick console
   - require("lua.focus")               -- Focus manager
+  - require("lua.log_colors")          -- Color logging
+  - require("lua.debug_log")           -- Structured debug logging
+  - require("lua.devtools")            -- Dev tool aggregator (dev builds only)
+  - require("lua.settings")            -- Persistent settings store
+  - require("lua.theme_menu")          -- Theme switcher overlay
+  - require("lua.system_panel")        -- System info overlay
+  - require("lua.permit")              -- Permission guard
+  - require("lua.audit")               -- Audit log
+  - require("lua.manifest")            -- App manifest loader
+  - require("lua.cart_reader")         -- Cartridge format reader
 ---
 Platforms: love2d
 

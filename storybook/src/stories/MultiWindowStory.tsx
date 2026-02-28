@@ -5,7 +5,7 @@
  * OS window while sharing the same React tree. State flows naturally
  * via props — click something in window 1, window 2 reacts instantly.
  *
- * SDL2 target only (Love2D does not support multiple windows).
+ * Works on both Love2D (forked) and SDL2 targets.
  */
 
 import React, { useState } from 'react';
@@ -21,7 +21,7 @@ function SectionCard({
 }) {
   const c = useThemeColors();
   return (
-    <Box style={{ backgroundColor: c.surface1, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 8 }}>
+    <Box style={{ backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 8 }}>
       <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>{title}</Text>
       <Box style={{ gap: 6 }}>
         {children}
@@ -43,14 +43,14 @@ function Button({
   return (
     <Pressable onPress={onPress}>
       <Box style={{
-        backgroundColor: active ? c.primary : c.surface2,
+        backgroundColor: active ? c.primary : c.surface,
         borderRadius: 6,
         paddingLeft: 12,
         paddingRight: 12,
         paddingTop: 6,
         paddingBottom: 6,
       }}>
-        <Text style={{ fontSize: 11, color: active ? c.background : c.text }}>
+        <Text style={{ fontSize: 11, color: active ? c.bg : c.text }}>
           {label}
         </Text>
       </Box>
@@ -86,19 +86,19 @@ function DetachedPanel({
 }) {
   const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.background, padding: 16, gap: 12 }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
       <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold' }}>{title}</Text>
       <Box style={{ gap: 4 }}>
         {items.map((item, i) => (
           <Pressable key={i} onPress={() => onSelect(i)}>
             <Box style={{
-              backgroundColor: i === selectedIndex ? c.primary : c.surface1,
+              backgroundColor: i === selectedIndex ? c.primary : c.surface,
               borderRadius: 6,
               padding: 8,
             }}>
               <Text style={{
                 fontSize: 12,
-                color: i === selectedIndex ? c.background : c.text,
+                color: i === selectedIndex ? c.bg : c.text,
               }}>
                 {item}
               </Text>
@@ -146,7 +146,7 @@ export function MultiWindowStory() {
         {'Multi-Window'}
       </Text>
       <Text style={{ fontSize: 11, color: c.textDim }}>
-        {'One React tree, multiple OS windows, state in sync. SDL2 only.'}
+        {'One React tree, multiple OS windows, state in sync.'}
       </Text>
 
       {/* Controls */}
@@ -238,14 +238,14 @@ export function MultiWindowStory() {
             logEvent('Log closed via window button');
           }}
         >
-          <Box style={{ width: '100%', height: '100%', backgroundColor: c.background, padding: 16, gap: 8 }}>
+          <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 8 }}>
             <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>
               {'Live Events'}
             </Text>
             <Text style={{ fontSize: 10, color: c.textDim }}>
               {'This window shows the same event stream as the main window.'}
             </Text>
-            <Box style={{ flexGrow: 1, backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2 }}>
+            <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 2 }}>
               <EventLog entries={events} />
             </Box>
           </Box>

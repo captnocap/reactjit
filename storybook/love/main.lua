@@ -64,6 +64,10 @@ function love.resize(w, h)
   ReactJIT.resize(w, h)
 end
 
+function love.focus(hasFocus)
+  ReactJIT.focus(hasFocus)
+end
+
 function love.keypressed(key, scancode, isrepeat)
   ReactJIT.keypressed(key, scancode, isrepeat)
 end
@@ -86,4 +90,10 @@ end
 
 function love.quit()
   ReactJIT.quit()
+end
+
+-- ReactJIT: register handler for secondary window close events.
+-- Love2D dispatches custom messages via love.handlers[messageName].
+love.handlers.windowclose = function(sdlWindowId)
+  ReactJIT.windowclose(sdlWindowId)
 end

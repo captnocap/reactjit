@@ -32,10 +32,12 @@ export function App() {
 
   return (
     // ✦ Root needs width + height, not flexGrow (no-flexgrow-root)
+    // ✦ overflow: 'auto' scrolls when content exceeds viewport, centers when it fits
     <Box style={{
       width: '100%',
       height: '100%',
       backgroundColor: '#0f172a',
+      overflow: 'auto',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 24,
@@ -71,7 +73,7 @@ export function App() {
       </Pressable>
 
       {/* ── Layout Rules ────────────────────────── */}
-      <Box style={{ gap: 6, width: '100%', maxWidth: 520, height: 280 }}>
+      <Box style={{ gap: 6, width: '100%', maxWidth: 520 }}>
         {/* ✦ Row + justifyContent needs explicit width (no-row-justify-without-width) */}
         <Box style={{
           flexDirection: 'row',

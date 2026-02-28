@@ -57,7 +57,7 @@ local SURFACE_TYPES = {
 local function isSurface(node)
   if SURFACE_TYPES[node.type] then
     local s = node.style or {}
-    if s.overflow == "scroll" then return false end
+    if s.overflow == "scroll" or s.overflow == "auto" then return false end
     return true
   end
   -- Standalone effects (not background mode) are visual surfaces too.
@@ -491,11 +491,21 @@ function Layout.layoutNode(node, px, py, pw, ph)
   if Layout._capabilities then
     if Layout._capabilities.isNonVisual(node.type)
        and not Layout._capabilities.rendersInOwnSurface(node.type) then
+      if not Layout._layoutDbgSeen then Layout._layoutDbgSeen = {} end
+      Layout._layoutDbgSeen[node.type] = (Layout._layoutDbgSeen[node.type] or 0) + 1
+      if Layout._layoutDbgSeen[node.type] <= 3 then
+        io.write(string.format("[LAYOUT-DBG] non-visual skip: type=%s id=%s → 0x0\n", node.type, tostring(node.id))); io.flush()
+      end
       node.computed = { x = px, y = py, w = 0, h = 0 }
       return
     end
     if Layout._capabilities.rendersInOwnSurface(node.type)
        and not node._isWindowRoot then
+      if not Layout._layoutDbgSeen then Layout._layoutDbgSeen = {} end
+      Layout._layoutDbgSeen[node.type] = (Layout._layoutDbgSeen[node.type] or 0) + 1
+      if Layout._layoutDbgSeen[node.type] <= 3 then
+        io.write(string.format("[LAYOUT-DBG] ownSurface skip: type=%s id=%s → 0x0\n", node.type, tostring(node.id))); io.flush()
+      end
       node.computed = { x = px, y = py, w = 0, h = 0 }
       return
     end
@@ -795,8 +805,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
       -- intrinsic size from their content (recursive bottom-up measurement).
       -- This is what lets <Box> inside <Row> auto-size from its children
       -- instead of collapsing to zero — same as a browser <div>.
-      -- Exception: scroll containers should NOT auto-size to content height,
-      -- as they are meant to constrain their viewport and scroll overflow.
+      -- Exception: explicit scroll containers should NOT auto-size to content
+      -- height, as they are meant to constrain their viewport and scroll
+      -- overflow.  overflow:auto containers DO auto-size (scroll only kicks
+      -- in when an external constraint is smaller than content).
       local childIsScroll = cs.overflow == "scroll"
       if not childIsText and (not cw or not ch) then
         -- Don't estimate intrinsic main-axis size for flex-grow children.
@@ -1286,14 +1298,17 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- ====================================================================
   -- Auto-height: shrink to content
   -- ====================================================================
-  -- For scroll containers with no explicit height, do NOT auto-size to
-  -- content (that defeats scrolling). Default to 0 so the container must
+  -- For explicit scroll containers with no explicit height, do NOT auto-size
+  -- to content (that defeats scrolling). Default to 0 so the container must
   -- get its height from an explicit value or flex-grow.
-  local isScrollContainer = s.overflow == "scroll"
+  -- overflow:auto containers auto-size to content normally but get scroll
+  -- state when constrained (explicit dimensions or flex-grow limits).
+  local isScrollContainer = s.overflow == "scroll" or s.overflow == "auto"
+  local isExplicitScroll  = s.overflow == "scroll"
 
   if h == nil then
-    if isScrollContainer then
-      -- Scroll containers without explicit height default to 0.
+    if isExplicitScroll then
+      -- Explicit scroll containers without explicit height default to 0.
       -- They need an explicit height or flex-grow to have visible area.
       h = 0
       hSource = "scroll-default"
@@ -1329,6 +1344,18 @@ function Layout.layoutNode(node, px, py, pw, ph)
   h = clampDim(h, minH, maxH)
 
   Log.log("layout", "  final id=%s computed x=%d y=%d w=%d h=%d", tostring(node.id), x, y, w, h)
+  -- Debug: log layout results for capability types
+  if Layout._capabilities and node.type ~= "View" and node.type ~= "__TEXT__" then
+    if not Layout._layoutResultDbg then Layout._layoutResultDbg = {} end
+    Layout._layoutResultDbg[node.type] = (Layout._layoutResultDbg[node.type] or 0) + 1
+    if Layout._layoutResultDbg[node.type] <= 5 then
+      io.write(string.format("[LAYOUT-DBG] RESULT type=%s id=%s → %dx%d@(%d,%d) wSrc=%s hSrc=%s flexGrow=%s\n",
+        node.type, tostring(node.id), w, h, x, y,
+        tostring(wSource), tostring(hSource),
+        tostring(node.style and node.style.flexGrow)))
+      io.flush()
+    end
+  end
   node.computed = { x = x, y = y, w = w, h = h, wSource = wSource or "unknown", hSource = hSource or "unknown" }
 
   -- ====================================================================

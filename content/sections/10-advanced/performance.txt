@@ -135,7 +135,7 @@ Platforms: All
 - Pre-compute dimensions when you know them. Do not rely on child
   content to infer container size.
 - Fill the viewport. Love2D is a fixed canvas, not a scrolling page.
-  Empty space below content is wasted if you do not set explicit sizes.
+  Use flexGrow: 1 on space-filling elements instead of hardcoded pixel heights.
 - Avoid letterSpacing on large text blocks. Character-by-character
   rendering is expensive.
 

@@ -132,6 +132,16 @@ local JSX_DOTS      = { 0.55, 0.55, 0.60, 1 }    -- "..." collapsed indicator
 local JSX_DIMS      = { 0.50, 0.52, 0.58, 0.8 }  -- dimensions on anonymous nodes
 local JSX_HANDLER   = { 0.90, 0.70, 0.20, 0.85 } -- handler badge (amber)
 
+-- Column layout: 3-tier typography
+local COL_CARET       = { 0.40, 0.42, 0.50, 0.60 }   -- dim tier: caret, guides
+local COL_TYPE        = { 0.50, 0.53, 0.60, 0.80 }    -- muted tier: type badge
+local COL_IDENTITY    = { 0.88, 0.90, 0.94, 1 }       -- normal tier: primitive identity
+local COL_COMP        = { 0.56, 0.68, 0.98, 1 }       -- normal tier: component name (accent)
+local COL_METADATA    = { 0.48, 0.50, 0.58, 0.70 }    -- muted tier: metadata tags
+local COL_JSX_DIM     = { 0.42, 0.44, 0.52, 0.50 }    -- dim tier: JSX preview
+local COL_TEXT_VAL    = { 0.92, 0.72, 0.48, 0.90 }    -- text content (orange)
+local COL_SELECT_BAR  = { 0.38, 0.65, 0.98, 0.90 }    -- selection accent bar
+
 -- Inline edit colors
 local EDIT_BG       = { 0.12, 0.12, 0.20, 1 }
 local EDIT_BORDER   = { 0.38, 0.65, 0.98, 0.6 }
@@ -1124,7 +1134,7 @@ end
 
 function drawTreePanel(root, rx, ry, rw, rh)
   local font = getFont()
-  local lineH = font:getHeight() + 4
+  local lineH = font:getHeight() + 6  -- +2px breathing room
   local pad = 8
 
   -- Reset position cache
@@ -1265,7 +1275,65 @@ local function isEmptyTextNode(node)
 end
 
 -- ============================================================================
--- Recursive tree node drawing — JSX format with opening/closing tags
+-- Column-layout tree helpers
+-- ============================================================================
+
+--- Truncate a string to fit within maxW pixels, appending "…" if needed.
+local function truncateToWidth(font, str, maxW)
+  if font:getWidth(str) <= maxW then return str end
+  local ellipsis = "…"
+  local ellW = font:getWidth(ellipsis)
+  if maxW <= ellW then return ellipsis end
+  -- Binary search for the longest prefix that fits
+  local lo, hi = 1, #str
+  while lo < hi do
+    local mid = math.floor((lo + hi + 1) / 2)
+    if font:getWidth(str:sub(1, mid)) + ellW <= maxW then
+      lo = mid
+    else
+      hi = mid - 1
+    end
+  end
+  return str:sub(1, lo) .. ellipsis
+end
+
+--- Build a JSX-style preview string: <TagName prop=val prop=val>
+local function buildJsxPreview(node, isSingleTextChild)
+  local tagName = getTagName(node)
+  local s = node.style or {}
+  local p = node.props or {}
+  local parts = { "<" .. tagName }
+  local count = 0
+
+  local function addProp(key, val)
+    if count >= 3 then return end
+    parts[#parts + 1] = " " .. key .. "=" .. val
+    count = count + 1
+  end
+
+  if p.key then addProp("key", fmtVal(p.key)) end
+  if s.flexGrow and s.flexGrow > 0 then addProp("flexGrow", fmtVal(s.flexGrow)) end
+  if s.flexDirection == "row" then addProp("flex", '"row"') end
+  if s.width then addProp("w", fmtVal(s.width)) end
+  if s.height then addProp("h", fmtVal(s.height)) end
+  if p.src then
+    local src = tostring(p.src)
+    if #src > 20 then src = "…" .. src:sub(-17) end
+    addProp("src", '"' .. src .. '"')
+  end
+  if count < 3 and p.placeholder then addProp("placeholder", fmtVal(p.placeholder)) end
+
+  local hasChildren = node.children and #node.children > 0
+  if hasChildren and not isSingleTextChild then
+    parts[#parts + 1] = ">"
+  else
+    parts[#parts + 1] = " />"
+  end
+  return table.concat(parts)
+end
+
+-- ============================================================================
+-- Recursive tree node drawing — column layout with typography tiers
 -- Returns the next Y position
 -- ============================================================================
 
@@ -1281,108 +1349,137 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
   local hasChildren = #children > 0
   local isCollapsed = state.collapsed[node.id]
   local tagName = getTagName(node)
-  local nameColor = getNameColor(node)
+  local isLeaf = not hasChildren
 
-  -- Single __TEXT__ child → inline display (e.g. Text:<Label>"Hello"</Label>)
+  -- Single __TEXT__ child → inline text after identity
   local isSingleTextChild = (not isTextNode and hasChildren
     and #children == 1 and children[1].type == "__TEXT__"
     and (children[1].text or "") ~= "")
 
   local visible = y + lineH > clipTop and y < clipBottom
   local openingY = y
+  local caretW = font:getWidth("\xE2\x96\xBE")  -- ▾ width, used for guide alignment
 
   -- Cache position for click/hover detection
   state.treeNodePositions[#state.treeNodePositions + 1] = {
-    node = node,
-    y = y,
-    lineH = lineH,
-    depth = depth,
+    node = node, y = y, lineH = lineH, depth = depth,
   }
 
   if visible then
-    -- Highlight row
-    if node == state.selectedNode then
+    local isSelected = (node == state.selectedNode)
+    local isHovered = (node == state.hoveredNode)
+
+    -- Row background
+    if isSelected then
       love.graphics.setColor(TREE_SELECT)
       love.graphics.rectangle("fill", rx, y, rw, lineH)
-    elseif node == state.hoveredNode then
+      -- 2px left accent bar
+      love.graphics.setColor(COL_SELECT_BAR)
+      love.graphics.rectangle("fill", rx, y, 2, lineH)
+    elseif isHovered then
       love.graphics.setColor(TREE_HOVER)
       love.graphics.rectangle("fill", rx, y, rw, lineH)
     end
 
+    love.graphics.setFont(font)
     local indent = rx + pad + depth * INDENT_SIZE
+    local textY = y + 2
 
-    -- Collapse indicator (only for expandable nodes, not single-text-child)
-    if hasChildren and not isSingleTextChild then
-      love.graphics.setColor(TREE_DIM)
-      love.graphics.print(isCollapsed and ">" or "v", indent - 8, y + 1)
+    -- ── Column 1: Caret ──
+    love.graphics.setColor(COL_CARET)
+    if isTextNode or isLeaf or isSingleTextChild then
+      love.graphics.print("\xC2\xB7", indent, textY)  -- middle dot
+    elseif isCollapsed then
+      love.graphics.print("\xE2\x96\xB8", indent, textY)  -- ▸
+    else
+      love.graphics.print("\xE2\x96\xBE", indent, textY)  -- ▾
     end
 
-    love.graphics.setFont(font)
+    local x = indent + caretW + 5
 
     if isTextNode then
-      -- Raw text node: __TEXT__:"content"
+      -- ── Text node: TXT "content" ──
+      love.graphics.setColor(COL_TYPE)
+      love.graphics.print("TXT", x, textY)
+      x = x + font:getWidth("TXT") + 6
+
       local text = getTextContent(node)
-      drawSegments({
-        { JSX_TYPE, "__TEXT__:" },
-        { JSX_TEXT_COL, '"' .. text .. '"' },
-      }, indent, y + 1, font)
-
-    elseif isSingleTextChild then
-      -- Inline text: Type:<Name>"content"</Name>
-      local text = getTextContent(children[1])
-      local dimName = getDimNameColor(node)
-      local segs = {
-        { JSX_TYPE, typeName .. ":" },
-        { JSX_BRACKET, "<" },
-        { nameColor, tagName },
-        { JSX_BRACKET, ">" },
-        { JSX_TEXT_COL, '"' .. text .. '"' },
-        { JSX_CLOSE_BRK, "</" },
-        { dimName, tagName },
-        { JSX_CLOSE_BRK, ">" },
-      }
-      appendHandlerBadge(segs, node)
-      drawSegments(segs, indent, y + 1, font)
-
-    elseif not hasChildren then
-      -- Self-closing: Type:<Name prop="val" />
-      local segs = {
-        { JSX_TYPE, typeName .. ":" },
-        { JSX_BRACKET, "<" },
-        { nameColor, tagName },
-      }
-      appendPropSegments(segs, node)
-      if not node.debugName and node.computed then
-        segs[#segs + 1] = { JSX_DIMS, " " .. math.floor(node.computed.w) .. "x" .. math.floor(node.computed.h) }
-      end
-      segs[#segs + 1] = { JSX_BRACKET, " />" }
-      appendHandlerBadge(segs, node)
-      drawSegments(segs, indent, y + 1, font)
-
-    elseif isCollapsed then
-      -- Collapsed: > Type:<Name> ...
-      local segs = {
-        { JSX_TYPE, typeName .. ":" },
-        { JSX_BRACKET, "<" },
-        { nameColor, tagName },
-      }
-      appendPropSegments(segs, node)
-      segs[#segs + 1] = { JSX_BRACKET, ">" }
-      segs[#segs + 1] = { JSX_DOTS, " ..." }
-      appendHandlerBadge(segs, node)
-      drawSegments(segs, indent, y + 1, font)
-
+      love.graphics.setColor(COL_TEXT_VAL)
+      love.graphics.print('"' .. text .. '"', x, textY)
     else
-      -- Opening tag: Type:<Name prop="val">
-      local segs = {
-        { JSX_TYPE, typeName .. ":" },
-        { JSX_BRACKET, "<" },
-        { nameColor, tagName },
-      }
-      appendPropSegments(segs, node)
-      segs[#segs + 1] = { JSX_BRACKET, ">" }
-      appendHandlerBadge(segs, node)
-      drawSegments(segs, indent, y + 1, font)
+      -- ── Column 2: Type badge (muted) ──
+      love.graphics.setColor(COL_TYPE)
+      love.graphics.print(typeName, x, textY)
+      x = x + font:getWidth(typeName) + 6
+
+      -- ── Column 3: Identity (bright) ──
+      if node.debugName then
+        love.graphics.setColor(COL_COMP)
+      else
+        love.graphics.setColor(COL_IDENTITY)
+      end
+      love.graphics.print(tagName, x, textY)
+      x = x + font:getWidth(tagName)
+
+      -- Inline text for single-text-child
+      if isSingleTextChild then
+        local text = getTextContent(children[1])
+        love.graphics.setColor(COL_TEXT_VAL)
+        local str = '  "' .. text .. '"'
+        love.graphics.print(str, x, textY)
+        x = x + font:getWidth(str)
+      end
+
+      -- ── Column 4: Metadata (muted) ──
+      local meta = {}
+      local s = node.style or {}
+      if s.flexGrow and s.flexGrow > 0 then meta[#meta + 1] = "grow=" .. s.flexGrow end
+      if s.flexDirection == "row" then meta[#meta + 1] = "row" end
+      if node.computed then
+        meta[#meta + 1] = math.floor(node.computed.w) .. "\xC3\x97" .. math.floor(node.computed.h)
+      end
+      if #meta > 0 then
+        love.graphics.setColor(COL_METADATA)
+        local metaStr = "  " .. table.concat(meta, "  ")
+        love.graphics.print(metaStr, x, textY)
+        x = x + font:getWidth(metaStr)
+      end
+
+      -- Collapsed indicator
+      if isCollapsed and hasChildren and not isSingleTextChild then
+        love.graphics.setColor(COL_METADATA)
+        love.graphics.print("  \xE2\x80\xA6", x, textY)
+        x = x + font:getWidth("  \xE2\x80\xA6")
+      end
+
+      -- Handler badge
+      if node.hasHandlers then
+        local badgeStr = " \xE2\x9A\xA1"
+        if node.handlerMeta and type(node.handlerMeta) == "table" then
+          local count = 0
+          for _ in pairs(node.handlerMeta) do count = count + 1 end
+          if count > 0 then badgeStr = " \xE2\x9A\xA1" .. count end
+        end
+        love.graphics.setColor(JSX_HANDLER)
+        love.graphics.print(badgeStr, x, textY)
+        x = x + font:getWidth(badgeStr)
+      end
+
+      -- ── Column 5: JSX preview (right-aligned, dim) ──
+      local jsxStr = buildJsxPreview(node, isSingleTextChild)
+      if jsxStr and #jsxStr > 0 then
+        local rightEdge = rx + rw - pad
+        local maxJsxW = rightEdge - x - 12
+        if maxJsxW > 40 then
+          love.graphics.setColor(COL_JSX_DIM)
+          local jsxW = font:getWidth(jsxStr)
+          if jsxW > maxJsxW then
+            jsxStr = truncateToWidth(font, jsxStr, maxJsxW)
+            jsxW = font:getWidth(jsxStr)
+          end
+          love.graphics.print(jsxStr, rightEdge - jsxW, textY)
+        end
+      end
     end
   end
 
@@ -1394,10 +1491,10 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
       y = drawTreeNode(child, depth + 1, y, font, lineH, pad, clipTop, clipBottom, rx, rw)
     end
 
-    -- Guide line from opening tag to closing tag
-    local guideX = rx + pad + depth * INDENT_SIZE - 5
+    -- Indent guide line from opening to closing tag
+    local guideX = rx + pad + depth * INDENT_SIZE + math.floor(caretW / 2)
     if openingY + lineH < clipBottom and y > clipTop then
-      love.graphics.setColor(JSX_GUIDE)
+      love.graphics.setColor(COL_CARET)
       love.graphics.setLineWidth(1)
       local gy1 = math.max(openingY + lineH, clipTop)
       local gy2 = math.min(y, clipBottom)
@@ -1406,31 +1503,25 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
 
     -- Cache closing tag position for click/hover
     state.treeNodePositions[#state.treeNodePositions + 1] = {
-      node = node,
-      y = y,
-      lineH = lineH,
-      depth = depth,
-      isClosingTag = true,
+      node = node, y = y, lineH = lineH, depth = depth, isClosingTag = true,
     }
 
-    -- Draw closing tag
+    -- Closing tag (minimal, dim)
     local closingVisible = y + lineH > clipTop and y < clipBottom
     if closingVisible then
       if node == state.selectedNode then
         love.graphics.setColor(TREE_SELECT)
         love.graphics.rectangle("fill", rx, y, rw, lineH)
+        love.graphics.setColor(COL_SELECT_BAR)
+        love.graphics.rectangle("fill", rx, y, 2, lineH)
       elseif node == state.hoveredNode then
         love.graphics.setColor(TREE_HOVER)
         love.graphics.rectangle("fill", rx, y, rw, lineH)
       end
 
       local indent = rx + pad + depth * INDENT_SIZE
-      local dimName = getDimNameColor(node)
-      drawSegments({
-        { JSX_CLOSE_BRK, "</" },
-        { dimName, tagName },
-        { JSX_CLOSE_BRK, ">" },
-      }, indent, y + 1, font)
+      love.graphics.setColor(COL_JSX_DIM)
+      love.graphics.print("</" .. tagName .. ">", indent + caretW + 5, y + 2)
     end
 
     y = y + lineH

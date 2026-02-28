@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Box,
   Text,
@@ -15,17 +15,10 @@ import {
   TextInput,
   useHotkey,
   useClipboard,
-  useBridge,
 } from '../../../packages/core/src';
 import type { LoveEvent } from '../../../packages/core/src/types';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
-
-interface SpellError {
-  word: string;
-  start: number;
-  stop: number;
-}
 
 const SCROLL_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
@@ -62,8 +55,6 @@ const DIFFICULTY_OPTIONS = [
 
 export function InputStory() {
   const c = useThemeColors();
-  const bridge = useBridge();
-
   const [pressCount, setPressCount] = useState(0);
   const [lastPressAction, setLastPressAction] = useState('none');
 
@@ -82,12 +73,6 @@ export function InputStory() {
   const [editorFocused, setEditorFocused] = useState(false);
   const [editorBlurValue, setEditorBlurValue] = useState('');
   const [editorSubmitValue, setEditorSubmitValue] = useState('');
-
-  const [spellAvailable, setSpellAvailable] = useState(true);
-  const [spellText, setSpellText] = useState('I hav a speling eror in this sentance');
-  const [spellErrors, setSpellErrors] = useState<SpellError[]>([]);
-  const [spellSuggestions, setSpellSuggestions] = useState<Record<string, string[]>>({});
-  const spellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [lastHotkey, setLastHotkey] = useState('(none)');
   const [hotkeyCount, setHotkeyCount] = useState(0);
@@ -117,41 +102,6 @@ export function InputStory() {
     setLastHotkey('Escape');
     setHotkeyCount(v => v + 1);
   });
-
-  const runSpellCheck = useCallback(async (text: string) => {
-    try {
-      const result = (await bridge.rpc('spell:checkText', { text })) as SpellError[] | null;
-      const errs = result || [];
-      setSpellAvailable(true);
-      setSpellErrors(errs);
-
-      const sugs: Record<string, string[]> = {};
-      for (const err of errs) {
-        const list = await bridge.rpc('spell:suggest', { word: err.word, limit: 4 }) as string[] | null;
-        sugs[err.word] = list || [];
-      }
-      setSpellSuggestions(sugs);
-    } catch {
-      setSpellAvailable(false);
-      setSpellErrors([]);
-      setSpellSuggestions({});
-    }
-  }, [bridge]);
-
-  useEffect(() => {
-    if (spellTimerRef.current) clearTimeout(spellTimerRef.current);
-    spellTimerRef.current = setTimeout(() => {
-      runSpellCheck(spellText);
-    }, 300);
-    return () => {
-      if (spellTimerRef.current) clearTimeout(spellTimerRef.current);
-    };
-  }, [spellText, runSpellCheck]);
-
-  const applySuggestion = useCallback((misspelled: string, replacement: string) => {
-    const re = new RegExp(`\\b${misspelled}\\b`, 'i');
-    setSpellText(prev => prev.replace(re, replacement));
-  }, []);
 
   const handleKeyDown = useCallback((e: LoveEvent) => {
     setLastKeyEvent({
@@ -354,64 +304,7 @@ export function InputStory() {
           )}
         </StorySection>
 
-        <StorySection index={5} title="Spell check">
-          {!spellAvailable ? (
-            <Text style={{ color: c.textSecondary, fontSize: 12 }}>
-              Spell check not available (dictionary service unavailable).
-            </Text>
-          ) : (
-            <>
-              <TextInput
-                value={spellText}
-                onChangeText={setSpellText}
-                multiline
-                style={{
-                  backgroundColor: c.surface,
-                  borderRadius: 6,
-                  padding: 10,
-                  minHeight: 56,
-                }}
-                textStyle={{ fontSize: 14, color: c.text }}
-              />
-              <Text style={{ color: spellErrors.length ? '#f87171' : '#34d399', fontSize: 12 }}>
-                {spellErrors.length
-                  ? `${spellErrors.length} misspelled word${spellErrors.length > 1 ? 's' : ''}`
-                  : 'No spelling errors'}
-              </Text>
-              {spellErrors.length > 0 && (
-                <Box style={{ gap: 8 }}>
-                  {spellErrors.map((err, i) => (
-                    <Box key={`${err.word}-${i}`} style={{ gap: 5 }}>
-                      <Text style={{ color: c.textSecondary, fontSize: 12 }}>{err.word}</Text>
-                      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                        {(spellSuggestions[err.word] || []).map(sug => (
-                          <Pressable
-                            key={`${err.word}-${sug}`}
-                            onPress={() => applySuggestion(err.word, sug)}
-                            style={({ pressed, hovered }) => ({
-                              backgroundColor: pressed ? c.primary : hovered ? c.surfaceHover : c.surface,
-                              borderRadius: 4,
-                              paddingLeft: 8,
-                              paddingRight: 8,
-                              paddingTop: 4,
-                              paddingBottom: 4,
-                              borderWidth: 1,
-                              borderColor: c.border,
-                            })}
-                          >
-                            <Text style={{ color: c.text, fontSize: 11 }}>{sug}</Text>
-                          </Pressable>
-                        ))}
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </>
-          )}
-        </StorySection>
-
-        <StorySection index={6} title="Keyboard hooks + clipboard">
+        <StorySection index={5} title="Keyboard hooks + clipboard">
           <Text style={{ color: c.textDim, fontSize: 10 }}>
             Press Ctrl+Z, Ctrl+Shift+S, or Escape anywhere.
           </Text>
@@ -453,7 +346,7 @@ export function InputStory() {
           </Text>
         </StorySection>
 
-        <StorySection index={7} title="Raw key event modifiers">
+        <StorySection index={6} title="Raw key event modifiers">
           <Text style={{ color: c.textDim, fontSize: 10 }}>
             Press any key while focusing the box below.
           </Text>
@@ -485,7 +378,7 @@ export function InputStory() {
           </Box>
         </StorySection>
 
-        <StorySection index={8} title="Modal">
+        <StorySection index={7} title="Modal">
           <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
             <Pressable
               onPress={() => setModalOpen(true)}
@@ -551,7 +444,7 @@ export function InputStory() {
           </Modal>
         </StorySection>
 
-        <StorySection index={9} title="Checkbox">
+        <StorySection index={8} title="Checkbox">
           <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
             <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
               <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Basic</Text>
@@ -587,7 +480,7 @@ export function InputStory() {
           </Box>
         </StorySection>
 
-        <StorySection index={10} title="Radio">
+        <StorySection index={9} title="Radio">
           <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
             <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
               <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Favorite fruit</Text>
@@ -614,7 +507,7 @@ export function InputStory() {
           </Box>
         </StorySection>
 
-        <StorySection index={11} title="Select">
+        <StorySection index={10} title="Select">
           <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
             <Box style={{ width: '100%', gap: 4, alignItems: 'center' }}>
               <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>With placeholder</Text>

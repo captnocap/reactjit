@@ -23,6 +23,24 @@ The pattern is the **declarative capability system** (`lua/capabilities.lua` + `
 
 Every new native feature (audio, timers, sensors, file watchers, notifications, whatever) should follow this pattern. The Lua module does the work, the React component is a one-liner, and the schema is the documentation. If you're adding something that requires the user to call `bridge.rpc()` or understand the transport layer, you haven't finished — wrap it in a capability.
 
+## The Proxy Input Rule (NON-NEGOTIABLE)
+
+**The ClaudeCanvas (PTY/vterm) is the single source of truth for ALL text state.** The semantic classifier scrapes it every frame into classified tokens. Every piece of UI that displays text from the session — input bars, prompt displays, conversation views, ALL of it — reads from classified tokens. Period.
+
+**An input bar is NOT an input.** It is a rectangle that displays the `user_input` classified token's text via `value={promptText}`. It holds focus so keystrokes route to ClaudeCanvas via `keystrokeTarget`/`submitTarget`. It has ZERO local text state. It does not accumulate characters. It does not interpret Enter or Escape. It forwards keystrokes to the canvas and displays what the classifier says. That's it.
+
+**The pattern (memorize this):**
+1. `usePromptText()` hook polls `claude:classified`, finds the prompt token, returns the text
+2. `<Input autoFocus keystrokeTarget="ClaudeCanvas" submitTarget="ClaudeCanvas" value={promptText} />`
+3. Lua proxy mode: keystrokes forward to target, TextInput never touches its own buffer
+
+**If you are ever tempted to:**
+- Sync text between two buffers → STOP. Read from the classified token.
+- Make a TextInput manage its own text AND forward to a target → STOP. One SSoT.
+- Add "proxy mode" or "forwarding" logic for text content → STOP. The display reads from the classifier. Keystrokes go to the canvas. Two separate concerns. Don't mix them.
+
+**This is exactly how BlankSlateCanvas works.** It polls `claude:classified` and renders tokens. The input bar does the same thing for the prompt token. Same pipe. Same SSoT. No special cases.
+
 ## Model Selection
 
 **Always use Opus 4.6 (`claude-opus-4-6`) for debugging.** Sonnet is fine for scaffolding, writing new components, and routine tasks. But when tracking down layout bugs, inspector issues, coordinate mismatches, or anything where the real problem is structural and not obvious — use Opus. It finds the actual bug instead of proposing workarounds that mask it.
@@ -33,14 +51,13 @@ ReactJIT is a React rendering framework with a hand-rolled renderer. The core pi
 
 **Rendering pipeline:** React reconciler → mutation commands → transport layer → layout engine → target-specific painter.
 
-**Primary renderer — Forked Love2D:**
-LuaJIT + Love2D (customized fork) + OpenGL 2.1 + SDL2 backend. Multi-window support via custom Love APIs (`love.window.createSecondary()`, `love.window.activateSecondary()`, etc.). Entry point: `love .`. The Love fork owns the run loop, the GL context, the font rasterizer, and the event pump.
+**Renderer — Love2D:**
+LuaJIT + Love2D + OpenGL 2.1. Multi-window support via subprocess IPC (each `<Window>` spawns a child Love2D process connected over TCP). Entry point: `love .`. Love2D owns the run loop, the GL context, the font rasterizer, and the event pump.
 
 **Also supported:**
-- **SDL2 / OpenGL** — Raw SDL2 + LuaJIT + OpenGL 2.1 + FreeType via FFI. No game engine middleware. We own the run loop and all graphics context management directly. Entry point: `luajit sdl2_init.lua`. Alternative when game engine features are not needed.
-- **Web (planned)** — WASM build from SDL2/OpenGL via Emscripten. Renders to `<canvas>`, not DOM.
+- **Web (planned)** — WASM build via Emscripten. Renders to `<canvas>`, not DOM.
 
-The target interface is formalized in `lua/target_love2d.lua` (primary) and `lua/target_sdl2.lua` (alternative). A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active. The `lua/window_manager.lua` module abstracts the backend and provides a unified API for both Love2D and SDL2 multi-window management.
+The target interface is formalized in `lua/target_love2d.lua`. A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
 
 ## CLI-First Workflow (IMPORTANT)
 
@@ -50,9 +67,8 @@ placement, and produces correct distribution packages. Running raw esbuild comma
 directly will use wrong flags, skip linting, and produce broken builds.
 
 ```bash
-rjit dev                        # Watch + HMR (SDL2, default). Do NOT run esbuild --watch manually.
-rjit dev love                   # Watch + HMR (Love2D)
-rjit build                      # Dev build (SDL2, default). Do NOT run esbuild manually.
+rjit dev                        # Watch + HMR (Love2D). Do NOT run esbuild --watch manually.
+rjit build                      # Dev build (Love2D). Do NOT run esbuild manually.
 rjit build linux                # Production: self-extracting Linux binary (x64)
 rjit build macos                # Production: macOS bundle (Intel x64)
 rjit build macmseries           # Production: macOS bundle (Apple Silicon arm64)
@@ -91,11 +107,11 @@ These live at the **monorepo root** and get copied into projects via the CLI:
   make cli-setup              # source → cli/runtime/
   cd examples/<project>
   reactjit update             # cli/runtime/ → project's local copies
-  reactjit build dist:sdl2    # rebuild
+  reactjit build               # rebuild
   ```
 - `reactjit update` syncs `lua/`, `lib/`, and `reactjit/` from the CLI runtime into the current project without touching `src/`. Use it to hydrate existing projects after framework changes.
 - `reactjit update` is symlink-aware: if a destination (e.g. `lua/`) is a symlink, it skips the copy and prints a message. This protects the storybook's source-of-truth symlinks.
-- `reactjit build dist:sdl2` has a fallback: if no local `lua/` exists, it reads from `cli/runtime/lua/`. But `reactjit dev` requires local copies, so always run `reactjit update` for dev workflows.
+- `reactjit build` has a fallback: if no local `lua/` exists, it reads from `cli/runtime/lua/`. But `reactjit dev` requires local copies, so always run `reactjit update` for dev workflows.
 
 ### The storybook reads from source directly (NEVER copy into it)
 
@@ -128,7 +144,7 @@ These are unique to each project and are NOT managed by the CLI:
 4. `make cli-setup` — propagates to `cli/runtime/` for consumer projects
 5. For each example project that needs the feature:
    - `cd examples/<project> && reactjit update` — syncs runtime files
-   - `reactjit build dist:sdl2` — rebuilds
+   - `reactjit build` — rebuilds
 6. For new projects: `reactjit init <name>` — gets everything automatically
 
 ## Other Build Commands
@@ -170,7 +186,7 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 
 **Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12), multi-window manager (`window_manager.lua`).
 
-**Target interface** — `lua/target_love2d.lua` (primary; uses `painter.lua` + `measure.lua` + forked Love2D backend) and `lua/target_sdl2.lua` (alternative; uses `sdl2_painter.lua` + `sdl2_measure.lua` + `sdl2_font.lua` + raw SDL2 FFI). Love2D entry point: `love .`. SDL2 run loop: `lua/sdl2_init.lua`. OpenGL bindings: `lua/sdl2_gl.lua`. Multi-window support: `lua/window_manager.lua` (abstracts both backends).
+**Target interface** — `lua/target_love2d.lua` (uses `painter.lua` + `measure.lua` + Love2D backend). Love2D entry point: `love .`. Multi-window support: `lua/window_manager.lua`.
 
 **Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
 
@@ -180,7 +196,7 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 
 These are encoded in `cli/targets.mjs` — you should never need to specify them manually:
 
-- **Love2D / SDL2**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). Love2D (primary): launched via `love .`. SDL2 (alternative): launched via `luajit sdl2_init.lua`. Same bundle format, different run loop.
+- **Love2D**: `--format=iife --global-name=ReactJIT` (bundle runs inside QuickJS in-process). Launched via `love .`.
 
 ## Critical Layout Rules
 

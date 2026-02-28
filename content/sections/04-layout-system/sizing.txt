@@ -10,9 +10,15 @@ difficulty: beginner
 === OVERVIEW ===
 Every element in ReactJIT has explicit sizing control through width, height, and their
 min/max variants. Values can be numbers (interpreted as pixels on Love2D/web, or character
-cells on grid targets) or percentage strings like '100%' or '50%'. Unlike the web, Box
-elements in ReactJIT have no intrinsic width -- if you do not specify a width, it is
-effectively zero unless flexGrow or alignItems: 'stretch' provides one.
+cells on grid targets) or percentage strings like '100%' or '50%'.
+
+Sizing resolves through three tiers. Explicit dimensions (width, height, flexGrow, flexBasis)
+always win. Containers with children auto-size from their content — Text measures from font
+metrics. Empty surface nodes (Box, Image, Video, VideoPlayer, Scene3D, Emulator) with no
+children and no explicit dimensions fall back to 1/4 of the parent's available space. This
+cascades: in an 800px-wide parent, an unsized empty Box is 200px; a nested unsized empty
+Box inside it is 50px. Interactive elements (Text, TextInput, ScrollView) are not surfaces
+and size from content or require explicit dimensions.
 
 Root containers must always use width: '100%', height: '100%' to fill the viewport. This
 is the most common mistake in ReactJIT development and is enforced by the linter. Using
@@ -23,11 +29,12 @@ Sizing style properties:
 
   width: number | string
     Width in pixels (number) or percentage of parent ('50%', '100%').
-    Box nodes have zero intrinsic width. Text nodes have intrinsic width from font measurement.
+    Text nodes have intrinsic width from font measurement. Empty surface nodes (Box, Image,
+    Video, etc.) use the proportional fallback (1/4 of parent) when omitted.
 
   height: number | string
     Height in pixels (number) or percentage of parent.
-    Box nodes have zero intrinsic height. Text nodes have intrinsic height from fontSize.
+    Text nodes have intrinsic height from fontSize. Containers auto-size to content height.
 
   minWidth: number | string
     Minimum width constraint. The element will not shrink below this value.
@@ -103,7 +110,9 @@ characters wide. Percentage values work the same way -- relative to the parent's
 
 === CRITICAL RULES ===
 - Root containers MUST use width: '100%', height: '100%' -- NOT flexGrow: 1
-- Box nodes have zero intrinsic width and height -- always specify dimensions or use flex sizing
+- Containers with children auto-size from content -- no explicit dimensions needed
+- Empty surface nodes (Box, Image, Video, Scene3D, Emulator) without children or explicit sizing get the proportional fallback (1/4 of parent)
+- ScrollView and TextInput are NOT surfaces -- they need explicit dimensions or flexGrow
 - Text nodes have intrinsic dimensions based on fontSize and content -- but you still MUST set fontSize
 - Pre-compute grid dimensions rather than relying on child content to infer container size
 - Percentage values are relative to the parent's computed dimension, not the viewport (unless the parent is the root)

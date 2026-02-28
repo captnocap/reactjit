@@ -71,6 +71,17 @@ export interface UsePTYOptions {
   maxOutput?: number;
 }
 
+export interface DirtyRow {
+  row: number;
+  text: string;
+}
+
+export interface CursorState {
+  row: number;
+  col: number;
+  visible: boolean;
+}
+
 export interface TerminalCapabilityProps {
   type?: string;
   shell?: string;
@@ -81,15 +92,21 @@ export interface TerminalCapabilityProps {
   session?: string;
   transport?: string;
   autoConnect?: boolean;
-  onData:    (event: { data: string }) => void;
-  onConnect: (event: { shell: string; ptyType: string; session?: string }) => void;
-  onExit:    (event: { exitCode: number | null }) => void;
-  onError:   (event: { error: string }) => void;
+  onData:       (event: { data: string }) => void;
+  onDirtyRows:  (event: { rows: DirtyRow[] }) => void;
+  onCursorMove: (event: CursorState) => void;
+  onConnect:    (event: { shell: string; ptyType: string; session?: string }) => void;
+  onExit:       (event: { exitCode: number | null }) => void;
+  onError:      (event: { error: string }) => void;
 }
 
 export interface UsePTYResult {
   /** Accumulated terminal output (rolling, trimmed to maxOutput) */
   output: string;
+  /** Latest settled dirty rows from vterm (structured row-level data) */
+  dirtyRows: DirtyRow[];
+  /** Current cursor position and visibility from vterm */
+  cursor: CursorState;
   /** Whether the shell process is currently running */
   connected: boolean;
   /** Write raw bytes to the PTY (keystrokes, escape sequences, commands) */
@@ -123,6 +140,8 @@ export function usePTY(opts: UsePTYOptions = {}): UsePTYResult {
   const maxOutput = opts.maxOutput ?? 100_000;
 
   const [output,    setOutput]    = useState('');
+  const [dirtyRows, setDirtyRows] = useState<DirtyRow[]>([]);
+  const [cursor,    setCursor]    = useState<CursorState>({ row: 0, col: 0, visible: true });
   const [connected, setConnected] = useState(false);
 
   // Stable session name that never changes across re-renders
@@ -156,6 +175,14 @@ export function usePTY(opts: UsePTYOptions = {}): UsePTYResult {
     });
   }, [maxOutput]);
 
+  const onDirtyRows = useCallback((e: { rows: DirtyRow[] }) => {
+    setDirtyRows(e.rows);
+  }, []);
+
+  const onCursorMove = useCallback((e: CursorState) => {
+    setCursor(e);
+  }, []);
+
   const onConnect = useCallback(() => setConnected(true),  []);
   const onExit    = useCallback(() => setConnected(false), []);
   const onError   = useCallback(() => setConnected(false), []);
@@ -171,6 +198,8 @@ export function usePTY(opts: UsePTYOptions = {}): UsePTYResult {
     transport:   opts.transport,
     autoConnect: opts.autoConnect,
     onData,
+    onDirtyRows,
+    onCursorMove,
     onConnect,
     onExit,
     onError,
@@ -178,6 +207,8 @@ export function usePTY(opts: UsePTYOptions = {}): UsePTYResult {
 
   return {
     output,
+    dirtyRows,
+    cursor,
     connected,
     send,
     sendLine,

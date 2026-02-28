@@ -1,0 +1,125 @@
+=== METADATA ===
+title: Terminal
+description: Non-visual PTY capability node for spawning and managing shell processes
+category: Components
+platforms: love2d
+keywords: terminal, pty, shell, process, bash, command, output
+related: SemanticTerminal, usePTY
+difficulty: intermediate
+
+=== OVERVIEW ===
+Terminal is a non-visual capability node that owns a PTY (pseudo-terminal) session. It renders nothing — there is no visual output from Terminal itself. Instead, it manages the shell process lifecycle on the Lua side and emits events as the shell produces output.
+
+Use Terminal when you need raw PTY access: capturing command output, running background processes, or building custom terminal UIs with your own rendering. Use SemanticTerminal instead when you want visual rendering with semantic classification.
+
+The recommended pattern is to pair Terminal with the usePTY hook. The hook accumulates output, manages connection state, and provides send helpers. Spread its terminalProps onto Terminal in your JSX tree.
+
+Three session archetypes are available. type="user" (default) inherits the parent process environment and runs a persistent interactive shell. type="root" escalates to a root shell (requires sudo NOPASSWD or will show a password prompt in the PTY). type="template" spawns a fresh bash -c process for each command, providing a clean environment per invocation.
+
+Terminal is Love2D native only — PTY requires a real OS process layer not available in web builds.
+
+=== API / SYNTAX ===
+```tsx
+import { Terminal } from '@reactjit/core';
+```
+
+Props:
+| Prop        | Type                                                        | Default     | Description                                                   |
+|-------------|-------------------------------------------------------------|-------------|---------------------------------------------------------------|
+| type        | 'user' \| 'root' \| 'template'                             | 'user'      | Session archetype                                             |
+| shell       | string                                                      | 'bash'      | Shell executable (any PATH-resolvable binary)                 |
+| cwd         | string                                                      | undefined   | Working directory for the child process                       |
+| env         | Record<string, string \| false>                             | undefined   | Environment variable overrides. false = unset the variable.   |
+| rows        | number                                                      | 24          | Terminal rows (affects text wrapping in the shell)            |
+| cols        | number                                                      | 80          | Terminal columns                                              |
+| session     | string                                                      | auto        | Named session ID for RPC targeting                            |
+| transport   | 'bridge' \| 'ws' \| 'http' \| 'tor'                        | 'bridge'    | Transport backend for the PTY bridge                          |
+| autoConnect | boolean                                                     | true        | Auto-spawn on mount                                           |
+| onData      | (event: { data: string }) => void                           | undefined   | Fires with each chunk of PTY output (ANSI-encoded)            |
+| onConnect   | (event: { shell: string; ptyType: string; session?: string }) => void | undefined | Fires once when the shell process starts               |
+| onExit      | (event: { exitCode: number \| null }) => void               | undefined   | Fires when the shell process exits                            |
+| onError     | (event: { error: string }) => void                          | undefined   | Fires on spawn error                                          |
+
+=== EXAMPLES ===
+Example 1: Capture command output with usePTY (recommended pattern)
+---
+```tsx
+import { Terminal, Text, Box, Pressable } from '@reactjit/core';
+import { usePTY } from '@reactjit/core';
+
+export default function App() {
+  const { output, sendLine, connected, terminalProps } = usePTY({
+    type: 'user',
+    shell: 'bash',
+    session: 'main',
+  });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 8 }}>
+      {/* Non-visual node — manages the PTY */}
+      <Terminal {...terminalProps} />
+
+      <Box style={{ flexGrow: 1, padding: 8, backgroundColor: '#1e1e2e', borderRadius: 6 }}>
+        <Text style={{ fontFamily: 'monospace', fontSize: 12, color: '#cdd6f4' }}>
+          {output || (connected ? 'Shell ready.' : 'Connecting…')}
+        </Text>
+      </Box>
+
+      <Pressable onPress={() => sendLine('ls -la')}>
+        <Box style={{ padding: 8, backgroundColor: '#313244', borderRadius: 4 }}>
+          <Text style={{ fontSize: 12, color: '#89b4fa' }}>Run: ls -la</Text>
+        </Box>
+      </Pressable>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: One-shot command runner (template type)
+---
+```tsx
+import { useState } from 'react';
+import { Terminal, Text, Box } from '@reactjit/core';
+import { usePTY } from '@reactjit/core';
+
+export default function App() {
+  const [result, setResult] = useState('');
+  const { runCommand, terminalProps } = usePTY({
+    type: 'template',
+    session: 'cmd',
+    maxOutput: 10_000,
+  });
+
+  // usePTY.onData accumulates output; we just display it
+  const { output } = usePTY({ ...terminalProps, onData: e => setResult(r => r + e.data) });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 8, padding: 16 }}>
+      <Terminal {...terminalProps} />
+      <Pressable onPress={() => runCommand('uname -a && uptime')}>
+        <Text style={{ fontSize: 12, color: '#89b4fa' }}>Run system info</Text>
+      </Pressable>
+      <Text style={{ fontFamily: 'monospace', fontSize: 11, color: '#a6e3a1', flexGrow: 1 }}>
+        {result}
+      </Text>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- Terminal renders nothing — it is invisible. You must handle onData output yourself.
+- Always use the usePTY hook for stateful UIs. Calling bridge.rpc('pty:write') manually is fragile.
+- session IDs must be unique per app. Two Terminal nodes with the same session will conflict.
+- PTY is native only (Love2D and SDL2). Web builds receive no output and onConnect never fires.
+- type="template" spawns a fresh shell per runCommand() call. It does not maintain state between invocations.
+- Raw PTY output includes ANSI escape codes. Render with a component that strips them or use SemanticTerminal for visual rendering.
+
+=== SEE ALSO ===
+- usePTY
+- SemanticTerminal
+- useSemanticTerminal

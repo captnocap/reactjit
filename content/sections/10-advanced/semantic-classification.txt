@@ -1,0 +1,183 @@
+=== METADATA ===
+title: Semantic Classification
+description: Architecture of the classifier pipeline that converts raw PTY output into typed semantic tokens
+category: Advanced
+platforms: love2d
+keywords: classifier, semantic, token, pty, terminal, classification, graph, vterm, pipeline
+related: SemanticTerminal, useSemanticTerminal, session-recording, Terminal
+difficulty: advanced
+
+=== OVERVIEW ===
+Semantic classification is the process that turns raw PTY bytes into a structured, typed view of terminal output. Instead of displaying ANSI color codes, the pipeline assigns each terminal row a semantic token — 'command', 'error', 'assistant_text', 'tool', etc. — and uses those tokens to drive color rendering, turn detection, graph construction, and session analysis.
+
+The pipeline has three stages: vterm decodes raw PTY bytes into Unicode text rows (stripping ANSI codes); the classifier assigns a token to each row and optionally refines assignments using adjacency context; the semantic graph aggregates rows into turns, nodes, and state transitions. SemanticTerminal runs this pipeline on the Lua side and emits onClassifiedRow and onGraphUpdate events to the React layer.
+
+The framework ships two classifiers: basic covers any interactive shell session, and claude_code covers the full Claude Code CLI. Custom classifiers are Lua files in lua/classifiers/ and are referenced by filename (without the .lua extension).
+
+=== API / SYNTAX ===
+Classifier module interface (Lua):
+```lua
+local M = {}
+
+M.name = "my_classifier"   -- identifier
+M.version = "1.0"
+M.cli = "myapp"            -- what command this classifier is for
+M.description = "..."
+
+-- Required: classify a single row of terminal text.
+-- Returns: token string, plus optional extra1, extra2 fields.
+function M.classifyRow(text, row, totalRows)
+  -- text: plain Unicode text of the row (ANSI stripped)
+  -- row: 0-based row index in the terminal buffer
+  -- totalRows: total rows in the current buffer
+  return "output"   -- token
+end
+
+-- Optional: refine a token using context from the previous row.
+-- Receives the initial token, the previous row's token, the text, and a context table.
+-- Return the (possibly revised) token.
+function M.refineAdjacency(kind, prevKind, text, context)
+  return kind
+end
+
+-- Optional: returns true if this row starts a new turn in the semantic graph.
+function M.isTurnStart(kind)
+  return false
+end
+
+-- Optional: group type for this token (e.g. "menu", "picker", "task").
+-- Used to group consecutive rows of the same logical unit.
+M.groupTypes = {}
+
+-- Optional: tokens where consecutive rows should be merged into a single block.
+M.blockTypes = {}
+
+return M
+```
+
+Built-in classifiers:
+| Classifier  | Tokens | Target           | Description                                      |
+|-------------|--------|------------------|--------------------------------------------------|
+| basic       | 7      | Any shell        | command, output, error, success, heading, separator, progress |
+| claude_code | 25+    | Claude Code CLI  | Full vocabulary covering all UI states (see below) |
+
+claude_code token vocabulary:
+| Group        | Tokens                                                       |
+|--------------|--------------------------------------------------------------|
+| Conversation | user_prompt, user_text, user_input, thinking, thought_complete, assistant_text |
+| Tool output  | tool, result, diff, error                                    |
+| Chrome       | banner, status_bar, idle_prompt, input_border, input_zone, box_drawing |
+| Interactive  | menu_title, menu_option, menu_desc, list_selectable, list_selected, list_info, search_box, selector, confirmation, hint |
+| Pickers      | picker_title, picker_item, picker_selected, picker_meta      |
+| Permissions  | permission                                                   |
+| Plan mode    | plan_border, plan_mode, wizard_step                          |
+| Tasks        | task_summary, task_done, task_open, task_active              |
+| Misc         | slash_menu, image_attachment                                 |
+
+basic token vocabulary:
+| Token     | Description                                      |
+|-----------|--------------------------------------------------|
+| command   | Shell prompt + command line (isTurnStart = true) |
+| output    | Normal command output                            |
+| error     | Error messages (stderr-like)                     |
+| success   | Success indicators, exit confirmations           |
+| heading   | Section headers, bold/underlined separators      |
+| separator | Visual rule lines                                |
+| progress  | Progress bars, spinners                          |
+
+=== EXAMPLES ===
+Example 1: Custom classifier for a REPL
+---
+```lua
+-- lua/classifiers/python_repl.lua
+local M = {}
+M.name = "python_repl"
+M.version = "1.0"
+M.cli = "python3"
+M.description = "Classifier for Python interactive sessions"
+
+M.tokens = { "prompt", "output", "error", "traceback", "value" }
+
+function M.classifyRow(text, row, totalRows)
+  if text:match("^>>>") or text:match("^%.%.%.") then return "prompt" end
+  if text:match("^Traceback") then return "traceback" end
+  if text:match("^%s+File .-,") or text:match("^%w+Error:") then return "error" end
+  return "output"
+end
+
+function M.refineAdjacency(kind, prevKind, text, context)
+  -- Lines after traceback frames are part of the traceback
+  if kind == "output" and (prevKind == "traceback" or prevKind == "error") then
+    return "error"
+  end
+  return kind
+end
+
+function M.isTurnStart(kind)
+  return kind == "prompt"
+end
+
+M.blockTypes = { output = true, error = true, traceback = true }
+
+return M
+```
+---
+Platforms: love2d
+
+Usage in React:
+```tsx
+<SemanticTerminal
+  command="python3"
+  classifier="python_repl"
+  showTokens
+  style={{ flexGrow: 1 }}
+/>
+```
+---
+Platforms: love2d
+
+Example 2: Reading classification events in React
+---
+```tsx
+import { Box, Text, SemanticTerminal } from '@reactjit/core';
+import { useSemanticTerminal } from '@reactjit/core';
+
+export default function App() {
+  const { classifiedRows, graphState, terminalProps } = useSemanticTerminal({
+    command: 'claude',
+    classifier: 'claude_code',
+    showTokens: true,
+  });
+
+  const turns = graphState?.turnCount ?? 0;
+  const errors = classifiedRows.filter(r => r.token === 'error').length;
+  const tools = classifiedRows.filter(r => r.token === 'tool').length;
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <Box style={{ flexDirection: 'row', gap: 16, padding: 8, backgroundColor: '#313244' }}>
+        <Text style={{ fontSize: 11, color: '#a6adc8' }}>Turns: {turns}</Text>
+        <Text style={{ fontSize: 11, color: '#f38ba8' }}>Errors: {errors}</Text>
+        <Text style={{ fontSize: 11, color: '#89b4fa' }}>Tool calls: {tools}</Text>
+      </Box>
+      <SemanticTerminal {...terminalProps} style={{ flexGrow: 1 }} />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- Classifiers are stateless per-row functions. Do not store state between classifyRow calls — the framework may call it in any order during seek or playback.
+- refineAdjacency receives the output of classifyRow for the current row and the classification of the previous row. It is optional; return kind unchanged if no refinement is needed.
+- The classifier prop is the Lua filename without .lua. A file at lua/classifiers/my_app.lua is referenced as classifier="my_app".
+- Classification happens at display time, not at capture time. Recordings store raw PTY bytes; you can replay a session through a different classifier without re-recording.
+- isTurnStart should return true exactly once per logical conversation turn. For shell sessions this is every command prompt; for Claude Code this is every user_prompt row. Over-triggering creates noise in the semantic graph.
+
+=== SEE ALSO ===
+- SemanticTerminal
+- useSemanticTerminal
+- session-recording
+- Terminal
+

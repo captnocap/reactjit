@@ -1,0 +1,134 @@
+=== METADATA ===
+title: useLocalStore
+description: Persistent useState backed by SQLite — values survive app restarts
+category: Hooks
+platforms: love2d
+keywords: storage, sqlite, persist, state, local, database, hook
+related: useState, useSearchHistory, storage
+difficulty: beginner
+
+=== OVERVIEW ===
+useLocalStore is a drop-in replacement for useState that persists values across app restarts using SQLite on the Lua side. The API is identical to useState — it returns a [value, setValue] tuple. On first mount the stored value is loaded from the database; on every subsequent setValue the new value is written back, debounced at 300ms to avoid write storms.
+
+Values are stored under a (namespace, key) pair in a local SQLite database (localstore.db). The default namespace is 'app'. Use custom namespaces to avoid key collisions between unrelated parts of your application.
+
+The hook is native-only. In web mode or when the bridge is unavailable, it falls back to plain in-memory state using the defaultValue — no crash, no warning.
+
+=== API / SYNTAX ===
+```tsx
+import { useLocalStore } from '@reactjit/core';
+import type { UseLocalStoreOptions } from '@reactjit/core';
+```
+
+Signature:
+```tsx
+function useLocalStore<T>(
+  key: string,
+  defaultValue: T,
+  options?: UseLocalStoreOptions,
+): [T, (value: T | ((prev: T) => T)) => void]
+```
+
+Parameters:
+| Parameter    | Type                   | Default   | Description                              |
+|--------------|------------------------|-----------|------------------------------------------|
+| key          | string                 | required  | Storage key within the namespace         |
+| defaultValue | T                      | required  | Value to use before storage loads        |
+| options      | UseLocalStoreOptions   | undefined | Optional configuration                   |
+
+UseLocalStoreOptions:
+| Option    | Type   | Default | Description                        |
+|-----------|--------|---------|------------------------------------|
+| namespace | string | 'app'   | Namespace prefix for the key       |
+
+Return value: `[value, setValue]` — identical interface to `useState<T>`.
+
+=== EXAMPLES ===
+Example 1: Persisted counter
+---
+```tsx
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useLocalStore } from '@reactjit/core';
+
+export default function App() {
+  const [count, setCount] = useLocalStore('counter', 0);
+
+  return (
+    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
+      <Text style={{ fontSize: 32, color: '#cdd6f4' }}>{count}</Text>
+      <Pressable onPress={() => setCount(n => n + 1)}>
+        <Box style={{ padding: '8 24', backgroundColor: '#89b4fa', borderRadius: 6 }}>
+          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Increment</Text>
+        </Box>
+      </Pressable>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Persisted theme preference with namespace
+---
+```tsx
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useLocalStore } from '@reactjit/core';
+
+const THEMES = ['catppuccin', 'dracula', 'gruvbox'] as const;
+type Theme = typeof THEMES[number];
+
+export default function App() {
+  const [theme, setTheme] = useLocalStore<Theme>('selected', 'catppuccin', { namespace: 'theme' });
+
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 16, flexDirection: 'column', gap: 8 }}>
+      <Text style={{ fontSize: 14, color: '#a6adc8' }}>Active theme: {theme}</Text>
+      {THEMES.map(t => (
+        <Pressable key={t} onPress={() => setTheme(t)}>
+          <Box style={{ padding: '6 16', backgroundColor: theme === t ? '#89b4fa' : '#313244', borderRadius: 4 }}>
+            <Text style={{ fontSize: 13, color: theme === t ? '#1e1e2e' : '#cdd6f4' }}>{t}</Text>
+          </Box>
+        </Pressable>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 3: Persisted complex object (panel layout)
+---
+```tsx
+import { useLocalStore } from '@reactjit/core';
+
+interface PanelState {
+  sidebarOpen: boolean;
+  activeTab: string;
+}
+
+const DEFAULT: PanelState = { sidebarOpen: true, activeTab: 'overview' };
+
+export default function App() {
+  const [layout, setLayout] = useLocalStore<PanelState>('panelLayout', DEFAULT);
+
+  const toggleSidebar = () =>
+    setLayout(prev => ({ ...prev, sidebarOpen: !prev.sidebarOpen }));
+
+  // ... render with layout.sidebarOpen, layout.activeTab
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- useLocalStore is native-only. In web builds the bridge is unavailable and it silently falls back to plain useState with the defaultValue. This means web builds never persist state — it is not an error.
+- The 300ms write debounce means rapid state changes do not hammer the database. Do not call setCount(0) and immediately read from the DB expecting the new value — the write may not have flushed yet.
+- Keys must be unique within their namespace. Two unrelated useLocalStore calls sharing a key in the same namespace will conflict. Use the namespace option to scope keys by feature area.
+- defaultValue is used only until the stored value loads on first mount. This means there is a brief flash of the default value on every app start. If you need to avoid the flash, check a separate loading state before rendering.
+- Values are stored via JSON serialization. Any non-JSON-safe type (functions, class instances, circular references) will lose type fidelity or fail to persist.
+
+=== SEE ALSO ===
+- useSearchHistory
+- storage
+
