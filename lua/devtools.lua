@@ -6,6 +6,10 @@
   selected outline, tooltip, perf bar) always render on the main canvas
   regardless of which tab is active.
 
+  Supports pop-out mode: the panel can be detached into a separate window
+  via Ctrl+Shift+D or the tab bar button, giving the app full viewport
+  while keeping devtools accessible alongside it.
+
   Usage:
     local devtools = require("lua.devtools")
     devtools.init({ inspector = inspector, console = console })
@@ -15,11 +19,13 @@
     -- In love.wheelmoved:   if devtools.wheelmoved(x, y) then return end
     -- In love.textinput:    if devtools.textinput(text) then return end
     -- In love.draw:         devtools.draw(root)
+    -- In love.focus:        devtools.handleFocus(hasFocus)
 
   Controls:
-    F12     -- Toggle devtools open/closed
-    `       -- Switch to Console tab (opens devtools if closed)
-    Escape  -- Close devtools (or clear selection first in Elements tab)
+    F12          -- Toggle devtools open/closed
+    `            -- Switch to Console tab (opens devtools if closed)
+    Ctrl+Shift+D -- Toggle pop-out / dock-back
+    Escape       -- Close devtools (or clear selection, or dock back)
 ]]
 
 local Log = require("lua.debug_log")
@@ -45,6 +51,15 @@ local state = {
   -- Draggable divider between tree and detail panels
   dividerRatio    = 0.5,   -- tree takes this fraction of width (0.0-1.0)
   draggingDivider = false, -- currently dragging?
+  -- Pop-out window state (subprocess over TCP IPC)
+  poppedOut      = false,    -- devtools panel in its own child process?
+  server         = nil,      -- TCP server socket (parent side)
+  conn           = nil,      -- TCP connection to child process
+  port           = nil,      -- TCP port
+  initSent       = false,    -- initial tree sent to child?
+  mainHasFocus   = true,     -- true when main window has focus
+  lastPerfSend   = 0,        -- throttle perf updates to child
+  lastSentSelId  = nil,      -- last selected node ID sent to child
 }
 
 -- ============================================================================
@@ -96,7 +111,18 @@ end
 
 --- Compute panel geometry based on current screen size.
 --- Returns panelY, panelH, contentY, contentH, screenW
+--- When popped out, uses devtools window dimensions (panel fills entire window).
 local function getPanelGeometry()
+  if state.poppedOut then
+    -- When popped out: in child process, fills entire window.
+    -- love.graphics.getDimensions() returns devtools window size in child.
+    local screenW, screenH = love.graphics.getDimensions()
+    local panelH = screenH
+    local panelY = 0
+    local contentY = TAB_BAR_H
+    local contentH = panelH - TAB_BAR_H - STATUS_BAR_H
+    return panelY, panelH, contentY, contentH, screenW
+  end
   local screenW, screenH = love.graphics.getDimensions()
   local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
   local panelY = screenH - panelH
@@ -126,10 +152,18 @@ function DevTools.isOpen()
   return state.open
 end
 
+--- Force devtools open (used by devtools child process on startup).
+function DevTools.forceOpen()
+  state.open = true
+  state.poppedOut = true
+end
+
 --- Return the available viewport height (screen height minus panel when open).
 --- Used by init.lua to pass reduced height to layout.layout().
+--- When popped out, the panel is in its own window — full height available.
 function DevTools.getViewportHeight()
   if not state.open then return love.graphics.getHeight() end
+  if state.poppedOut then return love.graphics.getHeight() end
   local screenH = love.graphics.getHeight()
   local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
   return screenH - panelH
@@ -148,25 +182,239 @@ local function pushViewportEvent()
 end
 
 -- ============================================================================
+-- Pop-out window management (subprocess over TCP IPC)
+-- ============================================================================
+
+--- Pop the devtools panel out into a separate child Love2D process.
+function DevTools.popOut()
+  if state.poppedOut then return end
+  local IPC = require("lua.window_ipc")
+
+  -- Create TCP server for child to connect to
+  local server, port = IPC.createServer()
+  if not server then
+    io.write("[devtools] failed to create IPC server\n"); io.flush()
+    return
+  end
+
+  state.server      = server
+  state.port        = port
+  state.conn        = nil
+  state.initSent    = false
+  state.lastPerfSend = 0
+  state.lastSentSelId = nil
+
+  -- Resolve devtools_window path relative to this file
+  local info = debug.getinfo(1, "S")
+  local thisFile = info and info.source and info.source:gsub("^@", "") or ""
+  local luaDir = thisFile:match("(.*/lua)/") or thisFile:match("(.*\\lua)\\")
+  local devtoolsWindowPath = luaDir and (luaDir .. "devtools_window") or "lua/devtools_window"
+
+  -- Spawn child Love2D process
+  local cmd = string.format(
+    'REACTJIT_WINDOW_TITLE=%q REACTJIT_WINDOW_WIDTH=%d REACTJIT_WINDOW_HEIGHT=%d REACTJIT_IPC_PORT=%d love %s &',
+    "DevTools", 800, 500, port, devtoolsWindowPath
+  )
+  io.write("[devtools] spawning: " .. cmd .. "\n"); io.flush()
+  os.execute(cmd)
+
+  state.poppedOut = true
+  -- Main app gets full viewport back
+  if tree then tree.markDirty() end
+  pushViewportEvent()
+  io.write("[devtools] popped out (IPC port " .. port .. ")\n"); io.flush()
+end
+
+--- Dock the devtools panel back into the main window (kill child process).
+function DevTools.dockBack()
+  if not state.poppedOut then return end
+  local IPC = require("lua.window_ipc")
+
+  -- Send quit to child
+  if state.conn then
+    IPC.send(state.conn, { type = "quit" })
+    IPC.cleanup(state.conn)
+    state.conn = nil
+  end
+
+  -- Close server
+  if state.server then
+    pcall(function() state.server:close() end)
+    state.server = nil
+  end
+
+  state.poppedOut = false
+  state.port = nil
+  state.initSent = false
+  state.mainHasFocus = true
+  state.lastSentSelId = nil
+  -- Main app loses viewport space to the docked panel
+  if tree then tree.markDirty() end
+  pushViewportEvent()
+  io.write("[devtools] docked back\n"); io.flush()
+end
+
+--- Toggle between popped out and docked.
+function DevTools.togglePopOut()
+  if not state.open then
+    -- Open + pop out in one action
+    state.open = true
+    inspector.enable()
+    DevTools.popOut()
+    return
+  end
+  if state.poppedOut then
+    DevTools.dockBack()
+  else
+    DevTools.popOut()
+  end
+end
+
+--- Is the devtools panel in its own window?
+function DevTools.isPoppedOut()
+  return state.poppedOut
+end
+
+--- Called when the main Love2D window gains/loses focus.
+--- When main loses focus and devtools window exists, devtools is focused.
+function DevTools.handleFocus(hasFocus)
+  state.mainHasFocus = hasFocus
+end
+
+--- Is the devtools window currently focused? (main lost focus while popped out)
+function DevTools.isDevToolsFocused()
+  return state.poppedOut and not state.mainHasFocus
+end
+
+--- Tick the IPC connection to the devtools child process.
+--- Call this from the main process's update loop.
+function DevTools.tick(dt)
+  if not state.poppedOut or not state.server then return end
+
+  local IPC = require("lua.window_ipc")
+
+  -- 1. Accept pending child connection
+  if not state.conn then
+    state.conn = IPC.accept(state.server)
+    return  -- wait for next frame
+  end
+
+  -- 2. Send initial full tree once connected
+  if not state.initSent then
+    if tree then
+      local root = tree.getTree()
+      if root then
+        local commands = IPC.serializeSubtree({ children = { root } })
+        local mainW, mainH = love.graphics.getDimensions()
+        IPC.send(state.conn, {
+          type = "init",
+          commands = commands,
+          mainWidth = mainW,
+          mainHeight = mainH,
+        })
+        state.initSent = true
+        io.write("[devtools] sent init (" .. #commands .. " commands)\n"); io.flush()
+      end
+    end
+    return
+  end
+
+  -- 3. Send perf data (throttled to every 0.5s)
+  state.lastPerfSend = state.lastPerfSend + dt
+  if state.lastPerfSend >= 0.5 then
+    state.lastPerfSend = 0
+    local perf = inspector and inspector.getPerfData()
+    if perf then
+      IPC.send(state.conn, { type = "devtools_state", perf = perf })
+    end
+  end
+
+  -- 4. Sync selected node changes to child
+  local sel = inspector and inspector.getSelectedNode()
+  local selId = sel and sel.id or false
+  if selId ~= state.lastSentSelId then
+    state.lastSentSelId = selId
+    IPC.send(state.conn, { type = "devtools_state", selectedNodeId = selId })
+  end
+
+  -- 5. Poll for events from child
+  local msgs, dead = IPC.poll(state.conn)
+  if dead then
+    io.write("[devtools] child connection lost, docking back\n"); io.flush()
+    state.conn = nil
+    if state.server then pcall(function() state.server:close() end); state.server = nil end
+    state.poppedOut = false
+    state.port = nil
+    state.initSent = false
+    state.mainHasFocus = true
+    state.lastSentSelId = nil
+    if tree then tree.markDirty() end
+    pushViewportEvent()
+    return
+  end
+
+  for _, msg in ipairs(msgs) do
+    if msg.type == "devtools_select" and msg.nodeId then
+      -- Child selected a node — sync to main inspector
+      local nodes = tree and tree.getNodes()
+      local node = nodes and nodes[msg.nodeId]
+      if node and inspector then
+        inspector.selectNode(node)
+      end
+    elseif msg.type == "windowEvent" and msg.handler == "onClose" then
+      -- Child window X clicked — dock back
+      DevTools.dockBack()
+      return
+    end
+  end
+end
+
+--- Forward tree mutations to the devtools child process.
+--- Call from init.lua after tree.applyCommands().
+function DevTools.forwardMutations(commands)
+  if not state.poppedOut or not state.conn or not state.initSent then return end
+  local IPC = require("lua.window_ipc")
+  IPC.send(state.conn, { type = "mutations", commands = commands })
+end
+
+-- ============================================================================
 -- Input handling
 -- ============================================================================
 
 --- Handle keypress. Returns true if consumed.
 function DevTools.keypressed(key)
+  -- Ctrl+Shift+D: toggle pop-out
+  if key == "d" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
+    DevTools.togglePopOut()
+    return true
+  end
+
   -- F12: toggle devtools
   if key == "f12" then
-    state.open = not state.open
-    if state.open then
-      inspector.enable()
-    else
+    if state.poppedOut then
+      -- Dock back first, then close
+      DevTools.dockBack()
+      state.open = false
       inspector.disable()
       console.hide()
       state.draggingDivider = false
       love.mouse.setCursor()
+      if tree then tree.markDirty() end
+      pushViewportEvent()
+    else
+      state.open = not state.open
+      if state.open then
+        inspector.enable()
+      else
+        inspector.disable()
+        console.hide()
+        state.draggingDivider = false
+        love.mouse.setCursor()
+      end
+      -- Relayout: viewport height changed
+      if tree then tree.markDirty() end
+      pushViewportEvent()
     end
-    -- Relayout: viewport height changed
-    if tree then tree.markDirty() end
-    pushViewportEvent()
     return true
   end
 
@@ -194,10 +442,15 @@ function DevTools.keypressed(key)
     if inspector.keypressed(key) then return true end
   end
 
-  -- Escape: clear selection first, then close devtools
+  -- Escape: clear selection first, then dock back (if popped), then close devtools
   if key == "escape" then
     if state.activeTab == "elements" and inspector.getSelectedNode() then
       inspector.clearSelection()
+      return true
+    end
+    -- If popped out, dock back first
+    if state.poppedOut then
+      DevTools.dockBack()
       return true
     end
     -- Close devtools
@@ -240,10 +493,17 @@ local logsMousepressed
 --- Handle mouse press. Returns true if consumed.
 function DevTools.mousepressed(x, y, button)
   if not state.open then
-    -- Even when panel is closed, inspector handles viewport clicks
-    -- for node selection (if enabled via F12 previously... but in devtools
-    -- mode, enabled = open, so this won't happen). Return false.
     return false
+  end
+
+  -- When popped out: route differently based on which window is focused
+  if state.poppedOut then
+    if state.mainHasFocus then
+      -- Main window click: only inspector canvas node selection
+      return inspector.mousepressed(x, y, button)
+    end
+    -- Devtools window focused: coordinates are relative to devtools window
+    -- Fall through to normal panel handling (panelY = 0 in pop-out geometry)
   end
 
   local panelY, panelH, contentY, contentH, screenW = getPanelGeometry()
@@ -269,9 +529,17 @@ function DevTools.mousepressed(x, y, button)
       tabX = tabX + tabW + 2
     end
 
+    -- Pop-out / dock-back button
+    local popoutX = screenW - 52
+    if x >= popoutX and x < popoutX + 20 then
+      DevTools.togglePopOut()
+      return true
+    end
+
     -- Close button (right side of tab bar)
     local closeX = screenW - 28
     if x >= closeX and x < closeX + 20 then
+      if state.poppedOut then DevTools.dockBack() end
       state.open = false
       inspector.disable()
       console.hide()
@@ -308,9 +576,15 @@ end
 function DevTools.mousemoved(x, y)
   if not inspector then return end
 
-  -- Divider dragging
+  -- When popped out and main has focus: only track hover overlays on canvas
+  if state.poppedOut and state.mainHasFocus then
+    inspector.mousemoved(x, y)
+    return
+  end
+
+  -- Divider dragging (uses devtools window coordinates when popped out)
   if state.draggingDivider then
-    local screenW = love.graphics.getWidth()
+    local _, _, _, _, screenW = getPanelGeometry()
     local clamped = math.max(MIN_TREE_W, math.min(x, screenW - MIN_DETAIL_W))
     state.dividerRatio = clamped / screenW
     return
@@ -318,8 +592,7 @@ function DevTools.mousemoved(x, y)
 
   -- Resize cursor when hovering divider
   if state.open and state.activeTab == "elements" and inspector.getSelectedNode() then
-    local screenW = love.graphics.getWidth()
-    local panelY = getPanelGeometry()
+    local panelY, _, _, _, screenW = getPanelGeometry()
     local treeW = math.floor(screenW * state.dividerRatio)
     if y > panelY and math.abs(x - treeW) <= DIVIDER_W then
       love.mouse.setCursor(love.mouse.getSystemCursor("sizewe"))
@@ -335,8 +608,10 @@ function DevTools.mousemoved(x, y)
     logsHoverRow = nil
   end
 
-  -- Inspector always tracks mouse for hover overlays
-  inspector.mousemoved(x, y)
+  -- Inspector tracks mouse for hover overlays (only when main is focused, not devtools)
+  if not state.poppedOut or state.mainHasFocus then
+    inspector.mousemoved(x, y)
+  end
 end
 
 --- Handle mouse release. Returns true if consumed.
@@ -349,9 +624,26 @@ function DevTools.mousereleased(x, y, button)
   return false
 end
 
+-- Forward declaration (defined in Logs tab section below)
+local logsWheelmoved
+
 --- Handle mouse wheel. Returns true if consumed.
 function DevTools.wheelmoved(x, y)
   if not state.open then return false end
+
+  -- When popped out: main window wheel goes to app, devtools window wheel goes to panel
+  if state.poppedOut then
+    if state.mainHasFocus then return false end
+    -- Devtools window focused: all wheel goes to panel
+    if state.activeTab == "elements" then
+      return inspector.wheelmoved(x, y)
+    elseif state.activeTab == "console" then
+      return console.wheelmoved(x, y)
+    elseif state.activeTab == "logs" then
+      return logsWheelmoved(x, y)
+    end
+    return false
+  end
 
   local panelY = getPanelGeometry()
   local mx, my = love.mouse.getPosition()
@@ -605,8 +897,15 @@ local function logsMousemoved(x, y, region)
 end
 
 --- Handle wheel scroll on logs tab.
-local function logsWheelmoved(x, y)
+logsWheelmoved = function(x, y)
   logsScrollY = math.max(0, logsScrollY - y * 20)
+  -- Clamp to content height
+  if logsRegion then
+    local channels = getSortedChannels()
+    local contentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
+    local maxScroll = math.max(0, contentH - logsRegion.h)
+    logsScrollY = math.min(logsScrollY, maxScroll)
+  end
   return true
 end
 
@@ -658,6 +957,13 @@ local function drawTabBar(panelY, screenW)
     love.graphics.print(tab.label, tabX + tabPadX, textY)
     tabX = tabX + tabW + 2
   end
+
+  -- Pop-out / dock-back button (right side, before close)
+  local popoutX = screenW - 52
+  local popoutY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
+  love.graphics.setColor(TAB_TEXT)
+  -- Arrow icons: pop-out arrow when docked, dock-back arrow when popped out
+  love.graphics.print(state.poppedOut and ">" or "<", popoutX + 4, popoutY)
 
   -- Close button (x) on the right
   local closeX = screenW - 28
@@ -722,21 +1028,9 @@ local function drawStatusBar(statusY, screenW)
   love.graphics.print(tostring(perf.nodeCount), x, textY)
 end
 
---- Main draw call. Renders overlays + panel (if open).
---- Call this from love.draw() after painting the UI tree.
-function DevTools.draw(root)
-  -- Playground code/preview cross-link overlay (always available).
-  if inspector and inspector.drawPlaygroundLinkOverlay then
-    inspector.drawPlaygroundLinkOverlay(root)
-  end
-
-  -- Always draw inspector overlays when enabled (hover, selected, tooltip, perf)
-  if inspector and inspector.isEnabled() then
-    inspector.drawOverlays(root)
-  end
-
-  if not state.open then return end
-
+--- Draw the panel content (tab bar, content area, status bar) into the current GL context.
+--- Shared between docked mode (drawn on main canvas) and pop-out mode (drawn on devtools window).
+local function drawPanelContent(root)
   local panelY, panelH, contentY, contentH, screenW = getPanelGeometry()
 
   -- Save graphics state for the panel
@@ -785,6 +1079,36 @@ function DevTools.draw(root)
 
   -- Restore graphics state
   love.graphics.pop()
+end
+
+--- Main draw call. Renders overlays + panel (if open).
+--- Call this from love.draw() after painting the UI tree.
+--- When popped out, only draws canvas overlays on the main window — the panel
+--- is rendered separately by drawInWindow() after GL context switch.
+function DevTools.draw(root)
+  -- Playground code/preview cross-link overlay (always available).
+  if inspector and inspector.drawPlaygroundLinkOverlay then
+    inspector.drawPlaygroundLinkOverlay(root)
+  end
+
+  -- Always draw inspector overlays when enabled (hover, selected, tooltip, perf)
+  if inspector and inspector.isEnabled() then
+    inspector.drawOverlays(root)
+  end
+
+  if not state.open then return end
+
+  -- When popped out, the panel is drawn in drawInWindow() on the devtools GL context
+  if state.poppedOut then return end
+
+  drawPanelContent(root)
+end
+
+--- Draw the devtools panel filling the entire window.
+--- Called by the devtools child process in love.draw().
+function DevTools.drawInWindow(root)
+  if not state.open or not state.poppedOut then return end
+  drawPanelContent(root)
 end
 
 -- ============================================================================
