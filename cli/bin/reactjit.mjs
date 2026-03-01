@@ -23,6 +23,7 @@ import { migrateSwiftUICommand } from '../commands/migrate-swiftui.mjs';
 import { migrateBlessedCommand } from '../commands/migrate-blessed.mjs';
 import { migratePyQt6Command } from '../commands/migrate-pyqt6.mjs';
 import { migrateFlutterCommand } from '../commands/migrate-flutter.mjs';
+import { testCommand } from '../commands/test.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -84,6 +85,7 @@ const HELP = `
     rjit convert <file> -o out    Write converted output to file
     rjit tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
     rjit tsl --test               Run TSL transpiler test suite
+    rjit test <spec.ts>           Run tests against a built app (rjit build first)
     rjit screenshot [--output]    Lint + build + headless screenshot
     rjit diagnose                 Find ghost nodes (in tree, not painting)
     rjit search-index             Index all <Text> nodes for cold AppSearch
@@ -113,6 +115,9 @@ switch (command) {
     break;
   case 'screenshot':
     await screenshotCommand(args);
+    break;
+  case 'test':
+    await testCommand(args);
     break;
   case 'manifest':
     await manifestCommand(args);

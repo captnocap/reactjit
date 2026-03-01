@@ -21,7 +21,7 @@ The pattern is the **declarative capability system** (`lua/capabilities.lua` + `
 2. React side: `<Audio src="beat.mp3" playing volume={0.8} />`
 3. AI discovery: `useCapabilities()` returns schemas for everything registered
 
-Every new native feature (audio, timers, sensors, file watchers, notifications, whatever) should follow this pattern. The Lua module does the work, the React component is a one-liner, and the schema is the documentation. If you're adding something that requires the user to call `bridge.rpc()` or understand the transport layer, you haven't finished — wrap it in a capability.
+Every new Lua-side feature (audio, timers, sensors, file watchers, notifications, whatever) should follow this pattern. The Lua module does the work, the React component is a one-liner, and the schema is the documentation. If you're adding something that requires the user to call `bridge.rpc()` or understand the transport layer, you haven't finished — wrap it in a capability.
 
 ## The Proxy Input Rule (NON-NEGOTIABLE)
 
@@ -45,17 +45,23 @@ Every new native feature (audio, timers, sensors, file watchers, notifications, 
 
 **Always use Opus 4.6 (`claude-opus-4-6`) for debugging.** Sonnet is fine for scaffolding, writing new components, and routine tasks. But when tracking down layout bugs, inspector issues, coordinate mismatches, or anything where the real problem is structural and not obvious — use Opus. It finds the actual bug instead of proposing workarounds that mask it.
 
+## React's Role (NON-NEGOTIABLE)
+
+React is a **layout declaration engine and tree diffing algorithm.** That's it. It is not a runtime. It is not an input handler. It is not a state manager. It is a proxy for Lua.
+
+- **React declares layout and diffs the tree.** Components return geometry descriptions (Box, Text, Image) that become Lua nodes with position, size, color, and text. React's job ends when the mutation commands flush to Lua.
+- **React does NOT handle input.** All keyboard, mouse, and touch events are owned by Lua. React event handlers (onPress, onKeyDown) are callbacks that Lua invokes — React never polls the OS event pump.
+- **React does NOT manage runtime state well.** `useHotState()` stores state in Lua memory and survives hot reload. `useLocalStore()` persists to SQLite. React's `useState` is for ephemeral UI state only.
+- **react-dom does not exist in this framework.** There is no DOM target. There never will be. Components do not render `<div>`, `<span>`, `<input>`, or any HTML element. If you see a component branching on renderer mode to produce DOM elements, that code is wrong and must be removed.
+- **If React is doing anything beyond declaring layout + forwarding to Lua = massive problem.** Late frames, input lag, state desync — all symptoms of React trying to be a runtime instead of a proxy.
+
 ## What This Is
 
-ReactJIT is a React rendering framework with a hand-rolled renderer. The core pipeline — reconciler, tree, layout engine, component library — is target-agnostic. Each target supplies two modules: `measure` (text metrics) and `painter` (how to turn `{x, y, w, h, color, text}` into visible output on that surface). Swap the target table, change the renderer entirely.
+ReactJIT is a Love2D rendering framework that uses React as its layout declaration layer. The pipeline: React reconciler → mutation commands → QuickJS bridge → Lua layout engine → Love2D painter (OpenGL 2.1).
 
-**Rendering pipeline:** React reconciler → mutation commands → transport layer → layout engine → target-specific painter.
+**Love2D is the only renderer.** LuaJIT + Love2D + OpenGL 2.1. Multi-window support via subprocess IPC (each `<Window>` spawns a child Love2D process connected over TCP). Entry point: `love .`. Love2D owns the run loop, the GL context, the font rasterizer, and the event pump.
 
-**Renderer — Love2D:**
-LuaJIT + Love2D + OpenGL 2.1. Multi-window support via subprocess IPC (each `<Window>` spawns a child Love2D process connected over TCP). Entry point: `love .`. Love2D owns the run loop, the GL context, the font rasterizer, and the event pump.
-
-**Also supported:**
-- **Web (planned)** — WASM build via Emscripten. Renders to `<canvas>`, not DOM.
+**WASM builds** use love.js (Emscripten) to compile the same Love2D pipeline to run in a browser `<canvas>`. It is still Love2D rendering — not DOM, not CSS, not react-dom. The WASM build uses Module.FS as the bridge transport instead of QuickJS FFI, but the rendering pipeline is identical.
 
 The target interface is formalized in `lua/target_love2d.lua`. A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
 
@@ -85,6 +91,86 @@ rjit screenshot [--output]      # Headless capture — verify layouts visually
 The CLI handles all targets. The npm scripts in root package.json are for monorepo
 development convenience only — never use raw esbuild commands for project builds.
 
+## Testing with `rjit test` (USE THIS)
+
+ReactJIT has a built-in test runner. You own the full stack — the instance tree, layout results, and event system — so tests run *inside* the Love2D process with direct access to everything. No browser automation. No ports. No sockets.
+
+**Workflow:**
+```bash
+cd examples/<project>
+rjit build                        # app must be built first
+rjit test tests/my.test.ts        # run the spec
+```
+
+**Writing specs — no imports, globals are injected:**
+```typescript
+// tests/my-app.test.ts
+// Globals: test(), page, expect() — no import needed
+
+test('submit button is visible', async () => {
+  const btn = page.find('Pressable', { testId: 'submit' });
+  await expect(btn).toBeVisible();
+});
+
+test('typing in the search box updates results', async () => {
+  const input = page.find('TextInput', { testId: 'search' });
+  await input.type('hello');
+  await expect(page.find('Text', { testId: 'result-count' })).toContainText('hello');
+});
+
+test('clicking a button triggers state change', async () => {
+  await page.find('Pressable', { testId: 'toggle' }).then(l => l.click());
+  await expect(page.find('Text', { testId: 'status' })).toHaveText('on');
+});
+```
+
+**Selectors — `page.find(componentName, props?)`:**
+- `page.find('Pressable', { testId: 'submit' })` — by component type + prop
+- `page.find('Text')` — any Text node
+- `page.find('TextInput', { placeholder: 'Search...' })` — by any prop value
+- Component name matches `debugName` (e.g. `'Pressable'`, `'Box'`, `'ScrollView'`) or raw type (`'View'`, `'Text'`)
+- Add `testId` props to components you want to target: `<Box testId="sidebar">` — they flow through to the node tree automatically
+
+**Available actions:**
+```typescript
+await locator.click()             // mouse press + release at element center + 1 frame wait
+await locator.type('hello')       // click to focus + inject chars + 1 frame wait
+await locator.key('return')       // inject keypressed/keyreleased (for Enter, Escape, arrows)
+await locator.text()              // returns text content of the element
+await locator.rect()              // returns { x, y, w, h }
+await locator.all()               // returns array of all matching nodes
+await page.wait()                 // wait 1 frame explicitly (after animations)
+await page.wait(3)                // wait N frames
+await page.screenshot('/tmp/s.png') // capture current frame
+```
+
+**Available matchers:**
+```typescript
+await expect(locator).toBeVisible()           // element exists and has non-zero size
+await expect(locator).toBeFound()             // element exists in the tree
+await expect(locator).toHaveText('exact')     // exact text match
+await expect(locator).toContainText('substr') // substring match
+await expect(locator).toHaveRect({ x, y, w, h }) // pixel rect within ±1px tolerance
+```
+
+**Timing model — each `await rpc()` = one frame:**
+- Every `await` in a test naturally waits one frame for the bridge round-trip
+- `click()` and `type()` add an extra `wait` automatically so React has time to re-render before the next assertion
+- If a state change triggers an animation or async work, use `await page.wait(N)` to give it time
+
+**When to write tests:**
+- After implementing any interactive feature (button → state change, input → filter, etc.)
+- When debugging a layout: write a `toHaveRect()` test to pin the geometry
+- When fixing a regression: write the test first, watch it fail, fix it, watch it pass
+- Treat `rjit test` the same way you'd treat `rjit lint` — run it before calling a feature done
+
+**Implementation files (do not confuse these):**
+- `lua/testrunner.lua` — Lua engine: tree query, event injection, screenshot, report
+- `cli/lib/test-shim.js` — JS globals (test/page/expect/_runTests) eval'd into QuickJS before spec
+- `cli/commands/test.mjs` — CLI: bundles spec, launches Love2D, streams results
+- `lua/init.lua` — RJIT_TEST=1 detection, RPC handler registration, frame counter
+- `packages/renderer/src/Love2DApp.ts` — exposes `globalThis.__rjitBridge` for the shim
+
 ## Source-of-Truth Architecture (CRITICAL)
 
 There are two categories of files: **globally distributed** (framework internals) and **project-specific** (user application code). Editing the wrong copy is the #1 source of "it builds but doesn't work" bugs.
@@ -97,11 +183,11 @@ These live at the **monorepo root** and get copied into projects via the CLI:
 |---|---|---|
 | `lua/*.lua` | `cli/runtime/lua/` | `<project>/lua/` |
 | `packages/core/` | `cli/runtime/reactjit/shared/` | `<project>/reactjit/shared/` |
-| `packages/native/` | `cli/runtime/reactjit/native/` | `<project>/reactjit/native/` |
+| `packages/renderer/` | `cli/runtime/reactjit/renderer/` | `<project>/reactjit/renderer/` |
 | `quickjs/libquickjs.so` | `cli/runtime/lib/` | `<project>/lib/` |
 
 **Rules:**
-- **ALWAYS edit the source-of-truth files** (`lua/`, `packages/core/`, `packages/native/`). NEVER edit `cli/runtime/` or `<project>/lua/` or `<project>/reactjit/` directly — those are disposable copies.
+- **ALWAYS edit the source-of-truth files** (`lua/`, `packages/core/`, `packages/renderer/`). NEVER edit `cli/runtime/` or `<project>/lua/` or `<project>/reactjit/` directly — those are disposable copies.
 - After editing any source-of-truth file, run the full sync pipeline:
   ```bash
   make cli-setup              # source → cli/runtime/
@@ -139,8 +225,8 @@ These are unique to each project and are NOT managed by the CLI:
 ### Adding a new Lua-side feature (checklist)
 
 1. Edit/create files in `lua/` (the source of truth)
-2. Edit/create files in `packages/core/src/` and `packages/native/src/` as needed
-3. The storybook picks up both changes automatically (Lua via symlink, TS via esbuild). Rebuild the storybook bundle: `make build-storybook-native`
+2. Edit/create files in `packages/core/src/` and `packages/renderer/src/` as needed
+3. The storybook picks up both changes automatically (Lua via symlink, TS via esbuild). Rebuild the storybook bundle: `make build-storybook-love`
 4. `make cli-setup` — propagates to `cli/runtime/` for consumer projects
 5. For each example project that needs the feature:
    - `cd examples/<project> && reactjit update` — syncs runtime files
@@ -152,7 +238,7 @@ These are unique to each project and are NOT managed by the CLI:
 ```bash
 npm install                       # Install dependencies
 
-# QuickJS setup (needed for native targets)
+# QuickJS setup
 make setup                        # Clones quickjs-ng, builds libquickjs.so
 make build                        # Builds all targets
 make dist-storybook               # Self-extracting Linux binary with bundled glibc
@@ -168,7 +254,7 @@ npm workspaces monorepo. Path aliases (`@reactjit/*`) defined in `tsconfig.base.
 | Package | Import | Role |
 |---------|--------|------|
 | `packages/core` | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
-| `packages/native` | `@reactjit/native` | react-reconciler host config, instance tree, event dispatch |
+| `packages/renderer` | `@reactjit/renderer` | react-reconciler host config, instance tree, event dispatch |
 | `packages/3d` | `@reactjit/3d` | 3D scene, lighting, materials (Scene3D) |
 | `packages/ai` | `@reactjit/ai` | LLM agent integration |
 | `packages/apis` | `@reactjit/apis` | External API wrappers |
@@ -293,8 +379,8 @@ The `Box` component in `packages/core/src/primitives.tsx` uses an **explicit whi
 
 1. Add the handler type to `BoxProps` in `packages/core/src/types.ts`
 2. Add it to the destructure list in `Box()` in `primitives.tsx`
-3. Add it to the `createElement` props object in the native mode branch of `Box()`
-4. Subscribe to the bridge event in `packages/native/src/eventDispatcher.ts`
+3. Add it to the `createElement` props object in `Box()`
+4. Subscribe to the bridge event in `packages/renderer/src/eventDispatcher.ts`
 
 If you skip steps 2-3, the handler silently disappears — `extractHandlers` in hostConfig never sees it, `hasHandlers` is false on the Lua node, and hit testing skips it. The symptom is events being pushed correctly from Lua but never reaching React.
 
@@ -367,7 +453,7 @@ Commit early and often. This project has no test suite, so git history IS the sa
 
 - Target: ES2020, JSX: react-jsx (automatic), Module resolution: bundler
 - React 18.3+, react-reconciler 0.29
-- No test framework configured
+- Test framework: `rjit test <spec.ts>` — see Testing section above
 
 ## Domain-Specific Invariants
 
@@ -380,9 +466,9 @@ Commit early and often. This project has no test suite, so git history IS the sa
 
 ### Packages (`packages/`)
 
-- **`core` and `native` are load-bearing** — they form the rendering pipeline. Everything else is domain-specific (audio, 3d, storage, etc.).
+- **`core` and `renderer` are load-bearing** — they form the rendering pipeline. Everything else is domain-specific (audio, 3d, storage, etc.).
 - **Edit source-of-truth, run `make cli-setup`** — never edit `cli/runtime/` directly. It gets overwritten on the next `make cli-setup`.
-- **Box event handlers use explicit whitelist** — to add a new event type (e.g. `onFileDrop`): (1) add type to `BoxProps` in types.ts, (2) add to destructure in `Box()` in primitives.tsx, (3) add to createElement props in native branch, (4) subscribe in eventDispatcher.ts. Skipping steps 2-3 means the handler silently disappears.
+- **Box event handlers use explicit whitelist** — to add a new event type (e.g. `onFileDrop`): (1) add type to `BoxProps` in types.ts, (2) add to destructure in `Box()` in primitives.tsx, (3) add to createElement props in Box(), (4) subscribe in eventDispatcher.ts. Skipping steps 2-3 means the handler silently disappears.
 - **Capabilities are the right place for new features** — if you need users to call `bridge.rpc()` or understand transport, wrap it in a capability. Pattern: register on Lua side, consume as component on React side, schema auto-discovered via `useCapabilities()`.
 
 ### Examples (`examples/`)

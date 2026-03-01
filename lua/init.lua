@@ -103,10 +103,14 @@ local settings   = M.settings
 local themeMenu  = M.themeMenu
 local systemPanel = M.systemPanel
 local focus      = M.focus
+local tooltips   = require("lua.tooltips")
 local permit     = M.permit
 local audit      = M.audit
 local manifestMod = M.manifestMod
 local cartReader  = M.cartReader
+
+-- Mouse position tracking (for tooltip timer advancement in update loop)
+local lastMouseX, lastMouseY = 0, 0
 
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
@@ -139,7 +143,7 @@ local scrollbarDrag = nil  -- { node, axis="v"|"h", startMouse, startScroll }
 local textSelectPending = nil  -- { node, startX, startY, line, col }
 local TEXT_SELECT_THRESHOLD = 3  -- pixels of movement before drag becomes selection
 
-local mode     = nil   -- "web", "native", or "canvas"
+local mode     = nil   -- "native", "canvas", or "wasm"
 local basePath = nil   -- directory containing these modules
 local initConfig = nil -- stashed config from init() for reload()
 local settingsToggleKey = "f10"
@@ -174,7 +178,7 @@ end
 -- ============================================================================
 
 --- Detect whether we are running in the browser (love.js) or natively.
---- In web mode, the presence of a /__bridge_namespace file signals Module.FS.
+--- In canvas mode, the presence of a /__bridge_namespace file signals Module.FS.
 local function detectMode(config)
   if config and config.mode and config.mode ~= "auto" then
     return config.mode
@@ -185,7 +189,7 @@ local function detectMode(config)
   local sentinelPath = "__bridge_" .. ns .. "_ready"
   if love.filesystem.getInfo("/__bridge_namespace")
     or love.filesystem.getInfo(sentinelPath) then
-    return "web"
+    return "canvas"
   end
 
   return "native"
@@ -382,6 +386,7 @@ local function loadThemes()
     if M.painter then M.painter.setTheme(M.currentTheme) end
     if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
     if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
+    tooltips.setTheme(M.currentTheme)
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -544,7 +549,7 @@ end
 
 --- Initialize reactjit.
 --- config fields:
----   mode       : "auto" | "web" | "native" | "canvas"  (default "auto")
+---   mode       : "auto" | "native" | "canvas" | "wasm"  (default "auto")
 ---   bundlePath : path to the JS bundle       (default "bundle.js")
 ---   namespace  : bridge namespace string     (default "default")
 ---   libpath    : path to libquickjs shared library (default "lib/libquickjs")
@@ -621,6 +626,7 @@ function ReactJIT.init(config)
           if M.painter then M.painter.setTheme(M.currentTheme) end
           if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
           if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
+          tooltips.setTheme(M.currentTheme)
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -650,14 +656,7 @@ function ReactJIT.init(config)
   mode = detectMode(config)
   local ns = config.namespace or "default"
 
-  if mode == "web" then
-    -- Web mode: use Module.FS bridge.
-    -- In web mode the DOM/browser handles rendering; Lua only bridges data.
-    M.bridge = require("lua.bridge_fs")
-    M.bridge.init(ns)
-    print("[reactjit] Initialized in WEB mode (Module.FS bridge)")
-
-  elseif mode == "canvas" then
+  if mode == "canvas" then
     -- Canvas mode: FS bridge + native rendering pipeline.
     -- React runs in the browser, reconciler commands come via /__reconciler_in.json,
     -- and Lua handles tree/layout/painter. Events go back via bridge_fs outbox.
@@ -665,6 +664,7 @@ function ReactJIT.init(config)
     M.bridge.init(ns)
 
     M.measure = require("lua.measure")
+    tooltips.setMeasure(M.measure)
     M.images  = require("lua.images")
     M.videos  = require("lua.videos")
     M.videos.initBackend()
@@ -746,6 +746,7 @@ function ReactJIT.init(config)
     M.bridge.init(ns)
 
     M.measure = require("lua.measure")
+    tooltips.setMeasure(M.measure)
     M.images  = require("lua.images")
     -- videos: SKIPPED (libmpv FFI)
     M.animate = require("lua.animate")
@@ -830,6 +831,7 @@ function ReactJIT.init(config)
     end
 
     M.measure = require("lua.measure")
+    tooltips.setMeasure(M.measure)
     M.images  = require("lua.images")
     M.animate = require("lua.animate")
     M.scene3d = require("lua.scene3d")
@@ -1530,6 +1532,7 @@ function ReactJIT.init(config)
     rpcHandlers["test:key"]        = function(a) return tr.key(a) end
     rpcHandlers["test:wait"]       = function(a) return tr.wait(a) end
     rpcHandlers["test:screenshot"] = function(a) return tr.screenshot(a) end
+    rpcHandlers["test:audit"]      = function(a) return tr.audit(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0
     ReactJIT._testStarted    = false
@@ -1612,13 +1615,6 @@ function ReactJIT.update(dt)
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
 
-  if mode == "web" then
-    -- Web mode: poll the Module.FS inbox and flush the outbox
-    M.bridge.poll()
-    M.bridge.flush()
-    return
-  end
-
   if mode == "canvas" or mode == "wasm" then
     -- Canvas/WASM mode: FS bridge + native rendering pipeline -----------
 
@@ -1693,6 +1689,9 @@ function ReactJIT.update(dt)
     end
 
     if M.codeblock then M.codeblock.update(dt) end
+
+    -- Tooltip timer (advances even when mouse is stationary)
+    tooltips.update(M.events.getHoveredNode(), dt, lastMouseX, lastMouseY)
 
     -- Update VideoPlayer controls (auto-hide timer, canvas mode)
     if M.videoplayer and M.tree then
@@ -1965,6 +1964,7 @@ function ReactJIT.update(dt)
             if M.painter then M.painter.setTheme(M.currentTheme) end
             if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
             if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
+            tooltips.setTheme(M.currentTheme)
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
           end
@@ -2382,6 +2382,9 @@ function ReactJIT.update(dt)
 
   if M.codeblock then M.codeblock.update(dt) end
 
+  -- Tooltip timer (advances even when mouse is stationary)
+  tooltips.update(M.events.getHoveredNode(), dt, lastMouseX, lastMouseY)
+
   -- Update VideoPlayer controls (auto-hide timer)
   if M.videoplayer and M.tree then
     M.videoplayer.update(dt, M.tree.getNodes())
@@ -2473,6 +2476,9 @@ function ReactJIT.draw()
         context = "painter.paint",
       })
     end
+
+    -- Tooltip overlay (after tree painting, before all other overlays)
+    tooltips.draw(love.graphics.getWidth(), love.graphics.getHeight())
 
     -- Fullscreen VideoPlayer: redraw on top of everything so no UI bleeds through
     if M.videoplayer then
@@ -3078,6 +3084,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
+  lastMouseX, lastMouseY = x, y
   if M.systemPanelEnabled then systemPanel.mousemoved(x, y) end
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
@@ -4333,7 +4340,7 @@ function ReactJIT.getBridge()
   return M.bridge
 end
 
---- Return the current mode ("web", "native", or "canvas").
+--- Return the current mode ("native", "canvas", or "wasm").
 function ReactJIT.getMode()
   return mode
 end
