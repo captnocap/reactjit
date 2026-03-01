@@ -1,7 +1,6 @@
 import React from 'react';
 import type { Style, Color } from '@reactjit/core';
 import { Box } from '@reactjit/core';
-import { useRendererMode } from '@reactjit/core';
 import { useScaledStyle, useScale } from '@reactjit/core';
 
 export interface MeterProps {
@@ -42,7 +41,6 @@ export function Meter({
   height,
   style,
 }: MeterProps) {
-  const mode = useRendererMode();
   const scale = useScale();
   const scaledStyle = useScaledStyle(style);
 
@@ -66,27 +64,6 @@ export function Meter({
     const col = segmentColor(i, segments, colors);
     const dimCol = col + '30';
 
-    if (mode === 'web') {
-      const pos = isVertical
-        ? { bottom: i * (segSize + gap), left: 0 }
-        : { left: i * (segSize + gap), top: 0 };
-
-      return (
-        <div
-          key={i}
-          style={{
-            position: 'absolute',
-            width: isVertical ? scaledW : segSize,
-            height: isVertical ? segSize : scaledH,
-            backgroundColor: isActive || isPeak ? col : dimCol,
-            borderRadius: Math.round(1 * scale),
-            ...pos,
-          } as React.CSSProperties}
-        />
-      );
-    }
-
-    // Native mode
     const pos = isVertical
       ? { bottom: i * (segSize + gap), left: 0 }
       : { left: i * (segSize + gap), top: 0 };
@@ -105,21 +82,6 @@ export function Meter({
       />
     );
   });
-
-  if (mode === 'web') {
-    return (
-      <div
-        style={{
-          position: 'relative',
-          width: scaledW,
-          height: scaledH,
-          ...scaledStyle,
-        } as React.CSSProperties}
-      >
-        {segElements}
-      </div>
-    );
-  }
 
   return (
     <Box

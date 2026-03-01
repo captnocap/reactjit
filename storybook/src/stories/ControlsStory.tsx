@@ -24,6 +24,7 @@ function KnobDemo() {
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Rotary controls with drag interaction. Supports custom ranges, colors, sizes, and disabled state.
       </Text>
+      // rjit-ignore-next-line
       <Box style={{ width: '100%', flexDirection: 'row', gap: 20, alignItems: 'flex-end', justifyContent: 'center', flexWrap: 'wrap' }}>
         <Box style={{ alignItems: 'center', gap: 4 }}>
           <Knob value={v1} onChange={setV1} label="Volume" />
@@ -69,6 +70,7 @@ function FaderDemo() {
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Vertical channel faders for mixer-style layouts. Drag to set level.
       </Text>
+      // rjit-ignore-next-line
       <Box style={{ width: '100%', flexDirection: 'row', gap: 16, alignItems: 'flex-end', justifyContent: 'center' }}>
         <Fader value={v1} onChange={setV1} label="Kick" color="#6366f1" />
         <Fader value={v2} onChange={setV2} label="Snare" color="#22c55e" />
@@ -98,6 +100,7 @@ function MeterDemo() {
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Animated level meters with peak hold. Vertical and horizontal orientations.
       </Text>
+      // rjit-ignore-next-line
       <Box style={{ width: '100%', flexDirection: 'row', gap: 12, alignItems: 'flex-end', justifyContent: 'center' }}>
         <Meter value={levels[0]} height={80} />
         <Meter value={levels[1]} height={80} />

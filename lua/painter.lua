@@ -487,6 +487,32 @@ local function drawPolygon(c, pts)
   love.graphics.polygon("fill", verts)
 end
 
+--- Draw stroked polyline paths scaled from a 24x24 viewBox to box dimensions.
+--- Used for vector icon rendering (Lucide icons etc.).
+--- @param c           table     Computed rect {x, y, w, h}
+--- @param paths       table     Array of polyline arrays, each [x0,y0,x1,y1,...]
+--- @param strokeWidth number    Line thickness before scaling (default 2)
+local function drawStrokePaths(c, paths, strokeWidth)
+  local sx = c.w / 24
+  local sy = c.h / 24
+  local scale = math.min(sx, sy)
+  love.graphics.setLineWidth((strokeWidth or 2) * scale)
+  love.graphics.setLineJoin("round")
+  love.graphics.setLineStyle("smooth")
+  for _, path in ipairs(paths) do
+    if #path >= 4 then
+      local scaled = {}
+      for i = 1, #path, 2 do
+        scaled[#scaled + 1] = c.x + path[i] * sx
+        scaled[#scaled + 1] = c.y + path[i + 1] * sy
+      end
+      love.graphics.line(scaled)
+    end
+  end
+  love.graphics.setLineWidth(1)
+  love.graphics.setLineStyle("rough")
+end
+
 -- ============================================================================
 -- Per-corner border radius helper
 -- ============================================================================
@@ -815,7 +841,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       -- Isolate capture from any inherited scissor/stencil state that could clip
       -- the off-screen render target.
       love.graphics.push("all")
-      love.graphics.setCanvas(maskTempCanvas)
+      love.graphics.setCanvas({maskTempCanvas, stencil = true})
       love.graphics.setScissor()
       love.graphics.setStencilTest()
       love.graphics.setBlendMode("alpha")
@@ -872,6 +898,19 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       else
         love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
       end
+    end
+
+    -- Stroked vector paths (icons)
+    if s.strokePaths and #s.strokePaths > 0 then
+      if s.strokeColor then
+        Painter.setColor(s.strokeColor)
+      elseif s.color then
+        Painter.setColor(s.color)
+      else
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+      end
+      Painter.applyOpacity(effectiveOpacity)
+      drawStrokePaths(c, s.strokePaths, s.strokeWidth)
     end
 
     -- Border stroke

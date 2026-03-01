@@ -256,7 +256,9 @@ function Capabilities.loadAll()
     "boids",
     "image_select",
     "image_process",
-    "scene3d",
+    -- NOTE: Do NOT autoload deprecated scene3d capability here.
+    -- Love2D Scene3D rendering is handled by lua/scene3d.lua (tree/layout/painter pipeline).
+    -- Registering Scene3D as a non-visual capability causes layout/paint to skip all 3D scenes.
     "terminal",
     "semantic_terminal",
   }

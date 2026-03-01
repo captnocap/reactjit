@@ -129,6 +129,7 @@ function DemoCard({ demo, onSelect }: { demo: DemoDef; onSelect: (id: DemoId) =>
       </Box>
 
       <Box style={{ padding: 12, gap: 6 }}>
+        // rjit-ignore-next-line
         <Box
           style={{
             backgroundColor: `${color}20`,

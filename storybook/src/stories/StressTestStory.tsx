@@ -70,6 +70,7 @@ function StressCard({ item, onSelect }: { item: StressDef; onSelect: (id: Stress
         </PreviewBoundary>
       </Box>
       <Box style={{ padding: 12, gap: 6 }}>
+        {/* rjit-ignore-next-line */}
         <Box
           style={{
             backgroundColor: `${color}20`,

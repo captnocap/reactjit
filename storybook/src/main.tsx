@@ -9,10 +9,10 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { NativeBridge } from '../../packages/native/src/NativeBridge';
-import { createRoot } from '../../packages/native/src/NativeRenderer';
+import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
+import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
-import { BridgeProvider, RendererProvider, useBridge } from '../../packages/core/src/context';
+import { BridgeProvider, useBridge } from '../../packages/core/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
@@ -319,11 +319,9 @@ const root = createRoot();
   root.render(
     <BridgeProvider bridge={bridge}>
       <ThemeProvider>
-        <RendererProvider mode="native">
-          <PortalHost>
-            <Storybook />
-          </PortalHost>
-        </RendererProvider>
+        <PortalHost>
+          <Storybook />
+        </PortalHost>
       </ThemeProvider>
     </BridgeProvider>
   );

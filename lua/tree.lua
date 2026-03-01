@@ -35,6 +35,15 @@ local mutationStats = { total = 0, creates = 0, updates = 0, removes = 0 }
 
 local MAX_CLEANUP_DEPTH = 32
 
+local function cloneStyleTable(style)
+  if type(style) ~= "table" then return {} end
+  local out = {}
+  for k, v in pairs(style) do
+    out[k] = v
+  end
+  return out
+end
+
 --- Recursively remove a node and all its descendants from the nodes table.
 --- Depth-limited to MAX_CLEANUP_DEPTH to guard against pathologically deep trees.
 local function cleanup(id, depth)
@@ -121,11 +130,12 @@ function Tree.applyCommands(commands)
     if op == "CREATE" then
       Log.log("tree", "CREATE id=%s type=%s debugName=%s handlers=%s", tostring(cmd.id), tostring(cmd.type), tostring(cmd.debugName or "-"), tostring(cmd.hasHandlers or false))
       local props = cmd.props or {}
+      local style = cloneStyleTable(props.style)
       nodes[cmd.id] = {
         id = cmd.id,
         type = cmd.type,
         props = props,
-        style = props.style or {},
+        style = style,
         hasHandlers = cmd.hasHandlers or false,
         handlerMeta = cmd.handlerMeta,  -- { onClick = "() => ...", ... } for inspector
         children = {},

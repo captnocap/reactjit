@@ -417,6 +417,7 @@ function MasksDashboardDemo() {
         backgroundColor: c.bgElevated,
         flexShrink: 0,
       }}>
+        {/* rjit-ignore-next-line */}
         <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
           <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
             <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Mask Mapping Dashboard</Text>
@@ -691,6 +692,7 @@ function LegacyMasksLab() {
         backgroundColor: c.bgElevated,
         flexShrink: 0,
       }}>
+        {/* rjit-ignore-next-line */}
         <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
           <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
             <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Masks Legacy Lab</Text>

@@ -7,9 +7,9 @@
  */
 
 import React from 'react';
-import { NativeBridge } from '../../../packages/native/src/NativeBridge';
-import { createRoot } from '../../../packages/native/src/NativeRenderer';
-import { BridgeProvider, RendererProvider } from '../../../packages/shared/src/context';
+import { NativeBridge } from '../../../packages/renderer/src/NativeBridge';
+import { createRoot } from '../../../packages/renderer/src/NativeRenderer';
+import { BridgeProvider } from '../../../packages/core/src/context';
 import { HUD } from '../../shared-components';
 
 // Boot the bridge (QuickJS FFI — immediately ready)
@@ -21,9 +21,7 @@ const root = createRoot();
 // Render the app
 root.render(
   <BridgeProvider bridge={bridge}>
-    <RendererProvider mode="native">
-      <HUD />
-    </RendererProvider>
+    <HUD />
   </BridgeProvider>
 );
 

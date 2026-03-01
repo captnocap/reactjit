@@ -214,9 +214,9 @@ Platforms: Love2D
 
 Example 7: Provider setup at app root
 ---
-import { createRoot } from '@reactjit/native';
+import { createRoot } from '@reactjit/renderer';
 import { BridgeProvider, RendererProvider } from '@reactjit/core';
-import { createBridge } from '@reactjit/native';
+import { createBridge } from '@reactjit/renderer';
 
 const bridge = createBridge();
 

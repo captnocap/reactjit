@@ -20,7 +20,7 @@ Source of truth          Stage 1              Stage 2
 ─────────────────────    ──────────────────   ─────────────────────
 lua/*.lua            ──► cli/runtime/lua/  ──► <project>/lua/
 packages/core/src/   ──► cli/runtime/reactjit/shared/ ──► <project>/reactjit/shared/
-packages/native/src/ ──► cli/runtime/reactjit/native/ ──► <project>/reactjit/native/
+packages/renderer/src/ ──► cli/runtime/reactjit/renderer/ ──► <project>/reactjit/renderer/
 ```
 
 - **Stage 1**: `make cli-setup` copies source-of-truth into `cli/runtime/`
@@ -34,12 +34,12 @@ packages/native/src/ ──► cli/runtime/reactjit/native/ ──► <project>/
 |---|---|
 | `lua/*.lua`, `lua/masks/*.lua` | `cli/runtime/lua/`, `<project>/lua/` |
 | `packages/core/src/` | `cli/runtime/reactjit/shared/` |
-| `packages/native/src/` | `cli/runtime/reactjit/native/` |
+| `packages/renderer/src/` | `cli/runtime/reactjit/renderer/` |
 | `storybook/src/` | (reads source directly — no copies) |
 
 ### After editing framework files: the sync pipeline
 
-If you touched ANY file in `lua/`, `packages/core/`, or `packages/native/`, you MUST run:
+If you touched ANY file in `lua/`, `packages/core/`, or `packages/renderer/`, you MUST run:
 
 ```bash
 # Stage 1: source → cli/runtime/

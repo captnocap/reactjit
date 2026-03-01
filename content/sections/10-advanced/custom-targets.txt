@@ -83,7 +83,7 @@ Example 1: Steps to Create a New Target
 4. Create an entry point:
 
    // packages/mytarget/src/index.ts
-   import { createRoot, render } from '@reactjit/native';
+   import { createRoot, render } from '@reactjit/renderer';
    import { BridgeProvider, RendererProvider } from '@reactjit/core';
    import { MyBridge } from './MyBridge';
 
@@ -122,7 +122,7 @@ Study these existing targets for different patterns:
   @reactjit/hs        - Node.js ESM, WebSocket transport, pixel canvas painter
   @reactjit/awesome   - Node.js ESM, stdio transport, Cairo/Pango painter
   @reactjit/web       - Browser ESM, Module.FS transport, CSS flexbox "painter"
-  @reactjit/native    - IIFE, QuickJS FFI transport, Lua pixel painter
+  @reactjit/renderer    - IIFE, QuickJS FFI transport, Lua pixel painter
 ---
 Platforms: All
 

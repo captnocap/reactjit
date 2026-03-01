@@ -89,6 +89,14 @@ function Layout.resolveUnit(value, parentSize)
   if type(value) == "number" then return value end
   if type(value) ~= "string" then return nil end
 
+  -- calc(X% ± Ypx) support
+  local cpct, csign, cpx = value:match("^calc%(([%d%.]+)%% ([%+%-]) ([%d%.]+)px%)$")
+  if cpct then
+    local base = (tonumber(cpct) / 100) * (parentSize or 0)
+    local px   = tonumber(cpx) or 0
+    return csign == "+" and base + px or base - px
+  end
+
   local num, unit = value:match("^([%d%.]+)(.*)$")
   num = tonumber(num)
   if not num then return nil end
@@ -891,7 +899,18 @@ function Layout.layoutNode(node, px, py, pw, ph)
       local fbRaw = cs.flexBasis
       if fbRaw ~= nil and fbRaw ~= "auto" then
         local mainParentSize = isRow and innerW or innerH
-        basis = ru(fbRaw, mainParentSize) or 0
+        -- Gap-aware percentage flexBasis: a plain percentage in a wrapping row
+        -- with gap overestimates each item's width (percentage is relative to
+        -- full container width, but gap eats into available space). Auto-correct
+        -- so that items with percentage spans always fit their row exactly.
+        -- Formula: corrected = p * W - gap * (1-p)  (works for any mix of spans)
+        local pctStr = wrap and gap > 0 and type(fbRaw) == "string" and fbRaw:match("^([%d%.]+)%%$")
+        if pctStr then
+          local p = tonumber(pctStr) / 100
+          basis = p * mainParentSize - gap * (1 - p)
+        else
+          basis = ru(fbRaw, mainParentSize) or 0
+        end
       else
         -- "auto" or not set: fall back to width/height
         basis = isRow and (cw or 0) or (ch or 0)

@@ -47,7 +47,7 @@ Your React app renders in a native SDL2 + OpenGL window. No browser, no Electron
 | Package | Import | What it does |
 |---------|--------|-------------|
 | `packages/core` | `@reactjit/core` | Primitives (`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, `Slider`, `Switch`, `Checkbox`, `Radio`, `Select`, `FlatList`), hooks, animation, types |
-| `packages/native` | `@reactjit/native` | react-reconciler host config, QuickJS FFI bridge, instance tree, event dispatch |
+| `packages/renderer` | `@reactjit/renderer` | react-reconciler host config, QuickJS FFI bridge, instance tree, event dispatch |
 
 
 ### UI & Interaction
@@ -289,9 +289,9 @@ Values cross the bridge via direct QuickJS C API traversal — no JSON serializa
 |---|---|
 | `lua/` | `<project>/lua/` |
 | `packages/core/` | `<project>/reactjit/shared/` |
-| `packages/native/` | `<project>/reactjit/native/` |
+| `packages/renderer/` | `<project>/reactjit/renderer/` |
 
-**Never edit copies.** Always edit `lua/`, `packages/core/`, `packages/native/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
+**Never edit copies.** Always edit `lua/`, `packages/core/`, `packages/renderer/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
 
 ## Contributing
 
@@ -337,7 +337,7 @@ reactjit/
   lua/                 Lua runtime (layout, painter, tree, events, bridges, inspector)
   packages/
     shared/            @reactjit/core — primitives, components, hooks, animation, types
-    native/            @reactjit/native — reconciler, QuickJS bridge, event dispatch
+    renderer/          @reactjit/renderer — reconciler, QuickJS bridge, event dispatch
     controls/          @reactjit/controls — hardware UI (Knob, Fader, Meter...)
     theme/             @reactjit/theme — theme system
     router/            @reactjit/router — navigation

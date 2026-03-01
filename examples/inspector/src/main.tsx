@@ -1,5 +1,5 @@
 import React from 'react';
-import { createLove2DApp } from '@reactjit/native';
+import { createLove2DApp } from '@reactjit/renderer';
 import { CartridgeInspector } from '@reactjit/core';
 import { ThemeProvider, useThemeColors } from '@reactjit/theme';
 import { PortalHost } from '@reactjit/core';

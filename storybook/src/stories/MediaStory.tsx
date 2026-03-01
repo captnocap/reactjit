@@ -1,16 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Text, Pressable, ScrollView, ImageGallery, useRendererMode } from '../../../packages/core/src';
+import { Box, Text, Pressable, ScrollView, ImageGallery } from '../../../packages/core/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
 import type { MediaType } from '../../../packages/media/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
-const WEB_PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">' +
-  '<rect width="960" height="640" fill="#0f172a"/>' +
-  '<text x="480" y="330" text-anchor="middle" fill="#cbd5e1" font-family="sans-serif" font-size="56">media placeholder</text>' +
-  '</svg>'
-);
-const NATIVE_PLACEHOLDER_SRC = 'lib/placeholder.png';
+const PLACEHOLDER_SRC = 'lib/placeholder.png';
 
 // ── Classifier Demo ────────────────────────────────────
 
@@ -233,8 +227,7 @@ function FeatureList() {
 
 function GalleryDemo() {
   const c = useThemeColors();
-  const mode = useRendererMode();
-  const placeholderSrc = mode === 'native' ? NATIVE_PLACEHOLDER_SRC : WEB_PLACEHOLDER_SRC;
+  const placeholderSrc = PLACEHOLDER_SRC;
   const images = useMemo(() => {
     return Array.from({ length: 6 }, (_, idx) => ({
       id: idx,

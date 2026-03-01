@@ -74,7 +74,6 @@ Initial baseline release. Everything documented here exists and works.
 - Storage (`storage.lua`)
 - Archive (`archive.lua`)
 - Media (`media.lua`)
-- Game canvas (`game.lua`, `lua/game/blackhole.lua`)
 - JSON (`json.lua`)
 
 ### TypeScript Packages
@@ -82,7 +81,7 @@ Initial baseline release. Everything documented here exists and works.
 | Package | Role |
 |---------|------|
 | `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
-| `@reactjit/native` | React reconciler host config, QuickJS bridge, event dispatcher |
+| `@reactjit/renderer` | React reconciler host config, QuickJS bridge, event dispatcher |
 | `@reactjit/web` | DOM overlay renderer |
 | `@reactjit/grid` | Shared layout engine + render server for grid targets |
 | `@reactjit/terminal` | Pure-JS terminal renderer (ANSI truecolor) |
@@ -101,7 +100,6 @@ Initial baseline release. Everything documented here exists and works.
 | `@reactjit/server` | Server-side hooks |
 | `@reactjit/audio` | Audio API types |
 | `@reactjit/3d` | 3D scene types |
-| `@reactjit/game` | Game canvas API |
 | `@reactjit/theme` | Theme system types |
 | `@reactjit/controls` | Control component types |
 
@@ -116,7 +114,7 @@ Initial baseline release. Everything documented here exists and works.
 ### Examples
 
 - `storybook/` — canonical reference implementation (component library + playground + docs)
-- `examples/native-hud/` — Love2D game HUD
+- `examples/native-hud/` — Love2D native HUD
 - `examples/playground/` — interactive playground
 - `examples/terminal-demo/` — terminal dashboard
 - `examples/cc-demo/` — ComputerCraft dashboard

@@ -258,7 +258,7 @@ npm install
 make setup
 
 # 4. Propagate source-of-truth files to CLI runtime
-#    Copies lua/*.lua, packages/shared/, packages/native/, libquickjs.so
+#    Copies lua/*.lua, packages/shared/, packages/renderer/, libquickjs.so
 #    into cli/runtime/ so the CLI can scaffold projects
 make cli-setup
 
@@ -792,7 +792,7 @@ EXAMPLES
 
 EXAMPLE: Pipeline Stages
 --------
-Stage 1: React Reconciler (@reactjit/native)
+Stage 1: React Reconciler (@reactjit/renderer)
   Input:  Your JSX component tree
   Output: Mutation commands (JSON)
   What:   react-reconciler 0.29 diffs the virtual tree.
@@ -868,7 +868,7 @@ React Reconciler
 
 Category: Architecture | Difficulty: intermediate | Platforms: love2d, web, terminal, cc, nvim, hs, awesome
 
-How @reactjit/native uses react-reconciler to build the instance tree and emit mutation commands
+How @reactjit/renderer uses react-reconciler to build the instance tree and emit mutation commands
 
 ---------
 OVERVIEW
@@ -895,7 +895,7 @@ Mutation Command Types:
   insertBefore   - Insert child before sibling: { type, parentId, childId, beforeId }
   commitTextUpdate - Update raw text content: { type, id, text }
 
-Key Exports from @reactjit/native:
+Key Exports from @reactjit/renderer:
   createRoot()       - Create a reconciler root
   render(element)    - Render a React element into the root
   unmountAll()       - Tear down all roots
@@ -911,7 +911,7 @@ EXAMPLES
 
 EXAMPLE: How createLove2DApp Works
 --------
-import { createLove2DApp } from '@reactjit/native';
+import { createLove2DApp } from '@reactjit/renderer';
 
 const app = createLove2DApp();
 app.render(<App />);
@@ -976,13 +976,13 @@ API / SYNTAX
 Source-of-Truth Locations:
   lua/*.lua                    -> Lua runtime (layout, painter, tree, events, etc.)
   packages/shared/src/         -> Core primitives, components, hooks, animation, types
-  packages/native/src/         -> React reconciler, host config, bridge, entry points
+  packages/renderer/src/         -> React reconciler, host config, bridge, entry points
   quickjs/libquickjs.so        -> QuickJS shared library
 
 Copy Destinations (managed by tooling, NEVER edit directly):
   cli/runtime/lua/             <- make cli-setup copies lua/*.lua here
   cli/runtime/reactjit/shared/ <- make cli-setup copies packages/shared/ here
-  cli/runtime/reactjit/native/ <- make cli-setup copies packages/native/ here
+  cli/runtime/reactjit/native/ <- make cli-setup copies packages/renderer/ here
   cli/runtime/lib/             <- make cli-setup copies quickjs/libquickjs.so here
   <project>/lua/               <- reactjit update copies here
   <project>/reactjit/shared/ <- reactjit update copies here
@@ -1020,7 +1020,7 @@ Platforms: all
 EXAMPLE: Adding a New Lua-Side Feature (Checklist)
 --------
 1. Edit/create files in lua/ (the source of truth)
-2. Edit/create files in packages/shared/src/ and packages/native/src/ as needed
+2. Edit/create files in packages/shared/src/ and packages/renderer/src/ as needed
 3. Run: make cli-setup
 4. For each example project that needs the feature:
    cd examples/<project>
@@ -1034,7 +1034,7 @@ Platforms: all
 CRITICAL RULES
 ---------
 
-* ALWAYS edit source-of-truth files (lua/, packages/shared/, packages/native/).
+* ALWAYS edit source-of-truth files (lua/, packages/shared/, packages/renderer/).
 * NEVER edit copies (cli/runtime/, <project>/lua/, <project>/reactjit/).
 * Those are disposable and will be overwritten by the next sync.
 * After editing any source-of-truth file, run the full sync pipeline:
@@ -1311,7 +1311,7 @@ Build steps for each target:
     6. Create launcher script
     7. Pack into single self-extracting binary
     8. Output: dist/<project-name>
-    Entry: src/main-love.tsx or src/native-main.tsx or src/main.tsx (first found)
+    Entry: src/main-love.tsx or src/main.tsx (first found)
 
   dist:terminal:
     1. Bundle JS (CJS for Node.js, --platform=node, --external:ws)
@@ -1486,7 +1486,7 @@ What it creates:
       libquickjs.so    QuickJS shared library for FFI bridge
     reactjit/
       shared/          @reactjit/core package source (primitives, hooks, animation)
-      native/          @reactjit/native package source (reconciler host config)
+      native/          @reactjit/renderer package source (reconciler host config)
     main.lua           Love2D entry point
     conf.lua           Love2D configuration (window size, title)
     package.json       Project dependencies and scripts
@@ -7497,8 +7497,8 @@ EXAMPLE: Setting Up PortalHost in Native Mode
 --------
 ```tsx
 import { PortalHost, Box, Text } from '@reactjit/core';
-import { createRoot } from '@reactjit/native';
-import { NativeBridge } from '@reactjit/native';
+import { createRoot } from '@reactjit/renderer';
+import { NativeBridge } from '@reactjit/renderer';
 import { BridgeProvider, RendererProvider } from '@reactjit/core';
 
 function App() {
@@ -7614,7 +7614,7 @@ PLATFORM NOTES
 
 Love2D:
 - Portals render with zIndex: 1000 in absolute positioning
-- PortalHost must wrap your root component in native-main.tsx
+- PortalHost must wrap your root component in main.tsx
 - Multiple portals stack in registration order (later portals appear on top)
 - Portal content is positioned absolutely relative to the viewport
 
@@ -12895,9 +12895,9 @@ Platforms: love2d
 
 EXAMPLE: Provider setup at app root
 --------
-import { createRoot } from '@reactjit/native';
+import { createRoot } from '@reactjit/renderer';
 import { BridgeProvider, RendererProvider } from '@reactjit/core';
-import { createBridge } from '@reactjit/native';
+import { createBridge } from '@reactjit/renderer';
 
 const bridge = createBridge();
 
@@ -15185,7 +15185,7 @@ Platforms: love2d, terminal, nvim, cc, hs, awesome
 
 EXAMPLE: Provider setup at app root
 --------
-import { createRoot } from '@reactjit/native';
+import { createRoot } from '@reactjit/renderer';
 import { RendererProvider } from '@reactjit/core';
 
 function App() {
@@ -18430,7 +18430,7 @@ EXAMPLES
 
 EXAMPLE: Standard App Entry Point (src/index.tsx)
 --------
-import { createLove2DApp } from '@reactjit/native';
+import { createLove2DApp } from '@reactjit/renderer';
 import App from './App';
 
 const app = createLove2DApp();
@@ -18927,7 +18927,7 @@ EXAMPLE: Steps to Create a New Target
 4. Create an entry point:
 
    // packages/mytarget/src/index.ts
-   import { createRoot, render } from '@reactjit/native';
+   import { createRoot, render } from '@reactjit/renderer';
    import { BridgeProvider, RendererProvider } from '@reactjit/core';
    import { MyBridge } from './MyBridge';
 
@@ -18966,7 +18966,7 @@ Study these existing targets for different patterns:
   @reactjit/hs        - Node.js ESM, WebSocket transport, pixel canvas painter
   @reactjit/awesome   - Node.js ESM, stdio transport, Cairo/Pango painter
   @reactjit/web       - Browser ESM, Module.FS transport, CSS flexbox "painter"
-  @reactjit/native    - IIFE, QuickJS FFI transport, Lua pixel painter
+  @reactjit/renderer    - IIFE, QuickJS FFI transport, Lua pixel painter
 --------
 Platforms: all
 
@@ -19932,7 +19932,7 @@ return TextInput
 3. **Register in painter** (`painter.lua`): add `elseif node.type == "MyWidget" then MyWidget.draw(node)`.
 4. **Register in events** (`events.lua`): add event handlers for your widget type.
 5. **Create TypeScript component** (`packages/shared/src/MyWidget.tsx`): declares host element, props interface, renders `React.createElement('MyWidget', props)`.
-6. **Add host config entry** (`packages/native/src/hostConfig.ts`): add `'MyWidget'` to supported types, implement `createInstance()`, `commitUpdate()`, etc.
+6. **Add host config entry** (`packages/renderer/src/hostConfig.ts`): add `'MyWidget'` to supported types, implement `createInstance()`, `commitUpdate()`, etc.
 7. **Define props interface** (`packages/shared/src/types.ts`): add `MyWidgetProps` with all props and event callbacks.
 8. **Export from index** (`packages/shared/src/index.ts`): `export { MyWidget } from './MyWidget';`.
 9. **Sync to CLI runtime**: `make cli-setup` to copy Lua files to `cli/runtime/lua/`.

@@ -53,7 +53,7 @@
  M packages/core/src/Typography.tsx
  M packages/core/src/masks/Scanlines.tsx
  M packages/core/src/masks/VHS.tsx
- M packages/native/src/hostConfig.ts
+ M packages/renderer/src/hostConfig.ts
  M packages/theme/src/ThemeProvider.tsx
  M storybook/love/main.lua
  M storybook/src/App.tsx

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useRendererMode, formatUptime, formatMemory, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, formatUptime, formatMemory, useLuaInterval } from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -303,7 +303,6 @@ function Feed3D({ history, spin }: { history: number[]; spin: number }) {
 }
 
 export function TradingPerfLabStory() {
-  const mode = useRendererMode();
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [loadProfile, setLoadProfile] = useState<LoadProfile>('balanced');
   const [live, setLive] = useState(true);
@@ -519,12 +518,11 @@ export function TradingPerfLabStory() {
   const shellBg = '#050b16';
   const panelBg = '#0b1322';
   const panelBorder = '#1d2c45';
-  const compact = mode === 'native';
-  const outerPad = compact ? 10 : 12;
-  const frameGap = compact ? 8 : 10;
-  const panelPad = compact ? 8 : 10;
-  const leftPaneBasis = compact ? 215 : 260;
-  const rightPaneBasis = compact ? 265 : 320;
+  const outerPad = 10;
+  const frameGap = 8;
+  const panelPad = 8;
+  const leftPaneBasis = 215;
+  const rightPaneBasis = 265;
   const chartMinHeight = compact ? 240 : 300;
   const chartBodyMinHeight = compact ? 210 : 280;
   const tapeHeight = compact ? 156 : 180;
@@ -594,8 +592,11 @@ export function TradingPerfLabStory() {
           <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>WATCHLIST</Text>
           <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', paddingLeft: 6, paddingRight: 6 }}>
             <Box style={{ width: 54 }}><Text style={{ fontSize: 9, color: '#587394' }}>SYM</Text></Box>
+            {/* rjit-ignore-next-line */}
             <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>LAST</Text></Box>
+            {/* rjit-ignore-next-line */}
             <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>%</Text></Box>
+            {/* rjit-ignore-next-line */}
             <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>VOL</Text></Box>
           </Box>
           <ScrollView style={{ flexGrow: 1, width: '100%' }}>
@@ -622,8 +623,11 @@ export function TradingPerfLabStory() {
                         }}
                       >
                         <Box style={{ width: 54 }}><Text style={{ color: '#d8e4f3', fontSize: 10 }}>{row.symbol}</Text></Box>
+                        {/* rjit-ignore-next-line */}
                         <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ color: '#c5d6ea', fontSize: 10 }}>{row.last.toFixed(2)}</Text></Box>
+                        {/* rjit-ignore-next-line */}
                         <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ color: up ? '#34d399' : '#f87171', fontSize: 10 }}>{`${up ? '+' : ''}${row.deltaPct.toFixed(2)}%`}</Text></Box>
+                        {/* rjit-ignore-next-line */}
                         <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ color: '#7f9bc0', fontSize: 10 }}>{formatCompact(row.volume)}</Text></Box>
                       </Box>
                     )}

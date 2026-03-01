@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ChartTooltip, useScale, Typography } from '../../../packages/core/src';
+import { Box, Text, useScale, Typography } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StorySection } from './_shared/StoryScaffold';
 
@@ -17,66 +17,41 @@ const LONG_TEXT = 'The quick brown fox jumps over the lazy dog. This sentence is
 export function TextStylesStory() {
   const c = useThemeColors();
   const scale = useScale();
-  const [activeScaleTip, setActiveScaleTip] = React.useState<'font24' | 'font16' | 'letter2' | 'line28' | null>(null);
 
   return (
     <>
       <StorySection index={1} title="Scaled text basics">
         <Box
-          onPointerEnter={() => setActiveScaleTip('font24')}
-          onPointerLeave={() => setActiveScaleTip(prev => (prev === 'font24' ? null : prev))}
-          style={{ width: '100%', position: 'relative', alignItems: 'center' }}
+          tooltip={{ content: `Why This Changes\n${scaleFormula(24, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
+          style={{ width: '100%', alignItems: 'center' }}
         >
-          <ChartTooltip visible={activeScaleTip === 'font24'} anchor="top">
-            <ChartTooltip.Label>Why This Changes</ChartTooltip.Label>
-            <ChartTooltip.Value>{scaleFormula(24, scale)}</ChartTooltip.Value>
-            <ChartTooltip.Detail>Scaled from viewport size (reference: 800×600).</ChartTooltip.Detail>
-          </ChartTooltip>
           <Text style={{ color: c.text, fontSize: 24, fontWeight: 'bold' }}>
             {`Bold ${sz(24, scale)}`}
           </Text>
         </Box>
 
         <Box
-          onPointerEnter={() => setActiveScaleTip('font16')}
-          onPointerLeave={() => setActiveScaleTip(prev => (prev === 'font16' ? null : prev))}
-          style={{ width: '100%', position: 'relative', alignItems: 'center' }}
+          tooltip={{ content: `Why This Changes\n${scaleFormula(16, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
+          style={{ width: '100%', alignItems: 'center' }}
         >
-          <ChartTooltip visible={activeScaleTip === 'font16'} anchor="top">
-            <ChartTooltip.Label>Why This Changes</ChartTooltip.Label>
-            <ChartTooltip.Value>{scaleFormula(16, scale)}</ChartTooltip.Value>
-            <ChartTooltip.Detail>Scaled from viewport size (reference: 800×600).</ChartTooltip.Detail>
-          </ChartTooltip>
           <Text style={{ color: c.textSecondary, fontSize: 16 }}>
             {`Regular ${sz(16, scale)} gray`}
           </Text>
         </Box>
 
         <Box
-          onPointerEnter={() => setActiveScaleTip('letter2')}
-          onPointerLeave={() => setActiveScaleTip(prev => (prev === 'letter2' ? null : prev))}
-          style={{ width: '100%', position: 'relative', alignItems: 'center' }}
+          tooltip={{ content: `Why This Changes\n${scaleFormula(2, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
+          style={{ width: '100%', alignItems: 'center' }}
         >
-          <ChartTooltip visible={activeScaleTip === 'letter2'} anchor="top">
-            <ChartTooltip.Label>Why This Changes</ChartTooltip.Label>
-            <ChartTooltip.Value>{scaleFormula(2, scale)}</ChartTooltip.Value>
-            <ChartTooltip.Detail>Scaled from viewport size (reference: 800×600).</ChartTooltip.Detail>
-          </ChartTooltip>
           <Text style={{ color: c.primary, fontSize: 14, letterSpacing: 2 }}>
             {`Letter spacing ${sz(2, scale)}`}
           </Text>
         </Box>
 
         <Box
-          onPointerEnter={() => setActiveScaleTip('line28')}
-          onPointerLeave={() => setActiveScaleTip(prev => (prev === 'line28' ? null : prev))}
-          style={{ width: '100%', position: 'relative', alignItems: 'center' }}
+          tooltip={{ content: `Why This Changes\n${scaleFormula(28, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
+          style={{ width: '100%', alignItems: 'center' }}
         >
-          <ChartTooltip visible={activeScaleTip === 'line28'} anchor="top">
-            <ChartTooltip.Label>Why This Changes</ChartTooltip.Label>
-            <ChartTooltip.Value>{scaleFormula(28, scale)}</ChartTooltip.Value>
-            <ChartTooltip.Detail>Scaled from viewport size (reference: 800×600).</ChartTooltip.Detail>
-          </ChartTooltip>
           <Text style={{ color: c.warning, fontSize: 14, lineHeight: 28 }}>
             {`Line height ${sz(28, scale)} shows extra spacing when text wraps to multiple lines.`}
           </Text>
@@ -86,12 +61,14 @@ export function TextStylesStory() {
           width: 260,
           gap: 4,
         }}>
+          // rjit-ignore-next-line
           <Text style={{ color: c.text, fontSize: 12, textAlign: 'left' }}>
             Left aligned
           </Text>
           <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>
             Center aligned
           </Text>
+          // rjit-ignore-next-line
           <Text style={{ color: c.text, fontSize: 12, textAlign: 'right' }}>
             Right aligned
           </Text>

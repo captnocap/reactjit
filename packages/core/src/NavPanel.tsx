@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from './primitives';
 import { Pressable } from './Pressable';
+import { useThemeColorsOptional } from './context';
 import type { Style } from './types';
 
 export interface NavItem {
@@ -33,71 +34,105 @@ export function NavPanel({
   style,
 }: NavPanelProps) {
   const centered = contentAlign === 'center';
+  const theme = useThemeColorsOptional();
+  const colors = {
+    panelBg: theme?.bgElevated ?? '#111827',
+    panelBorder: theme?.border ?? '#334155',
+    sectionTitle: theme?.textDim ?? '#64748b',
+    itemText: theme?.textSecondary ?? '#94a3b8',
+    itemTextActive: theme?.text ?? '#e2e8f0',
+    itemBgHover: theme?.surface ?? '#1e293b',
+    itemBgPressed: theme?.surfaceHover ?? '#2a3a52',
+    itemBgActive: theme?.surfaceHover ?? '#2a3a52',
+    itemBorderActive: theme?.borderFocus ?? '#4b5563',
+  };
 
   return (
     <Box style={{
       width,
-      backgroundColor: '#0c0c14',
+      backgroundColor: colors.panelBg,
       borderWidth: 1,
-      borderColor: '#1e293b',
+      borderColor: colors.panelBorder,
+      borderRadius: 8,
+      paddingTop: 6,
+      paddingBottom: 6,
+      gap: 2,
       overflow: 'scroll',
       ...style,
     }}>
       {/* Header slot */}
       {header && (
         <>
-          <Box style={{ padding: 12 }}>
+          <Box
+            style={{
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 4,
+              paddingBottom: 8,
+              alignItems: centered ? 'center' : 'start',
+            }}
+          >
             {header}
           </Box>
-          <Box style={{ height: 1, backgroundColor: '#1e293b' }} />
+          <Box style={{ height: 1, backgroundColor: colors.panelBorder }} />
         </>
       )}
 
       {/* Sections */}
       {sections.map((section) => (
-        <Box key={section.title}>
+        <Box key={section.title} style={{ paddingBottom: 2 }}>
           <Box
             style={{
-              paddingLeft: centered ? 8 : 12,
-              paddingRight: 8,
+              paddingLeft: centered ? 10 : 12,
+              paddingRight: 10,
               paddingTop: 8,
-              paddingBottom: 2,
+              paddingBottom: 4,
               alignItems: centered ? 'center' : 'start',
             }}
           >
-            <Text style={{ color: '#334155', fontSize: 9, textAlign: centered ? 'center' : 'left' }}>
+            <Text style={{ color: colors.sectionTitle, fontSize: 9, textAlign: centered ? 'center' : 'left' }}>
               {section.title.toUpperCase()}
             </Text>
           </Box>
-          {section.items.map((item) => {
-            const isActive = item.id === activeId;
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => onSelect?.(item.id)}
-                style={(state) => ({
-                  paddingLeft: centered ? 10 : 16,
-                  paddingRight: 8,
-                  paddingTop: 4,
-                  paddingBottom: 4,
-                  alignItems: centered ? 'center' : 'start',
-                  backgroundColor: isActive
-                    ? '#1e293b'
-                    : state.hovered
-                      ? '#111827'
-                      : 'transparent',
-                })}
-              >
-                <Text style={{
-                  color: isActive ? '#e2e8f0' : '#64748b',
-                  fontSize: 11,
-                  textAlign: centered ? 'center' : 'left',
-                }}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+          <Box style={{ gap: 2 }}>
+            {section.items.map((item) => {
+              const isActive = item.id === activeId;
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => onSelect?.(item.id)}
+                  style={(state) => ({
+                    marginLeft: 8,
+                    marginRight: 8,
+                    paddingLeft: centered ? 8 : 10,
+                    paddingRight: 8,
+                    paddingTop: 6,
+                    paddingBottom: 6,
+                    borderRadius: 6,
+                    borderWidth: isActive ? 1 : 0,
+                    borderColor: isActive ? colors.itemBorderActive : 'transparent',
+                    alignItems: centered ? 'center' : 'start',
+                    backgroundColor: isActive
+                      ? colors.itemBgActive
+                      : state.pressed
+                        ? colors.itemBgPressed
+                        : state.hovered
+                          ? colors.itemBgHover
+                          : 'transparent',
+                  })}
+                >
+                  <Text style={{
+                    color: isActive ? colors.itemTextActive : colors.itemText,
+                    fontSize: 11,
+                    fontWeight: isActive ? 'bold' : 'normal',
+                    textAlign: centered ? 'center' : 'left',
+                  }}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </Box>
         </Box>
       ))}
     </Box>

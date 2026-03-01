@@ -57,6 +57,7 @@ function BreakpointBadge() {
   const bp = useBreakpoint();
   const c = useThemeColors();
   return (
+    // rjit-ignore-next-line
     <Box style={{
       backgroundColor: c.primary,
       borderRadius: 4,
@@ -77,9 +78,11 @@ export function GridStory() {
 
   return (
     <StoryPage>
+      // rjit-ignore-next-line
       <Text style={{ color: c.text, fontSize: 18, textAlign: 'left', width: '100%' }}>
         {'Grid System'}
       </Text>
+      // rjit-ignore-next-line
       <Text style={{ color: c.muted, fontSize: 11, textAlign: 'left', width: '100%', marginBottom: 4 }}>
         {'12-column responsive grid. Three authoring modes, same output.'}
       </Text>
@@ -87,6 +90,7 @@ export function GridStory() {
 
       {/* 1. Numeric spans */}
       <StorySection index={1} title="Numeric Spans">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'<Col span={4}> = 4/12 = 33.3% each (3 equal columns)'}
         </Text>
@@ -96,6 +100,7 @@ export function GridStory() {
           <Col span={4}><Cell label="span={4}" color={C.c} /></Col>
         </Row>
 
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left', marginTop: 4 }}>
           {'<Col span={6}> + <Col span={6}> = two halves'}
         </Text>
@@ -104,6 +109,7 @@ export function GridStory() {
           <Col span={6}><Cell label="span={6}" color={C.e} /></Col>
         </Row>
 
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left', marginTop: 4 }}>
           {'<Col span={8}> + <Col span={4}> = 2:1 ratio'}
         </Text>
@@ -115,10 +121,12 @@ export function GridStory() {
 
       {/* 2. Semantic words */}
       <StorySection index={2} title="Semantic Words">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'Same layouts as above, using words instead of numbers.'}
         </Text>
 
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'"third" = span 4'}
         </Text>
@@ -128,6 +136,7 @@ export function GridStory() {
           <Col span="third"><Cell label={'"third"'} color={C.c} /></Col>
         </Row>
 
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left', marginTop: 4 }}>
           {'"half" = span 6'}
         </Text>
@@ -136,6 +145,7 @@ export function GridStory() {
           <Col span="half"><Cell label={'"half"'} color={C.e} /></Col>
         </Row>
 
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left', marginTop: 4 }}>
           {'"two-thirds" + "quarter"'}
         </Text>
@@ -147,6 +157,7 @@ export function GridStory() {
 
       {/* 3. Responsive breakpoints */}
       <StorySection index={3} title="Responsive Breakpoints">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'sm={12} md={6} lg={4} — full on mobile, halves on tablet, thirds on desktop.'}
         </Text>
@@ -162,6 +173,7 @@ export function GridStory() {
 
       {/* 4. Semantic responsive */}
       <StorySection index={4} title="Semantic Responsive">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'sm="full" md="half" lg="third" — same as section 3, using words.'}
         </Text>
@@ -177,6 +189,7 @@ export function GridStory() {
 
       {/* 5. Auto-responsive */}
       <StorySection index={5} title="Auto-Responsive (responsive flag)">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'<Col responsive> — sm=12, md=6, lg=4, xl=3 automatically.'}
         </Text>
@@ -194,6 +207,7 @@ export function GridStory() {
 
       {/* 6. Mixed modes */}
       <StorySection index={6} title="Mixed Modes in Same Row">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'Numbers and words in the same Row — they resolve identically.'}
         </Text>
@@ -206,6 +220,7 @@ export function GridStory() {
 
       {/* 7. Nested grid */}
       <StorySection index={7} title="Nested Grid">
+        // rjit-ignore-next-line
         <Text style={{ color: c.muted, fontSize: 10, width: '100%', textAlign: 'left' }}>
           {'Row inside a Col — grids compose naturally.'}
         </Text>

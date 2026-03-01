@@ -87,8 +87,8 @@ Example 2: Setting Up PortalHost in Native Mode
 ---
 ```tsx
 import { PortalHost, Box, Text } from '@reactjit/core';
-import { createRoot } from '@reactjit/native';
-import { NativeBridge } from '@reactjit/native';
+import { createRoot } from '@reactjit/renderer';
+import { NativeBridge } from '@reactjit/renderer';
 import { BridgeProvider, RendererProvider } from '@reactjit/core';
 
 function App() {
@@ -202,7 +202,7 @@ Platforms: love2d, web, terminal, cc, nvim, hs, awesome
 
 Love2D:
   - Portals render with zIndex: 1000 in absolute positioning
-  - PortalHost must wrap your root component in native-main.tsx
+  - PortalHost must wrap your root component in main.tsx
   - Multiple portals stack in registration order (later portals appear on top)
   - Portal content is positioned absolutely relative to the viewport
 

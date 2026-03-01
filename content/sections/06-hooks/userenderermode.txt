@@ -125,7 +125,7 @@ Platforms: love2d, terminal, nvim, cc, hs, awesome
 
 Example 5: Provider setup at app root
 ---
-import { createRoot } from '@reactjit/native';
+import { createRoot } from '@reactjit/renderer';
 import { RendererProvider } from '@reactjit/core';
 
 function App() {

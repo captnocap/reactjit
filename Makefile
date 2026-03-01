@@ -20,12 +20,12 @@ else
 endif
 
 QUICKJS_DIR = quickjs
-NATIVE_GAME = examples/native-hud/game
-LIB_DIR = $(NATIVE_GAME)/lib
+GAME = examples/native-hud/game
+LIB_DIR = $(GAME)/lib
 STORYBOOK_LOVE = storybook/love
 STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 
-.PHONY: all clean dist-clean setup build build-web build-storybook-love build-storybook-web dev-storybook-love storybook-love storybook-web install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-natives build-luajit build-all-platforms
+.PHONY: all clean dist-clean setup build build-web build-storybook-love dev-storybook-love storybook-love install dist-storybook dist-storybook-windows dist-cli dist-cli-full dist-cli-light release cli-setup build-blake3 build-binaries build-luajit build-all-platforms
 
 all: setup build
 
@@ -72,7 +72,7 @@ $(STORYBOOK_LIB)/libquickjs$(LIB_EXT): $(LIB_DIR)/libquickjs$(LIB_EXT)
 
 # ── Build targets ───────────────────────────────────────
 
-build: build-web build-storybook-love build-storybook-web
+build: build-web build-storybook-love
 
 build-web: node_modules
 	npx esbuild \
@@ -82,15 +82,6 @@ build-web: node_modules
 		--jsx=automatic \
 		--outfile=examples/web-overlay/dist/app.js \
 		examples/web-overlay/src/main.tsx
-
-build-storybook-web: node_modules
-	npx esbuild \
-		--bundle \
-		--format=esm \
-		--target=es2020 \
-		--jsx=automatic \
-		--outfile=storybook/dist/storybook.js \
-		storybook/src/main.tsx
 
 build-storybook-love: node_modules
 	npx esbuild \
@@ -102,7 +93,7 @@ build-storybook-love: node_modules
 		--external:child_process \
 		--external:ws \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
-		storybook/src/native-main.tsx
+		storybook/src/main.tsx
 
 # ── Storybook ──────────────────────────────────────────
 
@@ -111,9 +102,6 @@ storybook-love: setup build-storybook-love $(STORYBOOK_LIB)/libquickjs$(LIB_EXT)
 	@echo "=== Love2D Storybook ready ==="
 	@echo "  Run:  cd $(STORYBOOK_LOVE) && love ."
 	@echo ""
-
-storybook-web: build-storybook-web
-	@echo "Web storybook built. Serve with: cd storybook && python3 -m http.server 8080"
 
 # ── Dist (consumer-facing distributable) ─────────────────
 #
@@ -313,7 +301,7 @@ dev-storybook-love: setup $(STORYBOOK_LIB)/libquickjs$(LIB_EXT) node_modules
 		--jsx=automatic \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
 		--watch \
-		storybook/src/native-main.tsx
+		storybook/src/main.tsx
 
 # ── CLI setup (developer tooling — expects Love2D installed) ──
 
@@ -443,7 +431,7 @@ endif
 		echo "  Warning: quickjs.dll not found — run 'zig build libquickjs -Dtarget=x86_64-windows-gnu' first"; \
 	fi
 	cp -r packages/core cli/runtime/reactjit/core
-	cp -r packages/native cli/runtime/reactjit/native
+	cp -r packages/renderer cli/runtime/reactjit/renderer
 	cp -r packages/router cli/runtime/reactjit/router
 	cp -r packages/storage cli/runtime/reactjit/storage
 	cp -r packages/audio cli/runtime/reactjit/audio
@@ -475,12 +463,12 @@ endif
 
 # ── Cross-compilation targets ─────────────────────────────
 # Build all native artifacts (zig + LuaJIT) for a target platform.
-# Usage: make build-natives TARGET=x86_64-linux-gnu
+# Usage: make build-binaries TARGET=x86_64-linux-gnu
 #        make build-luajit TARGET=x86_64-windows-gnu
 #        make build-all-platforms
 
-build-natives:
-	@test -n "$(TARGET)" || { echo "Usage: make build-natives TARGET=<zig-triple>"; exit 1; }
+build-binaries:
+	@test -n "$(TARGET)" || { echo "Usage: make build-binaries TARGET=<zig-triple>"; exit 1; }
 	zig build all -Dtarget=$(TARGET)
 	@echo "=== Native artifacts built for $(TARGET) ==="
 

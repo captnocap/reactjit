@@ -410,9 +410,7 @@ function VTerm:getCell(row, col)
   local char = ""
   if c.chars[0] ~= 0 then
     local cp = c.chars[0]
-    if cp < 0 or cp > 0x10FFFF then
-      char = "\xEF\xBF\xBD"  -- U+FFFD replacement character
-    elseif cp < 0x80 then
+    if cp < 0x80 then
       char = string.char(cp)
     elseif cp < 0x800 then
       char = string.char(

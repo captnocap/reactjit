@@ -6,7 +6,6 @@ import {
   Tabs,
   Breadcrumbs,
   Toolbar,
-  Pressable,
   type BreadcrumbItem,
 } from '../../../packages/core/src';
 import type { NavSection, Tab, ToolbarEntry } from '../../../packages/core/src';
@@ -84,9 +83,9 @@ export function NavigationStory() {
       {/* 1. NavPanel */}
       <StorySection index={1} title="NavPanel">
         <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-          Grouped sidebar navigation with sections, active-item highlighting, and custom header.
+          Grouped sidebar navigation with sections, active-item highlighting, and a product header.
         </Text>
-        <Box style={{ width: '100%', alignItems: 'center' }}>
+        <Box style={{ width: '100%', maxWidth: 340, alignItems: 'center' }}>
           <NavPanel
             sections={NAV_SECTIONS}
             activeId={activePage}
@@ -95,13 +94,13 @@ export function NavigationStory() {
               setActiveTab('overview');
             }}
             header={
-              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'normal', textAlign: 'center' }}>
-                NAVIGATION
-              </Text>
+              <Box style={{ width: '100%', gap: 2 }}>
+                <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>Studio</Text>
+                <Text style={{ color: c.textDim, fontSize: 9, fontWeight: 'normal' }}>Navigation</Text>
+              </Box>
             }
-            width={280}
-            contentAlign="center"
-            style={{ height: 180, borderRadius: 10 }}
+            width={317}
+            style={{ height: 210, borderRadius: 10 }}
           />
         </Box>
         <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
@@ -184,6 +183,7 @@ export function NavigationStory() {
         <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
           All four navigation components working together. Select a page, switch tabs, and trigger toolbar actions.
         </Text>
+        {/* rjit-ignore-next-line */}
         <Box style={{
           width: '100%',
           flexDirection: 'row',
@@ -200,12 +200,12 @@ export function NavigationStory() {
               setActiveTab('overview');
             }}
             header={
-              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'normal', textAlign: 'center' }}>
-                NAVIGATION
-              </Text>
+              <Box style={{ width: '100%', gap: 2 }}>
+                <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>Studio</Text>
+                <Text style={{ color: c.textDim, fontSize: 9, fontWeight: 'normal' }}>Navigation</Text>
+              </Box>
             }
-            width={220}
-            contentAlign="center"
+            width={233}
             style={{ height: 220, borderRadius: 10 }}
           />
 

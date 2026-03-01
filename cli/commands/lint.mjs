@@ -12,6 +12,9 @@
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
  *
+ * Storybook-only rules (scoped to storybook/src/stories/):
+ *   storybook-no-off-center     (error)   Off-center textAlign, alignItems, or alignSelf
+ *
  * Removed rules (layout engine handles these correctly now):
  *   no-text-without-fontsize    — layout engine falls back to default fontSize
  *   no-unicode-symbol-in-text   — DejaVu Sans has full unicode symbol coverage
@@ -564,6 +567,9 @@ function extractFromObjectLiteral(objLit, ts) {
     props: new Set(),
     flexDirection: null,
     justifyContent: null,
+    textAlign: null,
+    alignItems: null,
+    alignSelf: null,
   };
 
   for (const prop of objLit.properties) {
@@ -589,6 +595,16 @@ function extractFromObjectLiteral(objLit, ts) {
     // Extract justifyContent value for row-width rule
     if (name === 'justifyContent' && ts.isStringLiteral(prop.initializer)) {
       info.justifyContent = prop.initializer.text;
+    }
+    // Extract alignment values for storybook centering rule
+    if (name === 'textAlign' && ts.isStringLiteral(prop.initializer)) {
+      info.textAlign = prop.initializer.text;
+    }
+    if (name === 'alignItems' && ts.isStringLiteral(prop.initializer)) {
+      info.alignItems = prop.initializer.text;
+    }
+    if (name === 'alignSelf' && ts.isStringLiteral(prop.initializer)) {
+      info.alignSelf = prop.initializer.text;
     }
   }
 
@@ -1459,6 +1475,8 @@ const rules = [
         'outlineColor', 'outlineWidth', 'outlineOffset',
         // Transitions & Animations (Lua-side)
         'transition', 'animation',
+        // Vector shapes (Love2D-only)
+        'arcShape', 'polygonPoints', 'strokePaths', 'strokeWidth', 'strokeColor',
       ]);
 
       const invalid = [];
@@ -1533,6 +1551,38 @@ const rules = [
       if (!ctx._attrs) return null;
       if (ctx._attrs.has('onPress')) return null;
       return '<Pressable> has no "onPress" handler — it creates an interactive element that does nothing when clicked. Add an onPress prop or use a Box instead';
+    },
+  },
+
+  // ── Storybook centering rules ─────────────────────────────────
+  // The storybook is a centered showcase. Everything centers, content centers
+  // within itself. Off-center alignment is wrong unless intentionally
+  // demonstrating alignment as a format.
+  // Scoped to storybook/src/stories/ only — does not affect example projects.
+
+  {
+    name: 'storybook-no-off-center',
+    severity: 'error',
+    check(ctx) {
+      // Only applies to files inside storybook/src/stories/
+      if (!ctx.file || !ctx.file.includes('storybook/src/stories/')) return null;
+      if (!ctx.style || !ctx.style.analyzable) return null;
+
+      const offenders = [];
+
+      if (ctx.style.textAlign && ctx.style.textAlign !== 'center') {
+        offenders.push(`textAlign: '${ctx.style.textAlign}'`);
+      }
+      if (ctx.style.alignItems && ctx.style.alignItems !== 'center') {
+        offenders.push(`alignItems: '${ctx.style.alignItems}'`);
+      }
+      if (ctx.style.alignSelf && ctx.style.alignSelf !== 'center') {
+        offenders.push(`alignSelf: '${ctx.style.alignSelf}'`);
+      }
+
+      if (offenders.length === 0) return null;
+
+      return `Off-center alignment in storybook: ${offenders.join(', ')} — storybook content must center. Use alignItems/alignSelf: 'center' and textAlign: 'center'. Suppress with // rjit-ignore-next-line if demonstrating alignment`;
     },
   },
 

@@ -27,26 +27,6 @@ export function useBridgeOptional(): IBridge | null {
   return useContext(BridgeContext);
 }
 
-// ── Renderer mode context (primitives switch on this) ───
-
-export type RendererMode = 'web' | 'native';
-
-const RendererContext = createContext<RendererMode>('web');
-
-export function RendererProvider({
-  mode,
-  children,
-}: {
-  mode: RendererMode;
-  children: ReactNode;
-}) {
-  return React.createElement(RendererContext.Provider, { value: mode }, children);
-}
-
-export function useRendererMode(): RendererMode {
-  return useContext(RendererContext);
-}
-
 // ── Theme color tokens context (populated by @reactjit/theme) ───
 //
 // This context holds a flat Record<string, string> of semantic color tokens

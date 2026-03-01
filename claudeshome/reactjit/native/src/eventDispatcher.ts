@@ -359,6 +359,34 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onStepToggle');
   });
 
+  // ── XYPad events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('xypad:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onChange');
+  });
+
+  bridge.subscribe('xypad:start', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingStart');
+  });
+
+  bridge.subscribe('xypad:end', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingEnd');
+  });
+
+  // ── PitchWheel events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('pitchwheel:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onChange');
+  });
+
+  bridge.subscribe('pitchwheel:start', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingStart');
+  });
+
+  bridge.subscribe('pitchwheel:end', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingEnd');
+  });
+
   // ── Capability events (Audio, Timer, etc.) ───────────
   //
   // Single subscription handles ALL capabilities. The Lua side specifies

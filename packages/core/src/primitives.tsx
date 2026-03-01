@@ -153,6 +153,7 @@ export function Box(props: BoxProps) {
     onFileDrop, onDirectoryDrop, onFileDragEnter, onFileDragLeave,
     onFocus, onBlur,
     onLayout,
+    tooltip,
     children,
   } = props;
 
@@ -203,6 +204,7 @@ export function Box(props: BoxProps) {
     onFocus,
     onBlur,
     onLayout,
+    tooltip,
   };
   if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
   if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;

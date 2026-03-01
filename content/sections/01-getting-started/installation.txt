@@ -37,7 +37,7 @@ npm install
 make setup
 
 # 4. Propagate source-of-truth files to CLI runtime
-#    Copies lua/*.lua, packages/shared/, packages/native/, libquickjs.so
+#    Copies lua/*.lua, packages/shared/, packages/renderer/, libquickjs.so
 #    into cli/runtime/ so the CLI can scaffold projects
 make cli-setup
 

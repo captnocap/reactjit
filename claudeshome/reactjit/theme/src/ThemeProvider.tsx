@@ -11,6 +11,9 @@ type ThemeSwitchPayload = {
   overrides?: Record<string, unknown>;
 };
 
+// Guard against border tokens collapsing into background/surface tokens.
+const MIN_BORDER_CONTRAST = 1.35;
+
 const LUA_OVERRIDE_KEYS: ThemeColorKey[] = [
   'bg',
   'bgAlt',
@@ -51,6 +54,98 @@ function mergeThemeColors(base: ThemeColors, overrides: ThemeColorOverrides | un
     // Preserve full palette map; Lua overlay currently edits semantic keys only.
     palette: base.palette,
   };
+}
+
+type RGB = { r: number; g: number; b: number };
+
+function parseHexColor(value: string): RGB | null {
+  const hex = value.startsWith('#') ? value.slice(1) : value;
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  const n = Number.parseInt(hex, 16);
+  return {
+    r: (n >> 16) & 0xff,
+    g: (n >> 8) & 0xff,
+    b: n & 0xff,
+  };
+}
+
+function toHexColor(rgb: RGB): string {
+  const toPart = (n: number) =>
+    Math.round(Math.max(0, Math.min(255, n)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${toPart(rgb.r)}${toPart(rgb.g)}${toPart(rgb.b)}`;
+}
+
+function mixHexColor(from: string, to: string, t: number): string | null {
+  const a = parseHexColor(from);
+  const b = parseHexColor(to);
+  if (!a || !b) return null;
+  return toHexColor({
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
+  });
+}
+
+function toLinear(channel: number): number {
+  const s = channel / 255;
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(color: string): number | null {
+  const rgb = parseHexColor(color);
+  if (!rgb) return null;
+  return 0.2126 * toLinear(rgb.r) + 0.7152 * toLinear(rgb.g) + 0.0722 * toLinear(rgb.b);
+}
+
+function contrastRatio(a: string, b: string): number | null {
+  const la = luminance(a);
+  const lb = luminance(b);
+  if (la == null || lb == null) return null;
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function minContrastAgainst(color: string, backgrounds: string[]): number | null {
+  let min: number | null = null;
+  for (const bg of backgrounds) {
+    const ratio = contrastRatio(color, bg);
+    if (ratio == null) return null;
+    min = min == null ? ratio : Math.min(min, ratio);
+  }
+  return min;
+}
+
+function adjustBorderContrast(colors: ThemeColors): ThemeColors {
+  const backgrounds = [colors.bg, colors.bgElevated, colors.surface];
+  const currentMinContrast = minContrastAgainst(colors.border, backgrounds);
+  if (currentMinContrast == null || currentMinContrast >= MIN_BORDER_CONTRAST) return colors;
+
+  const targets = [colors.textSecondary, colors.text, '#000000', '#ffffff'];
+
+  for (const target of targets) {
+    const targetContrast = minContrastAgainst(target, backgrounds);
+    if (targetContrast == null || targetContrast < MIN_BORDER_CONTRAST) continue;
+
+    let low = 0;
+    let high = 1;
+    for (let i = 0; i < 20; i += 1) {
+      const mid = (low + high) / 2;
+      const mixed = mixHexColor(colors.border, target, mid);
+      if (!mixed) break;
+      const mixedContrast = minContrastAgainst(mixed, backgrounds);
+      if (mixedContrast != null && mixedContrast >= MIN_BORDER_CONTRAST) high = mid;
+      else low = mid;
+    }
+
+    const adjusted = mixHexColor(colors.border, target, high);
+    if (!adjusted) continue;
+    return { ...colors, border: adjusted };
+  }
+
+  return colors;
 }
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -145,7 +240,7 @@ export function ThemeProvider({
 
   const resolved = themes[themeId] ?? themes[defaultThemeId];
   const resolvedColors = useMemo(
-    () => mergeThemeColors(resolved.colors, overridesByTheme[themeId]),
+    () => adjustBorderContrast(mergeThemeColors(resolved.colors, overridesByTheme[themeId])),
     [resolved.colors, overridesByTheme, themeId],
   );
 

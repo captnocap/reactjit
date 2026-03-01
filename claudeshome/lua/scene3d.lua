@@ -964,166 +964,186 @@ end
 local function renderScene(scene)
   if not scene.canvas then return end
 
+  -- Defensive: clear any leaked push stack frames from prior 3D draws.
+  for _ = 1, 64 do
+    local okPop = pcall(love.graphics.pop)
+    if not okPop then break end
+  end
+
   -- Save Love2D graphics state
   love.graphics.push("all")
 
-  -- Set canvas with depth buffer for proper 3D rendering
-  love.graphics.setCanvas({scene.canvas, depth = true})
+  local okRender, renderErr = xpcall(function()
+    -- Set canvas with depth buffer for proper 3D rendering
+    love.graphics.setCanvas({scene.canvas, depth = true})
 
-  -- Enable depth testing (isolated to this canvas)
-  love.graphics.setDepthMode("lequal", true)
+    -- Enable depth testing (isolated to this canvas)
+    love.graphics.setDepthMode("lequal", true)
 
-  -- Clear color and depth
-  love.graphics.clear(scene.bgColor[1], scene.bgColor[2], scene.bgColor[3], scene.bgColor[4])
+    -- Clear color and depth
+    love.graphics.clear(scene.bgColor[1], scene.bgColor[2], scene.bgColor[3], scene.bgColor[4])
 
-  -- Reset color to white for textured rendering
-  love.graphics.setColor(1, 1, 1, 1)
-
-  -- Draw starfield (2D, before 3D)
-  if scene.stars then
-    love.graphics.setDepthMode()  -- disable depth for 2D stars
-    love.graphics.setShader()
-    local stars = getStars(scene.nodeId or "default", scene.width, scene.height)
-    for _, star in ipairs(stars) do
-      love.graphics.setColor(star.brightness, star.brightness, star.brightness * 0.95, 1)
-      love.graphics.setPointSize(star.size)
-      love.graphics.points(star.x, star.y)
-    end
+    -- Reset color to white for textured rendering
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setDepthMode("lequal", true)  -- re-enable for 3D
-  end
 
-  -- Set up camera
-  if scene.cameraNode then
-    applyCamera(scene.cameraNode, scene.width, scene.height)
-  else
-    g3d.camera.position = {0, -3, 2}
-    g3d.camera.target = {0, 0, 0}
-    g3d.camera.fov = math.pi / 3
-    g3d.camera.nearClip = 0.01
-    g3d.camera.farClip = 1000
-    g3d.camera.aspectRatio = scene.width / scene.height
-    g3d.camera.updateProjectionMatrix()
-    g3d.camera.updateViewMatrix()
-  end
+    -- Draw starfield (2D, before 3D)
+    if scene.stars then
+      love.graphics.setDepthMode()  -- disable depth for 2D stars
+      love.graphics.setShader()
+      local stars = getStars(scene.nodeId or "default", scene.width, scene.height)
+      for _, star in ipairs(stars) do
+        love.graphics.setColor(star.brightness, star.brightness, star.brightness * 0.95, 1)
+        love.graphics.setPointSize(star.size)
+        love.graphics.points(star.x, star.y)
+      end
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.setDepthMode("lequal", true)  -- re-enable for 3D
+    end
 
-  -- Orbit controls: poll mouse directly for zero-latency rotation
-  if scene.orbitControls then
-    local mx, my = love.mouse.getPosition()
-    local mouseDown = love.mouse.isDown(1)
+    -- Set up camera
+    if scene.cameraNode then
+      applyCamera(scene.cameraNode, scene.width, scene.height)
+    else
+      g3d.camera.position = {0, -3, 2}
+      g3d.camera.target = {0, 0, 0}
+      g3d.camera.fov = math.pi / 3
+      g3d.camera.nearClip = 0.01
+      g3d.camera.farClip = 1000
+      g3d.camera.aspectRatio = scene.width / scene.height
+      g3d.camera.updateProjectionMatrix()
+      g3d.camera.updateViewMatrix()
+    end
 
-    if mouseDown then
-      if scene.orbitPrevMX then
-        -- Already tracking: accumulate delta
-        local dx = mx - scene.orbitPrevMX
-        local dy = my - scene.orbitPrevMY
-        scene.orbitRotY = scene.orbitRotY + dx * 0.008
-        scene.orbitRotX = scene.orbitRotX + dy * 0.008
-        scene.orbitPrevMX = mx
-        scene.orbitPrevMY = my
-      else
-        -- Start tracking only if mouse is within scene bounds
-        local inBounds = mx >= scene.screenX and mx <= scene.screenX + scene.width
-                     and my >= scene.screenY and my <= scene.screenY + scene.height
-        if inBounds then
+    -- Orbit controls: poll mouse directly for zero-latency rotation
+    if scene.orbitControls then
+      local mx, my = love.mouse.getPosition()
+      local mouseDown = love.mouse.isDown(1)
+
+      if mouseDown then
+        if scene.orbitPrevMX then
+          -- Already tracking: accumulate delta
+          local dx = mx - scene.orbitPrevMX
+          local dy = my - scene.orbitPrevMY
+          scene.orbitRotY = scene.orbitRotY + dx * 0.008
+          scene.orbitRotX = scene.orbitRotX + dy * 0.008
           scene.orbitPrevMX = mx
           scene.orbitPrevMY = my
+        else
+          -- Start tracking only if mouse is within scene bounds
+          local inBounds = mx >= scene.screenX and mx <= scene.screenX + scene.width
+                       and my >= scene.screenY and my <= scene.screenY + scene.height
+          if inBounds then
+            scene.orbitPrevMX = mx
+            scene.orbitPrevMY = my
+          end
         end
-      end
-    else
-      scene.orbitPrevMX = nil
-      scene.orbitPrevMY = nil
-    end
-
-    -- Apply orbit rotation offset to all meshes
-    if scene.orbitRotX ~= 0 or scene.orbitRotY ~= 0 then
-      for _, entry in pairs(scene.meshes) do
-        if entry.model then
-          local r = entry.model.rotation
-          entry.model:setRotation(r[1] + scene.orbitRotX, r[2] + scene.orbitRotY, r[3])
-        end
-      end
-    end
-  end
-
-  -- Resolve lighting
-  local dirLight = scene.directionalLight or {}
-  local ambLight = scene.ambientLight or {}
-
-  local lightDir = normalizeVec3(dirLight.direction or {-1, 0.5, -0.3})
-  local lightColor = parseLightColor(dirLight.color, dirLight.intensity)
-  local ambientColor = parseLightColor(ambLight.color or "#1a1a2e", ambLight.intensity or 0.15)
-  local camPos = g3d.camera.position
-
-  -- Separate opaque and transparent meshes
-  local opaque = {}
-  local transparent = {}
-  for _, entry in pairs(scene.meshes) do
-    if entry.model then
-      if entry.opacity < 1.0 then
-        transparent[#transparent + 1] = entry
       else
-        opaque[#opaque + 1] = entry
+        scene.orbitPrevMX = nil
+        scene.orbitPrevMY = nil
+      end
+
+      -- Apply orbit rotation offset to all meshes
+      if scene.orbitRotX ~= 0 or scene.orbitRotY ~= 0 then
+        for _, entry in pairs(scene.meshes) do
+          if entry.model then
+            local r = entry.model.rotation
+            entry.model:setRotation(r[1] + scene.orbitRotX, r[2] + scene.orbitRotY, r[3])
+          end
+        end
       end
     end
-  end
 
-  -- Helper: draw a mesh with the appropriate shader
-  local function drawMesh(entry)
-    local useEdgeShader = entry.edgeColor or entry.wireframe
+    -- Resolve lighting
+    local dirLight = scene.directionalLight or {}
+    local ambLight = scene.ambientLight or {}
 
-    if useEdgeShader then
-      -- Edge/wireframe shader (no lighting)
-      local shader = getEdgeShader()
-      local ec = entry.edgeColor or {1, 1, 1, 0.6}
-      local gl = entry.gridLines
-      if entry.wireframe and gl == 0 then gl = 8 end
-      shader:send("edgeColor", ec)
-      shader:send("edgeWidth", entry.edgeWidth)
-      shader:send("gridLines", gl)
-      entry.model:draw(shader)
-    elseif entry.unlit then
-      -- Unlit: use lighting shader with full ambient, no diffuse/specular
-      local shader = getLightingShader()
-      shader:send("ambientColor", {1, 1, 1})
-      shader:send("lightDirection", {0, 0, 0})
-      shader:send("lightColor", {0, 0, 0})
-      shader:send("cameraPosition", camPos)
-      shader:send("specularPower", 1.0)
-      shader:send("fresnelPower", entry.fresnel)
-      shader:send("meshOpacity", entry.opacity)
-      entry.model:draw(shader)
-    else
-      -- Lighting shader
-      local shader = getLightingShader()
-      shader:send("ambientColor", ambientColor)
-      shader:send("lightDirection", lightDir)
-      shader:send("lightColor", lightColor)
-      shader:send("cameraPosition", camPos)
-      shader:send("specularPower", entry.specular)
-      shader:send("fresnelPower", entry.fresnel)
-      shader:send("meshOpacity", entry.opacity)
-      entry.model:draw(shader)
+    local lightDir = normalizeVec3(dirLight.direction or {-1, 0.5, -0.3})
+    local lightColor = parseLightColor(dirLight.color, dirLight.intensity)
+    local ambientColor = parseLightColor(ambLight.color or "#1a1a2e", ambLight.intensity or 0.15)
+    local camPos = g3d.camera.position
+
+    -- Separate opaque and transparent meshes
+    local opaque = {}
+    local transparent = {}
+    for _, entry in pairs(scene.meshes) do
+      if entry.model then
+        if entry.opacity < 1.0 then
+          transparent[#transparent + 1] = entry
+        else
+          opaque[#opaque + 1] = entry
+        end
+      end
     end
-  end
 
-  -- Draw opaque meshes first
-  for _, entry in ipairs(opaque) do
-    drawMesh(entry)
-  end
+    -- Helper: draw a mesh with the appropriate shader
+    local function drawMesh(entry)
+      local useEdgeShader = entry.edgeColor or entry.wireframe
 
-  -- Draw transparent meshes with depth write disabled
-  if #transparent > 0 then
-    love.graphics.setDepthMode("lequal", false)  -- test depth but don't write
-    love.graphics.setBlendMode("alpha")
-    for _, entry in ipairs(transparent) do
+      if useEdgeShader then
+        -- Edge/wireframe shader (no lighting)
+        local shader = getEdgeShader()
+        local ec = entry.edgeColor or {1, 1, 1, 0.6}
+        local gl = entry.gridLines
+        if entry.wireframe and gl == 0 then gl = 8 end
+        shader:send("edgeColor", ec)
+        shader:send("edgeWidth", entry.edgeWidth)
+        shader:send("gridLines", gl)
+        entry.model:draw(shader)
+      elseif entry.unlit then
+        -- Unlit: use lighting shader with full ambient, no diffuse/specular
+        local shader = getLightingShader()
+        shader:send("ambientColor", {1, 1, 1})
+        shader:send("lightDirection", {0, 0, 0})
+        shader:send("lightColor", {0, 0, 0})
+        shader:send("cameraPosition", camPos)
+        shader:send("specularPower", 1.0)
+        shader:send("fresnelPower", entry.fresnel)
+        shader:send("meshOpacity", entry.opacity)
+        entry.model:draw(shader)
+      else
+        -- Lighting shader
+        local shader = getLightingShader()
+        shader:send("ambientColor", ambientColor)
+        shader:send("lightDirection", lightDir)
+        shader:send("lightColor", lightColor)
+        shader:send("cameraPosition", camPos)
+        shader:send("specularPower", entry.specular)
+        shader:send("fresnelPower", entry.fresnel)
+        shader:send("meshOpacity", entry.opacity)
+        entry.model:draw(shader)
+      end
+    end
+
+    -- Draw opaque meshes first
+    for _, entry in ipairs(opaque) do
       drawMesh(entry)
     end
-    love.graphics.setDepthMode("lequal", true)
+
+    -- Draw transparent meshes with depth write disabled
+    if #transparent > 0 then
+      love.graphics.setDepthMode("lequal", false)  -- test depth but don't write
+      love.graphics.setBlendMode("alpha")
+      for _, entry in ipairs(transparent) do
+        drawMesh(entry)
+      end
+      love.graphics.setDepthMode("lequal", true)
+    end
+  end, debug.traceback)
+
+  -- Always restore graphics state, even on 3D draw errors.
+  pcall(love.graphics.pop)
+  love.graphics.setCanvas()
+
+  -- If deeper internals leaked push frames, drain them so they do not
+  -- accumulate across frames.
+  for _ = 1, 64 do
+    local okPop = pcall(love.graphics.pop)
+    if not okPop then break end
   end
 
-  -- Restore Love2D graphics state (canvas, depth mode, shader, etc.)
-  love.graphics.pop()
+  if not okRender then
+    error(renderErr, 0)
+  end
 end
 
 -- ============================================================================

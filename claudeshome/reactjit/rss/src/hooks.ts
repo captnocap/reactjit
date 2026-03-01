@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLuaInterval } from '@reactjit/core';
 import { parseFeed } from './parser';
 import type { Feed, FeedItem, RSSFeedOptions, RSSFeedResult, RSSAggregateOptions, RSSAggregateResult } from './types';
 
@@ -100,13 +101,8 @@ export function useRSSFeed(
     return () => { cancelled = true; };
   }, [url, tick]);
 
-  // Polling
-  useEffect(() => {
-    const interval = options?.interval;
-    if (!interval || !url) return;
-    const id = setInterval(() => setTick(t => t + 1), interval);
-    return () => clearInterval(id);
-  }, [url, options?.interval]);
+  // Polling driven by Lua-side timer
+  useLuaInterval(url ? options?.interval : null, refetch);
 
   return {
     feed,
@@ -184,13 +180,8 @@ export function useRSSAggregate(
     return () => { cancelled = true; };
   }, [urlsKey, tick]);
 
-  // Polling
-  useEffect(() => {
-    const interval = options?.interval;
-    if (!interval || urls.length === 0) return;
-    const id = setInterval(() => setTick(t => t + 1), interval);
-    return () => clearInterval(id);
-  }, [urlsKey, options?.interval]);
+  // Polling driven by Lua-side timer
+  useLuaInterval(urls.length > 0 ? options?.interval : null, refetch);
 
   // Merge and sort items from all feeds
   const allItems: Array<FeedItem & { feedTitle: string; feedUrl: string }> = [];

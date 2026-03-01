@@ -285,7 +285,7 @@ After hot update, nodes in the update path get `changed-by-hmr` tag that fades a
 
 ### Implementation
 
-- **JS side:** Add render counter per node in `packages/native/src/hostConfig.ts` — increment on `commitUpdate`. Store in `Instance` alongside existing props.
+- **JS side:** Add render counter per node in `packages/renderer/src/hostConfig.ts` — increment on `commitUpdate`. Store in `Instance` alongside existing props.
 - **Lua side:** Add `node.renderCount` field updated via `UPDATE` mutation command. Add `node.contentKind` derived from render pattern analysis.
 - **Expose:** New field on nodes, consumed by all visualization phases.
 

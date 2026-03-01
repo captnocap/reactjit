@@ -156,6 +156,16 @@ Capabilities.register("Window", {
     local child = children[state.windowId]
     if not child then return end
 
+    -- Debug: log tick activity for first 10 ticks
+    if not child._tickCount then child._tickCount = 0 end
+    child._tickCount = child._tickCount + 1
+    if child._tickCount <= 10 then
+      io.write(string.format("[WINDOW-DBG] tick#%d windowId=%d nodeId=%s conn=%s initSent=%s\n",
+        child._tickCount, state.windowId, tostring(nodeId),
+        child.conn and "yes" or "no", tostring(child.initSent)))
+      io.flush()
+    end
+
     -- 1. Accept pending connection
     if not child.conn then
       child.conn = IPC.accept(child.server)
@@ -171,6 +181,11 @@ Capabilities.register("Window", {
       if tree then
         local nodes = tree.getNodes()
         local windowNode = nodes and nodes[nodeId]
+        if windowNode then
+          io.write(string.format("[WINDOW-DBG] initSend: windowNode id=%s children=%d\n",
+            tostring(nodeId), #(windowNode.children or {})))
+          io.flush()
+        end
         if windowNode and windowNode.children and #windowNode.children > 0 then
           local commands = IPC.serializeSubtree(windowNode)
           IPC.send(child.conn, { type = "init", commands = commands })

@@ -1,64 +1,47 @@
 import React from 'react';
-import { Box, Text, ChartTooltip } from '../../../packages/core/src';
+import { Box, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 export function BoxBasicStory() {
   const c = useThemeColors();
-  const [hoveredLayer, setHoveredLayer] = React.useState<'outer' | 'middle' | 'inner' | null>(null);
 
   return (
     <StoryPage>
         <StorySection index={1} title="Unstyled boxes (hover to inspect nesting)">
           <Box
-            onPointerEnter={() => setHoveredLayer('outer')}
-            onPointerLeave={() => setHoveredLayer(prev => (prev === 'outer' ? null : prev))}
+            tooltip={{ content: "Outer Box\nThe outermost container, 300x170", type: 'cursor', layout: 'descriptive' }}
             style={{
               width: 300,
               height: 170,
-              position: 'relative',
               borderWidth: 1,
               borderColor: c.border,
               justifyContent: 'center',
               alignItems: 'center',
             }}
           >
-            <ChartTooltip visible={hoveredLayer === 'outer'} anchor="top">
-              <ChartTooltip.Value>Outer Box</ChartTooltip.Value>
-            </ChartTooltip>
             <Box
-              onPointerEnter={() => setHoveredLayer('middle')}
-              onPointerLeave={() => setHoveredLayer(prev => (prev === 'middle' ? null : prev))}
+              tooltip={{ content: "Middle Box\nNested inside Outer, 220x120", type: 'cursor', layout: 'descriptive' }}
               style={{
                 width: 220,
                 height: 120,
-                position: 'relative',
                 borderWidth: 1,
                 borderColor: c.border,
                 justifyContent: 'center',
                 alignItems: 'center',
               }}
             >
-              <ChartTooltip visible={hoveredLayer === 'middle'} anchor="top">
-                <ChartTooltip.Value>Middle Box</ChartTooltip.Value>
-              </ChartTooltip>
               <Box
-                onPointerEnter={() => setHoveredLayer('inner')}
-                onPointerLeave={() => setHoveredLayer(prev => (prev === 'inner' ? null : prev))}
+                tooltip={{ content: "Inner Box\nInnermost layer, 140x75", type: 'cursor', layout: 'descriptive' }}
                 style={{
                   width: 140,
                   height: 75,
-                  position: 'relative',
                   borderWidth: 1,
                   borderColor: c.border,
                   justifyContent: 'center',
                   alignItems: 'center',
                 }}
-              >
-                <ChartTooltip visible={hoveredLayer === 'inner'} anchor="top">
-                  <ChartTooltip.Value>Inner Box</ChartTooltip.Value>
-                </ChartTooltip>
-              </Box>
+              />
             </Box>
           </Box>
         </StorySection>

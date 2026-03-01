@@ -14,6 +14,7 @@ const BINDINGS: Array<{ key: string; desc: string; category: string }> = [
   { category: 'View',   key: 'F3',          desc: 'Toggle search panel (Panel G)' },
   { category: 'View',   key: 'F4',          desc: 'Open commit helper' },
   { category: 'View',   key: 'F6',          desc: 'Toggle file tree (Panel F)' },
+  { category: 'View',   key: 'F9',          desc: 'Toggle notepad (Panel B) — leave notes for Claude' },
   // Navigation
   { category: 'Nav',    key: 'Tab',         desc: 'Focus next panel' },
   { category: 'Nav',    key: 'Shift+Tab',   desc: 'Focus previous panel' },

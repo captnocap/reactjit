@@ -25,7 +25,7 @@ Spawn 4 haiku agents with identical instructions. Each independently crawls the 
 >
 > Search strategy — examine ALL of these:
 > - `packages/shared/src/` — all exported components, hooks, types
-> - `packages/native/src/` — reconciler, event dispatcher, host config
+> - `packages/renderer/src/` — reconciler, event dispatcher, host config
 > - `packages/web/src/` — web renderer exports
 > - `packages/grid/src/` — grid layout engine
 > - `packages/terminal/src/`, `packages/cc/src/`, `packages/nvim/src/`, `packages/hs/src/`, `packages/awesome/src/` — target-specific code

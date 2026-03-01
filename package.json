@@ -5,7 +5,7 @@
   "private": true,
   "workspaces": [
     "packages/core",
-    "packages/native",
+    "packages/renderer",
     "packages/router",
     "packages/storage",
     "packages/audio",
@@ -15,15 +15,14 @@
     "packages/controls",
     "packages/geo",
     "packages/layouts",
-    "packages/terminal"
+    "packages/terminal",
+    "packages/icons"
   ],
   "scripts": {
     "build:native": "esbuild --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js examples/native-hud/src/main.tsx",
     "watch:native": "esbuild --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js --watch examples/native-hud/src/main.tsx",
-    "build:storybook": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=esm --target=es2020 --jsx=automatic --outfile=storybook/dist/storybook.js storybook/src/main.tsx",
-    "build:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js storybook/src/native-main.tsx",
-    "watch:storybook": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=esm --target=es2020 --jsx=automatic --outfile=storybook/dist/storybook.js --watch storybook/src/main.tsx",
-    "watch:storybook-native": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js --watch storybook/src/native-main.tsx",
+    "build:storybook": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js storybook/src/main.tsx",
+    "watch:storybook": "npx tsx scripts/docs/build.ts && esbuild --bundle --format=iife --global-name=ReactJITStorybook --target=es2020 --jsx=automatic --outfile=storybook/love/bundle.js --watch storybook/src/main.tsx",
     "build:docs": "npx tsx scripts/docs/build.ts",
     "validate:docs": "npx tsx scripts/docs/build.ts validate",
     "validate:story-layout": "node scripts/validate-story-layout.mjs",
@@ -37,13 +36,12 @@
     "@noble/hashes": "^2.0.1",
     "@scure/base": "^2.0.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0",
     "react-reconciler": "^0.29.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
     "esbuild": "^0.24.0",
+    "lucide-static": "^0.575.0",
     "typescript": "^5.5.0"
   }
 }

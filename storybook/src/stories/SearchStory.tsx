@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, ScrollView } from '../../../packages/core/src';
 import {
   SearchBar,
   SearchResults,
@@ -17,6 +17,7 @@ import {
   useSearchSchema,
   detectSearchableFields,
   useAppSearch,
+  useHotkey,
 } from '../../../packages/core/src';
 import type { SearchResultItem, CommandDef } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -41,7 +42,7 @@ const FILES: FileItem[] = [
   { id: 9, label: 'window_manager.lua', description: 'Multi-window abstraction', meta: 'Lua', path: 'lua/window_manager.lua', type: 'file' },
   { id: 10, label: 'timer.lua', description: 'Timer capability', meta: 'Lua', path: 'lua/capabilities/timer.lua', type: 'file' },
   { id: 11, label: 'audio.lua', description: 'Audio capability', meta: 'Lua', path: 'lua/capabilities/audio.lua', type: 'file' },
-  { id: 12, label: 'eventDispatcher.ts', description: 'Bridge event routing', meta: 'TS', path: 'packages/native/src/eventDispatcher.ts', type: 'file' },
+  { id: 12, label: 'eventDispatcher.ts', description: 'Bridge event routing', meta: 'TS', path: 'packages/renderer/src/eventDispatcher.ts', type: 'file' },
 ];
 
 const COMMANDS: CommandDef[] = [
@@ -131,7 +132,15 @@ function SearchComboSchemaDemo({ c }: { c: ReturnType<typeof useThemeColors> }) 
         placeholder="Search users..."
         showSchema
         maxResults={4}
-        style={{ width: '100%' }}
+        style={{ width: '100%', position: 'relative' }}
+        dropdownStyle={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: 4,
+          zIndex: 40,
+        }}
         activeColor={c.primary}
         textColor={c.text}
         mutedColor={c.textSecondary}
@@ -168,14 +177,16 @@ export function SearchStory() {
   const [flatQuery, setFlatQuery] = useState('');
   const [flatActive, setFlatActive] = useState(-1);
   const [flatSelected, setFlatSelected] = useState<string>('');
-  const flatResults = useSearch(FILES, flatQuery, { key: 'label', showAllOnEmpty: true, limit: 6 });
+  const [flatOpen, setFlatOpen] = useState(false);
+  const flatResults = useSearch(FILES, flatQuery, { key: 'label', showAllOnEmpty: false, limit: 6 });
 
   // Section 3: SearchResultsSections
   const [sectQuery, setSectQuery] = useState('');
   const [sectActive, setSectActive] = useState(-1);
   const [sectSelected, setSectSelected] = useState('');
-  const luaFiles = useSearch(FILES.filter(f => f.meta === 'Lua'), sectQuery, { key: 'label', showAllOnEmpty: true });
-  const tsFiles = useSearch(FILES.filter(f => f.meta !== 'Lua'), sectQuery, { key: 'label', showAllOnEmpty: true });
+  const [sectOpen, setSectOpen] = useState(false);
+  const luaFiles = useSearch(FILES.filter(f => f.meta === 'Lua'), sectQuery, { key: 'label', showAllOnEmpty: false });
+  const tsFiles = useSearch(FILES.filter(f => f.meta !== 'Lua'), sectQuery, { key: 'label', showAllOnEmpty: false });
 
   // Section 4: SearchCombo
   const [comboSelected, setComboSelected] = useState('');
@@ -186,11 +197,27 @@ export function SearchStory() {
 
   // Section 6: useFuzzySearch
   const [fuzzyQuery, setFuzzyQuery] = useState('');
+  const [fuzzyOpen, setFuzzyOpen] = useState(false);
   const { results: fuzzyResults } = useFuzzySearch(FILES, fuzzyQuery, { key: 'label', showAllOnEmpty: false, limit: 6 });
 
   // Section 7: useSearchHistory
   const { history, push: pushHistory, clear: clearHistory } = useSearchHistory({ storeKey: 'searchStoryHistory' });
   const [historyQuery, setHistoryQuery] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const hasOpenOverlay = (
+    (flatOpen && flatQuery.trim().length > 0) ||
+    (sectOpen && sectQuery.trim().length > 0) ||
+    (fuzzyOpen && fuzzyQuery.trim().length > 0) ||
+    (historyOpen && history.length > 0 && historyQuery.trim().length > 0)
+  );
+
+  useHotkey('escape', () => {
+    setFlatOpen(false);
+    setSectOpen(false);
+    setFuzzyOpen(false);
+    setHistoryOpen(false);
+  }, { enabled: hasOpenOverlay });
 
   return (
     <StoryPage>
@@ -221,26 +248,51 @@ export function SearchStory() {
         <Text style={{ color: c.textDim, fontSize: 10 }}>
           SearchBar drives a flat results list with keyboard active tracking.
         </Text>
-        <SearchBar
-          onSearch={(q) => { setFlatQuery(q); setFlatActive(-1); }}
-          placeholder="Filter files..."
-          style={{ width: '100%' }}
-          accentColor={c.primary}
-          backgroundColor={c.surface}
-          color={c.text}
-          borderColor={c.border}
-        />
-        <SearchResults
-          items={flatResults}
-          activeIndex={flatActive}
-          onSelect={(item) => setFlatSelected(item.label)}
-          style={{ width: '100%' }}
-          activeColor={c.primary}
-          textColor={c.text}
-          mutedColor={c.textSecondary}
-          backgroundColor={c.bgElevated}
-          borderColor={c.border}
-        />
+        <Box style={{ width: '100%', position: 'relative' }}>
+          <SearchBar
+            onSearch={(q) => {
+              setFlatQuery(q);
+              setFlatActive(-1);
+              setFlatOpen(q.trim().length > 0);
+            }}
+            placeholder="Filter files..."
+            style={{ width: '100%' }}
+            accentColor={c.primary}
+            backgroundColor={c.surface}
+            color={c.text}
+            borderColor={c.border}
+          />
+          {flatOpen && flatQuery.trim().length > 0 && (
+            <Box
+              style={{
+                width: '100%',
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: 4,
+                zIndex: 40,
+              }}
+              onPointerEnter={() => setFlatOpen(true)}
+              onPointerLeave={() => setFlatOpen(false)}
+            >
+              <SearchResults
+                items={flatResults}
+                activeIndex={flatActive}
+                onSelect={(item) => {
+                  setFlatSelected(item.label);
+                  setFlatOpen(false);
+                }}
+                style={{ width: '100%' }}
+                activeColor={c.primary}
+                textColor={c.text}
+                mutedColor={c.textSecondary}
+                backgroundColor={c.bgElevated}
+                borderColor={c.border}
+              />
+            </Box>
+          )}
+        </Box>
         {flatSelected && (
           <Text style={{ color: c.success, fontSize: 12 }}>{`Selected: ${flatSelected}`}</Text>
         )}
@@ -249,30 +301,55 @@ export function SearchStory() {
       {/* 3. SearchResultsSections */}
       <StorySection index={3} title="SearchResultsSections">
         <Text style={{ color: c.textDim, fontSize: 10 }}>Results grouped by file type.</Text>
-        <SearchBar
-          onSearch={(q) => { setSectQuery(q); setSectActive(-1); }}
-          placeholder="Filter by language..."
-          style={{ width: '100%' }}
-          accentColor={c.primary}
-          backgroundColor={c.surface}
-          color={c.text}
-          borderColor={c.border}
-        />
-        <SearchResultsSections
-          sections={[
-            { title: 'Lua', items: luaFiles },
-            { title: 'TypeScript', items: tsFiles },
-          ]}
-          activeIndex={sectActive}
-          onSelect={(item) => setSectSelected(item.label)}
-          style={{ width: '100%' }}
-          activeColor={c.primary}
-          textColor={c.text}
-          mutedColor={c.textSecondary}
-          sectionTitleColor={c.textDim}
-          backgroundColor={c.bgElevated}
-          borderColor={c.border}
-        />
+        <Box style={{ width: '100%', position: 'relative' }}>
+          <SearchBar
+            onSearch={(q) => {
+              setSectQuery(q);
+              setSectActive(-1);
+              setSectOpen(q.trim().length > 0);
+            }}
+            placeholder="Filter by language..."
+            style={{ width: '100%' }}
+            accentColor={c.primary}
+            backgroundColor={c.surface}
+            color={c.text}
+            borderColor={c.border}
+          />
+          {sectOpen && sectQuery.trim().length > 0 && (
+            <Box
+              style={{
+                width: '100%',
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: 4,
+                zIndex: 40,
+              }}
+              onPointerEnter={() => setSectOpen(true)}
+              onPointerLeave={() => setSectOpen(false)}
+            >
+              <SearchResultsSections
+                sections={[
+                  { title: 'Lua', items: luaFiles },
+                  { title: 'TypeScript', items: tsFiles },
+                ]}
+                activeIndex={sectActive}
+                onSelect={(item) => {
+                  setSectSelected(item.label);
+                  setSectOpen(false);
+                }}
+                style={{ width: '100%' }}
+                activeColor={c.primary}
+                textColor={c.text}
+                mutedColor={c.textSecondary}
+                sectionTitleColor={c.textDim}
+                backgroundColor={c.bgElevated}
+                borderColor={c.border}
+              />
+            </Box>
+          )}
+        </Box>
         {sectSelected && (
           <Text style={{ color: c.success, fontSize: 12 }}>{`Selected: ${sectSelected}`}</Text>
         )}
@@ -289,7 +366,15 @@ export function SearchStory() {
           onSelect={(item) => setComboSelected(item.label)}
           placeholder="Search files..."
           maxResults={6}
-          style={{ width: '100%' }}
+          style={{ width: '100%', position: 'relative' }}
+          dropdownStyle={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            zIndex: 40,
+          }}
           activeColor={c.primary}
           textColor={c.text}
           mutedColor={c.textSecondary}
@@ -342,46 +427,79 @@ export function SearchStory() {
         <Text style={{ color: c.textDim, fontSize: 10 }}>
           Fuzzy match with score. Results sorted by relevance. Characters highlighted.
         </Text>
-        <SearchBar
-          onSearch={setFuzzyQuery}
-          placeholder="Fuzzy search files..."
-          style={{ width: '100%' }}
-          accentColor={c.primary}
-          backgroundColor={c.surface}
-          color={c.text}
-          borderColor={c.border}
-        />
-        <Box style={{ width: '100%', gap: 4 }}>
-          {fuzzyResults.length === 0 && fuzzyQuery.length > 0 && (
-            <Text style={{ color: c.textDim, fontSize: 12 }}>No fuzzy matches</Text>
-          )}
-          {fuzzyResults.map(({ item, score }) => (
+        <Box style={{ width: '100%', position: 'relative' }}>
+          <SearchBar
+            onSearch={(q) => {
+              setFuzzyQuery(q);
+              setFuzzyOpen(q.trim().length > 0);
+            }}
+            placeholder="Fuzzy search files..."
+            style={{ width: '100%' }}
+            accentColor={c.primary}
+            backgroundColor={c.surface}
+            color={c.text}
+            borderColor={c.border}
+          />
+          {fuzzyOpen && fuzzyQuery.trim().length > 0 && (
             <Box
-              key={item.id}
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingLeft: 10,
-                paddingRight: 10,
-                paddingTop: 6,
-                paddingBottom: 6,
-                borderRadius: 6,
-                backgroundColor: c.surface,
-                gap: 8,
+                width: '100%',
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: 4,
+                zIndex: 40,
+                gap: 4,
+                backgroundColor: c.bgElevated,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: c.border,
+                paddingLeft: 4,
+                paddingRight: 4,
+                paddingTop: 4,
+                paddingBottom: 4,
               }}
+              onPointerEnter={() => setFuzzyOpen(true)}
+              onPointerLeave={() => setFuzzyOpen(false)}
             >
-              <Box style={{ flexGrow: 1 }}>
-                <HighlightedText
-                  text={item.label}
-                  query={fuzzyQuery}
-                  color={c.text}
-                  matchColor={c.primary}
-                />
-              </Box>
-              <Text style={{ fontSize: 10, color: c.textDim }}>{`score: ${score}`}</Text>
-              <Text style={{ fontSize: 10, color: c.textSecondary }}>{item.meta}</Text>
+              {fuzzyResults.length === 0 ? (
+                <Text style={{ color: c.textDim, fontSize: 12 }}>No fuzzy matches</Text>
+              ) : (
+                <ScrollView style={{ width: '100%', height: Math.min(220, fuzzyResults.length * 38 + 8) }}>
+                  <Box style={{ width: '100%', gap: 4 }}>
+                    {fuzzyResults.map(({ item, score }) => (
+                      <Box
+                        key={item.id}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingLeft: 10,
+                          paddingRight: 10,
+                          paddingTop: 6,
+                          paddingBottom: 6,
+                          borderRadius: 6,
+                          backgroundColor: c.surface,
+                          gap: 8,
+                        }}
+                      >
+                        <Box style={{ flexGrow: 1 }}>
+                          <HighlightedText
+                            text={item.label}
+                            query={fuzzyQuery}
+                            color={c.text}
+                            matchColor={c.primary}
+                          />
+                        </Box>
+                        <Text style={{ fontSize: 10, color: c.textDim }}>{`score: ${score}`}</Text>
+                        <Text style={{ fontSize: 10, color: c.textSecondary }}>{item.meta}</Text>
+                      </Box>
+                    ))}
+                  </Box>
+                </ScrollView>
+              )}
             </Box>
-          ))}
+          )}
         </Box>
       </StorySection>
 
@@ -400,44 +518,75 @@ export function SearchStory() {
         <Text style={{ color: c.textDim, fontSize: 10 }}>
           Persistent history backed by SQLite. Type a query and submit to record it.
         </Text>
-        <SearchBar
-          onSearch={setHistoryQuery}
-          onSubmit={(q) => { if (q.trim()) pushHistory(q); }}
-          placeholder="Search (Enter to save)..."
-          style={{ width: '100%' }}
-          accentColor={c.primary}
-          backgroundColor={c.surface}
-          color={c.text}
-          borderColor={c.border}
-        />
-        {history.length > 0 ? (
-          <Box style={{ width: '100%', gap: 4 }}>
-            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>Recent searches</Text>
-              <Pressable onPress={clearHistory}>
-                <Text style={{ color: c.error, fontSize: 10 }}>Clear all</Text>
-              </Pressable>
-            </Box>
-            {history.map((h) => (
-              <Box
-                key={h}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 6,
-                  paddingBottom: 6,
-                  borderRadius: 6,
-                  backgroundColor: c.surface,
-                }}
-              >
-                <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.primary, marginRight: 8 }} />
-                <Text style={{ color: c.text, fontSize: 12, flexGrow: 1 }}>{h}</Text>
+        <Box style={{ width: '100%', position: 'relative' }}>
+          <SearchBar
+            onSearch={(q) => {
+              setHistoryQuery(q);
+              setHistoryOpen(q.trim().length > 0);
+            }}
+            onSubmit={(q) => { if (q.trim()) pushHistory(q); }}
+            placeholder="Search (Enter to save)..."
+            style={{ width: '100%' }}
+            accentColor={c.primary}
+            backgroundColor={c.surface}
+            color={c.text}
+            borderColor={c.border}
+          />
+          {historyOpen && history.length > 0 && historyQuery.trim().length > 0 && (
+            <Box
+              style={{
+                width: '100%',
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: 4,
+                zIndex: 40,
+                gap: 4,
+                backgroundColor: c.bgElevated,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: c.border,
+                paddingLeft: 4,
+                paddingRight: 4,
+                paddingTop: 4,
+                paddingBottom: 4,
+              }}
+              onPointerEnter={() => setHistoryOpen(true)}
+              onPointerLeave={() => setHistoryOpen(false)}
+            >
+              <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                <Text style={{ color: c.textDim, fontSize: 10 }}>Recent searches</Text>
+                <Pressable onPress={clearHistory}>
+                  <Text style={{ color: c.error, fontSize: 10 }}>Clear all</Text>
+                </Pressable>
               </Box>
-            ))}
-          </Box>
-        ) : (
+              <ScrollView style={{ width: '100%', height: Math.min(200, history.length * 34 + 8) }}>
+                <Box style={{ width: '100%', gap: 4 }}>
+                  {history.map((h) => (
+                    <Box
+                      key={h}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingLeft: 10,
+                        paddingRight: 10,
+                        paddingTop: 6,
+                        paddingBottom: 6,
+                        borderRadius: 6,
+                        backgroundColor: c.surface,
+                      }}
+                    >
+                      <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.primary, marginRight: 8 }} />
+                      <Text style={{ color: c.text, fontSize: 12, flexGrow: 1 }}>{h}</Text>
+                    </Box>
+                  ))}
+                </Box>
+              </ScrollView>
+            </Box>
+          )}
+        </Box>
+        {history.length === 0 && (
           <Text style={{ color: c.textDim, fontSize: 12 }}>No history yet. Submit a search above.</Text>
         )}
       </StorySection>
@@ -456,7 +605,13 @@ export function SearchStory() {
 function AppSearchDemo() {
   const c = useThemeColors();
   const [open, setOpen] = useState(false);
+  const [hotQuery, setHotQuery] = useState('');
+  const [hotOpen, setHotOpen] = useState(false);
   const { results, loading, search, navigateTo, clear } = useAppSearch({ debounce: 120 });
+
+  useHotkey('escape', () => setHotOpen(false), {
+    enabled: hotOpen && hotQuery.trim().length > 0,
+  });
 
   return (
     <Searchable id="app-search-demo" style={{ width: '100%', gap: 12 }}>
@@ -536,49 +691,85 @@ function AppSearchDemo() {
       {/* Live results preview */}
       <Box style={{ gap: 6 }}>
         <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Inline hot search</Text>
-        <SearchBar
-          onSearch={search}
-          placeholder="Search live tree..."
-          style={{ width: '100%' }}
-          accentColor={c.primary}
-          backgroundColor={c.surface}
-          color={c.text}
-          borderColor={c.border}
-        />
-        {loading && (
-          <Text style={{ color: c.textDim, fontSize: 12 }}>Searching live tree...</Text>
-        )}
-        {!loading && results.length > 0 && (
-          <Box style={{ gap: 4 }}>
-            {results.slice(0, 5).map((r) => (
-              <Pressable
-                key={r.path}
-                onPress={() => { navigateTo(r); clear(); }}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 6,
-                  paddingBottom: 6,
-                  borderRadius: 6,
-                  backgroundColor: c.surface,
-                  gap: 8,
-                }}
-              >
-                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
-                <Text style={{ color: c.text, fontSize: 12, flexGrow: 1 }}>{r.text}</Text>
-                <Text style={{ color: c.textDim, fontSize: 10 }}>{r.context[0] ?? ''}</Text>
-              </Pressable>
-            ))}
-            {results.length > 5 && (
-              <Text style={{ color: c.textDim, fontSize: 11 }}>
-                +{results.length - 5} more — open AppSearch for full results
-              </Text>
-            )}
-          </Box>
-        )}
-        {!loading && results.length === 0 && (
+        <Box style={{ width: '100%', position: 'relative' }}>
+          <SearchBar
+            onSearch={(q) => {
+              setHotQuery(q);
+              search(q);
+              setHotOpen(q.trim().length > 0);
+            }}
+            placeholder="Search live tree..."
+            style={{ width: '100%' }}
+            accentColor={c.primary}
+            backgroundColor={c.surface}
+            color={c.text}
+            borderColor={c.border}
+          />
+          {hotOpen && hotQuery.trim().length > 0 && (
+            <Box
+              style={{
+                width: '100%',
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: 4,
+                zIndex: 40,
+                gap: 4,
+                backgroundColor: c.bgElevated,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: c.border,
+                paddingLeft: 4,
+                paddingRight: 4,
+                paddingTop: 4,
+                paddingBottom: 4,
+              }}
+              onPointerEnter={() => setHotOpen(true)}
+              onPointerLeave={() => setHotOpen(false)}
+            >
+              {loading && (
+                <Text style={{ color: c.textDim, fontSize: 12 }}>Searching live tree...</Text>
+              )}
+              {!loading && results.length > 0 && (
+                <ScrollView style={{ width: '100%', height: Math.min(220, results.length * 38 + 8) }}>
+                  <Box style={{ gap: 4 }}>
+                    {results.slice(0, 12).map((r) => (
+                      <Pressable
+                        key={r.path}
+                        onPress={() => { navigateTo(r); clear(); setHotQuery(''); setHotOpen(false); }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingLeft: 10,
+                          paddingRight: 10,
+                          paddingTop: 6,
+                          paddingBottom: 6,
+                          borderRadius: 6,
+                          backgroundColor: c.surface,
+                          gap: 8,
+                        }}
+                      >
+                        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
+                        <Text style={{ color: c.text, fontSize: 12, flexGrow: 1 }}>{r.text}</Text>
+                        <Text style={{ color: c.textDim, fontSize: 10 }}>{r.context[0] ?? ''}</Text>
+                      </Pressable>
+                    ))}
+                    {results.length > 12 && (
+                      <Text style={{ color: c.textDim, fontSize: 11 }}>
+                        +{results.length - 12} more — open AppSearch for full results
+                      </Text>
+                    )}
+                  </Box>
+                </ScrollView>
+              )}
+              {!loading && results.length === 0 && (
+                <Text style={{ color: c.textDim, fontSize: 12 }}>No live matches</Text>
+              )}
+            </Box>
+          )}
+        </Box>
+        {hotQuery.trim().length === 0 && (
           <Text style={{ color: c.textDim, fontSize: 12 }}>Type to search the live tree</Text>
         )}
       </Box>

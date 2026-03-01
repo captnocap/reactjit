@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Box } from './primitives';
-import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 
 export interface SparklineProps {
@@ -63,20 +62,15 @@ export function Sparkline({
             onPointerEnter={interactive ? () => handleHover(i) : undefined}
             onPointerLeave={interactive ? () => handleHover(null) : undefined}
             onClick={interactive && onPointPress ? () => onPointPress(i, value) : undefined}
+            tooltip={interactive ? { content: `${value}\nindex ${i}`, type: 'anchor', anchor: 'top', layout: 'descriptive' } : undefined}
             style={{
               width: barWidth,
               height: barHeight,
               backgroundColor: color,
               borderRadius: 1,
-              position: interactive ? 'relative' : undefined,
               opacity: interactive && anyHovered && !isHovered ? 0.35 : 1,
             }}
-          >
-            <ChartTooltip visible={interactive && isHovered} anchor="top">
-              <ChartTooltip.Value>{`${value}`}</ChartTooltip.Value>
-              <ChartTooltip.Detail>{`index ${i}`}</ChartTooltip.Detail>
-            </ChartTooltip>
-          </Box>
+          />
         );
       })}
     </Box>
