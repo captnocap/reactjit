@@ -19,8 +19,9 @@
  * const [tab, setTab] = useHotState('settings.tab', 'general');
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useBridgeOptional } from './context';
+import { getOriginalUseState } from './preserveState';
 
 type SetStateAction<T> = T | ((prev: T) => T);
 
@@ -45,6 +46,8 @@ export function useHotState<T>(
   const bridge = useBridgeOptional();
 
   // On first render: check injection cache (synchronous — zero flash)
+  // Use original useState to avoid double-preservation when preserveState is active
+  const useState = getOriginalUseState();
   const [value, setValueState] = useState<T>(() => {
     const cached = readCache<T>(key);
     return cached !== undefined ? cached : defaultValue;

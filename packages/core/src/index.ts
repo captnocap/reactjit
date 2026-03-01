@@ -87,6 +87,14 @@ export { useLocalStore, type UseLocalStoreOptions } from './useLocalStore';
 // Hot state (useState that survives HMR — Lua memory, not disk)
 export { useHotState } from './useHotState';
 
+// State preservation (auto-intercept useState for HMR survival)
+export {
+  enableStatePreservation,
+  disableStatePreservation,
+  isStatePreservationEnabled,
+  setPreservationBridge,
+} from './preserveState';
+
 // GIF recorder (capture Love2D window as animated GIF via ffmpeg)
 export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
 
