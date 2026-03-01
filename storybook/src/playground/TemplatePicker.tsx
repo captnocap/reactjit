@@ -78,9 +78,12 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
       }}>
         {Comp && (
           <PreviewBoundary>
+            {/* overflow:hidden here clips template children at the intended
+                layout boundary, preventing them from escaping into the wider tree */}
             <Box style={{
               width: INNER_WIDTH,
               height: INNER_HEIGHT,
+              overflow: 'hidden',
               transform: { scaleX: PREVIEW_SCALE, scaleY: PREVIEW_SCALE, originX: 0, originY: 0 },
             }}>
               <Comp />
