@@ -48,7 +48,7 @@ Build steps for each target:
     6. Create launcher script
     7. Pack into single self-extracting binary
     8. Output: dist/<project-name>
-    Entry: src/main-love.tsx or src/native-main.tsx or src/main.tsx (first found)
+    Entry: src/main-love.tsx or src/main.tsx (first found)
 
   dist:terminal:
     1. Bundle JS (CJS for Node.js, --platform=node, --external:ws)

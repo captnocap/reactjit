@@ -1,5 +1,5 @@
 import React from 'react';
-import { createLove2DApp, useLoveState } from '@reactjit/native';
+import { createLove2DApp, useLoveState } from '@reactjit/renderer';
 import App from './App';
 import type { SystemInfo } from './sysinfo';
 

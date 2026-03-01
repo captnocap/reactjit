@@ -233,14 +233,12 @@ local function classifyRow(text, row, totalRows)
   if text:find("for shortcuts", 1, true) or text:find("for short", 1, true) or text:find("esc to interrupt", 1, true) then return "status_bar" end
 
   -- Idle prompt: ❯ alone (possibly with spaces) near bottom of screen
-  -- Must check BEFORE thinking — ❯ shares byte 0xE2 with spinner chars
   if row >= totalRows - 8 then
     local stripped = text:match("^%s*(.-)%s*$")
     if stripped == "❯" or stripped == ">" then return "idle_prompt" end
   end
 
   -- User prompt: ❯ or > followed by typed text
-  -- ❯ followed by text — check both regular space and NBSP (C2 A0 = \194\160)
   if text:find("❯", 1, true) and not text:find("Imagining", 1, true) then
     local pos = text:find("❯", 1, true)
     local rest = text:sub(pos + 3):gsub("^\194\160", ""):gsub("^%s+", "")
@@ -319,11 +317,11 @@ end
 
 local function spawnClaude(state, props)
   local executable = props.executable or "claude"
-  local args = { "--verbose" }
+  local claudeArgs = { "--verbose" }
 
   if props.model and props.model ~= "" then
-    args[#args + 1] = "--model"
-    args[#args + 1] = props.model
+    claudeArgs[#claudeArgs + 1] = "--model"
+    claudeArgs[#claudeArgs + 1] = props.model
   end
 
   local cwd = props.workingDir or "."
@@ -331,9 +329,37 @@ local function spawnClaude(state, props)
   -- libvterm: damage-driven ANSI parser
   state.vterm = VTerm.new(TERM_ROWS, TERM_COLS)
 
-  -- PTY: gives Claude isatty()=true
+  -- Wrap in tmux so the Claude process survives Love2D crashes.
+  -- tmux new-session -A: attach if session exists, create if not.
+  -- Each sessionId gets its own tmux session (Fleet agents stay independent).
+  local tmuxSession = "rjit-claude-" .. (props.sessionId or "default")
+  local shell, args
+
+  -- Build the full command string for tmux to execute
+  local cmdParts = { executable }
+  for _, a in ipairs(claudeArgs) do cmdParts[#cmdParts + 1] = a end
+  local fullCmd = table.concat(cmdParts, " ")
+
+  -- Check if tmux is available
+  local tmuxAvailable = os.execute("command -v tmux >/dev/null 2>&1")
+  -- os.execute returns different types in Lua 5.1 vs 5.2+
+  if tmuxAvailable == 0 or tmuxAvailable == true then
+    -- Kill any stale session from a previous crash (destroy didn't run).
+    -- Without this, -A reattaches to a dead session instead of creating fresh.
+    os.execute("tmux kill-session -t " .. tmuxSession .. " 2>/dev/null")
+    shell = "tmux"
+    args = { "new-session", "-s", tmuxSession, fullCmd }
+    io.write("[claude_session] Spawning in tmux session: " .. tmuxSession .. "\n"); io.flush()
+  else
+    -- Fallback: spawn directly (no crash recovery, but still works)
+    shell = executable
+    args = claudeArgs
+    io.write("[claude_session] tmux not found, spawning directly (no crash recovery)\n"); io.flush()
+  end
+
+  -- PTY: gives Claude isatty()=true (via tmux, which preserves the TTY)
   state.proc = PTY.open({
-    shell = executable,
+    shell = shell,
     args  = args,
     cwd   = cwd,
     rows  = TERM_ROWS,
@@ -347,9 +373,14 @@ local function spawnClaude(state, props)
       TERM            = "xterm-256color",
       FORCE_COLOR     = "1",
       COLORTERM       = "truecolor",
+      -- Force tmux to use /bin/sh for spawning the command.
+      -- Without this, tmux uses $SHELL (user's zsh/bash) which loads
+      -- .zshrc/.bashrc on every session — adding 5-15s of startup delay.
+      SHELL           = "/bin/sh",
     },
   })
 
+  state._tmuxSession    = tmuxSession
   state.running         = true
   state.mode            = MODE_SPLASH
   state.settleAt        = nil
@@ -962,6 +993,13 @@ Capabilities.register("ClaudeCode", {
     -- Drain damage events from vterm
     local events = state.vterm:drain()
 
+    -- Snapshot settled cursor position for proxy input bar
+    local cursor = state.vterm:getCursor()
+    if cursor then
+      state._settledCursorRow = cursor.row
+      state._settledCursorCol = cursor.col
+    end
+
     if events.damaged then
       -- Accumulate dirty rows
       for _, row in ipairs(events.dirtyRows) do
@@ -1198,6 +1236,11 @@ Capabilities.register("ClaudeCode", {
     end
     if state.proc then state.proc:kill(); state.proc:close(); state.proc = nil end
     if state.vterm then state.vterm:free(); state.vterm = nil end
+    -- Kill the tmux session so stale sessions don't accumulate.
+    -- On next app start, -A creates a fresh session instead of reattaching to a dead one.
+    if state._tmuxSession then
+      os.execute("tmux kill-session -t " .. state._tmuxSession .. " 2>/dev/null")
+    end
   end,
 })
 
@@ -1206,7 +1249,7 @@ Capabilities.register("ClaudeCode", {
 local rpcHandlers = {}
 
 rpcHandlers["claude:send"] = function(args)
-  local id = (args and args.session) or _focusedId
+  local id = (args and args.session and args.session ~= "default" and args.session) or _focusedId
   local state = _sessions[id]
   if not state then return { error = "No session" } end
   if not args or not args.message then return { error = "Missing 'message'" } end
@@ -1215,16 +1258,22 @@ rpcHandlers["claude:send"] = function(args)
 end
 
 rpcHandlers["claude:stop"] = function(args)
-  local id = (args and args.session) or _focusedId
+  local id = (args and args.session and args.session ~= "default" and args.session) or _focusedId
   local state = _sessions[id]
   if not state then return { error = "No session" } end
   if state.proc then state.proc:write("\x03") end
   return { ok = true }
 end
 
+rpcHandlers["claude:write"] = function(args)
+  if not args or not args.data then return { error = "Missing 'data'" } end
+  local ok = Session.writeRaw(args.data)
+  return { ok = ok }
+end
+
 rpcHandlers["claude:respond"] = function(args)
   if not args or not args.choice then return { error = "Missing 'choice'" } end
-  local id = (args and args.session) or _focusedId
+  local id = (args and args.session and args.session ~= "default" and args.session) or _focusedId
   local state = _sessions[id]
   if not state then return { error = "No session" } end
   -- Pass pushEvent=nil since RPC doesn't have it; React already knows
@@ -1233,7 +1282,7 @@ rpcHandlers["claude:respond"] = function(args)
 end
 
 rpcHandlers["claude:screen"] = function(args)
-  local id = (args and args.session) or _focusedId
+  local id = (args and args.session and args.session ~= "default" and args.session) or _focusedId
   local state = _sessions[id]
   if not state or not state.vterm then return { error = "No vterm" } end
   return {
@@ -1244,7 +1293,7 @@ rpcHandlers["claude:screen"] = function(args)
 end
 
 rpcHandlers["claude:mode"] = function(args)
-  local id = (args and args.session) or _focusedId
+  local id = (args and args.session and args.session ~= "default" and args.session) or _focusedId
   local state = _sessions[id]
   if not state then return { error = "No session" } end
   return { mode = state.mode }
@@ -1260,7 +1309,10 @@ rpcHandlers["claude:autoaccept"] = function(args)
 end
 
 rpcHandlers["claude:classified"] = function(args)
-  local id = (args and args.session) or _focusedId
+  local id = _focusedId
+  if args and args.session and args.session ~= "default" then
+    id = args.session
+  end
   local state = _sessions[id]
   if not state or not state.vterm then return { rows = {}, mode = "no_session" } end
 
@@ -1280,7 +1332,203 @@ rpcHandlers["claude:classified"] = function(args)
     rows[#rows + 1] = { row = r, kind = kind, text = text }
   end
 
-  return { rows = rows, mode = state.mode, boundary = state._inputBoundary or numRows }
+  -- ── Block pass: blank lines delimit blocks ─────────────────────────
+  -- Claude always puts a blank line between actions. Everything between
+  -- two blank lines is one block. The first *major* semantic row in the
+  -- block determines the kind for ALL other rows in that block.
+  --
+  -- Major kinds (these SET the block kind):
+  --   banner, user_prompt, assistant_text, tool, result, thinking,
+  --   plan_mode, permission, error, diff, status_bar, input_border
+  -- Everything else (text, box_drawing, list_info, menu_option,
+  -- menu_title, etc.) INHERITS the block kind.
+
+  local BLOCK_SETTERS = {
+    banner = true, user_prompt = true, thinking = true,
+    tool = true, result = true, diff = true,
+    plan_mode = true, permission = true, error = true,
+    status_bar = true, input_border = true, input_zone = true,
+    idle_prompt = true, thought_complete = true, task_active = true,
+    image_attachment = true,
+  }
+
+  local blockKind = nil
+  for i = 1, #rows do
+    local text = rows[i].text
+    local kind = rows[i].kind
+    local isEmpty = text:match("^%s*$")
+
+    if isEmpty then
+      blockKind = nil  -- reset on blank line
+    elseif BLOCK_SETTERS[kind] then
+      -- Major semantic row: this sets the block's kind
+      blockKind = kind
+    elseif blockKind then
+      -- Everything else inherits the block's kind
+      rows[i].kind = blockKind
+    end
+  end
+
+  -- ── Structural input area detection ──────────────────────────────
+  -- Scan from the bottom to find the input area: ────, ❯/>, ────
+  -- Re-tag those rows as input_border/input_zone regardless of what
+  -- classifyRow returned. This is position-independent — it finds the
+  -- actual pattern, not a row number guess.
+  local n = #rows
+  if n >= 2 then
+    -- Find the last ──── row (bottom border)
+    local botBorder = nil
+    for i = n, math.max(1, n - 5), -1 do
+      local s = rows[i].text:match("^%s*(.-)%s*$")
+      if s:find("────", 1, true) then
+        botBorder = i
+        break
+      end
+    end
+
+    if botBorder and botBorder > 1 then
+      -- Find top border: scan upward from botBorder for another ────
+      local topBorder = nil
+      for i = botBorder - 1, math.max(1, botBorder - 6), -1 do
+        local s = rows[i].text:match("^%s*(.-)%s*$")
+        if s:find("────", 1, true) then
+          topBorder = i
+          break
+        end
+      end
+
+      if topBorder then
+        -- Verify there's a prompt (❯ or >) somewhere between the borders
+        local hasPrompt = false
+        for i = topBorder + 1, botBorder - 1 do
+          if rows[i].text:find("❯", 1, true) or rows[i].text:match("^>%s") then
+            hasPrompt = true
+            break
+          end
+        end
+
+        if hasPrompt then
+          rows[topBorder].kind = "input_border"
+          rows[botBorder].kind = "input_border"
+          for zi = topBorder + 1, botBorder - 1 do
+            rows[zi].kind = "input_zone"
+          end
+        end
+      end
+    end
+  end
+
+  -- Include PTY cursor position for proxy input bar.
+  -- Use the vterm cursor directly — getPromptState() fails in splash mode
+  -- because _inputBoundary isn't set yet. Instead, find the input_zone row
+  -- we already classified above, and compute cursor offset from that.
+  -- Extract prompt text and cursor position from input_zone rows.
+  -- The CLI (Ink) parks the vterm cursor below visible content, so we
+  -- can't use vterm:getCursor(). Instead, find the ❯ row, extract text
+  -- after the prompt symbol, and place cursor at end of text.
+  local vt = state.vterm
+  local promptText = ""
+  local promptCursorCol = -1
+
+  for _, r in ipairs(rows) do
+    if r.kind == "input_zone" then
+      local t = r.text
+      -- Strip prompt symbol and leading whitespace
+      local pos = t:find("❯", 1, true)
+      if pos then
+        t = t:sub(pos + 3)  -- ❯ is 3 bytes in UTF-8
+      elseif t:match("^>%s") then
+        t = t:sub(3)
+      end
+      -- Strip leading NBSP / spaces
+      t = t:gsub("^\194\160", ""):gsub("^%s+", "")
+      if #t > 0 then
+        if #promptText > 0 then promptText = promptText .. "\n" end
+        promptText = promptText .. t
+      end
+    end
+  end
+
+  -- If prompt text matches the placeholder, it's not user input — show as empty
+  if state._placeholder and #promptText > 0 then
+    -- The placeholder in vterm may be truncated, so check if one starts with the other
+    local ph = state._placeholder
+    if promptText == ph or ph:sub(1, #promptText) == promptText or promptText:sub(1, #ph) == ph then
+      promptText = ""
+    end
+  end
+
+  -- Try to get cursor col from vterm — the col may track even if the row is wrong.
+  -- Find where text starts on the prompt row, then compute offset.
+  local cursor = vt and vt:getCursor()
+  if cursor and #promptText > 0 then
+    -- Find the input_zone row with the ❯ prompt
+    local promptVtRow = nil
+    local textStartCol = 0
+    for _, r in ipairs(rows) do
+      if r.kind == "input_zone" and (r.text:find("❯", 1, true) or r.text:match("^>%s")) then
+        promptVtRow = r.row
+        -- Scan cells to find where user text starts
+        local foundPrompt = false
+        for col = 0, 15 do
+          local cell = vt:getCell(r.row, col)
+          if not cell or not cell.char then break end
+          local ch = cell.char
+          if not foundPrompt and (ch:find("❯", 1, true) or ch == "!" or ch == ">" or ch == "›") then
+            foundPrompt = true
+          elseif foundPrompt then
+            if ch == " " or ch == "\194\160" or ch == "" then
+              textStartCol = col + 1
+            else
+              textStartCol = col
+            end
+            break
+          end
+        end
+        break
+      end
+    end
+
+    -- Scan cells on the prompt row for cursor indicator.
+    -- Ink renders cursor as inverse/bold/different-bg character.
+    -- Log all cell attributes to find the pattern.
+    if promptVtRow then
+      local cols = select(2, vt:size())
+      local cursorCol = nil
+      for col = textStartCol, math.min(cols - 1, textStartCol + #promptText + 1) do
+        local cell = vt:getCell(promptVtRow, col)
+        if cell then
+          local hasBg = cell.bg and (cell.bg[1] > 0 or cell.bg[2] > 0 or cell.bg[3] > 0)
+          local isReverse = cell.reverse
+          local isBold = cell.bold
+          if hasBg or isReverse then
+            if not cursorCol then
+              cursorCol = col - textStartCol
+            end
+          end
+        end
+      end
+      if cursorCol then
+        promptCursorCol = math.min(cursorCol, #promptText)
+      else
+        promptCursorCol = #promptText
+      end
+    else
+      promptCursorCol = #promptText
+    end
+  else
+    promptCursorCol = #promptText
+  end
+
+  return {
+    rows = rows,
+    mode = state.mode,
+    boundary = state._inputBoundary or numRows,
+    promptCursorCol = promptCursorCol,
+    cursorVisible = true,
+    promptText = promptText,
+    placeholder = state._placeholder,
+  }
 end
 
 -- ── Graph / search / turn RPCs ───────────────────────────────────────
@@ -1317,7 +1565,7 @@ rpcHandlers["claude:graph"] = function(args)
         parentId = node.parentId,
         rowStart = node.rowStart,
         rowEnd = node.rowEnd,
-        text = node.text,
+        text = node.text or (node.lines and table.concat(node.lines, "\n") or ""),
         lineCount = #node.lines,
         childCount = #node.childrenIds,
         childrenIds = node.childrenIds,
@@ -1423,6 +1671,45 @@ rpcHandlers["claude:diff"] = function(args)
   end
 
   return { ops = ops }
+end
+
+-- Remove an image attachment by sending the CLI's keystroke sequence:
+-- up-arrow to enter selection, navigate to the target, backspace to remove, down to return
+rpcHandlers["claude:removeImage"] = function(args)
+  local index = args and args.index or 0       -- 0-indexed from left
+  local total = args and args.total or 1
+  -- Enter image selection mode (up arrow) — CLI selects the LAST image
+  Session.writeRaw("\x1b[A")
+  -- Navigate left to reach the target image (CLI starts at rightmost)
+  local moves = total - 1 - index
+  for i = 1, moves do
+    Session.writeRaw("\x1b[D")  -- left arrow
+  end
+  -- Small delay would be ideal but writeRaw is synchronous buffered, CLI processes in order
+  Session.writeRaw("\x7f")      -- backspace to remove
+  Session.writeRaw("\x1b[B")    -- down arrow to return to input
+  return { ok = true }
+end
+
+rpcHandlers["claude:openFile"] = function(args)
+  if not args or not args.path then return { error = "Missing path" } end
+  os.execute('xdg-open "' .. args.path .. '" 2>/dev/null &')
+  return { ok = true }
+end
+
+rpcHandlers["claude:images"] = function()
+  local cacheDir = os.getenv("HOME") .. "/.claude/image-cache"
+  local handle = io.popen('ls -t "' .. cacheDir .. '" 2>/dev/null')
+  if not handle then return { images = {} } end
+  local listing = handle:read("*a") or ""
+  handle:close()
+  local images = {}
+  for name in listing:gmatch("[^\n]+") do
+    if name:match("%.png$") or name:match("%.jpg$") or name:match("%.jpeg$") then
+      images[#images + 1] = cacheDir .. "/" .. name
+    end
+  end
+  return { images = images }
 end
 
 local originalGetHandlers = Capabilities.getHandlers

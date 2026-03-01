@@ -77,7 +77,7 @@ local function queueEvent(nodeId, eventType, value)
 end
 
 -- ============================================================================
--- Font helper (works on both Love2D and SDL2)
+-- Font helper
 -- ============================================================================
 
 -- Default font size for labels

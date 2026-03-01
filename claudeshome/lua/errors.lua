@@ -1,21 +1,30 @@
 --[[
   errors.lua -- Error collection + visual overlay
 
-  Stores a rolling buffer of recent errors and renders a red overlay
-  on top of everything using raw Love2D calls (NOT through the react
-  tree/layout/painter pipeline). This means it works even if those
-  systems are broken.
+  Two modes:
+    1. Normal overlay: 40% bottom panel on top of the running app (non-fatal errors)
+    2. BSOD mode: full-screen crash recovery screen with event trail, deep
+       stack trace, copy-to-clipboard, and reboot controls
+
+  BSOD mode activates automatically when crashRecoveryMode is true.
 
   Usage:
     local errors = require("lua.errors")
-    errors.push({ source = "js", message = "not a function", stack = "...", context = "event dispatch" })
+    errors.push({ source = "js", message = "...", stack = "...", context = "...", trail = {...} })
     -- In love.draw():
-    errors.draw()
+    errors.draw()            -- normal overlay
+    errors.drawBSOD()        -- full-screen crash recovery (call from init.lua when crashRecoveryMode)
     -- In love.mousepressed():
     errors.mousepressed(x, y)
+    -- In crash recovery keyboard routing:
+    errors.keypressed(key)
 ]]
 
 local Errors = {}
+
+-- Inline code editor for BSOD
+local editorOk, bsodEditor = pcall(require, "lua.bsod_editor")
+if not editorOk then bsodEditor = nil end
 
 -- Rolling buffer of recent errors (max 20)
 local buffer = {}
@@ -31,20 +40,61 @@ local visible = false
 local copyBtnRect = { x = 0, y = 0, w = 0, h = 0 }
 local copiedFlashUntil = 0
 
--- Overlay height as fraction of screen
+-- BSOD state
+local bsodCopied = false
+local bsodCopiedTimer = 0
+local bsodRebootStatus = nil   -- nil | "rebooting" | "failed"
+local bsodRebootTimer = 0
+local bsodSpinnerIdx = 1
+local bsodSpinnerTimer = 0
+local spinnerChars = { "|", "/", "-", "\\" }
+local scrollOffset = 0  -- scroll position for BSOD content
+
+-- Callback to trigger reload (set by init.lua)
+local reloadCallback = nil
+
+-- Overlay height as fraction of screen (normal mode)
 local OVERLAY_HEIGHT_FRAC = 0.4
 local MIN_OVERLAY_HEIGHT = 200
 local MAX_STACK_LINES = 6
 
--- Colors (RGBA 0-1)
+-- Normal overlay colors
 local BG_COLOR      = { 0.86, 0.15, 0.15, 0.92 }  -- #dc2626
 local TEXT_COLOR     = { 0.996, 0.949, 0.949, 1 }   -- #fef2f2
 local SECONDARY     = { 0.988, 0.647, 0.647, 1 }    -- #fca5a5
 local DIM_COLOR     = { 0.988, 0.647, 0.647, 0.7 }  -- #fca5a5 dimmed
 local SHADOW_COLOR  = { 0, 0, 0, 0.4 }
 
+-- BSOD colors (dark theme)
+local BSOD_BG       = { 0.06, 0.04, 0.08, 1 }
+local BSOD_ACCENT   = { 0.85, 0.20, 0.25, 1 }
+local BSOD_TEXT      = { 0.92, 0.90, 0.88, 1 }
+local BSOD_DIM       = { 0.55, 0.52, 0.50, 1 }
+local BSOD_TRACE     = { 0.75, 0.55, 0.50, 1 }
+local BSOD_TRAIL     = { 0.50, 0.60, 0.75, 1 }
+local BSOD_GREEN     = { 0.30, 0.80, 0.40, 1 }
+local BSOD_COPIED    = { 0.40, 0.85, 0.50, 1 }
+local BSOD_BAR       = { 0.08, 0.06, 0.10, 1 }
+
+--- Safely create a monospace-ish font for the editor.
+--- Some Love2D builds throw if "monospace" isn't a real font file.
+local function getEditorFont(size)
+  local okMono, mono = pcall(love.graphics.newFont, "monospace", size)
+  if okMono and mono then return mono end
+
+  local okFallback, fallback = pcall(love.graphics.newFont, size)
+  if okFallback and fallback then return fallback end
+
+  return love.graphics.getFont()
+end
+
+--- Set the reload callback (called by init.lua on setup).
+function Errors.setReloadCallback(fn)
+  reloadCallback = fn
+end
+
 --- Push a new error into the buffer and show the overlay.
---- @param err table { source, message, stack, context }
+--- @param err table { source, message, stack, context, trail }
 function Errors.push(err)
   local entry = {
     timestamp = os.date("%H:%M:%S"),
@@ -52,6 +102,7 @@ function Errors.push(err)
     message = err.message or "unknown error",
     stack = err.stack or "",
     context = err.context or "",
+    trail = err.trail or nil,  -- event trail snapshot (array of {type, args, time})
   }
 
   -- Add to buffer (rolling)
@@ -60,9 +111,19 @@ function Errors.push(err)
     table.remove(buffer, 1)
   end
 
-  -- Show the latest error
-  currentIndex = #buffer
+  -- Show this error — but if we're already displaying an error (crash cascade),
+  -- keep the index on the FIRST error in the sequence. That's the root cause;
+  -- subsequent errors are cascade noise from corrupted state.
+  if not visible then
+    currentIndex = #buffer
+  end
   visible = true
+  scrollOffset = 0
+
+  -- Initialize the inline code editor with the crash location
+  if bsodEditor then
+    pcall(bsodEditor.init, entry.message, entry.stack)
+  end
 
   -- Print structured output to terminal
   Errors._printToTerminal(entry)
@@ -94,18 +155,355 @@ end
 --- Format an error entry as a plain-text string for clipboard.
 local function formatForClipboard(entry)
   local parts = {}
-  parts[#parts + 1] = "ERROR"
+  parts[#parts + 1] = "REACTJIT CRASH REPORT"
+  parts[#parts + 1] = string.rep("=", 60)
+  parts[#parts + 1] = ""
+  parts[#parts + 1] = "Time: " .. (entry.timestamp or "unknown")
+
   if entry.context and entry.context ~= "" then
-    parts[#parts + 1] = "  --  " .. entry.context
+    parts[#parts + 1] = "Context: " .. entry.context
   end
-  parts[#parts + 1] = "\n"
+  parts[#parts + 1] = ""
+
   local prefix = entry.source ~= "unknown" and (entry.source .. ": ") or ""
-  parts[#parts + 1] = prefix .. entry.message .. "\n"
+  parts[#parts + 1] = "ERROR"
+  parts[#parts + 1] = prefix .. entry.message
+  parts[#parts + 1] = ""
+
   if entry.stack and entry.stack ~= "" then
-    parts[#parts + 1] = "\n" .. entry.stack .. "\n"
+    parts[#parts + 1] = "TRACEBACK"
+    parts[#parts + 1] = string.rep("-", 60)
+    parts[#parts + 1] = entry.stack
+    parts[#parts + 1] = ""
   end
-  return table.concat(parts)
+
+  -- Event trail
+  if entry.trail and #entry.trail > 0 then
+    parts[#parts + 1] = "EVENT TRAIL (" .. #entry.trail .. " events, most recent first)"
+    parts[#parts + 1] = string.rep("-", 60)
+    for i = #entry.trail, math.max(1, #entry.trail - 29), -1 do
+      local e = entry.trail[i]
+      local timeStr = string.format("%.3fs", e.time)
+      local argsPart = e.args ~= "" and ("  " .. e.args) or ""
+      parts[#parts + 1] = "  " .. timeStr .. "  " .. e.type .. argsPart
+    end
+  end
+
+  return table.concat(parts, "\n")
 end
+
+-- ============================================================================
+-- BSOD Mode: Full-screen crash recovery
+-- ============================================================================
+
+--- Draw the full-screen BSOD crash recovery screen.
+--- Called by init.lua when crashRecoveryMode is true.
+function Errors.drawBSOD()
+  if currentIndex < 1 or currentIndex > #buffer then return end
+
+  local entry = buffer[currentIndex]
+  if not entry then return end
+
+  local W = love.graphics.getWidth()
+  local H = love.graphics.getHeight()
+  local pad = 24
+  local barH = 44
+  local smallFont = love.graphics.newFont(11)
+
+  -- Background + accent bar (always safe)
+  love.graphics.clear(BSOD_BG[1], BSOD_BG[2], BSOD_BG[3])
+  love.graphics.setColor(BSOD_ACCENT)
+  love.graphics.rectangle("fill", 0, 0, W, 4)
+
+  -- Content section (protected — editor/stack rendering can fail)
+  pcall(function()
+    local y = pad + 4
+
+    -- Title
+    local titleFont = love.graphics.newFont(18)
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(BSOD_ACCENT)
+    love.graphics.print("ReactJIT crashed", pad, y)
+    y = y + 28
+
+    -- Timestamp + context
+    love.graphics.setFont(smallFont)
+    love.graphics.setColor(BSOD_DIM)
+    local contextStr = entry.timestamp
+    if entry.context ~= "" then
+      contextStr = contextStr .. "  |  " .. entry.context
+    end
+    love.graphics.print(contextStr, pad, y)
+    y = y + 16
+
+    -- Error counter (if multiple)
+    if #buffer > 1 then
+      love.graphics.setColor(BSOD_DIM)
+      love.graphics.print("Error " .. currentIndex .. " of " .. #buffer .. "  (Tab to cycle)", W - pad - 200, pad + 4)
+    end
+
+    -- Error message (compact — 2 lines max)
+    local bodyFont = love.graphics.newFont(12)
+    love.graphics.setFont(bodyFont)
+    love.graphics.setColor(BSOD_TEXT)
+
+    local msgPrefix = entry.source ~= "unknown" and (entry.source .. ": ") or ""
+    local fullMsg = msgPrefix .. entry.message
+    -- Truncate to ~2 lines worth
+    if #fullMsg > 120 then fullMsg = fullMsg:sub(1, 117) .. "..." end
+    love.graphics.print(fullMsg, pad, y)
+    y = y + 18
+
+    -- ================================================================
+    -- CODE EDITOR SECTION — takes ~50% of screen height
+    -- ================================================================
+    local editorActive = bsodEditor and bsodEditor.isActive()
+
+    if editorActive then
+      local editorFont = getEditorFont(12)
+      local editorH = math.floor((H - y - barH - 8) * 0.55)
+      editorH = math.max(editorH, 120)
+
+      bsodEditor.draw(pad, y, W - pad * 2, editorH, editorFont)
+      y = y + editorH + 8
+    else
+      -- No file found — show hint
+      love.graphics.setColor(BSOD_DIM)
+      love.graphics.setFont(smallFont)
+      if entry.source == "js" then
+        love.graphics.print("  Source is a compiled bundle — edit your .tsx source and save to trigger HMR reload", pad, y)
+      else
+        love.graphics.print("  Could not locate source file for inline editing", pad, y)
+      end
+      y = y + 20
+    end
+
+    -- ================================================================
+    -- STACK TRACE + EVENT TRAIL (scrollable, below editor)
+    -- ================================================================
+    local trailSectionY = y
+    local trailSectionH = H - y - barH - 4
+
+    -- Scissor for scrollable section
+    love.graphics.setScissor(0, trailSectionY, W, trailSectionH)
+
+    local sy = trailSectionY - scrollOffset
+
+    -- Separator
+    love.graphics.setColor(BSOD_ACCENT[1], BSOD_ACCENT[2], BSOD_ACCENT[3], 0.3)
+    love.graphics.rectangle("fill", pad, sy, W - pad * 2, 1)
+    sy = sy + 8
+
+    -- Stack trace
+    if entry.stack and entry.stack ~= "" then
+      love.graphics.setColor(BSOD_DIM)
+      love.graphics.setFont(smallFont)
+      love.graphics.print("TRACEBACK", pad, sy)
+      sy = sy + 14
+
+      for line in entry.stack:gmatch("[^\n]+") do
+        love.graphics.setColor(BSOD_TRACE)
+        love.graphics.print("  " .. line, pad, sy)
+        sy = sy + 14
+      end
+      sy = sy + 8
+    end
+
+    -- Event trail section
+    local trail = entry.trail
+    if trail and #trail > 0 then
+      love.graphics.setColor(BSOD_ACCENT[1], BSOD_ACCENT[2], BSOD_ACCENT[3], 0.3)
+      love.graphics.rectangle("fill", pad, sy, W - pad * 2, 1)
+      sy = sy + 8
+
+      love.graphics.setColor(BSOD_DIM)
+      love.graphics.setFont(smallFont)
+      love.graphics.print("EVENT TRAIL (" .. #trail .. " events, most recent first)", pad, sy)
+      sy = sy + 16
+
+      love.graphics.setFont(bodyFont)
+      local maxTrailShow = math.min(#trail, 25)
+      for i = #trail, math.max(1, #trail - maxTrailShow + 1), -1 do
+        local e = trail[i]
+        local timeStr = string.format("%.3fs", e.time)
+        local argsPart = e.args ~= "" and ("  " .. e.args) or ""
+        love.graphics.setColor(BSOD_TRAIL)
+        love.graphics.print("  " .. timeStr .. "  " .. e.type .. argsPart, pad, sy)
+        sy = sy + 14
+      end
+    end
+
+    love.graphics.setScissor()
+  end)
+
+  -- Clean up any leaked scissor from the content pcall
+  love.graphics.setScissor()
+
+  -- Bottom controls bar — ALWAYS renders, even if content section errored.
+  -- The pcall above may fail (editor crash, font issue, etc.) but the user
+  -- still needs to see key hints and the HMR watcher status.
+  local barY = H - barH
+  love.graphics.setColor(BSOD_BAR)
+  love.graphics.rectangle("fill", 0, barY, W, barH)
+  love.graphics.setColor(BSOD_ACCENT[1], BSOD_ACCENT[2], BSOD_ACCENT[3], 0.3)
+  love.graphics.rectangle("fill", 0, barY, W, 1)
+
+  love.graphics.setFont(smallFont)
+
+  -- Spinner + watcher status
+  bsodSpinnerTimer = bsodSpinnerTimer + (love.timer.getDelta() or 0.016)
+  if bsodSpinnerTimer >= 0.15 then
+    bsodSpinnerTimer = 0
+    bsodSpinnerIdx = (bsodSpinnerIdx % #spinnerChars) + 1
+  end
+  -- Tick reboot status timer
+  if bsodRebootStatus then
+    bsodRebootTimer = bsodRebootTimer - (love.timer.getDelta() or 0.016)
+    if bsodRebootTimer <= 0 then bsodRebootStatus = nil end
+  end
+
+  -- Left side: watcher status or reboot feedback
+  if bsodRebootStatus == "failed" then
+    love.graphics.setColor(BSOD_ACCENT)
+    love.graphics.print("Reboot failed — fix your code and save to reload", pad, barY + 14)
+  else
+    love.graphics.setColor(BSOD_GREEN)
+    love.graphics.print(spinnerChars[bsodSpinnerIdx] .. " Watching for code changes...", pad, barY + 14)
+  end
+
+  -- Right side: flash messages + key hints
+  if bsodCopied then
+    bsodCopiedTimer = bsodCopiedTimer - (love.timer.getDelta() or 0.016)
+    if bsodCopiedTimer <= 0 then bsodCopied = false end
+  end
+
+  local editorActive = bsodEditor and bsodEditor.isActive()
+  local hints
+  if bsodCopied then
+    hints = "Copied to clipboard!"
+    love.graphics.setColor(BSOD_COPIED)
+  elseif editorActive then
+    hints = "Ctrl+S  save+reload   |   R  reboot   |   Ctrl+C  copy   |   Esc  quit"
+    love.graphics.setColor(BSOD_DIM)
+  else
+    hints = "R  reboot   |   Ctrl+C  copy   |   Esc  quit"
+    love.graphics.setColor(BSOD_DIM)
+  end
+  local hintsW = smallFont:getWidth(hints)
+  love.graphics.print(hints, W - pad - hintsW, barY + 14)
+end
+
+--- Handle keypresses in BSOD/crash recovery mode.
+--- Called by ReactJIT.safeCall when crashRecoveryMode is true.
+function Errors.keypressed(key)
+  if currentIndex < 1 or currentIndex > #buffer then return end
+
+  -- Editor gets first crack at keypresses
+  if bsodEditor and bsodEditor.isActive() then
+    local result = bsodEditor.keypressed(key)
+    if result == "save" then
+      -- Save the file and trigger reload
+      local saved = bsodEditor.save()
+      if saved and reloadCallback then
+        pcall(reloadCallback)
+      end
+      return
+    end
+    -- If the editor has an active cursor, it consumed navigation keys
+    -- Only fall through for global shortcuts
+    local ctrl = love.keyboard.isDown("lctrl", "rctrl")
+    if not ctrl and key ~= "escape" and key ~= "r" and key ~= "tab" then
+      return
+    end
+  end
+
+  -- Ctrl+C: copy crash report to clipboard
+  if key == "c" and love.keyboard.isDown("lctrl", "rctrl") then
+    local entry = buffer[currentIndex]
+    if entry then
+      pcall(love.system.setClipboardText, formatForClipboard(entry))
+      bsodCopied = true
+      bsodCopiedTimer = 2.0
+    end
+    return
+  end
+
+  -- R: trigger reload/reboot (only when not editing)
+  if key == "r" then
+    if bsodEditor and bsodEditor.isActive() then return end  -- 'r' is a letter, don't reboot while typing
+    if reloadCallback then
+      bsodRebootStatus = "rebooting"
+      bsodRebootTimer = 3.0
+      local rok, rerr = pcall(reloadCallback)
+      -- If we're still here, either it failed or the callback handled the error.
+      -- Success = crashRecoveryMode is cleared and we won't draw BSOD next frame.
+      -- Failure = show feedback so the user knows it didn't silently do nothing.
+      if not rok or bsodRebootStatus == "rebooting" then
+        bsodRebootStatus = "failed"
+        bsodRebootTimer = 3.0
+      end
+    end
+    return
+  end
+
+  -- Escape: quit (or deactivate cursor in editor)
+  if key == "escape" then
+    love.event.quit()
+    return
+  end
+
+  -- Tab: cycle through errors
+  if key == "tab" then
+    if #buffer > 1 then
+      currentIndex = currentIndex % #buffer + 1
+      scrollOffset = 0
+      -- Reinitialize editor for the new error
+      if bsodEditor then
+        local entry = buffer[currentIndex]
+        if entry then
+          pcall(bsodEditor.init, entry.message, entry.stack)
+        end
+      end
+    end
+    return
+  end
+end
+
+--- Handle text input in BSOD mode (character insertion for editor).
+function Errors.textinput(text)
+  if bsodEditor and bsodEditor.isActive() then
+    bsodEditor.textinput(text)
+  end
+end
+
+--- Handle mouse press in BSOD mode (click to place cursor in editor).
+function Errors.bsodMousepressed(x, y, button)
+  if bsodEditor and bsodEditor.isActive() then
+    if bsodEditor.mousepressed(x, y, button) then
+      return true
+    end
+  end
+  return false
+end
+
+--- Handle mouse wheel in BSOD mode (scroll).
+function Errors.wheelmoved(x, y)
+  -- Let editor handle scroll if active
+  if bsodEditor and bsodEditor.isActive() then
+    bsodEditor.wheelmoved(x, y)
+    return
+  end
+
+  if y > 0 then
+    scrollOffset = math.max(0, scrollOffset - 60)
+  elseif y < 0 then
+    scrollOffset = scrollOffset + 60
+  end
+end
+
+-- ============================================================================
+-- Normal overlay mode (non-fatal errors, bottom panel)
+-- ============================================================================
 
 --- Draw the error overlay on top of everything.
 --- Call at the end of love.draw().
@@ -234,6 +632,9 @@ function Errors.clear()
   buffer = {}
   currentIndex = 0
   visible = false
+  scrollOffset = 0
+  bsodCopied = false
+  if bsodEditor then pcall(bsodEditor.reset) end
 end
 
 return Errors

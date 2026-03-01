@@ -7,8 +7,9 @@
  * Each section carries a .toSysLog(path) method for structured logging.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useBridgeOptional } from './context';
+import { useLuaInterval } from './hooks';
 import type { IBridge } from './bridge';
 
 // ── Types ────────────────────────────────────────────────────
@@ -214,52 +215,50 @@ export function useSystemMonitor(
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => {
-    if (!bridge) return;
+  const fetchData = useCallback(() => {
+    if (!bridge || !mountedRef.current) return;
 
-    let cancelled = false;
+    bridge.rpc<any>('sys:monitor', { processLimit }).then((raw) => {
+      if (!mountedRef.current) return;
 
-    function fetch() {
-      bridge!.rpc<any>('sys:monitor', { processLimit }).then((raw) => {
-        if (cancelled || !mountedRef.current) return;
+      const cpu = attachSysLog(
+        { ...raw.cpu, cores: attachSysLogToArray(raw.cpu?.cores || [], logger) },
+        logger,
+      ) as CpuInfo;
 
-        const cpu = attachSysLog(
-          { ...raw.cpu, cores: attachSysLogToArray(raw.cpu?.cores || [], logger) },
-          logger,
-        ) as CpuInfo;
+      const memory = attachSysLog(raw.memory || EMPTY.memory, logger) as DetailedMemory;
+      const tasks = attachSysLog(raw.tasks || EMPTY.tasks, logger) as TaskCounts;
+      const network = attachSysLogToArray(raw.network || [], logger) as NetworkInterface[];
+      const disk = attachSysLogToArray(raw.disk || [], logger) as DiskDevice[];
+      const gpu = raw.gpu ? attachSysLogToArray(raw.gpu, logger) as GpuInfo[] : null;
 
-        const memory = attachSysLog(raw.memory || EMPTY.memory, logger) as DetailedMemory;
-        const tasks = attachSysLog(raw.tasks || EMPTY.tasks, logger) as TaskCounts;
-        const network = attachSysLogToArray(raw.network || [], logger) as NetworkInterface[];
-        const disk = attachSysLogToArray(raw.disk || [], logger) as DiskDevice[];
-        const gpu = raw.gpu ? attachSysLogToArray(raw.gpu, logger) as GpuInfo[] : null;
+      setData({
+        cpu,
+        memory,
+        processes: raw.processes || [],
+        tasks,
+        gpu,
+        network,
+        disk,
+        loading: false,
+        toSysLog: (path: string) => logger(path, {
+          cpu: raw.cpu,
+          memory: raw.memory,
+          processes: raw.processes,
+          tasks: raw.tasks,
+          gpu: raw.gpu,
+          network: raw.network,
+          disk: raw.disk,
+        }),
+      });
+    }).catch(() => {});
+  }, [bridge, processLimit, logger]);
 
-        setData({
-          cpu,
-          memory,
-          processes: raw.processes || [],
-          tasks,
-          gpu,
-          network,
-          disk,
-          loading: false,
-          toSysLog: (path: string) => logger(path, {
-            cpu: raw.cpu,
-            memory: raw.memory,
-            processes: raw.processes,
-            tasks: raw.tasks,
-            gpu: raw.gpu,
-            network: raw.network,
-            disk: raw.disk,
-          }),
-        });
-      }).catch(() => {});
-    }
+  // Initial fetch
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-    fetch();
-    const id = setInterval(fetch, interval);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [bridge, interval, processLimit, logger]);
+  // Polling driven by Lua-side timer
+  useLuaInterval(bridge ? interval : null, fetchData);
 
   return data;
 }

@@ -20,7 +20,7 @@ The reconciler and layout engine are shared code.
 === EXAMPLES ===
 Example 1: Pipeline Stages
 ---
-Stage 1: React Reconciler (@reactjit/native)
+Stage 1: React Reconciler (@reactjit/renderer)
   Input:  Your JSX component tree
   Output: Mutation commands (JSON)
   What:   react-reconciler 0.29 diffs the virtual tree.

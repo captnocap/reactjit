@@ -244,9 +244,17 @@ function Events.resolveScrollWheelDeltas(node, dx, dy)
   local wheelX = dx or 0
   local wheelY = dy or 0
 
+  -- Horizontal-only container: map vertical wheel to horizontal
   if allowX and not allowY and wheelX == 0 and wheelY ~= 0 then
     wheelX = wheelY
     wheelY = 0
+  end
+
+  -- Vertical-only container: map horizontal tilt to vertical scroll
+  -- This handles left/right scroll wheel tilt acting as page up/down
+  if allowY and not allowX and wheelY == 0 and wheelX ~= 0 then
+    wheelY = wheelX
+    wheelX = 0
   end
 
   if not allowX then wheelX = 0 end

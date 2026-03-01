@@ -1,7 +1,7 @@
 /**
- * ClaudeCanvas — one-liner declarative component for a Claude Code terminal canvas.
+ * ClaudeCanvas -- one-liner declarative component for a Claude Code terminal canvas.
  *
- * Renders the Lua-side "ClaudeCanvas" capability — a visual, hittable PTY
+ * Renders the Lua-side "ClaudeCanvas" capability -- a visual, hittable PTY
  * canvas with damage-driven rendering, semantic classification, and scroll.
  *
  * @example
@@ -12,7 +12,6 @@
  */
 
 import React from 'react';
-import { useRendererMode } from '@reactjit/core';
 
 export interface ClaudeCanvasProps {
   sessionId?: string;
@@ -21,8 +20,6 @@ export interface ClaudeCanvasProps {
 }
 
 export function ClaudeCanvas({ sessionId = 'default', debugVisible = false, style }: ClaudeCanvasProps) {
-  const mode = useRendererMode();
-  if (mode === 'web') return null;
   return React.createElement('ClaudeCanvas', {
     sessionId,
     debugVisible,

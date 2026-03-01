@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 export const ALIAS_MAP = {
   core: '@reactjit/core',
-  native: '@reactjit/native',
+  renderer: '@reactjit/renderer',
   router: '@reactjit/router',
   storage: '@reactjit/storage',
   audio: '@reactjit/audio',
@@ -30,6 +30,7 @@ export const ALIAS_MAP = {
   rss: '@reactjit/rss',
   webhooks: '@reactjit/webhooks',
   apis: '@reactjit/apis',
+  icons: '@reactjit/icons',
 };
 
 /**

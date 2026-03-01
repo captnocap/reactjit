@@ -33,7 +33,7 @@ What it creates:
       libquickjs.so    QuickJS shared library for FFI bridge
     reactjit/
       shared/          @reactjit/core package source (primitives, hooks, animation)
-      native/          @reactjit/native package source (reconciler host config)
+      native/          @reactjit/renderer package source (reconciler host config)
     main.lua           Love2D entry point
     conf.lua           Love2D configuration (window size, title)
     package.json       Project dependencies and scripts

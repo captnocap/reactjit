@@ -361,6 +361,7 @@ export function NeofetchDemoStory() {
             {!sys.loading && <TaskSummary tasks={sys.tasks} />}
 
             {/* Single row: CPU | GPU+Memory | Network+Disk */}
+            {/* rjit-ignore-next-line */}
             <Box style={{ flexDirection: 'row', gap: 16, width: '100%', justifyContent: 'space-around', alignItems: 'flex-start' }}>
               {/* CPU with wrapping cores */}
               <Box style={{

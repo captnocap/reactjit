@@ -50,6 +50,8 @@ local RadioModule = nil      -- Lazy-loaded to avoid circular deps
 local SelectModule = nil     -- Lazy-loaded to avoid circular deps
 local PianoKeyboardModule = nil  -- Lazy-loaded to avoid circular deps
 local StepSequencerModule = nil  -- Lazy-loaded to avoid circular deps
+local XYPadModule = nil
+local PitchWheelModule = nil
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -204,6 +206,8 @@ end
 -- Text rendering helpers
 -- ============================================================================
 
+local drawLineNormal  -- forward declaration (used by drawLineWithSpacing fallback)
+
 --- Render a single line of text with letter spacing by drawing each character
 --- individually. This is expensive and should only be used when letterSpacing ~= 0.
 --- NOTE: Character-by-character rendering has a known performance cost. Only
@@ -260,7 +264,7 @@ end
 --- @param y        number
 --- @param align    string   "left", "center", or "right"
 --- @param maxWidth number
-local function drawLineNormal(font, text, x, y, align, maxWidth)
+drawLineNormal = function(font, text, x, y, align, maxWidth)
   love.graphics.printf(text, x, y, maxWidth, align)
 end
 
@@ -691,8 +695,26 @@ end
 --- @param node table The node to paint
 --- @param inheritedOpacity number Accumulated opacity from parent chain (default 1)
 --- @param stencilDepth number Current stencil nesting depth (default 0)
+-- Debug: log first N frames of paint decisions for each node type
+local _paintDbgCount = 0
+local _paintDbgSeen = {}  -- type -> count
+
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
+  local _pt0 = love.timer.getTime()
+
+  -- Debug logging for first 3 encounters of each type
+  local dbgType = node.type or "nil"
+  _paintDbgSeen[dbgType] = (_paintDbgSeen[dbgType] or 0) + 1
+  local dbgN = _paintDbgSeen[dbgType]
+  local dbgLog = dbgN <= 3
+  if dbgLog then
+    local c = node.computed
+    io.write(string.format("[PAINT-DBG] type=%s id=%s computed=%dx%d@(%d,%d) children=%d\n",
+      dbgType, tostring(node.id), c.w or 0, c.h or 0, c.x or 0, c.y or 0,
+      #(node.children or {})))
+    io.flush()
+  end
 
   -- Non-visual capability nodes (Audio, Timer, etc.) are managed by capabilities.lua.
   -- They don't paint anything — skip entirely.
@@ -702,6 +724,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   end
   if CapabilitiesModule and CapabilitiesModule.isNonVisual(node.type)
      and not CapabilitiesModule.rendersInOwnSurface(node.type) then
+    if dbgLog then io.write(string.format("[PAINT-DBG] SKIP non-visual: %s\n", dbgType)); io.flush() end
     return
   end
 
@@ -710,6 +733,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- unless they are the active window root being painted right now.
   if CapabilitiesModule and CapabilitiesModule.rendersInOwnSurface(node.type)
      and not node._isWindowRoot then
+    if dbgLog then io.write(string.format("[PAINT-DBG] SKIP rendersInOwnSurface: %s (isWindowRoot=%s)\n", dbgType, tostring(node._isWindowRoot))); io.flush() end
     return
   end
 
@@ -781,17 +805,23 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- Mask canvas capture: if this node has a mask child, redirect all rendering
   -- to a temporary canvas so the mask can post-process the full content.
   local maskTempCanvas = nil
-  local maskPrevCanvas = nil
+  local maskCaptureX, maskCaptureY = c.x, c.y
   if MasksModule and MasksModule.hasMask(node.id) then
-    local tc, tw, th = MasksModule.getTempCanvas(node.id)
+    local tc, tw, th, capX, capY = MasksModule.getTempCanvas(node.id)
     if tc and tw > 0 and th > 0 then
       maskTempCanvas = tc
-      maskPrevCanvas = love.graphics.getCanvas()
-      love.graphics.push()
+      maskCaptureX = capX or c.x
+      maskCaptureY = capY or c.y
+      -- Isolate capture from any inherited scissor/stencil state that could clip
+      -- the off-screen render target.
+      love.graphics.push("all")
       love.graphics.setCanvas(maskTempCanvas)
+      love.graphics.setScissor()
+      love.graphics.setStencilTest()
+      love.graphics.setBlendMode("alpha")
       love.graphics.clear(0, 0, 0, 0)
-      -- Translate so content at (c.x, c.y) renders at (0, 0) in the temp canvas
-      love.graphics.translate(-c.x, -c.y)
+      -- Translate so content at capture origin renders at (0, 0) in the temp canvas.
+      love.graphics.translate(-maskCaptureX, -maskCaptureY)
     end
   end
 
@@ -1442,14 +1472,39 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     end
     StepSequencerModule.draw(node, effectiveOpacity)
 
+  elseif not isHidden and node.type == "XYPad" then
+    if not XYPadModule then
+      XYPadModule = require("lua.xypad")
+    end
+    XYPadModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "PitchWheel" then
+    if not PitchWheelModule then
+      PitchWheelModule = require("lua.pitchwheel")
+    end
+    PitchWheelModule.draw(node, effectiveOpacity)
+
   elseif not isHidden then
     -- Generic visual capability dispatch: any registered capability with
     -- visual=true and a render method gets painted here automatically.
     if CapabilitiesModule then
       local capDef = CapabilitiesModule.getDefinition(node.type)
+      if dbgLog then
+        io.write(string.format("[PAINT-DBG] capDispatch type=%s capDef=%s visual=%s render=%s c=%dx%d isHidden=%s\n",
+          dbgType,
+          capDef and "yes" or "nil",
+          capDef and tostring(capDef.visual) or "n/a",
+          capDef and capDef.render and "yes" or "nil",
+          c.w or 0, c.h or 0,
+          tostring(isHidden)))
+        io.flush()
+      end
       if capDef and capDef.visual and capDef.render then
         if c.w > 0 and c.h > 0 then
+          if dbgLog then io.write(string.format("[PAINT-DBG] RENDERING %s %dx%d\n", dbgType, c.w, c.h)); io.flush() end
           capDef.render(node, c, effectiveOpacity)
+        else
+          if dbgLog then io.write(string.format("[PAINT-DBG] SKIPPED %s — zero size %dx%d\n", dbgType, c.w, c.h)); io.flush() end
         end
       end
     end
@@ -1534,12 +1589,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
 
   -- Apply mask: if we were capturing to a temp canvas, finalize and draw the result
   if maskTempCanvas then
-    love.graphics.pop()  -- undo the translate(-c.x, -c.y)
-    love.graphics.setCanvas(maskPrevCanvas)
+    -- Restore pre-capture graphics state (main canvas, clip, blend, transform).
+    love.graphics.pop()
     local outputCanvas = MasksModule.applyMask(node.id, maskTempCanvas)
     if outputCanvas then
       love.graphics.setColor(1, 1, 1, effectiveOpacity)
-      love.graphics.draw(outputCanvas, c.x, c.y)
+      love.graphics.draw(outputCanvas, maskCaptureX, maskCaptureY)
     end
   end
 
@@ -1564,6 +1619,8 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if didTransform then
     love.graphics.pop()
   end
+  -- Per-node paint timing (inclusive — includes children)
+  node.computed.paintMs = (love.timer.getTime() - _pt0) * 1000
 end
 
 -- ============================================================================

@@ -95,13 +95,20 @@ function M.classifyRow(text, row, totalRows)
   if text:find("for shortcuts", 1, true) or text:find("for short", 1, true)
      or text:find("esc to interrupt", 1, true) then return "status_bar" end
 
-  -- Idle prompt
+  -- ── Input area (bottom of terminal) ────────────────────────────
   if row >= totalRows - 8 then
     local stripped = text:match("^%s*(.-)%s*$")
-    if stripped == "\xe2\x9d\xaf" or stripped == ">" then return "idle_prompt" end
+    if stripped:find("\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80", 1, true) then return "input_border" end
+    if stripped == "\xe2\x9d\xaf" or stripped == ">" then return "input_zone" end
+    if text:find("\xe2\x9d\xaf", 1, true) and not text:find("Imagining", 1, true) then
+      local pos = text:find("\xe2\x9d\xaf", 1, true)
+      local rest = text:sub(pos + 3):gsub("^\194\160", ""):gsub("^%s+", "")
+      if #rest > 0 then return "input_zone" end
+    end
+    if text:match("^> .") then return "input_zone" end
   end
 
-  -- User prompt
+  -- User prompt: ❯ or > NOT near bottom = historical prompt in conversation
   if text:find("\xe2\x9d\xaf", 1, true) and not text:find("Imagining", 1, true) then
     local pos = text:find("\xe2\x9d\xaf", 1, true)
     local rest = text:sub(pos + 3):gsub("^\194\160", ""):gsub("^%s+", "")

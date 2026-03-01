@@ -13,7 +13,7 @@ returns 0 for such tables.
 
 ## Investigation 1: hostConfig.ts -- Is the array empty when flushed?
 
-**File:** `/home/siah/creative/reactjit/packages/native/src/hostConfig.ts`
+**File:** `/home/siah/creative/reactjit/packages/renderer/src/hostConfig.ts`
 
 **Finding: The JS side is correct. The array is NOT empty.**
 

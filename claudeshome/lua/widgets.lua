@@ -44,6 +44,8 @@ function Widgets.init(deps)
     { type = "Select",        mod = "lua.select",          stateKey = "_select",        dragField = "isOpen" },
     { type = "PianoKeyboard", mod = "lua.piano_keyboard",  stateKey = "_pianokeyboard", dragField = "isDragging" },
     { type = "StepSequencer", mod = "lua.step_sequencer",  stateKey = "_stepsequencer", dragField = "isDragging" },
+    { type = "XYPad",         mod = "lua.xypad",           stateKey = "_xypad",         dragField = "isDragging" },
+    { type = "PitchWheel",    mod = "lua.pitchwheel",      stateKey = "_pitchwheel",    dragField = "isDragging" },
   }
 
   for _, entry in ipairs(entries) do
@@ -93,14 +95,15 @@ function Widgets.drainAllEvents(pushEvent)
       if evts then
         for i = 1, #evts do
           local evt = evts[i]
-          pushEvent({
+          local payload = {
             type = evt.type,
-            payload = {
-              type = evt.type,
-              targetId = evt.nodeId,
-              value = evt.value,
-            },
-          })
+            targetId = evt.nodeId,
+            value = evt.value,
+          }
+          -- Forward extra fields (e.g. x, y for XYPad)
+          if evt.x ~= nil then payload.x = evt.x end
+          if evt.y ~= nil then payload.y = evt.y end
+          pushEvent({ type = evt.type, payload = payload })
         end
       end
     end

@@ -12,7 +12,7 @@
     "sourceMap": true,
     "paths": {
       "@reactjit/core": ["./packages/core/src"],
-      "@reactjit/native": ["./packages/native/src"],
+      "@reactjit/renderer": ["./packages/renderer/src"],
       "@reactjit/router": ["./packages/router/src"],
       "@reactjit/storage": ["./packages/storage/src"],
       "@reactjit/audio": ["./packages/audio/src"],
@@ -28,7 +28,8 @@
       "@reactjit/controls": ["./packages/controls/src"],
       "@reactjit/geo": ["./packages/geo/src"],
       "@reactjit/layouts": ["./packages/layouts/src"],
-      "@reactjit/terminal": ["./packages/terminal/src"]
+      "@reactjit/terminal": ["./packages/terminal/src"],
+      "@reactjit/icons": ["./packages/icons/src"]
     }
   }
 }

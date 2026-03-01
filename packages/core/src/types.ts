@@ -150,6 +150,13 @@ export interface Style {
   // backgroundColor fills this polygon instead of a rectangle.
   polygonPoints?: number[];
 
+  // Stroked polyline paths for vector icons (Love2D-only; ignored in web mode).
+  // Each sub-array is a polyline: [x0,y0, x1,y1, ...] in a 24x24 viewBox.
+  // Scaled to fit the element's width/height. Drawn with love.graphics.line().
+  strokePaths?: number[][];
+  strokeWidth?: number;       // Line thickness (default 2)
+  strokeColor?: Color;        // Defaults to `color` (inherits text color)
+
   // CSS Transitions (Lua-side: JS declares targets, Lua interpolates)
   // Per-property: transition: { backgroundColor: { duration: 300, easing: 'easeInOut' } }
   // Or all props:  transition: { all: { duration: 300 } }
@@ -252,6 +259,37 @@ export interface LayoutEvent {
   height: number;
 }
 
+// ── Tooltip prop ──────────────────────────────────────────────────────────────
+
+export interface TooltipConfig {
+  content: string;
+
+  // Placement
+  type?: 'cursor' | 'anchor' | 'corner';
+  prefer?: 'above' | 'below';
+  anchor?: 'top' | 'bottom' | 'left' | 'right';
+  corner?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+  // Content formatting
+  layout?: 'compact' | 'descriptive' | 'dense' | 'table';
+  truncate?: boolean;
+  maxLines?: number;
+
+  // Timing
+  delay?: number;
+
+  // Style overrides
+  style?: {
+    maxWidth?: number;
+    fontSize?: number;
+    fontFamily?: string;
+    color?: string | number[];
+    backgroundColor?: string | number[];
+  };
+}
+
+export type TooltipProp = string | TooltipConfig;
+
 export interface BoxProps {
   /** Tailwind utility classes. Lowest priority: className < shorthands < style={}. */
   className?: string;
@@ -323,6 +361,10 @@ export interface BoxProps {
   onFocus?: (event: LoveEvent) => void;
   onBlur?: (event: LoveEvent) => void;
   onLayout?: (event: LayoutEvent) => void;
+
+  /** Lua-owned tooltip. String for simple cursor-relative, object for full control. */
+  tooltip?: TooltipProp;
+
   children?: React.ReactNode;
   key?: string | number;
 }

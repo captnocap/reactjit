@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Text, Image, useRendererMode } from '../../../packages/core/src';
+import { Box, Text, Image } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
@@ -15,7 +15,6 @@ interface ImageVariant {
 
 export function ImageBasicStory() {
   const c = useThemeColors();
-  const mode = useRendererMode();
   const sources = useMemo(() => {
     return [
       'lib/placeholders/landscape.png',

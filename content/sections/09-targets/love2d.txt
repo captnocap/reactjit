@@ -55,7 +55,7 @@ Love2D Callbacks (wired in main.lua):
 === EXAMPLES ===
 Example 1: Standard App Entry Point (src/index.tsx)
 ---
-import { createLove2DApp } from '@reactjit/native';
+import { createLove2DApp } from '@reactjit/renderer';
 import App from './App';
 
 const app = createLove2DApp();

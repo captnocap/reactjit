@@ -9,9 +9,10 @@
  * const [theme, setTheme] = useLocalStore('selected', 'catppuccin', { namespace: 'theme' });
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useBridgeOptional } from './context';
 import type { IBridge } from './bridge';
+import { getOriginalUseState } from './preserveState';
 
 export interface UseLocalStoreOptions {
   /** Storage namespace. Defaults to 'app'. */
@@ -27,6 +28,7 @@ export function useLocalStore<T>(
 ): [T, (value: SetStateAction<T>) => void] {
   const bridge = useBridgeOptional();
   const namespace = options?.namespace ?? 'app';
+  const useState = getOriginalUseState();
   const [value, setValueState] = useState<T>(defaultValue);
   const valueRef = useRef<T>(defaultValue);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

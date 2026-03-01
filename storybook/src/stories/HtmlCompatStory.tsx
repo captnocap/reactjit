@@ -16,6 +16,7 @@ import { StoryPage, StorySection } from './_shared/StoryScaffold';
 function Label({ children }: { children: string }) {
   const c = useThemeColors();
   return (
+    {/* rjit-ignore-next-line */}
     <Text style={{ color: c.muted, fontSize: 9, width: '100%', textAlign: 'left' }}>
       {children}
     </Text>
@@ -30,9 +31,11 @@ export function HtmlCompatStory() {
 
   return (
     <StoryPage>
+      {/* rjit-ignore-next-line */}
       <Text style={{ color: c.text, fontSize: 18, textAlign: 'left', width: '100%' }}>
         {'HTML Compat'}
       </Text>
+      {/* rjit-ignore-next-line */}
       <Text style={{ color: c.muted, fontSize: 11, textAlign: 'left', width: '100%', marginBottom: 4 }}>
         {'Standard HTML elements remap to ReactJIT primitives. Paste React JSX and it renders.'}
       </Text>

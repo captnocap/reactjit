@@ -1,12 +1,3 @@
-/**
- * Portal component system for reactjit
- *
- * Renders children at the top level of the render tree, useful for modals,
- * tooltips, dropdowns, and overlays.
- *
- * Works in both web mode (with ReactDOM.createPortal fallback) and native mode.
- */
-
 import React, {
   createContext,
   useContext,
@@ -15,7 +6,6 @@ import React, {
   useRef,
   type ReactNode,
 } from 'react';
-import { useRendererMode } from './context';
 import { Box } from './primitives';
 
 // ── Portal Context ─────────────────────────────────────
@@ -75,32 +65,6 @@ export function PortalHost({ children }: PortalHostProps) {
   );
 }
 
-// ── Web fallback portal (rendered via ReactDOM.createPortal) ──
-
-function WebFallbackPortal({ children }: { children: ReactNode }) {
-  const [containerElement] = useState(() => {
-    const el = document.createElement('div');
-    el.style.position = 'fixed';
-    el.style.top = '0';
-    el.style.left = '0';
-    el.style.width = '100%';
-    el.style.height = '100%';
-    el.style.zIndex = '1000';
-    el.style.pointerEvents = 'none';
-    return el;
-  });
-
-  useEffect(() => {
-    document.body.appendChild(containerElement);
-    return () => {
-      document.body.removeChild(containerElement);
-    };
-  }, [containerElement]);
-
-  const ReactDOM = require('react-dom');
-  return ReactDOM.createPortal(children, containerElement);
-}
-
 // ── Context-based portal (registers with nearest PortalHost) ──
 
 function ContextPortal({
@@ -134,15 +98,6 @@ export interface PortalProps {
 let portalCounter = 0;
 
 export function Portal({ children, name }: PortalProps) {
-  const mode = useRendererMode();
-  const portalContext = useContext(PortalContext);
   const portalKeyRef = useRef<string>(`portal-${name || portalCounter++}`);
-
-  // Web mode without PortalHost: fall back to ReactDOM.createPortal
-  if (mode === 'web' && !portalContext) {
-    return <WebFallbackPortal>{children}</WebFallbackPortal>;
-  }
-
-  // Native mode or web mode with PortalHost context
   return <ContextPortal portalKey={portalKeyRef.current}>{children}</ContextPortal>;
 }

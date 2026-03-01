@@ -1,7 +1,6 @@
 import React from 'react';
 import type { Style, Color } from '@reactjit/core';
 import { Box, Text, Pressable } from '@reactjit/core';
-import { useRendererMode } from '@reactjit/core';
 import { useScaledStyle, useScale } from '@reactjit/core';
 import { LEDIndicator } from './LEDIndicator';
 

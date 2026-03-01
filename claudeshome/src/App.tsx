@@ -18,6 +18,7 @@ import { ChatHistoryPanel } from './panels/ChatHistoryPanel';
 import { SearchPanel } from './panels/SearchPanel';
 import { FileTreePanel } from './panels/FileTreePanel';
 import { FortuneCookiePanel } from './panels/FortuneCookiePanel';
+import { NotepadPanel } from './panels/NotepadPanel';
 import { useHearts, HeartsDisplay } from './components/Hearts';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useNotifications } from './hooks/useNotifications';
@@ -135,6 +136,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [fileTreeOpen,    setFileTreeOpen]    = useState(false);
   const [toastHistOpen,   setToastHistOpen]   = useState(false);
   const [permLogOpen,     setPermLogOpen]     = useState(false);
+  const [notepadOpen,     setNotepadOpen]     = useState(false);
 
   // ── Uptime counter ─────────────────────────────────────────────────
   const bootTimeRef = useRef(Date.now());
@@ -148,14 +150,14 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   });
 
   const panelNodes = useMemo<PanelContent>(() => ({
-    B: <FortuneCookiePanel />,
+    B: notepadOpen ? <NotepadPanel /> : <FortuneCookiePanel />,
     C: <SystemPanel />,
     D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
     E: <GitPanel />,
     F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
     G: searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
     ...panels,
-  }), [panels, onActiveCountChange]);
+  }), [panels, onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen]);
   const [debugCanvas, setDebugCanvas] = useState(true);
   const [editorKey, setEditorKey] = useState(0);
   const [editorHeight, setEditorHeight] = useState(29);
@@ -245,6 +247,11 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   useHotkey('f3', () => {
     setSearchOpen(prev => !prev);
     setFocusedPanel('G');
+  });
+
+  useHotkey('f9', () => {
+    setNotepadOpen(prev => !prev);
+    setFocusedPanel('B');
   });
 
   useHotkey('tab', () => {
@@ -412,6 +419,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         focusedPanel={focusedPanel}
         onPanelPress={setFocusedPanel}
         panelLabels={{
+          B: notepadOpen  ? 'NOTEPAD' : 'FORTUNE',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
           G: searchOpen   ? 'SEARCH' : 'HISTORY',
         }}

@@ -97,6 +97,7 @@ export async function updateCommand(args) {
   syncFile(join(sourceLuaRoot, 'init.lua'), join(cwd, 'lua', 'init.lua'), 'lua/init.lua (source overlay)');
   syncFile(join(sourceLuaRoot, 'bsod.lua'), join(cwd, 'lua', 'bsod.lua'), 'lua/bsod.lua (source overlay)');
   syncFile(join(sourceLuaRoot, 'masks.lua'), join(cwd, 'lua', 'masks.lua'), 'lua/masks.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'scene3d.lua'), join(cwd, 'lua', 'scene3d.lua'), 'lua/scene3d.lua (source overlay)');
   syncFile(join(sourceLuaRoot, 'capabilities.lua'), join(cwd, 'lua', 'capabilities.lua'), 'lua/capabilities.lua (source overlay)');
   // In monorepo development, always overlay source-of-truth lua/masks.
   // This keeps generated projects aligned with root runtime while iterating.
@@ -119,7 +120,7 @@ export async function updateCommand(args) {
     syncDir(runtimeBin, join(cwd, 'bin'), 'bin/');
   }
 
-  // Update reactjit/ (shared + native packages)
+  // Update reactjit/ (shared + renderer packages)
   if (existsSync(runtimePkgs)) {
     syncDir(runtimePkgs, join(cwd, 'reactjit'), 'reactjit/');
   }

@@ -47,8 +47,12 @@ export interface TerminalProps {
   transport?: 'bridge' | 'ws' | 'http' | 'tor';
   /** Auto-spawn on mount (default: true) */
   autoConnect?: boolean;
-  /** Fires with each chunk of PTY output (ANSI-encoded) */
+  /** Fires with each chunk of raw PTY output (ANSI-encoded, backward compat) */
   onData?: (event: { data: string }) => void;
+  /** Fires on settle with structured row data from vterm (only changed rows) */
+  onDirtyRows?: (event: { rows: Array<{ row: number; text: string }> }) => void;
+  /** Fires when the cursor moves in the vterm grid */
+  onCursorMove?: (event: { row: number; col: number; visible: boolean }) => void;
   /** Fires once when the shell process starts */
   onConnect?: (event: { shell: string; ptyType: string; session?: string }) => void;
   /** Fires when the shell process exits */

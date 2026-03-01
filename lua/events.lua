@@ -110,6 +110,8 @@ function Events.hitTest(node, mx, my)
   end
   -- Nodes with hoverStyle/activeStyle are hittable for Lua-side interaction
   if node.props and (node.props.hoverStyle or node.props.activeStyle) then return node end
+  -- Nodes with a tooltip prop are hittable for Lua-side tooltip rendering
+  if node.props and node.props.tooltip then return node end
   -- Also return scroll containers so wheel events can scroll them
   -- even when no JS handler is attached
   if isScroll then return node end
@@ -244,9 +246,17 @@ function Events.resolveScrollWheelDeltas(node, dx, dy)
   local wheelX = dx or 0
   local wheelY = dy or 0
 
+  -- Horizontal-only container: map vertical wheel to horizontal
   if allowX and not allowY and wheelX == 0 and wheelY ~= 0 then
     wheelX = wheelY
     wheelY = 0
+  end
+
+  -- Vertical-only container: map horizontal tilt to vertical scroll
+  -- This handles left/right scroll wheel tilt acting as page up/down
+  if allowY and not allowX and wheelY == 0 and wheelX ~= 0 then
+    wheelY = wheelX
+    wheelX = 0
   end
 
   if not allowX then wheelX = 0 end

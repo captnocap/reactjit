@@ -13,11 +13,12 @@ function love.conf(t)
     t.modules.font = false
     t.window = nil
   else
-    -- GUI mode
-    t.window.title = "devctl"
-    t.window.width = 1000
-    t.window.height = 700
-    t.window.vsync = 1
-    t.window.resizable = true
+    -- GUI mode — borderless, no taskbar decoration
+    t.window.title      = "devctl"
+    t.window.width      = 1000
+    t.window.height     = 700
+    t.window.vsync      = 1
+    t.window.resizable  = true
+    t.window.borderless = true
   end
 end

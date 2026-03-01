@@ -156,10 +156,17 @@ function Tor.start(opts)
   -- Find Tor binary
   local torBin = findTorBinary()
 
-  -- Launch Tor as background process, write PID to file
+  -- Launch Tor as background process, write PID to file.
+  -- Close all inherited fds > 2 before exec to prevent the parent's server
+  -- sockets (luasocket control ports, websocket listeners, etc.) from leaking
+  -- into the Tor child process and keeping ports occupied after the parent exits.
   local pidFile = configDir .. "/tor.pid"
   local logFile = configDir .. "/tor.log"
-  local cmd = torBin .. " -f " .. torrcPath
+  local cmd = "exec 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-;"
+    .. " for fd in /proc/self/fd/*; do"
+    .. "   fd=${fd##*/}; [ \"$fd\" -gt 2 ] 2>/dev/null && eval \"exec ${fd}>&-\" 2>/dev/null;"
+    .. " done;"
+    .. " " .. torBin .. " -f " .. torrcPath
     .. " > " .. logFile .. " 2>&1 & echo $! > " .. pidFile
 
   local result = os.execute(cmd)

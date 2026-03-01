@@ -14,6 +14,7 @@ export type {
   ScrollEvent,
   ScrollViewProps,
   ScrollViewRef,
+  InputProps,
   TextInputProps,
   TextEditorProps,
   FlatListProps,
@@ -58,6 +59,7 @@ export {
   usePeerServer,
   useHotkey,
   useClipboard,
+  useLuaInterval,
   type WindowControlOptions,
   type WebSocketStatus,
   type PeerMessage,
@@ -82,6 +84,20 @@ export { tw } from './tw';
 // Local store (persistent useState backed by SQLite)
 export { useLocalStore, type UseLocalStoreOptions } from './useLocalStore';
 
+// Hot state (useState that survives HMR — Lua memory, not disk)
+export { useHotState } from './useHotState';
+
+// State preservation (auto-intercept useState for HMR survival)
+export {
+  enableStatePreservation,
+  disableStatePreservation,
+  isStatePreservationEnabled,
+  setPreservationBridge,
+} from './preserveState';
+
+// GIF recorder (capture Love2D window as animated GIF via ffmpeg)
+export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
+
 // Primitives
 export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from './primitives';
 
@@ -97,7 +113,7 @@ export { Emulator } from './Emulator';
 
 // Terminal (PTY capability + hook)
 export { Terminal, type TerminalProps } from './Terminal';
-export { usePTY, type UsePTYOptions, type UsePTYResult, type TerminalCapabilityProps } from './usePTY';
+export { usePTY, type UsePTYOptions, type UsePTYResult, type TerminalCapabilityProps, type DirtyRow, type CursorState } from './usePTY';
 
 // SemanticTerminal (classified PTY + playback + hook)
 export { SemanticTerminal, type SemanticTerminalProps } from './SemanticTerminal';
@@ -137,7 +153,9 @@ export {
   type ImageGalleryItem,
 } from './ImageViewerModal';
 
-// TextInput
+// Input (unified text input — replaces TextInput and TextEditor)
+export { Input } from './Input';
+/** @deprecated Use <Input /> */
 export { TextInput } from './TextInput';
 
 // Search components (headless, Lua-owned input lifecycle)
@@ -183,7 +201,7 @@ export {
   type UseAppSearchOptions,
 } from './useAppSearch';
 
-// TextEditor (Lua-owned document editor)
+/** @deprecated Use <Input multiline /> */
 export { TextEditor } from './TextEditor';
 
 // CodeBlock (Lua-owned code renderer)
@@ -248,6 +266,7 @@ export {
   useAnimation,
   useSpring,
   useTransition,
+  tickAnimations,
   Easing,
   parallel,
   sequence,
@@ -350,3 +369,15 @@ export {
 
 // Cartridge Inspector
 export { CartridgeInspector, type CartridgeInspectorProps } from './CartridgeInspector';
+
+// Fleet (multi-agent Claude Code panel)
+export { Fleet, type FleetProps } from './Fleet';
+export {
+  useFleet,
+  type FleetOptions,
+  type FleetAgentConfig,
+  type FleetAgentState,
+  type FleetPermission,
+  type FleetQuestion,
+  type FleetResult,
+} from './useFleet';

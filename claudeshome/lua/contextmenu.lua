@@ -21,6 +21,8 @@ local Events        = nil
 local TextSelection = nil
 local Inspector     = nil
 local DevToolsRef   = nil
+local AppActions    = nil
+local ShortcutHints = nil
 
 function ContextMenu.init(config)
   config = config or {}
@@ -29,6 +31,8 @@ function ContextMenu.init(config)
   TextSelection = config.textselection
   Inspector     = config.inspector
   DevToolsRef   = config.devtools
+  AppActions    = config.actions or {}
+  ShortcutHints = config.shortcuts or {}
 end
 
 -- ============================================================================
@@ -66,8 +70,10 @@ local BG_COLOR       = { 0.12, 0.12, 0.16, 0.95 }
 local BORDER_COLOR   = { 0.25, 0.25, 0.32, 0.8 }
 local TEXT_COLOR     = { 0.85, 0.87, 0.91, 1.0 }
 local DISABLED_COLOR = { 0.45, 0.47, 0.50, 1.0 }
+local SHORTCUT_COLOR = { 0.57, 0.60, 0.66, 1.0 }
 local HOVER_COLOR    = { 0.22, 0.35, 0.55, 0.55 }
 local SEPARATOR_COLOR = { 0.25, 0.25, 0.32, 0.5 }
+local SHORTCUT_GAP   = 24
 
 -- ============================================================================
 -- Helpers
@@ -81,6 +87,13 @@ local function findContextMenuAncestor(node)
     current = current.parent
   end
   return nil
+end
+
+local function normalizeShortcut(value)
+  if value == nil then return nil end
+  local s = tostring(value)
+  if s == "" then return nil end
+  return s
 end
 
 --- Build the items list based on context.
@@ -120,7 +133,67 @@ local function buildItems(hitNode, textNode, root)
         action = item.action or "",
         disabled = item.disabled or false,
         separator = item.separator or false,
+        shortcut = normalizeShortcut(item.shortcut),
       }
+    end
+  end
+
+  local appItems = {}
+  if AppActions then
+    if AppActions.refresh then
+      appItems[#appItems + 1] = {
+        label = "Refresh",
+        action = "__refresh",
+        disabled = false,
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.refresh or nil),
+      }
+    end
+    if AppActions.screenshot then
+      appItems[#appItems + 1] = {
+        label = "Screenshot",
+        action = "__screenshot",
+        disabled = false,
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.screenshot or nil),
+      }
+    end
+    if AppActions.toggleThemeMenu then
+      appItems[#appItems + 1] = {
+        label = "Theme Menu",
+        action = "__theme_menu",
+        disabled = false,
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.themeMenu or nil),
+      }
+    end
+    if AppActions.toggleSettings then
+      appItems[#appItems + 1] = {
+        label = "Settings",
+        action = "__settings_menu",
+        disabled = false,
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.settings or nil),
+      }
+    end
+    if AppActions.toggleSystemPanel then
+      appItems[#appItems + 1] = {
+        label = "System Panel",
+        action = "__system_panel",
+        disabled = false,
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.systemPanel or nil),
+      }
+    end
+    if AppActions.toggleDevTools then
+      appItems[#appItems + 1] = {
+        label = "Inspector",
+        action = "__inspector_toggle",
+        disabled = false,
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.devtools or nil),
+      }
+    end
+  end
+
+  if #appItems > 0 then
+    items[#items + 1] = { separator = true }
+    for _, item in ipairs(appItems) do
+      items[#items + 1] = item
     end
   end
 
@@ -150,7 +223,13 @@ local function calcMenuSize(items, font)
   local maxW = MIN_WIDTH
   for _, item in ipairs(items) do
     if not item.separator then
-      local w = font:getWidth(item.label) + TEXT_PADDING_X * 2
+      local labelW = font:getWidth(item.label)
+      local shortcutText = normalizeShortcut(item.shortcut)
+      local shortcutW = shortcutText and font:getWidth(shortcutText) or 0
+      local w = labelW + TEXT_PADDING_X * 2
+      if shortcutW > 0 then
+        w = w + SHORTCUT_GAP + shortcutW
+      end
       if w > maxW then maxW = w end
     end
   end
@@ -313,6 +392,30 @@ local function selectItem(index)
   if action == "__copy" then
     if TextSelection then
       TextSelection.copyToClipboard()
+    end
+  elseif action == "__refresh" then
+    if AppActions and AppActions.refresh then
+      pcall(AppActions.refresh)
+    end
+  elseif action == "__screenshot" then
+    if AppActions and AppActions.screenshot then
+      pcall(AppActions.screenshot)
+    end
+  elseif action == "__theme_menu" then
+    if AppActions and AppActions.toggleThemeMenu then
+      pcall(AppActions.toggleThemeMenu)
+    end
+  elseif action == "__settings_menu" then
+    if AppActions and AppActions.toggleSettings then
+      pcall(AppActions.toggleSettings)
+    end
+  elseif action == "__system_panel" then
+    if AppActions and AppActions.toggleSystemPanel then
+      pcall(AppActions.toggleSystemPanel)
+    end
+  elseif action == "__inspector_toggle" then
+    if AppActions and AppActions.toggleDevTools then
+      pcall(AppActions.toggleDevTools)
     end
   elseif action == "__inspect" then
     -- Prefer the most specific node: textNode > hitNode
@@ -483,6 +586,13 @@ function ContextMenu.draw()
 
       local textY = curY + math.floor((ITEM_HEIGHT - font:getHeight()) / 2)
       love.graphics.print(item.label, x + PADDING_X + TEXT_PADDING_X, textY)
+
+      local shortcutText = normalizeShortcut(item.shortcut)
+      if shortcutText then
+        love.graphics.setColor(SHORTCUT_COLOR)
+        local shortcutX = x + menuW - PADDING_X - TEXT_PADDING_X - font:getWidth(shortcutText)
+        love.graphics.print(shortcutText, shortcutX, textY)
+      end
 
       curY = curY + ITEM_HEIGHT
     end

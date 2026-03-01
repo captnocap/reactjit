@@ -323,7 +323,7 @@ function Masks.applyMask(parentNodeId, sourceCanvas)
   if not mod then return nil end
 
   love.graphics.push("all")
-  love.graphics.setCanvas(inst.outputCanvas)
+  love.graphics.setCanvas({inst.outputCanvas, stencil = true})
   -- Render mask modules in an unclipped local space; any parent clipping is
   -- applied later when painter composites the final output canvas.
   love.graphics.setScissor()
@@ -340,7 +340,7 @@ function Masks.applyMask(parentNodeId, sourceCanvas)
   if not okDraw then
     local okFallback = pcall(function()
       love.graphics.push("all")
-      love.graphics.setCanvas(inst.outputCanvas)
+      love.graphics.setCanvas({inst.outputCanvas, stencil = true})
       love.graphics.setScissor()
       love.graphics.setStencilTest()
       love.graphics.setBlendMode("alpha")

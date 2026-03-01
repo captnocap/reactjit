@@ -363,7 +363,7 @@ function parseFlags(args) {
 function generateTsconfig(selectedPackages) {
   const paths = {
     '@reactjit/core': ['./reactjit/core/src'],
-    '@reactjit/native': ['./reactjit/native/src'],
+    '@reactjit/renderer': ['./reactjit/renderer/src'],
   };
 
   for (const pkg of selectedPackages) {
@@ -424,7 +424,7 @@ export function scaffoldProject(dest, opts = {}) {
     // In monorepo development, overlay critical source-of-truth runtime files.
     // Older cli/runtime snapshots can lag behind active source edits.
     const sourceLuaRoot = join(CLI_ROOT, '..', 'lua');
-    for (const name of ['init.lua', 'bsod.lua', 'masks.lua', 'capabilities.lua']) {
+    for (const name of ['init.lua', 'bsod.lua', 'masks.lua', 'scene3d.lua', 'capabilities.lua']) {
       const src = join(sourceLuaRoot, name);
       if (existsSync(src)) {
         cpSync(src, join(dest, 'lua', name));
@@ -463,7 +463,7 @@ export function scaffoldProject(dest, opts = {}) {
     const destPkgs = join(dest, 'reactjit');
     mkdirSync(destPkgs, { recursive: true });
 
-    for (const dir of ['core', 'native']) {
+    for (const dir of ['core', 'renderer']) {
       const src = join(runtimePkgs, dir);
       if (existsSync(src)) {
         cpSync(src, join(destPkgs, dir), { recursive: true });

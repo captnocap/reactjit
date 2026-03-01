@@ -5,7 +5,7 @@
  * and full agentic tool execution loops.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type {
   AIConfig, AIProviderType, Message, ToolCall, StreamDelta,
   ChatOptions, ChatResult, CompletionOptions, CompletionResult,
@@ -389,7 +389,7 @@ export function useModels(options: Partial<AIConfig> = {}): ModelsResult {
   }, [config.provider, config.baseURL, config.apiKey, version]);
 
   // Auto-fetch when config changes
-  useState(() => { fetchModels(); });
+  useEffect(() => { fetchModels(); }, [fetchModels]);
 
   const refetch = useCallback(() => {
     setVersion(v => v + 1);

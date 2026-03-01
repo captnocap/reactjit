@@ -3,7 +3,6 @@ import { Box, Image, Text } from './primitives';
 import { Pressable } from './Pressable';
 import { ScrollView } from './ScrollView';
 import { Modal } from './Modal';
-import { useRendererMode } from './context';
 import type { Color, LoveEvent, Style } from './types';
 
 export interface ImageGalleryItem {
@@ -101,7 +100,6 @@ export function ImageViewerModal({
   style,
   imageStyle,
 }: ImageViewerModalProps) {
-  const mode = useRendererMode();
   const total = images.length;
   const safeIndex = useMemo(() => clampIndex(index, total), [index, total]);
   const current = images[safeIndex];

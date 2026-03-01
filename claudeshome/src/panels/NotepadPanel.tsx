@@ -6,7 +6,7 @@
  * so typing here does NOT go to Claude.
  */
 import React, { useState, useCallback } from 'react';
-import { Box, Text, ScrollView, Pressable, TextEditor, useLocalStore } from '@reactjit/core';
+import { Box, Text, ScrollView, Pressable, TextEditor, useLocalStore, useLoveRPC } from '@reactjit/core';
 import { C } from '../theme';
 
 interface Note {
@@ -30,13 +30,18 @@ function fmt(ts: number): string {
 export function NotepadPanel() {
   const [notes, setNotes] = useLocalStore<Note[]>('notes', [], { namespace: 'notepad' });
   const [editorKey, setEditorKey] = useState(0);
+  const sendToClaude = useLoveRPC('claude:send');
+  const showToast    = useLoveRPC('toast:show');
 
   const handleSubmit = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setNotes(prev => [...prev, { id: nextId(), text: trimmed, ts: Date.now() }]);
     setEditorKey(k => k + 1);
-  }, [setNotes]);
+    // Notify Claude — delivers the note as a chat message so he sees it immediately
+    sendToClaude({ message: `[NOTE FROM HUMAN] ${trimmed}` }).catch(() => {});
+    showToast({ text: '✎ Note sent to Claude', duration: 3 }).catch(() => {});
+  }, [setNotes, sendToClaude, showToast]);
 
   const deleteNote = useCallback((id: number) => {
     setNotes(prev => prev.filter(n => n.id !== id));

@@ -55,8 +55,8 @@ local _lastRowKind = {}     -- nodeId -> { [row] = lastKind } for change detecti
 local _lastGraph = {}       -- nodeId -> SemanticGraph
 local _lastDiff = {}        -- nodeId -> diff ops from previous frame
 
--- Session ID → nodeId mapping (so RPCs can look up by sessionId)
-local _sessionNodeMap = {}  -- sessionId -> nodeId
+-- sessionId -> nodeId reverse lookup (populated in create)
+local _sessionNodeMap = {}  -- "default" -> numeric nodeId
 
 -- Scroll step sizes
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
@@ -89,8 +89,7 @@ Capabilities.register("ClaudeCanvas", {
   hittable = true,  -- can receive focus and keyboard events
 
   schema = {
-    sessionId    = { type = "string", desc = "Session ID linking to a ClaudeCode instance" },
-    debugVisible = { type = "boolean", default = false, desc = "Show raw terminal canvas (F5 debug toggle)" },
+    sessionId = { type = "string", desc = "Session ID linking to a ClaudeCode instance" },
   },
 
   events = {},
@@ -107,8 +106,6 @@ Capabilities.register("ClaudeCanvas", {
 
     local sessionId = props.sessionId or "default"
     Renderer.getSession(sessionId)
-
-    -- Register mapping so RPCs can look up graph by sessionId
     _sessionNodeMap[sessionId] = nodeId
 
     return {
@@ -123,26 +120,64 @@ Capabilities.register("ClaudeCanvas", {
   end,
 
   tick = function(nodeId, state, dt, pushEvent, props)
-    -- Auto-focus on first tick — only when debug canvas is visible
-    -- In headless mode, React's TextInput owns focus instead
-    if not state._focusGrabbed and props.debugVisible then
-      local nodes = Tree.getNodes()
-      local node = nodes[nodeId]
-      if node then
-        Focus.set(node)
-        state._focusGrabbed = true
-      end
-    end
-    -- Reset focus grab when toggling back to headless so next debug toggle re-grabs
-    if state._focusGrabbed and not props.debugVisible then
-      state._focusGrabbed = false
-    end
+    -- Don't grab focus — the Input bar owns focus and forwards keystrokes here
+    -- via keystrokeTarget/submitTarget props.
+    state._focusGrabbed = true
 
     local inputState = getInputState(nodeId)
     inputState.blinkTimer = inputState.blinkTimer + dt
     if inputState.blinkTimer >= 0.53 then
       inputState.blinkTimer = 0
       inputState.blinkOn = not inputState.blinkOn
+    end
+
+    -- Sync proxy input cursor directly from vterm cursor position.
+    -- getPromptState() fails in splash mode — bypass it entirely.
+    -- The vterm cursor IS the SSoT for cursor position.
+    local sessionId = props and props.sessionId or "default"
+    local vt = Session.getVTerm(sessionId)
+    if vt then
+      local cursor = vt:getCursor()
+      if cursor then
+        -- Find the prompt prefix width by scanning for ❯/>/! symbol + space
+        local promptWidth = 0
+        local boundary = Session.getInputBoundary(sessionId) or 0
+        if cursor.row >= boundary then
+          for col = 0, math.min(15, cursor.col) do
+            local cell = vt:getCell(cursor.row, col)
+            if cell and cell.char then
+              local ch = cell.char
+              if ch:find("❯", 1, true) or ch == "!" or ch == ">" or ch == "›" then
+                -- Prompt symbol found. Skip it + the space/NBSP after it.
+                promptWidth = col + 2
+                break
+              end
+            end
+          end
+        end
+
+        local cursorCol = math.max(0, cursor.col - promptWidth)
+
+        local allNodes = Tree.getNodes()
+        if allNodes then
+          for _, n in pairs(allNodes) do
+            if n.type == "TextInput" and n.props and n.props.keystrokeTarget == "ClaudeCanvas" then
+              if n.inputState then
+                -- Convert cell column to byte offset
+                local bytePos = 0
+                local cellCount = 0
+                for char in n.inputState.text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+                  if cellCount >= cursorCol then break end
+                  bytePos = bytePos + #char
+                  cellCount = cellCount + 1
+                end
+                n.inputState.cursorPos = math.min(bytePos, #n.inputState.text)
+              end
+              break
+            end
+          end
+        end
+      end
     end
   end,
 
@@ -165,97 +200,25 @@ Capabilities.register("ClaudeCanvas", {
     local inputState = getInputState(nodeId)
     inputState.viewportH = c.h
 
-    -- Headless mode: skip all painting when debugVisible is off
-    if not props.debugVisible then return end
-
-    -- Compute desired column count — applied next tick (row resize segfaults libvterm)
-    -- Must match the visible cell area: canvas width minus tag prefix and right-side debug info
-    if Measure then
-      local sizeFont = Measure.getFont(13, nil, nil)
-      local tagSizeFont = Measure.getFont(9, nil, nil)
-      local charW = sizeFont:getWidth("M")
-      local leftReserve = tagSizeFont:getWidth("[list_selectable] ") + 4
-      local rightReserve = 180  -- row numbers + color debug labels
-      local cellArea = c.w - leftReserve - rightReserve
-      local fitCols = math.max(20, math.floor(cellArea / charW))
-      Session.setDesiredSize(fitCols, nil)
+    -- Resize vterm to match cols prop (if provided)
+    if props.cols then
+      Session.resize(props.cols, nil, sessionId)
     end
 
-    -- ── Compute bottom reserved area (input + debug) FIRST ────────
+    -- ── Compute bottom reserved area (debug overlay only) ─────────
     local inputState = getInputState(nodeId)
     if not Measure then return end
 
     local fontSize = 13
     local font = Measure.getFont(fontSize, nil, nil)
     local lineHeight = font:getHeight()
-    local promptX = c.x + 16
-    local prefixW = font:getWidth("> ")
-    local textAreaW = c.w - 32 - prefixW
-    if textAreaW < 20 then textAreaW = 20 end
 
-    -- Word-wrap helper
-    local function wrapText(text, maxW)
-      if #text == 0 then return { "" }, { 0 } end
-      local lines = {}
-      local lineStarts = { 1 }
-      local lineStart = 1
-      local lastSpace = nil
-      local x = 0
-      local i = 1
-      while i <= #text do
-        local ch = text:sub(i, i)
-        local chW = font:getWidth(ch)
-        if ch == " " then lastSpace = i end
-        if x + chW > maxW and i > lineStart then
-          local breakAt
-          if lastSpace and lastSpace > lineStart then
-            breakAt = lastSpace
-            lines[#lines + 1] = text:sub(lineStart, breakAt - 1)
-            lineStart = breakAt + 1
-          else
-            breakAt = i
-            lines[#lines + 1] = text:sub(lineStart, breakAt - 1)
-            lineStart = breakAt
-          end
-          lineStarts[#lineStarts + 1] = lineStart
-          lastSpace = nil
-          x = 0
-        else
-          x = x + chW
-          i = i + 1
-        end
-      end
-      lines[#lines + 1] = text:sub(lineStart)
-      return lines, lineStarts
-    end
-
-    -- Read vterm prompt state FIRST so we compute input height from reality
-    local prompt = Session.getPromptState()
-    local promptText = prompt and prompt.text or ""
-    -- Strip leading whitespace (NBSP and regular)
-    promptText = promptText:gsub("^\194\160", ""):gsub("^%s+", "")
-    local promptCursorCol = prompt and prompt.cursorCol or 0
-
-
-    -- Compute wrapped lines from vterm prompt (not local inputState.text)
-    local displayLines, displayStarts
-    if #promptText > 0 then
-      displayLines, displayStarts = wrapText(promptText, textAreaW)
-    else
-      displayLines = { "" }
-      displayStarts = { 1 }
-    end
-    local displayNumLines = #displayLines
-
-    local inputH = displayNumLines * lineHeight + 8
-    local bottomMargin = 20
-    local inputTop = c.y + c.h - inputH - bottomMargin
-
-    -- Debug overlay height (3 lines of debug text + 5px gap above input)
+    -- Debug overlay height (3 lines of debug text + margin)
     local df = Measure.getFont(10, nil, nil)
     local dfH = df:getHeight()
     local debugH = dfH * 3 + 5  -- 3 lines + gap
-    local debugTop = inputTop - 5 - debugH
+    local bottomMargin = 10
+    local debugTop = c.y + c.h - debugH - bottomMargin
 
     -- The content area stops at the debug overlay top
     local contentBottom = debugTop
@@ -319,6 +282,7 @@ Capabilities.register("ClaudeCanvas", {
 
       local scrollY = inputState.scrollY
       local prevKind = nil
+      local blockKind = nil  -- first semantic kind in current blank-line-delimited block
       local inMenu = false
       local rowColors = {}  -- row -> { fg, hasText }
       local rowMeta = {}    -- row -> { nodeId, turnId, groupId, groupType }
@@ -347,6 +311,7 @@ Capabilities.register("ClaudeCanvas", {
         assistant_text = true, user_text = true, diff = true,
         text = true, banner = true, thinking = true, plan_mode = true,
         status_bar = true, input_border = true,
+        tool = true, result = true,
       }
 
       -- Per-turn sequence counters (reset on turn change)
@@ -379,6 +344,9 @@ Capabilities.register("ClaudeCanvas", {
         end
 
         local rowText = vterm:getRowText(row)
+        if #rowText == 0 or rowText:match("^%s*$") then
+          blockKind = nil  -- blank line resets the block
+        end
         if #rowText > 0 then
           -- Classify with zone awareness
           local kind = Session.classifyRow(rowText, row, rows)
@@ -446,17 +414,21 @@ Capabilities.register("ClaudeCanvas", {
             kind = "user_text"
           end
 
-          -- Adjacency: text/menu_option after assistant-attributed tokens = assistant_text
-          -- State machine: ● tool / thinking / thought_complete / result / task_* = assistant owns stream
-          -- All subsequent def-colored text belongs to assistant until next user marker
-          -- menu_option (numbered list "1. Foo") also gets absorbed — it's a list in prose, not an interactive menu
-          if (kind == "text" or kind == "menu_option") and (prevKind == "tool" or prevKind == "thinking"
-             or prevKind == "thought_complete" or prevKind == "result"
-             or prevKind == "assistant_text" or prevKind == "task_done"
-             or prevKind == "task_open" or prevKind == "task_summary"
-             or prevKind == "task_active" or prevKind == "diff"
-             or prevKind == "plan_border") then
-            kind = "assistant_text"
+          -- Block inheritance: blank lines delimit blocks, first major semantic
+          -- row sets the kind for ALL other rows in the same block.
+          -- Major kinds that SET the block (everything else inherits):
+          local BLOCK_SETTERS = {
+            banner = true, user_prompt = true, thinking = true,
+            tool = true, result = true, diff = true,
+            plan_mode = true, permission = true, error = true,
+            status_bar = true, input_border = true, input_zone = true,
+            idle_prompt = true, thought_complete = true, task_active = true,
+            image_attachment = true,
+          }
+          if BLOCK_SETTERS[kind] then
+            blockKind = kind
+          elseif blockKind then
+            kind = blockKind
           end
 
           -- Adjacency: text after menu_option = menu_desc (option description)
@@ -518,6 +490,8 @@ Capabilities.register("ClaudeCanvas", {
           if row >= boundary then
             if Session.isSeparatorRow(vterm, row) then
               kind = "input_border"
+            elseif kind == "user_prompt" or kind == "idle_prompt" then
+              kind = "user_input"
             elseif kind == "status_bar" then
               kind = "status_bar"
             elseif kind == "confirmation" or kind == "menu_option" or kind == "selector" or kind == "menu_title" then
@@ -525,7 +499,7 @@ Capabilities.register("ClaudeCanvas", {
             elseif rowText:match("^%s*/[%w%-]") then
               kind = "slash_menu"
             else
-              kind = "user_input"
+              kind = "input_zone"
             end
           end
 
@@ -668,6 +642,7 @@ Capabilities.register("ClaudeCanvas", {
             _lastRowKind[nodeId][row] = kind
           end
 
+          -- blockKind already updated by BLOCK_SETTERS above
           prevKind = kind
 
           -- Drawing: only for visible rows
@@ -702,6 +677,39 @@ Capabilities.register("ClaudeCanvas", {
         ::continue_row::
       end
       love.graphics.setScissor()
+
+      -- ── Prompt cursor ─────────────────────────────────────────
+      -- The CLI (Ink) parks the vterm cursor below visible content.
+      -- Find the prompt row by scanning for ❯ in the input zone,
+      -- then draw cursor after the last non-empty cell on that row.
+      if inputState.blinkOn and boundary > 0 then
+        local promptRow = nil
+        local promptCol = nil
+        for row = boundary, lastNonEmpty do
+          local rowText = vterm:getRowText(row)
+          if rowText:find("❯", 1, true) or rowText:match("^>%s") then
+            promptRow = row
+            -- Find the last non-empty cell to place cursor after text
+            local lastCell = 0
+            for col = 0, cols - 1 do
+              local cell = vterm:getCell(row, col)
+              if cell and cell.char and #cell.char > 0 and cell.char ~= " " then
+                lastCell = col + 1
+              end
+            end
+            promptCol = lastCell
+            break
+          end
+        end
+        if promptRow then
+          local cy = c.y + 8 + promptRow * lineH - scrollY
+          local cx = c.x + cellOffsetX + promptCol * charW
+          if cy >= c.y and cy + lineH <= contentBottom then
+            love.graphics.setColor(0.9, 0.9, 0.95, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", cx, cy, charW, lineH)
+          end
+        end
+      end
 
       -- Store classified cache for clipboard dump hotkey
       _lastClassified[nodeId] = classifiedCache
@@ -770,96 +778,6 @@ Capabilities.register("ClaudeCanvas", {
         dbg.lastDmg, dbg.settle, dbg.streaming, dbg.vtContent or 0),
       c.x + 8, debugTop + dfH * 2)
 
-    -- ── Input bar (reads from vterm prompt, computed above) ────
-    -- Input background
-    love.graphics.setColor(COLORS.inputBg[1], COLORS.inputBg[2], COLORS.inputBg[3],
-                           (COLORS.inputBg[4] or 1) * effectiveOpacity)
-    love.graphics.rectangle("fill", c.x + 8, inputTop, c.w - 16, inputH, 4, 4)
-
-    -- "> " prefix on first line
-    love.graphics.setFont(font)
-    love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
-                           (COLORS.inputPrompt[4] or 1) * effectiveOpacity)
-    love.graphics.print("> ", promptX, inputTop + 4)
-
-    if #promptText == 0 then
-      -- Show placeholder from CLI (tab to accept)
-      local ph = Session.getPlaceholder()
-      if ph and #ph > 0 then
-        love.graphics.setScissor(promptX + prefixW, inputTop, textAreaW, inputH)
-        love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
-                               0.4 * effectiveOpacity)
-        love.graphics.print(ph, promptX + prefixW, inputTop + 4)
-        local phW = font:getWidth(ph)
-        love.graphics.setColor(COLORS.inputPrompt[1], COLORS.inputPrompt[2], COLORS.inputPrompt[3],
-                               0.25 * effectiveOpacity)
-        love.graphics.print("  tab", promptX + prefixW + phW, inputTop + 4)
-        love.graphics.setScissor()
-      end
-    else
-      -- Draw wrapped prompt text
-      love.graphics.setScissor(c.x + 8, inputTop, c.w - 16, inputH)
-      love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2], COLORS.inputText[3],
-                             (COLORS.inputText[4] or 1) * effectiveOpacity)
-      for i, line in ipairs(displayLines) do
-        local lx = promptX + (i == 1 and prefixW or 0)
-        local ly = inputTop + 4 + (i - 1) * lineHeight
-        love.graphics.print(line, lx, ly)
-      end
-      love.graphics.setScissor()
-    end
-
-    -- Cursor: position from vterm cursor column
-    if inputState.blinkOn and #promptText > 0 then
-      local cursorByte = math.min(promptCursorCol, #promptText)
-      local cursorLine = 1
-      for i = 2, #displayStarts do
-        if cursorByte >= displayStarts[i] then
-          cursorLine = i
-        else
-          break
-        end
-      end
-      local lineOffset = cursorByte - displayStarts[cursorLine] + 1
-      local textBefore = displayLines[cursorLine]:sub(1, math.max(0, lineOffset))
-      local cursorPx = font:getWidth(textBefore)
-      local cursorX = promptX + (cursorLine == 1 and prefixW or 0) + cursorPx
-      local cursorY = inputTop + 4 + (cursorLine - 1) * lineHeight
-      love.graphics.setColor(COLORS.inputCaret[1], COLORS.inputCaret[2], COLORS.inputCaret[3],
-                             (COLORS.inputCaret[4] or 1) * effectiveOpacity)
-      love.graphics.rectangle("fill", cursorX, cursorY, 2, lineHeight)
-    elseif inputState.blinkOn then
-      -- Empty prompt: cursor at the start
-      love.graphics.setColor(COLORS.inputCaret[1], COLORS.inputCaret[2], COLORS.inputCaret[3],
-                             (COLORS.inputCaret[4] or 1) * effectiveOpacity)
-      love.graphics.rectangle("fill", promptX + prefixW, inputTop + 4, 2, lineHeight)
-    end
-
-    -- ── Dropdown rows below input (for @ picker, slash menus, etc.) ──
-    local dropdownRows = Session.getDropdownRows()
-    if #dropdownRows > 0 then
-      local dropdownTop = inputTop + inputH + 4
-      local dropFont = Measure.getFont(11, nil, nil)
-      local dropLineH = dropFont:getHeight()
-      love.graphics.setFont(dropFont)
-
-      -- Background for dropdown area
-      local dropH = #dropdownRows * dropLineH + 8
-      love.graphics.setColor(0.08, 0.12, 0.2, 0.95 * effectiveOpacity)
-      love.graphics.rectangle("fill", c.x + 8, dropdownTop, c.w - 16, dropH, 4, 4)
-
-      for i, dr in ipairs(dropdownRows) do
-        local dy = dropdownTop + 4 + (i - 1) * dropLineH
-        if dy + dropLineH > c.y + c.h then break end
-        -- Prefix with kind tag
-        love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
-        love.graphics.print("[" .. dr.kind .. "]", c.x + 12, dy)
-        -- Row text
-        love.graphics.setColor(0.9, 0.9, 0.9, 0.9 * effectiveOpacity)
-        local tagW = dropFont:getWidth("[" .. dr.kind .. "] ")
-        love.graphics.print(dr.text, c.x + 12 + tagW, dy)
-      end
-    end
   end,
 
   -- ── Keyboard event routing (called by init.lua) ───────────────
@@ -1163,36 +1081,28 @@ function Canvas.getInputText(nodeId)
   return getInputState(nodeId).text
 end
 
---- Get the last built semantic graph for a canvas node
-function Canvas.getGraph(nodeId)
-  return _lastGraph[nodeId]
-end
-
---- Get the last classified cache for a canvas node
-function Canvas.getClassified(nodeId)
-  return _lastClassified[nodeId]
-end
-
---- Get the last diff for a canvas node
-function Canvas.getDiff(nodeId)
-  return _lastDiff[nodeId]
-end
-
---- Resolve a sessionId to its canvas nodeId
-function Canvas.getNodeIdForSession(sessionId)
+--- Resolve a sessionId to the canvas nodeId
+local function resolveNodeId(sessionId)
   return _sessionNodeMap[sessionId or "default"]
 end
 
---- Get the graph for a session (convenience)
+--- Get the semantic graph for a session
 function Canvas.getGraphForSession(sessionId)
-  local nid = _sessionNodeMap[sessionId or "default"]
-  return nid and _lastGraph[nid]
+  local nid = resolveNodeId(sessionId)
+  if not nid then return nil end
+  return _lastGraph[nid]
 end
 
---- Get classified cache for a session (convenience)
+--- Get the classified rows cache for a session
 function Canvas.getClassifiedForSession(sessionId)
-  local nid = _sessionNodeMap[sessionId or "default"]
-  return nid and _lastClassified[nid]
+  local nid = resolveNodeId(sessionId)
+  if not nid then return nil end
+  return _lastClassified[nid]
+end
+
+--- Get the canvas nodeId for a session (for direct access)
+function Canvas.getNodeIdForSession(sessionId)
+  return resolveNodeId(sessionId)
 end
 
 return Canvas

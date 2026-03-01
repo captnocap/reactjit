@@ -9,11 +9,9 @@ export interface StoryDef {
   component: ComponentType;
 }
 
-import { BoxBasicStory } from './BoxBasic';
 import { TextStory } from './TextStory';
-import { FlexRowStory } from './FlexRow';
 import { InputStory } from './InputStory';
-import { GradientStory } from './Gradient';
+import { StyleStory } from './StyleStory';
 import { DemoStory } from './DemoStory';
 import { ErrorTestStory } from './ErrorTest';
 import { DataStory } from './DataStory';
@@ -35,7 +33,6 @@ import { CartridgeInspectorStory } from './CartridgeInspectorStory';
 import { LocalStoreStory } from './LocalStoreStory';
 import { EffectsStory } from './EffectsStory';
 import { PolyPizzaStory } from './PolyPizzaStory';
-import { GamesStory } from './GamesStory';
 import { StressTestStory } from './StressTestStory';
 import { CompositionStory } from './CompositionStory';
 import { MultiWindowStory } from './MultiWindowStory';
@@ -47,29 +44,23 @@ import { SearchStory } from './SearchStory';
 import { TerminalStory } from './TerminalStory';
 import { SemanticTerminalStory } from './SemanticTerminalStory';
 import { NoclipMazeStory } from './NoclipMazeStory';
-import { GridStory } from './GridStory';
-import { TailwindStory } from './TailwindStory';
-import { HtmlCompatStory } from './HtmlCompatStory';
 import { FleetStory } from './FleetStory';
 import { OriginStory } from './OriginStory';
+import { IconStory } from './IconStory';
 
 
 export const stories: StoryDef[] = [
   // Core
-  { id: 'box-basic', title: 'Box', section: 'Core', component: BoxBasicStory },
+  { id: 'style', title: 'Style', section: 'Core', component: StyleStory },
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
-  { id: 'layout', title: 'Layout', section: 'Core', component: FlexRowStory },
-  { id: 'style', title: 'Style', section: 'Core', component: GradientStory },
   { id: 'image', title: 'Image', section: 'Core', component: ImageBasicStory },
   { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },
   { id: 'video', title: 'Video', section: 'Core', component: VideoStory },
   { id: 'composition', title: 'Composition', section: 'Core', component: CompositionStory },
   { id: 'input', title: 'Input', section: 'Core', component: InputStory },
   { id: 'search', title: 'Search', section: 'Core', component: SearchStory },
+  { id: 'icons', title: 'Icons', section: 'Core', component: IconStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
-  { id: 'grid', title: 'Grid System', section: 'Core', component: GridStory },
-  { id: 'tailwind', title: 'Tailwind', section: 'Core', component: TailwindStory },
-  { id: 'html-compat', title: 'HTML Compat', section: 'Core', component: HtmlCompatStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
 
   // Packages
@@ -90,7 +81,6 @@ export const stories: StoryDef[] = [
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
-  { id: 'games', title: 'Games', section: 'Demos', component: GamesStory },
   { id: 'emulator', title: 'NES Emulator', section: 'Demos', component: EmulatorStory },
   { id: 'scene-3d-showcase', title: '3D Showcase', section: 'Demos', component: Scene3DShowcaseStory },
   { id: 'map-basic', title: 'Map', section: 'Demos', component: MapBasicStory },

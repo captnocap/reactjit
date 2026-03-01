@@ -373,15 +373,17 @@ function Bridge.new(libpath)
 
   -- ffi.load uses dlopen which resolves relative to process CWD, not Love2D's
   -- game directory. Resolve to an absolute path using love.filesystem.getSource().
-  if libpath:sub(1, 1) ~= "/" and love and love.filesystem and love.filesystem.getSource then
+  local isAbsolute = libpath:sub(1, 1) == "/" or libpath:match("^%a:\\")
+  if not isAbsolute and love and love.filesystem and love.filesystem.getSource then
     local source = love.filesystem.getSource()
     if source then
       -- getSource() returns a file path (fused binary or .love file), not a
       -- directory. Strip the filename to get the containing directory.
+      -- Use [/\\] to handle both Unix and Windows path separators.
       local isFused = love.filesystem.isFused and love.filesystem.isFused()
       local isLoveFile = source:match("%.love$")
       if isFused or isLoveFile then
-        source = source:match("(.+)/[^/]+$") or source
+        source = source:match("(.+)[/\\][^/\\]+$") or source
       end
       libpath = source .. "/" .. libpath
     end

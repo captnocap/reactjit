@@ -26,6 +26,9 @@ local rootChildren = {}   -- ordered list of top-level children
 local treeDirty = true
 local syntheticRoot = nil -- cached wrapper when #rootChildren > 1
 
+-- Mutation stats (reset each frame by consumer)
+local mutationStats = { total = 0, creates = 0, updates = 0, removes = 0 }
+
 -- ============================================================================
 -- Internal helpers
 -- ============================================================================
@@ -92,9 +95,28 @@ end
 
 --- Apply an array of mutation commands from the React reconciler.
 --- Each command is a table with an `op` field and associated data.
+--- Return current mutation stats and reset counters.
+function Tree.getMutationStats()
+  local s = { total = mutationStats.total, creates = mutationStats.creates, updates = mutationStats.updates, removes = mutationStats.removes }
+  mutationStats.total = 0
+  mutationStats.creates = 0
+  mutationStats.updates = 0
+  mutationStats.removes = 0
+  return s
+end
+
 function Tree.applyCommands(commands)
+  mutationStats.total = mutationStats.total + #commands
   for _, cmd in ipairs(commands) do
     local op = cmd.op
+
+    if op == "CREATE" or op == "CREATE_TEXT" then
+      mutationStats.creates = mutationStats.creates + 1
+    elseif op == "UPDATE" or op == "UPDATE_TEXT" then
+      mutationStats.updates = mutationStats.updates + 1
+    elseif op == "REMOVE" or op == "REMOVE_FROM_ROOT" then
+      mutationStats.removes = mutationStats.removes + 1
+    end
 
     if op == "CREATE" then
       Log.log("tree", "CREATE id=%s type=%s debugName=%s handlers=%s", tostring(cmd.id), tostring(cmd.type), tostring(cmd.debugName or "-"), tostring(cmd.hasHandlers or false))
@@ -112,6 +134,8 @@ function Tree.applyCommands(commands)
         -- Debug info from React component (for inspector)
         debugName = cmd.debugName,
         debugSource = cmd.debugSource,
+        -- Render tracking for classification
+        renderCount = 1,
       }
       -- Pre-load image and establish ref count
       if Images and cmd.type == "Image" and props.src then
@@ -225,6 +249,11 @@ function Tree.applyCommands(commands)
         end
         if cmd.handlerMeta ~= nil then
           node.handlerMeta = cmd.handlerMeta
+        end
+
+        -- Update render count from JS reconciler
+        if cmd.renderCount then
+          node.renderCount = cmd.renderCount
         end
 
         treeDirty = true

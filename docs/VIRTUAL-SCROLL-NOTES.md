@@ -1,6 +1,6 @@
 # Virtual Scroll — Implementation Notes
 
-Reverted from `native-main.tsx` on 2026-02-18. The implementation worked
+Reverted from `main.tsx` on 2026-02-18. The implementation worked
 for individual ScrollView containers but failed at the full-storybook scale.
 
 ## What was built

@@ -17,9 +17,16 @@ export interface CoinTickerRowProps {
 }
 
 function formatPrice(price: number): string {
-  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  if (price >= 1) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1000) return formatFixed(price, 0);
+  if (price >= 1) return formatFixed(price, 2);
   return price.toPrecision(4);
+}
+
+function formatFixed(price: number, digits: number): string {
+  const fixed = price.toFixed(digits);
+  const [whole, fraction] = fixed.split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return fraction !== undefined ? `${grouped}.${fraction}` : grouped;
 }
 
 /**
@@ -76,7 +83,7 @@ export function CoinTickerRow({
       {/* Price + change */}
       <Box style={{ alignItems: 'flex-end', gap: 2 }}>
         <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
-          {currency}{formatPrice(price)}
+          {`${currency}${formatPrice(price)}`}
         </Text>
         {change24h !== undefined && (
           <Box style={{
@@ -88,7 +95,7 @@ export function CoinTickerRow({
             paddingBottom: 1,
           }}>
             <Text style={{ color: changeColor, fontSize: 10, fontWeight: 'bold' }}>
-              {up ? '+' : ''}{change24h.toFixed(2)}%
+              {`${up ? '+' : ''}${change24h.toFixed(2)}%`}
             </Text>
           </Box>
         )}

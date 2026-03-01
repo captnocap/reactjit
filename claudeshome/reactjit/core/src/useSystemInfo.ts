@@ -7,8 +7,9 @@
  * Every returned section has .toSysLog(path) for structured file logging.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useBridgeOptional } from './context';
+import { useLuaInterval } from './hooks';
 import type { IBridge } from './bridge';
 
 // ── Dynamic require (esbuild-safe) ──────────────────────────
@@ -202,57 +203,38 @@ export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => {
-    // No bridge — try Node.js direct gathering
+  const fetchData = useCallback(() => {
+    if (!mountedRef.current) return;
+
     if (!bridge) {
       const nodeInfo = getSystemInfoNode(logger);
-      if (nodeInfo) {
-        setInfo(nodeInfo);
-
-        if (refreshInterval > 0) {
-          const id = setInterval(() => {
-            if (!mountedRef.current) return;
-            const fresh = getSystemInfoNode(logger);
-            if (fresh) setInfo(fresh);
-          }, refreshInterval);
-          return () => clearInterval(id);
-        }
-      }
+      if (nodeInfo) setInfo(nodeInfo);
       return;
     }
 
-    // Bridge available — use RPC
-    let cancelled = false;
+    bridge.rpc<any>('sys:info').then((raw) => {
+      if (!mountedRef.current) return;
+      setInfo({
+        os: raw.os,
+        kernel: raw.kernel,
+        hostname: raw.hostname,
+        user: raw.user,
+        shell: raw.shell,
+        cpu: raw.cpu,
+        arch: raw.arch,
+        memory: withSysLog(raw.memory, logger),
+        uptime: withSysLog(raw.uptime, logger),
+        loading: false,
+        toSysLog: (path: string) => logger(path, raw),
+      });
+    }).catch(() => {});
+  }, [bridge, logger]);
 
-    function fetch() {
-      bridge!.rpc<any>('sys:info').then((raw) => {
-        if (!cancelled && mountedRef.current) {
-          setInfo({
-            os: raw.os,
-            kernel: raw.kernel,
-            hostname: raw.hostname,
-            user: raw.user,
-            shell: raw.shell,
-            cpu: raw.cpu,
-            arch: raw.arch,
-            memory: withSysLog(raw.memory, logger),
-            uptime: withSysLog(raw.uptime, logger),
-            loading: false,
-            toSysLog: (path: string) => logger(path, raw),
-          });
-        }
-      }).catch(() => {});
-    }
+  // Initial fetch
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-    fetch();
-
-    if (refreshInterval > 0) {
-      const id = setInterval(fetch, refreshInterval);
-      return () => { cancelled = true; clearInterval(id); };
-    }
-
-    return () => { cancelled = true; };
-  }, [bridge, refreshInterval, logger]);
+  // Polling driven by Lua-side timer (bridge mode) or stays as one-shot (no bridge)
+  useLuaInterval(bridge && refreshInterval > 0 ? refreshInterval : null, fetchData);
 
   return info;
 }

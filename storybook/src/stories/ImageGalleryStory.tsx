@@ -9,7 +9,7 @@ import {
   ImageViewerModal,
   HoverPreviewRowsGallery,
   BentoImageGallery,
-  useRendererMode,
+
   type ImageGalleryItem,
 } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -131,10 +131,9 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
 
 export function ImageGalleryStory() {
   const c = useThemeColors();
-  const mode = useRendererMode();
   const [wrapViewerOpen, setWrapViewerOpen] = useState(false);
   const [wrapActiveIndex, setWrapActiveIndex] = useState(0);
-  const wrapThumb = mode === 'native' ? 220 : 260;
+  const wrapThumb = 220;
 
   const images = useMemo<ImageGalleryItem[]>(() => {
     const placeholderStems = [

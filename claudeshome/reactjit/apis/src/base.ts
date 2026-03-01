@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLuaInterval } from '@reactjit/core';
 import { rateLimitedFetch, type RateLimitConfig } from './rateLimit';
 
 // ── Result types ────────────────────────────────────────
@@ -77,12 +78,8 @@ export function useAPI<T = any>(
     return () => { cancelled = true; };
   }, [url, tick]);
 
-  useEffect(() => {
-    const interval = options?.interval;
-    if (!interval || !url) return;
-    const id = setInterval(() => setTick(t => t + 1), interval);
-    return () => clearInterval(id);
-  }, [url, options?.interval]);
+  // Polling driven by Lua-side timer — no JS setInterval
+  useLuaInterval(url ? options?.interval : null, refetch);
 
   return { data, error, loading, refetch };
 }

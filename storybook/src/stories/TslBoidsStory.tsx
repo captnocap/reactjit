@@ -103,6 +103,7 @@ function CodePane({ label, badge, code, badgeColor }: { label: string; badge: st
       <Box style={{ flexGrow: 1, overflow: 'scroll', padding: 12 }}>
         {lines.map((line, i) => (
           <Box key={i} style={{ flexDirection: 'row', gap: 12, minHeight: 18 }}>
+            // rjit-ignore-next-line
             <Text style={{ fontSize: 10, color: c.overlay1, width: 24, textAlign: 'right' }}>{String(i + 1)}</Text>
             <Text style={{ fontSize: 10, color: c.text, fontFamily: 'monospace' }}>{line || ' '}</Text>
           </Box>

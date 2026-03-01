@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Text } from './primitives';
+import { useLuaInterval } from './hooks';
 import type { Style, Color } from './types';
 
 export interface LoadingDotsProps {
@@ -33,12 +34,9 @@ export function LoadingDots({
 }: LoadingDotsProps) {
   const [activeDot, setActiveDot] = useState(0);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveDot(prev => (prev + 1) % (count + 1));
-    }, speed);
-    return () => clearInterval(interval);
-  }, [count, speed]);
+  useLuaInterval(speed, () => {
+    setActiveDot(prev => (prev + 1) % (count + 1));
+  });
 
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, ...style }}>

@@ -11,8 +11,8 @@
       "@reactjit/core": [
         "./reactjit/shared/src"
       ],
-      "@reactjit/native": [
-        "./reactjit/native/src"
+      "@reactjit/renderer": [
+        "./reactjit/renderer/src"
       ]
     }
   },

@@ -8,6 +8,8 @@ import React from 'react';
 import { Text } from './primitives';
 import type { TextProps } from './types';
 
+const BODY_FONT_SIZE = 14;
+
 // Root is used to accept children (fragments, inline mixing)
 function TypographyRoot({ children }: { children?: React.ReactNode }) {
   return <>{children}</>;
@@ -30,27 +32,27 @@ function Caption({ style, ...props }: TextProps) {
 }
 
 function Muted({ style, ...props }: TextProps) {
-  return <Text style={{ opacity: 0.55, ...style }} {...props} />;
+  return <Text style={{ fontSize: BODY_FONT_SIZE, opacity: 0.55, ...style }} {...props} />;
 }
 
 function Mono({ style, ...props }: TextProps) {
-  return <Text style={{ fontFamily: 'monospace', ...style }} {...props} />;
+  return <Text style={{ fontSize: BODY_FONT_SIZE, fontFamily: 'monospace', ...style }} {...props} />;
 }
 
 function Bold({ style, ...props }: TextProps) {
-  return <Text style={{ fontWeight: 'bold', ...style }} {...props} />;
+  return <Text style={{ fontSize: BODY_FONT_SIZE, fontWeight: 'bold', ...style }} {...props} />;
 }
 
 function Italic({ style, ...props }: TextProps) {
-  return <Text style={{ ...(style as any), fontStyle: 'italic' }} {...(props as any)} />;
+  return <Text style={{ fontSize: BODY_FONT_SIZE, ...style }} italic {...props} />;
 }
 
 function Strike({ style, ...props }: TextProps) {
-  return <Text style={{ textDecorationLine: 'line-through', ...style }} {...props} />;
+  return <Text style={{ fontSize: BODY_FONT_SIZE, textDecorationLine: 'line-through', ...style }} {...props} />;
 }
 
 function Underline({ style, ...props }: TextProps) {
-  return <Text style={{ textDecorationLine: 'underline', ...style }} {...props} />;
+  return <Text style={{ fontSize: BODY_FONT_SIZE, textDecorationLine: 'underline', ...style }} {...props} />;
 }
 
 // Attach sub-components as static properties

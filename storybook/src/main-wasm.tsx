@@ -6,8 +6,8 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { createWasmApp } from '../../packages/native/src/WasmApp';
-import { BridgeProvider, RendererProvider, useBridge } from '../../packages/core/src/context';
+import { createWasmApp } from '../../packages/renderer/src/WasmApp';
+import { BridgeProvider, useBridge } from '../../packages/core/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';

@@ -137,7 +137,7 @@ describe('reactjit init', () => {
 
     // Core packages always included
     assert.ok(existsSync(join(dest, 'reactjit', 'shared')), 'shared package should exist');
-    assert.ok(existsSync(join(dest, 'reactjit', 'native')), 'native package should exist');
+    assert.ok(existsSync(join(dest, 'reactjit', 'renderer')), 'renderer package should exist');
 
     // Optional packages NOT included in minimal mode
     assert.ok(!existsSync(join(dest, 'reactjit', 'router')), 'router should NOT exist in minimal');
@@ -147,7 +147,7 @@ describe('reactjit init', () => {
     // tsconfig has only core paths
     const tsconfig = JSON.parse(readFileSync(join(dest, 'tsconfig.json'), 'utf-8'));
     assert.ok(tsconfig.compilerOptions.paths['@reactjit/core'], 'tsconfig should have core path');
-    assert.ok(tsconfig.compilerOptions.paths['@reactjit/native'], 'tsconfig should have native path');
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/renderer'], 'tsconfig should have renderer path');
     assert.ok(!tsconfig.compilerOptions.paths['@reactjit/router'], 'tsconfig should NOT have router path in minimal');
 
     // package.json has correct name
@@ -160,7 +160,7 @@ describe('reactjit init', () => {
     assert.ok(!appTsx.includes('../reactjit/'), 'App.tsx should NOT have relative reactjit imports');
 
     const mainTsx = readFileSync(join(dest, 'src', 'main.tsx'), 'utf-8');
-    assert.ok(mainTsx.includes("from '@reactjit/native'"), 'main.tsx should use @reactjit/native import');
+    assert.ok(mainTsx.includes("from '@reactjit/renderer'"), 'main.tsx should use @reactjit/renderer import');
 
     rmSync(dest, { recursive: true, force: true });
   });
@@ -177,12 +177,12 @@ describe('reactjit init', () => {
 
     // Core packages always present
     assert.ok(existsSync(join(dest, 'reactjit', 'shared')));
-    assert.ok(existsSync(join(dest, 'reactjit', 'native')));
+    assert.ok(existsSync(join(dest, 'reactjit', 'renderer')));
 
     // tsconfig has all paths (even if runtime dirs weren't available to copy)
     const tsconfig = JSON.parse(readFileSync(join(dest, 'tsconfig.json'), 'utf-8'));
     assert.ok(tsconfig.compilerOptions.paths['@reactjit/core']);
-    assert.ok(tsconfig.compilerOptions.paths['@reactjit/native']);
+    assert.ok(tsconfig.compilerOptions.paths['@reactjit/renderer']);
     assert.ok(tsconfig.compilerOptions.paths['@reactjit/router']);
     assert.ok(tsconfig.compilerOptions.paths['@reactjit/storage']);
     assert.ok(tsconfig.compilerOptions.paths['@reactjit/components']);

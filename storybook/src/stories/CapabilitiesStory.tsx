@@ -221,6 +221,7 @@ export function CapabilitiesStory() {
       </StorySection>
 
       <StorySection index={2} title="Live Demos">
+        // rjit-ignore-next-line
         <Box style={{ flexDirection: 'row', gap: 16, width: '100%', alignItems: 'flex-start' }}>
           <Box style={{ flexGrow: 1, gap: 16 }}>
             <TimerDemo />

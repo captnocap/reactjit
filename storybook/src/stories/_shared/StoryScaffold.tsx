@@ -34,7 +34,8 @@ export function StorySection({
 }) {
   const c = useThemeColors();
   return (
-    <Box>
+    <Box style={{ position: 'relative', zIndex: 1000 - index }}>
+      // rjit-ignore-next-line
       <Text style={{
         width: '100%',
         color: c.text,
