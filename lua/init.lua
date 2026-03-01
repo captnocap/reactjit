@@ -155,6 +155,9 @@ local hmrFrameCounter = 0
 local hmrLastMtime    = nil
 local hmrHasLoaded    = false
 
+-- Crash recovery: when true, update/draw skip the app and only poll HMR
+local crashRecoveryMode = false
+
 -- Helper: does the current mode run the rendering pipeline?
 local function isRendering()
   return mode == "native" or mode == "canvas" or mode == "wasm"
@@ -880,6 +883,22 @@ function ReactJIT.init(config)
       for method, handler in pairs(hotstate.getHandlers()) do
         rpcHandlers[method] = handler
       end
+      -- Override hotstate:load to trigger a reload after loading atoms
+      rpcHandlers["hotstate:load"] = function(args)
+        local path = args and args.path or nil
+        local ok, err = hotstate.loadFile(path)
+        if not ok then return { error = err } end
+        -- Schedule reload on next frame (can't reload inside an RPC handler)
+        ReactJIT._pendingReload = true
+        return { loaded = true, atoms = hotstate.count() }
+      end
+      -- Override hotstate:snapshot to also return atom count
+      rpcHandlers["hotstate:snapshot"] = function(args)
+        local path = args and args.path or nil
+        local result, err = hotstate.snapshot(path)
+        if result then return { path = result, atoms = hotstate.count() } end
+        return { error = err }
+      end
     end
   end
 
@@ -1379,9 +1398,58 @@ function ReactJIT.init(config)
   end
 end
 
+--- Poll bundle.js mtime for HMR. Returns true if reload was triggered.
+--- Extracted so crash recovery mode can call it independently.
+function ReactJIT._pollHMR()
+  hmrFrameCounter = hmrFrameCounter + 1
+  if hmrFrameCounter % 60 == 0 and initConfig then
+    local info = love.filesystem.getInfo(initConfig.bundlePath)
+    if info and info.modtime then
+      if hmrLastMtime == nil then
+        hmrLastMtime = info.modtime
+      elseif info.modtime ~= hmrLastMtime then
+        hmrLastMtime = info.modtime
+        if hmrHasLoaded then
+          -- In crash recovery mode, attempt reload and clear the crash
+          if crashRecoveryMode then
+            io.write("[reactjit] Crash recovery: new bundle detected, attempting reload...\n"); io.flush()
+            local rok, rerr = pcall(ReactJIT.reload)
+            if rok then
+              crashRecoveryMode = false
+              errors.clear()
+              io.write("[reactjit] Crash recovery: reload succeeded! Resuming.\n"); io.flush()
+              return true
+            else
+              io.write("[reactjit] Crash recovery: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+              errors.push({
+                source = "lua",
+                message = "Crash recovery reload failed: " .. tostring(rerr),
+                context = "ReactJIT._pollHMR (recovery)",
+              })
+              return false
+            end
+          end
+          ReactJIT.reload()
+          return true
+        end
+      end
+      hmrHasLoaded = true
+    end
+  end
+  return false
+end
+
 --- Call once per frame from love.update(dt).
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
+  -- Crash recovery mode: skip everything except HMR polling.
+  -- The app is dead but we keep watching for a fixed bundle.
+  if crashRecoveryMode then
+    ReactJIT._pollHMR()
+    if M.gif then M.gif.update(dt) end
+    return
+  end
+
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
 
@@ -1491,22 +1559,23 @@ function ReactJIT.update(dt)
   if M.audioEngine then M.audioEngine.update(dt) end
 
   -- HMR: poll bundle.js mtime every ~1 second for changes
-  hmrFrameCounter = hmrFrameCounter + 1
-  if hmrFrameCounter % 60 == 0 and initConfig then
-    local info = love.filesystem.getInfo(initConfig.bundlePath)
-    if info and info.modtime then
-      if hmrLastMtime == nil then
-        hmrLastMtime = info.modtime
-      elseif info.modtime ~= hmrLastMtime then
-        hmrLastMtime = info.modtime
-        if hmrHasLoaded then
-          ReactJIT.reload()
-          return
-        end
-      end
-      hmrHasLoaded = true
+  local hmrTriggered = ReactJIT._pollHMR()
+  if hmrTriggered then return end
+
+  -- Pending reload (triggered by hotstate:load RPC)
+  if ReactJIT._pendingReload then
+    ReactJIT._pendingReload = nil
+    local rok, rerr = pcall(ReactJIT.reload)
+    if not rok then
+      errors.push({ source = "lua", message = tostring(rerr), context = "hotstate:load reload" })
     end
+    return
   end
+
+  -- Wrap the entire app pipeline in pcall. If JS throws (bad render, etc.),
+  -- we enter crash recovery mode instead of escaping to Love2D's error handler.
+  -- Crash recovery keeps the Love2D process alive and polls for a fixed bundle.
+  local appOk, appErr = pcall(function()
 
   -- Deferred mount: trigger root.render() on the first update so the
   -- Love2D event loop is already running. Uses callGlobal (JS_Call)
@@ -2151,12 +2220,34 @@ function ReactJIT.update(dt)
   if M.inspectorEnabled then devtools.tick(dt) end
   if M.screenshot then M.screenshot.update() end
   if M.gif then M.gif.update(dt) end
+
+  end) -- end pcall(function() wrapping native mode app pipeline
+
+  if not appOk then
+    crashRecoveryMode = true
+    local errMsg = tostring(appErr)
+    io.write("[reactjit] CRASH: entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
+    io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
+    errors.push({
+      source = "lua",
+      message = errMsg,
+      context = "ReactJIT.update (crash recovery)",
+    })
+  end
 end
 
 --- Call once per frame from love.draw().
 --- Paints the retained UI tree (native and canvas modes).
 function ReactJIT.draw()
   if not isRendering() then return end
+
+  -- Crash recovery mode: skip the broken tree, only draw the error overlay
+  if crashRecoveryMode then
+    love.graphics.clear(0.08, 0.02, 0.02, 1.0)
+    errors.draw()
+    if M.gif then M.gif.captureIfReady() end
+    return
+  end
 
   -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
   -- mpv can dirty this during mpv_render_context_create or render calls.
@@ -3865,9 +3956,12 @@ function ReactJIT.reload()
     M.bridge:eval("globalThis.__devState = " .. jsLiteral .. ";", "<hmr-state>")
   end
 
-  -- Inject hot state atoms so useHotState can restore synchronously
+  -- Inject hot state atoms so useHotState can restore synchronously.
+  -- First, check for a state_preset.json file and merge it into atoms.
+  -- This lets Claude (or any tool) write a JSON file to reproduce exact app states.
   local hsOk2, hotstate2 = pcall(require, "lua.hotstate")
   if hsOk2 then
+    hotstate2.loadPreset()
     local allAtoms = hotstate2.getAll()
     if next(allAtoms) then
       local hsLiteral = luaTableToJSLiteral(allAtoms)
