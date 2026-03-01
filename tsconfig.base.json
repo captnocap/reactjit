@@ -27,7 +27,8 @@
       "@reactjit/theme": ["./packages/theme/src"],
       "@reactjit/controls": ["./packages/controls/src"],
       "@reactjit/geo": ["./packages/geo/src"],
-      "@reactjit/layouts": ["./packages/layouts/src"]
+      "@reactjit/layouts": ["./packages/layouts/src"],
+      "@reactjit/terminal": ["./packages/terminal/src"]
     }
   }
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text, Pressable, Modal } from '@reactjit/core';
 import { C } from '../theme';
-import type { PermissionInfo } from '../hooks/useClaude';
+import type { PermissionInfo } from '@reactjit/terminal';
 
 interface Props {
   perm: PermissionInfo | null;

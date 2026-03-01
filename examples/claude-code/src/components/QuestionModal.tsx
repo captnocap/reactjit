@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text, Pressable, Modal } from '@reactjit/core';
 import { C } from '../theme';
-import type { QuestionInfo } from '../hooks/useClaude';
+import type { QuestionInfo } from '@reactjit/terminal';
 
 interface Props {
   question: QuestionInfo | null;

@@ -1,18 +1,24 @@
 import { useState, useCallback } from 'react';
 import { useLoveRPC } from '@reactjit/core';
+import type { PermissionInfo, QuestionInfo, ClaudeState } from './types';
 
-export interface PermissionInfo {
-  action: string;
-  target: string;
-  question: string;
-}
-
-export interface QuestionInfo {
-  question: string;
-  options: string[];
-}
-
-export function useClaude() {
+/**
+ * useClaude — manage a Claude Code session's permission/question/status state.
+ *
+ * Wire the returned event handlers onto <Native type="ClaudeCode" .../>
+ * and use `respond`/`respondQuestion` from your modal buttons.
+ *
+ * @example
+ * const claude = useClaude();
+ * <Native type="ClaudeCode" workingDir="." model="sonnet"
+ *   onStatusChange={claude.onStatusChange}
+ *   onPermissionRequest={claude.onPerm}
+ *   onPermissionResolved={claude.onPermResolved}
+ *   onQuestionPrompt={claude.onQuestion}
+ * />
+ * <PermissionModal perm={claude.perm} onRespond={claude.respond} />
+ */
+export function useClaude(): ClaudeState {
   const [perm, setPerm] = useState<PermissionInfo | null>(null);
   const [question, setQuestion] = useState<QuestionInfo | null>(null);
   const [status, setStatus] = useState<string>('idle');
@@ -30,11 +36,9 @@ export function useClaude() {
     const res = await rpcAutoAccept({}) as any;
     setAutoAccept(!!res?.autoAccept);
   }, [rpcAutoAccept]);
-  // Fire once on mount
   useState(() => { syncAutoAccept(); });
 
   const onPerm = useCallback((e: any) => {
-    // Auto-accept is handled in Lua now — this only fires when auto-accept is off
     setPerm({
       action: e.action || 'Tool',
       target: e.target || '',
@@ -69,16 +73,9 @@ export function useClaude() {
   }, []);
 
   return {
-    perm,
-    question,
-    status,
-    autoAccept,
+    perm, question, status, autoAccept,
     toggleAutoAccept,
-    onPerm,
-    onPermResolved,
-    onQuestion,
-    onStatusChange,
-    respond,
-    respondQuestion,
+    onPerm, onPermResolved, onQuestion, onStatusChange,
+    respond, respondQuestion,
   };
 }
