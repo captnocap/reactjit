@@ -6,7 +6,7 @@ Same principle as the AI appliance — compile media into a single executable. A
 
 ## What the User Sees
 
-1. Open the **authoring tool** (iLoveReact binary)
+1. Open the **authoring tool** (ReactJIT binary)
 2. Drop in video files
 3. Define the structure:
    - Title screen / main menu
@@ -31,7 +31,7 @@ Same principle as the AI appliance — compile media into a single executable. A
 
 ## The Menu System
 
-This is where iLoveReact earns its keep. The menu isn't a static image like a real DVD — it's a live React UI rendered by Love2D:
+This is where ReactJIT earns its keep. The menu isn't a static image like a real DVD — it's a live React UI rendered by Love2D:
 
 - **Animated backgrounds** — particles, shaders, moving artwork
 - **Scene selection grids** — thumbnail previews pulled from chapter timestamps
@@ -132,7 +132,7 @@ Extends `dist:love` the same way the AI appliance does:
 
 **Portability.** One file. No "which player do I open this with." No codec packs. No missing subtitle files. No broken relative paths. It runs.
 
-**Customization.** The menu system is React. You're not limited to DVD Studio Pro's template library from 2004. Animated shaders, interactive elements, generative art on the title screen — whatever you can build in iLoveReact.
+**Customization.** The menu system is React. You're not limited to DVD Studio Pro's template library from 2004. Animated shaders, interactive elements, generative art on the title screen — whatever you can build in ReactJIT.
 
 ## Use Cases
 

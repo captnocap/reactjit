@@ -95,8 +95,8 @@ function parseProps(tag: string, jsxLine: number): string {
   const outProps = [...ps];
   if (PLAYGROUND_TRACKED_TAGS.has(tag)) {
     outProps.unshift(
-      `__ilrPlaygroundTag: ${JSON.stringify(tag)}`,
-      `__ilrPlaygroundLine: ${jsxLine}`,
+      `__rjitPlaygroundTag: ${JSON.stringify(tag)}`,
+      `__rjitPlaygroundLine: ${jsxLine}`,
     );
   }
 

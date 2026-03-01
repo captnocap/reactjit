@@ -1,25 +1,25 @@
 ---
-name: ilovereact-new-poc
+name: reactjit-new-poc
 description: >
-  Scaffold and build a new iLoveReact PoC demo. Use when the user asks to "make a demo",
+  Scaffold and build a new ReactJIT PoC demo. Use when the user asks to "make a demo",
   "new PoC", "new example", "scaffold a project", "build me a ... demo", "create a
   new app", or wants to prototype any UI idea in the examples/ directory. Covers all
   targets (Love2D, terminal, web, CC, Neovim, Hammerspoon, AwesomeWM).
 ---
 
-# New iLoveReact PoC Demo
+# New ReactJIT PoC Demo
 
 ## Workflow
 
 ```bash
 cd examples/
-ilovereact init <name>        # scaffolds everything — do NOT mkdir or copy files manually
+reactjit init <name>        # scaffolds everything — do NOT mkdir or copy files manually
 cd <name>
 # write src/App.tsx (and any sub-components under src/)
-ilovereact lint               # after every component change
-ilovereact build              # lint gate + bundle
-ilovereact screenshot --output /tmp/preview.png   # visual verify — read the image
-ilovereact build dist:<target>  # when ready to ship (love, terminal, web, cc, nvim, hs, awesome)
+reactjit lint               # after every component change
+reactjit build              # lint gate + bundle
+reactjit screenshot --output /tmp/preview.png   # visual verify — read the image
+reactjit build dist:<target>  # when ready to ship (love, terminal, web, cc, nvim, hs, awesome)
 ```
 
 That's the entire workflow. The CLI handles entry points, esbuild flags, runtime files,
@@ -27,11 +27,11 @@ and distribution packaging. The only files to edit are under `src/`.
 
 ## Writing Components
 
-Import primitives from `@ilovereact/core`:
+Import primitives from `@reactjit/core`:
 
 ```tsx
 import React, { useState } from 'react';
-import { Box, Text, Pressable, Image, ScrollView, TextInput, Modal } from '@ilovereact/core';
+import { Box, Text, Pressable, Image, ScrollView, TextInput, Modal } from '@reactjit/core';
 ```
 
 Also available: `Slider`, `Switch`, `Checkbox`, `Radio`, `RadioGroup`, `Select`, `FlatList`.
@@ -52,13 +52,13 @@ These cause silent broken layouts if violated. The linter catches all of them.
 6. **Auto-sizing works** — containers without explicit dimensions size to fit children (bottom-up measurement). Use it for cards, badges, labels. Only set explicit dims on root, percentage-child parents, or performance-critical layouts (10+ children).
 7. **Fill the viewport** — Love2D is a fixed canvas, not a scrolling page. Think in rows.
 
-Escape hatch: `// ilr-ignore-next-line` suppresses lint for the next JSX element.
+Escape hatch: `// rjit-ignore-next-line` suppresses lint for the next JSX element.
 
 ## Minimal Valid App
 
 ```tsx
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '@ilovereact/core';
+import { Box, Text, Pressable } from '@reactjit/core';
 
 export function App() {
   const [count, setCount] = useState(0);
@@ -91,8 +91,8 @@ Colors accept CSS strings (`'#ff0000'`, `'rgba(0,0,0,0.5)'`).
 After writing or modifying any component:
 
 ```bash
-ilovereact lint
-ilovereact screenshot --output /tmp/preview.png
+reactjit lint
+reactjit screenshot --output /tmp/preview.png
 ```
 
 Read the screenshot image to confirm the layout before moving on.

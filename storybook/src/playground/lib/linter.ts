@@ -28,7 +28,7 @@ export function lint(source: string): LintMessage[] {
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
     const num = idx + 1;
-    if (idx > 0 && lines[idx - 1].trim() === '// ilr-ignore-next-line') continue;
+    if (idx > 0 && lines[idx - 1].trim() === '// rjit-ignore-next-line') continue;
 
     let sp = 0;
     while (true) {

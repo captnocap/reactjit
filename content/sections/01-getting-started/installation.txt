@@ -27,7 +27,7 @@ Prerequisites:
 Example 1: Full Installation (All Targets)
 ---
 # 1. Clone the repository
-git clone <repo-url> && cd react-love
+git clone <repo-url> && cd reactjit
 
 # 2. Install npm dependencies (workspaces monorepo)
 npm install
@@ -54,7 +54,7 @@ Example 2: Minimal Installation (Grid Targets Only)
 # Grid targets (terminal, cc, nvim, hs, awesome) do not need Love2D or QuickJS
 
 # 1. Clone and install
-git clone <repo-url> && cd react-love
+git clone <repo-url> && cd reactjit
 npm install
 
 # 2. Build a terminal demo directly

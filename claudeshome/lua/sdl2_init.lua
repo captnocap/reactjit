@@ -975,9 +975,9 @@ function SDL2Init.run(config)
   local lastTicks = sdl.SDL_GetTicks()
 
   -- ------------------------------------------------------------------
-  -- 4a. Diagnostic mode (ILOVEREACT_DIAGNOSE=1)
+  -- 4a. Diagnostic mode (REACTJIT_DIAGNOSE=1)
   -- ------------------------------------------------------------------
-  local diagEnabled = os.getenv("ILOVEREACT_DIAGNOSE") == "1"
+  local diagEnabled = os.getenv("REACTJIT_DIAGNOSE") == "1"
   local diagFrameCount = 0
   local diagWaitFrames = 3  -- let tree mutations + layout settle
   local diagDone = false

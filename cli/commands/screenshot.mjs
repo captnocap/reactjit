@@ -52,8 +52,8 @@ export async function screenshotCommand(args) {
 
   const env = {
     ...process.env,
-    ILOVEREACT_SCREENSHOT: '1',
-    ILOVEREACT_SCREENSHOT_OUTPUT: outputPath,
+    REACTJIT_SCREENSHOT: '1',
+    REACTJIT_SCREENSHOT_OUTPUT: outputPath,
   };
 
   // Detect xvfb-run for headless operation

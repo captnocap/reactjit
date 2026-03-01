@@ -1,6 +1,6 @@
 #\!/bin/sh
 # CartridgeOS /init — PID 1
-# No display server. Just kernel -> KMS/DRM -> SDL2 -> LuaJIT -> iLoveReact.
+# No display server. Just kernel -> KMS/DRM -> SDL2 -> LuaJIT -> ReactJIT.
 
 mount -t proc     proc     /proc
 mount -t sysfs    sysfs    /sys
@@ -10,7 +10,7 @@ echo 1 > /proc/sys/kernel/printk 2>/dev/null || true
 
 echo ""
 echo "  CartridgeOS v0.1"
-echo "  iLoveReact -- no X11, no Wayland, no display server"
+echo "  ReactJIT -- no X11, no Wayland, no display server"
 echo "  kernel: $(uname -r)"
 echo ""
 
@@ -29,7 +29,7 @@ export LIBGL_DRIVERS_DIR=/usr/lib/dri
 export EGL_PLATFORM=drm
 export LD_LIBRARY_PATH=/app:/usr/lib:/lib
 
-echo "  Launching iLoveReact..."
+echo "  Launching ReactJIT..."
 echo ""
 
 exec /usr/bin/luajit /app/main.lua

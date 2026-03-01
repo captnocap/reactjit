@@ -32,8 +32,8 @@ function resolveVideoStyle(props: VideoProps): Style | undefined {
 
 export function Video(props: VideoProps) {
   const anyProps = props as any;
-  const playgroundLine = anyProps.__ilrPlaygroundLine;
-  const playgroundTag = anyProps.__ilrPlaygroundTag;
+  const playgroundLine = anyProps.__rjitPlaygroundLine;
+  const playgroundTag = anyProps.__rjitPlaygroundTag;
   const {
     src,
     paused = false,
@@ -94,7 +94,7 @@ export function Video(props: VideoProps) {
     onReady,
     onError,
   };
-  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
-  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+  if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
   return React.createElement('Video', hostProps);
 }

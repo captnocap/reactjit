@@ -16,12 +16,12 @@ fundamental constraints of the layout system.
 
 The linter runs automatically during `reactjit build` (lint gate). You should also run
 `reactjit lint` after every component change to catch issues early. Rules can be bypassed
-on a per-line basis with the `// ilr-ignore-next-line` comment, but this should be rare.
+on a per-line basis with the `// rjit-ignore-next-line` comment, but this should be rare.
 
 === API / SYNTAX ===
 Linter escape hatch:
 
-  // ilr-ignore-next-line
+  // rjit-ignore-next-line
   <Text style={{ color: '#cdd6f4' }}>Intentionally no fontSize</Text>
 
 This suppresses all linter rules for the next line. Use sparingly.

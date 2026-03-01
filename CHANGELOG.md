@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to iLoveReact are documented here.
+All notable changes to ReactJIT are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — `MAJOR.MINOR.PATCH`:
@@ -81,33 +81,33 @@ Initial baseline release. Everything documented here exists and works.
 
 | Package | Role |
 |---------|------|
-| `@ilovereact/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
-| `@ilovereact/native` | React reconciler host config, QuickJS bridge, event dispatcher |
-| `@ilovereact/web` | DOM overlay renderer |
-| `@ilovereact/grid` | Shared layout engine + render server for grid targets |
-| `@ilovereact/terminal` | Pure-JS terminal renderer (ANSI truecolor) |
-| `@ilovereact/cc` | ComputerCraft target (WebSocket, 16-color) |
-| `@ilovereact/nvim` | Neovim target (stdio, floating windows) |
-| `@ilovereact/hs` | Hammerspoon target (WebSocket, hs.canvas) |
-| `@ilovereact/awesome` | AwesomeWM target (stdio, Cairo) |
-| `@ilovereact/components` | Layout helpers (Card, Badge, FlexRow, etc.) |
-| `@ilovereact/router` | Client-side routing |
-| `@ilovereact/storage` | Cross-target storage adapters (Love2D files, SQLite, memory, web) |
-| `@ilovereact/ai` | AI provider hooks (OpenAI, Anthropic), MCP client |
-| `@ilovereact/apis` | Pre-built API clients (Spotify, GitHub, Weather, TMDB, Hue, etc.) |
-| `@ilovereact/rss` | RSS/Atom feed parser + OPML |
-| `@ilovereact/webhooks` | WebSocket/HTTP webhook hooks |
-| `@ilovereact/crypto` | Noble cryptography wrappers (hashes, ciphers, curves) |
-| `@ilovereact/server` | Server-side hooks |
-| `@ilovereact/audio` | Audio API types |
-| `@ilovereact/3d` | 3D scene types |
-| `@ilovereact/game` | Game canvas API |
-| `@ilovereact/theme` | Theme system types |
-| `@ilovereact/controls` | Control component types |
+| `@reactjit/core` | Primitives (Box, Text, Image), components, hooks, animation, types |
+| `@reactjit/native` | React reconciler host config, QuickJS bridge, event dispatcher |
+| `@reactjit/web` | DOM overlay renderer |
+| `@reactjit/grid` | Shared layout engine + render server for grid targets |
+| `@reactjit/terminal` | Pure-JS terminal renderer (ANSI truecolor) |
+| `@reactjit/cc` | ComputerCraft target (WebSocket, 16-color) |
+| `@reactjit/nvim` | Neovim target (stdio, floating windows) |
+| `@reactjit/hs` | Hammerspoon target (WebSocket, hs.canvas) |
+| `@reactjit/awesome` | AwesomeWM target (stdio, Cairo) |
+| `@reactjit/components` | Layout helpers (Card, Badge, FlexRow, etc.) |
+| `@reactjit/router` | Client-side routing |
+| `@reactjit/storage` | Cross-target storage adapters (Love2D files, SQLite, memory, web) |
+| `@reactjit/ai` | AI provider hooks (OpenAI, Anthropic), MCP client |
+| `@reactjit/apis` | Pre-built API clients (Spotify, GitHub, Weather, TMDB, Hue, etc.) |
+| `@reactjit/rss` | RSS/Atom feed parser + OPML |
+| `@reactjit/webhooks` | WebSocket/HTTP webhook hooks |
+| `@reactjit/crypto` | Noble cryptography wrappers (hashes, ciphers, curves) |
+| `@reactjit/server` | Server-side hooks |
+| `@reactjit/audio` | Audio API types |
+| `@reactjit/3d` | 3D scene types |
+| `@reactjit/game` | Game canvas API |
+| `@reactjit/theme` | Theme system types |
+| `@reactjit/controls` | Control component types |
 
 ### Tooling
 
-- `ilovereact` CLI — `init`, `dev`, `build`, `build dist:<target>`, `lint`, `screenshot`, `update`
+- `reactjit` CLI — `init`, `dev`, `build`, `build dist:<target>`, `lint`, `screenshot`, `update`
 - Static layout linter (`cli/commands/lint.mjs`) — enforces fontSize, no-unicode-symbol-in-text, row-box width, root container sizing
 - Headless screenshot capture
 - `make cli-setup` / `make build` / `make dist-storybook` build pipeline

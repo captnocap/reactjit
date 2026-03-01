@@ -35,7 +35,7 @@ export default function EmulatorStory() {
 
       {/* Emulator viewport */}
       <Box style={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}>
-        {/* // ilr-ignore-next-line */}
+        {/* // rjit-ignore-next-line */}
         <Emulator
           playing={playing}
           style={{ width: 512, height: 480 }}

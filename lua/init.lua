@@ -399,6 +399,16 @@ end
 local function applyInteractionStyle(node)
   if not node or not node.props then return end
 
+  -- Ensure transient interaction overlays cannot mutate the declarative style
+  -- source-of-truth table (node.props.style).
+  if node.props.style and node.style == node.props.style then
+    local detached = {}
+    for k, v in pairs(node.style) do
+      detached[k] = v
+    end
+    node.style = detached
+  end
+
   local hoverStyle = node.props.hoverStyle
   local activeStyle = node.props.activeStyle
   local focusStyle = node.props.focusStyle
@@ -433,20 +443,21 @@ local function applyInteractionStyle(node)
     if overrideActive then
       -- Save base value before applying overlay (only on first capture)
       if base[k] == nil then
-        if node.style[k] == nil then
+        local declarativeStyle = node.props and node.props.style
+        if not declarativeStyle or declarativeStyle[k] == nil then
           base[k] = "__NIL__"
         else
-          base[k] = node.style[k]
+          base[k] = declarativeStyle[k]
         end
       end
     else
       -- No overlay active: refresh base from current node.style so React
-      -- UPDATE commands (e.g. active prop toggling backgroundColor) are
-      -- respected instead of restoring a stale captured value.
-      if node.style[k] == nil then
+      -- UPDATE commands are respected instead of restoring stale captured values.
+      local declarativeStyle = node.props and node.props.style
+      if not declarativeStyle or declarativeStyle[k] == nil then
         base[k] = "__NIL__"
       else
-        base[k] = node.style[k]
+        base[k] = declarativeStyle[k]
       end
     end
 
@@ -1479,12 +1490,52 @@ function ReactJIT.init(config)
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
-  if os.getenv("ILOVEREACT_SCREENSHOT") == "1" then
+  if os.getenv("REACTJIT_SCREENSHOT") == "1" then
     M.screenshot = require("lua.screenshot")
     M.screenshot.init({
-      outputPath = os.getenv("ILOVEREACT_SCREENSHOT_OUTPUT") or "screenshot.png",
+      outputPath = os.getenv("REACTJIT_SCREENSHOT_OUTPUT") or "screenshot.png",
     })
   end
+
+  -- Test mode (RJIT_TEST=1) — rjit test ----------------------------------------
+  if os.getenv("RJIT_TEST") == "1" and M.bridge then
+    local shimPath = os.getenv("RJIT_TEST_SHIM")
+    local specPath = os.getenv("RJIT_TEST_SPEC")
+    if shimPath then
+      local f = io.open(shimPath, "r")
+      if f then
+        local src = f:read("*a"); f:close()
+        pcall(function() M.bridge:eval(src, "<test-shim>") end)
+      end
+    end
+    if specPath then
+      local f = io.open(specPath, "r")
+      if f then
+        local src = f:read("*a"); f:close()
+        local ok, err = pcall(function() M.bridge:eval(src, "<test-spec>") end)
+        if not ok then
+          io.write("[rjit test] spec eval error: " .. tostring(err) .. "\n"); io.flush()
+          love.event.quit(1)
+        end
+      else
+        io.write("[rjit test] spec not found: " .. tostring(specPath) .. "\n"); io.flush()
+        love.event.quit(1)
+      end
+    end
+    local tr = require("lua.testrunner")
+    tr.init({ tree = M.tree })
+    rpcHandlers["test:query"]      = function(a) return tr.query(a) end
+    rpcHandlers["test:click"]      = function(a) return tr.click(a) end
+    rpcHandlers["test:type"]       = function(a) return tr.type_text(a) end
+    rpcHandlers["test:key"]        = function(a) return tr.key(a) end
+    rpcHandlers["test:wait"]       = function(a) return tr.wait(a) end
+    rpcHandlers["test:screenshot"] = function(a) return tr.screenshot(a) end
+    rpcHandlers["test:done"]       = function(a) return tr.report(a) end
+    ReactJIT._testFrameCount = 0
+    ReactJIT._testStarted    = false
+    io.write("[rjit test] active\n"); io.flush()
+  end
+  -- ---------------------------------------------------------------------------
 
   -- Wire up the reload callback for crash recovery BSOD
   errors.setReloadCallback(function()
@@ -1695,6 +1746,19 @@ function ReactJIT.update(dt)
     M.bridge:tick()
     -- Push initial viewport dimensions so useWindowDimensions can pick them up
     pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
+  end
+
+  -- Test mode: trigger _runTests() after 3 frames (mount + 2 render cycles)
+  if ReactJIT._testFrameCount ~= nil and not ReactJIT._testStarted then
+    ReactJIT._testFrameCount = ReactJIT._testFrameCount + 1
+    if ReactJIT._testFrameCount >= 3 then
+      ReactJIT._testStarted = true
+      local tok, terr = pcall(function() M.bridge:callGlobal("_runTests") end)
+      if not tok then
+        io.write("TEST_ERROR: " .. tostring(terr) .. "\n"); io.flush()
+        love.event.quit(1)
+      end
+    end
   end
 
   -- 1. Tick JS timers + microtasks
@@ -2334,6 +2398,13 @@ function ReactJIT.update(dt)
   if not appOk then
     crashRecoveryMode = true
     local errMsg = tostring(appErr)
+    -- Update-time crashes can happen while rendering to off-screen canvases
+    -- (scene3d/effects/masks). Reset graphics state so the recovery BSOD can
+    -- draw without triggering secondary Love2D canvas/present failures.
+    love.graphics.setCanvas()
+    love.graphics.setScissor()
+    love.graphics.setStencilTest()
+    love.graphics.setBlendMode("alpha")
     io.write("[reactjit] CRASH: entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
     io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
     errors.push({
@@ -2386,15 +2457,19 @@ function ReactJIT.draw()
       end
     end
     if not ok then
-      -- Painter can fail while rendering to an off-screen canvas (effects/masks).
-      -- Reset volatile graphics state so Love2D can still present safely.
-      love.graphics.setCanvas()
-      love.graphics.setScissor()
-      love.graphics.setStencilTest()
-      love.graphics.setBlendMode("alpha")
+      -- Paint failure corrupts the graphics state (transform stack, stencil depth,
+      -- active canvases). Reset EVERYTHING so Love2D can present safely and so the
+      -- next frame doesn't cascade into a secondary error that masks this one.
+      love.graphics.reset()
+      -- Enter crash recovery — continuing with corrupted state causes cascade
+      -- errors (e.g. scene3d stack depth) that overwrite the real root cause.
+      crashRecoveryMode = true
+      local errMsg = tostring(paintErr)
+      io.write("[reactjit] CRASH (paint): entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
+      io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
       errors.push({
         source = "lua",
-        message = tostring(paintErr),
+        message = errMsg,
         context = "painter.paint",
       })
     end
@@ -3610,6 +3685,7 @@ function ReactJIT.wheelmoved(x, y)
     -- Update scroll position directly in Lua for immediate response
     local ss = scrollContainer.scrollState
     local scrollSpeed = 40  -- pixels per wheel tick
+    local isHorizontalTilt = (x ~= 0 and y == 0)
     local wheelX, wheelY = x, y
     if M.events.resolveScrollWheelDeltas then
       wheelX, wheelY = M.events.resolveScrollWheelDeltas(scrollContainer, x, y)
@@ -3619,8 +3695,19 @@ function ReactJIT.wheelmoved(x, y)
         wheelX = wheelY
         wheelY = 0
       end
+      if allowY and not allowX and wheelY == 0 and wheelX ~= 0 then
+        wheelY = wheelX
+        wheelX = 0
+      end
       if not allowX then wheelX = 0 end
       if not allowY then wheelY = 0 end
+    end
+
+    -- Horizontal tilt remapped to vertical → use page-sized scroll
+    if isHorizontalTilt and wheelY ~= 0 then
+      local c = scrollContainer.computed
+      local viewportH = c and c.h or 400
+      scrollSpeed = math.max(40, math.floor(viewportH * 0.85))
     end
 
     local newScrollX = (ss.scrollX or 0) - wheelX * scrollSpeed

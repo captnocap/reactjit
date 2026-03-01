@@ -6,7 +6,7 @@ A portable, self-contained binary that IS an AI character. Not a runtime that lo
 
 ## What the User Sees
 
-1. Open the **authoring tool** (itself an iLoveReact binary)
+1. Open the **authoring tool** (itself an ReactJIT binary)
 2. Design a character:
    - Portrait, sprites, images
    - Personality and dialogue style
@@ -111,7 +111,7 @@ You don't install an AI framework and then configure a character. You receive a 
 
 ## Open Questions
 
-- **Authoring tool scope:** Full visual editor in iLoveReact, or CLI-driven build from a config file? The visual editor is more ambitious but more compelling.
+- **Authoring tool scope:** Full visual editor in ReactJIT, or CLI-driven build from a config file? The visual editor is more ambitious but more compelling.
 - **Model updates:** If a better model comes out, can you re-bind the character sheet to new weights without the authoring tool? (Probably yes — just swap the GGUF and rebuild.)
 - **Multi-character:** Can one binary host multiple characters sharing one model? (Probably — different system prompts, same weights.)
 - **Networking:** Should characters be able to discover each other on a LAN? Characters talking to characters.

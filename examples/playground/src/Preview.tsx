@@ -38,7 +38,7 @@ export function Preview({ UserComponent, errors }: PreviewProps) {
           </Box>
         )}
       </Box>
-      {/* ilr-ignore-next-line */}
+      {/* rjit-ignore-next-line */}
       <Box style={{ flexGrow: 1, overflow: 'scroll', padding: 12 }}>
         {hasErrors ? (
           <Box style={{ padding: 16, backgroundColor: '#2d1b1b', borderRadius: 8 }}>

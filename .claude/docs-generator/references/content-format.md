@@ -20,7 +20,7 @@ Double newlines create paragraph breaks.
 
 === API / SYNTAX ===
 ```tsx
-import { Thing } from '@ilovereact/core';
+import { Thing } from '@reactjit/core';
 ```
 
 Props:

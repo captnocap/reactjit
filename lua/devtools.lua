@@ -111,14 +111,33 @@ local function getFont()
 end
 
 -- Scrollbar helper (thin thumb, no track)
+local SCROLLBAR_HIT_W = 10  -- hit area width (wider than visual for easier clicking)
+local SCROLLBAR_VIS_W = 3   -- visual bar width
+
 local function drawScrollbar(rx, ry, rw, rh, scrollY, contentH)
   if not contentH or contentH <= rh then return end
   local maxScroll = math.max(1, contentH - rh)
   local thumbH = math.max(20, rh * (rh / contentH))
   local thumbY = ry + (scrollY / maxScroll) * (rh - thumbH)
   love.graphics.setColor(1, 1, 1, 0.25)
-  love.graphics.rectangle("fill", rx + rw - 5, thumbY, 3, thumbH, 1, 1)
+  love.graphics.rectangle("fill", rx + rw - 5, thumbY, SCROLLBAR_VIS_W, thumbH, 1, 1)
 end
+
+--- Scrollbar geometry: returns { thumbY, thumbH, maxScroll, trackY, trackH } or nil
+local function getScrollbarGeometry(region, scrollY, contentH)
+  if not region or not contentH or contentH <= region.h then return nil end
+  local rh = region.h
+  local maxScroll = math.max(1, contentH - rh)
+  local thumbH = math.max(20, rh * (rh / contentH))
+  local thumbY = region.y + (scrollY / maxScroll) * (rh - thumbH)
+  return { thumbY = thumbY, thumbH = thumbH, maxScroll = maxScroll, trackY = region.y, trackH = rh }
+end
+
+-- Scrollbar drag state
+local devScrollDrag = nil  -- { tab, startMouse, startScroll, maxScroll, trackH, thumbH, trackY }
+-- Stored regions and content heights for scrollbar interaction
+local perfRegion   = nil
+local perfContentHStored = 0
 
 -- ============================================================================
 -- Geometry helpers
@@ -349,9 +368,9 @@ function DevTools.tick(dt)
     end
   end
 
-  -- 4. Send perf data (throttled to every 0.5s)
+  -- 4. Send perf data (throttled to ~15fps to match mutation rate for sparkline)
   state.lastPerfSend = state.lastPerfSend + dt
-  if state.lastPerfSend >= 0.5 then
+  if state.lastPerfSend >= (1.0 / 15) then
     state.lastPerfSend = 0
     local perf = inspector and inspector.getPerfData()
     if perf then
@@ -532,8 +551,70 @@ local perfWheelmoved
 local logsHoverRow = nil  -- index into sortedChannels, or "all"/"none"
 local logsScrollY  = 0
 local logsRegion   = nil  -- stored from draw for scroll clamping
+local logsContentHStored = 0
+local perfScrollY  = 0   -- forward-declared (used by scrollbar helpers before perf section)
 
 local wfRefresh  -- forward declaration (used by mousepressed before definition)
+
+--- Try to start a scrollbar drag. Returns true if click was on a scrollbar.
+local function devScrollbarPressed(mx, my, button)
+  if button ~= 1 then return false end
+
+  -- Determine which tab's scrollbar to test
+  local tab, region, scrollY, contentH
+  if state.activeTab == "perf" and perfRegion then
+    tab, region, scrollY, contentH = "perf", perfRegion, perfScrollY, perfContentHStored
+  elseif state.activeTab == "logs" and logsRegion then
+    tab, region, scrollY, contentH = "logs", logsRegion, logsScrollY, logsContentHStored
+  else
+    return false
+  end
+
+  -- Check if click is in the scrollbar hit zone (right edge of region)
+  local barX = region.x + region.w - SCROLLBAR_HIT_W
+  if mx < barX or mx > region.x + region.w then return false end
+  if my < region.y or my > region.y + region.h then return false end
+
+  local geo = getScrollbarGeometry(region, scrollY, contentH)
+  if not geo then return false end
+
+  if my >= geo.thumbY and my <= geo.thumbY + geo.thumbH then
+    -- Click on thumb → start drag
+    devScrollDrag = { tab = tab, startMouse = my, startScroll = scrollY,
+                      maxScroll = geo.maxScroll, trackH = geo.trackH,
+                      thumbH = geo.thumbH, trackY = geo.trackY }
+  else
+    -- Click on track → jump to position, then start drag
+    local ratio = (my - geo.trackY) / geo.trackH
+    local newScroll = math.max(0, math.min(ratio * geo.maxScroll, geo.maxScroll))
+    if tab == "perf" then perfScrollY = newScroll
+    else logsScrollY = newScroll end
+    devScrollDrag = { tab = tab, startMouse = my, startScroll = newScroll,
+                      maxScroll = geo.maxScroll, trackH = geo.trackH,
+                      thumbH = geo.thumbH, trackY = geo.trackY }
+  end
+  return true
+end
+
+--- Update scrollbar drag on mouse move. Returns true if consumed.
+local function devScrollbarMoved(mx, my)
+  if not devScrollDrag then return false end
+  local d = devScrollDrag
+  local delta = my - d.startMouse
+  local thumbTravel = math.max(1, d.trackH - d.thumbH)
+  local scrollDelta = (delta / thumbTravel) * d.maxScroll
+  local newScroll = math.max(0, math.min(d.startScroll + scrollDelta, d.maxScroll))
+  if d.tab == "perf" then perfScrollY = newScroll
+  else logsScrollY = newScroll end
+  return true
+end
+
+--- End scrollbar drag. Returns true if was dragging.
+local function devScrollbarReleased()
+  if not devScrollDrag then return false end
+  devScrollDrag = nil
+  return true
+end
 
 --- Handle mouse press. Returns true if consumed.
 function DevTools.mousepressed(x, y, button)
@@ -579,6 +660,8 @@ function DevTools.mousepressed(x, y, button)
     if x >= refreshX and x < refreshX + 20 then
       -- Wireframe
       wfRefresh()
+      -- Perf
+      perfScrollY = 0
       -- Logs
       sortedChannels = nil
       logsScrollY = 0
@@ -610,6 +693,9 @@ function DevTools.mousepressed(x, y, button)
     return true  -- consumed by tab bar even if no tab hit
   end
 
+  -- Scrollbar click/drag gets priority over tab content
+  if devScrollbarPressed(x, y, button) then return true end
+
   -- Content area click: route to active tab
   if state.activeTab == "elements" then
     -- Check if click is on the divider between tree and detail
@@ -625,9 +711,11 @@ function DevTools.mousepressed(x, y, button)
   elseif state.activeTab == "wireframe" then
     -- Flex toggle button click
     local ft = state._wfFlexToggle
-    if ft and x >= ft.x and x < ft.x + ft.w and y >= ft.y and y < ft.y + ft.h then
-      wfShowFlex = not wfShowFlex
-      return true
+    if ft then
+      if x >= ft.x and x < ft.x + ft.w and y >= ft.y and y < ft.y + ft.h then
+        wfShowFlex = not wfShowFlex
+        return true
+      end
     end
     -- Hit test against wireframe rects — select node but stay on wireframe.
     local hitNode = wireframeHitTest(x, y)
@@ -654,6 +742,9 @@ function DevTools.mousemoved(x, y)
     inspector.mousemoved(x, y)
     return
   end
+
+  -- Scrollbar dragging
+  if devScrollbarMoved(x, y) then return end
 
   -- Divider dragging (uses devtools window coordinates when popped out)
   if state.draggingDivider then
@@ -695,6 +786,7 @@ end
 
 --- Handle mouse release. Returns true if consumed.
 function DevTools.mousereleased(x, y, button)
+  if devScrollbarReleased() then return true end
   if state.draggingDivider then
     state.draggingDivider = false
     love.mouse.setCursor()
@@ -1123,20 +1215,40 @@ local function drawWireframeTab(root, region)
   local font = getFont()
   love.graphics.setFont(font)
   local fh = font:getHeight()
-  local bottomY = region.y + region.h - fh - 6
+  local bottomY = region.y + region.h - fh - 10
 
-  -- Flex toggle button (left side)
-  local flexLabel = wfShowFlex and "[Flex: ON]" or "[Flex: OFF]"
-  local flexW = font:getWidth(flexLabel)
+  -- Flex toggle pill button (left side)
+  local flexLabel = wfShowFlex and "Flex" or "Flex"
+  local flexTw = font:getWidth(flexLabel)
+  local pillPadX, pillPadY = 8, 3
+  local pillX = region.x + 8
+  local pillY = bottomY - pillPadY
+  local pillW = flexTw + pillPadX * 2
+  local pillH = fh + pillPadY * 2
+
+  -- Check hover for visual feedback
+  local mx, my = love.mouse.getPosition()
+  local isFlexHover = mx >= pillX and mx < pillX + pillW and my >= pillY and my < pillY + pillH
+
   if wfShowFlex then
-    love.graphics.setColor(FP_GROW_COLOR)
+    -- Active: filled amber pill
+    love.graphics.setColor(0.95, 0.75, 0.20, isFlexHover and 0.35 or 0.25)
+    love.graphics.rectangle("fill", pillX, pillY, pillW, pillH, 4, 4)
+    love.graphics.setColor(0.95, 0.75, 0.20, 0.80)
+    love.graphics.rectangle("line", pillX, pillY, pillW, pillH, 4, 4)
+    love.graphics.setColor(0.95, 0.85, 0.40, 1)
   else
-    love.graphics.setColor(0.45, 0.45, 0.50, 0.60)
+    -- Inactive: dim outline pill
+    love.graphics.setColor(0.40, 0.40, 0.45, isFlexHover and 0.25 or 0.10)
+    love.graphics.rectangle("fill", pillX, pillY, pillW, pillH, 4, 4)
+    love.graphics.setColor(0.40, 0.40, 0.45, 0.50)
+    love.graphics.rectangle("line", pillX, pillY, pillW, pillH, 4, 4)
+    love.graphics.setColor(0.50, 0.50, 0.55, 0.70)
   end
-  love.graphics.print(flexLabel, region.x + 8, bottomY)
+  love.graphics.print(flexLabel, pillX + pillPadX, bottomY)
 
   -- Store flex toggle hit rect for click handling
-  state._wfFlexToggle = { x = region.x + 8, y = bottomY, w = flexW, h = fh }
+  state._wfFlexToggle = { x = pillX, y = pillY, w = pillW, h = pillH }
 
   -- Scale label (right side)
   love.graphics.setColor(STATUS_TEXT)
@@ -1167,7 +1279,7 @@ end
 local PERF_HISTORY_SIZE = 120
 local perfHistory = {}    -- array of { layoutMs, paintMs, totalMs }
 local perfHistoryIdx = 0  -- next write index (wraps)
-local perfScrollY = 0
+-- perfScrollY is forward-declared near other scroll state (line ~555)
 
 -- Mutation stats accumulator (polled per frame)
 local lastMutationStats = { total = 0, creates = 0, updates = 0, removes = 0 }
@@ -1487,12 +1599,18 @@ local function drawPerfTab(region)
   end
 
   local perfContentH = (y - region.y) + perfScrollY
+  -- Store for scrollbar interaction
+  perfRegion = region
+  perfContentHStored = perfContentH
   drawScrollbar(region.x, region.y, region.w, region.h, perfScrollY, perfContentH)
   love.graphics.setScissor()
 end
 
 perfWheelmoved = function(x, y)
-  perfScrollY = math.max(0, perfScrollY - y * 20)
+  -- Map horizontal tilt to vertical scroll (page-like) when no vertical input
+  local dy = y
+  if dy == 0 and x ~= 0 then dy = x end
+  perfScrollY = math.max(0, perfScrollY - dy * 20)
   return true
 end
 
@@ -1633,11 +1751,12 @@ local function drawLogsTab(region)
   local hintY = rowY + 8
   if hintY + fh < region.y + region.h + logsScrollY then
     love.graphics.setColor(0.35, 0.38, 0.45, 1)
-    love.graphics.print("Tip: ILOVEREACT_DEBUG=tree,layout love love  (enable at startup)", x0, hintY)
+    love.graphics.print("Tip: REACTJIT_DEBUG=tree,layout love love  (enable at startup)", x0, hintY)
     love.graphics.print("Output goes to terminal AND console tab", x0, hintY + fh + 2)
   end
 
   local logsContentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
+  logsContentHStored = logsContentH
   drawScrollbar(region.x, region.y, region.w, region.h, logsScrollY, logsContentH)
   love.graphics.setScissor()
 end
@@ -1730,7 +1849,10 @@ end
 
 --- Handle wheel scroll on logs tab.
 logsWheelmoved = function(x, y)
-  logsScrollY = math.max(0, logsScrollY - y * 20)
+  -- Map horizontal tilt to vertical scroll when no vertical input
+  local dy = y
+  if dy == 0 and x ~= 0 then dy = x end
+  logsScrollY = math.max(0, logsScrollY - dy * 20)
   -- Clamp to content height
   if logsRegion then
     local channels = getSortedChannels()

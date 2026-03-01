@@ -473,11 +473,11 @@ LocalStorageAdapter
 new LocalStorageAdapter({ prefix? })
 
 Options:
-  prefix?: string — Key prefix (default: 'ilr:')
+  prefix?: string — Key prefix (default: 'rjit:')
 
 Storage Key Format:
   <prefix><collection>:<id>
-  Example: 'ilr:notes:n1'
+  Example: 'rjit:notes:n1'
 
 Limits:
   - 5-10MB total (browser-dependent)

@@ -57,7 +57,7 @@ Warning rules (advisory):
     <Pressable> component lacks an onPress handler.
 
 Escape hatch:
-  // ilr-ignore-next-line
+  // rjit-ignore-next-line
   Place this comment on the line immediately before the JSX element to suppress all rules
   for that element.
 
@@ -76,7 +76,7 @@ Platforms: All
 Example 2: Suppress a lint rule
 ---
 {/* This Text intentionally has no fontSize for testing */}
-{/* // ilr-ignore-next-line */}
+{/* // rjit-ignore-next-line */}
 <Text style={{ color: '#cdd6f4' }}>Special case</Text>
 ---
 Platforms: All
@@ -102,7 +102,7 @@ The linter requires TypeScript to be installed as a dev dependency (npm install 
 === CRITICAL RULES ===
 - Run the linter after EVERY component change
 - Error-level rules block builds -- they must be fixed or explicitly suppressed
-- The escape hatch (// ilr-ignore-next-line) should be used sparingly
+- The escape hatch (// rjit-ignore-next-line) should be used sparingly
 - Style passed via variables (style={myStyle}) cannot be analyzed -- the linter skips those
 - Style objects with spread operators ({...baseStyle, color: '#fff'}) are partially analyzed
 - Only ReactJIT primitives are linted (Box, Text, Image, etc.) -- HTML elements are skipped

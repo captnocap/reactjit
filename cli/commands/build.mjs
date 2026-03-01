@@ -856,12 +856,12 @@ async function buildDistLove(cwd, projectName, opts = {}) {
 
     // 5b. Find launcher stub + Windows QuickJS DLL
     const launcherCandidates = [
-      join(CLI_ROOT, 'runtime', 'bin', 'ilr-launcher.exe'),
-      join(monoRoot, 'zig-out', 'bin', 'ilr-launcher.exe'),
+      join(CLI_ROOT, 'runtime', 'bin', 'rjit-launcher.exe'),
+      join(monoRoot, 'zig-out', 'bin', 'rjit-launcher.exe'),
     ];
     const launcherPath = launcherCandidates.find(p => existsSync(p));
     if (!launcherPath) {
-      console.error('  ilr-launcher.exe not found.');
+      console.error('  rjit-launcher.exe not found.');
       console.error('  Run: make cli-setup (or zig build win-launcher)');
       process.exit(1);
     }

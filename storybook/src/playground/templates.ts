@@ -206,7 +206,7 @@ export const templates: Template[] = [
     var display = animated >= 1000
       ? (animated / 1000).toFixed(1) + 'k'
       : String(Math.round(animated));
-    return ( // ilr-ignore-next-line
+    return ( // rjit-ignore-next-line
       <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'normal' }}>
         {props.prefix + display + props.suffix}
       </Text>

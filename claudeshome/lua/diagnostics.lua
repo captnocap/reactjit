@@ -5,7 +5,7 @@
   status. Nodes that exist in the tree but won't get painted are "ghosts" —
   this module tells you which ones and why.
 
-  Triggered via env var:  ILOVEREACT_DIAGNOSE=1
+  Triggered via env var:  REACTJIT_DIAGNOSE=1
   Integrated into sdl2_init.lua run loop (waits 3 frames, runs, exits).
 
   Output format (structured, parseable by CLI):
@@ -22,7 +22,7 @@ local Diagnostics = {}
 -- ============================================================================
 
 function Diagnostics.isEnabled()
-  return os.getenv("ILOVEREACT_DIAGNOSE") == "1"
+  return os.getenv("REACTJIT_DIAGNOSE") == "1"
 end
 
 -- ============================================================================

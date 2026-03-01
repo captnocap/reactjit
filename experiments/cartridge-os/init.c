@@ -636,7 +636,7 @@ int main(void) {
 
     /* ── Banner ───────────────────────────────────────────────────────────── */
     puts("\n  CartridgeOS v0.1");
-    puts("  iLoveReact  --  no X11, no Wayland, no display server");
+    puts("  ReactJIT  --  no X11, no Wayland, no display server");
 
     char ver[64] = "unknown";
     FILE *vf = fopen("/proc/version", "r");
@@ -886,7 +886,7 @@ int main(void) {
         }
     }
 
-    printf("\n  Launching iLoveReact (%s)...\n\n",
+    printf("\n  Launching ReactJIT (%s)...\n\n",
            verdict == CART_VERDICT_VERIFIED ? "verified" : "unsigned/dev");
     fflush(stdout);
 

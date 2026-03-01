@@ -337,8 +337,8 @@ function resolveImageStyle(props: ImageProps): Style | undefined {
 
 export function Box(props: BoxProps) {
   const anyProps = props as any;
-  const playgroundLine = anyProps.__ilrPlaygroundLine;
-  const playgroundTag = anyProps.__ilrPlaygroundTag;
+  const playgroundLine = anyProps.__rjitPlaygroundLine;
+  const playgroundTag = anyProps.__rjitPlaygroundTag;
   const {
     backgroundVideo, backgroundVideoFit, hoverVideo, hoverVideoFit,
     hoverStyle, activeStyle, focusStyle,
@@ -490,8 +490,8 @@ export function Box(props: BoxProps) {
     onBlur,
     onLayout,
   };
-  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
-  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+  if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
 
   return React.createElement(
     'View',
@@ -558,8 +558,8 @@ export function Col({ span, sm, md, lg, xl, responsive, style, ...rest }: ColPro
 
 export function Text(props: TextProps) {
   const anyProps = props as any;
-  const playgroundLine = anyProps.__ilrPlaygroundLine;
-  const playgroundTag = anyProps.__ilrPlaygroundTag;
+  const playgroundLine = anyProps.__rjitPlaygroundLine;
+  const playgroundTag = anyProps.__rjitPlaygroundTag;
   const { lines, numberOfLines, onKeyDown, onKeyUp, onTextInput, children } = props;
   const resolvedStyle = resolveTextStyle(props);
   const tokens = useThemeColorsOptional();
@@ -597,15 +597,15 @@ export function Text(props: TextProps) {
   }
 
   const hostProps: any = { style: scaledStyle, numberOfLines: resolvedLines, onKeyDown, onKeyUp, onTextInput };
-  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
-  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+  if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
   return React.createElement('Text', hostProps, children);
 }
 
 export function Image(props: ImageProps) {
   const anyProps = props as any;
-  const playgroundLine = anyProps.__ilrPlaygroundLine;
-  const playgroundTag = anyProps.__ilrPlaygroundTag;
+  const playgroundLine = anyProps.__rjitPlaygroundLine;
+  const playgroundTag = anyProps.__rjitPlaygroundTag;
   const { src, onClick, onWheel } = props;
   const resolvedStyle = resolveImageStyle(props);
   const scaledStyle = useScaledStyle(resolvedStyle);
@@ -627,8 +627,8 @@ export function Image(props: ImageProps) {
   }
 
   const hostProps: any = { src, style: scaledStyle, onClick, onWheel };
-  if (playgroundLine !== undefined) hostProps.__ilrPlaygroundLine = playgroundLine;
-  if (playgroundTag !== undefined) hostProps.__ilrPlaygroundTag = playgroundTag;
+  if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
+  if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
   return React.createElement('Image', hostProps);
 }
 

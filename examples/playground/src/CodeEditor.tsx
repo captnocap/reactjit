@@ -114,7 +114,7 @@ export function CodeEditor({ initialCode, onChange, jumpToLine }: CodeEditorProp
   }, [focused, cursor, lines, backspace, deleteFwd, insertNewline, insertText, move, resetBlink]);
 
   return (
-    // ilr-ignore-next-line
+    // rjit-ignore-next-line
     <Box style={{ flexGrow: 1, backgroundColor: '#1e1e2e', overflow: 'scroll' }}
       onClick={() => { if (!focused) { setFocused(true); resetBlink(); } }}
       onKeyDown={handleKeyDown} onTextInput={handleTextInput}>

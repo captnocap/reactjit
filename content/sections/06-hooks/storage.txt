@@ -248,7 +248,7 @@ LocalStorageAdapter
     new LocalStorageAdapter({ prefix? })
 
     Options:
-      prefix  string   Key prefix to namespace this adapter. Default: 'ilr:'.
+      prefix  string   Key prefix to namespace this adapter. Default: 'rjit:'.
 
     Extra method:
       clearCollection(collection): Promise<void>

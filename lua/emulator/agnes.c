@@ -635,7 +635,7 @@ agnes_color_t agnes_get_screen_pixel(const agnes_t *agnes, int x, int y) {
     return g_colors[color_ix & 0x3f];
 }
 
-/* iLoveReact extension: bulk framebuffer read — converts indexed screen to RGBA */
+/* ReactJIT extension: bulk framebuffer read — converts indexed screen to RGBA */
 void agnes_get_screen_buffer(const agnes_t *agnes, uint8_t *out_rgba) {
     int total = AGNES_SCREEN_WIDTH * AGNES_SCREEN_HEIGHT;
     for (int i = 0; i < total; i++) {

@@ -142,6 +142,9 @@ local TEXT_SELECT_THRESHOLD = 3  -- pixels of movement before drag becomes selec
 local mode     = nil   -- "web", "native", or "canvas"
 local basePath = nil   -- directory containing these modules
 local initConfig = nil -- stashed config from init() for reload()
+local settingsToggleKey = "f10"
+local themeMenuToggleKey = "f9"
+local systemPanelToggleKey = "f11"
 
 -- Interaction style overlay tracking (hoverStyle / activeStyle / focusStyle)
 -- Maps nodeId -> { [propKey] = baseValue } for properties overridden by interaction
@@ -154,6 +157,12 @@ local prevFocusedNodeIds = {}  -- { [nodeId] = true }
 local hmrFrameCounter = 0
 local hmrLastMtime    = nil
 local hmrHasLoaded    = false
+
+-- Crash recovery: when true, update/draw skip the app and only poll HMR
+local crashRecoveryMode = false
+
+-- Event trail for crash diagnostics
+local eventTrail = require("lua.event_trail")
 
 -- Helper: does the current mode run the rendering pipeline?
 local function isRendering()
@@ -212,6 +221,86 @@ local function pushEvent(evt)
   elseif mode == "canvas" or mode == "wasm" then
     M.bridge.emit(evt.type, evt.payload)
   end
+end
+
+local function captureScreenshot()
+  if not M.screenshotEnabled then return false end
+
+  love.graphics.captureScreenshot(function(imageData)
+    local t = os.date("*t")
+    local filename = string.format("screenshot_%04d%02d%02d_%02d%02d%02d.png",
+      t.year, t.month, t.day, t.hour, t.min, t.sec)
+    local fileData = imageData:encode("png")
+    local f = io.open(filename, "wb")
+    if f then
+      f:write(fileData:getString())
+      f:close()
+      M.controllerToast.timer = 2.0
+      M.controllerToast.text = "Saved " .. filename
+    else
+      M.controllerToast.timer = 2.0
+      M.controllerToast.text = "Screenshot failed"
+    end
+  end)
+
+  return true
+end
+
+local function triggerRefresh()
+  if mode == "native" and M.bridge and initConfig then
+    local ok, err = pcall(ReactJIT.reload)
+    if not ok then
+      io.write("[reactjit] Refresh failed: " .. tostring(err) .. "\n"); io.flush()
+      M.controllerToast.timer = 2.0
+      M.controllerToast.text = "Refresh failed"
+      return false
+    end
+    return true
+  end
+
+  if love.event and love.event.quit then
+    local ok = pcall(function() love.event.quit("restart") end)
+    if ok then return true end
+  end
+
+  M.controllerToast.timer = 2.0
+  M.controllerToast.text = "Refresh unavailable"
+  return false
+end
+
+local function initContextMenuModule()
+  M.contextmenu = require("lua.contextmenu")
+  M.contextmenu.init({
+    measure = M.measure,
+    events = M.events,
+    textselection = M.textselection,
+    inspector = inspector,
+    devtools = devtools,
+    actions = {
+      refresh = triggerRefresh,
+      screenshot = M.screenshotEnabled and captureScreenshot or nil,
+      toggleThemeMenu = M.themeMenuEnabled and function()
+        themeMenu.keypressed(themeMenuToggleKey)
+      end or nil,
+      toggleSettings = M.settingsEnabled and function()
+        settings.toggle()
+      end or nil,
+      toggleSystemPanel = M.systemPanelEnabled and function()
+        systemPanel.keypressed(systemPanelToggleKey)
+      end or nil,
+      toggleDevTools = M.inspectorEnabled and function()
+        devtools.keypressed("f12")
+      end or nil,
+    },
+    shortcuts = {
+      refresh = "F5 / Ctrl+R",
+      screenshot = "F2",
+      themeMenu = themeMenuToggleKey:upper(),
+      settings = settingsToggleKey:upper(),
+      systemPanel = systemPanelToggleKey:upper(),
+      devtools = "F12",
+    },
+  })
 end
 
 --- Emit a synthetic scroll event after Lua updates a scroll container.
@@ -291,6 +380,8 @@ local function loadThemes()
     end
     M.currentTheme = resolvedTheme or M.themes[M.currentThemeName]
     if M.painter then M.painter.setTheme(M.currentTheme) end
+    if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
+    if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -492,25 +583,33 @@ function ReactJIT.init(config)
   -- Settings overlay can be disabled or configured
   M.settingsEnabled = config.settings ~= false
   if M.settingsEnabled then
-    local settingsKey = "f10"
+    settingsToggleKey = "f10"
     if type(config.settings) == "table" and config.settings.key then
-      settingsKey = config.settings.key
+      settingsToggleKey = config.settings.key
     elseif type(config.settingsKey) == "string" then
-      settingsKey = config.settingsKey
+      settingsToggleKey = config.settingsKey
     end
-    settings.init({ key = settingsKey })
+    settings.init({ key = settingsToggleKey })
   end
 
   -- Theme menu overlay can be disabled or configured
   M.themeMenuEnabled = config.themeMenu ~= false
   if M.themeMenuEnabled then
+    themeMenuToggleKey = "f9"
+    if type(config.themeMenu) == "table" and type(config.themeMenu.key) == "string" then
+      themeMenuToggleKey = config.themeMenu.key
+    elseif type(config.themeMenuKey) == "string" then
+      themeMenuToggleKey = config.themeMenuKey
+    end
     themeMenu.init({
-      key = "f9",
+      key = themeMenuToggleKey,
       onSwitch = function(name, resolvedTheme, overrides)
         if M.themes and M.themes[name] then
           M.currentThemeName = name
           M.currentTheme = resolvedTheme or M.themes[name]
           if M.painter then M.painter.setTheme(M.currentTheme) end
+          if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
+          if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -585,10 +684,10 @@ function ReactJIT.init(config)
     M.events.setTreeModule(M.tree)
 
     M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure })
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
 
     M.textinput = require("lua.textinput")
-    M.textinput.init({ measure = M.measure })
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -602,8 +701,7 @@ function ReactJIT.init(config)
     M.textselection = require("lua.textselection")
     M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
 
-    M.contextmenu = require("lua.contextmenu")
-    M.contextmenu.init({ measure = M.measure, events = M.events, textselection = M.textselection, inspector = inspector, devtools = devtools })
+    initContextMenuModule()
 
     M.osk = require("lua.osk")
     M.osk.init({ measure = M.measure })
@@ -666,10 +764,10 @@ function ReactJIT.init(config)
     M.events.setTreeModule(M.tree)
 
     M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure })
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
 
     M.textinput = require("lua.textinput")
-    M.textinput.init({ measure = M.measure })
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -682,8 +780,7 @@ function ReactJIT.init(config)
     M.textselection = require("lua.textselection")
     M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
 
-    M.contextmenu = require("lua.contextmenu")
-    M.contextmenu.init({ measure = M.measure, events = M.events, textselection = M.textselection, inspector = inspector, devtools = devtools })
+    initContextMenuModule()
 
     M.osk = require("lua.osk")
     M.osk.init({ measure = M.measure })
@@ -750,10 +847,10 @@ function ReactJIT.init(config)
     M.events.setTreeModule(M.tree)
 
     M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure })
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
 
     M.textinput = require("lua.textinput")
-    M.textinput.init({ measure = M.measure })
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -767,8 +864,7 @@ function ReactJIT.init(config)
     M.textselection = require("lua.textselection")
     M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
 
-    M.contextmenu = require("lua.contextmenu")
-    M.contextmenu.init({ measure = M.measure, events = M.events, textselection = M.textselection, inspector = inspector, devtools = devtools })
+    initContextMenuModule()
 
     M.osk = require("lua.osk")
     M.osk.init({ measure = M.measure })
@@ -869,10 +965,53 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register hot state RPC handlers (in-memory atoms that survive HMR)
+  do
+    local hsOk, hotstate = pcall(require, "lua.hotstate")
+    if hsOk then
+      for method, handler in pairs(hotstate.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+      -- Override hotstate:load to trigger a reload after loading atoms
+      rpcHandlers["hotstate:load"] = function(args)
+        local path = args and args.path or nil
+        local ok, err = hotstate.loadFile(path)
+        if not ok then return { error = err } end
+        -- Schedule reload on next frame (can't reload inside an RPC handler)
+        ReactJIT._pendingReload = true
+        return { loaded = true, atoms = hotstate.count() }
+      end
+      -- Override hotstate:snapshot to also return atom count
+      rpcHandlers["hotstate:snapshot"] = function(args)
+        local path = args and args.path or nil
+        local result, err = hotstate.snapshot(path)
+        if result then return { path = result, atoms = hotstate.count() } end
+        return { error = err }
+      end
+    end
+  end
+
+  -- Register GIF recorder RPC handlers
+  do
+    local gifOk, gif = pcall(require, "lua.gif")
+    if gifOk then
+      M.gif = gif
+      for method, handler in pairs(gif.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
     if M.gamemod then return M.gamemod.handleCommand(args) end
+  end
+
+  -- Trigger a hot reload programmatically (dev tooling, demo, devtools button)
+  rpcHandlers["dev:reload"] = function()
+    ReactJIT.reload()
+    return true
   end
 
   -- Expose current inspector perf counters for stress-test dashboards.
@@ -886,6 +1025,41 @@ function ReactJIT.init(config)
       paintMs = 0,
       nodeCount = 0,
     }
+  end
+
+  -- ── Lua-side interval timer service ──────────────────────────────────
+  -- JS calls timer:create to start a repeating timer. Lua ticks it in
+  -- love.update(dt) and pushes a timer:tick event each interval.
+  -- Eliminates the need for setInterval in JS hooks entirely.
+
+  local luaTimers = {}       -- id -> { interval, elapsed, event }
+  local luaTimerNextId = 0
+
+  rpcHandlers["timer:create"] = function(args)
+    luaTimerNextId = luaTimerNextId + 1
+    local id = luaTimerNextId
+    luaTimers[id] = {
+      interval = (args.interval or 1000) / 1000,  -- ms -> seconds
+      elapsed = 0,
+      event = args.event or ("timer:" .. id),
+      payload = args.payload,   -- optional extra data to pass back
+    }
+    return { id = id }
+  end
+
+  rpcHandlers["timer:cancel"] = function(args)
+    if args and args.id then luaTimers[args.id] = nil end
+  end
+
+  -- Tick all lua timers. Called from ReactJIT.update(dt).
+  M._tickLuaTimers = function(dt)
+    for id, t in pairs(luaTimers) do
+      t.elapsed = t.elapsed + dt
+      if t.elapsed >= t.interval then
+        t.elapsed = t.elapsed - t.interval
+        pushEvent({ type = t.event, payload = t.payload or { timerId = id } })
+      end
+    end
   end
 
   -- App-wide text search RPC handlers
@@ -1297,99 +1471,6 @@ function ReactJIT.init(config)
     rpcHandlers[method] = handler
   end
 
-  -- ── Toast RPC ─────────────────────────────────────────────────
-  rpcHandlers["toast:show"] = function(args)
-    if not args or not args.text then return { error = "Missing 'text'" } end
-    local duration = args.duration or 3
-    M.controllerToast.timer = duration
-    M.controllerToast.text = args.text
-    M.controllerToast.fadeStart = duration * 0.3
-    return { ok = true }
-  end
-
-  -- ── Shell exec RPC (gated by process permit) ──────────────────
-  rpcHandlers["shell:exec"] = gated("process", function(args)
-    if not args or not args.command then return { error = "Missing 'command'" } end
-    -- Enforce max output size to prevent OOM
-    local maxLen = args.maxOutput or 64000
-    local handle = io.popen(args.command .. " 2>&1", "r")
-    if not handle then return { error = "Failed to execute command", exitCode = -1 } end
-    local output = handle:read("*a") or ""
-    local ok, exitType, code = handle:close()
-    if #output > maxLen then
-      output = output:sub(1, maxLen) .. "\n...[truncated at " .. maxLen .. " bytes]"
-    end
-    return {
-      output = output,
-      exitCode = code or 0,
-      exitType = exitType or "exit",
-      ok = ok ~= nil,
-    }
-  end)
-
-  -- ── Git convenience RPCs (built on shell:exec, gated by process permit) ──
-  rpcHandlers["git:status"] = gated("process", function(args)
-    local cwd = (args and args.cwd) or "."
-    local handle = io.popen("cd " .. ("%q"):format(cwd) .. " && git status --porcelain -b 2>&1", "r")
-    if not handle then return { error = "Failed to run git" } end
-    local output = handle:read("*a") or ""
-    handle:close()
-
-    -- Parse branch from first line
-    local branch = output:match("^## ([^\n%.]+)")
-    local files = {}
-    for line in output:gmatch("[^\n]+") do
-      if not line:match("^##") then
-        local status = line:sub(1, 2)
-        local file = line:sub(4)
-        files[#files + 1] = { status = status, file = file }
-      end
-    end
-
-    return { branch = branch or "unknown", files = files, raw = output }
-  end)
-
-  rpcHandlers["git:log"] = gated("process", function(args)
-    local cwd = (args and args.cwd) or "."
-    local count = (args and args.count) or 10
-    local format = (args and args.format) or "%h|%s|%an|%ar"
-    local handle = io.popen(
-      "cd " .. ("%q"):format(cwd) ..
-      " && git log --oneline -n " .. tostring(count) ..
-      " --format='" .. format .. "' 2>&1", "r")
-    if not handle then return { error = "Failed to run git" } end
-    local output = handle:read("*a") or ""
-    handle:close()
-
-    local commits = {}
-    for line in output:gmatch("[^\n]+") do
-      local hash, subject, author, date = line:match("^([^|]+)|([^|]*)|([^|]*)|(.*)$")
-      if hash then
-        commits[#commits + 1] = {
-          hash = hash,
-          subject = subject,
-          author = author,
-          date = date,
-        }
-      end
-    end
-
-    return { commits = commits }
-  end)
-
-  rpcHandlers["git:diff"] = gated("process", function(args)
-    local cwd = (args and args.cwd) or "."
-    local staged = (args and args.staged)
-    local cmd = "cd " .. ("%q"):format(cwd) .. " && git diff"
-    if staged then cmd = cmd .. " --staged" end
-    cmd = cmd .. " --stat 2>&1"
-    local handle = io.popen(cmd, "r")
-    if not handle then return { error = "Failed to run git" } end
-    local output = handle:read("*a") or ""
-    handle:close()
-    return { stat = output }
-  end)
-
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and M.inspectorEnabled then
     console.init({ bridge = M.bridge, tree = M.tree, inspector = inspector })
@@ -1398,17 +1479,125 @@ function ReactJIT.init(config)
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
-  if os.getenv("ILOVEREACT_SCREENSHOT") == "1" then
+  if os.getenv("REACTJIT_SCREENSHOT") == "1" then
     M.screenshot = require("lua.screenshot")
     M.screenshot.init({
-      outputPath = os.getenv("ILOVEREACT_SCREENSHOT_OUTPUT") or "screenshot.png",
+      outputPath = os.getenv("REACTJIT_SCREENSHOT_OUTPUT") or "screenshot.png",
     })
   end
+
+  -- Test mode (RJIT_TEST=1) — rjit test ----------------------------------------
+  if os.getenv("RJIT_TEST") == "1" and M.bridge then
+    local shimPath = os.getenv("RJIT_TEST_SHIM")
+    local specPath = os.getenv("RJIT_TEST_SPEC")
+    if shimPath then
+      local f = io.open(shimPath, "r")
+      if f then
+        local src = f:read("*a"); f:close()
+        pcall(function() M.bridge:eval(src, "<test-shim>") end)
+      end
+    end
+    if specPath then
+      local f = io.open(specPath, "r")
+      if f then
+        local src = f:read("*a"); f:close()
+        local ok, err = pcall(function() M.bridge:eval(src, "<test-spec>") end)
+        if not ok then
+          io.write("[rjit test] spec eval error: " .. tostring(err) .. "\n"); io.flush()
+          love.event.quit(1)
+        end
+      else
+        io.write("[rjit test] spec not found: " .. tostring(specPath) .. "\n"); io.flush()
+        love.event.quit(1)
+      end
+    end
+    local tr = require("lua.testrunner")
+    tr.init({ tree = M.tree })
+    rpcHandlers["test:query"]      = function(a) return tr.query(a) end
+    rpcHandlers["test:click"]      = function(a) return tr.click(a) end
+    rpcHandlers["test:type"]       = function(a) return tr.type_text(a) end
+    rpcHandlers["test:key"]        = function(a) return tr.key(a) end
+    rpcHandlers["test:wait"]       = function(a) return tr.wait(a) end
+    rpcHandlers["test:screenshot"] = function(a) return tr.screenshot(a) end
+    rpcHandlers["test:done"]       = function(a) return tr.report(a) end
+    ReactJIT._testFrameCount = 0
+    ReactJIT._testStarted    = false
+    io.write("[rjit test] active\n"); io.flush()
+  end
+  -- ---------------------------------------------------------------------------
+
+  -- Wire up the reload callback for crash recovery BSOD
+  errors.setReloadCallback(function()
+    local rok, rerr = pcall(ReactJIT.reload)
+    if rok then
+      crashRecoveryMode = false
+      errors.clear()
+      eventTrail.clear()
+      io.write("[reactjit] Manual reboot: reload succeeded!\n"); io.flush()
+    else
+      io.write("[reactjit] Manual reboot: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+      errors.push({
+        source = "lua",
+        message = "Reboot failed: " .. tostring(rerr),
+        context = "Manual reboot (R key)",
+      })
+    end
+  end)
+end
+
+--- Poll bundle.js mtime for HMR. Returns true if reload was triggered.
+--- Extracted so crash recovery mode can call it independently.
+function ReactJIT._pollHMR()
+  hmrFrameCounter = hmrFrameCounter + 1
+  if hmrFrameCounter % 60 == 0 and initConfig then
+    local info = love.filesystem.getInfo(initConfig.bundlePath)
+    if info and info.modtime then
+      if hmrLastMtime == nil then
+        hmrLastMtime = info.modtime
+      elseif info.modtime ~= hmrLastMtime then
+        hmrLastMtime = info.modtime
+        if hmrHasLoaded then
+          -- In crash recovery mode, attempt reload and clear the crash
+          if crashRecoveryMode then
+            io.write("[reactjit] Crash recovery: new bundle detected, attempting reload...\n"); io.flush()
+            local rok, rerr = pcall(ReactJIT.reload)
+            if rok then
+              crashRecoveryMode = false
+              errors.clear()
+              eventTrail.clear()
+              io.write("[reactjit] Crash recovery: reload succeeded! Resuming.\n"); io.flush()
+              return true
+            else
+              io.write("[reactjit] Crash recovery: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+              errors.push({
+                source = "lua",
+                message = "Crash recovery reload failed: " .. tostring(rerr),
+                context = "ReactJIT._pollHMR (recovery)",
+              })
+              return false
+            end
+          end
+          ReactJIT.reload()
+          return true
+        end
+      end
+      hmrHasLoaded = true
+    end
+  end
+  return false
 end
 
 --- Call once per frame from love.update(dt).
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
+  -- Crash recovery mode: skip everything except HMR polling.
+  -- The app is dead but we keep watching for a fixed bundle.
+  if crashRecoveryMode then
+    ReactJIT._pollHMR()
+    if M.gif then M.gif.update(dt) end
+    return
+  end
+
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
 
@@ -1439,12 +1628,17 @@ function ReactJIT.update(dt)
         local ok, commands = pcall(json.decode, raw)
         if ok and type(commands) == "table" then
           M.tree.applyCommands(commands)
+          -- Forward mutations to devtools pop-out child
+          if M.inspectorEnabled and devtools.isPoppedOut() then
+            devtools.forwardMutations(commands)
+          end
         end
       end
     end
 
-    -- 3. Tick Lua-side transitions and animations (before layout)
+    -- 3. Tick Lua-side transitions, animations, and interval timers (before layout)
     if M.animate then M.animate.tick(dt) end
+    if M._tickLuaTimers then M._tickLuaTimers(dt) end
 
     -- 4. Relayout if tree changed
     if M.tree.isDirty() then
@@ -1496,7 +1690,9 @@ function ReactJIT.update(dt)
 
     if M.inspectorEnabled then inspector.update(dt) end
     if M.inspectorEnabled then console.update(dt) end
+    if M.inspectorEnabled then devtools.tick(dt) end
     if M.screenshot then M.screenshot.update() end
+    if M.gif then M.gif.update(dt) end
 
     -- 5. Flush bridge outbox (events back to JS)
     M.bridge.flush()
@@ -1511,49 +1707,54 @@ function ReactJIT.update(dt)
   if M.audioEngine then M.audioEngine.update(dt) end
 
   -- HMR: poll bundle.js mtime every ~1 second for changes
-  hmrFrameCounter = hmrFrameCounter + 1
-  if hmrFrameCounter % 60 == 0 and initConfig then
-    local info = love.filesystem.getInfo(initConfig.bundlePath)
-    if info and info.modtime then
-      if hmrLastMtime == nil then
-        hmrLastMtime = info.modtime
-      elseif info.modtime ~= hmrLastMtime then
-        hmrLastMtime = info.modtime
-        if hmrHasLoaded then
-          ReactJIT.reload()
-          return
-        end
-      end
-      hmrHasLoaded = true
+  local hmrTriggered = ReactJIT._pollHMR()
+  if hmrTriggered then return end
+
+  -- Pending reload (triggered by hotstate:load RPC)
+  if ReactJIT._pendingReload then
+    ReactJIT._pendingReload = nil
+    local rok, rerr = pcall(ReactJIT.reload)
+    if not rok then
+      errors.push({ source = "lua", message = tostring(rerr), context = "hotstate:load reload" })
     end
+    return
   end
+
+  -- Wrap the entire app pipeline in pcall. If JS throws (bad render, etc.),
+  -- we enter crash recovery mode instead of escaping to Love2D's error handler.
+  -- Crash recovery keeps the Love2D process alive and polls for a fixed bundle.
+  local appOk, appErr = pcall(function()
 
   -- Deferred mount: trigger root.render() on the first update so the
   -- Love2D event loop is already running. Uses callGlobal (JS_Call)
   -- instead of eval because JS_Eval hangs after complex React renders.
   if ReactJIT._needsMount then
     ReactJIT._needsMount = nil
-    local mok, merr = pcall(function() M.bridge:callGlobal("__mount") end)
-    if not mok then
-      errors.push({
-        source = "js",
-        message = tostring(merr),
-        context = "mount (__mount) — bad bundle, waiting for next HMR",
-      })
-      -- Don't tick or push viewport — mount failed, wait for next hot reload
-    else
-      -- Tick immediately to drain any scheduled microtasks/timers
-      M.bridge:tick()
-      -- Push initial viewport dimensions so useWindowDimensions can pick them up
-      pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
+    M.bridge:callGlobal("__mount")
+    -- Tick immediately to drain any scheduled microtasks/timers
+    M.bridge:tick()
+    -- Push initial viewport dimensions so useWindowDimensions can pick them up
+    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
+  end
+
+  -- Test mode: trigger _runTests() after 3 frames (mount + 2 render cycles)
+  if ReactJIT._testFrameCount ~= nil and not ReactJIT._testStarted then
+    ReactJIT._testFrameCount = ReactJIT._testFrameCount + 1
+    if ReactJIT._testFrameCount >= 3 then
+      ReactJIT._testStarted = true
+      local tok, terr = pcall(function() M.bridge:callGlobal("_runTests") end)
+      if not tok then
+        io.write("TEST_ERROR: " .. tostring(terr) .. "\n"); io.flush()
+        love.event.quit(1)
+      end
     end
   end
 
   -- 1. Tick JS timers + microtasks
-  local tok, terr = pcall(function() M.bridge:tick() end)
-  if not tok then
-    errors.push({ source = "js", message = tostring(terr), context = "bridge tick" })
-  end
+  M.bridge:tick()
+
+  -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
+  if M._tickLuaTimers then M._tickLuaTimers(dt) end
 
   -- 2. Tell JS to process any pending input events
   local ok, err = pcall(function() M.bridge:callGlobal("_pollAndDispatchEvents") end)
@@ -1751,6 +1952,8 @@ function ReactJIT.update(dt)
             end
             M.currentTheme = resolvedTheme or M.themes[name]
             if M.painter then M.painter.setTheme(M.currentTheme) end
+            if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
+            if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
           end
@@ -1783,16 +1986,29 @@ function ReactJIT.update(dt)
       end
       M.tree.applyCommands(treeCommands)
 
+      -- Forward mutations to devtools pop-out child
+      if M.inspectorEnabled and devtools.isPoppedOut() then
+        devtools.forwardMutations(treeCommands)
+      end
+
       -- Forward mutations to child window processes
       local winApi = package.loaded["lua.capabilities.window_api"]
       if winApi then
         local IPC = require("lua.window_ipc")
         local activeChildren = winApi.getChildren()
         if #activeChildren > 0 then
+          if not ReactJIT._winRouteDbg then ReactJIT._winRouteDbg = 0 end
+          ReactJIT._winRouteDbg = ReactJIT._winRouteDbg + 1
+          local dbgRoute = ReactJIT._winRouteDbg <= 10
+
           -- Build the set of Window root node IDs → child window IDs
           local windowRootNodeIds = {}
           for _, c in ipairs(activeChildren) do
             windowRootNodeIds[c.nodeId] = c.windowId
+            if dbgRoute then
+              io.write(string.format("[ROUTE-DBG] windowRoot nodeId=%s → childWindow=%d\n", tostring(c.nodeId), c.windowId))
+              io.flush()
+            end
           end
           -- Rebuild ownership map and route mutations
           local allNodes = M.tree.getNodes()
@@ -1802,6 +2018,17 @@ function ReactJIT.update(dt)
           end
           IPC.rebuildOwnership(windowEntries, allNodes)
           local buckets = IPC.routeMutations(treeCommands, windowRootNodeIds)
+          if dbgRoute then
+            local totalRouted = 0
+            for windowId, cmds in pairs(buckets) do
+              totalRouted = totalRouted + #cmds
+              io.write(string.format("[ROUTE-DBG] → window#%d: %d mutations\n", windowId, #cmds))
+              io.flush()
+            end
+            io.write(string.format("[ROUTE-DBG] total=%d routed=%d kept-by-main=%d\n",
+              #treeCommands, totalRouted, #treeCommands - totalRouted))
+            io.flush()
+          end
           for windowId, cmds in pairs(buckets) do
             winApi.sendMutations(windowId, cmds)
           end
@@ -2099,8 +2326,23 @@ function ReactJIT.update(dt)
     end
   end
 
-  -- Update TextEditor/TextInput blink timer if one has focus
+  -- autoFocus: if nothing has focus, find a TextInput with autoFocus prop and grab it
   local focusedNode = focus.get()
+  if not focusedNode then
+    local allNodes = M.tree and M.tree.getNodes()
+    if allNodes then
+      for _, node in pairs(allNodes) do
+        if node.type == "TextInput" and node.props and node.props.autoFocus then
+          focus.set(node)
+          M.textinput.focus(node)
+          focusedNode = node
+          break
+        end
+      end
+    end
+  end
+
+  -- Update TextEditor/TextInput blink timer if one has focus
   if focusedNode and focusedNode.type == "TextEditor" then
     local result = M.texteditor.update(focusedNode, dt)
     if result == "change" then
@@ -2136,13 +2378,43 @@ function ReactJIT.update(dt)
 
   if M.inspectorEnabled then inspector.update(dt) end
   if M.inspectorEnabled then console.update(dt) end
+  if M.inspectorEnabled then devtools.tick(dt) end
   if M.screenshot then M.screenshot.update() end
+  if M.gif then M.gif.update(dt) end
+
+  end) -- end pcall(function() wrapping native mode app pipeline
+
+  if not appOk then
+    crashRecoveryMode = true
+    local errMsg = tostring(appErr)
+    -- Update-time crashes can happen while rendering to off-screen canvases
+    -- (scene3d/effects/masks). Reset graphics state so the recovery BSOD can
+    -- draw without triggering secondary Love2D canvas/present failures.
+    love.graphics.setCanvas()
+    love.graphics.setScissor()
+    love.graphics.setStencilTest()
+    love.graphics.setBlendMode("alpha")
+    io.write("[reactjit] CRASH: entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
+    io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
+    errors.push({
+      source = "lua",
+      message = errMsg,
+      context = "ReactJIT.update (crash recovery)",
+    })
+  end
 end
 
 --- Call once per frame from love.draw().
 --- Paints the retained UI tree (native and canvas modes).
 function ReactJIT.draw()
   if not isRendering() then return end
+
+  -- Crash recovery mode: full-screen BSOD
+  if crashRecoveryMode then
+    errors.drawBSOD()
+    if M.gif then M.gif.captureIfReady() end
+    return
+  end
 
   -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
   -- mpv can dirty this during mpv_render_context_create or render calls.
@@ -2165,11 +2437,28 @@ function ReactJIT.draw()
     end
     if M.inspectorEnabled then inspector.beginPaint() end
     local ok, paintErr = pcall(M.painter.paint, root)
-    if M.inspectorEnabled then inspector.endPaint() end
+    if M.inspectorEnabled then
+      inspector.endPaint()
+      -- Record frame timing for perf tab sparkline
+      local perfSnap = inspector.getPerfData()
+      if perfSnap and devtools then
+        devtools.recordFrame(perfSnap.layoutMs, perfSnap.paintMs)
+      end
+    end
     if not ok then
+      -- Paint failure corrupts the graphics state (transform stack, stencil depth,
+      -- active canvases). Reset EVERYTHING so Love2D can present safely and so the
+      -- next frame doesn't cascade into a secondary error that masks this one.
+      love.graphics.reset()
+      -- Enter crash recovery — continuing with corrupted state causes cascade
+      -- errors (e.g. scene3d stack depth) that overwrite the real root cause.
+      crashRecoveryMode = true
+      local errMsg = tostring(paintErr)
+      io.write("[reactjit] CRASH (paint): entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
+      io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
       errors.push({
         source = "lua",
-        message = tostring(paintErr),
+        message = errMsg,
         context = "painter.paint",
       })
     end
@@ -2246,20 +2535,10 @@ function ReactJIT.draw()
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
   if M.screenshot then M.screenshot.captureIfReady() end
 
-  -- DevTools pop-out window: render panel into secondary GL context
-  if M.inspectorEnabled and devtools.isPoppedOut() then
-    local entry = devtools.getWindowEntry()
-    if entry then
-      local wmMod = package.loaded["lua.window_manager"]
-      if wmMod then
-        wmMod.activate(entry)
-        love.graphics.clear(0.05, 0.05, 0.10, 1)
-        devtools.drawInWindow(root)
-        wmMod.swap(entry)
-        wmMod.activateMain()
-      end
-    end
-  end
+  -- GIF recorder frame capture
+  if M.gif then M.gif.captureIfReady() end
+
+  -- (Devtools pop-out renders in its own child Love2D process — no GL switch needed)
 end
 
 -- ============================================================================
@@ -2438,6 +2717,57 @@ local function scrollbarMouseReleased()
   if not scrollbarDrag then return false end
   scrollbarDrag = nil
   return true
+end
+
+-- ============================================================================
+-- Safe callback wrapper — pcall + event trail for ALL love callbacks
+-- ============================================================================
+
+--- Safely dispatch a Love2D callback through ReactJIT.
+--- Records the event in the trail, then pcall-wraps the dispatch.
+--- On error, enters crashRecoveryMode (same as update() errors).
+--- @param method string  The ReactJIT method name (e.g. "mousepressed")
+--- @param ...    any     Arguments to pass through
+function ReactJIT.safeCall(method, ...)
+  -- Record in event trail (stringify args for diagnostics)
+  local args = { ... }
+  local argParts = {}
+  for i = 1, #args do
+    argParts[i] = tostring(args[i])
+  end
+  eventTrail.record(method, table.concat(argParts, ", "))
+
+  -- In crash recovery — route input to errors overlay (incl. inline editor), skip everything else
+  if crashRecoveryMode then
+    if method == "keypressed" then
+      pcall(errors.keypressed, args[1])
+    elseif method == "wheelmoved" then
+      pcall(errors.wheelmoved, args[1], args[2])
+    elseif method == "textinput" then
+      pcall(errors.textinput, args[1])
+    elseif method == "mousepressed" then
+      pcall(errors.bsodMousepressed, args[1], args[2], args[3])
+    end
+    return
+  end
+
+  local fn = ReactJIT[method]
+  if not fn then return end
+
+  local ok, err = pcall(fn, ...)
+  if not ok then
+    crashRecoveryMode = true
+    local trace = debug.traceback(tostring(err), 2)
+    eventTrail.freeze()
+    io.write("[reactjit] CRASH in " .. method .. ": entering recovery mode.\n"); io.flush()
+    errors.push({
+      source = "lua",
+      message = tostring(err),
+      stack = trace,
+      context = "love." .. method .. " (safeCall)",
+      trail = eventTrail.getTrail(),
+    })
+  end
 end
 
 --- Call from love.mousepressed(x, y, button).
@@ -2888,6 +3218,74 @@ function ReactJIT.focus(hasFocus)
   end
 end
 
+-- Find first node in tree matching a type string (for keystrokeTarget)
+local function findNodeByType(nodeType)
+  local allNodes = M.tree and M.tree.getNodes()
+  if not allNodes then return nil end
+  for _, node in pairs(allNodes) do
+    if node.type == nodeType then return node end
+  end
+  return nil
+end
+
+-- Forward a key event to a keystrokeTarget (Lua → Lua by node type)
+local function forwardKeystroke(srcNode, key, scancode, isrepeat)
+  local targetType = srcNode.props and srcNode.props.keystrokeTarget
+  if not targetType then return end
+  local targetNode = findNodeByType(targetType)
+  if not targetNode then return end
+  if targetNode.type == "TextInput" then
+    M.textinput.handleKeyPressed(targetNode, key, scancode, isrepeat)
+  elseif targetNode.type == "TextEditor" then
+    M.texteditor.handleKeyPressed(targetNode, key, scancode, isrepeat)
+  elseif M.capabilities and M.capabilities.isHittable(targetNode.type) then
+    local capDef = M.capabilities.getDefinition(targetNode.type)
+    if capDef and capDef.handleKeyPressed then
+      capDef.handleKeyPressed(targetNode, key, scancode, isrepeat)
+    end
+  end
+end
+
+-- Forward text input to a keystrokeTarget (Lua → Lua by node type)
+local function forwardTextInput(srcNode, text)
+  local targetType = srcNode.props and srcNode.props.keystrokeTarget
+  if not targetType then return end
+  local targetNode = findNodeByType(targetType)
+  if not targetNode then return end
+  if targetNode.type == "TextInput" then
+    M.textinput.handleTextInput(targetNode, text)
+    M.textinput.markChanged(targetNode)
+  elseif targetNode.type == "TextEditor" then
+    M.texteditor.handleTextInput(targetNode, text)
+  elseif M.capabilities and M.capabilities.isHittable(targetNode.type) then
+    local capDef = M.capabilities.getDefinition(targetNode.type)
+    if capDef and capDef.handleTextInput then
+      capDef.handleTextInput(targetNode, text)
+    end
+  end
+end
+
+-- On submit: send enter to the target, clear the source input.
+-- Text is already there from keystrokeTarget forwarding.
+local function forwardSubmit(srcNode)
+  local targetType = srcNode.props and srcNode.props.submitTarget
+  if not targetType then return false end
+  local targetNode = findNodeByType(targetType)
+  if not targetNode then return false end
+  if targetNode.type == "TextInput" then
+    M.textinput.handleKeyPressed(targetNode, "return", nil, false)
+  elseif targetNode.type == "TextEditor" then
+    M.texteditor.handleKeyPressed(targetNode, "return", nil, false)
+  elseif M.capabilities and M.capabilities.isHittable(targetNode.type) then
+    local capDef = M.capabilities.getDefinition(targetNode.type)
+    if capDef and capDef.handleKeyPressed then
+      capDef.handleKeyPressed(targetNode, "return", nil, false)
+    end
+  end
+  M.textinput.clear(srcNode)
+  return true
+end
+
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
@@ -2943,25 +3341,16 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     end
   end
 
+  -- F5 / Ctrl+R / Cmd+R: refresh app
+  if key == "f5" or (key == "r" and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
+    if triggerRefresh() then
+      return
+    end
+  end
+
   -- PrintScreen / F2: capture screenshot to file
   if M.screenshotEnabled and (key == "printscreen" or key == "f2") then
-    love.graphics.captureScreenshot(function(imageData)
-      local t = os.date("*t")
-      local filename = string.format("screenshot_%04d%02d%02d_%02d%02d%02d.png",
-        t.year, t.month, t.day, t.hour, t.min, t.sec)
-      local fileData = imageData:encode("png")
-      local f = io.open(filename, "wb")
-      if f then
-        f:write(fileData:getString())
-        f:close()
-        M.controllerToast.timer = 2.0
-        M.controllerToast.text = "Saved " .. filename
-      else
-        M.controllerToast.timer = 2.0
-        M.controllerToast.text = "Screenshot failed"
-      end
-    end)
-    return
+    if captureScreenshot() then return end
   end
 
   -- Route to focused TextEditor if any
@@ -2981,6 +3370,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       })
     elseif result == "submit" then
       local value = M.texteditor.getValue(focusedNode)
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
       pushEvent({
         type = "texteditor:submit",
         payload = {
@@ -2992,12 +3382,80 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       return
     elseif result == false then
       -- TextEditor didn't handle this key combo, let it through to bridge
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
       -- (falls through to pushEvent below)
     else
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
       return  -- consumed by TextEditor
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
+    local isProxy = focusedNode.props and focusedNode.props.keystrokeTarget
+
+    if isProxy then
+      -- Proxy mode: forward keystrokes to target with optimistic local echo.
+      -- syncValue() overwrites with classified truth on next poll (~100ms).
+      if key == "return" or key == "kpenter" then
+        forwardSubmit(focusedNode)
+        return
+      end
+
+      -- Ctrl+A: select all locally (standard UX), forward as-is to target
+      if key == "a" and love.keyboard.isDown("lctrl", "rctrl") then
+        M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+        forwardKeystroke(focusedNode, key, scancode, isrepeat)
+        return
+      end
+
+      -- Backspace/Delete with full selection: clear locally + send Ctrl+U to PTY.
+      -- This avoids the double-escape problem — Ctrl+A then Backspace clears
+      -- the line in one clean operation without touching escape at all.
+      if (key == "backspace" or key == "delete") and M.textinput.isSelectAll(focusedNode) then
+        M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+        -- Send Ctrl+U (clear line) to the PTY instead of individual backspaces
+        local targetType = focusedNode.props and focusedNode.props.keystrokeTarget
+        if targetType then
+          local targetNode = findNodeByType(targetType)
+          if targetNode and M.capabilities and M.capabilities.isHittable(targetNode.type) then
+            local capDef = M.capabilities.getDefinition(targetNode.type)
+            if capDef and capDef.handleTextInput then
+              -- Ctrl+E (end of line) + Ctrl+U (clear line) = reliable full clear
+              capDef.handleTextInput(targetNode, "\x05\x15")
+            end
+          end
+        end
+        return
+      end
+
+      -- Regular backspace: optimistic local delete + forward
+      if key == "backspace" then
+        M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+      end
+
+      -- Arrow keys: optimistic cursor movement
+      if key == "left" or key == "right" or key == "home" or key == "end" then
+        M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+      end
+
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
+      return
+    end
+
+    -- escapeTarget: forward Escape to a capability (e.g. ClaudeCanvas to stop Claude)
+    local escTarget = focusedNode.props and focusedNode.props.escapeTarget
+    if escTarget and key == "escape" then
+      local targetNode = findNodeByType(escTarget)
+      if targetNode and M.capabilities and M.capabilities.isHittable(targetNode.type) then
+        local capDef = M.capabilities.getDefinition(targetNode.type)
+        if capDef and capDef.handleKeyPressed then
+          capDef.handleKeyPressed(targetNode, key, scancode, isrepeat)
+        end
+      end
+      return
+    end
+
     local result = M.textinput.handleKeyPressed(focusedNode, key, scancode, isrepeat)
+
+    -- Normal TextInput (no proxy) — original behavior
     if result == "blur" then
       local value = M.textinput.blur(focusedNode)
       M.textinput.cancelChange(focusedNode)
@@ -3013,6 +3471,7 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     elseif result == "submit" then
       local value = M.textinput.getValue(focusedNode)
       M.textinput.cancelChange(focusedNode)
+      M.textinput.clear(focusedNode)
       pushEvent({
         type = "textinput:submit",
         payload = {
@@ -3023,11 +3482,11 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       })
       return
     elseif result == false then
-      -- TextInput didn't handle this key combo, let it through to bridge
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
     else
-      -- Key was consumed. Check if text may have changed (backspace, delete, paste, etc.)
       M.textinput.markChanged(focusedNode)
-      return  -- consumed by TextInput
+      forwardKeystroke(focusedNode, key, scancode, isrepeat)
+      return
     end
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with keyboard handling
@@ -3127,10 +3586,21 @@ function ReactJIT.textinput(text)
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     M.texteditor.handleTextInput(focusedNode, text)
+    forwardTextInput(focusedNode, text)
     return  -- consumed, no bridge traffic
   elseif focusedNode and focusedNode.type == "TextInput" then
-    M.textinput.handleTextInput(focusedNode, text)
-    M.textinput.markChanged(focusedNode)  -- start liveChange debounce
+    local isProxy = focusedNode.props and focusedNode.props.keystrokeTarget
+    if isProxy then
+      -- Proxy mode: forward text to target + optimistic local echo.
+      -- Insert into the local buffer so the user sees instant feedback.
+      -- syncValue() overwrites with the authoritative classified text on next poll.
+      M.textinput.handleTextInput(focusedNode, text)
+      forwardTextInput(focusedNode, text)
+    else
+      M.textinput.handleTextInput(focusedNode, text)
+      M.textinput.markChanged(focusedNode)
+      forwardTextInput(focusedNode, text)
+    end
     return  -- consumed, no bridge traffic
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with text input handling
@@ -3204,6 +3674,7 @@ function ReactJIT.wheelmoved(x, y)
     -- Update scroll position directly in Lua for immediate response
     local ss = scrollContainer.scrollState
     local scrollSpeed = 40  -- pixels per wheel tick
+    local isHorizontalTilt = (x ~= 0 and y == 0)
     local wheelX, wheelY = x, y
     if M.events.resolveScrollWheelDeltas then
       wheelX, wheelY = M.events.resolveScrollWheelDeltas(scrollContainer, x, y)
@@ -3213,8 +3684,19 @@ function ReactJIT.wheelmoved(x, y)
         wheelX = wheelY
         wheelY = 0
       end
+      if allowY and not allowX and wheelY == 0 and wheelX ~= 0 then
+        wheelY = wheelX
+        wheelX = 0
+      end
       if not allowX then wheelX = 0 end
       if not allowY then wheelY = 0 end
+    end
+
+    -- Horizontal tilt remapped to vertical → use page-sized scroll
+    if isHorizontalTilt and wheelY ~= 0 then
+      local c = scrollContainer.computed
+      local viewportH = c and c.h or 400
+      scrollSpeed = math.max(40, math.floor(viewportH * 0.85))
     end
 
     local newScrollX = (ss.scrollX or 0) - wheelX * scrollSpeed
@@ -3747,11 +4229,24 @@ function ReactJIT.reload()
     return
   end
 
-  -- 5. Set up deferred mount + inject cached dev state
+  -- 5. Set up deferred mount + inject cached dev state + hot state atoms
   M.bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
   if devStateCache then
     local jsLiteral = luaTableToJSLiteral(devStateCache)
     M.bridge:eval("globalThis.__devState = " .. jsLiteral .. ";", "<hmr-state>")
+  end
+
+  -- Inject hot state atoms so useHotState can restore synchronously.
+  -- First, check for a state_preset.json file and merge it into atoms.
+  -- This lets Claude (or any tool) write a JSON file to reproduce exact app states.
+  local hsOk2, hotstate2 = pcall(require, "lua.hotstate")
+  if hsOk2 then
+    hotstate2.loadPreset()
+    local allAtoms = hotstate2.getAll()
+    if next(allAtoms) then
+      local hsLiteral = luaTableToJSLiteral(allAtoms)
+      M.bridge:eval("globalThis.__hotstateCache = " .. hsLiteral .. ";", "<hmr-hotstate>")
+    end
   end
 
   -- 6. Evaluate new bundle
@@ -3781,22 +4276,13 @@ function ReactJIT.reload()
 end
 
 --- Call when a secondary window's close button is clicked.
---- Routes the SDL window ID to the Window capability's onClose event,
---- or docks back the devtools window if it's the one being closed.
+--- Routes the SDL window ID to the Window capability's onClose event.
+--- (Devtools pop-out handles its own close via IPC — no WM entry here.)
 function ReactJIT.windowclose(sdlWindowId)
   local wmOk, wmMod = pcall(require, "lua.window_manager")
   if not wmOk then return end
   local win = wmMod.getBySDLId(sdlWindowId)
   if not win or win.isMain then return end  -- main window close → love.quit()
-
-  -- Check if this is the devtools pop-out window
-  if M.inspectorEnabled and devtools.isPoppedOut() then
-    local dtEntry = devtools.getWindowEntry()
-    if dtEntry and dtEntry.id == win.id then
-      devtools.dockBack()
-      return
-    end
-  end
 
   -- Push onClose event to the Window capability via the bridge
   if win.rootNodeId and M.bridge then
@@ -3901,6 +4387,16 @@ function ReactJIT.setScroll(nodeId, scrollX, scrollY)
   if nodes then
     emitScrollEvent(nodes[nodeId])
   end
+end
+
+--- Check if we are in crash recovery mode.
+function ReactJIT.isCrashRecovery()
+  return crashRecoveryMode
+end
+
+--- Get the event trail module reference (for errors.lua BSOD rendering).
+function ReactJIT.getEventTrail()
+  return eventTrail
 end
 
 return ReactJIT

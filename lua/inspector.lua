@@ -691,12 +691,16 @@ end
 function Inspector.wheelmoved(x, y)
   if not state.enabled then return false end
 
+  -- Map horizontal tilt to vertical scroll when no vertical input
+  local dy = y
+  if dy == 0 and x ~= 0 then dy = x end
+
   -- Detail panel scroll (uses stored region)
   if state.selectedNode and state.detailRegion then
     local dr = state.detailRegion
     if state.mouseX >= dr.x and state.mouseX < dr.x + dr.w
        and state.mouseY >= dr.y and state.mouseY < dr.y + dr.h then
-      state.detailScrollY = state.detailScrollY - y * 20
+      state.detailScrollY = state.detailScrollY - dy * 20
       if state.detailScrollY < 0 then state.detailScrollY = 0 end
       local maxScroll = math.max(0, (state.detailContentH or 0) - dr.h)
       if state.detailScrollY > maxScroll then state.detailScrollY = maxScroll end
@@ -709,7 +713,7 @@ function Inspector.wheelmoved(x, y)
     local tr = state.treeRegion
     if state.mouseX >= tr.x and state.mouseX < tr.x + tr.w
        and state.mouseY >= tr.y and state.mouseY < tr.y + tr.h then
-      state.treeScrollY = state.treeScrollY - y * 20
+      state.treeScrollY = state.treeScrollY - dy * 20
       if state.treeScrollY < 0 then state.treeScrollY = 0 end
       local maxScroll = math.max(0, (state.treeContentH or 0) - tr.h)
       if state.treeScrollY > maxScroll then state.treeScrollY = maxScroll end
@@ -850,7 +854,7 @@ local PLAYGROUND_TOKEN_TO_HOST_TYPE = {
 local function collectPlaygroundNodes(node, line, out)
   if not node then return end
   local p = node.props or {}
-  local taggedLine = tonumber(p.__ilrPlaygroundLine)
+  local taggedLine = tonumber(p.__rjitPlaygroundLine)
   if taggedLine and taggedLine == line and node.computed and node.type ~= "__TEXT__" then
     out[#out + 1] = node
   end
@@ -872,7 +876,7 @@ local function filterPlaygroundNodesByToken(nodes, token)
   local filtered = {}
   for _, node in ipairs(nodes) do
     local p = node.props or {}
-    if p.__ilrPlaygroundTag == token then
+    if p.__rjitPlaygroundTag == token then
       filtered[#filtered + 1] = node
     elseif hostType and node.type == hostType then
       filtered[#filtered + 1] = node

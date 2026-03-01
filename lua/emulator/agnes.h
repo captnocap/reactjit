@@ -79,7 +79,7 @@ bool agnes_next_frame(agnes_t *agnes);
 
 agnes_color_t agnes_get_screen_pixel(const agnes_t *agnes, int x, int y);
 
-/* iLoveReact extension: bulk framebuffer read (256*240*4 bytes RGBA) */
+/* ReactJIT extension: bulk framebuffer read (256*240*4 bytes RGBA) */
 void agnes_get_screen_buffer(const agnes_t *agnes, uint8_t *out_rgba);
 
 #ifdef __cplusplus

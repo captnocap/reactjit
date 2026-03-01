@@ -819,6 +819,8 @@ function builtins.record(name)
   pushOutput(string.format("Recording macro '%s'... (type :stop to finish)", name), COLORS.macro)
 end
 
+local executeCommand  -- forward declaration (used by builtins.macro before definition)
+
 function builtins.stop()
   if not state.recording then
     pushOutput("Not recording", COLORS.dim)
@@ -917,7 +919,7 @@ function builtins.log(args)
     end
     pushOutput("", COLORS.info)
     pushOutput("Usage: :log <channel> | :log all | :log none | :log ch1 ch2", COLORS.dim)
-    pushOutput("Env var: ILOVEREACT_DEBUG=tree,layout love love", COLORS.dim)
+    pushOutput("Env var: REACTJIT_DEBUG=tree,layout love love", COLORS.dim)
     return
   end
 
@@ -1244,6 +1246,10 @@ function Console.wheelmoved(x, y)
   if not state.visible then return false end
   state.scrollY = state.scrollY - y * 16
   if state.scrollY < 0 then state.scrollY = 0 end
+  -- Clamp to content (uses last known region from draw)
+  if state.lastMaxScroll then
+    if state.scrollY > state.lastMaxScroll then state.scrollY = state.lastMaxScroll end
+  end
   return true
 end
 
@@ -1354,6 +1360,7 @@ function Console.draw()
 
     local totalContentH = #state.output * lineH
     local maxScroll = math.max(0, totalContentH - outputH)
+    state.lastMaxScroll = maxScroll
     if state.scrollY > maxScroll then state.scrollY = maxScroll end
 
     local startY = outputY - state.scrollY
@@ -1372,8 +1379,8 @@ function Console.draw()
     if totalContentH > outputH and maxScroll > 0 then
       local barH = math.max(20, outputH * (outputH / totalContentH))
       local barY = outputY + (state.scrollY / maxScroll) * (outputH - barH)
-      love.graphics.setColor(COLORS.dim)
-      love.graphics.rectangle("fill", screenW - 4, barY, 3, barH, 1, 1)
+      love.graphics.setColor(1, 1, 1, 0.25)
+      love.graphics.rectangle("fill", screenW - 5, barY, 3, barH, 1, 1)
     end
 
     -- Input area
@@ -1560,6 +1567,7 @@ function Console.drawInRegion(region)
 
     local totalContentH = #state.output * lineH
     local maxScroll = math.max(0, totalContentH - outputH)
+    state.lastMaxScroll = maxScroll
     if state.scrollY > maxScroll then state.scrollY = maxScroll end
 
     local startY = outputY - state.scrollY
@@ -1578,8 +1586,8 @@ function Console.drawInRegion(region)
     if totalContentH > outputH and maxScroll > 0 then
       local barH = math.max(20, outputH * (outputH / totalContentH))
       local barY = outputY + (state.scrollY / maxScroll) * (outputH - barH)
-      love.graphics.setColor(COLORS.dim)
-      love.graphics.rectangle("fill", rx + rw - 4, barY, 3, barH, 1, 1)
+      love.graphics.setColor(1, 1, 1, 0.25)
+      love.graphics.rectangle("fill", rx + rw - 5, barY, 3, barH, 1, 1)
     end
 
     -- Input area

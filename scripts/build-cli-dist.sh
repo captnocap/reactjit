@@ -337,7 +337,7 @@ STUB
     # Windows: tar.gz archive (user extracts manually or via installer)
     cd "$STAGING" && tar czf "$OUTPUT.tar.gz" .
     echo "  Windows: created ${BINARY_NAME}.tar.gz (extract and run run.bat)"
-    # TODO: When ilr-launcher.exe exists, create proper .exe wrapper
+    # TODO: When rjit-launcher.exe exists, create proper .exe wrapper
     ;;
 esac
 

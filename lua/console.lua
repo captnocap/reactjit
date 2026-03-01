@@ -919,7 +919,7 @@ function builtins.log(args)
     end
     pushOutput("", COLORS.info)
     pushOutput("Usage: :log <channel> | :log all | :log none | :log ch1 ch2", COLORS.dim)
-    pushOutput("Env var: ILOVEREACT_DEBUG=tree,layout love love", COLORS.dim)
+    pushOutput("Env var: REACTJIT_DEBUG=tree,layout love love", COLORS.dim)
     return
   end
 

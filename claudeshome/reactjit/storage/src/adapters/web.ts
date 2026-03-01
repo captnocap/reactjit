@@ -17,7 +17,7 @@ export class LocalStorageAdapter implements StorageAdapter {
   private prefix: string;
 
   constructor(options?: { prefix?: string }) {
-    this.prefix = options?.prefix ?? 'ilr:';
+    this.prefix = options?.prefix ?? 'rjit:';
   }
 
   private key(collection: string, id: string): string {

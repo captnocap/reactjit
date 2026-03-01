@@ -2,7 +2,7 @@
 
 ## The Idea
 
-A terminal emulator built on iLoveReact that treats the terminal as a first-class graphical surface. Text I/O is the default, but inline video playback, image rendering, and embedded web views are native — not hacks bolted onto a text grid. The shell is still a shell. It just isn't blind anymore.
+A terminal emulator built on ReactJIT that treats the terminal as a first-class graphical surface. Text I/O is the default, but inline video playback, image rendering, and embedded web views are native — not hacks bolted onto a text grid. The shell is still a shell. It just isn't blind anymore.
 
 ## Why This Doesn't Exist Properly Yet
 
@@ -14,7 +14,7 @@ Every attempt at a "rich terminal" has been one of:
 
 The problem is always the same: the text grid and the graphical content are two different systems fighting each other.
 
-iLoveReact already solved this. `<Text>` and `<Image>` and `<Video>` live in the same layout tree. A terminal built on this framework doesn't need to hack images into a text grid — the text grid and the images are siblings in a flex layout.
+ReactJIT already solved this. `<Text>` and `<Image>` and `<Video>` live in the same layout tree. A terminal built on this framework doesn't need to hack images into a text grid — the text grid and the images are siblings in a flex layout.
 
 ## What It Looks Like
 
@@ -144,7 +144,7 @@ Same as the other concepts. The terminal emulator itself is a `dist:love` binary
 ## Open Questions
 
 - **PTY management in Love2D/Lua** — need to spawn and manage pseudo-terminals. LuaJIT FFI can call `forkpty()` / `openpty()` directly on Linux. Cross-platform PTY abstraction would be needed for macOS/Windows.
-- **Text rendering performance** — terminals output a LOT of text. The iLoveReact text measurement and rendering pipeline needs to handle thousands of lines efficiently. Virtualized scrollback is mandatory.
+- **Text rendering performance** — terminals output a LOT of text. The ReactJIT text measurement and rendering pipeline needs to handle thousands of lines efficiently. Virtualized scrollback is mandatory.
 - **Selection and copy-paste** — selecting text that flows around inline images/video. Non-trivial UX problem.
 - **ANSI compatibility** — how much of the VT100/xterm escape sequence zoo to support. Full compatibility is a rabbit hole but necessary for real-world use (vim, less, htop, etc.).
 - **Font rendering** — terminals need monospace, ligatures, powerline glyphs, Nerd Font icons. Love2D's text rendering needs to handle all of this.

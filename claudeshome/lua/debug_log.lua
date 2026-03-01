@@ -2,7 +2,7 @@
   debug_log.lua -- Channel-based debug logging with runtime toggles
 
   All channels are OFF by default. Toggle at runtime via the devtools console
-  (:log command) or at startup via the ILOVEREACT_DEBUG environment variable.
+  (:log command) or at startup via the REACTJIT_DEBUG environment variable.
 
   Usage from other modules:
     local Log = require("lua.debug_log")
@@ -17,8 +17,8 @@
     :log ch1 ch2        Toggle multiple channels at once
 
   Environment variable (for startup debugging):
-    ILOVEREACT_DEBUG=tree,layout love love
-    ILOVEREACT_DEBUG=all love love
+    REACTJIT_DEBUG=tree,layout love love
+    REACTJIT_DEBUG=all love love
 ]]
 
 local Log = {}
@@ -152,11 +152,11 @@ end
 -- Environment variable bootstrap
 -- ============================================================================
 
-local envDebug = os.getenv("ILOVEREACT_DEBUG")
+local envDebug = os.getenv("REACTJIT_DEBUG")
 if envDebug and envDebug ~= "" then
   if envDebug == "all" then
     Log.all(true)
-    io.write("[debug_log] All channels enabled via ILOVEREACT_DEBUG=all\n"); io.flush()
+    io.write("[debug_log] All channels enabled via REACTJIT_DEBUG=all\n"); io.flush()
   else
     local enabled = {}
     for name in envDebug:gmatch("[^,]+") do
@@ -167,7 +167,7 @@ if envDebug and envDebug ~= "" then
       end
     end
     if #enabled > 0 then
-      io.write("[debug_log] Channels enabled via ILOVEREACT_DEBUG: " .. table.concat(enabled, ", ") .. "\n"); io.flush()
+      io.write("[debug_log] Channels enabled via REACTJIT_DEBUG: " .. table.concat(enabled, ", ") .. "\n"); io.flush()
     end
   end
 end

@@ -27,13 +27,13 @@ Options:
 Steps performed:
   1. Lint gate (fails on errors, same as `reactjit lint`)
   2. Bundle JS (esbuild with IIFE format for Love2D)
-  3. Launch Love2D with ILOVEREACT_SCREENSHOT=1 environment variable
+  3. Launch Love2D with REACTJIT_SCREENSHOT=1 environment variable
   4. Love2D renders one frame and saves to the specified output path
   5. Love2D exits automatically after saving
 
 Environment variables set:
-  ILOVEREACT_SCREENSHOT=1
-  ILOVEREACT_SCREENSHOT_OUTPUT=<absolute output path>
+  REACTJIT_SCREENSHOT=1
+  REACTJIT_SCREENSHOT_OUTPUT=<absolute output path>
 
 Timeout:
   15 seconds. If Love2D does not produce a screenshot within this window, the command
@@ -67,7 +67,7 @@ systems (CI, remote servers), xvfb-run must be available for the command to work
 auto-detected and used when present.
 
 The screenshot captures exactly what Love2D would render at the window size defined in
-conf.lua. The Lua runtime detects the ILOVEREACT_SCREENSHOT environment variable, renders
+conf.lua. The Lua runtime detects the REACTJIT_SCREENSHOT environment variable, renders
 one complete frame, saves the canvas to disk, and exits.
 
 === CRITICAL RULES ===

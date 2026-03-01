@@ -16,7 +16,7 @@
 //!   zig build all -Dtarget=aarch64-linux-gnu
 //!   zig build all -Dtarget=x86_64-macos
 //!   zig build all -Dtarget=aarch64-macos
-//!   zig build win-launcher  → zig-out/bin/ilr-launcher.exe (always x86_64-windows)
+//!   zig build win-launcher  → zig-out/bin/rjit-launcher.exe (always x86_64-windows)
 //!
 //! Outputs → zig-out/lib/ (shared libraries) and zig-out/cartridge/ (init binary).
 //! The Makefile cli-setup target copies from zig-out/lib/ into cli/runtime/lib/.
@@ -203,7 +203,7 @@ pub fn build(b: *std.Build) void {
     // ── win-launcher ──────────────────────────────────────────────────────────
     // Self-extracting Windows launcher stub. Always targets x86_64-windows
     // regardless of the host -Dtarget flag. SUBSYSTEM:WINDOWS so no console.
-    // Output: zig-out/bin/ilr-launcher.exe
+    // Output: zig-out/bin/rjit-launcher.exe
     {
         const win_target = b.resolveTargetQuery(.{
             .cpu_arch = .x86_64,
@@ -217,7 +217,7 @@ pub fn build(b: *std.Build) void {
         });
 
         const exe = b.addExecutable(.{
-            .name = "ilr-launcher",
+            .name = "rjit-launcher",
             .root_module = mod,
         });
 

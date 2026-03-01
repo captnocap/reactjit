@@ -51,7 +51,7 @@ export async function diagnoseCommand(args) {
 
   const env = {
     ...process.env,
-    ILOVEREACT_DIAGNOSE: '1',
+    REACTJIT_DIAGNOSE: '1',
   };
 
   // Detect xvfb-run for headless operation

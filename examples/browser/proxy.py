@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local HTTP proxy that bridges iLoveReact's fetch() to browse's stealth Firefox.
+"""Local HTTP proxy that bridges ReactJIT's fetch() to browse's stealth Firefox.
 
 Runs on localhost:9876. The Love2D app fetches from here instead of the real URL.
 Browse connects to your running Firefox session and navigates with full stealth —

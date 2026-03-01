@@ -57,7 +57,7 @@ else
     esac
 fi
 
-BUILD_DIR="/tmp/ilr-luajit-build/$ZIG_TRIPLE"
+BUILD_DIR="/tmp/rjit-luajit-build/$ZIG_TRIPLE"
 OUT_DIR="$REPO_ROOT/zig-out/luajit/$ZIG_TRIPLE"
 
 if [[ "$CLEAN" == 1 ]]; then

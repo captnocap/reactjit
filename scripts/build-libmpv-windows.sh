@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BUILD_DIR=/tmp/ilr-mpv-build
+BUILD_DIR=/tmp/rjit-mpv-build
 OUT_DIR="$REPO_ROOT/vendor/mpv-win64"
 
 TARGET="x86_64-windows-gnu"

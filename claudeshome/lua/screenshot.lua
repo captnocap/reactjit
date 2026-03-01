@@ -1,14 +1,14 @@
 --[[
   screenshot.lua -- Headless screenshot capture for reactjit
 
-  Triggered via environment variable ILOVEREACT_SCREENSHOT=1.
+  Triggered via environment variable REACTJIT_SCREENSHOT=1.
   Waits a few frames for layout to settle, captures a screenshot
   using love.graphics.captureScreenshot(), prints the output path,
   and quits.
 
   Usage (in init.lua):
     local screenshot = require("lua.screenshot")
-    screenshot.init({ outputPath = os.getenv("ILOVEREACT_SCREENSHOT_OUTPUT") or "screenshot.png" })
+    screenshot.init({ outputPath = os.getenv("REACTJIT_SCREENSHOT_OUTPUT") or "screenshot.png" })
     -- In update: screenshot.update()
     -- In draw:   screenshot.captureIfReady()
 ]]

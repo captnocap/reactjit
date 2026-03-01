@@ -257,16 +257,16 @@ zig-out-win/bin/quickjs.dll:
 	@echo "  Built quickjs.dll for Windows"
 
 # Zig self-extracting launcher stub (always Windows, no console window).
-zig-out/bin/ilr-launcher.exe:
+zig-out/bin/rjit-launcher.exe:
 	zig build win-launcher
-	@echo "  Built ilr-launcher.exe"
+	@echo "  Built rjit-launcher.exe"
 
 # Cross-compile libmpv for Windows using zig cc (FFmpeg statically linked in).
 # First build only — subsequent runs are skipped by Make's file check.
 vendor/mpv-win64/mpv-2.dll:
 	bash scripts/build-libmpv-windows.sh
 
-dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/ilr-launcher.exe vendor/mpv-win64/mpv-2.dll
+dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/rjit-launcher.exe vendor/mpv-win64/mpv-2.dll
 	@echo "=== Packaging single-file Windows exe ==="
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
@@ -295,8 +295,8 @@ dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-wi
 	rm -rf $(WIN_STAGING) /tmp/reactjit-demo.love
 	# ── Concatenate: launcher.exe + payload.zip + 8-byte offset footer ──
 	rm -f $(DIST_DIR)/reactjit-demo.exe
-	cat zig-out/bin/ilr-launcher.exe /tmp/reactjit-payload.zip > $(DIST_DIR)/reactjit-demo.exe
-	python3 -c "import sys,struct; sys.stdout.buffer.write(struct.pack('<Q', $$(wc -c < zig-out/bin/ilr-launcher.exe)))" >> $(DIST_DIR)/reactjit-demo.exe
+	cat zig-out/bin/rjit-launcher.exe /tmp/reactjit-payload.zip > $(DIST_DIR)/reactjit-demo.exe
+	python3 -c "import sys,struct; sys.stdout.buffer.write(struct.pack('<Q', $$(wc -c < zig-out/bin/rjit-launcher.exe)))" >> $(DIST_DIR)/reactjit-demo.exe
 	rm -f /tmp/reactjit-payload.zip
 	@echo "=== Done: $(DIST_DIR)/reactjit-demo.exe ==="
 	@echo "  Size: $$(du -h $(DIST_DIR)/reactjit-demo.exe | cut -f1)"
@@ -429,11 +429,11 @@ endif
 		echo "  Warning: tor not found — .onion hosting won't be bundled"; \
 	fi
 	@# ── Windows cross-compiled binaries (for rjit build windows) ──
-	@if [ -f zig-out/bin/ilr-launcher.exe ]; then \
-		cp zig-out/bin/ilr-launcher.exe cli/runtime/bin/ilr-launcher.exe; \
-		echo "  Bundled ilr-launcher.exe (Windows self-extractor)"; \
+	@if [ -f zig-out/bin/rjit-launcher.exe ]; then \
+		cp zig-out/bin/rjit-launcher.exe cli/runtime/bin/rjit-launcher.exe; \
+		echo "  Bundled rjit-launcher.exe (Windows self-extractor)"; \
 	else \
-		echo "  Warning: ilr-launcher.exe not found — run 'zig build win-launcher' first"; \
+		echo "  Warning: rjit-launcher.exe not found — run 'zig build win-launcher' first"; \
 	fi
 	@mkdir -p cli/runtime/lib/win64; \
 	if [ -f zig-out-win/bin/quickjs.dll ]; then \

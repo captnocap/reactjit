@@ -1,11 +1,11 @@
 ---
 name: docs-generator
-description: Generate and maintain comprehensive documentation for the iLoveReact framework using a multi-agent pipeline. Use when the user asks to "generate docs", "update documentation", "document the framework", "write docs", "docs mode", "documentation mode", "refresh docs", "document [component/hook/feature]", or any request to create or update content in `content/sections/`. Also triggers on "/docs" or when the user wants to ensure documentation coverage is complete.
+description: Generate and maintain comprehensive documentation for the ReactJIT framework using a multi-agent pipeline. Use when the user asks to "generate docs", "update documentation", "document the framework", "write docs", "docs mode", "documentation mode", "refresh docs", "document [component/hook/feature]", or any request to create or update content in `content/sections/`. Also triggers on "/docs" or when the user wants to ensure documentation coverage is complete.
 ---
 
 # Documentation Generator
 
-Multi-phase pipeline that audits the iLoveReact codebase for documentable surface area, then writes structured `.txt` content files that compile into `dist/llms/*.txt` and the storybook docs viewer.
+Multi-phase pipeline that audits the ReactJIT codebase for documentable surface area, then writes structured `.txt` content files that compile into `dist/llms/*.txt` and the storybook docs viewer.
 
 ## Content Format
 
@@ -19,7 +19,7 @@ Spawn 4 haiku agents with identical instructions. Each independently crawls the 
 
 **Agent prompt template:**
 
-> Crawl the iLoveReact codebase and produce a complete list of everything that needs documentation. For each item, output one line: `CATEGORY | name | one-line description | source file(s)`.
+> Crawl the ReactJIT codebase and produce a complete list of everything that needs documentation. For each item, output one line: `CATEGORY | name | one-line description | source file(s)`.
 >
 > Categories: Component, Hook, Lua Module, CLI Command, Layout Concept, Animation API, Event Type, Target, Architecture Concept, Type/Interface, Utility.
 >
@@ -62,7 +62,7 @@ For each missing or stale item, spawn a sonnet agent to write or update the `.tx
 
 **Agent prompt template:**
 
-> Write documentation for `{name}` in the iLoveReact framework.
+> Write documentation for `{name}` in the ReactJIT framework.
 >
 > Read the source code at `{source_files}` to understand the full API.
 > Read [references/content-format.md] for the exact `.txt` format to follow.
