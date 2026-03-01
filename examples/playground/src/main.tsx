@@ -1,5 +1,5 @@
 import React from 'react';
-import { createLove2DApp } from '../reactjit/native/src/Love2DApp';
+import { createLove2DApp } from '@reactjit/native';
 import { App } from './App';
 
 (globalThis as any).__getDevState = () => ({

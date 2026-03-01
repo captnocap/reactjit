@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Pressable } from '../reactjit/shared/src';
+import { Box, Text, Pressable } from '@reactjit/core';
 import type { LintMessage } from './lib/linter';
 
 interface StatusBarProps { messages: LintMessage[]; onJumpToLine?: (line: number) => void; }
@@ -13,7 +13,7 @@ export function StatusBar({ messages, onJumpToLine }: StatusBarProps) {
   const wc = messages.filter(m => m.severity === 'warning').length;
 
   return (
-    <Box style={{ backgroundColor: '#181825', borderTopWidth: 1, borderColor: '#1e293b', minHeight: 28 }}>
+    <Box style={{ backgroundColor: '#181825', borderTopWidth: 1, borderColor: '#313244', minHeight: 28 }}>
       <Box style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, gap: 12 }}>
         {!messages.length ? (
           <Text style={{ color: '#a6e3a1', fontSize: 11 }}>0 errors, 0 warnings</Text>

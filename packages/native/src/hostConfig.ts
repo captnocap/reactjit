@@ -119,6 +119,7 @@ export interface Instance {
   props: Record<string, any>;
   handlers: Record<string, Function>;
   children: Instance[];
+  renderCount: number;
 }
 
 export interface TextInstance {
@@ -501,7 +502,7 @@ export const hostConfig: HostConfig<
       handlerRegistry.set(id, handlers);
     }
 
-    return { id, type: resolvedType, props: clean, handlers, children: [] };
+    return { id, type: resolvedType, props: clean, handlers, children: [], renderCount: 1 };
   },
 
   createTextInstance(text: string): TextInstance {
@@ -642,6 +643,7 @@ export const hostConfig: HostConfig<
 
     instance.handlers = handlers;
     instance.props = clean;
+    instance.renderCount = (instance.renderCount || 0) + 1;
 
     if (updatePayload && !(updatePayload as any).__handlersOnly) {
       const hasHandlers = Object.keys(handlers).length > 0;
@@ -654,6 +656,7 @@ export const hostConfig: HostConfig<
         props: payload.diff,
         hasHandlers,
         handlerMeta: hasHandlers ? buildHandlerMeta(handlers) : undefined,
+        renderCount: instance.renderCount,
       };
 
       if (payload.removeKeys.length > 0) {

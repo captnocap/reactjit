@@ -81,9 +81,9 @@ function StressCard({ item, onSelect }: { item: StressDef; onSelect: (id: Stress
             alignSelf: 'flex-start',
           }}
         >
-          <Text style={{ color, fontSize: 9, fontWeight: 'bold' }}>{item.category.toUpperCase()}</Text>
+          <Text style={{ color, fontSize: 9, fontWeight: 'normal' }}>{item.category.toUpperCase()}</Text>
         </Box>
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>{item.name}</Text>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>{item.name}</Text>
         <Text style={{ color: c.textDim, fontSize: 10 }}>{item.description}</Text>
       </Box>
     </Pressable>
@@ -99,7 +99,7 @@ export function StressTestStory() {
     return (
       <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20, overflow: 'scroll' }}>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>Choose a stress test</Text>
+          <Text style={{ color: c.text, fontSize: 20, fontWeight: 'normal' }}>Choose a stress test</Text>
           <Text style={{ color: c.textDim, fontSize: 12 }}>Pick a scenario to run heavy load and rendering checks.</Text>
         </Box>
         <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-around', width: '100%' }}>
@@ -144,8 +144,8 @@ export function StressTestStory() {
           >
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Stress Tests</Text>
           </Pressable>
-          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{current.name}</Text>
-          <Text style={{ color: categoryColor, fontSize: 10, fontWeight: 'bold' }}>{current.category.toUpperCase()}</Text>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>{current.name}</Text>
+          <Text style={{ color: categoryColor, fontSize: 10, fontWeight: 'normal' }}>{current.category.toUpperCase()}</Text>
         </Box>
         <Text style={{ color: c.textDim, fontSize: 10 }}>{current.description}</Text>
       </Box>

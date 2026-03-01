@@ -60,6 +60,9 @@ local state = {
   mainHasFocus   = true,     -- true when main window has focus
   lastPerfSend   = 0,        -- throttle perf updates to child
   lastSentSelId  = nil,      -- last selected node ID sent to child
+  -- Mutation batching: accumulate mutations, flush at ~15fps to match child
+  pendingMutations = {},     -- queued mutation commands
+  mutationFlushTimer = 0,    -- time since last flush
 }
 
 -- ============================================================================
@@ -93,9 +96,11 @@ local STATUS_WARN  = { 0.95, 0.75, 0.20, 1 }
 
 -- Tab definitions
 local TABS = {
-  { id = "elements", label = "Elements" },
-  { id = "console",  label = "Console" },
-  { id = "logs",     label = "Logs" },
+  { id = "elements",  label = "Elements" },
+  { id = "wireframe", label = "Wireframe" },
+  { id = "perf",      label = "Perf" },
+  { id = "console",   label = "Console" },
+  { id = "logs",      label = "Logs" },
 }
 
 -- Cached font (created lazily)
@@ -103,6 +108,16 @@ local fontSmall = nil
 local function getFont()
   if not fontSmall then fontSmall = love.graphics.newFont(11) end
   return fontSmall
+end
+
+-- Scrollbar helper (thin thumb, no track)
+local function drawScrollbar(rx, ry, rw, rh, scrollY, contentH)
+  if not contentH or contentH <= rh then return end
+  local maxScroll = math.max(1, contentH - rh)
+  local thumbH = math.max(20, rh * (rh / contentH))
+  local thumbY = ry + (scrollY / maxScroll) * (rh - thumbH)
+  love.graphics.setColor(1, 1, 1, 0.25)
+  love.graphics.rectangle("fill", rx + rw - 5, thumbY, 3, thumbH, 1, 1)
 end
 
 -- ============================================================================
@@ -153,9 +168,12 @@ function DevTools.isOpen()
 end
 
 --- Force devtools open (used by devtools child process on startup).
+--- Sets mainHasFocus = false because in the child process there is no
+--- main window — all clicks should route to the panel (tabs + content).
 function DevTools.forceOpen()
   state.open = true
   state.poppedOut = true
+  state.mainHasFocus = false
 end
 
 --- Return the available viewport height (screen height minus panel when open).
@@ -248,6 +266,8 @@ function DevTools.dockBack()
   state.initSent = false
   state.mainHasFocus = true
   state.lastSentSelId = nil
+  state.pendingMutations = {}
+  state.mutationFlushTimer = 0
   -- Main app loses viewport space to the docked panel
   if tree then tree.markDirty() end
   pushViewportEvent()
@@ -319,7 +339,17 @@ function DevTools.tick(dt)
     return
   end
 
-  -- 3. Send perf data (throttled to every 0.5s)
+  -- 3. Flush batched mutations (~15fps to match child's frame rate)
+  state.mutationFlushTimer = state.mutationFlushTimer + dt
+  if state.mutationFlushTimer >= (1.0 / 15) then
+    state.mutationFlushTimer = 0
+    if #state.pendingMutations > 0 then
+      IPC.send(state.conn, { type = "mutations", commands = state.pendingMutations })
+      state.pendingMutations = {}
+    end
+  end
+
+  -- 4. Send perf data (throttled to every 0.5s)
   state.lastPerfSend = state.lastPerfSend + dt
   if state.lastPerfSend >= 0.5 then
     state.lastPerfSend = 0
@@ -329,7 +359,7 @@ function DevTools.tick(dt)
     end
   end
 
-  -- 4. Sync selected node changes to child
+  -- 5. Sync selected node changes to child
   local sel = inspector and inspector.getSelectedNode()
   local selId = sel and sel.id or false
   if selId ~= state.lastSentSelId then
@@ -337,7 +367,7 @@ function DevTools.tick(dt)
     IPC.send(state.conn, { type = "devtools_state", selectedNodeId = selId })
   end
 
-  -- 5. Poll for events from child
+  -- 6. Poll for events from child
   local msgs, dead = IPC.poll(state.conn)
   if dead then
     io.write("[devtools] child connection lost, docking back\n"); io.flush()
@@ -348,6 +378,8 @@ function DevTools.tick(dt)
     state.initSent = false
     state.mainHasFocus = true
     state.lastSentSelId = nil
+    state.pendingMutations = {}
+    state.mutationFlushTimer = 0
     if tree then tree.markDirty() end
     pushViewportEvent()
     return
@@ -370,11 +402,15 @@ function DevTools.tick(dt)
 end
 
 --- Forward tree mutations to the devtools child process.
---- Call from init.lua after tree.applyCommands().
+--- Batches mutations and flushes at ~15fps (matching child's frame rate)
+--- to avoid flooding the child with 240fps worth of IPC traffic.
 function DevTools.forwardMutations(commands)
   if not state.poppedOut or not state.conn or not state.initSent then return end
-  local IPC = require("lua.window_ipc")
-  IPC.send(state.conn, { type = "mutations", commands = commands })
+  -- Accumulate into pending batch
+  local pending = state.pendingMutations
+  for _, cmd in ipairs(commands) do
+    pending[#pending + 1] = cmd
+  end
 end
 
 -- ============================================================================
@@ -487,8 +523,17 @@ function DevTools.textinput(text)
   return false
 end
 
--- Forward declaration (defined after DevTools.mousepressed, called within it)
+-- Forward declarations (defined in tab sections below, called by DevTools methods above)
 local logsMousepressed
+local logsMousemoved
+local logsWheelmoved
+local wireframeHitTest
+local perfWheelmoved
+local logsHoverRow = nil  -- index into sortedChannels, or "all"/"none"
+local logsScrollY  = 0
+local logsRegion   = nil  -- stored from draw for scroll clamping
+
+local wfRefresh  -- forward declaration (used by mousepressed before definition)
 
 --- Handle mouse press. Returns true if consumed.
 function DevTools.mousepressed(x, y, button)
@@ -529,6 +574,21 @@ function DevTools.mousepressed(x, y, button)
       tabX = tabX + tabW + 2
     end
 
+    -- Refresh button — clears stale state for the active panel
+    local refreshX = screenW - 76
+    if x >= refreshX and x < refreshX + 20 then
+      -- Wireframe
+      wfRefresh()
+      -- Logs
+      sortedChannels = nil
+      logsScrollY = 0
+      -- Inspector (clear selection, re-walk tree)
+      if inspector then
+        inspector.clearSelection()
+      end
+      return true
+    end
+
     -- Pop-out / dock-back button
     local popoutX = screenW - 52
     if x >= popoutX and x < popoutX + 20 then
@@ -562,6 +622,19 @@ function DevTools.mousepressed(x, y, button)
     end
     -- Inspector handles tree/detail region clicks via stored regions
     return inspector.mousepressed(x, y, button)
+  elseif state.activeTab == "wireframe" then
+    -- Flex toggle button click
+    local ft = state._wfFlexToggle
+    if ft and x >= ft.x and x < ft.x + ft.w and y >= ft.y and y < ft.y + ft.h then
+      wfShowFlex = not wfShowFlex
+      return true
+    end
+    -- Hit test against wireframe rects — select node but stay on wireframe.
+    local hitNode = wireframeHitTest(x, y)
+    if hitNode and inspector then
+      inspector.selectNode(hitNode)
+    end
+    return true
   elseif state.activeTab == "console" then
     return true  -- console content area consumes clicks
   elseif state.activeTab == "logs" then
@@ -601,6 +674,13 @@ function DevTools.mousemoved(x, y)
     end
   end
 
+  -- Wireframe tab hover tracking
+  if state.open and state.activeTab == "wireframe" then
+    wfHoverNode = wireframeHitTest(x, y)
+  else
+    wfHoverNode = nil
+  end
+
   -- Logs tab hover tracking
   if state.open and state.activeTab == "logs" and logsRegion then
     logsMousemoved(x, y, logsRegion)
@@ -608,10 +688,9 @@ function DevTools.mousemoved(x, y)
     logsHoverRow = nil
   end
 
-  -- Inspector tracks mouse for hover overlays (only when main is focused, not devtools)
-  if not state.poppedOut or state.mainHasFocus then
-    inspector.mousemoved(x, y)
-  end
+  -- Always update inspector mouse position (needed for scroll hit testing in popped-out mode).
+  -- Hover overlays on the main canvas are gated separately in the inspector's draw path.
+  inspector.mousemoved(x, y)
 end
 
 --- Handle mouse release. Returns true if consumed.
@@ -624,9 +703,6 @@ function DevTools.mousereleased(x, y, button)
   return false
 end
 
--- Forward declaration (defined in Logs tab section below)
-local logsWheelmoved
-
 --- Handle mouse wheel. Returns true if consumed.
 function DevTools.wheelmoved(x, y)
   if not state.open then return false end
@@ -637,6 +713,8 @@ function DevTools.wheelmoved(x, y)
     -- Devtools window focused: all wheel goes to panel
     if state.activeTab == "elements" then
       return inspector.wheelmoved(x, y)
+    elseif state.activeTab == "perf" then
+      return perfWheelmoved(x, y)
     elseif state.activeTab == "console" then
       return console.wheelmoved(x, y)
     elseif state.activeTab == "logs" then
@@ -653,6 +731,8 @@ function DevTools.wheelmoved(x, y)
 
   if state.activeTab == "elements" then
     return inspector.wheelmoved(x, y)
+  elseif state.activeTab == "perf" then
+    return perfWheelmoved(x, y)
   elseif state.activeTab == "console" then
     return console.wheelmoved(x, y)
   elseif state.activeTab == "logs" then
@@ -660,6 +740,760 @@ function DevTools.wheelmoved(x, y)
   end
 
   return false
+end
+
+-- ============================================================================
+-- Wireframe tab: mini viewport showing all nodes as outlines
+-- ============================================================================
+
+-- Colors for wireframe
+local WF_NODE_COLOR     = { 0.35, 0.38, 0.48, 0.50 }  -- default node outline
+local WF_TEXT_COLOR     = { 0.55, 0.50, 0.40, 0.40 }  -- text node outline
+local WF_SELECTED_COLOR = { 0.38, 0.65, 0.98, 1 }     -- selected node
+local WF_HOVER_COLOR    = { 0.38, 0.65, 0.98, 0.50 }  -- hovered node
+local WF_LABEL_COLOR    = { 0.55, 0.58, 0.65, 0.80 }  -- node labels
+local WF_BG_COLOR       = { 0.03, 0.03, 0.06, 1 }     -- viewport background
+local WF_VIEWPORT_BORDER = { 0.20, 0.22, 0.30, 0.60 } -- viewport outline
+local WF_DEPTH_COLORS   = {                             -- depth-based tinting
+  { 0.45, 0.55, 0.80, 0.55 },  -- depth 0
+  { 0.50, 0.70, 0.60, 0.50 },  -- depth 1
+  { 0.70, 0.60, 0.50, 0.45 },  -- depth 2
+  { 0.60, 0.50, 0.70, 0.40 },  -- depth 3
+  { 0.50, 0.60, 0.55, 0.35 },  -- depth 4+
+}
+
+-- Flex pressure overlay colors
+local FP_GROW_COLOR   = { 0.95, 0.75, 0.20, 0.60 }  -- amber for flex-grow
+local FP_SHRINK_COLOR = { 0.40, 0.60, 0.95, 0.60 }  -- blue for flex-shrink
+local FP_BASIS_COLOR  = { 0.50, 0.50, 0.50, 0.30 }  -- gray for basis portion
+local FP_TEXT_COLOR   = { 0.70, 0.72, 0.78, 0.90 }  -- info text
+local FP_HEADER_BG    = { 0.08, 0.08, 0.12, 0.85 }  -- header backdrop
+
+-- Wireframe state
+local wfHoverNode = nil   -- node under cursor in wireframe
+local wfNodeRects = {}    -- array of { node, sx, sy, sw, sh } for hit testing
+local wfLastRootId = nil  -- track root identity to detect tree rebuilds (HMR)
+local wfShowFlex = true   -- flex pressure overlay toggle
+
+--- Get the depth-based color for a node.
+local function getWfDepthColor(depth)
+  local idx = math.min(depth + 1, #WF_DEPTH_COLORS)
+  return WF_DEPTH_COLORS[idx]
+end
+
+--- Recursively draw nodes as wireframe outlines.
+--- @param node table        The tree node
+--- @param scale number      Scale factor (viewport → region)
+--- @param offX number       X offset in screen coords
+--- @param offY number       Y offset in screen coords
+--- @param depth number      Tree depth (for color)
+--- @param clipRect table|nil  { x1, y1, x2, y2 } in scaled coords — parent's clip bounds
+local function drawWfNode(node, scale, offX, offY, depth, clipRect)
+  if not node or not node.computed then return end
+  local c = node.computed
+  if c.w <= 0 or c.h <= 0 then return end
+
+  -- Scaled screen coordinates
+  local sx = offX + c.x * scale
+  local sy = offY + c.y * scale
+  local sw = c.w * scale
+  local sh = c.h * scale
+
+  -- Skip tiny rects (less than 1px either dimension)
+  if sw < 1 and sh < 1 then return end
+
+  -- Clip: skip nodes entirely outside, clamp partial overlaps to clip bounds
+  if clipRect then
+    if sx + sw < clipRect.x1 or sx > clipRect.x2 then return end
+    if sy + sh < clipRect.y1 or sy > clipRect.y2 then return end
+    -- Clamp visible rect to clip bounds
+    local cx1 = math.max(sx, clipRect.x1)
+    local cy1 = math.max(sy, clipRect.y1)
+    local cx2 = math.min(sx + sw, clipRect.x2)
+    local cy2 = math.min(sy + sh, clipRect.y2)
+    sx, sy, sw, sh = cx1, cy1, cx2 - cx1, cy2 - cy1
+    if sw < 1 or sh < 1 then return end
+  end
+
+  -- Store for hit testing (clamped rect)
+  wfNodeRects[#wfNodeRects + 1] = { node = node, sx = sx, sy = sy, sw = sw, sh = sh }
+
+  -- Determine color
+  local isSelected = inspector and inspector.getSelectedNode() == node
+  local isHovered = wfHoverNode == node
+
+  if isSelected then
+    -- Selected: filled highlight + bright outline
+    love.graphics.setColor(WF_SELECTED_COLOR[1], WF_SELECTED_COLOR[2], WF_SELECTED_COLOR[3], 0.15)
+    love.graphics.rectangle("fill", sx, sy, sw, sh)
+    love.graphics.setColor(WF_SELECTED_COLOR)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", sx, sy, sw, sh)
+    love.graphics.setLineWidth(1)
+  elseif isHovered then
+    -- Hovered: subtle fill + outline
+    love.graphics.setColor(WF_HOVER_COLOR[1], WF_HOVER_COLOR[2], WF_HOVER_COLOR[3], 0.10)
+    love.graphics.rectangle("fill", sx, sy, sw, sh)
+    love.graphics.setColor(WF_HOVER_COLOR)
+    love.graphics.rectangle("line", sx, sy, sw, sh)
+  else
+    -- Normal: classify by render count for non-text nodes
+    local col
+    if node.type == "__TEXT__" then
+      col = WF_TEXT_COLOR
+    else
+      local rc = node.renderCount or 0
+      if rc > 20 then
+        col = { 0.95, 0.40, 0.30, 0.55 }  -- hotspot red
+      elseif rc > 1 then
+        col = { 0.95, 0.75, 0.20, 0.50 }  -- reactive amber
+      else
+        col = getWfDepthColor(depth)        -- static: depth-based cool
+      end
+    end
+    love.graphics.setColor(col)
+    love.graphics.rectangle("line", sx, sy, sw, sh)
+  end
+
+  -- Label only on selected node (avoids visual clutter that looks like clipping)
+  if isSelected and sw > 30 and sh > 12 and node.type ~= "__TEXT__" then
+    local label = node.debugName or node.type or ""
+    if #label > 0 then
+      local font = getFont()
+      local labelW = font:getWidth(label)
+      if labelW < sw - 4 then
+        love.graphics.setColor(WF_SELECTED_COLOR)
+        love.graphics.setFont(font)
+        love.graphics.print(label, sx + 2, sy + 1)
+      end
+    end
+  end
+
+  -- Recurse into children — propagate clip rect for overflow containers
+  if node.children then
+    local childClip = clipRect
+    local s = node.style or {}
+    if s.overflow == "hidden" or s.overflow == "scroll" or s.overflow == "auto" then
+      -- This node clips its children to its own bounds
+      childClip = { x1 = sx, y1 = sy, x2 = sx + sw, y2 = sy + sh }
+    end
+    for _, child in ipairs(node.children) do
+      drawWfNode(child, scale, offX, offY, depth + 1, childClip)
+    end
+  end
+end
+
+--- Clear wireframe stale state (call on HMR or manual refresh).
+local function wfRefresh()
+  wfHoverNode = nil
+  wfNodeRects = {}
+  wfLastRootId = nil
+  if inspector then inspector.clearSelection() end
+end
+
+--- Draw the flex pressure overlay on the wireframe.
+--- Shows flex distribution bars and summary when a flex container is selected.
+local function drawFlexOverlay(selectedNode, scale, offX, offY, region)
+  if not selectedNode then return end
+  local c = selectedNode.computed
+  if not c or not c.flexInfo then return end
+  local fi = c.flexInfo
+
+  -- Build lookup: childId → screen rect from wfNodeRects
+  local childRects = {}
+  for _, r in ipairs(wfNodeRects) do
+    childRects[r.node.id] = r
+  end
+
+  -- Find the selected node's own screen rect
+  local selRect = childRects[selectedNode.id]
+  if not selRect then return end
+
+  local font = getFont()
+  love.graphics.setFont(font)
+  local fh = font:getHeight()
+
+  for lineIdx, flexLine in ipairs(fi.lines) do
+    if not flexLine then goto continueLine end
+    local itemCount = #flexLine.items
+    if itemCount == 0 then goto continueLine end
+
+    -- Container summary header above the node
+    if lineIdx == 1 then
+      local summaryParts = {}
+      summaryParts[#summaryParts + 1] = string.format("%.0fpx", fi.mainSize)
+      summaryParts[#summaryParts + 1] = string.format("basis:%.0f", flexLine.totalBasis)
+      if flexLine.freeSpace >= 0 then
+        summaryParts[#summaryParts + 1] = string.format("free:%.0f", flexLine.freeSpace)
+      else
+        summaryParts[#summaryParts + 1] = string.format("over:%.0f", -flexLine.freeSpace)
+      end
+      summaryParts[#summaryParts + 1] = string.format("%d items", itemCount)
+      local summary = table.concat(summaryParts, "  |  ")
+      local tw = font:getWidth(summary)
+
+      -- Position header above the selected node rect
+      local hx = selRect.sx + math.floor((selRect.sw - tw) / 2)
+      local hy = selRect.sy - fh - 6
+      -- Clamp to region bounds
+      hx = math.max(region.x + 2, math.min(hx, region.x + region.w - tw - 2))
+      hy = math.max(region.y + 2, hy)
+
+      -- Background pill
+      love.graphics.setColor(FP_HEADER_BG)
+      love.graphics.rectangle("fill", hx - 4, hy - 1, tw + 8, fh + 2, 3, 3)
+      -- Text
+      love.graphics.setColor(FP_TEXT_COLOR)
+      love.graphics.print(summary, hx, hy)
+    end
+
+    -- Draw allocation bars on each child
+    local barH = 4  -- bar thickness in screen pixels
+    local barW = 4  -- bar thickness for column direction
+
+    for _, item in ipairs(flexLine.items) do
+      local r = childRects[item.id]
+      if not r then goto continueItem end
+      if r.sw < 3 or r.sh < 3 then goto continueItem end
+
+      local totalFinal = 0
+      for _, it in ipairs(flexLine.items) do totalFinal = totalFinal + it.finalBasis end
+      if totalFinal <= 0 then goto continueItem end
+
+      if fi.isRow then
+        -- Horizontal bar at bottom of child rect
+        local barY = r.sy + r.sh - barH - 1
+
+        -- Basis portion (gray)
+        local basisFrac = item.origBasis / totalFinal
+        local basisW = math.max(0, r.sw * (basisFrac * itemCount))
+        -- Clamp to child width
+        basisW = math.min(basisW, r.sw)
+
+        love.graphics.setColor(FP_BASIS_COLOR)
+        love.graphics.rectangle("fill", r.sx, barY, r.sw, barH)
+
+        -- Delta portion overlay
+        if math.abs(item.delta) > 0.5 then
+          local deltaFrac = math.abs(item.delta) / fi.mainSize
+          local deltaW = math.max(2, r.sw * deltaFrac * itemCount)
+          deltaW = math.min(deltaW, r.sw)
+          if item.delta > 0 then
+            -- Grow: amber bar from right side of basis
+            love.graphics.setColor(FP_GROW_COLOR)
+            love.graphics.rectangle("fill", r.sx + r.sw - deltaW, barY, deltaW, barH)
+          else
+            -- Shrink: blue bar from right side
+            love.graphics.setColor(FP_SHRINK_COLOR)
+            love.graphics.rectangle("fill", r.sx + r.sw - deltaW, barY, deltaW, barH)
+          end
+        end
+
+        -- Label if wide enough
+        if r.sw > 40 then
+          local label
+          if item.grow > 0 and item.delta > 0.5 then
+            label = string.format("+%.0f (g:%.0f)", item.delta, item.grow)
+          elseif item.delta < -0.5 then
+            label = string.format("%.0f (s)", item.delta)
+          else
+            label = string.format("%.0fpx", item.finalBasis)
+          end
+          local lw = font:getWidth(label)
+          if lw < r.sw - 4 then
+            love.graphics.setColor(FP_TEXT_COLOR)
+            love.graphics.print(label, r.sx + 2, barY - fh - 1)
+          end
+        end
+      else
+        -- Column: vertical bar at right of child rect
+        local barX = r.sx + r.sw - barW - 1
+
+        love.graphics.setColor(FP_BASIS_COLOR)
+        love.graphics.rectangle("fill", barX, r.sy, barW, r.sh)
+
+        -- Delta portion overlay
+        if math.abs(item.delta) > 0.5 then
+          local deltaFrac = math.abs(item.delta) / fi.mainSize
+          local deltaH = math.max(2, r.sh * deltaFrac * itemCount)
+          deltaH = math.min(deltaH, r.sh)
+          if item.delta > 0 then
+            love.graphics.setColor(FP_GROW_COLOR)
+            love.graphics.rectangle("fill", barX, r.sy + r.sh - deltaH, barW, deltaH)
+          else
+            love.graphics.setColor(FP_SHRINK_COLOR)
+            love.graphics.rectangle("fill", barX, r.sy + r.sh - deltaH, barW, deltaH)
+          end
+        end
+
+        -- Label if tall enough
+        if r.sh > 40 and r.sw > 30 then
+          local label
+          if item.grow > 0 and item.delta > 0.5 then
+            label = string.format("+%.0f", item.delta)
+          elseif item.delta < -0.5 then
+            label = string.format("%.0f", item.delta)
+          else
+            label = string.format("%.0f", item.finalBasis)
+          end
+          love.graphics.setColor(FP_TEXT_COLOR)
+          love.graphics.print(label, barX - font:getWidth(label) - 2, r.sy + 2)
+        end
+      end
+
+      ::continueItem::
+    end
+
+    ::continueLine::
+  end
+end
+
+--- Draw the wireframe tab content.
+local function drawWireframeTab(root, region)
+  if not root then return end
+
+  -- Detect tree rebuild (HMR) — root node ID changes when tree is torn down
+  local rootId = root.id
+  if wfLastRootId and rootId ~= wfLastRootId then
+    wfHoverNode = nil
+    wfNodeRects = {}
+  end
+  wfLastRootId = rootId
+
+  love.graphics.setScissor(region.x, region.y, region.w, region.h)
+
+  -- Dark background for the viewport area
+  love.graphics.setColor(WF_BG_COLOR)
+  love.graphics.rectangle("fill", region.x, region.y, region.w, region.h)
+
+  -- Use the root node's computed size as the viewport — this is what the
+  -- layout engine actually used, regardless of window resize or panel docking.
+  local appW, appH
+  if root.computed and root.computed.w > 0 and root.computed.h > 0 then
+    appW = root.computed.w
+    appH = root.computed.h
+  else
+    appW, appH = love.graphics.getDimensions()
+  end
+
+  if appW <= 0 or appH <= 0 then
+    love.graphics.setScissor()
+    return
+  end
+
+  -- Compute scale to fit app viewport into the wireframe region with padding
+  local pad = 16
+  local availW = region.w - pad * 2
+  local availH = region.h - pad * 2
+  if availW <= 0 or availH <= 0 then
+    love.graphics.setScissor()
+    return
+  end
+
+  local scaleX = availW / appW
+  local scaleY = availH / appH
+  local scale = math.min(scaleX, scaleY)
+
+  -- Center the viewport representation in the region
+  local scaledW = appW * scale
+  local scaledH = appH * scale
+  local offX = region.x + pad + math.floor((availW - scaledW) / 2)
+  local offY = region.y + pad + math.floor((availH - scaledH) / 2)
+
+  -- Draw viewport border
+  love.graphics.setColor(WF_VIEWPORT_BORDER)
+  love.graphics.rectangle("line", offX - 1, offY - 1, scaledW + 2, scaledH + 2)
+
+  -- Clear hit test rects and rebuild during draw
+  wfNodeRects = {}
+
+  -- Draw all nodes recursively
+  love.graphics.setLineWidth(1)
+  drawWfNode(root, scale, offX, offY, 0)
+
+  -- Flex pressure overlay
+  if wfShowFlex and inspector then
+    local selNode = inspector.getSelectedNode()
+    if selNode then
+      drawFlexOverlay(selNode, scale, offX, offY, region)
+    end
+  end
+
+  -- Bottom bar: scale label + flex toggle
+  local font = getFont()
+  love.graphics.setFont(font)
+  local fh = font:getHeight()
+  local bottomY = region.y + region.h - fh - 6
+
+  -- Flex toggle button (left side)
+  local flexLabel = wfShowFlex and "[Flex: ON]" or "[Flex: OFF]"
+  local flexW = font:getWidth(flexLabel)
+  if wfShowFlex then
+    love.graphics.setColor(FP_GROW_COLOR)
+  else
+    love.graphics.setColor(0.45, 0.45, 0.50, 0.60)
+  end
+  love.graphics.print(flexLabel, region.x + 8, bottomY)
+
+  -- Store flex toggle hit rect for click handling
+  state._wfFlexToggle = { x = region.x + 8, y = bottomY, w = flexW, h = fh }
+
+  -- Scale label (right side)
+  love.graphics.setColor(STATUS_TEXT)
+  local scaleLabel = string.format("%.0f%%", scale * 100)
+  local labelW = font:getWidth(scaleLabel)
+  love.graphics.print(scaleLabel, region.x + region.w - labelW - 8, bottomY)
+
+  love.graphics.setScissor()
+end
+
+--- Hit test wireframe tab: find the deepest (last-drawn) node under the cursor.
+wireframeHitTest = function(x, y)
+  -- Walk in reverse order (last drawn = frontmost / deepest)
+  for i = #wfNodeRects, 1, -1 do
+    local r = wfNodeRects[i]
+    if x >= r.sx and x < r.sx + r.sw and y >= r.sy and y < r.sy + r.sh then
+      return r.node
+    end
+  end
+  return nil
+end
+
+-- ============================================================================
+-- Perf tab: frame budget, sparkline, node timing, mutations, memory
+-- ============================================================================
+
+-- Frame history ring buffer (120 entries = ~2s at 60fps)
+local PERF_HISTORY_SIZE = 120
+local perfHistory = {}    -- array of { layoutMs, paintMs, totalMs }
+local perfHistoryIdx = 0  -- next write index (wraps)
+local perfScrollY = 0
+
+-- Mutation stats accumulator (polled per frame)
+local lastMutationStats = { total = 0, creates = 0, updates = 0, removes = 0 }
+
+-- Colors for perf tab
+local PERF_TAB_BG      = { 0.03, 0.03, 0.06, 1 }
+local PERF_BUDGET_BG   = { 0.10, 0.10, 0.16, 1 }
+local PERF_BUDGET_FILL = { 0.30, 0.80, 0.40, 0.80 }
+local PERF_BUDGET_WARN = { 0.95, 0.75, 0.20, 0.80 }
+local PERF_BUDGET_CRIT = { 0.95, 0.40, 0.30, 0.80 }
+local PERF_SPARK_LINE  = { 0.38, 0.65, 0.98, 0.80 }
+local PERF_SPARK_FILL  = { 0.38, 0.65, 0.98, 0.15 }
+local PERF_SPARK_THRESH = { 0.95, 0.40, 0.30, 0.30 }
+local PERF_HEADER_COL  = { 0.65, 0.68, 0.75, 1 }
+local PERF_LABEL_COL   = { 0.55, 0.58, 0.65, 1 }
+local PERF_VALUE_COL   = { 0.88, 0.90, 0.94, 1 }
+local PERF_REACTIVE_COL = { 0.95, 0.75, 0.20, 0.80 }
+local PERF_HOTSPOT_COL = { 0.95, 0.40, 0.30, 0.90 }
+local PERF_STATIC_COL  = { 0.40, 0.55, 0.75, 0.70 }
+local PERF_COMP_COL    = { 0.56, 0.68, 0.98, 1 }
+local PERF_DIM_COL     = { 0.42, 0.44, 0.52, 0.70 }
+local PERF_PROP_COL    = { 0.90, 0.78, 0.35, 0.80 }
+
+--- Record a frame's timing data into the ring buffer.
+function DevTools.recordFrame(layoutMs, paintMs)
+  perfHistoryIdx = (perfHistoryIdx % PERF_HISTORY_SIZE) + 1
+  perfHistory[perfHistoryIdx] = {
+    layoutMs = layoutMs or 0,
+    paintMs = paintMs or 0,
+    totalMs = (layoutMs or 0) + (paintMs or 0),
+  }
+  -- Poll mutation stats
+  if tree and tree.getMutationStats then
+    lastMutationStats = tree.getMutationStats()
+  end
+end
+
+--- Build a comprehensive offender entry from a node.
+local function buildOffenderInfo(node)
+  local info = {
+    node = node,
+    name = node.debugName or nil,
+    luaType = node.type or "?",
+    id = node.id,
+    renderCount = node.renderCount or 0,
+    layoutMs = (node.computed and node.computed.layoutMs) or 0,
+    paintMs = (node.computed and node.computed.paintMs) or 0,
+    w = node.computed and math.floor(node.computed.w) or 0,
+    h = node.computed and math.floor(node.computed.h) or 0,
+    props = {},
+    source = node.debugSource,
+    handlerCount = 0,
+  }
+  -- Key style props
+  local s = node.style or {}
+  if s.flexGrow and s.flexGrow > 0 then info.props[#info.props + 1] = "flexGrow=" .. s.flexGrow end
+  if s.flexDirection == "row" then info.props[#info.props + 1] = "row" end
+  if s.width then info.props[#info.props + 1] = "w=" .. tostring(s.width) end
+  if s.height then info.props[#info.props + 1] = "h=" .. tostring(s.height) end
+  if s.overflow then info.props[#info.props + 1] = "overflow=" .. s.overflow end
+  -- Handlers
+  if node.handlerMeta and type(node.handlerMeta) == "table" then
+    for _ in pairs(node.handlerMeta) do info.handlerCount = info.handlerCount + 1 end
+  end
+  -- Total cost
+  info.totalMs = info.layoutMs + info.paintMs
+  return info
+end
+
+--- Get top offenders sorted by actual time cost (layout + paint), with full info.
+local function getTopOffenders(maxCount)
+  if not tree then return {} end
+  local allNodes = tree.getNodes()
+  if not allNodes then return {} end
+
+  local list = {}
+  for _, node in pairs(allNodes) do
+    if node.type ~= "__TEXT__" and node.computed then
+      local cost = (node.computed.layoutMs or 0) + (node.computed.paintMs or 0)
+      local rc = node.renderCount or 0
+      -- Include if it has measurable cost OR re-renders
+      if cost > 0.01 or rc > 1 then
+        list[#list + 1] = buildOffenderInfo(node)
+      end
+    end
+  end
+
+  -- Sort by total time cost (highest first)
+  table.sort(list, function(a, b) return a.totalMs > b.totalMs end)
+
+  local result = {}
+  for i = 1, math.min(maxCount, #list) do
+    result[i] = list[i]
+  end
+  return result
+end
+
+--- Draw a labeled value pair inline. Returns new x position.
+local function drawLV(font, x, y, label, value, labelCol, valueCol)
+  love.graphics.setColor(labelCol)
+  love.graphics.print(label, x, y)
+  x = x + font:getWidth(label)
+  love.graphics.setColor(valueCol)
+  love.graphics.print(value, x, y)
+  return x + font:getWidth(value) + 16
+end
+
+--- Draw the perf tab content.
+local function drawPerfTab(region)
+  local font = getFont()
+  love.graphics.setFont(font)
+  love.graphics.setScissor(region.x, region.y, region.w, region.h)
+
+  love.graphics.setColor(PERF_TAB_BG)
+  love.graphics.rectangle("fill", region.x, region.y, region.w, region.h)
+
+  local fh = font:getHeight()
+  local pad = 16
+  local x0 = region.x + pad
+  local y = region.y + pad - perfScrollY
+  local contentW = region.w - pad * 2
+
+  -- == Frame Budget Bar ==
+  local perf = inspector and inspector.getPerfData()
+  if perf then
+    love.graphics.setColor(PERF_HEADER_COL)
+    love.graphics.print("Frame Budget", x0, y)
+    y = y + fh + 6
+
+    local frameMs = perf.layoutMs + perf.paintMs
+    local budgetMs = 16.6
+    local pct = math.min(frameMs / budgetMs, 1.5)
+
+    local barH = 18
+    love.graphics.setColor(PERF_BUDGET_BG)
+    love.graphics.rectangle("fill", x0, y, contentW, barH, 4, 4)
+
+    local fillW = math.min(pct, 1.0) * contentW
+    local barColor = PERF_BUDGET_FILL
+    if pct > 0.8 then barColor = PERF_BUDGET_WARN end
+    if pct > 1.0 then barColor = PERF_BUDGET_CRIT end
+    love.graphics.setColor(barColor)
+    love.graphics.rectangle("fill", x0, y, fillW, barH, 4, 4)
+
+    love.graphics.setColor(PERF_VALUE_COL)
+    love.graphics.print(string.format("%.1fms / %.1fms  (%.0f%%)", frameMs, budgetMs, pct * 100), x0 + 8, y + math.floor((barH - fh) / 2))
+    y = y + barH + 6
+
+    -- Stats row 1: timing + FPS
+    local nx = x0
+    nx = drawLV(font, nx, y, "Layout ", string.format("%.2fms", perf.layoutMs), PERF_LABEL_COL, PERF_VALUE_COL)
+    nx = drawLV(font, nx, y, "Paint ", string.format("%.2fms", perf.paintMs), PERF_LABEL_COL, PERF_VALUE_COL)
+    local fpsColor = perf.fps >= 55 and PERF_BUDGET_FILL or (perf.fps >= 30 and PERF_BUDGET_WARN or PERF_BUDGET_CRIT)
+    nx = drawLV(font, nx, y, "FPS ", tostring(perf.fps), PERF_LABEL_COL, fpsColor)
+    drawLV(font, nx, y, "Nodes ", tostring(perf.nodeCount), PERF_LABEL_COL, PERF_VALUE_COL)
+    y = y + fh + 4
+
+    -- Stats row 2: memory + mutations
+    local memKB = collectgarbage("count")
+    nx = x0
+    nx = drawLV(font, nx, y, "Memory ", string.format("%.1f MB", memKB / 1024), PERF_LABEL_COL, PERF_VALUE_COL)
+    nx = drawLV(font, nx, y, "Mutations ", tostring(lastMutationStats.total) .. "/frame", PERF_LABEL_COL, PERF_VALUE_COL)
+    if lastMutationStats.total > 0 then
+      local parts = {}
+      if lastMutationStats.creates > 0 then parts[#parts + 1] = "+" .. lastMutationStats.creates end
+      if lastMutationStats.updates > 0 then parts[#parts + 1] = "~" .. lastMutationStats.updates end
+      if lastMutationStats.removes > 0 then parts[#parts + 1] = "-" .. lastMutationStats.removes end
+      love.graphics.setColor(PERF_DIM_COL)
+      love.graphics.print("(" .. table.concat(parts, " ") .. ")", nx, y)
+    end
+    y = y + fh + 16
+  end
+
+  -- == Frame Time Sparkline ==
+  local histCount = math.min(#perfHistory, PERF_HISTORY_SIZE)
+  if histCount > 1 then
+    love.graphics.setColor(PERF_HEADER_COL)
+    love.graphics.print("Frame Time", x0, y)
+    y = y + fh + 6
+
+    local sparkH = 60
+    local sparkW = contentW
+
+    love.graphics.setColor(PERF_BUDGET_BG)
+    love.graphics.rectangle("fill", x0, y, sparkW, sparkH, 4, 4)
+
+    local maxMs = 20
+    local threshY = y + sparkH - (16.6 / maxMs) * sparkH
+    love.graphics.setColor(PERF_SPARK_THRESH)
+    love.graphics.setLineWidth(1)
+    love.graphics.line(x0, threshY, x0 + sparkW, threshY)
+
+    local stepW = sparkW / (PERF_HISTORY_SIZE - 1)
+    local points = {}
+    local fillPoints = {}
+
+    for i = 1, histCount do
+      local idx = ((perfHistoryIdx - histCount + i - 1) % PERF_HISTORY_SIZE) + 1
+      local entry = perfHistory[idx]
+      local ms = entry and entry.totalMs or 0
+      local ptx = x0 + (i - 1) * stepW
+      local pty = y + sparkH - math.min(ms / maxMs, 1.0) * sparkH
+      points[#points + 1] = ptx
+      points[#points + 1] = pty
+      fillPoints[#fillPoints + 1] = ptx
+      fillPoints[#fillPoints + 1] = pty
+    end
+
+    if #fillPoints >= 4 then
+      fillPoints[#fillPoints + 1] = fillPoints[#fillPoints - 1]
+      fillPoints[#fillPoints + 1] = y + sparkH
+      fillPoints[#fillPoints + 1] = fillPoints[1]
+      fillPoints[#fillPoints + 1] = y + sparkH
+      love.graphics.setColor(PERF_SPARK_FILL)
+      pcall(love.graphics.polygon, "fill", fillPoints)
+    end
+    if #points >= 4 then
+      love.graphics.setColor(PERF_SPARK_LINE)
+      love.graphics.setLineWidth(1.5)
+      love.graphics.line(points)
+      love.graphics.setLineWidth(1)
+    end
+
+    love.graphics.setColor(PERF_LABEL_COL)
+    love.graphics.print("16.6ms", x0 + 4, threshY - fh - 2)
+    y = y + sparkH + 16
+  end
+
+  -- == Top Offenders (by actual cost) ==
+  love.graphics.setColor(PERF_HEADER_COL)
+  love.graphics.print("Costliest Nodes (layout + paint time)", x0, y)
+  y = y + fh + 8
+
+  local offenders = getTopOffenders(20)
+  if #offenders == 0 then
+    love.graphics.setColor(PERF_LABEL_COL)
+    love.graphics.print("Waiting for frame data...", x0, y)
+  else
+    for i, info in ipairs(offenders) do
+      -- Row 1: rank, component name, lua type, dimensions, total cost
+      local rc = info.renderCount
+      local rowColor = PERF_STATIC_COL
+      if rc > 20 then rowColor = PERF_HOTSPOT_COL
+      elseif rc > 1 then rowColor = PERF_REACTIVE_COL end
+
+      -- Rank
+      love.graphics.setColor(PERF_LABEL_COL)
+      love.graphics.print(string.format("%2d.", i), x0, y)
+      local nx = x0 + font:getWidth("00. ")
+
+      -- Component name (bright) or lua type
+      if info.name then
+        love.graphics.setColor(PERF_COMP_COL)
+        love.graphics.print(info.name, nx, y)
+        nx = nx + font:getWidth(info.name)
+        -- Lua type as dim badge
+        love.graphics.setColor(PERF_DIM_COL)
+        love.graphics.print(" [" .. info.luaType .. "]", nx, y)
+        nx = nx + font:getWidth(" [" .. info.luaType .. "]")
+      else
+        love.graphics.setColor(PERF_VALUE_COL)
+        love.graphics.print(info.luaType, nx, y)
+        nx = nx + font:getWidth(info.luaType)
+      end
+
+      -- #id
+      love.graphics.setColor(PERF_DIM_COL)
+      love.graphics.print(" #" .. info.id, nx, y)
+      nx = nx + font:getWidth(" #" .. info.id)
+
+      -- Right side: total cost
+      local costStr = string.format("%.2fms", info.totalMs)
+      local costW = font:getWidth(costStr)
+      love.graphics.setColor(rowColor)
+      love.graphics.print(costStr, x0 + contentW - costW, y)
+
+      y = y + fh + 2
+
+      -- Row 2: detailed breakdown
+      nx = x0 + font:getWidth("00. ")
+      love.graphics.setColor(PERF_DIM_COL)
+
+      local details = {}
+      details[#details + 1] = info.w .. "x" .. info.h
+      details[#details + 1] = "layout:" .. string.format("%.2fms", info.layoutMs)
+      details[#details + 1] = "paint:" .. string.format("%.2fms", info.paintMs)
+      details[#details + 1] = "renders:" .. rc
+      if info.handlerCount > 0 then
+        details[#details + 1] = "handlers:" .. info.handlerCount
+      end
+      if #info.props > 0 then
+        details[#details + 1] = table.concat(info.props, " ")
+      end
+
+      local detailStr = table.concat(details, "  ")
+      love.graphics.print(detailStr, nx, y)
+
+      -- Row 3: source file (if available)
+      if info.source and info.source.fileName then
+        y = y + fh + 1
+        love.graphics.setColor(PERF_DIM_COL)
+        local srcStr = info.source.fileName
+        if info.source.lineNumber then
+          srcStr = srcStr .. ":" .. info.source.lineNumber
+        end
+        -- Truncate long paths — show last 2 segments
+        local parts = {}
+        for part in srcStr:gmatch("[^/]+") do parts[#parts + 1] = part end
+        if #parts > 2 then
+          srcStr = ".../" .. parts[#parts - 1] .. "/" .. parts[#parts]
+        end
+        love.graphics.print(srcStr, nx, y)
+      end
+
+      y = y + fh + 6
+    end
+  end
+
+  local perfContentH = (y - region.y) + perfScrollY
+  drawScrollbar(region.x, region.y, region.w, region.h, perfScrollY, perfContentH)
+  love.graphics.setScissor()
+end
+
+perfWheelmoved = function(x, y)
+  perfScrollY = math.max(0, perfScrollY - y * 20)
+  return true
 end
 
 -- ============================================================================
@@ -699,10 +1533,6 @@ local LOG_HEADER_TXT = { 0.65, 0.68, 0.75, 1 }
 local LOG_BTN_BG    = { 0.12, 0.12, 0.18, 1 }
 local LOG_BTN_TEXT  = { 0.55, 0.58, 0.65, 1 }
 local LOG_BTN_HOVER = { 0.18, 0.22, 0.32, 1 }
-
--- Track which button is hovered for visual feedback
-local logsHoverRow = nil  -- index into sortedChannels, or "all"/"none"
-local logsScrollY  = 0
 
 --- Toggle a channel (handles JS-side sync for recon/dispatch).
 local function toggleChannel(name)
@@ -807,6 +1637,8 @@ local function drawLogsTab(region)
     love.graphics.print("Output goes to terminal AND console tab", x0, hintY + fh + 2)
   end
 
+  local logsContentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
+  drawScrollbar(region.x, region.y, region.w, region.h, logsScrollY, logsContentH)
   love.graphics.setScissor()
 end
 
@@ -860,7 +1692,7 @@ logsMousepressed = function(x, y, button, region)
 end
 
 --- Handle mouse movement on logs tab for hover effects.
-local function logsMousemoved(x, y, region)
+logsMousemoved = function(x, y, region)
   logsHoverRow = nil
   if not region then return end
   if x < region.x or x > region.x + region.w then return end
@@ -909,9 +1741,6 @@ logsWheelmoved = function(x, y)
   return true
 end
 
--- Store current logs tab region for mousemoved (needs geometry from draw)
-local logsRegion = nil
-
 -- ============================================================================
 -- Drawing
 -- ============================================================================
@@ -958,18 +1787,23 @@ local function drawTabBar(panelY, screenW)
     tabX = tabX + tabW + 2
   end
 
-  -- Pop-out / dock-back button (right side, before close)
-  local popoutX = screenW - 52
-  local popoutY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
-  love.graphics.setColor(TAB_TEXT)
-  -- Arrow icons: pop-out arrow when docked, dock-back arrow when popped out
-  love.graphics.print(state.poppedOut and ">" or "<", popoutX + 4, popoutY)
+  -- Right-side buttons: refresh, pop-out, close
+  local btnY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
 
-  -- Close button (x) on the right
+  -- Refresh button
+  local refreshX = screenW - 76
+  love.graphics.setColor(TAB_TEXT)
+  love.graphics.print("o", refreshX + 4, btnY)
+
+  -- Pop-out / dock-back button
+  local popoutX = screenW - 52
+  love.graphics.setColor(TAB_TEXT)
+  love.graphics.print(state.poppedOut and ">" or "<", popoutX + 4, btnY)
+
+  -- Close button (x)
   local closeX = screenW - 28
-  local closeY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
   love.graphics.setColor(CLOSE_COLOR)
-  love.graphics.print("x", closeX + 4, closeY)
+  love.graphics.print("x", closeX + 4, btnY)
 end
 
 --- Draw the status bar at the bottom of the panel (FPS, Layout, Paint, Nodes).
@@ -1064,6 +1898,12 @@ local function drawPanelContent(root)
       -- No selection: tree takes full width
       inspector.drawTreeInRegion(root, { x = 0, y = contentY, w = screenW, h = contentH })
     end
+
+  elseif state.activeTab == "wireframe" then
+    drawWireframeTab(root, { x = 0, y = contentY, w = screenW, h = contentH })
+
+  elseif state.activeTab == "perf" then
+    drawPerfTab({ x = 0, y = contentY, w = screenW, h = contentH })
 
   elseif state.activeTab == "console" then
     console.drawInRegion({ x = 0, y = contentY, w = screenW, h = contentH })

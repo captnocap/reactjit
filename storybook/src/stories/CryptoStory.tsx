@@ -52,7 +52,7 @@ function HashDemo() {
 
       {hashes.map(h => (
         <Box key={h.label} style={{ gap: 2 }}>
-          <Text style={{ fontSize: 10, color: h.color, fontWeight: '700' }}>{`${h.label}:`}</Text>
+          <Text style={{ fontSize: 10, color: h.color, fontWeight: 'normal' }}>{`${h.label}:`}</Text>
           <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
             <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${h.hex.slice(0, 64)}${h.hex.length > 64 ? '...' : ''}`}</Text>
           </Box>
@@ -92,7 +92,7 @@ function TokenDemo() {
         <Text style={{ fontSize: 9, color: c.textDim, flexGrow: 1 }}>libsodium randombytes_buf via Lua FFI</Text>
         <Pressable onPress={regenerate}>
           <Box style={{ backgroundColor: c.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-            <Text style={{ fontSize: 10, color: '#000', fontWeight: '700' }}>Regenerate</Text>
+            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'normal' }}>Regenerate</Text>
           </Box>
         </Pressable>
       </Box>
@@ -102,14 +102,14 @@ function TokenDemo() {
       )}
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>randomToken(16) -- hex:</Text>
+        <Text style={{ fontSize: 10, color: c.warning, fontWeight: 'normal' }}>randomToken(16) -- hex:</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
           <Text style={{ fontSize: 10, color: c.textSecondary }}>{tokens.hex}</Text>
         </Box>
       </Box>
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.success, fontWeight: '700' }}>randomId(24) -- alphanumeric:</Text>
+        <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>randomId(24) -- alphanumeric:</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
           <Text style={{ fontSize: 10, color: c.textSecondary }}>{tokens.id}</Text>
         </Box>
@@ -167,14 +167,14 @@ function SignDemo() {
       {result && (
         <>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: c.accent, fontWeight: '700' }}>Public Key:</Text>
+            <Text style={{ fontSize: 10, color: c.accent, fontWeight: 'normal' }}>Public Key:</Text>
             <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
               <Text style={{ fontSize: 8, color: c.textSecondary }}>{result.pubKey}</Text>
             </Box>
           </Box>
 
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>Signature:</Text>
+            <Text style={{ fontSize: 10, color: c.warning, fontWeight: 'normal' }}>Signature:</Text>
             <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
               <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${result.signature.slice(0, 64)}...`}</Text>
             </Box>
@@ -185,7 +185,7 @@ function SignDemo() {
               width: 8, height: 8, borderRadius: 4,
               backgroundColor: result.valid ? c.success : c.error,
             }} />
-            <Text style={{ fontSize: 11, color: result.valid ? c.success : c.error, fontWeight: '700' }}>
+            <Text style={{ fontSize: 11, color: result.valid ? c.success : c.error, fontWeight: 'normal' }}>
               {result.valid ? 'Signature valid' : 'Signature INVALID'}
             </Text>
           </Box>
@@ -238,21 +238,21 @@ function EncryptDemo() {
       )}
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.success, fontWeight: '700' }}>Plaintext:</Text>
+        <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>Plaintext:</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
           <Text style={{ fontSize: 10, color: c.info }}>{plaintext}</Text>
         </Box>
       </Box>
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.warning, fontWeight: '700' }}>{`Encrypted (${algo || '...'} + ${kdf || '...'}):`}</Text>
+        <Text style={{ fontSize: 10, color: c.warning, fontWeight: 'normal' }}>{`Encrypted (${algo || '...'} + ${kdf || '...'}):`}</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
           <Text style={{ fontSize: 9, color: c.textSecondary }}>{encrypted}</Text>
         </Box>
       </Box>
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.success, fontWeight: '700' }}>Decrypted:</Text>
+        <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>Decrypted:</Text>
         <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
           <Text style={{ fontSize: 10, color: c.success }}>{decrypted}</Text>
         </Box>
@@ -263,7 +263,7 @@ function EncryptDemo() {
           width: 8, height: 8, borderRadius: 4,
           backgroundColor: decrypted === plaintext ? c.success : c.error,
         }} />
-        <Text style={{ fontSize: 11, color: decrypted === plaintext ? c.success : c.error, fontWeight: '700' }}>
+        <Text style={{ fontSize: 11, color: decrypted === plaintext ? c.success : c.error, fontWeight: 'normal' }}>
           {decrypted === plaintext ? 'Round-trip OK' : decrypted ? 'Decryption failed' : 'Computing...'}
         </Text>
       </Box>
@@ -295,7 +295,7 @@ function FeatureList() {
       {features.map(f => (
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: '700', width: 100 }}>{f.label}</Text>
+          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 100 }}>{f.label}</Text>
           <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
         </Box>
       ))}

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Box, Text, Badge, ProgressBar, Sparkline,
+  Box, Text, Badge, Pressable, ProgressBar, Sparkline,
   useHotkey, useLoveEvent, useSystemMonitor, useLuaInterval,
 } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -283,7 +283,7 @@ export function NoclipMazeStory() {
           borderColor: '#1a1a2e',
         }}
       >
-        <Text style={{ fontSize: 11, color: '#666', fontWeight: 'bold' }}>NOCLIP</Text>
+        <Text style={{ fontSize: 11, color: '#666', fontWeight: 'normal' }}>NOCLIP</Text>
         <Badge label={noclip ? 'ON' : 'OFF'} variant={noclip ? 'success' : 'error'} />
         <Box style={{ width: 1, height: 14, backgroundColor: '#1a1a2e' }} />
         <Text style={{ fontSize: 10, color: '#555' }}>
@@ -293,6 +293,37 @@ export function NoclipMazeStory() {
         <Text style={{ fontSize: 10, color: '#555' }}>
           {`FACING: ${((facing * 180 / Math.PI) % 360).toFixed(0)}\u00B0`}
         </Text>
+        <Box style={{ width: 1, height: 14, backgroundColor: '#1a1a2e' }} />
+        <Pressable
+          onPress={() => setShowCrt((v) => !v)}
+          style={{
+            paddingLeft: 6,
+            paddingRight: 6,
+            paddingTop: 3,
+            paddingBottom: 3,
+            borderRadius: 4,
+            backgroundColor: showCrt ? '#183025' : '#131622',
+            borderWidth: 1,
+            borderColor: showCrt ? '#3b8f6b' : '#2b3040',
+          }}
+        >
+          <Text style={{ fontSize: 9, color: showCrt ? '#9ff0cc' : '#7f8696', fontWeight: 'normal' }}>SCAN</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setShowVhs((v) => !v)}
+          style={{
+            paddingLeft: 6,
+            paddingRight: 6,
+            paddingTop: 3,
+            paddingBottom: 3,
+            borderRadius: 4,
+            backgroundColor: showVhs ? '#34271a' : '#131622',
+            borderWidth: 1,
+            borderColor: showVhs ? '#a57741' : '#2b3040',
+          }}
+        >
+          <Text style={{ fontSize: 9, color: showVhs ? '#ffd9ab' : '#7f8696', fontWeight: 'normal' }}>VHS</Text>
+        </Pressable>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ fontSize: 9, color: '#444' }}>
           WASD=move  Arrows=turn  N=noclip  C=scanlines  V=vhs
@@ -303,43 +334,46 @@ export function NoclipMazeStory() {
       <Box style={{ flexDirection: 'row', flexGrow: 1 }}>
         {/* 3D Scene */}
         <Box style={{ flexGrow: 1 }}>
-          <Scene style={{ width: '100%', height: '100%' }} backgroundColor="#050811" stars>
-            <Camera position={camPos} lookAt={lookAt} fov={1.1} near={0.05} far={80} />
-            <AmbientLight color="#0e1528" intensity={0.25} />
-            <DirectionalLight direction={[-0.4, 0.6, -0.5]} color="#c8d8ff" intensity={0.9} />
+          {/* Keep post-processing isolated to the scene layer so UI overlays stay crisp. */}
+          <Box style={{ width: '100%', height: '100%' }}>
+            <Scene style={{ width: '100%', height: '100%' }} backgroundColor="#050811" stars>
+              <Camera position={camPos} lookAt={lookAt} fov={1.1} near={0.05} far={80} />
+              <AmbientLight color="#0e1528" intensity={0.25} />
+              <DirectionalLight direction={[-0.4, 0.6, -0.5]} color="#c8d8ff" intensity={0.9} />
 
-            {/* Floor */}
-            <Mesh
-              geometry="plane"
-              color="#0a0e18"
-              position={[floorSize / 2, floorSize / 2, 0]}
-              scale={[floorSize * 1.2, floorSize * 1.2, 1]}
-              edgeColor="#141e30"
-              edgeWidth={0.005}
-              specular={4}
-            />
-
-            {/* Walls */}
-            {walls.map((w, i) => (
+              {/* Floor */}
               <Mesh
-                key={i}
-                geometry="box"
-                color={w.special ? '#1a2844' : baseWallColor}
-                texture={w.special ? 'framework-canvas' : undefined}
-                seed={w.special ? w.seed : undefined}
-                position={w.pos}
-                scale={w.scale}
-                edgeColor="#0c1220"
-                edgeWidth={0.025}
-                specular={w.special ? 48 : 16}
-                opacity={noclip ? 0.55 : 1}
+                geometry="plane"
+                color="#0a0e18"
+                position={[floorSize / 2, floorSize / 2, 0]}
+                scale={[floorSize * 1.2, floorSize * 1.2, 1]}
+                edgeColor="#141e30"
+                edgeWidth={0.005}
+                specular={4}
               />
-            ))}
-          </Scene>
 
-          {/* Post-processing overlays */}
-          {showCrt && <Scanlines mask intensity={0.15} spacing={2} />}
-          {showVhs && <VHS mask tracking={0.15} noise={0.1} colorBleed={1} />}
+              {/* Walls */}
+              {walls.map((w, i) => (
+                <Mesh
+                  key={i}
+                  geometry="box"
+                  color={w.special ? '#1a2844' : baseWallColor}
+                  texture={w.special ? 'framework-canvas' : undefined}
+                  seed={w.special ? w.seed : undefined}
+                  position={w.pos}
+                  scale={w.scale}
+                  edgeColor="#0c1220"
+                  edgeWidth={0.025}
+                  specular={w.special ? 48 : 16}
+                  opacity={noclip ? 0.55 : 1}
+                />
+              ))}
+            </Scene>
+
+            {/* Post-processing overlays (apply to scene box only). */}
+            {showCrt && <Scanlines mask intensity={0.9} spacing={2} tint="#ff2bd6" />}
+            {showVhs && <VHS mask intensity={0.9} tracking={0.15} noise={0.1} colorBleed={1} tint="#ff2bd6" />}
+          </Box>
 
           {/* Minimap overlay (bottom-left of scene) */}
           <Box
@@ -369,7 +403,7 @@ export function NoclipMazeStory() {
             borderColor: '#1a1a2e',
           }}
         >
-          <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>SYSTEM</Text>
+          <Text style={{ fontSize: 11, color: c.text, fontWeight: 'normal' }}>SYSTEM</Text>
 
           {/* CPU cores */}
           <Box style={{ gap: 4 }}>

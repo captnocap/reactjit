@@ -74,7 +74,7 @@ export function DocPage({ content, onNavigate, currentSectionId }: { content: Pa
   return (
     <Box style={{ width: '100%', padding: 16, paddingBottom: 40 }}>
       {/* Title */}
-      <Text style={{ color: c.text, fontSize: s(18), fontWeight: 'bold', marginBottom: 6 }}>
+      <Text style={{ color: c.text, fontSize: s(18), fontWeight: 'normal', marginBottom: 6 }}>
         {metadata.title}
       </Text>
 
@@ -132,7 +132,7 @@ export function DocPage({ content, onNavigate, currentSectionId }: { content: Pa
           <SectionHeader title="PLATFORM NOTES" s={s} />
           {Object.entries(sections.platformNotes).map(([platform, notes]) => (
             <Box key={platform} style={{ marginBottom: 8 }}>
-              <Text style={{ color: c.text, fontSize: s(10), lineHeight: s(16), fontWeight: 'bold', marginBottom: 4 }}>
+              <Text style={{ color: c.text, fontSize: s(10), lineHeight: s(16), fontWeight: 'normal', marginBottom: 4 }}>
                 {platform}
               </Text>
               <ContentText text={notes} s={s} />

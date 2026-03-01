@@ -419,7 +419,7 @@ function MasksDashboardDemo() {
       }}>
         <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
           <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
-            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'bold' }}>Mask Mapping Dashboard</Text>
+            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Mask Mapping Dashboard</Text>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>
               Click a top toggle to remap effects and masks across dashboard surfaces.
             </Text>
@@ -438,7 +438,7 @@ function MasksDashboardDemo() {
               opacity: profileId === 'random' ? 1 : 0.75,
             }}
           >
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Re-map</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Re-map</Text>
           </Pressable>
         </Box>
 
@@ -456,7 +456,7 @@ function MasksDashboardDemo() {
 
         <Box style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
           <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Global Speed</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Global Speed</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
               <Box style={{ flexGrow: 1 }}>
                 <Slider value={speedScale} min={0.5} max={1.8} onValueChange={setSpeedScale} />
@@ -465,7 +465,7 @@ function MasksDashboardDemo() {
             </Box>
           </Box>
           <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Global Intensity</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Global Intensity</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
               <Box style={{ flexGrow: 1 }}>
                 <Slider value={intensityScale} min={0.3} max={1.3} onValueChange={setIntensityScale} />
@@ -515,7 +515,7 @@ function MasksDashboardDemo() {
             }}
           >
             <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Operations Dashboard</Text>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>Operations Dashboard</Text>
               <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Badge label={activeProfile.label} variant="info" />
                 <Text style={{ color: c.textDim, fontSize: 10 }}>{`Updated ${updateLabel}`}</Text>
@@ -545,8 +545,8 @@ function MasksDashboardDemo() {
                 <Text style={{ color: c.textSecondary, fontSize: 10 }}>{card.label}</Text>
                 <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box style={{ gap: 2 }}>
-                    <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>{card.value}</Text>
-                    <Text style={{ color: card.delta >= 0 ? c.success : c.error, fontSize: 10, fontWeight: 'bold' }}>
+                    <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>{card.value}</Text>
+                    <Text style={{ color: card.delta >= 0 ? c.success : c.error, fontSize: 10, fontWeight: 'normal' }}>
                       {`${card.delta >= 0 ? '+' : ''}${card.delta.toFixed(1)}%`}
                     </Text>
                   </Box>
@@ -571,7 +571,7 @@ function MasksDashboardDemo() {
                 gap: 8,
               }}
             >
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>Weekly Throughput</Text>
+              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Weekly Throughput</Text>
               <BarChart data={revenueBars} height={134} showValues color={c.primary} />
             </MappedSurface>
 
@@ -589,12 +589,12 @@ function MasksDashboardDemo() {
                 gap: 8,
               }}
             >
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>Target Tracking</Text>
+              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Target Tracking</Text>
               {targets.map((metric) => (
                 <Box key={metric.label} style={{ gap: 3 }}>
                   <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
                     <Text style={{ color: c.textSecondary, fontSize: 10 }}>{metric.label}</Text>
-                    <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>
+                    <Text style={{ color: c.text, fontSize: 10, fontWeight: 'normal' }}>
                       {`${Math.round(metric.value * 100)}%`}
                     </Text>
                   </Box>
@@ -619,7 +619,7 @@ function MasksDashboardDemo() {
             }}
           >
             <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>Service Health</Text>
+              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Service Health</Text>
               <Text style={{ color: c.textSecondary, fontSize: 10 }}>{`${services.length} services`}</Text>
             </Box>
             <Divider color={c.border} />
@@ -627,7 +627,7 @@ function MasksDashboardDemo() {
               <Box key={service.name} style={{ gap: 3 }}>
                 <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>{service.name}</Text>
+                    <Text style={{ color: c.text, fontSize: 11, fontWeight: 'normal' }}>{service.name}</Text>
                     <Badge label={service.state} variant={serviceBadgeVariant(service.state)} />
                   </Box>
                   <Text style={{ color: c.textSecondary, fontSize: 10 }}>{`${service.latency}ms`}</Text>
@@ -693,7 +693,7 @@ function LegacyMasksLab() {
       }}>
         <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
           <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
-            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'bold' }}>Masks Legacy Lab</Text>
+            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Masks Legacy Lab</Text>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>
               Original playground retained while the dashboard mapping demo is being validated.
             </Text>
@@ -701,7 +701,7 @@ function LegacyMasksLab() {
         </Box>
 
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Mask</Text>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Mask</Text>
           <Tabs
             tabs={maskTabs}
             activeId={String(maskIdx)}
@@ -712,7 +712,7 @@ function LegacyMasksLab() {
         </Box>
 
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Background Effect</Text>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Background Effect</Text>
           <Tabs
             tabs={bgTabs}
             activeId={String(bgIdx)}
@@ -724,7 +724,7 @@ function LegacyMasksLab() {
 
         <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
           <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Intensity</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Intensity</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
               <Box style={{ flexGrow: 1 }}>
                 <Slider value={intensity} min={0} max={1} onValueChange={setIntensity} />
@@ -733,7 +733,7 @@ function LegacyMasksLab() {
             </Box>
           </Box>
           <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Speed</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Speed</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
               <Box style={{ flexGrow: 1 }}>
                 <Slider value={speed} min={0.1} max={3} onValueChange={setSpeed} />
@@ -746,7 +746,7 @@ function LegacyMasksLab() {
 
       <Box style={{ flexDirection: 'row', gap: 6, flexGrow: 1, minHeight: 0 }}>
         <Box style={{ flexGrow: 1, flexBasis: 0, gap: 4, minHeight: 0 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
             {`${selectedMask.name} Mask`}
           </Text>
           <Box style={{
@@ -777,7 +777,7 @@ function LegacyMasksLab() {
                 alignItems: 'center',
                 gap: 6,
               }}>
-                <Text style={{ color: c.text, fontSize: 22, fontWeight: 'bold' }}>
+                <Text style={{ color: c.text, fontSize: 22, fontWeight: 'normal' }}>
                   {selectedMask.name}
                 </Text>
                 <Text style={{ color: c.textSecondary, fontSize: 11 }}>
@@ -790,7 +790,7 @@ function LegacyMasksLab() {
         </Box>
 
         <Box style={{ width: 240, gap: 4, minHeight: 0 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
             Full Compositing Stack
           </Text>
 
@@ -839,7 +839,7 @@ function LegacyMasksLab() {
                 borderWidth: 1,
                 borderColor: c.border,
               }}>
-                <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>
+                <Text style={{ color: c.text, fontSize: 9, fontWeight: 'normal' }}>
                   BG + Text FX + Mask
                 </Text>
               </Box>
@@ -865,7 +865,7 @@ function LegacyMasksLab() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
                 Constellation + CRT
               </Text>
             </Box>
@@ -930,7 +930,7 @@ export function MasksStory() {
         backgroundColor: c.bgElevated,
         flexShrink: 0,
       }}>
-        <Text style={{ color: c.text, fontSize: 15, fontWeight: 'bold' }}>Masks</Text>
+        <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Masks</Text>
         <Text style={{ color: c.textSecondary, fontSize: 10 }}>
           Dashboard-style mapping demo is first-class. Legacy lab remains for side-by-side comparison.
         </Text>

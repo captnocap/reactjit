@@ -194,6 +194,8 @@ end
 -- Editor state helpers (operate on editorState)
 -- ============================================================================
 
+local clearSelection  -- forward declaration (used by applySnapshot before definition)
+
 local function lineCount(es)
   return #es.lines
 end
@@ -271,7 +273,7 @@ local function wordJumpRight(es)
   es.cursorCol = col
 end
 
-local function clearSelection(es)
+clearSelection = function(es)
   es.selectStart = nil
   es.selectEnd = nil
 end

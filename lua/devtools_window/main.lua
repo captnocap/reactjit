@@ -33,6 +33,11 @@ local treeDirty    = true
 local connected    = false
 local shuttingDown = false
 
+-- Frame throttle: devtools don't need high fps.
+-- Low rate avoids GPU contention on multi-monitor setups (e.g. 240hz + 60hz).
+local TARGET_FPS   = 15
+local FRAME_BUDGET = 1.0 / TARGET_FPS
+
 -- ============================================================================
 -- love.load — connect to parent, receive initial tree
 -- ============================================================================
@@ -212,4 +217,54 @@ function love.quit()
   -- User clicked X — tell parent to dock back
   sendEvent({ type = "windowEvent", handler = "onClose" })
   return true -- block close, wait for parent to send "quit"
+end
+
+-- ============================================================================
+-- Custom run loop — throttle to TARGET_FPS to avoid GPU contention
+-- ============================================================================
+
+function love.run()
+  if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
+  if love.timer then love.timer.step() end
+
+  local socket = require("socket")
+  local accumulator = 0
+
+  return function()
+    -- Process all queued events (input, resize, quit)
+    if love.event then
+      love.event.pump()
+      for name, a, b, c, d, e, f in love.event.poll() do
+        if name == "quit" then
+          if not love.quit or not love.quit() then
+            return a or 0
+          end
+        end
+        love.handlers[name](a, b, c, d, e, f)
+      end
+    end
+
+    local dt = love.timer and love.timer.step() or 0
+    accumulator = accumulator + dt
+
+    -- Update at full rate (IPC poll needs to stay responsive)
+    if love.update then love.update(dt) end
+
+    -- Draw only when frame budget allows
+    if accumulator >= FRAME_BUDGET then
+      accumulator = accumulator - FRAME_BUDGET
+      -- Clamp so we don't spiral if we fall behind
+      if accumulator > FRAME_BUDGET then accumulator = 0 end
+
+      if love.graphics and love.graphics.isActive() then
+        love.graphics.origin()
+        love.graphics.clear(love.graphics.getBackgroundColor())
+        if love.draw then love.draw() end
+        love.graphics.present()
+      end
+    end
+
+    -- Sleep to yield CPU — devtools are not latency-sensitive
+    socket.sleep(0.004)
+  end
 end

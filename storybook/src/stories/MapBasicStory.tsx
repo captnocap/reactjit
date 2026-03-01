@@ -179,7 +179,7 @@ function SectionBox({ title, children }: { title: string; children: React.ReactN
         gap: 8,
       }}
     >
-      <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: 'bold' }}>{title}</Text>
+      <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: 'normal' }}>{title}</Text>
       {children}
     </Box>
   );
@@ -267,7 +267,7 @@ export function MapBasicStory() {
         }}
       >
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 15, color: C.textPrimary, fontWeight: 'bold' }}>Map</Text>
+          <Text style={{ fontSize: 15, color: C.textPrimary, fontWeight: 'normal' }}>Map</Text>
           <Text style={{ fontSize: 10, color: C.textSecondary }}>
             Tiles · Markers · Polylines · Polygons · GeoJSON
           </Text>
@@ -406,7 +406,7 @@ export function MapBasicStory() {
             gap: 2,
           }}
         >
-          <Text style={{ fontSize: 13, color: C.textPrimary, fontWeight: 'bold' }}>
+          <Text style={{ fontSize: 13, color: C.textPrimary, fontWeight: 'normal' }}>
             {`${preset.label} · ${tileSource === 'osm' ? 'Streets' : 'Cycle'}`}
           </Text>
           <Text style={{ fontSize: 10, color: C.textSecondary }}>

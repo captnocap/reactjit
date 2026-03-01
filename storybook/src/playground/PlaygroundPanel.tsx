@@ -98,7 +98,7 @@ export function PlaygroundPanel() {
             >
               <Text style={{ color: c.textSecondary, fontSize: 10 }}>Templates</Text>
             </Pressable>
-            <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>Editor</Text>
+            <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>Editor</Text>
           </Box>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
             <Text style={{ color: c.textDim, fontSize: 9, marginRight: 4 }}>Hints</Text>

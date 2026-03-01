@@ -106,9 +106,9 @@ export function EffectsStory() {
       }}>
         <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
           <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
-            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'bold' }}>Effects</Text>
+            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Effects</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
+              <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
                 {selectedEffect.name}
               </Text>
               <Box style={{
@@ -121,7 +121,7 @@ export function EffectsStory() {
                 borderColor: c.border,
                 backgroundColor: c.bgAlt,
               }}>
-                <Text style={{ color: c.textDim, fontSize: 9, fontWeight: 'bold' }}>
+                <Text style={{ color: c.textDim, fontSize: 9, fontWeight: 'normal' }}>
                   {selectedEffect.cat}
                 </Text>
               </Box>
@@ -139,7 +139,7 @@ export function EffectsStory() {
         </Box>
 
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Category</Text>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Category</Text>
           <Tabs
             tabs={categoryTabs}
             activeId={category}
@@ -159,7 +159,7 @@ export function EffectsStory() {
 
         <Box style={{ gap: 2 }}>
           <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>Effect</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Effect</Text>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>
               {filteredEffects.length > 0 ? `${safeCurrentFilterIdx + 1}/${filteredEffects.length}` : '0/0'}
             </Text>
@@ -181,7 +181,7 @@ export function EffectsStory() {
       <Box style={{ flexDirection: 'row', gap: 8, flexGrow: 1, minHeight: 0 }}>
         {/* Standalone effect */}
         <Box style={{ flexGrow: 1, flexBasis: 0, gap: 4, minHeight: 0 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
             {mode === 'normal' ? 'Standalone' : mode === 'infinite' ? 'Seamless Tiling' : 'Cursor-Reactive'}
           </Text>
           <Box style={{
@@ -199,7 +199,7 @@ export function EffectsStory() {
 
         {/* Background texture demo */}
         <Box style={{ width: 208, gap: 4, minHeight: 0 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
+          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
             {mode === 'reactive' ? 'Cursor-Reactive Background' : 'As Background'}
           </Text>
           <Box style={{
@@ -219,7 +219,7 @@ export function EffectsStory() {
               justifyContent: 'flex-end',
             }}>
               <SelectedEffect background {...modeProps} />
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>
                 {effects[selected].name}
               </Text>
               <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 4 }}>
@@ -302,7 +302,7 @@ export function EffectsStory() {
                 alignItems: 'center',
                 gap: 4,
               }}>
-                <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'bold' }}>Nova Echo</Text>
+                <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'normal' }}>Nova Echo</Text>
                 <Pressable
                   onPress={goNext}
                   style={{
@@ -316,7 +316,7 @@ export function EffectsStory() {
                     borderColor: 'rgba(255,255,255,0.34)',
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'normal' }}>
                     {`Next: ${nextEffectName}`}
                   </Text>
                 </Pressable>

@@ -19,7 +19,7 @@ class ErrorBoundary extends React.Component<
     const { colors } = this.props;
     if (this.state.hasError) return (
       <Box style={{ padding: 16, backgroundColor: colors.bgElevated, borderRadius: 8, margin: 12 }}>
-        <Text style={{ color: colors.error, fontSize: 13, fontWeight: 'bold' }}>Runtime Error</Text>
+        <Text style={{ color: colors.error, fontSize: 13, fontWeight: 'normal' }}>Runtime Error</Text>
         <Box style={{ height: 8 }} />
         <Text style={{ color: colors.error, fontSize: 12 }}>{this.state.errorMessage}</Text>
       </Box>
@@ -34,7 +34,7 @@ export function Preview({ UserComponent, errors }: PreviewProps) {
   return (
     <Box style={{ flexGrow: 1, flexBasis: 0, height: '100%', backgroundColor: c.bg }}>
       <Box style={{ height: 32, paddingLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 1, borderColor: c.border }}>
-        <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>Preview</Text>
+        <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>Preview</Text>
         {hasErrors && (
           <Box style={{ backgroundColor: c.error, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
             <Text style={{ color: c.error, fontSize: 9 }}>ERROR</Text>

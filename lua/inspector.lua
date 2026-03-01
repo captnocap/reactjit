@@ -20,6 +20,7 @@
 ]]
 
 local ZIndex = require("lua.zindex")
+local Measure = require("lua.measure")
 local console = nil  -- lazy-loaded to avoid circular deps
 
 -- Forward declarations (defined later in the file)
@@ -69,6 +70,10 @@ local state = {
   -- Inline style editing
   editState = nil,  -- nil or { node, section, prop, propIndex, text, cursor, originalValue, liveApplied }
   detailPropPositions = {},  -- { section, prop, y, h, valueX, value }
+  -- View mode toggle: "lua" | "hybrid" | "react"
+  viewMode = "hybrid",
+  -- Toggle bar region (set during draw, used for click detection)
+  toggleBarRegion = nil,  -- { x, y, w, h }
 }
 
 -- ============================================================================
@@ -102,6 +107,16 @@ local DETAIL_BG     = { 0.05, 0.05, 0.10, 0.92 }
 
 local TREE_WIDTH = 280
 local DETAIL_WIDTH = 300
+
+-- Scrollbar helper (thin thumb, no track)
+local function drawScrollbar(rx, ry, rw, rh, scrollY, contentH)
+  if not contentH or contentH <= rh then return end
+  local maxScroll = math.max(1, contentH - rh)
+  local thumbH = math.max(20, rh * (rh / contentH))
+  local thumbY = ry + (scrollY / maxScroll) * (rh - thumbH)
+  love.graphics.setColor(1, 1, 1, 0.25)
+  love.graphics.rectangle("fill", rx + rw - 5, thumbY, 3, thumbH, 1, 1)
+end
 
 -- JSX tree view constants
 local INDENT_SIZE = 16
@@ -141,6 +156,36 @@ local COL_METADATA    = { 0.48, 0.50, 0.58, 0.70 }    -- muted tier: metadata ta
 local COL_JSX_DIM     = { 0.42, 0.44, 0.52, 0.50 }    -- dim tier: JSX preview
 local COL_TEXT_VAL    = { 0.92, 0.72, 0.48, 0.90 }    -- text content (orange)
 local COL_SELECT_BAR  = { 0.38, 0.65, 0.98, 0.90 }    -- selection accent bar
+
+-- View mode toggle bar
+local TOGGLE_BG       = { 0.08, 0.08, 0.14, 1 }       -- toggle bar background
+local TOGGLE_ACTIVE   = { 0.38, 0.65, 0.98, 0.25 }    -- active segment fill
+local TOGGLE_BORDER   = { 0.25, 0.27, 0.35, 0.6 }     -- segment borders
+local TOGGLE_TEXT_ON  = { 0.88, 0.90, 0.94, 1 }        -- active segment text
+local TOGGLE_TEXT_OFF = { 0.45, 0.48, 0.55, 0.8 }      -- inactive segment text
+local TOGGLE_HEIGHT   = 22                              -- toggle bar height
+local VIEW_MODES      = { "lua", "hybrid", "react" }
+local VIEW_MODE_LABELS = { lua = "Lua", hybrid = "Hybrid", react = "React" }
+
+-- Node classification colors + labels
+local CLASS_STATIC   = { 0.40, 0.55, 0.75, 0.70 }  -- cool blue: never re-rendered
+local CLASS_REACTIVE = { 0.95, 0.75, 0.20, 0.80 }  -- amber: updates on interaction
+local CLASS_HOTSPOT  = { 0.95, 0.40, 0.30, 0.90 }  -- red: high-frequency re-render
+local CLASS_LABELS = {
+  static   = { "S", CLASS_STATIC },
+  reactive = { "R", CLASS_REACTIVE },
+  hotspot  = { "H", CLASS_HOTSPOT },
+}
+
+--- Derive a content kind from node render count.
+--- @param node table
+--- @return string "static"|"reactive"|"hotspot"
+local function classifyNode(node)
+  local rc = node.renderCount or 0
+  if rc <= 1 then return "static" end
+  if rc > 20 then return "hotspot" end
+  return "reactive"
+end
 
 -- Inline edit colors
 local EDIT_BG       = { 0.12, 0.12, 0.20, 1 }
@@ -182,7 +227,7 @@ local commitEdit
 -- Cached fonts (created lazily on first draw, avoids allocation per frame)
 local fontSmall = nil   -- 11px, used by tooltip/tree/detail/perf
 local function getFont()
-  if not fontSmall then fontSmall = love.graphics.newFont(11) end
+  if not fontSmall then fontSmall = Measure.getFont(11) end
   return fontSmall
 end
 
@@ -575,6 +620,18 @@ function Inspector.mousepressed(x, y, button)
     end
   end
 
+  -- View mode toggle bar click
+  if state.toggleBarRegion then
+    local tb = state.toggleBarRegion
+    if x >= tb.x and x < tb.x + tb.w and y >= tb.y and y < tb.y + tb.h then
+      local idx = math.floor((x - tb.x) / tb.segW) + 1
+      if idx >= 1 and idx <= 3 then
+        state.viewMode = VIEW_MODES[idx]
+      end
+      return true
+    end
+  end
+
   -- Tree panel click (uses stored region from drawTreeInRegion)
   if state.treeRegion then
     local tr = state.treeRegion
@@ -641,10 +698,8 @@ function Inspector.wheelmoved(x, y)
        and state.mouseY >= dr.y and state.mouseY < dr.y + dr.h then
       state.detailScrollY = state.detailScrollY - y * 20
       if state.detailScrollY < 0 then state.detailScrollY = 0 end
-      if state.detailContentH then
-        local maxScroll = math.max(0, state.detailContentH - dr.h)
-        if state.detailScrollY > maxScroll then state.detailScrollY = maxScroll end
-      end
+      local maxScroll = math.max(0, (state.detailContentH or 0) - dr.h)
+      if state.detailScrollY > maxScroll then state.detailScrollY = maxScroll end
       return true
     end
   end
@@ -656,10 +711,8 @@ function Inspector.wheelmoved(x, y)
        and state.mouseY >= tr.y and state.mouseY < tr.y + tr.h then
       state.treeScrollY = state.treeScrollY - y * 20
       if state.treeScrollY < 0 then state.treeScrollY = 0 end
-      if state.treeContentH then
-        local maxScroll = math.max(0, state.treeContentH - tr.h)
-        if state.treeScrollY > maxScroll then state.treeScrollY = maxScroll end
-      end
+      local maxScroll = math.max(0, (state.treeContentH or 0) - tr.h)
+      if state.treeScrollY > maxScroll then state.treeScrollY = maxScroll end
       return true
     end
   end
@@ -1144,21 +1197,61 @@ function drawTreePanel(root, rx, ry, rw, rh)
   love.graphics.setColor(TREE_BG)
   love.graphics.rectangle("fill", rx, ry, rw, rh)
 
+  -- ── View mode toggle bar ──
+  local barY = ry + 4
+  local barH = TOGGLE_HEIGHT
+  local barPad = 8
+  local segW = math.floor((rw - barPad * 2) / 3)
+  local barX = rx + barPad
+
+  -- Toggle background
+  love.graphics.setColor(TOGGLE_BG)
+  love.graphics.rectangle("fill", barX, barY, segW * 3, barH, 3, 3)
+
+  -- Draw each segment
+  for i, mode in ipairs(VIEW_MODES) do
+    local sx = barX + (i - 1) * segW
+    local isActive = (state.viewMode == mode)
+
+    if isActive then
+      love.graphics.setColor(TOGGLE_ACTIVE)
+      love.graphics.rectangle("fill", sx, barY, segW, barH, 3, 3)
+    end
+
+    -- Segment border
+    love.graphics.setColor(TOGGLE_BORDER)
+    love.graphics.rectangle("line", sx, barY, segW, barH, 3, 3)
+
+    -- Label
+    love.graphics.setFont(font)
+    love.graphics.setColor(isActive and TOGGLE_TEXT_ON or TOGGLE_TEXT_OFF)
+    local label = VIEW_MODE_LABELS[mode]
+    local lw = font:getWidth(label)
+    love.graphics.print(label, sx + math.floor((segW - lw) / 2), barY + math.floor((barH - font:getHeight()) / 2))
+  end
+
+  -- Store toggle bar region for click detection
+  state.toggleBarRegion = { x = barX, y = barY, w = segW * 3, h = barH, segW = segW }
+
+  -- Offset tree content below toggle bar
+  local treeTop = ry + barH + 10
+  local treeH = rh - (barH + 10)
+
   -- Right border
   love.graphics.setColor(TOOLTIP_BORDER)
   love.graphics.rectangle("fill", rx + rw - 1, ry, 1, rh)
 
-  -- Scissor to region
-  love.graphics.setScissor(rx, ry, rw, rh)
+  -- Scissor to tree region (below toggle)
+  love.graphics.setScissor(rx, treeTop, rw, treeH)
   love.graphics.setFont(font)
 
   -- Walk tree and draw lines
-  local drawY = ry - state.treeScrollY
-  local endY = drawTreeNode(root, 0, drawY, font, lineH, pad, ry, ry + rh, rx, rw)
+  local drawY = treeTop - state.treeScrollY
+  local endY = drawTreeNode(root, 0, drawY, font, lineH, pad, treeTop, treeTop + treeH, rx, rw)
 
   -- Store content height for scroll clamping
   state.treeContentH = (endY - drawY)
-  local maxTreeScroll = math.max(0, state.treeContentH - rh)
+  local maxTreeScroll = math.max(0, state.treeContentH - treeH)
   if state.treeScrollY > maxTreeScroll then state.treeScrollY = maxTreeScroll end
 
   -- Auto-scroll to selected node (after positions are cached)
@@ -1167,9 +1260,9 @@ function drawTreePanel(root, rx, ry, rw, rh)
       if entry.node == state.selectedNode then
         -- entry.y is the drawn position (includes current scroll offset)
         -- Convert to absolute position in the tree content
-        local absY = entry.y + state.treeScrollY - ry
-        local visibleH = rh
-        if entry.y < ry or entry.y + lineH > ry + rh then
+        local absY = entry.y + state.treeScrollY - treeTop
+        local visibleH = treeH
+        if entry.y < treeTop or entry.y + lineH > treeTop + treeH then
           -- Node is outside visible area — scroll to center it
           state.treeScrollY = math.max(0, absY - visibleH / 2)
         end
@@ -1179,6 +1272,7 @@ function drawTreePanel(root, rx, ry, rw, rh)
     state.scrollToSelected = false
   end
 
+  drawScrollbar(rx, treeTop, rw, treeH, state.treeScrollY, state.treeContentH)
   love.graphics.setScissor()
 end
 
@@ -1278,23 +1372,19 @@ end
 -- Column-layout tree helpers
 -- ============================================================================
 
---- Truncate a string to fit within maxW pixels, appending "…" if needed.
+--- Truncate a string to fit within maxW pixels, appending "..." if needed.
 local function truncateToWidth(font, str, maxW)
   if font:getWidth(str) <= maxW then return str end
-  local ellipsis = "…"
+  local ellipsis = "..."
   local ellW = font:getWidth(ellipsis)
   if maxW <= ellW then return ellipsis end
-  -- Binary search for the longest prefix that fits
-  local lo, hi = 1, #str
-  while lo < hi do
-    local mid = math.floor((lo + hi + 1) / 2)
-    if font:getWidth(str:sub(1, mid)) + ellW <= maxW then
-      lo = mid
-    else
-      hi = mid - 1
+  for i = #str, 1, -1 do
+    local prefix = str:sub(1, i)
+    if font:getWidth(prefix) + ellW <= maxW then
+      return prefix .. ellipsis
     end
   end
-  return str:sub(1, lo) .. ellipsis
+  return ellipsis
 end
 
 --- Build a JSX-style preview string: <TagName prop=val prop=val>
@@ -1318,7 +1408,7 @@ local function buildJsxPreview(node, isSingleTextChild)
   if s.height then addProp("h", fmtVal(s.height)) end
   if p.src then
     local src = tostring(p.src)
-    if #src > 20 then src = "…" .. src:sub(-17) end
+    if #src > 20 then src = ".." .. src:sub(-18) end
     addProp("src", '"' .. src .. '"')
   end
   if count < 3 and p.placeholder then addProp("placeholder", fmtVal(p.placeholder)) end
@@ -1358,7 +1448,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
 
   local visible = y + lineH > clipTop and y < clipBottom
   local openingY = y
-  local caretW = font:getWidth("\xE2\x96\xBE")  -- ▾ width, used for guide alignment
+  local caretW = font:getWidth("v")  -- caret width, used for guide alignment
 
   -- Cache position for click/hover detection
   state.treeNodePositions[#state.treeNodePositions + 1] = {
@@ -1388,17 +1478,18 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
     -- ── Column 1: Caret ──
     love.graphics.setColor(COL_CARET)
     if isTextNode or isLeaf or isSingleTextChild then
-      love.graphics.print("\xC2\xB7", indent, textY)  -- middle dot
+      love.graphics.print("-", indent, textY)
     elseif isCollapsed then
-      love.graphics.print("\xE2\x96\xB8", indent, textY)  -- ▸
+      love.graphics.print(">", indent, textY)
     else
-      love.graphics.print("\xE2\x96\xBE", indent, textY)  -- ▾
+      love.graphics.print("v", indent, textY)
     end
 
     local x = indent + caretW + 5
+    local mode = state.viewMode
 
     if isTextNode then
-      -- ── Text node: TXT "content" ──
+      -- ── Text node: TXT "content" (same in all modes) ──
       love.graphics.setColor(COL_TYPE)
       love.graphics.print("TXT", x, textY)
       x = x + font:getWidth("TXT") + 6
@@ -1406,22 +1497,23 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
       local text = getTextContent(node)
       love.graphics.setColor(COL_TEXT_VAL)
       love.graphics.print('"' .. text .. '"', x, textY)
-    else
-      -- ── Column 2: Type badge (muted) ──
-      love.graphics.setColor(COL_TYPE)
+
+    elseif mode == "lua" then
+      -- ══ Lua mode: Type primary, identity secondary, layout metadata prominent ══
+
+      -- Type (primary — bright)
+      love.graphics.setColor(COL_IDENTITY)
       love.graphics.print(typeName, x, textY)
       x = x + font:getWidth(typeName) + 6
 
-      -- ── Column 3: Identity (bright) ──
+      -- Identity (secondary — muted, only if named)
       if node.debugName then
-        love.graphics.setColor(COL_COMP)
-      else
-        love.graphics.setColor(COL_IDENTITY)
+        love.graphics.setColor(COL_METADATA)
+        love.graphics.print(tagName, x, textY)
+        x = x + font:getWidth(tagName)
       end
-      love.graphics.print(tagName, x, textY)
-      x = x + font:getWidth(tagName)
 
-      -- Inline text for single-text-child
+      -- Inline text
       if isSingleTextChild then
         local text = getTextContent(children[1])
         love.graphics.setColor(COL_TEXT_VAL)
@@ -1430,13 +1522,159 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
         x = x + font:getWidth(str)
       end
 
-      -- ── Column 4: Metadata (muted) ──
+      -- Layout metadata (prominent — brighter than normal metadata)
+      local meta = {}
+      local s = node.style or {}
+      if node.computed then
+        meta[#meta + 1] = math.floor(node.computed.w) .. "x" .. math.floor(node.computed.h)
+      end
+      if s.flexGrow and s.flexGrow > 0 then meta[#meta + 1] = "grow=" .. s.flexGrow end
+      if s.flexDirection == "row" then meta[#meta + 1] = "row" end
+      if node.computed and node.computed.wSource then
+        meta[#meta + 1] = "w:" .. node.computed.wSource
+      end
+      if node.computed and node.computed.hSource then
+        meta[#meta + 1] = "h:" .. node.computed.hSource
+      end
+      if s.overflow then meta[#meta + 1] = "overflow:" .. s.overflow end
+      if #meta > 0 then
+        love.graphics.setColor(COL_TYPE)
+        local metaStr = "  " .. table.concat(meta, "  ")
+        love.graphics.print(metaStr, x, textY)
+        x = x + font:getWidth(metaStr)
+      end
+
+      -- Collapsed
+      if isCollapsed and hasChildren and not isSingleTextChild then
+        love.graphics.setColor(COL_METADATA)
+        love.graphics.print("  ...", x, textY)
+        x = x + font:getWidth("  ...")
+      end
+
+      -- Node ID right-aligned
+      if node.id then
+        local idStr = "#" .. node.id
+        love.graphics.setColor(COL_METADATA)
+        love.graphics.print(idStr, rx + rw - pad - font:getWidth(idStr), textY)
+      end
+
+    elseif mode == "react" then
+      -- ══ React mode: JSX-style display, no Lua internals ══
+
+      -- Opening bracket + tag name (primary)
+      love.graphics.setColor(COL_JSX_DIM)
+      love.graphics.print("<", x, textY)
+      x = x + font:getWidth("<")
+
+      if node.debugName then
+        love.graphics.setColor(COL_COMP)
+      else
+        love.graphics.setColor(COL_IDENTITY)
+      end
+      love.graphics.print(tagName, x, textY)
+      x = x + font:getWidth(tagName)
+
+      -- Inline text
+      if isSingleTextChild then
+        love.graphics.setColor(COL_JSX_DIM)
+        love.graphics.print(">", x, textY)
+        x = x + font:getWidth(">")
+        local text = getTextContent(children[1])
+        love.graphics.setColor(COL_TEXT_VAL)
+        love.graphics.print(text, x, textY)
+        x = x + font:getWidth(text)
+        love.graphics.setColor(COL_JSX_DIM)
+        local closeStr = "</" .. tagName .. ">"
+        love.graphics.print(closeStr, x, textY)
+        x = x + font:getWidth(closeStr)
+      else
+        -- Props inline
+        local s = node.style or {}
+        local p = node.props or {}
+        local propCount = 0
+        local function drawProp(key, val)
+          if propCount >= 3 then return end
+          love.graphics.setColor(COL_JSX_DIM)
+          love.graphics.print(" ", x, textY)
+          x = x + font:getWidth(" ")
+          love.graphics.setColor(JSX_PROP_KEY)
+          love.graphics.print(key, x, textY)
+          x = x + font:getWidth(key)
+          love.graphics.setColor(COL_JSX_DIM)
+          love.graphics.print("=", x, textY)
+          x = x + font:getWidth("=")
+          love.graphics.setColor(JSX_PROP_VAL)
+          love.graphics.print(val, x, textY)
+          x = x + font:getWidth(val)
+          propCount = propCount + 1
+        end
+
+        if p.key then drawProp("key", fmtVal(p.key)) end
+        if s.flexGrow and s.flexGrow > 0 then drawProp("flexGrow", fmtVal(s.flexGrow)) end
+        if s.flexDirection == "row" then drawProp("flexDirection", '"row"') end
+        if s.width then drawProp("width", fmtVal(s.width)) end
+        if s.height then drawProp("height", fmtVal(s.height)) end
+        if propCount < 3 and p.src then drawProp("src", fmtVal(p.src)) end
+
+        -- Closing
+        love.graphics.setColor(COL_JSX_DIM)
+        if isLeaf then
+          love.graphics.print(" />", x, textY)
+        elseif isCollapsed then
+          love.graphics.print(">", x, textY)
+          x = x + font:getWidth(">")
+          love.graphics.setColor(COL_METADATA)
+          love.graphics.print("...", x, textY)
+        else
+          love.graphics.print(">", x, textY)
+        end
+      end
+
+      -- Handler badge
+      if node.hasHandlers then
+        local badgeStr = " @"
+        if node.handlerMeta and type(node.handlerMeta) == "table" then
+          local count = 0
+          for _ in pairs(node.handlerMeta) do count = count + 1 end
+          if count > 0 then badgeStr = " @" .. count end
+        end
+        love.graphics.setColor(JSX_HANDLER)
+        love.graphics.print(badgeStr, x, textY)
+      end
+
+    else
+      -- ══ Hybrid mode (default): type muted, identity bright, JSX right-aligned ══
+
+      -- Type badge (muted)
+      love.graphics.setColor(COL_TYPE)
+      love.graphics.print(typeName, x, textY)
+      x = x + font:getWidth(typeName) + 6
+
+      -- Identity (bright)
+      if node.debugName then
+        love.graphics.setColor(COL_COMP)
+      else
+        love.graphics.setColor(COL_IDENTITY)
+      end
+      love.graphics.print(tagName, x, textY)
+      x = x + font:getWidth(tagName)
+
+      -- Inline text
+      if isSingleTextChild then
+        local text = getTextContent(children[1])
+        love.graphics.setColor(COL_TEXT_VAL)
+        local str = '  "' .. text .. '"'
+        love.graphics.print(str, x, textY)
+        x = x + font:getWidth(str)
+      end
+
+      -- Metadata (muted)
       local meta = {}
       local s = node.style or {}
       if s.flexGrow and s.flexGrow > 0 then meta[#meta + 1] = "grow=" .. s.flexGrow end
       if s.flexDirection == "row" then meta[#meta + 1] = "row" end
       if node.computed then
-        meta[#meta + 1] = math.floor(node.computed.w) .. "\xC3\x97" .. math.floor(node.computed.h)
+        meta[#meta + 1] = math.floor(node.computed.w) .. "x" .. math.floor(node.computed.h)
       end
       if #meta > 0 then
         love.graphics.setColor(COL_METADATA)
@@ -1445,27 +1683,27 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
         x = x + font:getWidth(metaStr)
       end
 
-      -- Collapsed indicator
+      -- Collapsed
       if isCollapsed and hasChildren and not isSingleTextChild then
         love.graphics.setColor(COL_METADATA)
-        love.graphics.print("  \xE2\x80\xA6", x, textY)
-        x = x + font:getWidth("  \xE2\x80\xA6")
+        love.graphics.print("  ...", x, textY)
+        x = x + font:getWidth("  ...")
       end
 
       -- Handler badge
       if node.hasHandlers then
-        local badgeStr = " \xE2\x9A\xA1"
+        local badgeStr = " @"
         if node.handlerMeta and type(node.handlerMeta) == "table" then
           local count = 0
           for _ in pairs(node.handlerMeta) do count = count + 1 end
-          if count > 0 then badgeStr = " \xE2\x9A\xA1" .. count end
+          if count > 0 then badgeStr = " @" .. count end
         end
         love.graphics.setColor(JSX_HANDLER)
         love.graphics.print(badgeStr, x, textY)
         x = x + font:getWidth(badgeStr)
       end
 
-      -- ── Column 5: JSX preview (right-aligned, dim) ──
+      -- JSX preview (right-aligned, dim)
       local jsxStr = buildJsxPreview(node, isSingleTextChild)
       if jsxStr and #jsxStr > 0 then
         local rightEdge = rx + rw - pad
@@ -1479,6 +1717,26 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
           end
           love.graphics.print(jsxStr, rightEdge - jsxW, textY)
         end
+      end
+    end
+
+    -- ── Classification badge (all modes, right-aligned) ──
+    if not isTextNode then
+      local kind = classifyNode(node)
+      local cls = CLASS_LABELS[kind]
+      if cls and kind ~= "static" then
+        -- Only show badge for non-static nodes (static is the baseline)
+        local badge = cls[1]
+        local badgeColor = cls[2]
+        local rightEdge = rx + rw - pad
+        local badgeW = font:getWidth(badge) + 6
+        local badgeX = rightEdge - badgeW
+        -- Background pill
+        love.graphics.setColor(badgeColor[1], badgeColor[2], badgeColor[3], 0.15)
+        love.graphics.rectangle("fill", badgeX, y + 2, badgeW, lineH - 4, 3, 3)
+        -- Letter
+        love.graphics.setColor(badgeColor)
+        love.graphics.print(badge, badgeX + 3, textY)
       end
     end
   end
@@ -1520,8 +1778,26 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
       end
 
       local indent = rx + pad + depth * INDENT_SIZE
-      love.graphics.setColor(COL_JSX_DIM)
-      love.graphics.print("</" .. tagName .. ">", indent + caretW + 5, y + 2)
+      local cx = indent + caretW + 5
+      if state.viewMode == "lua" then
+        -- Lua mode: minimal closing marker
+        love.graphics.setColor(COL_CARET)
+        love.graphics.print("/" .. typeName, cx, y + 2)
+      elseif state.viewMode == "react" then
+        -- React mode: JSX closing tag
+        love.graphics.setColor(COL_JSX_DIM)
+        love.graphics.print("</", cx, y + 2)
+        cx = cx + font:getWidth("</")
+        love.graphics.setColor(node.debugName and { COL_COMP[1], COL_COMP[2], COL_COMP[3], 0.5 } or { COL_IDENTITY[1], COL_IDENTITY[2], COL_IDENTITY[3], 0.5 })
+        love.graphics.print(tagName, cx, y + 2)
+        cx = cx + font:getWidth(tagName)
+        love.graphics.setColor(COL_JSX_DIM)
+        love.graphics.print(">", cx, y + 2)
+      else
+        -- Hybrid mode: dim closing tag
+        love.graphics.setColor(COL_JSX_DIM)
+        love.graphics.print("</" .. tagName .. ">", cx, y + 2)
+      end
     end
 
     y = y + lineH
@@ -2102,6 +2378,7 @@ function drawDetailPanel(rx, ry, rw, rh)
   local maxDetailScroll = math.max(0, contentH - rh)
   if state.detailScrollY > maxDetailScroll then state.detailScrollY = maxDetailScroll end
 
+  drawScrollbar(rx, ry, rw, rh, state.detailScrollY, contentH)
   love.graphics.setScissor()
 end
 

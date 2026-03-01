@@ -45,6 +45,16 @@ function syncDir(src, dest, label) {
   console.log(`  ${green(' ok')}  ${cyan(label)} ${dim(`(${count} files merged, user files preserved)`)}`);
 }
 
+/** Copy one file if present, creating parent directories as needed. */
+function syncFile(src, dest, label) {
+  if (!existsSync(src)) return false;
+  const parent = dirname(dest);
+  if (!existsSync(parent)) mkdirSync(parent, { recursive: true });
+  cpSync(src, dest);
+  console.log(`  ${green(' ok')}  ${cyan(label)}`);
+  return true;
+}
+
 export async function updateCommand(args) {
   const cwd = process.cwd();
 
@@ -81,6 +91,22 @@ export async function updateCommand(args) {
 
   // Update lua/
   syncDir(runtimeLua, join(cwd, 'lua'), 'lua/');
+  // In monorepo development, overlay critical source-of-truth runtime files.
+  // Older cli/runtime snapshots can lag behind active source edits.
+  const sourceLuaRoot = join(CLI_ROOT, '..', 'lua');
+  syncFile(join(sourceLuaRoot, 'init.lua'), join(cwd, 'lua', 'init.lua'), 'lua/init.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'bsod.lua'), join(cwd, 'lua', 'bsod.lua'), 'lua/bsod.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'masks.lua'), join(cwd, 'lua', 'masks.lua'), 'lua/masks.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'capabilities.lua'), join(cwd, 'lua', 'capabilities.lua'), 'lua/capabilities.lua (source overlay)');
+  // In monorepo development, always overlay source-of-truth lua/masks.
+  // This keeps generated projects aligned with root runtime while iterating.
+  const runtimeMasks = join(runtimeLua, 'masks');
+  const sourceMasks = join(sourceLuaRoot, 'masks');
+  if (existsSync(sourceMasks)) {
+    syncDir(sourceMasks, join(cwd, 'lua', 'masks'), 'lua/masks/ (source overlay)');
+  } else if (!existsSync(runtimeMasks)) {
+    console.warn(`  ${yellow('warn')}  ${cyan('lua/masks/')} ${dim('(not found in CLI runtime)')}`);
+  }
 
   // Update lib/
   if (existsSync(runtimeLib)) {

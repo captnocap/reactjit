@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, TextEditor } from '../reactjit/shared/src';
+import { Box, Text, TextEditor } from '@reactjit/core';
 import { Preview } from './Preview';
 import { StatusBar } from './StatusBar';
 import { lint } from './lib/linter';
@@ -78,8 +78,8 @@ export function App() {
 
   return (
     <Box style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
-      <Box style={{ width: '50%', height: '100%', borderRightWidth: 1, borderColor: '#1e293b' }}>
-        <Box style={{ height: 32, paddingLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#181825', borderBottomWidth: 1, borderColor: '#1e293b' }}>
+      <Box style={{ width: '50%', height: '100%', backgroundColor: '#11111b', borderRightWidth: 1, borderColor: '#1e293b' }}>
+        <Box style={{ height: 32, paddingLeft: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#181825', borderBottomWidth: 1, borderColor: '#313244' }}>
           <Text style={{ color: '#cdd6f4', fontSize: 12, fontWeight: 'bold' }}>Editor</Text>
           <Text style={{ color: '#585b70', fontSize: 10 }}>ReactJIT Playground</Text>
         </Box>
@@ -87,8 +87,10 @@ export function App() {
           initialValue={initialCode}
           onBlur={handleCodeChange}
           onSubmit={handleCodeChange}
+          lineNumbers
+          syntaxHighlight
           placeholder="Write JSX here..."
-          style={{ flexGrow: 1, width: '100%' }}
+          style={{ flexGrow: 1, width: '100%', backgroundColor: '#1e1e2e', paddingTop: 4, paddingBottom: 4 }}
           textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
         />
         <StatusBar messages={lintMessages} onJumpToLine={handleJumpToLine} />

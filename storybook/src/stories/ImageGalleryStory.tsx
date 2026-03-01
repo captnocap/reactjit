@@ -63,7 +63,7 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
       >
         <Image src={preview.src} style={{ width: '100%', height: 360, objectFit: 'cover' }} />
         <Box style={{ padding: 8, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: c.text, fontWeight: '700' }}>{preview.title || 'Preview'}</Text>
+          <Text style={{ fontSize: 11, color: c.text, fontWeight: 'normal' }}>{preview.title || 'Preview'}</Text>
           <Text style={{ fontSize: 10, color: c.textSecondary }}>
             Hover or click tiles in the right panel to swap preview
           </Text>
@@ -159,7 +159,7 @@ export function ImageGalleryStory() {
   return (
     <StoryPage>
       <Box style={{ gap: 2, alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700', textAlign: 'center' }}>Gallery Layout Setups</Text>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal', textAlign: 'center' }}>Gallery Layout Setups</Text>
         <Text style={{ fontSize: 11, color: c.textDim, textAlign: 'center' }}>
         Same image collection shown in different row/preview systems.
         </Text>

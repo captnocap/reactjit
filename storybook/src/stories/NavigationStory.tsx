@@ -95,7 +95,7 @@ export function NavigationStory() {
               setActiveTab('overview');
             }}
             header={
-              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>
+              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'normal', textAlign: 'center' }}>
                 NAVIGATION
               </Text>
             }
@@ -131,7 +131,7 @@ export function NavigationStory() {
           alignItems: 'center',
           gap: 4,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
             {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
           </Text>
           <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
@@ -200,7 +200,7 @@ export function NavigationStory() {
               setActiveTab('overview');
             }}
             header={
-              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>
+              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'normal', textAlign: 'center' }}>
                 NAVIGATION
               </Text>
             }
@@ -221,7 +221,7 @@ export function NavigationStory() {
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-            <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold', textAlign: 'center' }}>
+            <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal', textAlign: 'center' }}>
               {PAGE_LABELS[activePage] ?? 'Home'}
             </Text>
             <Box style={{ width: '100%', maxWidth: 320 }}>

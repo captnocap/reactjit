@@ -1,11 +1,12 @@
 /**
  * TemplatePicker — Grid of starter templates for the playground.
  *
- * Each card renders a live miniature preview of the template at ~0.25 scale,
- * clipped inside the card. Click to load into the editor.
+ * Cards show a static colored placeholder — zero live renders at rest.
+ * Hovering a card for 500ms opens a floating overlay with the live preview.
+ * At most one template is ever mounted at a time.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { Box, Text, Pressable, useLocalStore } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
@@ -23,13 +24,18 @@ const CATEGORY_COLORS: Record<string, string> = {
   Recent: '#a78bfa',
 };
 
-const PREVIEW_SCALE = 0.35;
 const CARD_WIDTH = 340;
 const PREVIEW_HEIGHT = 200;
-const INNER_WIDTH = CARD_WIDTH / PREVIEW_SCALE;
-const INNER_HEIGHT = PREVIEW_HEIGHT / PREVIEW_SCALE;
+const HOVER_DELAY_MS = 500;
 
-/** Error boundary so a broken template preview doesn't crash the whole picker */
+// Overlay preview is larger — 0.5 scale gives a clearer look
+const OVERLAY_SCALE = 0.5;
+const OVERLAY_PANEL_W = 560;   // total panel width (preview + info strip shares this)
+const OVERLAY_PREVIEW_H = 320;
+const OVERLAY_INNER_W = OVERLAY_PANEL_W / OVERLAY_SCALE;  // fills the full panel width
+const OVERLAY_INNER_H = OVERLAY_PREVIEW_H / OVERLAY_SCALE;
+
+/** Error boundary so a broken template preview doesn't crash the picker */
 class PreviewBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean }
@@ -42,7 +48,6 @@ class PreviewBoundary extends React.Component<
   }
 }
 
-/** Eval a template code string into a React component (or null on error) */
 function useTemplateComponent(code: string): React.ComponentType | null {
   return useMemo(() => {
     const result = transformJSX(code);
@@ -52,49 +57,157 @@ function useTemplateComponent(code: string): React.ComponentType | null {
   }, [code]);
 }
 
-function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t: Template) => void }) {
+// ── Floating overlay ────────────────────────────────────────────────────────
+
+function TemplateOverlay({
+  template,
+  onClose,
+}: {
+  template: Template;
+  onClose: () => void;
+}) {
   const c = useThemeColors();
   const color = CATEGORY_COLORS[template.category] || c.textDim;
   const Comp = useTemplateComponent(template.code);
 
   return (
+    // Full-area backdrop — pointer leave closes overlay
+    <Box
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 100,
+      }}
+      onPointerLeave={onClose as any}
+    >
+      {/* Panel */}
+      <Box style={{
+        width: OVERLAY_PANEL_W,
+        backgroundColor: c.bgElevated,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: color,
+        overflow: 'hidden',
+        gap: 0,
+      }}>
+        {/* Live preview */}
+        <Box style={{
+          width: OVERLAY_PANEL_W,
+          height: OVERLAY_PREVIEW_H,
+          overflow: 'hidden',
+          backgroundColor: c.bg,
+        }}>
+          {Comp && (
+            <PreviewBoundary>
+              <Box style={{
+                width: OVERLAY_INNER_W,
+                height: OVERLAY_INNER_H,
+                overflow: 'hidden',
+                transform: {
+                  scaleX: OVERLAY_SCALE,
+                  scaleY: OVERLAY_SCALE,
+                  originX: 0,
+                  originY: 0,
+                },
+              }}>
+                <Comp />
+              </Box>
+            </PreviewBoundary>
+          )}
+        </Box>
+
+        {/* Info strip */}
+        <Box style={{ padding: 16, gap: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box style={{ gap: 2 }}>
+            <Text style={{ color: c.text, fontSize: 14, fontWeight: 'normal' }}>
+              {template.name}
+            </Text>
+            <Text style={{ color: c.textDim, fontSize: 11 }}>
+              {template.description}
+            </Text>
+          </Box>
+          <Box style={{
+            backgroundColor: color + '20',
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 4,
+            paddingBottom: 4,
+            borderRadius: 6,
+          }}>
+            <Text style={{ color, fontSize: 10, fontWeight: 'normal' }}>
+              {template.category.toUpperCase()}
+            </Text>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Card ────────────────────────────────────────────────────────────────────
+
+function TemplateCard({
+  template,
+  onSelect,
+  onHoverIn,
+  onHoverOut,
+}: {
+  template: Template;
+  onSelect: (t: Template) => void;
+  onHoverIn: () => void;
+  onHoverOut: () => void;
+}) {
+  const c = useThemeColors();
+  const color = CATEGORY_COLORS[template.category] || c.textDim;
+
+  return (
     <Pressable
       onPress={() => onSelect(template)}
+      onHoverIn={onHoverIn}
+      onHoverOut={onHoverOut}
       style={(state) => ({
         width: CARD_WIDTH,
         backgroundColor: state.hovered ? c.bgAlt : c.bg,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: state.hovered ? color : c.border,
+        // Always a visible border — dimmed at rest, full category color on hover
+        borderColor: state.hovered ? color : color + '50',
         overflow: 'hidden',
       })}
     >
-      {/* Live miniature preview */}
+      {/* Static placeholder — no live render, no layout bloat */}
       <Box style={{
         width: CARD_WIDTH,
         height: PREVIEW_HEIGHT,
-        overflow: 'hidden',
-        backgroundColor: c.bgElevated,
+        backgroundColor: color + '10',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 10,
       }}>
-        {Comp && (
-          <PreviewBoundary>
-            {/* overflow:hidden here clips template children at the intended
-                layout boundary, preventing them from escaping into the wider tree */}
-            <Box style={{
-              width: INNER_WIDTH,
-              height: INNER_HEIGHT,
-              overflow: 'hidden',
-              transform: { scaleX: PREVIEW_SCALE, scaleY: PREVIEW_SCALE, originX: 0, originY: 0 },
-            }}>
-              <Comp />
-            </Box>
-          </PreviewBoundary>
-        )}
+        <Box style={{
+          width: 44,
+          height: 44,
+          borderRadius: 10,
+          backgroundColor: color + '25',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <Text style={{ color, fontSize: 20, fontWeight: 'normal' }}>
+            {template.name[0]}
+          </Text>
+        </Box>
+        <Text style={{ color: color + 'AA', fontSize: 10 }}>
+          HOVER TO PREVIEW
+        </Text>
       </Box>
 
-      {/* Info below preview */}
+      {/* Info */}
       <Box style={{ padding: 12, gap: 6 }}>
-        {/* Category badge */}
         <Box style={{
           backgroundColor: color + '20',
           paddingLeft: 8,
@@ -104,13 +217,13 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
           borderRadius: 4,
           alignSelf: 'flex-start',
         }}>
-          <Text style={{ color, fontSize: 9, fontWeight: 'bold' }}>{template.category.toUpperCase()}</Text>
+          <Text style={{ color, fontSize: 9, fontWeight: 'normal' }}>
+            {template.category.toUpperCase()}
+          </Text>
         </Box>
-
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
           {template.name}
         </Text>
-
         <Text style={{ color: c.textDim, fontSize: 10 }}>
           {template.description}
         </Text>
@@ -119,52 +232,74 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
   );
 }
 
+// ── Picker ──────────────────────────────────────────────────────────────────
+
 export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }) {
   const c = useThemeColors();
   const [lastSessionCode] = useLocalStore('code', '', { namespace: 'playground' });
+  const [overlayTemplate, setOverlayTemplate] = useState<Template | null>(null);
+  const timerRef = useRef<any>(null);
 
-  const handleLastSessionSelect = () => {
-    if (!lastSessionCode) return;
-    onSelect({
-      id: '__last-session',
-      name: 'Last Session',
-      description: 'Continue where you left off',
-      category: 'Recent',
-      code: lastSessionCode,
-    });
-  };
+  const showOverlayFor = useCallback((t: Template) => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setOverlayTemplate(t), HOVER_DELAY_MS);
+  }, []);
+
+  const hideOverlay = useCallback(() => {
+    clearTimeout(timerRef.current);
+    setOverlayTemplate(null);
+  }, []);
+
+  const lastSessionTemplate: Template | null = lastSessionCode ? {
+    id: '__last-session',
+    name: 'Last Session',
+    description: 'Continue where you left off',
+    category: 'Recent',
+    code: lastSessionCode,
+  } : null;
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20, overflow: 'scroll' }}>
-      {/* Header */}
-      <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
-          Choose a template
-        </Text>
-        <Text style={{ color: c.textDim, fontSize: 12 }}>
-          Pick a starting point, then customize it in the editor
-        </Text>
+    // Outer box provides the absolute positioning context for the overlay
+    <Box style={{ width: '100%', height: '100%' }}>
+      {/* Scrollable grid */}
+      <Box style={{ width: '100%', height: '100%', overflow: 'scroll', padding: 24, gap: 20 }}>
+        <Box style={{ gap: 4 }}>
+          <Text style={{ color: c.text, fontSize: 20, fontWeight: 'normal' }}>
+            Choose a template
+          </Text>
+          <Text style={{ color: c.textDim, fontSize: 12 }}>
+            Pick a starting point, then customize it in the editor
+          </Text>
+        </Box>
+
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-around', width: '100%' }}>
+          {lastSessionTemplate && (
+            <TemplateCard
+              template={lastSessionTemplate}
+              onSelect={onSelect}
+              onHoverIn={() => showOverlayFor(lastSessionTemplate)}
+              onHoverOut={hideOverlay}
+            />
+          )}
+          {templates.map(t => (
+            <TemplateCard
+              key={t.id}
+              template={t}
+              onSelect={onSelect}
+              onHoverIn={() => showOverlayFor(t)}
+              onHoverOut={hideOverlay}
+            />
+          ))}
+        </Box>
       </Box>
 
-      {/* Grid */}
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-around', width: '100%' }}>
-        {/* Last session card (if available) */}
-        {lastSessionCode && (
-          <TemplateCard
-            template={{
-              id: '__last-session',
-              name: 'Last Session',
-              description: 'Continue where you left off',
-              category: 'Recent',
-              code: lastSessionCode,
-            }}
-            onSelect={handleLastSessionSelect}
-          />
-        )}
-        {templates.map(t => (
-          <TemplateCard key={t.id} template={t} onSelect={onSelect} />
-        ))}
-      </Box>
+      {/* Live preview overlay — mounts only when a card has been hovered long enough */}
+      {overlayTemplate && (
+        <TemplateOverlay
+          template={overlayTemplate}
+          onClose={hideOverlay}
+        />
+      )}
     </Box>
   );
 }

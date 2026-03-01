@@ -140,10 +140,10 @@ function DemoCard({ demo, onSelect }: { demo: DemoDef; onSelect: (id: DemoId) =>
             alignSelf: 'flex-start',
           }}
         >
-          <Text style={{ color, fontSize: 9, fontWeight: 'bold' }}>{demo.category.toUpperCase()}</Text>
+          <Text style={{ color, fontSize: 9, fontWeight: 'normal' }}>{demo.category.toUpperCase()}</Text>
         </Box>
 
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
           {demo.name}
         </Text>
         <Text style={{ color: c.textDim, fontSize: 10 }}>
@@ -163,7 +163,7 @@ export function DemoStory() {
     return (
       <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20, overflow: 'scroll' }}>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 20, fontWeight: 'normal' }}>
             Choose a demo
           </Text>
           <Text style={{ color: c.textDim, fontSize: 12 }}>
@@ -221,8 +221,8 @@ export function DemoStory() {
           >
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Demos</Text>
           </Pressable>
-          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{current.name}</Text>
-          <Text style={{ color: categoryColor, fontSize: 10, fontWeight: 'bold' }}>{current.category.toUpperCase()}</Text>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>{current.name}</Text>
+          <Text style={{ color: categoryColor, fontSize: 10, fontWeight: 'normal' }}>{current.category.toUpperCase()}</Text>
         </Box>
         <Text style={{ color: c.textDim, fontSize: 10 }}>{current.description}</Text>
       </Box>

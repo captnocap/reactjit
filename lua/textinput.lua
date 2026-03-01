@@ -465,11 +465,32 @@ function TextInput.syncValue(node)
     is.lastValue = props.value
     clampCursor(is)
   end
-  -- External cursor position (proxy input mirrors PTY cursor)
+  -- External cursor position (proxy input mirrors PTY cursor).
+  -- Only apply when classified text has caught up to local buffer —
+  -- otherwise the cursor snaps back while the user is actively typing.
   if props.cursorPosition ~= nil and props.cursorPosition >= 0 then
-    is.cursorPos = props.cursorPosition
-    clampCursor(is)
+    local classifiedCaughtUp = (props.value == nil or props.value == is.text)
+    if classifiedCaughtUp then
+      is.cursorPos = props.cursorPosition
+      clampCursor(is)
+    end
   end
+end
+
+-- ============================================================================
+-- Public API: query state (for proxy optimistic echo)
+-- ============================================================================
+
+function TextInput.hasSelection(node)
+  local is = ensureState(node)
+  return hasSelection(is)
+end
+
+function TextInput.isSelectAll(node)
+  local is = ensureState(node)
+  if not hasSelection(is) then return false end
+  local s, e = selectionOrdered(is)
+  return s == 0 and e == #is.text
 end
 
 -- ============================================================================

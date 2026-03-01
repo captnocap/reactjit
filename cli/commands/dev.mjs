@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, watch } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, watch } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { TARGETS, TARGET_NAMES, esbuildArgs } from '../targets.mjs';
@@ -9,6 +9,24 @@ import {
   boldCyan, boldGreen, boldRed, boldYellow, boldMagenta,
   banner, log, ok, warn, fail, info, elapsed,
 } from '../lib/log.mjs';
+
+/** Wait for outfile to exist and have a stable size (fully flushed to disk). */
+function waitForFile(filepath, timeout = 3000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    let lastSize = -1;
+    const check = () => {
+      if (Date.now() - start > timeout) { resolve(); return; }
+      try {
+        const size = statSync(filepath).size;
+        if (size > 0 && size === lastSize) { resolve(); return; }
+        lastSize = size;
+      } catch {}
+      setTimeout(check, 30);
+    };
+    check();
+  });
+}
 
 export async function devCommand(args) {
   const cwd = process.cwd();
@@ -100,7 +118,7 @@ export async function devCommand(args) {
       buildStart = Date.now();
 
       if (targetName === 'love') {
-        launchRuntime();
+        waitForFile(outfile).then(launchRuntime);
       }
     } else if (output.includes('[ERROR]') || output.includes('error:')) {
       // Let esbuild errors through with red highlighting

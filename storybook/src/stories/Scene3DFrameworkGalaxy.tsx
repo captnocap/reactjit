@@ -135,7 +135,7 @@ export function Scene3DFrameworkGalaxyStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         Cube Galaxy Stress
       </Text>
       <Text style={{ fontSize: 12, color: c.textDim }}>
@@ -181,7 +181,7 @@ export function Scene3DFrameworkGalaxyStory() {
               gap: 3,
             }}
           >
-            <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>
+            <Text style={{ color: c.text, fontSize: 10, fontWeight: 'normal' }}>
               Runtime Perf
             </Text>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>

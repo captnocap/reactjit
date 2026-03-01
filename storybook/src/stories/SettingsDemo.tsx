@@ -10,7 +10,7 @@ import { Select } from '../../../packages/core/src/Select';
 function SectionHeader({ children }: { children: string }) {
   const c = useThemeColors();
   return (
-    <Text style={{ color: c.text, fontSize: 16, fontWeight: '700' }}>
+    <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>
       {children}
     </Text>
   );
@@ -89,7 +89,7 @@ export function SettingsDemoStory() {
         <Text style={{
           color: c.text,
           fontSize: 22,
-          fontWeight: '700',
+          fontWeight: 'normal',
           textDecorationLine: 'underline',
         }}>
           Game Settings
@@ -121,7 +121,7 @@ export function SettingsDemoStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: '700' }}>CS</Text>
+              <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: 'normal' }}>CS</Text>
             </Box>
             <Box style={{ gap: 4, flexShrink: 1 }}>
               <TextInput
@@ -301,7 +301,7 @@ export function SettingsDemoStory() {
             paddingTop: 6,
             paddingBottom: 6,
           }}>
-            <Text style={{ color: '#0f172a', fontSize: 11, fontWeight: '700' }}>CPU: 45%</Text>
+            <Text style={{ color: '#0f172a', fontSize: 11, fontWeight: 'normal' }}>CPU: 45%</Text>
           </Box>
           <Box style={{
             flexShrink: 1,
@@ -313,7 +313,7 @@ export function SettingsDemoStory() {
             paddingTop: 6,
             paddingBottom: 6,
           }}>
-            <Text style={{ color: '#0f172a', fontSize: 11, fontWeight: '700' }}>GPU: 72%</Text>
+            <Text style={{ color: '#0f172a', fontSize: 11, fontWeight: 'normal' }}>GPU: 72%</Text>
           </Box>
           <Box style={{
             flexShrink: 1,
@@ -325,7 +325,7 @@ export function SettingsDemoStory() {
             paddingTop: 6,
             paddingBottom: 6,
           }}>
-            <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>RAM: 8.2 GB</Text>
+            <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'normal' }}>RAM: 8.2 GB</Text>
           </Box>
         </Box>
 
@@ -343,7 +343,7 @@ export function SettingsDemoStory() {
             })}
           >
             {(state) => (
-              <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '700' }}>
+              <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: 'normal' }}>
                 {state.pressed ? 'Saving...' : 'Save Settings'}
               </Text>
             )}

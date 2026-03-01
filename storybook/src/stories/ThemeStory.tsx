@@ -73,7 +73,7 @@ function ThemeCard({
     }}>
       <Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
-          <Text style={{ color: tc.text, fontSize: 11, fontWeight: 'bold' }}>
+          <Text style={{ color: tc.text, fontSize: 11, fontWeight: 'normal' }}>
             {theme.displayName}
           </Text>
           <Text style={{ color: tc.textDim, fontSize: 9 }}>{id}</Text>
@@ -125,7 +125,7 @@ export function ThemeStory() {
         <Box style={{ width: '100%', flexDirection: 'row', gap: 10, alignItems: 'center' }}>
           <Box style={{ gap: 2, flexGrow: 1 }}>
             <Text style={{ color: c.textDim, fontSize: 10 }}>Active theme</Text>
-            <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'bold' }}>{themeId}</Text>
+            <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'normal' }}>{themeId}</Text>
           </Box>
           <ThemeSwitcher />
         </Box>

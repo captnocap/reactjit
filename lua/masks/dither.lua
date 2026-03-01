@@ -12,9 +12,15 @@
 local Masks = require("lua.masks")
 local Util = require("lua.effects.util")
 
-local floor, min, max = math.floor, math.min, math.max
+local floor, max = math.floor, math.max
 
 local Dither = {}
+
+local function clamp(v, lo, hi)
+  if v < lo then return lo end
+  if v > hi then return hi end
+  return v
+end
 
 -- 4x4 Bayer matrix (normalized to 0-1)
 local bayer4 = {
@@ -38,36 +44,42 @@ function Dither.update(state, dt, props, w, h, mouse)
 end
 
 function Dither.draw(state, w, h, source)
-  local levels = Util.prop(state.props, "levels", 4)
-  local scale = max(1, Util.prop(state.props, "scale", 2))
-  local intensity = Util.prop(state.props, "intensity", 0.8)
+  local props = state.props or {}
+  local levels = max(2, floor(Util.prop(props, "levels", 4)))
+  local scale = max(1, floor(Util.prop(props, "scale", 2)))
+  local intensity = clamp(Util.prop(props, "intensity", 0.8), 0, 1)
 
-  -- Draw source as base
+  -- Base image remains intact; dither is layered as a texture overlay.
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.draw(source, 0, 0)
 
-  -- Overlay dither pattern
-  -- We draw a grid of small rectangles that darken or lighten based on Bayer threshold
-  local step = floor(scale)
+  -- Overlay Bayer stipple: alternating subtle dark/light micro-cells.
+  local step = scale
   local invLevels = 1 / max(1, levels)
+  local darkStrength = 0.02 + intensity * 0.1
+  local lightStrength = 0.01 + intensity * 0.05
 
   for y = 0, h - 1, step do
     for x = 0, w - 1, step do
       local bx = (floor(x / step) % 4) + 1
       local by = (floor(y / step) % 4) + 1
       local threshold = bayer4[by][bx]
+      -- Tie strength to quantization levels: fewer levels = stronger stipple.
+      local quantizeFactor = (1 - invLevels) * 0.6 + 0.4
+      local centered = (threshold - 0.5) * 2 * quantizeFactor
 
-      -- Use threshold to create a stipple pattern
-      -- Areas darker than threshold get darkened, lighter areas get dots
-      local stippleAlpha = threshold * intensity * 0.15
-      love.graphics.setColor(0, 0, 0, stippleAlpha)
+      if centered >= 0 then
+        love.graphics.setColor(0, 0, 0, centered * darkStrength)
+      else
+        love.graphics.setColor(1, 1, 1, -centered * lightStrength)
+      end
       love.graphics.rectangle("fill", x, y, step, step)
     end
   end
 
-  -- Subtle color quantization overlay: grid lines at pixel boundaries
+  -- Optional pixel-grid accent for larger cell sizes.
   if scale >= 3 then
-    local gridAlpha = intensity * 0.04
+    local gridAlpha = intensity * 0.025
     love.graphics.setColor(0, 0, 0, gridAlpha)
     for x = 0, w, step do
       love.graphics.rectangle("fill", x, 0, 1, h)

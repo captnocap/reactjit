@@ -120,7 +120,7 @@ function ModulePanel({ title, color, children }: {
       flexGrow: 1,
       flexBasis: 0,
     }}>
-      <Text style={{ color, fontSize: 11, fontWeight: '700' }}>{title}</Text>
+      <Text style={{ color, fontSize: 11, fontWeight: 'normal' }}>{title}</Text>
       {children}
     </Box>
   );
@@ -188,7 +188,7 @@ function Transport({ clockId }: { clockId: string }) {
         gap: 2,
       }}>
         <Label>POSITION</Label>
-        <Text style={{ color: C.stepCur, fontSize: 16, fontWeight: '700' }}>
+        <Text style={{ color: C.stepCur, fontSize: 16, fontWeight: 'normal' }}>
           {`${clock.bar + 1}.${clock.beat + 1}.${(clock.step % 4) + 1}`}
         </Text>
       </Box>
@@ -350,7 +350,7 @@ function StepGrid({
             <Text style={{
               color: trackColors[track] || C.dim,
               fontSize: 9,
-              fontWeight: '700',
+              fontWeight: 'normal',
             }}>
               {trackLabels[track] || `T${track + 1}`}
             </Text>
@@ -502,7 +502,7 @@ function RackInfo() {
           paddingBottom: 3,
         }}>
           <Text style={{ color: C.dim, fontSize: 9 }}>{type}</Text>
-          <Text style={{ color: C.text, fontSize: 9, fontWeight: '700' }}>{String(count)}</Text>
+          <Text style={{ color: C.text, fontSize: 9, fontWeight: 'normal' }}>{String(count)}</Text>
         </Box>
       ))}
     </Box>
@@ -594,7 +594,7 @@ export function AudioRackStory() {
         gap: 6,
       }}>
         <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          <Text style={{ color: C.orange, fontSize: 11, fontWeight: '700' }}>STEP SEQUENCER</Text>
+          <Text style={{ color: C.orange, fontSize: 11, fontWeight: 'normal' }}>STEP SEQUENCER</Text>
           <Label>Click steps to toggle</Label>
         </Box>
         <StepGrid
@@ -627,7 +627,7 @@ export function AudioRackStory() {
           flexGrow: 1,
           flexBasis: 0,
         }}>
-          <Text style={{ color: C.green, fontSize: 11, fontWeight: '700' }}>SAMPLER</Text>
+          <Text style={{ color: C.green, fontSize: 11, fontWeight: 'normal' }}>SAMPLER</Text>
           <SamplerSlots moduleId="sampler1" />
         </Box>
 
@@ -643,7 +643,7 @@ export function AudioRackStory() {
           flexGrow: 1,
           flexBasis: 0,
         }}>
-          <Text style={{ color: C.orange, fontSize: 11, fontWeight: '700' }}>PATCH BAY</Text>
+          <Text style={{ color: C.orange, fontSize: 11, fontWeight: 'normal' }}>PATCH BAY</Text>
           <ConnectionList />
         </Box>
       </Box>

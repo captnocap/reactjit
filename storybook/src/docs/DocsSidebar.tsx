@@ -43,7 +43,7 @@ export function DocsSidebar({ sections, activeSectionId, activeFileKey, onSelect
     }}>
       {/* Header */}
       <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
-        <Text style={{ color: c.textDim, fontSize: s(10), lineHeight: s(16), fontWeight: 'bold' }}>DOCUMENTATION</Text>
+        <Text style={{ color: c.textDim, fontSize: s(10), lineHeight: s(16), fontWeight: 'normal' }}>DOCUMENTATION</Text>
       </Box>
       <Box style={{ height: 1, backgroundColor: c.border }} />
 

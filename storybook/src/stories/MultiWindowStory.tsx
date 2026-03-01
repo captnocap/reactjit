@@ -22,7 +22,7 @@ function SectionCard({
   const c = useThemeColors();
   return (
     <Box style={{ backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 8 }}>
-      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>{title}</Text>
+      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'normal' }}>{title}</Text>
       <Box style={{ gap: 6 }}>
         {children}
       </Box>
@@ -87,7 +87,7 @@ function DetachedPanel({
   const c = useThemeColors();
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold' }}>{title}</Text>
+      <Text style={{ fontSize: 16, color: c.text, fontWeight: 'normal' }}>{title}</Text>
       <Box style={{ gap: 4 }}>
         {items.map((item, i) => (
           <Pressable key={i} onPress={() => onSelect(i)}>
@@ -142,7 +142,7 @@ export function MultiWindowStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, gap: 16 }}>
-      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         {'Multi-Window'}
       </Text>
       <Text style={{ fontSize: 11, color: c.textDim }}>
@@ -239,7 +239,7 @@ export function MultiWindowStory() {
           }}
         >
           <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 8 }}>
-            <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>
+            <Text style={{ fontSize: 14, color: c.text, fontWeight: 'normal' }}>
               {'Live Events'}
             </Text>
             <Text style={{ fontSize: 10, color: c.textDim }}>

@@ -1,5 +1,0 @@
-permissions test — round 5
-written by claude test 102
-reads: ✓ CLAUDE.md, lua/init.lua
-write: ✓ this file
-timestamp: 2026-02-24

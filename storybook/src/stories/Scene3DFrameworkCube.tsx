@@ -20,7 +20,7 @@ export function Scene3DFrameworkCubeStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         Framework Canvas Cube
       </Text>
       <Text style={{ fontSize: 12, color: c.textDim }}>
@@ -39,7 +39,7 @@ export function Scene3DFrameworkCubeStory() {
             gap: 8,
           }}
         >
-          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
             2D Framework Components
           </Text>
           <Text style={{ color: c.textSecondary, fontSize: 10 }}>

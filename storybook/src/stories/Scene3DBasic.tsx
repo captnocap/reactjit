@@ -13,7 +13,7 @@ export function Scene3DBasicStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', gap: 12, padding: 16 }}>
-      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         3D Scene
       </Text>
       <Text style={{ fontSize: 12, color: c.textDim }}>

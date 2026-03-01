@@ -149,7 +149,7 @@ function RESTAPISection() {
         {error && <Text style={{ color: c.error, fontSize: 10 }}>{`Error: ${error.message}`}</Text>}
         {price != null && (
           <Box style={{ alignItems: 'center', gap: 2 }}>
-            <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+            <Text style={{ color: c.text, fontSize: 20, fontWeight: 'normal' }}>
               {`$${Number(price).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
             </Text>
             {change != null && (

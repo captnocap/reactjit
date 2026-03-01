@@ -5,6 +5,8 @@ import type { MaskProps } from './types';
 export interface ScanlinesProps extends MaskProps {
   /** Line spacing in pixels. Default 2. */
   spacing?: number;
+  /** Optional line tint color (hex). Example: #ff2bd6 */
+  tint?: string;
 }
 
 /**

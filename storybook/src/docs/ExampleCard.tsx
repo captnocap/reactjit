@@ -28,7 +28,7 @@ export function ExampleCard({ title, code, platforms }: ExampleCardProps) {
 
   return (
     <Box style={{ marginBottom: 12 }}>
-      <Text style={{ color: c.text, fontSize: s(10), lineHeight: s(16), fontWeight: 'bold', marginBottom: 4 }}>
+      <Text style={{ color: c.text, fontSize: s(10), lineHeight: s(16), fontWeight: 'normal', marginBottom: 4 }}>
         {title}
       </Text>
       <CodeBlock code={code} />

@@ -43,7 +43,7 @@ export const templates: Template[] = [
         <Text style={{
           color: '#cdd6f4',
           fontSize: 20,
-          fontWeight: 'bold',
+          fontWeight: 'normal',
         }}>
           ReactJIT Playground
         </Text>
@@ -67,7 +67,7 @@ export const templates: Template[] = [
           <Text style={{
             color: '#1e1e2e',
             fontSize: 14,
-            fontWeight: 'bold',
+            fontWeight: 'normal',
           }}>
             {count === 0 ? 'Press me' : 'Pressed ' + count + 'x'}
           </Text>
@@ -207,7 +207,7 @@ export const templates: Template[] = [
       ? (animated / 1000).toFixed(1) + 'k'
       : String(Math.round(animated));
     return ( // ilr-ignore-next-line
-      <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>
+      <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'normal' }}>
         {props.prefix + display + props.suffix}
       </Text>
     );
@@ -227,7 +227,7 @@ export const templates: Template[] = [
     <ScrollView style={{ width: '100%', height: '100%', backgroundColor: BG }}>
     <Box style={{ padding: 16, gap: 12 }}>
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: BRIGHT, fontSize: 18, fontWeight: 'bold' }}>Dashboard</Text>
+        <Text style={{ color: BRIGHT, fontSize: 18, fontWeight: 'normal' }}>Dashboard</Text>
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
           <Text style={{ color: DIM, fontSize: 10 }}>Live</Text>
@@ -253,7 +253,7 @@ export const templates: Template[] = [
               <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box style={{ gap: 2, width: 80, height: 30 }}>
                   <KpiValue value={kpi.raw} prefix={kpi.prefix} suffix={kpi.suffix} />
-                  <Text style={{ color: kpi.color, fontSize: 10, fontWeight: 'bold' }}>
+                  <Text style={{ color: kpi.color, fontSize: 10, fontWeight: 'normal' }}>
                     {(kpi.change >= 0 ? '+' : '') + kpi.change + '%'}
                   </Text>
                 </Box>
@@ -274,7 +274,7 @@ export const templates: Template[] = [
           padding: 14,
           gap: 8,
         }}>
-          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Monthly Revenue ($k)</Text>
+          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Monthly Revenue ($k)</Text>
           <BarChart data={revenue} height={120} showValues color="#3b82f6" />
         </Box>
 
@@ -287,13 +287,13 @@ export const templates: Template[] = [
           padding: 14,
           gap: 10,
         }}>
-          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Targets</Text>
+          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Targets</Text>
           {targets.map(function(metric) {
             return (
               <Box key={metric.label} style={{ gap: 3 }}>
                 <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
                   <Text style={{ color: DIM, fontSize: 10 }}>{metric.label}</Text>
-                  <Text style={{ color: BRIGHT, fontSize: 10, fontWeight: 'bold' }}>
+                  <Text style={{ color: BRIGHT, fontSize: 10, fontWeight: 'normal' }}>
                     {Math.round(metric.value * 100) + '%'}
                   </Text>
                 </Box>
@@ -313,7 +313,7 @@ export const templates: Template[] = [
         padding: 14,
         gap: 8,
       }}>
-        <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Top Products</Text>
+        <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Top Products</Text>
         <Table columns={PRODUCT_COLUMNS} data={products} rowKey="name" striped />
       </Box>
     </Box>
@@ -362,7 +362,7 @@ export const templates: Template[] = [
       }}>
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
           <Box style={{ width: 3, height: 14, backgroundColor: props.color, borderRadius: 2 }} />
-          <Text style={{ color: BRIGHT, fontSize: 12, fontWeight: 'bold' }}>{props.title}</Text>
+          <Text style={{ color: BRIGHT, fontSize: 12, fontWeight: 'normal' }}>{props.title}</Text>
         </Box>
         {props.children}
       </Box>
@@ -374,7 +374,7 @@ export const templates: Template[] = [
       <Box style={{ gap: 2 }}>
         <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
           <Text style={{ color: DIM, fontSize: 11 }}>{props.label}</Text>
-          <Text style={{ color: props.color, fontSize: 11, fontWeight: 'bold' }}>
+          <Text style={{ color: props.color, fontSize: 11, fontWeight: 'normal' }}>
             {Math.round(props.value * 100) + '%'}
           </Text>
         </Box>
@@ -400,7 +400,7 @@ export const templates: Template[] = [
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 14, gap: 10 }}>
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>Settings</Text>
+        <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'normal' }}>Settings</Text>
         <Badge label={quality.toUpperCase()} variant="info" />
       </Box>
       <Divider color={BORDER} />
@@ -515,7 +515,7 @@ export const templates: Template[] = [
         borderWidth: 1,
         borderColor: '#1a1a2e',
       }}>
-        <Text style={{ color: ACCENT, fontSize: 18, fontWeight: 'bold' }}>siah@archlinux</Text>
+        <Text style={{ color: ACCENT, fontSize: 18, fontWeight: 'normal' }}>siah@archlinux</Text>
         <Divider color={DIM} />
 
         <Box style={{ flexDirection: 'row', gap: 24 }}>
@@ -548,7 +548,7 @@ export const templates: Template[] = [
             ].map(function(pair) {
               return (
                 <Box key={pair[0]} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: ACCENT, fontSize: 14, fontWeight: 'bold' }}>{pair[0] + ':'}</Text>
+                  <Text style={{ color: ACCENT, fontSize: 14, fontWeight: 'normal' }}>{pair[0] + ':'}</Text>
                   <Text style={{ color: BRIGHT, fontSize: 14 }}>{pair[1]}</Text>
                 </Box>
               );
@@ -701,7 +701,7 @@ export const templates: Template[] = [
           })}
         </Box>
         <Box style={{ gap: 3 }}>
-          <Text style={{ color: ACCENT_C, fontSize: 16, fontWeight: 'bold' }}>
+          <Text style={{ color: ACCENT_C, fontSize: 16, fontWeight: 'normal' }}>
             {Math.round(animTemp) + 'F@sanfrancisco'}
           </Text>
           <Divider color={DIM} />
@@ -736,7 +736,7 @@ export const templates: Template[] = [
 
       <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
         <Box style={{ width: 280, backgroundColor: CARD, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: BORDER }}>
-          <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'bold' }}>CONDITIONS</Text>
+          <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'normal' }}>CONDITIONS</Text>
           <Spacer size={4} />
           {[
             { label: 'temp', val: w.temp + 'F', raw: w.temp, max: 110, color: tempColor(w.temp) },
@@ -761,7 +761,7 @@ export const templates: Template[] = [
 
         <Box style={{ flexGrow: 1, gap: 12 }}>
           <Box style={{ backgroundColor: CARD, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: BORDER }}>
-            <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'bold' }}>ATMOSPHERE</Text>
+            <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'normal' }}>ATMOSPHERE</Text>
             <Spacer size={4} />
             {[
               { label: 'pressure', val: w.pressure + ' inHg' },
@@ -781,14 +781,14 @@ export const templates: Template[] = [
             })}
           </Box>
           <Box style={{ backgroundColor: CARD, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: BORDER, gap: 4 }}>
-            <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'bold' }}>24H TREND</Text>
+            <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'normal' }}>24H TREND</Text>
             <Sparkline data={hourly} width={250} height={28} color={WARM} />
           </Box>
         </Box>
       </Box>
 
       <Box style={{ flexGrow: 1, backgroundColor: CARD, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: BORDER, gap: 6 }}>
-        <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'bold' }}>7-DAY FORECAST</Text>
+        <Text style={{ color: ACCENT_C, fontSize: 11, fontWeight: 'normal' }}>7-DAY FORECAST</Text>
         <BarChart
           data={forecast.map(function(f) {
             return { label: f.label, value: f.value, color: tempColor(f.value) };
@@ -869,7 +869,7 @@ export const templates: Template[] = [
         sections={NAV_SECTIONS}
         activeId={activePage}
         onSelect={function(id) { setActivePage(id); setActiveTab('overview'); }}
-        header={<Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>ACME APP</Text>}
+        header={<Text style={{ color: '#475569', fontSize: 10, fontWeight: 'normal' }}>ACME APP</Text>}
       />
 
       <Box style={{ flexGrow: 1, gap: 0 }}>
@@ -884,7 +884,7 @@ export const templates: Template[] = [
           <Tabs tabs={CONTENT_TABS} activeId={activeTab} onSelect={setActiveTab} />
         </Box>
         <Box style={{ flexGrow: 1, padding: 16, gap: 12 }}>
-          <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>
+          <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'normal' }}>
             {breadcrumbs[breadcrumbs.length - 1].label}
           </Text>
           <Text style={{ color: DIM, fontSize: 11 }}>
@@ -1015,7 +1015,7 @@ export const templates: Template[] = [
       width: 50,
       align: 'right',
       render: function(value) {
-        return <Text style={{ color: scoreColor(value), fontSize: 11, fontWeight: 'bold' }}>{value}</Text>;
+        return <Text style={{ color: scoreColor(value), fontSize: 11, fontWeight: 'normal' }}>{value}</Text>;
       },
     },
     { key: 'team', title: 'Team', width: 80 },
@@ -1025,7 +1025,7 @@ export const templates: Template[] = [
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' }}>
       <Box style={{ gap: 20, padding: 16 }}>
         <Box style={{ gap: 6 }}>
-          <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>Team Directory</Text>
+          <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'normal' }}>Team Directory</Text>
           <Text style={{ color: '#64748b', fontSize: 11 }}>Employee performance overview</Text>
         </Box>
 
@@ -1262,7 +1262,7 @@ export const templates: Template[] = [
                 padding: 8,
                 gap: 6,
               }}>
-                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Groove Contour</Text>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'normal' }}>Groove Contour</Text>
                 <AreaChart data={grooveLine} width={280} height={100} color="#22d3ee" interactive />
                 <BarChart data={stepBars} height={60} showLabels={false} interactive />
               </Box>
@@ -1276,7 +1276,7 @@ export const templates: Template[] = [
                 padding: 8,
                 gap: 6,
               }}>
-                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Mix DNA</Text>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'normal' }}>Mix DNA</Text>
                 <RadarChart
                   axes={[
                     { label: 'tight' },
@@ -1515,7 +1515,7 @@ export const templates: Template[] = [
                 padding: 8,
                 gap: 6,
               }}>
-                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Atmosphere Wave</Text>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'normal' }}>Atmosphere Wave</Text>
                 <AreaChart data={lineData} width={280} height={100} color={colorMain} interactive />
                 <BarChart data={pulseBars} height={55} showLabels={false} interactive />
               </Box>
@@ -1529,7 +1529,7 @@ export const templates: Template[] = [
                 padding: 8,
                 gap: 6,
               }}>
-                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'bold' }}>Palette Weight</Text>
+                <Text style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 'normal' }}>Palette Weight</Text>
                 <PieChart data={paletteWeight} size={100} innerRadius={20} />
                 <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Mesh: ' + meshType}</Text>
                 <Text style={{ color: '#64748b', fontSize: 10 }}>

@@ -61,7 +61,7 @@ const PALETTE = [
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>{title}</Text>
+      <Text style={{ color: ACCENT, fontSize: 11, fontWeight: 'normal' }}>{title}</Text>
       {children}
     </Box>
   );
@@ -311,7 +311,7 @@ export function NeofetchDemoStory() {
 
         {/* Identity + system summary */}
         <Box style={{ gap: 3 }}>
-          <Text style={{ color: ACCENT, fontSize: 16, fontWeight: '700' }}>{title}</Text>
+          <Text style={{ color: ACCENT, fontSize: 16, fontWeight: 'normal' }}>{title}</Text>
           <Box style={{ flexDirection: 'row', gap: 8 }}>
             <Label text={info.os || '...'} color={BRIGHT} />
             <Label text={info.kernel || ''} />

@@ -17,9 +17,9 @@ function CounterDemo() {
           borderRadius: 6,
         })}
       >
-        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>-</Text>
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'normal' }}>-</Text>
       </Pressable>
-      <Text style={{ color: c.text, fontSize: 18, fontWeight: 'bold', minWidth: 40 }}>
+      <Text style={{ color: c.text, fontSize: 18, fontWeight: 'normal', minWidth: 40 }}>
         {String(count)}
       </Text>
       <Pressable
@@ -30,7 +30,7 @@ function CounterDemo() {
           borderRadius: 6,
         })}
       >
-        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>+</Text>
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'normal' }}>+</Text>
       </Pressable>
       <Text style={{ color: c.textDim, fontSize: 11 }}>
         Close and reopen -- this persists

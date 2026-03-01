@@ -20,7 +20,7 @@ function LectureCard({
   const c = useThemeColors();
   return (
     <Box style={{ backgroundColor: c.surface1, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 8 }}>
-      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>{title}</Text>
+      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'normal' }}>{title}</Text>
       <Box style={{ gap: 6 }}>
         {children}
       </Box>
@@ -36,7 +36,7 @@ function TimerDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'normal' }}>
         {'Timer'}
       </Text>
 
@@ -52,7 +52,7 @@ function TimerDemo() {
         />
 
         <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-          <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>
+          <Text style={{ fontSize: 24, color: c.text, fontWeight: 'normal' }}>
             {String(count)}
           </Text>
           <Text style={{ fontSize: 11, color: c.textDim }}>{'ticks'}</Text>
@@ -98,7 +98,7 @@ function CapabilityDiscovery() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'normal' }}>
         {'AI Discovery — useCapabilities()'}
       </Text>
 
@@ -114,7 +114,7 @@ function CapabilityDiscovery() {
         {capabilities && Object.entries(capabilities).map(([name, cap]) => (
           <Box key={name} style={{ backgroundColor: c.surface2, borderRadius: 6, padding: 8, gap: 4 }}>
             <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>
+              <Text style={{ fontSize: 12, color: c.text, fontWeight: 'normal' }}>
                 {'<' + name + '>'}
               </Text>
               <Text style={{ fontSize: 9, color: cap.visual ? c.success : c.primary }}>
@@ -164,7 +164,7 @@ function OneLinerShowcase() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 12, color: c.primary, fontWeight: 'normal' }}>
         {'One-Liners'}
       </Text>
 

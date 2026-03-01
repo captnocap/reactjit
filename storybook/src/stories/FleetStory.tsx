@@ -49,7 +49,7 @@ export function FleetStory() {
         borderBottomWidth: 1,
         borderColor: c.border,
       }}>
-        <Text style={{ fontSize: 11, color: c.muted, fontWeight: 'bold' }}>{'FLEET'}</Text>
+        <Text style={{ fontSize: 11, color: c.muted, fontWeight: 'normal' }}>{'FLEET'}</Text>
         {PRESETS.map((p, i) => (
           <Pressable
             key={p.label}

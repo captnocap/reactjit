@@ -94,14 +94,14 @@ function TradingBars2D({
   return (
     <Box style={{ width: '100%', height: '100%', gap: 10 }}>
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#9fb3cc', fontSize: 11, fontWeight: 'bold' }}>
+        <Text style={{ color: '#9fb3cc', fontSize: 11, fontWeight: 'normal' }}>
           Price Bars
         </Text>
         <BarChart data={priceBars} height={220} showLabels={false} gap={2} interactive />
       </Box>
 
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#9fb3cc', fontSize: 11, fontWeight: 'bold' }}>
+        <Text style={{ color: '#9fb3cc', fontSize: 11, fontWeight: 'normal' }}>
           Volume
         </Text>
         <BarChart data={volumeBars} height={80} showLabels={false} gap={2} />
@@ -258,7 +258,7 @@ export function TradingViewBarsStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         TradingView Hybrid
       </Text>
       <Text style={{ fontSize: 12, color: c.textDim }}>

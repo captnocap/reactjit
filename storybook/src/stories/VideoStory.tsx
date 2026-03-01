@@ -21,7 +21,7 @@ function StatusPill({ label, value }: { label: string; value: string }) {
       backgroundColor: c.surface,
     }}>
       <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
-      <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>{value}</Text>
+      <Text style={{ color: c.text, fontSize: 9, fontWeight: 'normal' }}>{value}</Text>
     </Box>
   );
 }

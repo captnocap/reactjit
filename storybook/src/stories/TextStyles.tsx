@@ -5,11 +5,11 @@ import { StorySection } from './_shared/StoryScaffold';
 
 /** Show the actual rendered size: original × scale */
 function sz(base: number, scale: number): string {
-  return scale === 1 ? `${base}px` : `${Math.round(base * scale)}px (${base}×${scale.toFixed(1)})`;
+  return scale === 1 ? `${base}px` : `${Math.round(base * scale)}px (${base}x${scale.toFixed(1)})`;
 }
 
 function scaleFormula(base: number, scale: number): string {
-  return `${base} × ${scale.toFixed(2)} = ${Math.round(base * scale)}px`;
+  return `${base} x ${scale.toFixed(2)} = ${Math.round(base * scale)}px`;
 }
 
 const LONG_TEXT = 'The quick brown fox jumps over the lazy dog. This sentence is deliberately long to test how text truncation works across both renderers.';
@@ -21,7 +21,7 @@ export function TextStylesStory() {
 
   return (
     <>
-      <StorySection index={1} title="Text styles">
+      <StorySection index={1} title="Scaled text basics">
         <Box
           onPointerEnter={() => setActiveScaleTip('font24')}
           onPointerLeave={() => setActiveScaleTip(prev => (prev === 'font24' ? null : prev))}
@@ -102,40 +102,62 @@ export function TextStylesStory() {
         </Text>
       </StorySection>
 
-      <StorySection index={2} title="Typography variants (inline)">
-        <Box style={{ gap: 8 }}>
-          <Typography.Heading style={{ color: c.text }}>
+      <StorySection index={2} title="Typography presets">
+        <Box style={{ width: '100%', gap: 8 }}>
+          <Typography.Heading style={{ color: c.text, fontSize: 24 }}>
             The quick brown fox jumps over the lazy dog
           </Typography.Heading>
-          <Typography.SubHeading style={{ color: c.primary }}>
+          <Typography.SubHeading style={{ color: c.primary, fontSize: 18 }}>
             Secondary heading: all things in motion
           </Typography.SubHeading>
-          <Box style={{ gap: 4 }}>
-            <Typography.Bold style={{ color: c.text }}>
+          <Typography.Label style={{ color: c.primary, fontSize: 12 }}>
+            LABEL TEXT
+          </Typography.Label>
+          <Typography.Caption style={{ color: c.textDim, fontSize: 10 }}>
+            Small caption: supporting details at the margins
+          </Typography.Caption>
+          <Typography.Muted style={{ color: c.text, fontSize: 13 }}>
+            Muted content: secondary, steps back into the background
+          </Typography.Muted>
+          <Typography.Mono style={{ color: c.text, fontSize: 13 }}>
+            Monospace: const x = "code";
+          </Typography.Mono>
+        </Box>
+      </StorySection>
+
+      <StorySection index={3} title="Emphasis and decoration">
+        <Box style={{ width: '100%', gap: 8 }}>
+          <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
+            <Text style={{ color: c.textDim, fontSize: 10 }}>Typography wrappers</Text>
+            <Typography.Bold style={{ color: c.text, fontSize: 16 }}>
               Bold text stands out
             </Typography.Bold>
-            <Typography.Italic style={{ color: c.text }}>
+            <Typography.Italic style={{ color: c.text, fontSize: 16 }}>
               Italic text leans
             </Typography.Italic>
-            <Typography.Underline style={{ color: c.text }}>
+            <Typography.Underline style={{ color: c.text, fontSize: 16 }}>
               Underlined emphasizes
             </Typography.Underline>
-            <Typography.Strike style={{ color: c.textDim }}>
+            <Typography.Strike style={{ color: c.textDim, fontSize: 16 }}>
               Strikethrough removes
             </Typography.Strike>
           </Box>
-          <Typography.Label style={{ color: c.primary }}>
-            LABEL TEXT
-          </Typography.Label>
-          <Typography.Caption style={{ color: c.textDim }}>
-            Small caption: supporting details at the margins
-          </Typography.Caption>
-          <Typography.Muted style={{ color: c.text }}>
-            Muted content: secondary, steps back into the background
-          </Typography.Muted>
-          <Typography.Mono style={{ color: c.text }}>
-            Monospace: const x = "code";
-          </Typography.Mono>
+
+          <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
+            <Text style={{ color: c.textDim, fontSize: 10 }}>Raw textDecorationLine combinations</Text>
+            <Text style={{ color: c.warning, fontSize: 16, fontWeight: 'bold', textDecorationLine: 'underline' }}>
+              Bold + underline
+            </Text>
+            <Text style={{ color: c.error, fontSize: 14, fontWeight: 'bold', textDecorationLine: 'line-through' }}>
+              Bold + strikethrough
+            </Text>
+            <Text style={{ color: c.text, fontSize: 10, textDecorationLine: 'underline' }}>
+              Small underlined (10px)
+            </Text>
+            <Text style={{ color: c.text, fontSize: 20, textDecorationLine: 'underline' }}>
+              Large underlined (20px)
+            </Text>
+          </Box>
         </Box>
       </StorySection>
 
@@ -158,37 +180,6 @@ export function TextStylesStory() {
           <Text style={{ color: c.textDim, fontSize: 10 }}>No limit</Text>
           <Text style={{ color: c.text, fontSize: 13 }}>
             {LONG_TEXT}
-          </Text>
-        </Box>
-      </StorySection>
-
-      <StorySection index={5} title="Text decoration">
-        <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>textDecorationLine</Text>
-          <Text style={{ color: c.text, fontSize: 15, textDecorationLine: 'underline' }}>
-            Underlined text
-          </Text>
-          <Text style={{ color: c.primary, fontSize: 14, textDecorationLine: 'line-through' }}>
-            Strikethrough text
-          </Text>
-          <Text style={{ color: c.success, fontSize: 14, textDecorationLine: 'none' }}>
-            Explicit none
-          </Text>
-        </Box>
-
-        <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>Decoration + weight + size</Text>
-          <Text style={{ color: c.warning, fontSize: 16, fontWeight: 'bold', textDecorationLine: 'underline' }}>
-            Bold + underline
-          </Text>
-          <Text style={{ color: c.error, fontSize: 14, fontWeight: 'bold', textDecorationLine: 'line-through' }}>
-            Bold + strikethrough
-          </Text>
-          <Text style={{ color: c.text, fontSize: 10, textDecorationLine: 'underline' }}>
-            Small underlined (10px)
-          </Text>
-          <Text style={{ color: c.text, fontSize: 20, textDecorationLine: 'underline' }}>
-            Large underlined (20px)
           </Text>
         </Box>
       </StorySection>

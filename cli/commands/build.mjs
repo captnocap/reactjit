@@ -816,52 +816,108 @@ async function buildDistLove(cwd, projectName, opts = {}) {
     console.log(`  Extract and run: open ${appName}\n`);
 
   } else if (plat.os === 'windows') {
-    // ── Windows: fuse love.exe + .love into single exe ──
+    // ── Windows: single self-extracting exe ──
+    // Format: [launcher.exe][zip payload][8-byte LE uint64: zip start offset]
+    // The launcher extracts to %LOCALAPPDATA%\reactjit\<crc32>\ on first run.
     const monoRoot = join(CLI_ROOT, '..');
-    const vendorExeCandidates = [
-      join(cwd, 'vendor', 'love.exe'),
-      join(monoRoot, 'vendor', 'love.exe'),
+
+    // 5a. Find Love2D Windows binaries (auto-download if missing)
+    const loveWinVersion = '11.5';
+    const loveWinDir = `love-${loveWinVersion}-win64`;
+    const loveWinCandidates = [
+      join(cwd, 'vendor', loveWinDir),
+      join(monoRoot, 'vendor', loveWinDir),
+      join(CLI_ROOT, 'vendor', loveWinDir),
     ];
-    const vendorExe = vendorExeCandidates.find(p => existsSync(p));
-    if (!vendorExe) {
-      console.error('  Windows love.exe not found.');
-      console.error('  Place love.exe (and its DLLs) in one of these locations:');
-      console.error('    <project>/vendor/love.exe');
-      console.error('    <monorepo>/vendor/love.exe');
-      console.error('  Download from: https://love2d.org');
+    let vendorDir = loveWinCandidates.find(p => existsSync(join(p, 'love.exe')));
+
+    if (!vendorDir) {
+      // Auto-download Love2D Windows binaries
+      console.log(`  [5/7] Downloading Love2D ${loveWinVersion} Windows (first time only)...`);
+      const downloadDir = join(CLI_ROOT, 'vendor');
+      mkdirSync(downloadDir, { recursive: true });
+      const zipPath = join(downloadDir, `${loveWinDir}.zip`);
+      const url = `https://github.com/love2d/love/releases/download/${loveWinVersion}/${loveWinDir}.zip`;
+      try {
+        execSync(`curl -L -o "${zipPath}" "${url}"`, { stdio: 'pipe' });
+        execSync(`unzip -o "${zipPath}" -d "${downloadDir}"`, { stdio: 'pipe' });
+        rmSync(zipPath, { force: true });
+        vendorDir = join(downloadDir, loveWinDir);
+        console.log(`  Downloaded to ${vendorDir}`);
+      } catch (e) {
+        console.error(`  Failed to download Love2D Windows: ${e.message}`);
+        console.error(`  Manually download from: https://love2d.org`);
+        console.error(`  Place contents in: <project>/vendor/${loveWinDir}/`);
+        process.exit(1);
+      }
+    } else {
+      console.log('  [5/7] Love2D Windows binaries found.');
+    }
+
+    // 5b. Find launcher stub + Windows QuickJS DLL
+    const launcherCandidates = [
+      join(CLI_ROOT, 'runtime', 'bin', 'ilr-launcher.exe'),
+      join(monoRoot, 'zig-out', 'bin', 'ilr-launcher.exe'),
+    ];
+    const launcherPath = launcherCandidates.find(p => existsSync(p));
+    if (!launcherPath) {
+      console.error('  ilr-launcher.exe not found.');
+      console.error('  Run: make cli-setup (or zig build win-launcher)');
       process.exit(1);
     }
 
-    const vendorDir = dirname(vendorExe);
+    const quickjsDllCandidates = [
+      join(CLI_ROOT, 'runtime', 'lib', 'win64', 'libquickjs.dll'),
+      join(monoRoot, 'zig-out-win', 'bin', 'quickjs.dll'),
+    ];
+    const quickjsDll = quickjsDllCandidates.find(p => existsSync(p));
+    if (!quickjsDll) {
+      console.error('  Windows libquickjs.dll not found.');
+      console.error('  Run: make cli-setup (or zig build libquickjs -Dtarget=x86_64-windows-gnu)');
+      process.exit(1);
+    }
 
-    console.log('  [5/6] Fusing love.exe + game.love...');
-    // Fuse: cat love.exe + game.love > output.exe
-    const fusedExe = join(distDir, `${projectName}.exe`);
-    const loveBuf = readFileSync(vendorExe);
-    const gameBuf = readFileSync(loveArchive);
-    writeFileSync(fusedExe, Buffer.concat([loveBuf, gameBuf]));
+    // 6. Assemble payload: fused game.exe + DLLs + libquickjs.dll
+    console.log('  [6/7] Assembling Windows payload...');
+    const winStaging = join(payloadDir, 'win-staging');
+    mkdirSync(join(winStaging, 'lib'), { recursive: true });
 
-    // Copy DLLs from vendor directory alongside the exe
-    console.log('  [6/6] Copying DLLs...');
-    let dllCount = 0;
-    if (existsSync(vendorDir)) {
-      for (const entry of readdirSync(vendorDir)) {
-        if (entry.toLowerCase().endsWith('.dll')) {
-          cpSync(join(vendorDir, entry), join(distDir, entry));
-          dllCount++;
-        }
+    // Fuse love.exe + game.love → game.exe (standardized name for launcher)
+    const loveExeBuf = readFileSync(join(vendorDir, 'love.exe'));
+    const gameLoveBuf = readFileSync(loveArchive);
+    writeFileSync(join(winStaging, 'game.exe'), Buffer.concat([loveExeBuf, gameLoveBuf]));
+
+    // Copy Love2D DLLs
+    for (const entry of readdirSync(vendorDir)) {
+      if (entry.toLowerCase().endsWith('.dll')) {
+        cpSync(join(vendorDir, entry), join(winStaging, entry));
       }
     }
 
-    // Copy libquickjs.dll if available
-    const quickjsDll = join(vendorDir, 'libquickjs.dll');
-    if (existsSync(quickjsDll)) {
-      cpSync(quickjsDll, join(distDir, 'libquickjs.dll'));
-    }
+    // Copy libquickjs.dll
+    cpSync(quickjsDll, join(winStaging, 'lib', 'libquickjs.dll'));
 
-    const sizeMb = (statSync(fusedExe).size / (1024 * 1024)).toFixed(1);
-    console.log(`\n  Done! ${sizeMb} MB → ${fusedExe} (+ ${dllCount} DLLs)`);
-    console.log(`  Run:  ${projectName}.exe\n`);
+    // Create payload zip
+    const payloadZip = join(payloadDir, 'payload.zip');
+    execSync(`cd "${winStaging}" && zip -9 -r "${payloadZip}" .`, { stdio: 'pipe' });
+
+    // 7. Concatenate: launcher + payload.zip + 8-byte offset
+    console.log('  [7/7] Packing self-extracting exe...');
+    const launcherBuf = readFileSync(launcherPath);
+    const payloadBuf = readFileSync(payloadZip);
+    const offsetBuf = Buffer.alloc(8);
+    offsetBuf.writeBigUInt64LE(BigInt(launcherBuf.length));
+
+    const outFile = join(distDir, `${projectName}.exe`);
+    writeFileSync(outFile, Buffer.concat([launcherBuf, payloadBuf, offsetBuf]));
+
+    // Cleanup
+    rmSync(winStaging, { recursive: true, force: true });
+    rmSync(payloadZip, { force: true });
+
+    const sizeMb = (statSync(outFile).size / (1024 * 1024)).toFixed(1);
+    console.log(`\n  Done! ${sizeMb} MB → ${outFile}`);
+    console.log(`  Ship this single file — double-click to run on Windows.\n`);
 
   } else {
     console.error(`  Unsupported platform for dist:love: ${plat.os}`);

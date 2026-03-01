@@ -220,7 +220,7 @@ function BookPanel({
   const maxSize = Math.max(1, ...sorted.map((l) => l.size));
   return (
     <Box style={{ flexGrow: 1, gap: 4 }}>
-      <Text style={{ color, fontSize: 11, fontWeight: 'bold' }}>{title}</Text>
+      <Text style={{ color, fontSize: 11, fontWeight: 'normal' }}>{title}</Text>
       {sorted.map((level, i) => (
         <Box key={`${title}-${i}`} style={{ position: 'relative', height: 18, justifyContent: 'center' }}>
           <Box
@@ -545,7 +545,7 @@ export function TradingPerfLabStory() {
       >
         <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 8 }}>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 17, color: '#e8eef8', fontWeight: '700' }}>
+            <Text style={{ fontSize: 17, color: '#e8eef8', fontWeight: 'normal' }}>
               Trading Workstation
             </Text>
             <Text style={{ fontSize: 11, color: '#92a8c4' }}>
@@ -557,7 +557,7 @@ export function TradingPerfLabStory() {
               <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
             </Box>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#244266', backgroundColor: '#0a172c' }}>
-              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>LIVE</Text>
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>LIVE</Text>
               <Switch value={live} onValueChange={setLive} />
             </Box>
           </Box>
@@ -591,7 +591,7 @@ export function TradingPerfLabStory() {
             gap: 6,
           }}
         >
-          <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>WATCHLIST</Text>
+          <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>WATCHLIST</Text>
           <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', paddingLeft: 6, paddingRight: 6 }}>
             <Box style={{ width: 54 }}><Text style={{ fontSize: 9, color: '#587394' }}>SYM</Text></Box>
             <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>LAST</Text></Box>
@@ -672,7 +672,7 @@ export function TradingPerfLabStory() {
               gap: compact ? 6 : 8,
             }}
           >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>PRICE FEED</Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>PRICE FEED</Text>
             <Box style={{ flexGrow: 1, minHeight: chartBodyMinHeight }}>
               {selected && (viewMode === '2d' ? (
                 <Feed2D history={visibleHistory} />
@@ -692,7 +692,7 @@ export function TradingPerfLabStory() {
               gap: compact ? 6 : 8,
             }}
           >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>EXECUTION / ENGINE CONTROLS</Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>EXECUTION / ENGINE CONTROLS</Text>
             <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: frameGap, width: '100%' }}>
               <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
                 <LabeledSlider label="Symbols" value={symbolCount} min={20} max={320} step={10} onChange={setSymbolCount} />
@@ -721,7 +721,7 @@ export function TradingPerfLabStory() {
             }}
           >
             <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>ORDER BOOK</Text>
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ORDER BOOK</Text>
               <Text style={{ color: '#6f8daf', fontSize: 10 }}>{`Spread ${spread.toFixed(2)}`}</Text>
             </Box>
             {selected && (
@@ -743,7 +743,7 @@ export function TradingPerfLabStory() {
               height: tapeHeight,
             }}
           >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>TIME & SALES</Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>TIME & SALES</Text>
             <ScrollView style={{ width: '100%', flexGrow: 1 }}>
               <Box style={{ gap: 3 }}>
                 {tapeRows.map((row) => (
@@ -767,7 +767,7 @@ export function TradingPerfLabStory() {
               gap: 4,
             }}
           >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700' }}>ENGINE HEALTH</Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ENGINE HEALTH</Text>
             <Text style={{ color: '#c7d8ec', fontSize: 10 }}>
               {`fps ${fps || '--'} | layout ${layoutMs.toFixed(1)}ms | paint ${paintMs.toFixed(1)}ms`}
             </Text>
@@ -777,7 +777,7 @@ export function TradingPerfLabStory() {
             <Text style={{ color: '#7f9bc0', fontSize: 10 }}>
               {`processed ${snapshot.processedTotal.toLocaleString()} | dropped ${snapshot.droppedFrames} | nodes ${nodeCount || '--'}`}
             </Text>
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: '700', marginTop: 2 }}>TARGET SYSTEM</Text>
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal', marginTop: 2 }}>TARGET SYSTEM</Text>
             <Text style={{ color: '#c7d8ec', fontSize: 10 }}>{sysHost}</Text>
             <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysOs}</Text>
             <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysCpu}</Text>

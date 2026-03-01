@@ -7,7 +7,7 @@ export function TextStory() {
   return (
     <StoryPage>
       <TextStylesStory />
-      <TextEffectsStory />
+      <TextEffectsStory index={5} />
     </StoryPage>
   );
 }

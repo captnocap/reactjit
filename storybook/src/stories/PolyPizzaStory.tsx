@@ -147,7 +147,7 @@ function ActionButton({
         borderRadius: 6,
       })}
     >
-      <Text style={{ fontSize: 11, color: fg, fontWeight: 'bold' }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: fg, fontWeight: 'normal' }}>{label}</Text>
     </Pressable>
   );
 }
@@ -232,7 +232,7 @@ export function PolyPizzaStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>Poly Pizza API Test Bench</Text>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>Poly Pizza API Test Bench</Text>
         <Text style={{ fontSize: 11, color: c.textSecondary }}>
           Paste an API key, search models, and fetch model metadata with attribution immediately.
         </Text>
@@ -304,7 +304,7 @@ export function PolyPizzaStory() {
         <ScrollView style={{ flexGrow: 1, backgroundColor: c.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: c.border }}>
           <Box style={{ width: '100%', padding: 12, gap: 12 }}>
             <Box style={{ gap: 4 }}>
-              <Text style={{ fontSize: 13, color: c.text, fontWeight: 'bold' }}>Model Fetch</Text>
+              <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>Model Fetch</Text>
               {modelResult.loading && <Text style={{ fontSize: 11, color: c.warning }}>Loading model...</Text>}
               {modelResult.error && <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${modelResult.error.message}`}</Text>}
               {!modelResult.loading && !modelResult.error && !modelObj && (
@@ -312,7 +312,7 @@ export function PolyPizzaStory() {
               )}
               {modelObj && (
                 <Box style={{ gap: 6, backgroundColor: c.bg, borderRadius: 6, borderWidth: 1, borderColor: c.border, padding: 10 }}>
-                  <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>{titleForModel(modelObj)}</Text>
+                  <Text style={{ fontSize: 12, color: c.text, fontWeight: 'normal' }}>{titleForModel(modelObj)}</Text>
                   <Text style={{ fontSize: 11, color: c.textSecondary }}>{`ID: ${idForModel(modelObj) ?? 'unknown'}`}</Text>
                   <Text style={{ fontSize: 11, color: c.textSecondary }}>{`Author: ${authorForModel(modelObj)}`}</Text>
                   <Text style={{ fontSize: 11, color: c.textSecondary }}>{`License: ${licenseForModel(modelObj)}`}</Text>
@@ -331,7 +331,7 @@ export function PolyPizzaStory() {
             </Box>
 
             <Box style={{ gap: 4 }}>
-              <Text style={{ fontSize: 13, color: c.text, fontWeight: 'bold' }}>Search Results</Text>
+              <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>Search Results</Text>
               {searchResult.loading && <Text style={{ fontSize: 11, color: c.warning }}>Searching...</Text>}
               {searchResult.error && <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${searchResult.error.message}`}</Text>}
               {!searchResult.loading && !searchResult.error && activeSearch && searchItems.length === 0 && (
@@ -352,7 +352,7 @@ export function PolyPizzaStory() {
                             borderColor: c.border,
                             padding: 8,
                           }}>
-                            <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>{titleForModel(item)}</Text>
+                            <Text style={{ fontSize: 12, color: c.text, fontWeight: 'normal' }}>{titleForModel(item)}</Text>
                             <Text style={{ fontSize: 10, color: c.textSecondary }}>{`ID: ${id ?? 'unknown'}`}</Text>
                             <Text style={{ fontSize: 10, color: c.textDim }}>{`By ${authorForModel(item)} | ${licenseForModel(item)}`}</Text>
                             <Text style={{ fontSize: 10, color: c.info }}>Press to load this model</Text>

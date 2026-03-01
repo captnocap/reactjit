@@ -136,7 +136,7 @@ export function InputStory() {
                 borderRadius: 6,
               })}
             >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Press me</Text>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Press me</Text>
             </Pressable>
             <Pressable
               onLongPress={() => setLastPressAction('long press')}
@@ -150,7 +150,7 @@ export function InputStory() {
                 borderRadius: 6,
               })}
             >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Long press</Text>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Long press</Text>
             </Pressable>
             <Pressable
               disabled
@@ -320,7 +320,7 @@ export function InputStory() {
                 paddingBottom: 8,
               })}
             >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{copied ? 'Copied!' : 'Copy'}</Text>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'normal' }}>{copied ? 'Copied!' : 'Copy'}</Text>
             </Pressable>
             <Pressable
               onPress={async () => {
@@ -336,7 +336,7 @@ export function InputStory() {
                 paddingBottom: 8,
               })}
             >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Paste</Text>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'normal' }}>Paste</Text>
             </Pressable>
           </Box>
           <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Last hotkey: ${lastHotkey}`}</Text>
@@ -391,7 +391,7 @@ export function InputStory() {
                 paddingBottom: 9,
               })}
             >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Open modal</Text>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Open modal</Text>
             </Pressable>
             {modalAction && (
               <Text style={{ color: c.textSecondary, fontSize: 12 }}>{modalAction}</Text>
@@ -408,7 +408,7 @@ export function InputStory() {
               padding: 16,
               gap: 10,
             }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Input Summary</Text>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>Input Summary</Text>
               <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Press count: ${pressCount}`}</Text>
               <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Slider: ${sliderValueB}`}</Text>
               <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Switch: ${switchA ? 'ON' : 'OFF'}`}</Text>
@@ -437,7 +437,7 @@ export function InputStory() {
                     paddingBottom: 7,
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Confirm</Text>
+                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'normal' }}>Confirm</Text>
                 </Pressable>
               </Box>
             </Box>

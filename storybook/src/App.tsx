@@ -115,11 +115,22 @@ export function App() {
             width: 200, borderRight: '1px solid #1e293b', backgroundColor: '#0c0c14',
             overflowY: 'auto', flexShrink: 0, display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{
-              padding: '16px 16px 12px', fontSize: 11, fontWeight: 700,
-              letterSpacing: '0.08em', color: '#475569', borderBottom: '1px solid #1e293b',
-            }}>
-              ReactJIT
+            <div style={{ padding: '12px 12px 10px', borderBottom: '1px solid #1e293b' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 8px',
+                borderRadius: 6,
+                border: '1px solid #1e293b',
+                backgroundColor: '#111827',
+              }}>
+                <div style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: '#3b82f6', flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 11, letterSpacing: '0.06em', color: '#e2e8f0' }}>ReactJIT</span>
+                  <span style={{ fontSize: 8, letterSpacing: '0.12em', color: '#64748b' }}>STORYBOOK</span>
+                </div>
+              </div>
             </div>
 
             <div style={{ flex: 1, paddingTop: 8 }}>

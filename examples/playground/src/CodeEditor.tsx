@@ -3,9 +3,9 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, useLuaInterval } from '../reactjit/shared/src';
+import { Box, Text, useLuaInterval } from '@reactjit/core';
 import { tokenizeLine, TOKEN_COLORS } from './lib/tokenizer';
-import type { LoveEvent } from '../reactjit/shared/src/types';
+import type { LoveEvent } from '@reactjit/core';
 
 const FONT_SIZE = 13;
 const LINE_HEIGHT = 20;

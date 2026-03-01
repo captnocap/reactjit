@@ -152,7 +152,7 @@ export function Scene3DPlanetStory() {
           gap: 4,
         }}
       >
-        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold', marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'normal', marginBottom: 4 }}>
           Lighting
         </Text>
         <LabeledSlider label="Azimuth" value={lightAzimuth} min={-3.14} max={3.14} step={0.05} onChange={setLightAzimuth} />
@@ -161,12 +161,12 @@ export function Scene3DPlanetStory() {
         <LabeledSlider label="Ambient" value={ambientIntensity} min={0} max={1} step={0.02} onChange={setAmbientIntensity} />
         <LabeledSlider label="Specular" value={specularPower} min={1} max={128} step={1} onChange={setSpecularPower} />
 
-        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold', marginTop: 8, marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'normal', marginTop: 8, marginBottom: 4 }}>
           Camera
         </Text>
         <LabeledSlider label="Zoom" value={zoom} min={1.5} max={10} step={0.1} onChange={setZoom} />
 
-        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold', marginTop: 8, marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'normal', marginTop: 8, marginBottom: 4 }}>
           Atmosphere
         </Text>
         <LabeledSlider label="Fresnel" value={fresnelPower} min={0} max={8} step={0.1} onChange={setFresnelPower} />

@@ -819,6 +819,8 @@ function builtins.record(name)
   pushOutput(string.format("Recording macro '%s'... (type :stop to finish)", name), COLORS.macro)
 end
 
+local executeCommand  -- forward declaration (used by builtins.macro before definition)
+
 function builtins.stop()
   if not state.recording then
     pushOutput("Not recording", COLORS.dim)
@@ -1377,8 +1379,8 @@ function Console.draw()
     if totalContentH > outputH and maxScroll > 0 then
       local barH = math.max(20, outputH * (outputH / totalContentH))
       local barY = outputY + (state.scrollY / maxScroll) * (outputH - barH)
-      love.graphics.setColor(COLORS.dim)
-      love.graphics.rectangle("fill", screenW - 4, barY, 3, barH, 1, 1)
+      love.graphics.setColor(1, 1, 1, 0.25)
+      love.graphics.rectangle("fill", screenW - 5, barY, 3, barH, 1, 1)
     end
 
     -- Input area
@@ -1584,8 +1586,8 @@ function Console.drawInRegion(region)
     if totalContentH > outputH and maxScroll > 0 then
       local barH = math.max(20, outputH * (outputH / totalContentH))
       local barY = outputY + (state.scrollY / maxScroll) * (outputH - barH)
-      love.graphics.setColor(COLORS.dim)
-      love.graphics.rectangle("fill", rx + rw - 4, barY, 3, barH, 1, 1)
+      love.graphics.setColor(1, 1, 1, 0.25)
+      love.graphics.rectangle("fill", rx + rw - 5, barY, 3, barH, 1, 1)
     end
 
     -- Input area

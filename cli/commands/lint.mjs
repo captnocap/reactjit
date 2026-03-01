@@ -38,11 +38,43 @@
  *   tsl-no-js-globals            (error)   JS globals that don't exist in LuaJIT (console, Date, setTimeout, fetch, window, etc.)
  *   tsl-no-zero-index            (error)   arr[0] is always nil — Lua arrays are 1-indexed
  *   tsl-no-any                   (warning) `any` type suppresses checking — add // tsl-any to suppress intentionally
+ *
+ * Lua checks (runs on .lua files in lua/):
+ *   lua-no-forward-ref           (error)   Call to local function before its declaration — causes nil crash at runtime
  */
 
-import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createRequire } from 'node:module';
+
+// ── Incremental lint cache ──────────────────────────────────
+// Stores { [relPath]: { mtimeMs, diagnostics } } so unchanged
+// files skip parsing entirely on subsequent runs.
+
+const LINT_CACHE_FILE = '.rjit-lint-cache.json';
+
+function loadLintCache(cwd) {
+  const cachePath = join(cwd, LINT_CACHE_FILE);
+  try {
+    if (existsSync(cachePath)) {
+      return JSON.parse(readFileSync(cachePath, 'utf-8'));
+    }
+  } catch { /* corrupted cache — start fresh */ }
+  return {};
+}
+
+function saveLintCache(cwd, cache) {
+  const cachePath = join(cwd, LINT_CACHE_FILE);
+  try {
+    writeFileSync(cachePath, JSON.stringify(cache), 'utf-8');
+  } catch { /* non-fatal — next run will just re-scan everything */ }
+}
+
+function getFileMtime(filePath) {
+  try {
+    return statSync(filePath).mtimeMs;
+  } catch { return 0; }
+}
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -205,6 +237,281 @@ function findTslFiles(dir) {
   }
   walk(dir);
   return files;
+}
+
+function findLuaFiles(dir) {
+  const files = [];
+  const skip = new Set(['node_modules', 'dist', '.git', 'build', 'out']);
+  function walk(d) {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.lua')) files.push(full);
+    }
+  }
+  walk(dir);
+  return files;
+}
+
+// ── Lua forward reference detection ─────────────────────────
+
+/**
+ * Strip Lua comments and string literals from source lines.
+ * Returns an array of "clean" lines safe for pattern matching.
+ * Handles line comments (--), block comments (--[[ ]]), single/double
+ * quoted strings, and long strings ([[ ]], [=[ ]=], etc.).
+ */
+function stripLuaCommentsAndStrings(lines) {
+  const clean = [];
+  let inBlock = false;
+  let blockClose = null;
+
+  for (const raw of lines) {
+    let line = raw;
+
+    // Continue consuming a multi-line block comment or long string
+    if (inBlock) {
+      const ci = line.indexOf(blockClose);
+      if (ci >= 0) {
+        line = ' '.repeat(ci + blockClose.length) + line.slice(ci + blockClose.length);
+        inBlock = false;
+        blockClose = null;
+      } else {
+        clean.push('');
+        continue;
+      }
+    }
+
+    // Process remaining characters
+    let result = '';
+    let j = 0;
+    while (j < line.length) {
+      // Block comment: --[[ or --[===[
+      if (line[j] === '-' && line[j + 1] === '-' && line[j + 2] === '[') {
+        const eqm = line.slice(j + 2).match(/^\[(=*)\[/);
+        if (eqm) {
+          const close = ']' + eqm[1] + ']';
+          const ci = line.indexOf(close, j + 4 + eqm[1].length);
+          if (ci >= 0) {
+            // Opens and closes on same line
+            result += ' '.repeat(ci + close.length - j);
+            j = ci + close.length;
+            continue;
+          }
+          inBlock = true;
+          blockClose = close;
+          break;
+        }
+      }
+
+      // Line comment: --
+      if (line[j] === '-' && line[j + 1] === '-') {
+        break;
+      }
+
+      // Long string: [[ or [===[
+      if (line[j] === '[') {
+        const eqm = line.slice(j).match(/^\[(=*)\[/);
+        if (eqm) {
+          const close = ']' + eqm[1] + ']';
+          const ci = line.indexOf(close, j + 2 + eqm[1].length);
+          if (ci >= 0) {
+            result += ' '.repeat(ci + close.length - j);
+            j = ci + close.length;
+            continue;
+          }
+          inBlock = true;
+          blockClose = close;
+          break;
+        }
+      }
+
+      // Quoted strings: "..." or '...'
+      if (line[j] === '"' || line[j] === "'") {
+        const q = line[j];
+        j++;
+        while (j < line.length && line[j] !== q) {
+          if (line[j] === '\\') j++;
+          j++;
+        }
+        if (j < line.length) j++; // closing quote
+        result += ' ';
+        continue;
+      }
+
+      result += line[j];
+      j++;
+    }
+
+    clean.push(result);
+  }
+
+  return clean;
+}
+
+// Lua built-ins and keywords — never flag calls to these
+const LUA_BUILTINS = new Set([
+  // keywords (some look like calls with parens after)
+  'if', 'else', 'elseif', 'for', 'while', 'repeat', 'return',
+  'local', 'function', 'end', 'then', 'do', 'in', 'not', 'and', 'or',
+  'nil', 'true', 'false', 'break', 'goto', 'until',
+  // Lua standard library
+  'print', 'type', 'tostring', 'tonumber', 'error', 'assert',
+  'pcall', 'xpcall', 'require', 'pairs', 'ipairs', 'next',
+  'select', 'unpack', 'rawget', 'rawset', 'rawequal', 'rawlen',
+  'setmetatable', 'getmetatable', 'setfenv', 'getfenv',
+  'collectgarbage', 'dofile', 'load', 'loadfile', 'loadstring',
+  // LuaJIT
+  'bit', 'ffi', 'jit',
+  // Love2D
+  'love',
+]);
+
+/**
+ * Lint a Lua file for forward references to local functions.
+ *
+ * Catches calls to `local function NAME()` or `local NAME = function()`
+ * where the call appears before the declaration and no forward
+ * `local NAME` exists above the call site.
+ *
+ * Crash pattern:
+ *   local function a()
+ *     b()              -- b is compiled as a global lookup → nil → crash
+ *   end
+ *   local function b() ... end
+ *
+ * Fix:
+ *   local b            -- forward-declare
+ *   local function a()
+ *     b()              -- captured as upvalue, assigned before a() runs
+ *   end
+ *   b = function() ... end
+ */
+function lintLuaForwardRefs(filePath, rawLines) {
+  const diagnostics = [];
+  const cleanLines = stripLuaCommentsAndStrings(rawLines);
+
+  // Phase 1: Find all `local function NAME(` and `local NAME = function(` declarations
+  const localFuncDecls = new Map(); // name → first line number (1-based)
+  const LOCAL_FUNC_RE = /\blocal\s+function\s+(\w+)\s*\(/;
+  const LOCAL_ASSIGN_FUNC_RE = /\blocal\s+(\w+)\s*=\s*function\s*\(/;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    let m = LOCAL_FUNC_RE.exec(line);
+    if (m && !localFuncDecls.has(m[1])) {
+      localFuncDecls.set(m[1], i + 1);
+      continue;
+    }
+    m = LOCAL_ASSIGN_FUNC_RE.exec(line);
+    if (m && !localFuncDecls.has(m[1])) {
+      localFuncDecls.set(m[1], i + 1);
+    }
+  }
+
+  if (localFuncDecls.size === 0) return diagnostics; // nothing to check
+
+  // Phase 2: Find forward declarations — `local NAME` without `= function(`
+  const forwardDecls = new Map(); // name → earliest line (1-based)
+  const LOCAL_DECL_RE = /\blocal\s+([\w][\w\s,]*)/;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    const m = LOCAL_DECL_RE.exec(line);
+    if (!m) continue;
+
+    const rest = m[1];
+    // Skip `local function` declarations — those are caught in phase 1
+    if (/^function\b/.test(rest)) continue;
+
+    // Handle `local a, b, c` and `local a = expr`
+    for (const part of rest.split(',')) {
+      const nameMatch = part.trim().match(/^(\w+)/);
+      if (!nameMatch) continue;
+      const name = nameMatch[1];
+
+      // Skip `local name = function(` — that's a func decl, not a forward decl
+      if (/=\s*function\s*\(/.test(part)) continue;
+
+      const lineNum = i + 1;
+      if (!forwardDecls.has(name) || lineNum < forwardDecls.get(name)) {
+        forwardDecls.set(name, lineNum);
+      }
+    }
+  }
+
+  // Phase 3: Find bare function calls and cross-reference
+  // Match NAME( but not .NAME( or :NAME( or string matches
+  const CALL_RE = /(?<![.:\w])(\w+)\s*\(/g;
+  const seen = new Set(); // deduplicate per name per line
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    CALL_RE.lastIndex = 0;
+    seen.clear();
+    let m;
+
+    while ((m = CALL_RE.exec(line)) !== null) {
+      const name = m[1];
+      if (LUA_BUILTINS.has(name)) continue;
+      if (!localFuncDecls.has(name)) continue;
+      if (seen.has(name)) continue;
+
+      const callLine = i + 1;
+      const declLine = localFuncDecls.get(name);
+
+      // Only flag if declaration is AFTER this call
+      if (declLine <= callLine) continue;
+
+      // Check for a forward declaration before the call
+      const fwdLine = forwardDecls.get(name);
+      if (fwdLine !== undefined && fwdLine < callLine) continue;
+
+      // Check for -- rjit-ignore-next-line on the previous line
+      if (i > 0 && /rjit-ignore-next-line/.test(rawLines[i - 1])) continue;
+
+      seen.add(name);
+      diagnostics.push({
+        rule: 'lua-no-forward-ref',
+        severity: 'error',
+        message: `Forward reference to local function '${name}' (defined at line ${declLine}). Add \`local ${name}\` before this point to forward-declare it.`,
+        file: filePath,
+        line: callLine,
+        col: m.index + 1,
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+/**
+ * Run Lua lint on all .lua files under a directory (with incremental cache).
+ */
+function runLuaLint(luaDir, cwd, cache, newCache) {
+  if (!existsSync(luaDir)) return { diagnostics: [], fileCount: 0, cached: 0 };
+  const files = findLuaFiles(luaDir);
+  const diagnostics = [];
+  let cachedCount = 0;
+  for (const filePath of files) {
+    const relPath = cwd ? relative(cwd, filePath) : filePath;
+    const mtimeMs = getFileMtime(filePath);
+
+    if (cache && cache[relPath] && cache[relPath].mtimeMs === mtimeMs) {
+      if (cache[relPath].diagnostics) diagnostics.push(...cache[relPath].diagnostics);
+      if (newCache) newCache[relPath] = cache[relPath];
+      cachedCount++;
+      continue;
+    }
+
+    const source = readFileSync(filePath, 'utf-8');
+    const lines = source.split('\n');
+    const fileDiags = lintLuaForwardRefs(filePath, lines);
+    diagnostics.push(...fileDiags);
+    if (newCache) newCache[relPath] = { mtimeMs, diagnostics: fileDiags };
+  }
+  return { diagnostics, fileCount: files.length, cached: cachedCount };
 }
 
 // ── Style extraction from JSX ────────────────────────────────
@@ -1388,17 +1695,30 @@ function lintTslFile(filePath, source, ts) {
 }
 
 /**
- * Run TSL lint on all .tsl files under srcDir.
+ * Run TSL lint on all .tsl files under srcDir (with incremental cache).
  * Returns flat diagnostics array.
  */
-function runTslLint(srcDir, ts) {
+function runTslLint(srcDir, ts, cwd, cache, newCache) {
   const files = findTslFiles(srcDir);
   const diagnostics = [];
+  let cachedCount = 0;
   for (const filePath of files) {
+    const relPath = cwd ? relative(cwd, filePath) : filePath;
+    const mtimeMs = getFileMtime(filePath);
+
+    if (cache && cache[relPath] && cache[relPath].mtimeMs === mtimeMs) {
+      if (cache[relPath].diagnostics) diagnostics.push(...cache[relPath].diagnostics);
+      if (newCache) newCache[relPath] = cache[relPath];
+      cachedCount++;
+      continue;
+    }
+
     const source = readFileSync(filePath, 'utf-8');
-    diagnostics.push(...lintTslFile(filePath, source, ts));
+    const fileDiags = lintTslFile(filePath, source, ts);
+    diagnostics.push(...fileDiags);
+    if (newCache) newCache[relPath] = { mtimeMs, diagnostics: fileDiags };
   }
-  return { diagnostics, fileCount: files.length };
+  return { diagnostics, fileCount: files.length, cached: cachedCount };
 }
 
 // ── Public API ───────────────────────────────────────────────
@@ -1428,8 +1748,34 @@ export async function runLint(cwd, options = {}) {
   const allMCPCalls = [];
   const apiUsage = { imports: [], hasSettingsRegistry: false };
 
+  // Load incremental cache — skip files whose mtime hasn't changed
+  const cache = options.noCache ? {} : loadLintCache(cwd);
+  const newCache = {};
+  let cachedCount = 0;
+
   for (const filePath of files) {
+    const relPath = relative(cwd, filePath);
+    const mtimeMs = getFileMtime(filePath);
+
+    // Cache hit: file unchanged since last lint — reuse diagnostics
+    if (cache[relPath] && cache[relPath].mtimeMs === mtimeMs) {
+      const cached = cache[relPath];
+      if (cached.diagnostics) diagnostics.push(...cached.diagnostics);
+      if (cached.mcpCalls) allMCPCalls.push(...cached.mcpCalls);
+      if (cached.apiUsage) {
+        apiUsage.imports.push(...(cached.apiUsage.imports || []));
+        if (cached.apiUsage.hasSettingsRegistry) apiUsage.hasSettingsRegistry = true;
+      }
+      newCache[relPath] = cached;
+      cachedCount++;
+      continue;
+    }
+
+    // Cache miss: parse and lint this file
     const source = readFileSync(filePath, 'utf-8');
+    const fileDiagnostics = [];
+    const fileMCPCalls = [];
+    const fileApiUsage = { imports: [], hasSettingsRegistry: false };
 
     // Crypto miner detection — scans raw source for mining signatures.
     // Non-suppressable: rjit-ignore-next-line does NOT work for this rule.
@@ -1439,7 +1785,7 @@ export async function runLint(cwd, options = {}) {
       const patternList = minerResult.matches.map(m =>
         `${m.category}: "${m.pattern}" [${m.trigger}]`
       ).join(', ');
-      diagnostics.push({
+      fileDiagnostics.push({
         rule: 'no-crypto-miner',
         severity: 'error',
         message: `Crypto miner signature detected: ${patternList}. Mining code is not allowed in ReactJIT applications.`,
@@ -1464,7 +1810,7 @@ export async function runLint(cwd, options = {}) {
       for (const rule of rules) {
         const message = rule.check(ctx);
         if (message) {
-          diagnostics.push({
+          fileDiagnostics.push({
             rule: rule.name,
             severity: rule.severity,
             message,
@@ -1483,7 +1829,7 @@ export async function runLint(cwd, options = {}) {
       for (const rule of callRules) {
         const message = rule.check(call);
         if (message) {
-          diagnostics.push({
+          fileDiagnostics.push({
             rule: rule.name,
             severity: rule.severity,
             message,
@@ -1497,18 +1843,45 @@ export async function runLint(cwd, options = {}) {
 
     // MCP server calls
     const mcpCalls = findMCPServerCalls(sourceFile, filePath, ts);
-    allMCPCalls.push(...mcpCalls);
+    fileMCPCalls.push(...mcpCalls);
 
     // API usage detection — find imports from @reactjit/apis or @reactjit/ai
-    detectAPIUsage(sourceFile, filePath, ts, apiUsage);
+    detectAPIUsage(sourceFile, filePath, ts, fileApiUsage);
+
+    // Merge into totals
+    diagnostics.push(...fileDiagnostics);
+    allMCPCalls.push(...fileMCPCalls);
+    apiUsage.imports.push(...fileApiUsage.imports);
+    if (fileApiUsage.hasSettingsRegistry) apiUsage.hasSettingsRegistry = true;
+
+    // Store in new cache
+    newCache[relPath] = {
+      mtimeMs,
+      diagnostics: fileDiagnostics,
+      mcpCalls: fileMCPCalls,
+      apiUsage: fileApiUsage,
+    };
   }
 
-  // TSL lint pass — scan .tsl files in src/
-  const { diagnostics: tslDiagnostics, fileCount: tslFileCount } = runTslLint(srcDir, ts);
+  // TSL lint pass — scan .tsl files in src/ (with cache)
+  const { diagnostics: tslDiagnostics, fileCount: tslFileCount, cached: tslCached } =
+    runTslLint(srcDir, ts, cwd, cache, newCache);
   diagnostics.push(...tslDiagnostics);
 
-  if (files.length === 0 && tslFileCount === 0) {
-    if (!options.silent) console.log('  No .tsx or .tsl files found in src/.');
+  // Lua lint pass — scan .lua files in lua/ (with cache)
+  const luaDir = join(cwd, 'lua');
+  const { diagnostics: luaDiagnostics, fileCount: luaFileCount, cached: luaCached } =
+    runLuaLint(luaDir, cwd, cache, newCache);
+  diagnostics.push(...luaDiagnostics);
+
+  // Save updated cache
+  saveLintCache(cwd, newCache);
+
+  const totalCached = cachedCount + (tslCached || 0) + (luaCached || 0);
+  const totalFiles = files.length + tslFileCount + luaFileCount;
+
+  if (files.length === 0 && tslFileCount === 0 && luaFileCount === 0) {
+    if (!options.silent) console.log('  No .tsx, .tsl, or .lua files found.');
     return { errors: 0, warnings: 0, diagnostics: [] };
   }
 
@@ -1571,12 +1944,12 @@ export async function runLint(cwd, options = {}) {
     const parts = [];
     if (errors > 0) parts.push(red(`${errors} error${errors !== 1 ? 's' : ''}`));
     if (warnings > 0) parts.push(yellow(`${warnings} warning${warnings !== 1 ? 's' : ''}`));
-    const totalFiles = files.length + tslFileCount;
-    console.log(`  ${parts.join(', ')} in ${totalFiles} file${totalFiles !== 1 ? 's' : ''}`);
+    const cacheNote = totalCached > 0 ? dim(` (${totalFiles - totalCached} scanned, ${totalCached} cached)`) : '';
+    console.log(`  ${parts.join(', ')} in ${totalFiles} file${totalFiles !== 1 ? 's' : ''}${cacheNote}`);
     console.log('');
   } else if (!options.silent) {
-    const totalFiles = files.length + tslFileCount;
-    console.log(`\n  ${dim('OK')} ${totalFiles} file${totalFiles !== 1 ? 's' : ''} checked, no issues\n`);
+    const cacheNote = totalCached > 0 ? dim(` (${totalFiles - totalCached} scanned, ${totalCached} cached)`) : '';
+    console.log(`\n  ${dim('OK')} ${totalFiles} file${totalFiles !== 1 ? 's' : ''} checked, no issues${cacheNote}\n`);
   }
 
   return { errors, warnings, diagnostics };

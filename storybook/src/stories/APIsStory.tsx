@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Pressable, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   TrackRow,
@@ -117,9 +117,12 @@ function Divider() {
 function MusicDemo() {
   const c = useThemeColors();
   const [trackIdx, setTrackIdx] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [progress, setProgress] = useState(0.3);
 
   useLuaInterval(80, () => {
+    if (!playing) return;
     setProgress((p) => {
       const next = p + 0.002;
       if (next >= 1) {
@@ -130,6 +133,10 @@ function MusicDemo() {
     });
   });
 
+  const trackRows = TRACKS
+    .map((track, i) => ({ track, i }))
+    .filter(({ track }) => !selectedArtist || track.artist === selectedArtist);
+
   const current = TRACKS[trackIdx];
 
   return (
@@ -137,6 +144,41 @@ function MusicDemo() {
       <Text style={{ color: c.muted, fontSize: 11, textAlign: 'center' }}>
         {`NowPlayingCard wires to useSpotifyNowPlaying() or useLastFMNowPlaying(). TrackRow and ArtistRow for ranked lists.`}
       </Text>
+
+      <Box style={{ flexDirection: 'row', gap: 8, width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Pressable
+          onPress={() => {
+            setTrackIdx((i) => (i - 1 + TRACKS.length) % TRACKS.length);
+            setProgress(0.03);
+            setPlaying(true);
+          }}
+        >
+          <Box style={{ backgroundColor: c.surface, borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ color: c.text, fontSize: 10 }}>Prev</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={() => setPlaying((v) => !v)}>
+          <Box style={{ backgroundColor: playing ? c.primary : c.surface, borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ color: playing ? c.bg : c.text, fontSize: 10 }}>{playing ? 'Pause' : 'Play'}</Text>
+          </Box>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setTrackIdx((i) => (i + 1) % TRACKS.length);
+            setProgress(0.03);
+            setPlaying(true);
+          }}
+        >
+          <Box style={{ backgroundColor: c.surface, borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ color: c.text, fontSize: 10 }}>Next</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={() => setSelectedArtist(null)}>
+          <Box style={{ backgroundColor: selectedArtist ? c.surface : c.primary, borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ color: selectedArtist ? c.text : c.bg, fontSize: 10 }}>All Artists</Text>
+          </Box>
+        </Pressable>
+      </Box>
 
       {/* Now playing — two accent variants side by side */}
       <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
@@ -146,7 +188,7 @@ function MusicDemo() {
             title={current.title}
             artist={current.artist}
             album={current.album}
-            playing
+            playing={playing}
             progress={progress}
           />
         </Box>
@@ -156,7 +198,7 @@ function MusicDemo() {
             title={current.title}
             artist={current.artist}
             album={current.album}
-            playing
+            playing={playing}
             progress={progress}
             accentColor="#1DB954"
           />
@@ -167,22 +209,32 @@ function MusicDemo() {
       <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
         <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
           <Box style={{ padding: 10, paddingBottom: 4 }}>
-            <Label>TrackRow</Label>
+            <Label>{selectedArtist ? `TrackRow (${selectedArtist})` : 'TrackRow'}</Label>
           </Box>
           <Divider />
-          {TRACKS.map((t, i) => (
-            <TrackRow
-              key={t.title}
-              rank={i + 1}
-              title={t.title}
-              artist={t.artist}
-              nowPlaying={i === trackIdx}
-              style={{
-                paddingHorizontal: 10,
-                borderBottomWidth: i < TRACKS.length - 1 ? 1 : 0,
-                borderColor: c.border,
+          {trackRows.map(({ track, i }, rowIdx) => (
+            <Pressable
+              key={track.title}
+              onPress={() => {
+                setTrackIdx(i);
+                setProgress(0.03);
+                setPlaying(true);
               }}
-            />
+            >
+              <TrackRow
+                rank={rowIdx + 1}
+                title={track.title}
+                artist={track.artist}
+                nowPlaying={i === trackIdx}
+                style={{
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  borderBottomWidth: rowIdx < trackRows.length - 1 ? 1 : 0,
+                  borderColor: c.border,
+                  backgroundColor: i === trackIdx ? c.bgElevated : 'transparent',
+                }}
+              />
+            </Pressable>
           ))}
         </Box>
 
@@ -192,17 +244,33 @@ function MusicDemo() {
           </Box>
           <Divider />
           {ARTISTS.map((a, i) => (
-            <ArtistRow
+            <Pressable
               key={a.name}
-              rank={a.rank}
-              name={a.name}
-              playcount={a.playcount}
-              style={{
-                paddingHorizontal: 10,
-                borderBottomWidth: i < ARTISTS.length - 1 ? 1 : 0,
-                borderColor: c.border,
+              onPress={() => {
+                const next = selectedArtist === a.name ? null : a.name;
+                setSelectedArtist(next);
+                if (!next) return;
+                const firstTrack = TRACKS.findIndex((t) => t.artist === next);
+                if (firstTrack >= 0) {
+                  setTrackIdx(firstTrack);
+                  setProgress(0.03);
+                  setPlaying(true);
+                }
               }}
-            />
+            >
+              <ArtistRow
+                rank={a.rank}
+                name={a.name}
+                playcount={a.playcount}
+                style={{
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  borderBottomWidth: i < ARTISTS.length - 1 ? 1 : 0,
+                  borderColor: c.border,
+                  backgroundColor: selectedArtist === a.name ? c.bgElevated : 'transparent',
+                }}
+              />
+            </Pressable>
           ))}
         </Box>
       </Box>

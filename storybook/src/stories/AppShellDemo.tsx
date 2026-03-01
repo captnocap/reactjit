@@ -81,7 +81,7 @@ export function AppShellDemoStory() {
           setActiveTab('overview');
         }}
         header={
-          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>ACME APP</Text>
+          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'normal' }}>ACME APP</Text>
         }
       />
 
@@ -108,7 +108,7 @@ export function AppShellDemoStory() {
         {/* Content */}
         <Box style={{ flexGrow: 1, padding: 16, gap: 12 }}>
           {/* Page title */}
-          <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>
             {breadcrumbs[breadcrumbs.length - 1].label}
           </Text>
           <Text style={{ color: c.textDim, fontSize: 11 }}>
@@ -125,7 +125,7 @@ export function AppShellDemoStory() {
             gap: 8,
             flexGrow: 1,
           }}>
-            <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
+            <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
               {`${breadcrumbs[breadcrumbs.length - 1].label} - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
             </Text>
             <Box style={{ height: 1, backgroundColor: c.border }} />

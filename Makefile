@@ -156,7 +156,7 @@ endif
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
 	# Bundle goes into love/ subdir — matches bundlePath = "love/bundle.js" in main.lua.
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/masks $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -165,6 +165,7 @@ endif
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
+	cp lua/masks/*.lua $(STAGING_DIR)/lua/masks/
 	cp lua/capabilities/*.lua $(STAGING_DIR)/lua/capabilities/
 	cp lua/classifiers/*.lua $(STAGING_DIR)/lua/classifiers/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
@@ -270,7 +271,7 @@ dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-wi
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/masks $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -279,13 +280,14 @@ dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-wi
 	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cp lua/effects/*.lua $(STAGING_DIR)/lua/effects/
+	cp lua/masks/*.lua $(STAGING_DIR)/lua/masks/
 	cp lua/capabilities/*.lua $(STAGING_DIR)/lua/capabilities/
 	cp lua/classifiers/*.lua $(STAGING_DIR)/lua/classifiers/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	rm -rf $(STAGING_DIR)
 	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll + mpv-2.dll ──
 	mkdir -p $(WIN_STAGING)/lib
-	cat $(LOVE_WIN_DIR)/love.exe /tmp/reactjit-demo.love > $(WIN_STAGING)/reactjit-demo.exe
+	cat $(LOVE_WIN_DIR)/love.exe /tmp/reactjit-demo.love > $(WIN_STAGING)/game.exe
 	cp $(LOVE_WIN_DIR)/*.dll $(WIN_STAGING)/
 	cp zig-out-win/bin/quickjs.dll $(WIN_STAGING)/lib/libquickjs.dll
 	cp vendor/mpv-win64/mpv-2.dll $(WIN_STAGING)/
@@ -331,6 +333,8 @@ cli-setup: setup
 	cp lua/classifiers/*.lua cli/runtime/lua/classifiers/
 	mkdir -p cli/runtime/lua/effects
 	cp lua/effects/*.lua cli/runtime/lua/effects/
+	mkdir -p cli/runtime/lua/masks
+	cp lua/masks/*.lua cli/runtime/lua/masks/
 	mkdir -p cli/runtime/lua/child_window
 	cp lua/child_window/*.lua cli/runtime/lua/child_window/
 	mkdir -p cli/runtime/lua/devtools_window
@@ -423,6 +427,20 @@ endif
 		echo "  Bundled tor"; \
 	else \
 		echo "  Warning: tor not found — .onion hosting won't be bundled"; \
+	fi
+	@# ── Windows cross-compiled binaries (for rjit build windows) ──
+	@if [ -f zig-out/bin/ilr-launcher.exe ]; then \
+		cp zig-out/bin/ilr-launcher.exe cli/runtime/bin/ilr-launcher.exe; \
+		echo "  Bundled ilr-launcher.exe (Windows self-extractor)"; \
+	else \
+		echo "  Warning: ilr-launcher.exe not found — run 'zig build win-launcher' first"; \
+	fi
+	@mkdir -p cli/runtime/lib/win64; \
+	if [ -f zig-out-win/bin/quickjs.dll ]; then \
+		cp zig-out-win/bin/quickjs.dll cli/runtime/lib/win64/libquickjs.dll; \
+		echo "  Bundled libquickjs.dll (Windows)"; \
+	else \
+		echo "  Warning: quickjs.dll not found — run 'zig build libquickjs -Dtarget=x86_64-windows-gnu' first"; \
 	fi
 	cp -r packages/core cli/runtime/reactjit/core
 	cp -r packages/native cli/runtime/reactjit/native

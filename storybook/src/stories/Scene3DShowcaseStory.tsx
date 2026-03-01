@@ -42,7 +42,7 @@ export function Scene3DShowcaseStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 12, gap: 10 }}>
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
           3D Showcase
         </Text>
         <Text style={{ fontSize: 11, color: c.textDim }}>

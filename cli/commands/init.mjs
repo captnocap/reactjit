@@ -421,6 +421,24 @@ export function scaffoldProject(dest, opts = {}) {
   const runtimeLua = join(CLI_ROOT, 'runtime', 'lua');
   if (existsSync(runtimeLua)) {
     cpSync(runtimeLua, join(dest, 'lua'), { recursive: true });
+    // In monorepo development, overlay critical source-of-truth runtime files.
+    // Older cli/runtime snapshots can lag behind active source edits.
+    const sourceLuaRoot = join(CLI_ROOT, '..', 'lua');
+    for (const name of ['init.lua', 'bsod.lua', 'masks.lua', 'capabilities.lua']) {
+      const src = join(sourceLuaRoot, name);
+      if (existsSync(src)) {
+        cpSync(src, join(dest, 'lua', name));
+      }
+    }
+    // In monorepo development, always overlay source-of-truth lua/masks.
+    // This keeps generated projects aligned with root runtime while iterating.
+    const runtimeMasks = join(runtimeLua, 'masks');
+    const sourceMasks = join(sourceLuaRoot, 'masks');
+    if (existsSync(sourceMasks)) {
+      cpSync(sourceMasks, join(dest, 'lua', 'masks'), { recursive: true });
+    } else if (!existsSync(runtimeMasks)) {
+      console.warn('  Warning: lua/masks/ not found in CLI runtime.');
+    }
   } else {
     console.warn('  Warning: lua/ runtime not found in CLI. Run `make cli-setup` first.');
   }

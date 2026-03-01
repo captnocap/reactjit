@@ -24,7 +24,7 @@ export default function EmulatorStory() {
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
       {/* Header */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>NES Emulator</Text>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>NES Emulator</Text>
         <Text style={{ fontSize: 11, color: c.textDim }}>
           {romName
             ? `Playing: ${romName}`

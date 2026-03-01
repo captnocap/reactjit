@@ -56,13 +56,13 @@ const SURFACE_EFFECT_IDS: TextEffectType[] = [
   'typewriter-text',
 ];
 
-export function TextEffectsStory() {
+export function TextEffectsStory({ index = 5 }: { index?: number } = {}) {
   const c = useThemeColors();
   const inlineVariants = VARIANTS.filter((v) => INLINE_EFFECT_IDS.includes(v.id));
   const surfaceVariants = VARIANTS.filter((v) => SURFACE_EFFECT_IDS.includes(v.id));
 
   return (
-    <StorySection index={4} title="Text effects">
+    <StorySection index={index} title="Text effects">
       <Box style={{ width: '100%', gap: 6 }}>
         <Text style={{ color: c.text, fontSize: 11 }}>Inline-capable (no frame)</Text>
         {inlineVariants.map((v) => (
@@ -92,36 +92,36 @@ export function TextEffectsStory() {
       <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
         <Text style={{ color: c.text, fontSize: 11, width: '100%' }}>Surface / mini-scene (framed)</Text>
         {surfaceVariants.map((v) => (
-        <Box
-          key={v.id}
-          style={{
-            width: 280,
-            backgroundColor: c.surface,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: c.border,
-            padding: 8,
-            gap: 4,
-          }}
-        >
-          <Text style={{ color: c.textDim, fontSize: 11 }}>
-            {v.label}
-          </Text>
-          <TextEffect
-            type={v.id}
-            text={v.sentence ?? v.sample}
-            fontSize={v.previewFontSize ?? 24}
-            letterSpacing={v.letterSpacing ?? 0.95}
-            speed={v.speed ?? 1}
-            amplitude={v.amplitude ?? 0.72}
-            typingSpeed={v.typingSpeed ?? 14}
-            style={{ width: '100%', height: 96 }}
-          />
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
-            {v.id}
-          </Text>
-        </Box>
-      ))}
+          <Box
+            key={v.id}
+            style={{
+              width: 280,
+              backgroundColor: c.surface,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: c.border,
+              padding: 8,
+              gap: 4,
+            }}
+          >
+            <Text style={{ color: c.textDim, fontSize: 11 }}>
+              {v.label}
+            </Text>
+            <TextEffect
+              type={v.id}
+              text={v.sentence ?? v.sample}
+              fontSize={v.previewFontSize ?? 24}
+              letterSpacing={v.letterSpacing ?? 0.95}
+              speed={v.speed ?? 1}
+              amplitude={v.amplitude ?? 0.72}
+              typingSpeed={v.typingSpeed ?? 14}
+              style={{ width: '100%', height: 96 }}
+            />
+            <Text style={{ color: c.textDim, fontSize: 10 }}>
+              {v.id}
+            </Text>
+          </Box>
+        ))}
       </Box>
     </StorySection>
   );

@@ -317,7 +317,7 @@ export function SearchStory() {
             paddingBottom: 9,
           })}
         >
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Open Command Palette</Text>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Open Command Palette</Text>
         </Pressable>
         {lastCmd && (
           <Text style={{ color: c.success, fontSize: 12 }}>{`Last command: ${lastCmd}`}</Text>
@@ -473,14 +473,14 @@ function AppSearchDemo() {
             backgroundColor: c.primary,
           }}
         >
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>Open AppSearch</Text>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Open AppSearch</Text>
         </Pressable>
         <Text style={{ color: c.textDim, fontSize: 12 }}>or press ⌘K / Ctrl+K</Text>
       </Box>
 
       {/* Description */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>How it works</Text>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>How it works</Text>
         <Text style={{ color: c.textDim, fontSize: 12 }}>
           AppSearch runs two search tiers simultaneously:
         </Text>
@@ -506,7 +506,7 @@ function AppSearchDemo() {
 
       {/* Searchable wrapper example */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>Searchable wrapper</Text>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Searchable wrapper</Text>
         <Box
           style={{
             padding: 12,
@@ -535,7 +535,7 @@ function AppSearchDemo() {
 
       {/* Live results preview */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>Inline hot search</Text>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Inline hot search</Text>
         <SearchBar
           onSearch={search}
           placeholder="Search live tree..."

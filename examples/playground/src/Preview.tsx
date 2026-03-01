@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from '../reactjit/shared/src';
+import { Box, Text } from '@reactjit/core';
 
 interface PreviewProps { UserComponent: React.ComponentType | null; errors: string[]; }
 

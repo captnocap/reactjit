@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.love
 bundle.js
+.rjit-lint-cache.json
 
 # Build output
 examples/demo/dist/
@@ -69,6 +70,7 @@ Thumbs.db
 # Zig build artifacts
 .zig-cache/
 zig-out/
+zig-out-win/
 
 # Cloned third-party sources (fetched by build scripts)
 third_party/luajit/
@@ -104,17 +106,9 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
-treesb.md
-.gitignore
-storybook/src/stories/t.md
-.gitignore
-lua/tree.md
-storybook/t.md
-
 # Love2D Windows download cache
 vendor/
-zig-out-win/
-vendor/mpv-win64/
 
 # Local Netlify folder
 .netlify
+love_song.md

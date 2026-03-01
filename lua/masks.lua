@@ -34,6 +34,35 @@ local maskByParent = {}
 -- Canvas pool: reusable temp canvases keyed by "WxH"
 local canvasPool = {}
 
+local floor = math.floor
+local ceil = math.ceil
+local max = math.max
+
+-- Expand bounds to include visual descendants so masks don't hard-clip
+-- absolutely-positioned overlays or other content extending past parent bounds.
+local function unionDescendantBounds(node, minX, minY, maxX, maxY)
+  if not node then return minX, minY, maxX, maxY end
+  local children = node.children or {}
+  for _, child in ipairs(children) do
+    local cs = child.style or {}
+    if cs.display ~= "none" then
+      local cc = child.computed
+      if cc and cc.w and cc.h and cc.w > 0 and cc.h > 0 then
+        local x1 = cc.x or 0
+        local y1 = cc.y or 0
+        local x2 = x1 + cc.w
+        local y2 = y1 + cc.h
+        if x1 < minX then minX = x1 end
+        if y1 < minY then minY = y1 end
+        if x2 > maxX then maxX = x2 end
+        if y2 > maxY then maxY = y2 end
+      end
+      minX, minY, maxX, maxY = unionDescendantBounds(child, minX, minY, maxX, maxY)
+    end
+  end
+  return minX, minY, maxX, maxY
+end
+
 -- ============================================================================
 -- Registration
 -- ============================================================================
@@ -131,18 +160,33 @@ function Masks.syncWithTree(nodes)
         -- Resolve dimensions from parent
         local c = node.parent and node.parent.computed
         if c then
-          local w = math.floor(c.w or 0)
-          local h = math.floor(c.h or 0)
+          local parentNode = node.parent
+          local px = c.x or 0
+          local py = c.y or 0
+          local pw = c.w or 0
+          local ph = c.h or 0
+          local minX = px
+          local minY = py
+          local maxX = px + pw
+          local maxY = py + ph
+          minX, minY, maxX, maxY = unionDescendantBounds(parentNode, minX, minY, maxX, maxY)
+
+          local capX = floor(minX)
+          local capY = floor(minY)
+          local capW = max(1, ceil(maxX) - capX)
+          local capH = max(1, ceil(maxY) - capY)
           local inst = instances[id]
 
-          inst.screenX = c.x or 0
-          inst.screenY = c.y or 0
+          inst.screenX = px
+          inst.screenY = py
+          inst.captureX = capX
+          inst.captureY = capY
 
-          if w > 0 and h > 0 and (inst.width ~= w or inst.height ~= h) then
+          if capW > 0 and capH > 0 and (inst.width ~= capW or inst.height ~= capH) then
             if inst.outputCanvas then inst.outputCanvas:release() end
-            inst.outputCanvas = love.graphics.newCanvas(w, h)
-            inst.width = w
-            inst.height = h
+            inst.outputCanvas = love.graphics.newCanvas(capW, capH)
+            inst.width = capW
+            inst.height = capH
             inst.needsInit = true
           end
         end
@@ -251,14 +295,17 @@ end
 --- Get a temporary canvas for the painter to capture a node's content into.
 --- The painter should call this at the start of painting a masked node.
 --- @param parentNodeId number
---- @return love.Canvas|nil, number, number  tempCanvas, width, height
+--- @return love.Canvas|nil, number, number, number, number
+---   tempCanvas, width, height, captureX, captureY
 function Masks.getTempCanvas(parentNodeId)
   local maskNodeId = maskByParent[parentNodeId]
   if not maskNodeId then return nil end
   local inst = instances[maskNodeId]
   if not inst or inst.width <= 0 or inst.height <= 0 then return nil end
   local canvas = getPooledCanvas(inst.width, inst.height)
-  return canvas, inst.width, inst.height
+  local captureX = inst.captureX or inst.screenX or 0
+  local captureY = inst.captureY or inst.screenY or 0
+  return canvas, inst.width, inst.height, captureX, captureY
 end
 
 --- Apply the mask to a captured source canvas and return the result.
@@ -277,9 +324,39 @@ function Masks.applyMask(parentNodeId, sourceCanvas)
 
   love.graphics.push("all")
   love.graphics.setCanvas(inst.outputCanvas)
+  -- Render mask modules in an unclipped local space; any parent clipping is
+  -- applied later when painter composites the final output canvas.
+  love.graphics.setScissor()
+  love.graphics.setStencilTest()
+  love.graphics.setBlendMode("alpha")
   love.graphics.clear(0, 0, 0, 0)
-  mod.draw(inst.state, inst.width, inst.height, sourceCanvas)
+  local okDraw, drawErr = xpcall(function()
+    mod.draw(inst.state, inst.width, inst.height, sourceCanvas)
+  end, debug.traceback)
   love.graphics.pop()
+
+  -- Fail-open: if a mask draw throws, keep rendering the unmasked source so
+  -- the frame stays valid and we don't leave canvas state dirty.
+  if not okDraw then
+    local okFallback = pcall(function()
+      love.graphics.push("all")
+      love.graphics.setCanvas(inst.outputCanvas)
+      love.graphics.setScissor()
+      love.graphics.setStencilTest()
+      love.graphics.setBlendMode("alpha")
+      love.graphics.clear(0, 0, 0, 0)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.draw(sourceCanvas, 0, 0)
+      love.graphics.pop()
+    end)
+    if _G._reactjit_verbose then
+      io.write("[masks] draw failed (" .. tostring(inst.type) .. "): " .. tostring(drawErr) .. "\n")
+      if not okFallback then
+        io.write("[masks] fallback draw also failed\n")
+      end
+      io.flush()
+    end
+  end
 
   -- Return the temp canvas to the pool
   returnPooledCanvas(sourceCanvas, inst.width, inst.height)

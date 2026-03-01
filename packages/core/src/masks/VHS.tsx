@@ -9,6 +9,8 @@ export interface VHSProps extends MaskProps {
   noise?: number;
   /** Horizontal color bleed in pixels. Default 2. */
   colorBleed?: number;
+  /** Optional additive tint color (hex). Example: #ff2bd6 */
+  tint?: string;
 }
 
 /**

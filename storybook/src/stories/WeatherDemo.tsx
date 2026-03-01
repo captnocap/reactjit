@@ -57,7 +57,7 @@ const PALETTE = [
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>{title}</Text>
+      <Text style={{ color: ACCENT, fontSize: 11, fontWeight: 'normal' }}>{title}</Text>
       {children}
     </Box>
   );
@@ -164,7 +164,7 @@ export function WeatherDemoStory() {
         </Box>
 
         <Box style={{ gap: 3 }}>
-          <Text style={{ color: ACCENT, fontSize: 16, fontWeight: '700' }}>
+          <Text style={{ color: ACCENT, fontSize: 16, fontWeight: 'normal' }}>
             {`${Math.round(w.temp)}F@sanfrancisco`}
           </Text>
           <Divider color={DIM} />
@@ -253,7 +253,7 @@ export function WeatherDemoStory() {
             backgroundColor: CARD, borderRadius: 8, padding: 10,
             borderWidth: 1, borderColor: BORDER, gap: 4,
           }}>
-            <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>24H TREND</Text>
+            <Text style={{ color: ACCENT, fontSize: 11, fontWeight: 'normal' }}>24H TREND</Text>
             <Sparkline data={hourly} width={250} height={28} color={WARM} />
           </Box>
         </Box>
@@ -265,7 +265,7 @@ export function WeatherDemoStory() {
         backgroundColor: CARD, borderRadius: 8, padding: 10,
         borderWidth: 1, borderColor: BORDER, gap: 6,
       }}>
-        <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>7-DAY FORECAST</Text>
+        <Text style={{ color: ACCENT, fontSize: 11, fontWeight: 'normal' }}>7-DAY FORECAST</Text>
         <BarChart
           data={forecast.map((f) => ({
             label: f.label,

@@ -6,6 +6,121 @@
 
 ---
 
+## Terminal Geometry Law (READ THIS FIRST)
+
+The PTY runs in a virtual terminal (vterm) with a fixed grid of `cols × rows`.
+The CLI (Claude Code) renders its TUI — menus, dashboards, prompts, diffs — into
+that grid. We read the grid, classify it, and present it two ways: a debug view
+(raw cells) and a pretty view (semantic components). Everything below flows from
+how this grid relates to pixels on screen.
+
+### The grid is not the pixels
+
+The vterm grid has a **resolution** (cols × rows) that is independent of the
+component's pixel size. Think of it like a video: a 1080p stream can play in a
+200px thumbnail or a 4K display. The grid resolution determines what the CLI
+*thinks* the terminal looks like. The pixel rect determines how we *render* it.
+
+- **120 cols in a 50px-wide component** → tiny text, or scroll, or scale-to-fit.
+  The CLI still renders 120-column menus. We just show them small.
+- **30 cols in a 1200px-wide component** → large text or lots of whitespace.
+  The CLI wraps everything at 30 characters. We can reflow on the pretty side.
+- **cols matching pixel width / char width** → 1:1 cell-to-pixel mapping.
+  The debug view is perfectly aligned. Cursor positions are exact.
+
+### Why cols matters
+
+The CLI's behavior is col-dependent:
+- **Prompt text wraps** at the col boundary. If a user types 50 chars in a 30-col
+  terminal, the prompt spans 2 rows. Our classifier must stitch them back or lose text.
+- **Menus, dashboards, spinners** all lay out relative to cols. A 120-col terminal
+  gets the full dashboard. A 30-col terminal gets a compact view.
+- **Cursor position** is a `(row, col)` in the grid. We detect it by scanning cell
+  attributes (background/reverse). For the proxy input bar to show the cursor at
+  the right character offset, the col position must be correct.
+- **Dynamic UI** (tab completion, slash menus, file pickers) renders at the col width.
+  If cols is wrong, these overlap, truncate, or wrap unexpectedly.
+
+### The three consumers and their constraints
+
+1. **Debug view (ClaudeCanvas)** — renders raw cells in a monospace grid.
+   Needs: cols × charW ≤ panel pixel width, or horizontal scroll.
+   This is a 1:1 mapping. Each cell = one character = `charW` pixels.
+
+2. **Pretty view (BlankSlateCanvas)** — renders semantic tokens as styled components.
+   Needs: nothing from cols. It strips terminal artifacts (box-drawing, borders)
+   and reflows text to its own container width. A 30-col source renders identically
+   to a 120-col source on the pretty side — same text, same meaning, different wrapping.
+
+3. **Proxy input bar** — displays the prompt text extracted from the classified stream.
+   Needs: the full prompt text without wrapping artifacts. If the prompt wraps in the
+   vterm (because cols is too narrow), the classifier must stitch the rows back together.
+   Cursor position comes from cell attribute scanning on the prompt row.
+
+### The rule
+
+**cols is a configuration choice, not derived from pixel width.** It determines the
+CLI's rendering behavior. It is set once at session creation and resized explicitly
+(e.g., when the user resizes the window or changes a setting). It is NOT
+automatically derived from any component's layout rect, because:
+
+- The component might be 50px wide (embedded widget) but want 120-col CLI output.
+- The component might be fullscreen but want 80-col output for readability.
+- Multiple views (debug + pretty) share the same vterm but have different widths.
+- Scale factor exists: the debug view can zoom in/out to fit cols into its rect.
+
+**Default:** 120 cols (matches standard terminal width, CLI renders its full UI).
+
+**Override:** The `<Native type="ClaudeCanvas" cols={N}>` prop sets it explicitly.
+The debug view scales its rendering to fit. The pretty view ignores it entirely.
+
+### Scale factor (debug view)
+
+The debug view computes a scale factor to fit the grid into its pixel rect:
+
+```
+charW      = monospace font character width at base font size
+gridPixelW = cols × charW
+panelW     = component's layout rect width
+scaleFactor = panelW / gridPixelW   (clamped to [0.25, 2.0])
+```
+
+At scale 1.0, each cell is `charW` pixels wide (perfect 1:1).
+Below 1.0, the grid is shrunk to fit (readable down to ~0.5, tiny below that).
+Above 1.0, the grid is enlarged (useful for small col counts in large panels).
+
+The pretty view has no scale factor — it renders semantic text in its own font at
+its own size, reflowing to its own container width.
+
+### Cursor position mapping
+
+The cursor lives in vterm grid coordinates: `(row, col)`. We detect it by scanning
+cell attributes (non-zero background or reverse flag) on the prompt row.
+
+For the proxy input bar:
+- `promptCursorCol` = the column offset within the prompt text (0-indexed)
+- This is a character offset, not a pixel offset
+- The `<Input cursorPosition={N}>` prop places the cursor at character N
+- The input bar's own font and size don't need to match the vterm's
+
+For the debug view:
+- Cursor pixel position = `cellOffsetX + col × charW × scaleFactor`
+- Cursor height = `lineH × scaleFactor`
+
+### Prompt text extraction across wrapped rows
+
+When cols is narrow and the user types a long prompt, it wraps across multiple
+vterm rows. The classifier must:
+
+1. Find all rows classified as `input_zone` that follow the `❯` prefix row
+2. Stitch their text content together (strip leading whitespace from continuation rows)
+3. Return the combined text as `promptText`
+4. Compute `promptCursorCol` relative to the combined text, not the current row
+
+This is already handled in `claude_session.lua`'s classified handler.
+
+---
+
 ## The One Thing You Need to Understand
 
 The PTY running `claude` is already being read and **semantically classified**.

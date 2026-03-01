@@ -51,7 +51,7 @@ function MiniCard({ title, subtitle, color }: { title: string; subtitle: string;
     <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10, marginBottom: 6 }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-        <Text style={{ fontSize: 13, color: c.text, fontWeight: 'bold' }}>{title}</Text>
+        <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>{title}</Text>
       </Box>
       <Text style={{ fontSize: 11, color: c.textDim, marginTop: 4 }}>{subtitle}</Text>
     </Box>
@@ -82,7 +82,7 @@ function PanelHeader({ title, subtitle, color }: { title: string; subtitle: stri
   const c = useThemeColors();
   return (
     <Box style={{ padding: 8, borderBottomWidth: 1, borderBottomColor: c.border }}>
-      <Text style={{ fontSize: 13, color, fontWeight: 'bold' }}>{title}</Text>
+      <Text style={{ fontSize: 13, color, fontWeight: 'normal' }}>{title}</Text>
       <Text style={{ fontSize: 10, color: c.textDim }}>{subtitle}</Text>
     </Box>
   );
@@ -211,7 +211,7 @@ export function OverflowStressStory() {
           <Box style={{ padding: 6 }}>
             {Array.from({ length: 25 }, (_, i) => (
               <Box key={i} style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 11, color: c.primary, fontWeight: 'bold' }}>{`Section ${i + 1}`}</Text>
+                <Text style={{ fontSize: 11, color: c.primary, fontWeight: 'normal' }}>{`Section ${i + 1}`}</Text>
                 <Text style={{ fontSize: 10, color: c.textDim }}>Lorem ipsum dolor sit amet consectetur adipiscing elit</Text>
                 <Box style={{ height: 3, backgroundColor: c.border, borderRadius: 1, marginTop: 4 }}>
                   <Box style={{ height: 3, width: `${20 + (i * 13) % 80}%`, backgroundColor: c.success, borderRadius: 1 }} />

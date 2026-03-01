@@ -38,7 +38,7 @@ function ClassifierDemo() {
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>File Classification</Text>
+      <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>File Classification</Text>
       <Text style={{ fontSize: 9, color: c.textDim }}>Instant local classification by extension — no RPC needed</Text>
 
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
@@ -70,14 +70,14 @@ function FormatSizeDemo() {
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Size Formatting</Text>
+      <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>Size Formatting</Text>
       <Text style={{ fontSize: 9, color: c.textDim }}>Human-readable byte formatting</Text>
 
       <Box style={{ gap: 3 }}>
         {sizes.map(s => (
           <Box key={s} style={{ flexDirection: 'row', gap: 8 }}>
             <Text style={{ fontSize: 10, color: c.textDim, width: 120 }}>{`${s.toLocaleString()} bytes`}</Text>
-            <Text style={{ fontSize: 10, color: c.success, fontWeight: '700' }}>{formatSize(s)}</Text>
+            <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>{formatSize(s)}</Text>
           </Box>
         ))}
       </Box>
@@ -100,7 +100,7 @@ function ArchiveFormats() {
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Archive Formats (libarchive)</Text>
+      <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>Archive Formats (libarchive)</Text>
       <Text style={{ fontSize: 9, color: c.textDim }}>LuaJIT FFI bindings to libarchive — read any format</Text>
 
       <Box style={{ gap: 4 }}>
@@ -111,7 +111,7 @@ function ArchiveFormats() {
               paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
               width: 40, alignItems: 'center',
             }}>
-              <Text style={{ fontSize: 9, color: c.bg, fontWeight: '700' }}>{f.ext}</Text>
+              <Text style={{ fontSize: 9, color: c.bg, fontWeight: 'normal' }}>{f.ext}</Text>
             </Box>
             <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
           </Box>
@@ -221,7 +221,7 @@ function FeatureList() {
       {features.map(f => (
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: '700', width: 100 }}>{f.label}</Text>
+          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 100 }}>{f.label}</Text>
           <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
         </Box>
       ))}
@@ -247,7 +247,7 @@ function GalleryDemo() {
 
   return (
     <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
-      <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>Modal Image Gallery</Text>
+      <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>Modal Image Gallery</Text>
       <Text style={{ fontSize: 9, color: c.textDim }}>
         Opens images in an overlay so page layout stays intact.
       </Text>
@@ -273,7 +273,7 @@ export function MediaStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>@reactjit/media</Text>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>@reactjit/media</Text>
         <Text style={{ fontSize: 11, color: c.textDim }}>Media library scanner, archive walker, and file indexer.</Text>
       </Box>
 
@@ -285,7 +285,7 @@ export function MediaStory() {
               paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
               borderRadius: 4,
             }}>
-              <Text style={{ fontSize: 10, color: tab === t.key ? c.bg : c.textSecondary, fontWeight: '700' }}>
+              <Text style={{ fontSize: 10, color: tab === t.key ? c.bg : c.textSecondary, fontWeight: 'normal' }}>
                 {t.label}
               </Text>
             </Box>

@@ -39,9 +39,9 @@ local Layout = {}
 -- occupy proportional space when unsized, rather than collapsing to zero.
 -- Interactive elements (buttons, inputs, text) size from their content instead.
 -- When a surface has no explicit dimensions and no children to measure from,
--- it falls back to viewport_size / 4 (capped at the parent's available space).
--- Applied in layoutNode after auto-height resolves — not in the estimation
--- chain, which would propagate incorrect parent dimensions through recursion.
+-- it falls back to parent_height / 4, cascading recursively so nested unsized
+-- surfaces shrink proportionally with their container.
+-- Applied in layoutNode after auto-height resolves (ph is definite at that point).
 
 local SURFACE_TYPES = {
   View     = true,
@@ -466,6 +466,7 @@ end
 --- pw, ph  = available width and height from parent
 function Layout.layoutNode(node, px, py, pw, ph)
   if not node then return end
+  local _lt0 = love.timer.getTime()
   local s = node.style or {}
   Log.log("layout", "layoutNode id=%s type=%s debugName=%s avail=%sx%s", tostring(node.id), tostring(node.type), tostring(node.debugName or "-"), tostring(pw), tostring(ph))
 
@@ -475,7 +476,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- ==================================================================
   if s.display == "none" then
     Log.log("layout", "  skip display:none id=%s", tostring(node.id))
-    node.computed = { x = px, y = py, w = 0, h = 0, wSource = "none", hSource = "none" }
+    node.computed = { x = px, y = py, w = 0, h = 0, wSource = "none", hSource = "none", layoutMs = 0 }
     return
   end
 
@@ -957,6 +958,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- ====================================================================
   -- Process each flex line: distribute, re-measure, justify, position
   -- ====================================================================
+  node.computed = node.computed or {}  -- ensure exists for flexInfo persistence
   local crossCursor = 0  -- tracks position along the cross axis across lines
   local contentMainEnd = 0   -- furthest main-axis extent (for auto-sizing)
   local contentCrossEnd = 0  -- furthest cross-axis extent (for auto-sizing)
@@ -970,6 +972,11 @@ function Layout.layoutNode(node, px, py, pw, ph)
     local lineTotalBasis = 0
     local lineTotalFlex = 0
     local lineTotalMarginMain = 0
+
+    -- Snapshot each child's pre-distribution basis for flex pressure viz
+    for _, idx in ipairs(line) do
+      childInfos[idx]._origBasis = childInfos[idx].basis
+    end
 
     for _, idx in ipairs(line) do
       local ci = childInfos[idx]
@@ -1014,6 +1021,27 @@ function Layout.layoutNode(node, px, py, pw, ph)
         end
       end
     end
+
+    -- ----------------------------------------------------------------
+    -- Persist flex distribution data for devtools pressure visualization
+    -- ----------------------------------------------------------------
+    if not node.computed.flexInfo then
+      node.computed.flexInfo = { lines = {}, isRow = isRow, gap = gap, mainSize = mainSize }
+    end
+    local flexLine = { totalBasis = lineTotalBasis, totalFlex = lineTotalFlex, freeSpace = lineAvail, items = {} }
+    for _, idx in ipairs(line) do
+      local ci = childInfos[idx]
+      local child = allChildren[idx]
+      flexLine.items[#flexLine.items + 1] = {
+        id = child.id,
+        origBasis = ci._origBasis,
+        finalBasis = ci.basis,
+        grow = ci.grow,
+        shrink = ci.shrink,
+        delta = ci.basis - ci._origBasis,
+      }
+    end
+    node.computed.flexInfo.lines[lineIdx] = flexLine
 
     -- ----------------------------------------------------------------
     -- Re-measure text nodes after flex distribution
@@ -1328,15 +1356,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
   -- Proportional surface fallback:
   -- Empty surface nodes (Box, Image, Video, Scene3D) that resolved to zero
-  -- height get a fallback of viewport_height / 4. Uses the known viewport
-  -- dimensions directly — not the parent chain, which propagates incorrectly
-  -- through the estimation recursion. The parent reads back child.computed.h
-  -- after layoutNode returns, so the cursor advances correctly.
+  -- height get a fallback of parent_height / 4, cascading recursively.
+  -- Using ph (the definite, fully-resolved parent height at this point in
+  -- layout) means nested unsized surfaces shrink proportionally with their
+  -- container rather than all pinning to viewport/4 regardless of depth.
+  -- Fallback chain: 800px window → 200px → 50px → 12px …
   if not isScrollContainer and isSurface(node) and h < 1
      and (s.flexGrow or 0) <= 0
      and not explicitH then
     local vH = Layout._viewportH or 600
-    h = math.min(vH / 4, ph or vH)
+    h = (ph or vH) / 4
     hSource = "surface-fallback"
   end
 
@@ -1491,6 +1520,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
       contentW = contentW,
       contentH = contentH,
     }
+  end
+  -- Per-node layout timing (inclusive — includes children)
+  if node.computed then
+    node.computed.layoutMs = (love.timer.getTime() - _lt0) * 1000
   end
 end
 

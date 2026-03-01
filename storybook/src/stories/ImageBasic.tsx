@@ -64,7 +64,7 @@ export function ImageBasicStory() {
   return (
     <StoryPage>
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>Image Showcase</Text>
+          <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>Image Showcase</Text>
           <Text style={{ fontSize: 11, color: c.textDim }}>
             Clean image framing patterns for hero media, galleries, and avatars.
           </Text>
@@ -95,7 +95,7 @@ export function ImageBasicStory() {
                 }}
               >
                 <Box style={{ gap: 1 }}>
-                  <Text style={{ fontSize: 11, color: c.text, fontWeight: '700' }}>{variant.title}</Text>
+                  <Text style={{ fontSize: 11, color: c.text, fontWeight: 'normal' }}>{variant.title}</Text>
                   <Text style={{ fontSize: 9, color: c.textSecondary }}>{variant.note}</Text>
                 </Box>
                 <Box

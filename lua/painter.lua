@@ -206,6 +206,8 @@ end
 -- Text rendering helpers
 -- ============================================================================
 
+local drawLineNormal  -- forward declaration (used by drawLineWithSpacing fallback)
+
 --- Render a single line of text with letter spacing by drawing each character
 --- individually. This is expensive and should only be used when letterSpacing ~= 0.
 --- NOTE: Character-by-character rendering has a known performance cost. Only
@@ -262,7 +264,7 @@ end
 --- @param y        number
 --- @param align    string   "left", "center", or "right"
 --- @param maxWidth number
-local function drawLineNormal(font, text, x, y, align, maxWidth)
+drawLineNormal = function(font, text, x, y, align, maxWidth)
   love.graphics.printf(text, x, y, maxWidth, align)
 end
 
@@ -699,6 +701,7 @@ local _paintDbgSeen = {}  -- type -> count
 
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
+  local _pt0 = love.timer.getTime()
 
   -- Debug logging for first 3 encounters of each type
   local dbgType = node.type or "nil"
@@ -802,17 +805,23 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- Mask canvas capture: if this node has a mask child, redirect all rendering
   -- to a temporary canvas so the mask can post-process the full content.
   local maskTempCanvas = nil
-  local maskPrevCanvas = nil
+  local maskCaptureX, maskCaptureY = c.x, c.y
   if MasksModule and MasksModule.hasMask(node.id) then
-    local tc, tw, th = MasksModule.getTempCanvas(node.id)
+    local tc, tw, th, capX, capY = MasksModule.getTempCanvas(node.id)
     if tc and tw > 0 and th > 0 then
       maskTempCanvas = tc
-      maskPrevCanvas = love.graphics.getCanvas()
-      love.graphics.push()
+      maskCaptureX = capX or c.x
+      maskCaptureY = capY or c.y
+      -- Isolate capture from any inherited scissor/stencil state that could clip
+      -- the off-screen render target.
+      love.graphics.push("all")
       love.graphics.setCanvas(maskTempCanvas)
+      love.graphics.setScissor()
+      love.graphics.setStencilTest()
+      love.graphics.setBlendMode("alpha")
       love.graphics.clear(0, 0, 0, 0)
-      -- Translate so content at (c.x, c.y) renders at (0, 0) in the temp canvas
-      love.graphics.translate(-c.x, -c.y)
+      -- Translate so content at capture origin renders at (0, 0) in the temp canvas.
+      love.graphics.translate(-maskCaptureX, -maskCaptureY)
     end
   end
 
@@ -1580,12 +1589,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
 
   -- Apply mask: if we were capturing to a temp canvas, finalize and draw the result
   if maskTempCanvas then
-    love.graphics.pop()  -- undo the translate(-c.x, -c.y)
-    love.graphics.setCanvas(maskPrevCanvas)
+    -- Restore pre-capture graphics state (main canvas, clip, blend, transform).
+    love.graphics.pop()
     local outputCanvas = MasksModule.applyMask(node.id, maskTempCanvas)
     if outputCanvas then
       love.graphics.setColor(1, 1, 1, effectiveOpacity)
-      love.graphics.draw(outputCanvas, c.x, c.y)
+      love.graphics.draw(outputCanvas, maskCaptureX, maskCaptureY)
     end
   end
 
@@ -1610,6 +1619,8 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if didTransform then
     love.graphics.pop()
   end
+  -- Per-node paint timing (inclusive — includes children)
+  node.computed.paintMs = (love.timer.getTime() - _pt0) * 1000
 end
 
 -- ============================================================================

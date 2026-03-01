@@ -42,11 +42,21 @@ const HIDDEN_TOKENS = new Set([
 
 const BANNER_TOKENS = new Set(['banner']);
 
+// ── Text cleanup ─────────────────────────────────────────────────
+// Strip box-drawing, border glyphs, and terminal decoration from display text.
+// These are presentation artifacts from the CLI's TUI — the pretty side shows clean text.
+const BOX_DRAWING_RE = /[\u2500-\u257F\u2580-\u259F\u2190-\u21FF\u256C\u2550-\u256B⎿⎡⎣⎤⎥⎢│┌┐└┘├┤┬┴┼─━╭╮╯╰]/g;
+
+function cleanText(raw: string): string {
+  return raw.replace(BOX_DRAWING_RE, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 // ── Row renderer ─────────────────────────────────────────────────
 
 function RowLine({ kind, text, even }: { kind: string; text: string; even: boolean }) {
   const style = getTokenStyle(kind, text);
-  const hasText = text.trim().length > 0;
+  const display = cleanText(text);
+  if (!display) return null;
   return (
     <Box style={{
       width: '100%',
@@ -55,16 +65,14 @@ function RowLine({ kind, text, even }: { kind: string; text: string; even: boole
       paddingTop: 3,
       paddingBottom: 3,
     }}>
-      {hasText && (
-        <Text style={{
-          fontSize: style.fontSize ?? 13,
-          color: style.color,
-          fontWeight: style.fontWeight,
-          opacity: even ? style.opacity : (style.opacity ?? 1) * 0.85,
-        }}>
-          {text}
-        </Text>
-      )}
+      <Text style={{
+        fontSize: style.fontSize ?? 13,
+        color: style.color,
+        fontWeight: style.fontWeight,
+        opacity: even ? style.opacity : (style.opacity ?? 1) * 0.85,
+      }}>
+        {display}
+      </Text>
     </Box>
   );
 }
@@ -188,7 +196,13 @@ export function BlankSlateCanvas({ sessionId = 'default', windowHeight }: { sess
       }
       if (HIDDEN_TOKENS.has(r.kind)) continue;
       if (!pastBanner && BANNER_TOKENS.has(r.kind)) {
-        banner.push(r);
+        // Merge consecutive banner rows into paragraphs
+        const prev = banner.length > 0 ? banner[banner.length - 1] : null;
+        if (prev && r.text.trim().length > 0 && prev.text.trim().length > 0) {
+          prev.text = prev.text.trimEnd() + ' ' + r.text.trimStart();
+        } else {
+          banner.push({ ...r });
+        }
       } else {
         pastBanner = true;
         // Merge consecutive rows of the same kind into one paragraph

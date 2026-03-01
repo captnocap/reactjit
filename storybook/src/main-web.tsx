@@ -72,8 +72,26 @@ function StorybookPanel() {
         padding: 0,
         overflow: 'scroll',
       }}>
-        <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
-          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>ReactJIT</Text>
+        <Box style={{ paddingTop: 10, paddingLeft: 10, paddingRight: 10, paddingBottom: 8 }}>
+          <Box style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingTop: 6,
+            paddingBottom: 6,
+            paddingLeft: 8,
+            paddingRight: 8,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.surface,
+          }}>
+            <Box style={{ width: 3, height: 14, borderRadius: 2, backgroundColor: c.primary }} />
+            <Box>
+              <Text style={{ color: c.text, fontSize: 11, letterSpacing: 0.6 }}>ReactJIT</Text>
+              <Text style={{ color: c.textDim, fontSize: 8, letterSpacing: 1.1 }}>STORYBOOK</Text>
+            </Box>
+          </Box>
         </Box>
         <Box style={{ height: 1, backgroundColor: c.border }} />
 
@@ -119,7 +137,7 @@ function StorybookPanel() {
           alignItems: 'center',
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
             {active?.title}
           </Text>
           <Text style={{ color: c.textDim, fontSize: 9 }}>
@@ -150,7 +168,7 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
         backgroundColor: active ? c.surface : 'transparent',
       }}
     >
-      <Text style={{ color: active ? c.text : c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>
+      <Text style={{ color: active ? c.text : c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
         {label}
       </Text>
     </Pressable>

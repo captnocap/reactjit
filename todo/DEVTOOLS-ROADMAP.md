@@ -48,6 +48,45 @@ The current inspector tree mashes caret, node type, identity, and metadata into 
 
 ---
 
+## Phase 1b: Live Source Editor in Detail Panel
+
+**Status:** Not started
+**Priority:** High — turns DevTools from "inspect" into "inspect AND edit"
+**Effort:** Medium
+**Depends on:** Phase 1
+
+The detail panel has massive dead space below the box model diagram + style section. Embed the playground's TextEditor there, showing the actual source file of the selected node. Edits trigger esbuild rebuild, HMR fires, layout updates live. Full visual editing loop without leaving DevTools.
+
+### What it shows
+
+When a node is selected:
+- The detail panel's lower half becomes a live code editor
+- Editor opens `node.debugSource.fileName` scrolled to `node.debugSource.lineNumber`
+- Syntax-highlighted JSX/TSX with the selected node's line highlighted
+- Edits save to disk, esbuild watch picks it up, HMR applies — the tree updates in place
+
+### Why this is platinum
+
+The existing inline style editor lets you tweak individual values (`flexGrow: 1` → `2`). This lets you restructure the JSX itself — move children, add wrappers, change component hierarchy. You're not adjusting parameters; you're reshaping the layout from inside the inspector.
+
+### Interaction
+
+- Select node in tree → editor scrolls to its source line
+- Edit JSX → save → HMR → tree updates, selection preserved (same node ID survives HMR)
+- Box model diagram + style section stay above the editor (they update live too)
+- Editor respects the playground's existing TextEditor cross-link: hover a JSX tag in the editor → highlight the corresponding node on the canvas
+
+### Implementation
+
+- **Data available:** `node.debugSource = { fileName, lineNumber }` on every node (set by React fiber in `hostConfig.ts`)
+- **Editor component:** The playground already has a TextEditor with syntax highlighting + playground cross-link (`Inspector.setPlaygroundLink`). Reuse it.
+- **File read:** New RPC `dev:readFile` — reads source file from disk, returns content. The TextEditor displays it.
+- **File write:** New RPC `dev:writeFile` — writes edited content back to disk. esbuild watch detects the change, rebuilds, HMR applies via the existing `ReactJIT.reload()` path.
+- **Detail panel integration:** Split `drawDetailPanel()` in `lua/inspector.lua` — upper region keeps box model + style + props, lower region hosts the TextEditor (either as a Lua-drawn editor or as a React `<TextEditor>` rendered in the devtools child window).
+- **Scroll-to-line:** On node selection change, send `{ fileName, lineNumber }` to the editor, which scrolls and highlights that line.
+
+---
+
 ## Phase 2: Lua / Hybrid / React Toggle
 
 **Status:** Not started
@@ -444,6 +483,7 @@ Each tab header gets a `⧉` button. Click → `<Window>`. Tab shows "Popped out
 
 ```
 Phase 1: Inspector Tree Polish ──┐
+Phase 1b: Live Source Editor ────┤
                                  ├── Phase 2: Lua/Hybrid/React Toggle
                                  │
 Phase 3: Mini Wireframe ─────────┤
@@ -459,7 +499,7 @@ Phase 10: Live/Frozen Toggle     │
 Phase 11: Pop-Out Windows ───────┘ (wire incrementally as each view lands)
 ```
 
-**Suggested execution:** 1 → 2 → 3 → 6 → 7 → 4 → 5 → 8 → 9 → 10. Phase 11 wired into each as it ships.
+**Suggested execution:** 1 → 1b → 2 → 3 → 6 → 7 → 4 → 5 → 8 → 9 → 10. Phase 11 wired into each as it ships.
 
 ---
 

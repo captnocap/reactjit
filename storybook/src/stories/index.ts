@@ -51,6 +51,7 @@ import { GridStory } from './GridStory';
 import { TailwindStory } from './TailwindStory';
 import { HtmlCompatStory } from './HtmlCompatStory';
 import { FleetStory } from './FleetStory';
+import { OriginStory } from './OriginStory';
 
 
 export const stories: StoryDef[] = [
@@ -96,6 +97,7 @@ export const stories: StoryDef[] = [
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
   { id: 'poly-pizza', title: 'Poly Pizza', section: 'Demos', component: PolyPizzaStory },
   { id: 'noclip-maze', title: 'Noclip Maze', section: 'Demos', component: NoclipMazeStory },
+  { id: 'origin', title: 'Origin', section: 'Demos', component: OriginStory },
 
   // Stress Test
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },

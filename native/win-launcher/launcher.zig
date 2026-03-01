@@ -7,11 +7,11 @@
 //!
 //! On first run:
 //!   - Reads the embedded zip payload from itself
-//!   - Extracts to %LOCALAPPDATA%\ilovereact\<crc32_hex>\
+//!   - Extracts to %LOCALAPPDATA%\reactjit\<crc32_hex>\
 //!   - Writes a .ready marker
 //! On subsequent runs:
 //!   - Checks for .ready marker → skips extraction
-//! Then launches ilovereact-demo.exe from the cache dir.
+//! Then launches game.exe from the cache dir.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -23,8 +23,8 @@ pub fn main() void {
     run() catch |err| {
         // SUBSYSTEM:WINDOWS has no console — show an error dialog instead.
         var msg_buf: [256]u8 = undefined;
-        const msg = std.fmt.bufPrintZ(&msg_buf, "iLoveReact failed to start: {}", .{err}) catch "iLoveReact failed to start.";
-        _ = MessageBoxA(null, msg.ptr, "iLoveReact", 0x10); // MB_ICONERROR
+        const msg = std.fmt.bufPrintZ(&msg_buf, "ReactJIT failed to start: {}", .{err}) catch "ReactJIT failed to start.";
+        _ = MessageBoxA(null, msg.ptr, "ReactJIT", 0x10); // MB_ICONERROR
     };
 }
 
@@ -63,7 +63,7 @@ fn run() !void {
         try allocator.dupe(u8, "C:\\Temp");
     defer allocator.free(local_app_data);
 
-    const cache_root = try std.fs.path.join(allocator, &.{ local_app_data, "ilovereact-demo" });
+    const cache_root = try std.fs.path.join(allocator, &.{ local_app_data, "reactjit" });
     defer allocator.free(cache_root);
 
     const cache_dir_name = try std.fmt.allocPrint(allocator, "{x:0>8}", .{crc});
@@ -128,7 +128,7 @@ fn run() !void {
     }
 
     // ── 6. Launch the game ───────────────────────────────────────────────────
-    const game_exe = try std.fs.path.join(allocator, &.{ cache_dir_path, "ilovereact-demo.exe" });
+    const game_exe = try std.fs.path.join(allocator, &.{ cache_dir_path, "game.exe" });
     defer allocator.free(game_exe);
 
     var child = std.process.Child.init(&.{game_exe}, allocator);

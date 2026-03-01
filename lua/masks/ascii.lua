@@ -17,6 +17,12 @@ local noise = love.math.noise
 
 local Ascii = {}
 
+local function clamp(v, lo, hi)
+  if v < lo then return lo end
+  if v > hi then return hi end
+  return v
+end
+
 -- Character ramp from dark to bright (sorted by visual density)
 local charRamp = { " ", ".", ":", "-", "=", "+", "*", "#", "%", "@" }
 local rampLen = #charRamp
@@ -44,22 +50,36 @@ function Ascii.update(state, dt, props, w, h, mouse)
 end
 
 function Ascii.draw(state, w, h, source)
-  local cellSize = max(4, Util.prop(state.props, "cellSize", 8))
-  local opacity = Util.prop(state.props, "opacity", 0.6)
-  local colored = Util.boolProp(state.props, "colored", true)
+  local props = state.props or {}
+  local cellSize = max(4, floor(Util.prop(props, "cellSize", 8)))
+  local opacity = clamp(Util.prop(props, "opacity", 0.6), 0, 1)
+  local effectMix = clamp(Util.prop(props, "intensity", 1.0), 0, 1)
+  local colored = Util.boolProp(props, "colored", true)
   local t = state.time
 
-  -- Draw source dimmed as base
-  love.graphics.setColor(1, 1, 1, 1 - opacity * 0.7)
+  -- Keep full source image as base and overlay ASCII glyphs on top.
+  love.graphics.setColor(1, 1, 1, 1)
   love.graphics.draw(source, 0, 0)
 
   -- Get source image data for brightness sampling
   local imgData = source:newImageData()
   local font = getFont(cellSize)
   love.graphics.setFont(font)
+  local glyphAlpha = (0.08 + opacity * 0.52) * effectMix
 
   local cols = floor(w / cellSize)
   local rows = floor(h / cellSize)
+
+  if effectMix <= 0 then
+    imgData:release()
+    return
+  end
+
+  if colored then
+    love.graphics.setBlendMode("add")
+  else
+    love.graphics.setBlendMode("alpha")
+  end
 
   for row = 0, rows - 1 do
     for col = 0, cols - 1 do
@@ -79,20 +99,22 @@ function Ascii.draw(state, w, h, source)
       charIdx = max(1, min(rampLen, charIdx + floor((noiseVal - 0.5) * 1.5)))
 
       local ch = charRamp[charIdx]
-      if ch ~= " " then
+      if ch ~= " " and a > 0.01 then
         local cx = col * cellSize
         local cy = row * cellSize
 
         if colored then
-          love.graphics.setColor(r, g, b, opacity * a)
+          love.graphics.setColor(max(0.08, r), max(0.08, g), max(0.08, b), glyphAlpha * a * 0.8)
         else
-          love.graphics.setColor(brightness, brightness, brightness, opacity * a)
+          local v = brightness * 0.85 + 0.15
+          love.graphics.setColor(v, v, v, glyphAlpha * a)
         end
         love.graphics.print(ch, cx, cy)
       end
     end
   end
 
+  love.graphics.setBlendMode("alpha")
   imgData:release()
 end
 

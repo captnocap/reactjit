@@ -169,7 +169,7 @@ export function DataDashboardDemoStory() {
 
       {/* Header */}
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: BRIGHT, fontSize: 18, fontWeight: 'bold' }}>Dashboard</Text>
+        <Text style={{ color: BRIGHT, fontSize: 18, fontWeight: 'normal' }}>Dashboard</Text>
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
           <Text style={{ color: DIM, fontSize: 10 }}>Live</Text>
@@ -194,10 +194,10 @@ export function DataDashboardDemoStory() {
             <Text style={{ color: DIM, fontSize: 10 }}>{kpi.label}</Text>
             <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box style={{ gap: 2, width: 80, height: 30 }}>
-                <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>
+                <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'normal' }}>
                   {`${kpi.prefix}${formatNum(kpi.raw)}${kpi.suffix || ''}`}
                 </Text>
-                <Text style={{ color: kpi.change >= 0 ? kpi.color : kpi.color, fontSize: 10, fontWeight: 'bold' }}>
+                <Text style={{ color: kpi.change >= 0 ? kpi.color : kpi.color, fontSize: 10, fontWeight: 'normal' }}>
                   {`${kpi.change >= 0 ? '+' : ''}${kpi.change}%`}
                 </Text>
               </Box>
@@ -218,7 +218,7 @@ export function DataDashboardDemoStory() {
           padding: 14,
           gap: 8,
         }}>
-          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Monthly Revenue ($k)</Text>
+          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Monthly Revenue ($k)</Text>
           <BarChart
             data={revenue}
             height={120}
@@ -236,12 +236,12 @@ export function DataDashboardDemoStory() {
           padding: 14,
           gap: 10,
         }}>
-          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Targets</Text>
+          <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Targets</Text>
           {targets.map((metric) => (
             <Box key={metric.label} style={{ gap: 3 }}>
               <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
                 <Text style={{ color: DIM, fontSize: 10 }}>{metric.label}</Text>
-                <Text style={{ color: BRIGHT, fontSize: 10, fontWeight: 'bold' }}>
+                <Text style={{ color: BRIGHT, fontSize: 10, fontWeight: 'normal' }}>
                   {`${Math.round(metric.value * 100)}%`}
                 </Text>
               </Box>
@@ -261,7 +261,7 @@ export function DataDashboardDemoStory() {
         padding: 14,
         gap: 8,
       }}>
-        <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>Top Products</Text>
+        <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Top Products</Text>
         <Table columns={PRODUCT_COLUMNS} data={products} rowKey="name" striped />
       </Box>
 
