@@ -1,12 +1,4 @@
-/**
- * <Fleet> — Multi-agent Claude Code panel for power users.
- *
- * Tight, information-dense interface. One window, N agents, independent
- * expand/collapse. Vivid status indicators. Inline permissions. No fluff.
- */
-
 import React, { useState, useCallback } from 'react';
-import { useRendererMode } from './context';
 import { useFleet } from './useFleet';
 import { Box, Text } from './primitives';
 import { Pressable } from './Pressable';
@@ -97,11 +89,11 @@ const COLORS = {
   text: '#d6e8ff',
   textDim: '#6e88c0',
   textMuted: '#3d5080',
-  accent: '#00ffff',  // CYAN — electric, unmissable
+  accent: '#00ffff',
   accentBright: '#00ffff',
-  approve: '#00ff00',  // LIME — surgical green
-  deny: '#ff0080',  // HOT PINK — unmissable
-  warning: '#ffff00',  // YELLOW — screaming
+  approve: '#00ff00',
+  deny: '#ff0080',
+  warning: '#ffff00',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -112,7 +104,6 @@ const STATUS_COLORS: Record<string, string> = {
   stopped: COLORS.textMuted,
 };
 
-// Agent colors — VIVID, neon-bright per index
 const AGENT_COLORS = ['#00ffff', '#00ff00', '#ffff00', '#ff00ff', '#ff0080', '#00ff88'];
 
 const MODEL_LABELS: Record<string, string> = {
@@ -130,7 +121,6 @@ const StatusIndicator = React.memo(function StatusIndicator({
   status: string;
   color: string;
 }) {
-  // Pulse on active states
   const isPulsing = status === 'running' || status === 'thinking';
   const pulsOp = isPulsing ? 0.8 : 1;
 
@@ -265,7 +255,7 @@ const QuestionBar = React.memo(function QuestionBar({
           >
             <Text style={{ fontSize: 9, color: COLORS.text }}>
               {i + 1}. {opt.slice(0, 20)}
-              {opt.length > 20 ? '…' : ''}
+              {opt.length > 20 ? '...' : ''}
             </Text>
           </Pressable>
         ))}
@@ -305,7 +295,6 @@ const AgentTile = React.memo(function AgentTile({
         flexShrink: expanded ? 0 : 1,
       }}
     >
-      {/* Header — BRIGHT, high contrast */}
       <Pressable
         onPress={onToggle}
         style={{
@@ -319,7 +308,6 @@ const AgentTile = React.memo(function AgentTile({
         }}
       >
         <Box style={S.headerLeft}>
-          {/* Expand/collapse chevron */}
           <Text
             style={{
               fontSize: 10,
@@ -328,10 +316,9 @@ const AgentTile = React.memo(function AgentTile({
               width: 8,
             }}
           >
-            {expanded ? '⏷' : '⏶'}
+            {expanded ? '\u23F7' : '\u23F6'}
           </Text>
 
-          {/* Agent name — LOUD when expanded */}
           <Text
             style={{
               fontSize: 12,
@@ -343,7 +330,6 @@ const AgentTile = React.memo(function AgentTile({
             {agent.label.toUpperCase()}
           </Text>
 
-          {/* Model badge (compact) */}
           <Box
             style={{
               borderRadius: 2,
@@ -361,7 +347,6 @@ const AgentTile = React.memo(function AgentTile({
             </Text>
           </Box>
 
-          {/* Status indicator — BRIGHT */}
           <Box
             style={{
               width: 12,
@@ -374,13 +359,11 @@ const AgentTile = React.memo(function AgentTile({
             }}
           />
 
-          {/* Status text — VIVID */}
           <Text style={{ fontSize: 9, color: statusColor, fontWeight: 'bold', letterSpacing: 0.5 }}>
             {agent.status.toUpperCase()}
           </Text>
         </Box>
 
-        {/* Right: perm/question badge — SCREAMING COLORS */}
         <Box style={S.headerRight}>
           {hasPerm && (
             <Box
@@ -411,10 +394,8 @@ const AgentTile = React.memo(function AgentTile({
         </Box>
       </Pressable>
 
-      {/* Expanded body */}
       {expanded && (
         <Box style={{ flexGrow: 1, flexDirection: 'column' }}>
-          {/* Permission bar — GLOWING, unmissable */}
           {agent.perm && (
             <Box
               style={{
@@ -428,7 +409,7 @@ const AgentTile = React.memo(function AgentTile({
             >
               <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexGrow: 1 }}>
                 <Text style={{ fontSize: 10, color: COLORS.warning, fontWeight: 'bold', letterSpacing: 1 }}>
-                  {'⚠ PERM'}
+                  {'\u26A0 PERM'}
                 </Text>
                 <Text style={{ fontSize: 11, color: COLORS.warning, flexGrow: 1, fontWeight: 'bold' }}>
                   {agent.perm.question || `${agent.perm.action}: ${agent.perm.target}`}
@@ -478,7 +459,6 @@ const AgentTile = React.memo(function AgentTile({
             </Box>
           )}
 
-          {/* Question bar */}
           {agent.question && (
             <QuestionBar
               question={agent.question}
@@ -486,14 +466,12 @@ const AgentTile = React.memo(function AgentTile({
             />
           )}
 
-          {/* Canvas */}
           <Native
             type="ClaudeCanvas"
             sessionId={agent.id}
             style={S.canvas}
           />
 
-          {/* Prompt input — BRIGHT border */}
           <Box
             style={{
               ...S.prompt,
@@ -511,7 +489,7 @@ const AgentTile = React.memo(function AgentTile({
                 color: agentColor,
               }}
             >
-              {'❯'}
+              {'\u276F'}
             </Text>
             <TextInput
               key={editorKey}
@@ -552,12 +530,8 @@ export function Fleet({
   defaultExpanded,
   style,
 }: FleetProps) {
-  const mode = useRendererMode();
-  if (mode === 'web') return null;
-
   const fleet = useFleet({ workingDir, agents: agentConfigs });
 
-  // Expanded state per agent
   const [expandedSet, setExpandedSet] = useState<Set<string>>(() => {
     if (defaultExpanded) return new Set(defaultExpanded);
     return new Set(agentConfigs[0] ? [agentConfigs[0].id] : []);
@@ -574,7 +548,6 @@ export function Fleet({
 
   return (
     <Box style={{ ...S.root, ...style }}>
-      {/* Hidden: always-mounted ClaudeCode sessions */}
       <Box style={S.hidden}>
         {fleet.agents.map(agent => (
           <Native
@@ -593,7 +566,6 @@ export function Fleet({
         ))}
       </Box>
 
-      {/* Auto-accept toggle — BRIGHT */}
       <Box style={S.autoAcceptBar}>
         <Pressable
           onPress={fleet.toggleAutoAccept}
@@ -617,7 +589,6 @@ export function Fleet({
         </Pressable>
       </Box>
 
-      {/* Agent tiles */}
       {fleet.agents.map((agent, idx) => (
         <AgentTile
           key={`tile-${agent.id}`}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from './primitives';
 import { Pressable } from './Pressable';
+import { useThemeColorsOptional } from './context';
 import type { Style } from './types';
 
 export type ToolbarEntry =
@@ -18,15 +19,26 @@ export function Toolbar({
   onSelect,
   style,
 }: ToolbarProps) {
+  const theme = useThemeColorsOptional();
+  const colors = {
+    barBg: theme?.surface ?? '#1e293b',
+    barBorder: theme?.border ?? '#334155',
+    divider: theme?.border ?? '#334155',
+    itemBgHover: theme?.surfaceHover ?? '#2a3a52',
+    itemBgPressed: theme?.bgElevated ?? '#111827',
+    itemText: theme?.text ?? '#e2e8f0',
+    itemTextDisabled: theme?.textDim ?? '#64748b',
+  };
+
   return (
     <Box style={{
       flexDirection: 'row',
       width: '100%',
       alignItems: 'center',
-      backgroundColor: '#111827',
+      backgroundColor: colors.barBg,
       borderWidth: 1,
-      borderColor: '#1e293b',
-      borderRadius: 6,
+      borderColor: colors.barBorder,
+      borderRadius: 8,
       padding: 4,
       gap: 2,
       ...style,
@@ -39,7 +51,7 @@ export function Toolbar({
               style={{
                 width: 1,
                 height: 18,
-                backgroundColor: '#334155',
+                backgroundColor: colors.divider,
                 marginLeft: 4,
                 marginRight: 4,
               }}
@@ -62,14 +74,14 @@ export function Toolbar({
               backgroundColor: disabled
                 ? 'transparent'
                 : state.pressed
-                  ? '#334155'
+                  ? colors.itemBgPressed
                   : state.hovered
-                    ? '#1e293b'
+                    ? colors.itemBgHover
                     : 'transparent',
             })}
           >
             <Text style={{
-              color: disabled ? '#475569' : '#cbd5e1',
+              color: disabled ? colors.itemTextDisabled : colors.itemText,
               fontSize: 11,
             }}>
               {entry.label}

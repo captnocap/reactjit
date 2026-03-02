@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Box, Text } from './primitives';
-import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 
 export interface StackedBarChartSeries {
@@ -38,7 +37,6 @@ export function StackedBarChart({
 
   const numBars = series[0].data.length;
 
-  // Compute totals for each bar position
   const totals: number[] = [];
   for (let col = 0; col < numBars; col++) {
     let sum = 0;
@@ -66,29 +64,23 @@ export function StackedBarChart({
           const isHovered = hoveredStack === col;
           const stackTotal = totals[col];
 
+          const seriesLines = series.map(s => `${s.label}: ${s.data[col] ?? 0}`).join('\n');
+          const tooltipLabel = labels?.[col] ? `${labels[col]}\n` : '';
+          const tooltipContent = `${tooltipLabel}${stackTotal}\n${seriesLines}`;
+
           return (
             <Box
               key={col}
               onPointerEnter={interactive ? () => setHoveredStack(col) : undefined}
               onPointerLeave={interactive ? () => setHoveredStack(null) : undefined}
+              tooltip={interactive ? { content: tooltipContent, type: 'anchor', anchor: 'top', layout: 'descriptive' } : undefined}
               style={{
                 flexGrow: fixed ? 0 : 1,
                 width: barWidth,
                 alignItems: 'center',
-                position: interactive ? 'relative' : undefined,
                 opacity: interactive && anyHovered && !isHovered ? 0.35 : 1,
               }}
             >
-              <ChartTooltip visible={interactive && isHovered} anchor="top">
-                {labels?.[col] ? <ChartTooltip.Label>{labels[col]}</ChartTooltip.Label> : null}
-                <ChartTooltip.Value>{`${stackTotal}`}</ChartTooltip.Value>
-                {series.map((s, si) => (
-                  <ChartTooltip.Detail key={si}>
-                    {`${s.label}: ${s.data[col] ?? 0}`}
-                  </ChartTooltip.Detail>
-                ))}
-              </ChartTooltip>
-              {/* Stacked segments */}
               <Box style={{
                 width: barWidth,
                 alignSelf: fixed ? undefined : 'stretch',

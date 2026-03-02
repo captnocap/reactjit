@@ -29,11 +29,8 @@ export {
   BridgeProvider,
   useBridge,
   useBridgeOptional,
-  RendererProvider,
-  useRendererMode,
   ThemeColorsContext,
   useThemeColorsOptional,
-  type RendererMode,
 } from './context';
 
 // Viewport-proportional scaling
@@ -99,7 +96,7 @@ export {
 export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
 
 // Primitives
-export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from './primitives';
+export { Box, Row, Col, Text, Image, FocusGroup } from './primitives';
 
 // Typography
 export { Typography } from './Typography';
@@ -251,7 +248,6 @@ export { Table, type TableProps, type TableColumn } from './Table';
 export { BarChart, type BarChartProps, type BarChartBar } from './BarChart';
 export { ProgressBar, type ProgressBarProps } from './ProgressBar';
 export { Sparkline, type SparklineProps } from './Sparkline';
-export { ChartTooltip, type ChartTooltipProps } from './ChartTooltip';
 export { HorizontalBarChart, type HorizontalBarChartProps, type HorizontalBarChartBar } from './HorizontalBarChart';
 export { StackedBarChart, type StackedBarChartProps, type StackedBarChartSeries } from './StackedBarChart';
 export { LineChart, type LineChartProps, type LineChartPoint } from './LineChart';
@@ -340,6 +336,7 @@ export type {
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
   BoidsProps, ImageSelectProps, ImageProcessProps,
   CapabilitySchema,
+  TooltipProp, TooltipConfig,
 } from './types';
 
 // GPIO hooks

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Box, Text } from './primitives';
-import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 
 export interface HorizontalBarChartBar {
@@ -63,18 +62,22 @@ export function HorizontalBarChart({
         const isHovered = hoveredIndex === i;
         const pct = Math.round((bar.value / maxValue) * 100);
 
+        const tooltipContent = bar.label
+          ? `${bar.label}\n${bar.value}\n${pct}%`
+          : `${bar.value}\n${pct}%`;
+
         return (
           <Box
             key={i}
             onPointerEnter={interactive ? () => handleHover(i) : undefined}
             onPointerLeave={interactive ? () => handleHover(null) : undefined}
             onClick={interactive && onBarPress ? () => onBarPress(i, bar) : undefined}
+            tooltip={interactive ? { content: tooltipContent, type: 'anchor', anchor: 'right', layout: 'descriptive' } : undefined}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               height: barHeight,
               gap: 8,
-              position: 'relative',
               opacity: interactive && anyHovered && !isHovered ? 0.35 : 1,
             }}
           >
@@ -96,11 +99,6 @@ export function HorizontalBarChart({
                 {`${bar.value}`}
               </Text>
             )}
-            <ChartTooltip visible={interactive && isHovered} anchor="right">
-              {bar.label ? <ChartTooltip.Label>{bar.label}</ChartTooltip.Label> : null}
-              <ChartTooltip.Value>{`${bar.value}`}</ChartTooltip.Value>
-              <ChartTooltip.Detail>{`${pct}%`}</ChartTooltip.Detail>
-            </ChartTooltip>
           </Box>
         );
       })}

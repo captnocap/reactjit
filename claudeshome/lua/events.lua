@@ -110,6 +110,8 @@ function Events.hitTest(node, mx, my)
   end
   -- Nodes with hoverStyle/activeStyle are hittable for Lua-side interaction
   if node.props and (node.props.hoverStyle or node.props.activeStyle) then return node end
+  -- Nodes with a tooltip prop are hittable for Lua-side tooltip rendering
+  if node.props and node.props.tooltip then return node end
   -- Also return scroll containers so wheel events can scroll them
   -- even when no JS handler is attached
   if isScroll then return node end

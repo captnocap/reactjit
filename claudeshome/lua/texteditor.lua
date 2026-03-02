@@ -13,7 +13,8 @@
 
 local Measure = nil
 local Focus   = require("lua.focus")
-local Tooltips = require("lua.texteditor_tooltips")
+local TooltipDict = require("lua.texteditor_tooltips")
+local TooltipSystem = require("lua.tooltips")
 local Color   = require("lua.color")
 local Syntax  = require("lua.syntax")
 
@@ -333,7 +334,7 @@ end
 local function visibleArea(node, es)
   local c = node.computed or { x = 0, y = 0, w = 400, h = 300 }
   local lh = getLineHeight(node)
-  local gutterW = showLineNumbers(node) and 50 or 0
+  local gutterW = showLineNumbers(node) and 56 or 0
   local padding = 8
   local textAreaX = c.x + gutterW
   local textAreaY = c.y
@@ -505,8 +506,8 @@ local function updateHover(node, es, dt)
   local resolved = nil
 
   if tokenInfo then
-    if Tooltips.lookup then
-      resolved = Tooltips.lookup(tokenInfo.token, level, {
+    if TooltipDict.lookup then
+      resolved = TooltipDict.lookup(tokenInfo.token, level, {
         line = tokenInfo.line,
         lineNumber = line,
         col = col,
@@ -516,7 +517,7 @@ local function updateHover(node, es, dt)
         nextToken = tokenInfo.nextToken,
       })
     else
-      local entry = Tooltips[tokenInfo.token]
+      local entry = TooltipDict[tokenInfo.token]
       if entry then
         resolved = {
           key = tokenInfo.token,
@@ -533,6 +534,15 @@ local function updateHover(node, es, dt)
       es.hoverTimer = es.hoverTimer + dt
       if es.hoverTimer >= 0.4 then
         es.hoverVisible = true
+        -- Delegate to unified tooltip system
+        local va = visibleArea(node, es)
+        local font = getFont(node)
+        local lh = getLineHeight(node, font)
+        local wordY = va.textAreaY + (es.hoverLine - 1) * lh - es.scrollY
+        local wordX = va.textAreaX + va.padding + font:getWidth(
+          (es.lines[es.hoverLine] or ""):sub(1, es.hoverCol)
+        ) - es.scrollX
+        TooltipSystem.showManual(es.hoverText, wordX, wordY)
       end
     else
       -- New token — reset timer
@@ -543,6 +553,7 @@ local function updateHover(node, es, dt)
       es.hoverText = resolved.text
       es.hoverTimer = 0
       es.hoverVisible = false
+      TooltipSystem.showManual(nil)
     end
   else
     -- No known token under cursor
@@ -550,6 +561,7 @@ local function updateHover(node, es, dt)
     es.hoverText = nil
     es.hoverTimer = 0
     es.hoverVisible = false
+    TooltipSystem.showManual(nil)
   end
 end
 
@@ -1048,11 +1060,17 @@ function TextEditor.draw(node, effectiveOpacity)
   local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
   local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
   love.graphics.intersectScissor(sx, sy, sw, sh)
+  -- Save the actual intersected editor scissor so we can truly restore it inside the loop.
+  -- (intersectScissor is cumulative, so we need the result of this first intersection.)
+  local edScissorX, edScissorY, edScissorW, edScissorH = love.graphics.getScissor()
 
   -- Gutter
   if va.gutterW > 0 then
     setColorWithOpacity(colors.gutter, effectiveOpacity)
     love.graphics.rectangle("fill", c.x, c.y, va.gutterW, c.h)
+    -- Gutter right border (Monaco-style separator)
+    setColorWithOpacity({ colors.gutter[1] * 1.6, colors.gutter[2] * 1.6, colors.gutter[3] * 1.6, 0.7 }, effectiveOpacity)
+    love.graphics.rectangle("fill", c.x + va.gutterW - 1, c.y, 1, c.h)
   end
 
   local lastLine = math.min(va.firstLine + va.visLines, lineCount(es))
@@ -1061,10 +1079,10 @@ function TextEditor.draw(node, effectiveOpacity)
     local y = va.textAreaY + (i - 1) * lh - es.scrollY
     local lineStr = es.lines[i] or ""
 
-    -- Active line highlight
+    -- Active line highlight (extends full width including gutter, Monaco-style)
     if isFocused and i == es.cursorLine then
       setColorWithOpacity(colors.activeLine, effectiveOpacity)
-      love.graphics.rectangle("fill", va.textAreaX, y, va.textAreaW, lh)
+      love.graphics.rectangle("fill", c.x, y, c.w, lh)
     end
 
     -- Selection highlight
@@ -1125,8 +1143,8 @@ function TextEditor.draw(node, effectiveOpacity)
     end
 
     -- Beginner-only dynamic inline hints (visual aid; does not mutate source text).
-    if tooltipLevel == "beginner" and Tooltips.inlineHint and (i == es.cursorLine or i == es.hoverLine) then
-      local hint = Tooltips.inlineHint(lineStr, tooltipLevel)
+    if tooltipLevel == "beginner" and TooltipDict.inlineHint and (i == es.cursorLine or i == es.hoverLine) then
+      local hint = TooltipDict.inlineHint(lineStr, tooltipLevel)
       if hint and hint ~= "" then
         local commentText = " // " .. hint
         local lineW = font:getWidth(lineStr)
@@ -1139,8 +1157,8 @@ function TextEditor.draw(node, effectiveOpacity)
       end
     end
 
-    -- Restore full-node scissor
-    love.graphics.intersectScissor(sx, sy, sw, sh)
+    -- Restore editor scissor (use setScissor, not intersectScissor, to truly undo the text-area clip)
+    love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
   end
 
   -- Placeholder
@@ -1165,7 +1183,7 @@ function TextEditor.draw(node, effectiveOpacity)
     love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
     setColorWithOpacity(colors.cursor, effectiveOpacity)
     love.graphics.rectangle("fill", cx, cy + 3, 2, lh - 6)
-    love.graphics.intersectScissor(sx, sy, sw, sh)
+    love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
   end
 
   -- Scrollbar
@@ -1202,83 +1220,9 @@ function TextEditor.draw(node, effectiveOpacity)
     love.graphics.setScissor()
   end
 
-  -- ── Hover tooltip (drawn OUTSIDE the scissor so it can overflow) ──
-  if tooltipLevel and tooltipLevel ~= "" and tooltipLevel ~= "clean"
-     and es.hoverVisible and es.hoverWord and es.hoverText then
-    local tooltipText = es.hoverText
-    if tooltipText and tooltipText ~= "" then
-      -- Use a slightly smaller font for the tooltip
-      local tooltipFontSize = (node.style or {}).fontSize or 14
-      tooltipFontSize = math.max(10, tooltipFontSize - 2)
-      local tooltipFont
-      if Measure then
-        tooltipFontSize = Measure.scaleFontSize(tooltipFontSize, node)
-        tooltipFont = Measure.getFont(tooltipFontSize, nil, nil)
-      else
-        tooltipFont = love.graphics.getFont()
-      end
-
-      local maxW = 300
-      local padX, padY = 10, 8
-      local textW = maxW - padX * 2
-
-      -- Wrap text manually
-      local wrappedLines = {}
-      for _, segment in ipairs({tooltipText}) do
-        local words = {}
-        for w in segment:gmatch("%S+") do words[#words+1] = w end
-        local line = ""
-        for _, w in ipairs(words) do
-          local test = line == "" and w or (line .. " " .. w)
-          if tooltipFont:getWidth(test) > textW then
-            if line ~= "" then wrappedLines[#wrappedLines+1] = line end
-            line = w
-          else
-            line = test
-          end
-        end
-        if line ~= "" then wrappedLines[#wrappedLines+1] = line end
-      end
-
-      local lineH = math.floor(tooltipFont:getHeight() * 1.4)
-      local contentH = #wrappedLines * lineH
-      local boxW = maxW
-      local boxH = contentH + padY * 2
-
-      -- Position: above the hovered word, or below if near top
-      local wordY = va.textAreaY + (es.hoverLine - 1) * lh - es.scrollY
-      local wordX = va.textAreaX + va.padding + font:getWidth(
-        (es.lines[es.hoverLine] or ""):sub(1, es.hoverCol)
-      ) - es.scrollX
-
-      local tooltipX = math.max(c.x + 4, math.min(wordX, c.x + c.w - boxW - 4))
-      local tooltipY = wordY - boxH - 6
-      if tooltipY < c.y then
-        tooltipY = wordY + lh + 4  -- below the word if no room above
-      end
-
-      -- Draw tooltip background
-      love.graphics.setFont(tooltipFont)
-      setColorWithOpacity(colors.tooltipBg, effectiveOpacity)
-      love.graphics.rectangle("fill", tooltipX, tooltipY, boxW, boxH, 6, 6)
-
-      -- Border
-      setColorWithOpacity(colors.tooltipBorder, effectiveOpacity)
-      love.graphics.setLineWidth(1)
-      love.graphics.rectangle("line", tooltipX, tooltipY, boxW, boxH, 6, 6)
-
-      -- Text
-      setColorWithOpacity(colors.tooltipText, effectiveOpacity)
-      for li, wline in ipairs(wrappedLines) do
-        love.graphics.print(wline,
-          tooltipX + padX,
-          tooltipY + padY + (li - 1) * lineH)
-      end
-
-      -- Restore original font
-      love.graphics.setFont(font)
-    end
-  end
+  -- Hover tooltip rendering is now handled by lua/tooltips.lua (unified system).
+  -- TextEditor.update() calls TooltipSystem.showManual() with the resolved text
+  -- and word position. The tooltip is drawn in init.lua's overlay pass.
 end
 
 return TextEditor

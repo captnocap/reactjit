@@ -21,6 +21,7 @@
 
 local ZIndex = require("lua.zindex")
 local Measure = require("lua.measure")
+local SourceEditor = require("lua.source_editor")
 local console = nil  -- lazy-loaded to avoid circular deps
 
 -- Forward declarations (defined later in the file)
@@ -74,6 +75,12 @@ local state = {
   viewMode = "hybrid",
   -- Toggle bar region (set during draw, used for click detection)
   toggleBarRegion = nil,  -- { x, y, w, h }
+  -- Clickable parent/child navigation in detail panel
+  detailParentPosition = nil,  -- { node, y, h } or nil
+  detailChildPositions = {},   -- array of { node, y, h }
+  -- Add-prop mode: two-phase inline editor for injecting new style properties
+  -- nil = inactive, { phase = "key"|"value", text, cursor, propName } = active
+  addPropState = nil,
 }
 
 -- ============================================================================
@@ -545,6 +552,16 @@ function Inspector.keypressed(key)
     return handleEditKey(key)
   end
 
+  -- Source editor gets next priority when active
+  if SourceEditor.isActive() then
+    -- Escape deactivates the source editor
+    if key == "escape" then
+      SourceEditor.deactivate()
+      return true
+    end
+    if SourceEditor.keypressed(key) then return true end
+  end
+
   -- Console toggle (backtick)
   if key == "`" then
     if console then
@@ -569,6 +586,7 @@ function Inspector.keypressed(key)
     if state.selectedNode then
       state.selectedNode = nil
       state.detailScrollY = 0
+      SourceEditor.close()
       return true
     end
   end
@@ -583,6 +601,11 @@ function Inspector.textinput(text)
   -- Edit mode
   if state.editState then
     return handleEditTextInput(text)
+  end
+
+  -- Source editor
+  if SourceEditor.isActive() then
+    if SourceEditor.textinput(text) then return true end
   end
 
   -- Route to console
@@ -602,16 +625,66 @@ function Inspector.mousepressed(x, y, button)
   if state.selectedNode and state.detailRegion then
     local dr = state.detailRegion
     if x >= dr.x and x < dr.x + dr.w and y >= dr.y and y < dr.y + dr.h then
-      -- Check if click is on an editable property value
+      -- Source editor gets first crack (it knows its own region)
+      if SourceEditor.mousepressed(x, y, button) then
+        -- Clicking in source editor deactivates inline style editing
+        if state.editState then commitEdit() end
+        return true
+      end
+
+      -- If we got here, click was NOT in the source editor — deactivate it
+      SourceEditor.deactivate()
+
+      -- Check if click is on an editable property value or the [+ add] button
       for i, entry in ipairs(state.detailPropPositions) do
         if entry.y + entry.h > dr.y and entry.y < dr.y + dr.h then  -- visible
           if y >= entry.y and y < entry.y + entry.h and x >= entry.valueX then
             if state.editState then commitEdit() end
+            if entry.section == "addProp" then
+              -- Start add-prop mode: phase 1 = type prop name
+              state.addPropState = {
+                node = state.selectedNode,
+                phase = "key",
+                text = "",
+                cursor = 0,
+              }
+              -- Re-use editState for the inline editor rendering
+              state.editState = {
+                node = state.selectedNode,
+                section = "addProp",
+                prop = "__add__",
+                propIndex = 0,
+                text = "",
+                cursor = 0,
+                originalValue = nil,
+                liveApplied = false,
+              }
+              return true
+            end
             startEditing(entry, i)
             return true
           end
         end
       end
+      -- Check if click is on the parent link
+      if state.detailParentPosition then
+        local pp = state.detailParentPosition
+        if y >= pp.y and y < pp.y + pp.h and pp.node then
+          if state.editState then commitEdit() end
+          Inspector.selectNode(pp.node)
+          return true
+        end
+      end
+
+      -- Check if click is on a child entry
+      for _, cp in ipairs(state.detailChildPositions) do
+        if y >= cp.y and y < cp.y + cp.h and cp.node then
+          if state.editState then commitEdit() end
+          Inspector.selectNode(cp.node)
+          return true
+        end
+      end
+
       -- Click elsewhere in detail: commit current edit
       if state.editState then
         commitEdit()
@@ -694,6 +767,11 @@ function Inspector.wheelmoved(x, y)
   -- Map horizontal tilt to vertical scroll when no vertical input
   local dy = y
   if dy == 0 and x ~= 0 then dy = x end
+
+  -- Source editor scroll (check before detail panel — editor is inside it)
+  if SourceEditor.wheelmoved(x, dy) then
+    return true
+  end
 
   -- Detail panel scroll (uses stored region)
   if state.selectedNode and state.detailRegion then
@@ -1855,6 +1933,49 @@ end
 commitEdit = function()
   if not state.editState then return end
   local es = state.editState
+
+  -- Add-prop mode: two-phase commit
+  if es.section == "addProp" and state.addPropState then
+    local aps = state.addPropState
+    if aps.phase == "key" then
+      -- Phase 1 complete: got prop name, move to phase 2 (value)
+      local propName = es.text:match("^%s*(.-)%s*$")  -- trim
+      if propName and #propName > 0 then
+        aps.phase = "value"
+        aps.propName = propName
+        aps.text = ""
+        aps.cursor = 0
+        -- Reset editState for phase 2
+        state.editState = {
+          node = es.node,
+          section = "addProp",
+          prop = propName,
+          propIndex = 0,
+          text = "",
+          cursor = 0,
+          originalValue = nil,
+          liveApplied = false,
+        }
+        return  -- don't clear editState yet
+      else
+        -- Empty name: cancel
+        state.addPropState = nil
+        state.editState = nil
+        return
+      end
+    elseif aps.phase == "value" then
+      -- Phase 2 complete: apply the new property
+      local value = parseStyleValue(es.text)
+      if es.node and es.node.style then
+        es.node.style[aps.propName] = value
+      end
+      if markDirtyCallback then markDirtyCallback() end
+      state.addPropState = nil
+      state.editState = nil
+      return
+    end
+  end
+
   local value = parseStyleValue(es.text)
   if es.section == "style" and es.node and es.node.style then
     es.node.style[es.prop] = value
@@ -1871,6 +1992,7 @@ cancelEdit = function()
     es.node.style[es.prop] = es.originalValue
     if markDirtyCallback then markDirtyCallback() end
   end
+  state.addPropState = nil
   state.editState = nil
 end
 
@@ -2020,14 +2142,17 @@ function drawDetailPanel(rx, ry, rw, rh)
   -- Cancel edit if the selected node changed
   if state.editState and state.editState.node ~= node then
     state.editState = nil
+    state.addPropState = nil
   end
 
   local font = getFont()
   local lineH = font:getHeight() + 2
   local pad = 10
 
-  -- Reset property positions cache
+  -- Reset position caches
   state.detailPropPositions = {}
+  state.detailParentPosition = nil
+  state.detailChildPositions = {}
 
   -- Background
   love.graphics.setColor(DETAIL_BG)
@@ -2070,6 +2195,24 @@ function drawDetailPanel(rx, ry, rw, rh)
       love.graphics.print(loc, x, y)
       y = y + lineH
     end
+  end
+
+  -- Parent link (clickable)
+  if node.parent then
+    local parentName = node.parent.debugName and ("<" .. node.parent.debugName .. ">") or (node.parent.type or "?")
+    local parentLabel = "\xe2\x86\x91 " .. parentName  -- ↑ parent
+    local parentPC = node.parent.computed
+    if parentPC then
+      parentLabel = parentLabel .. string.format("  %dx%d", math.floor(parentPC.w), math.floor(parentPC.h))
+    end
+    -- Hover highlight
+    local isParentHovered = state.mouseX >= x and state.mouseY >= y
+      and state.mouseY < y + lineH and state.mouseX < rx + rw - pad
+      and y + lineH > ry and y < ry + rh
+    love.graphics.setColor(isParentHovered and TOOLTIP_ACCENT or TREE_DIM)
+    love.graphics.print(parentLabel, x, y)
+    state.detailParentPosition = { node = node.parent, y = y, h = lineH }
+    y = y + lineH
   end
   y = y + 6
 
@@ -2157,46 +2300,156 @@ function drawDetailPanel(rx, ry, rw, rh)
     love.graphics.print(string.format("x: %d   y: %d", math.floor(c.x), math.floor(c.y)), x, y)
     y = y + lineH + 2
 
-    -- Width with provenance
-    local wProv = PROV_LABELS[c.wSource or "unknown"] or PROV_LABELS["unknown"]
-    love.graphics.setColor(TOOLTIP_TEXT)
-    local wStr = string.format("w: %d  ", math.floor(c.w))
-    love.graphics.print(wStr, x, y)
-    love.graphics.setColor(wProv[3])
-    love.graphics.print(wProv[1], x + font:getWidth(wStr), y)
-    y = y + lineH
-    -- Show original style value when explicit (e.g. "width: '100%'" → resolved to 1679)
-    local wDesc = wProv[2]
-    if c.wSource == "explicit" and s.width ~= nil then
-      wDesc = "style.width = " .. fmtVal(s.width)
-    elseif c.wSource == "parent" and node.parent and node.parent.computed then
-      wDesc = "parent w = " .. math.floor(node.parent.computed.w)
-    end
-    love.graphics.setColor(TREE_DIM)
-    love.graphics.print(wDesc, x + 10, y)
-    y = y + lineH + 2
+    -- Helper: draw a single axis math chain
+    local function drawAxisChain(axis, val, source, detail, style)
+      local prov = PROV_LABELS[source or "unknown"] or PROV_LABELS["unknown"]
+      -- Primary line: "w: 51  PARENT WIDTH"
+      love.graphics.setColor(TOOLTIP_TEXT)
+      local prefix = string.format("%s: %d  ", axis, math.floor(val))
+      love.graphics.print(prefix, x, y)
+      love.graphics.setColor(prov[3])
+      love.graphics.print(prov[1], x + font:getWidth(prefix), y)
+      y = y + lineH
 
-    -- Height with provenance
-    local hProv = PROV_LABELS[c.hSource or "unknown"] or PROV_LABELS["unknown"]
-    love.graphics.setColor(TOOLTIP_TEXT)
-    local hStr = string.format("h: %d  ", math.floor(c.h))
-    love.graphics.print(hStr, x, y)
-    love.graphics.setColor(hProv[3])
-    love.graphics.print(hProv[1], x + font:getWidth(hStr), y)
-    y = y + lineH
-    local hDesc = hProv[2]
-    if c.hSource == "explicit" and s.height ~= nil then
-      hDesc = "style.height = " .. fmtVal(s.height)
-    elseif c.hSource == "content" and node.children then
-      hDesc = "auto from " .. #node.children .. " children"
-    elseif c.hSource == "text" then
-      hDesc = "measured from text (fontSize " .. tostring(s.fontSize or "?") .. ")"
-    elseif c.hSource == "surface-fallback" then
-      hDesc = "empty surface got viewport/4"
+      -- Math chain lines (indented)
+      local indent = x + 12
+      local d = detail or {}
+
+      if source == "explicit" then
+        love.graphics.setColor(TREE_DIM)
+        local sv = d.styleValue or (axis == "w" and style.width or style.height)
+        love.graphics.print("style." .. (axis == "w" and "width" or "height") .. " = " .. fmtVal(sv), indent, y)
+        y = y + lineH
+
+      elseif source == "parent" then
+        -- Show the full derivation: parent outer → padding → inner (= this width)
+        local parentOuter = node.parent and node.parent.computed and node.parent.computed.w
+        local pL = d.padL or 0
+        local pR = d.padR or 0
+        local pw_inner = d.parentW
+
+        if parentOuter and pw_inner then
+          love.graphics.setColor(TREE_DIM)
+          love.graphics.print(string.format("parent outer: %d", math.floor(parentOuter)), indent, y)
+          y = y + lineH
+          if pL > 0 or pR > 0 then
+            love.graphics.print(string.format("  - pad %dL %dR = inner %d", pL, pR, math.floor(pw_inner)), indent, y)
+          else
+            love.graphics.print(string.format("  = inner %d (no padding)", math.floor(pw_inner)), indent, y)
+          end
+          y = y + lineH
+          -- If the value doesn't match inner, siblings/shrink are involved
+          if math.abs(val - pw_inner) > 0.5 then
+            -- Try to find flex info from parent
+            local pfi = node.parent and node.parent.computed and node.parent.computed.flexInfo
+            if pfi then
+              for _, fl in ipairs(pfi.lines or {}) do
+                for _, item in ipairs(fl.items or {}) do
+                  if item.id == node.id then
+                    love.graphics.setColor(PROV_FLEX)
+                    if item.shrink and item.shrink > 0 and item.delta < 0 then
+                      love.graphics.print(string.format("  shrink: %d (overflow, shrink=%s)", math.floor(item.delta), fmtVal(item.shrink)), indent, y)
+                    elseif item.grow and item.grow > 0 and item.delta > 0 then
+                      love.graphics.print(string.format("  grow: +%d (grow=%s)", math.floor(item.delta), fmtVal(item.grow)), indent, y)
+                    else
+                      love.graphics.print(string.format("  adjusted: %d by flex", math.floor(item.delta)), indent, y)
+                    end
+                    y = y + lineH
+                    break
+                  end
+                end
+              end
+            end
+            love.graphics.setColor(TOOLTIP_ACCENT)
+            love.graphics.print(string.format("  = %d", math.floor(val)), indent, y)
+            y = y + lineH
+          end
+        else
+          love.graphics.setColor(TREE_DIM)
+          love.graphics.print("parent w = " .. (pw_inner and math.floor(pw_inner) or "?"), indent, y)
+          y = y + lineH
+        end
+
+      elseif source == "flex" then
+        love.graphics.setColor(TREE_DIM)
+        if d.origBasis then
+          love.graphics.print(string.format("basis: %d", math.floor(d.origBasis)), indent, y)
+          y = y + lineH
+        end
+        if d.freeSpace then
+          local freeLabel = d.freeSpace >= 0 and "free" or "overflow"
+          love.graphics.print(string.format("%s: %d in container %d", freeLabel, math.floor(d.freeSpace), math.floor(d.parentMainSize or 0)), indent, y)
+          y = y + lineH
+        end
+        if d.grow and d.grow > 0 and d.totalGrow and d.totalGrow > 0 then
+          love.graphics.setColor(PROV_FLEX)
+          love.graphics.print(string.format("grow: %s/%s x %d = +%d",
+            fmtVal(d.grow), fmtVal(d.totalGrow), math.floor(d.freeSpace or 0), math.floor(d.delta or 0)), indent, y)
+          y = y + lineH
+        elseif d.shrink and d.delta and d.delta < 0 then
+          love.graphics.setColor(PROV_PARENT)
+          love.graphics.print(string.format("shrink: %s x %d = %d",
+            fmtVal(d.shrink), math.floor(-(d.freeSpace or 0)), math.floor(d.delta)), indent, y)
+          y = y + lineH
+        end
+        if d.gap and d.gap > 0 then
+          love.graphics.setColor(TREE_DIM)
+          love.graphics.print(string.format("gap: %d (%d siblings)", math.floor(d.gap), d.siblingCount or 0), indent, y)
+          y = y + lineH
+        end
+        love.graphics.setColor(TOOLTIP_ACCENT)
+        love.graphics.print(string.format("= %d", math.floor(val)), indent, y)
+        y = y + lineH
+
+      elseif source == "stretch" then
+        love.graphics.setColor(TREE_DIM)
+        local parentCross = d.parentW or d.parentH
+        if parentCross then
+          love.graphics.print(string.format("parent cross: %d", math.floor(parentCross)), indent, y)
+        else
+          love.graphics.print("parent cross-axis stretch", indent, y)
+        end
+        y = y + lineH
+
+      elseif source == "content" then
+        love.graphics.setColor(TREE_DIM)
+        local nc = d.childCount or (node.children and #node.children or 0)
+        love.graphics.print(string.format("auto from %d children", nc), indent, y)
+        y = y + lineH
+
+      elseif source == "text" then
+        love.graphics.setColor(TREE_DIM)
+        local fs = (d and d.fontSize) or s.fontSize or "?"
+        love.graphics.print("measured from text (fontSize " .. tostring(fs) .. ")", indent, y)
+        y = y + lineH
+
+      elseif source == "surface-fallback" then
+        love.graphics.setColor(PROV_FALLBACK)
+        local pv = d.parentH or d.parentW or d.viewportH or d.viewportW or "?"
+        love.graphics.print(string.format("empty surface: %s / 4 = %d", tostring(pv and math.floor(pv) or "?"), math.floor(val)), indent, y)
+        y = y + lineH
+
+      elseif source == "root" then
+        love.graphics.setColor(PROV_ROOT)
+        love.graphics.print("auto-filled from viewport", indent, y)
+        y = y + lineH
+
+      elseif source == "aspect-ratio" then
+        love.graphics.setColor(TREE_DIM)
+        love.graphics.print("derived from other axis (ar=" .. fmtVal(s.aspectRatio or "?") .. ")", indent, y)
+        y = y + lineH
+
+      else
+        love.graphics.setColor(TREE_DIM)
+        love.graphics.print(prov[2], indent, y)
+        y = y + lineH
+      end
+
+      y = y + 2
     end
-    love.graphics.setColor(TREE_DIM)
-    love.graphics.print(hDesc, x + 10, y)
-    y = y + lineH + 4
+
+    drawAxisChain("w", c.w, c.wSource, c.wDetail, s)
+    drawAxisChain("h", c.h, c.hSource, c.hDetail, s)
   end
 
   -- Separator
@@ -2267,6 +2520,42 @@ function drawDetailPanel(rx, ry, rw, rh)
       end
       y = y + 4
     end
+
+    -- [+ add] button or active add-prop editor
+    if state.addPropState and state.addPropState.node == node then
+      local aps = state.addPropState
+      if aps.phase == "key" then
+        -- Phase 1: typing prop name
+        love.graphics.setColor(SECTION_COL)
+        love.graphics.print("prop: ", x, y)
+        drawInlineEditor(x + font:getWidth("prop: "), y, rx + rw - x - font:getWidth("prop: ") - pad, lineH, font)
+        y = y + lineH
+      elseif aps.phase == "value" then
+        -- Phase 2: typing value for the named prop
+        love.graphics.setColor(PROP_KEY_COL)
+        love.graphics.print(aps.propName .. ": ", x, y)
+        drawInlineEditor(x + font:getWidth(aps.propName .. ": "), y, rx + rw - x - font:getWidth(aps.propName .. ": ") - pad, lineH, font)
+        y = y + lineH
+      end
+    else
+      -- Show [+ add] button
+      local addLabel = "[+ add]"
+      local isAddHovered = state.mouseX >= x and state.mouseY >= y
+        and state.mouseY < y + lineH and state.mouseX < x + font:getWidth(addLabel)
+        and y + lineH > ry and y < ry + rh
+      love.graphics.setColor(isAddHovered and TOOLTIP_ACCENT or TREE_DIM)
+      love.graphics.print(addLabel, x, y)
+      state.detailPropPositions[#state.detailPropPositions + 1] = {
+        section = "addProp",
+        prop = "__add__",
+        y = y,
+        h = lineH,
+        valueX = x,
+        value = nil,
+      }
+      y = y + lineH
+    end
+    y = y + 4
   end
 
   -- Separator
@@ -2295,7 +2584,7 @@ function drawDetailPanel(rx, ry, rw, rh)
     if hasProps then y = y + 4 end
   end
 
-  -- ── Children summary ──
+  -- ── Children summary (clickable) ──
   local nc = node.children and #node.children or 0
   if nc > 0 then
     love.graphics.setColor(SECTION_COL)
@@ -2311,8 +2600,13 @@ function drawDetailPanel(rx, ry, rw, rh)
       local cc = child.computed
       local dims = cc and string.format("%dx%d", math.floor(cc.w), math.floor(cc.h)) or "?"
       local childName = child.debugName and ("<" .. child.debugName .. ">") or (child.type or "?")
-      love.graphics.setColor(TOOLTIP_TEXT)
+      -- Hover highlight for clickable children
+      local isChildHovered = state.mouseX >= x and state.mouseY >= y
+        and state.mouseY < y + lineH and state.mouseX < rx + rw - pad
+        and y + lineH > ry and y < ry + rh
+      love.graphics.setColor(isChildHovered and TOOLTIP_ACCENT or TOOLTIP_TEXT)
       love.graphics.print(string.format("[%d] %s  %s", i, childName, dims), x, y)
+      state.detailChildPositions[#state.detailChildPositions + 1] = { node = child, y = y, h = lineH }
       y = y + lineH
     end
   end
@@ -2353,8 +2647,13 @@ function drawDetailPanel(rx, ry, rw, rh)
           -- Truncate snippet to fit available width
           local displaySnip = snippet
           if font:getWidth(displaySnip) > availW then
-            while #displaySnip > 0 and font:getWidth(displaySnip .. "\xe2\x80\xa6") > availW do
-              displaySnip = displaySnip:sub(1, #displaySnip - 1)
+            -- Truncate at UTF-8 character boundaries to avoid invalid byte sequences
+            local len = utf8.len(displaySnip) or 0
+            while len > 0 do
+              local bytePos = utf8.offset(displaySnip, len) -- byte offset of last char
+              displaySnip = displaySnip:sub(1, bytePos - 1)
+              len = len - 1
+              if font:getWidth(displaySnip .. "\xe2\x80\xa6") <= availW then break end
             end
             displaySnip = displaySnip .. "\xe2\x80\xa6"
           end
@@ -2375,6 +2674,43 @@ function drawDetailPanel(rx, ry, rw, rh)
   love.graphics.setColor(TREE_DIM)
   love.graphics.print("Click values to edit  |  Arrow keys +/-", x, y)
   y = y + lineH + pad
+
+  -- ── Source Editor ──
+  if node.debugSource and node.debugSource.fileName then
+    y = y + 4
+    love.graphics.setColor(SECTION_COL)
+    local srcLabel = "source"
+    if SourceEditor.isDirty() then srcLabel = srcLabel .. "  \xe2\x97\x8f" end -- ●
+    love.graphics.print(srcLabel, x, y)
+
+    -- Show filename on the right
+    local shortFile = node.debugSource.fileName:match("([^/]+)$") or node.debugSource.fileName
+    love.graphics.setColor(TREE_DIM)
+    local fileW = font:getWidth(shortFile)
+    love.graphics.print(shortFile, rx + rw - pad - fileW, y)
+    y = y + lineH + 4
+
+    -- Open file if not already open (or selected node changed)
+    local srcPath = node.debugSource.fileName
+    if SourceEditor.getPath() ~= srcPath then
+      SourceEditor.open(srcPath, node.debugSource.lineNumber)
+    end
+
+    -- Editor region: fixed height, rendered inline in the detail panel
+    -- Use remaining viewport height or minimum 200px
+    local editorH = math.max(200, rh - (y - ry) - 10)
+    -- Temporarily pop the detail panel's scissor so the editor can set its own
+    love.graphics.setScissor()
+    SourceEditor.draw(rx + 2, y, rw - 4, editorH, font)
+    -- Restore detail panel scissor
+    love.graphics.setScissor(rx, ry, rw, rh)
+    y = y + editorH + pad
+  else
+    -- No source info — close editor if open
+    if SourceEditor.getPath() then
+      SourceEditor.close()
+    end
+  end
 
   -- Store content height for scroll clamping
   local contentH = (y - ry) + state.detailScrollY

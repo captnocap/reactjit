@@ -1,6 +1,6 @@
 /**
  * Typography system — opinionated Text component variants.
- * Uses the ChartTooltip dot-notation pattern: `Typography.Heading`, `Typography.Muted`, etc.
+ * Uses the dot-notation pattern: `Typography.Heading`, `Typography.Muted`, etc.
  * Each sub-component is a thin `<Text>` wrapper with baked-in style defaults.
  */
 

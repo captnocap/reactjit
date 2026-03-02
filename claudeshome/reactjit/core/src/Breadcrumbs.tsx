@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from './primitives';
 import { Pressable } from './Pressable';
+import { useThemeColorsOptional } from './context';
 import type { Style } from './types';
 
 export interface BreadcrumbItem {
@@ -21,6 +22,13 @@ export function Breadcrumbs({
   separator = '/',
   style,
 }: BreadcrumbsProps) {
+  const theme = useThemeColorsOptional();
+  const colors = {
+    textCurrent: theme?.text ?? '#e2e8f0',
+    textDefault: theme?.textSecondary ?? '#94a3b8',
+    separator: theme?.textDim ?? '#64748b',
+  };
+
   return (
     <Box style={{
       flexDirection: 'row',
@@ -35,7 +43,7 @@ export function Breadcrumbs({
         return (
           <React.Fragment key={item.id}>
             {isLast ? (
-              <Text style={{ color: '#e2e8f0', fontSize: 11, fontWeight: 'bold' }}>
+              <Text style={{ color: colors.textCurrent, fontSize: 11, fontWeight: 'bold' }}>
                 {item.label}
               </Text>
             ) : (
@@ -45,13 +53,13 @@ export function Breadcrumbs({
                   opacity: state.hovered ? 1 : 0.7,
                 })}
               >
-                <Text style={{ color: '#64748b', fontSize: 11 }}>
+                <Text style={{ color: colors.textDefault, fontSize: 11 }}>
                   {item.label}
                 </Text>
               </Pressable>
             )}
             {!isLast && (
-              <Text style={{ color: '#334155', fontSize: 11 }}>
+              <Text style={{ color: colors.separator, fontSize: 11 }}>
                 {separator}
               </Text>
             )}

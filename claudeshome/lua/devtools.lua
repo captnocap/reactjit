@@ -29,6 +29,7 @@
 ]]
 
 local Log = require("lua.debug_log")
+local eventTrail = require("lua.event_trail")
 
 local DevTools = {}
 
@@ -448,6 +449,7 @@ function DevTools.keypressed(key)
   if key == "f12" then
     if state.poppedOut then
       -- Dock back first, then close
+      eventTrail.recordSemantic("F12: closed inspector (docked back)")
       DevTools.dockBack()
       state.open = false
       inspector.disable()
@@ -459,8 +461,10 @@ function DevTools.keypressed(key)
     else
       state.open = not state.open
       if state.open then
+        eventTrail.recordSemantic("F12: opened inspector")
         inspector.enable()
       else
+        eventTrail.recordSemantic("F12: closed inspector")
         inspector.disable()
         console.hide()
         state.draggingDivider = false
@@ -1204,10 +1208,15 @@ local function drawWireframeTab(root, region)
   drawWfNode(root, scale, offX, offY, 0)
 
   -- Flex pressure overlay
+  local flexHasOverlay = false
   if wfShowFlex and inspector then
     local selNode = inspector.getSelectedNode()
     if selNode then
-      drawFlexOverlay(selNode, scale, offX, offY, region)
+      local c = selNode.computed
+      if c and c.flexInfo then
+        flexHasOverlay = true
+        drawFlexOverlay(selNode, scale, offX, offY, region)
+      end
     end
   end
 
@@ -1218,7 +1227,7 @@ local function drawWireframeTab(root, region)
   local bottomY = region.y + region.h - fh - 10
 
   -- Flex toggle pill button (left side)
-  local flexLabel = wfShowFlex and "Flex" or "Flex"
+  local flexLabel = wfShowFlex and "\xe2\x97\x8f Flex" or "\xe2\x97\x8b Flex"  -- ● / ○
   local flexTw = font:getWidth(flexLabel)
   local pillPadX, pillPadY = 8, 3
   local pillX = region.x + 8
@@ -1231,21 +1240,30 @@ local function drawWireframeTab(root, region)
   local isFlexHover = mx >= pillX and mx < pillX + pillW and my >= pillY and my < pillY + pillH
 
   if wfShowFlex then
-    -- Active: filled amber pill
-    love.graphics.setColor(0.95, 0.75, 0.20, isFlexHover and 0.35 or 0.25)
+    -- Active: solid amber pill
+    love.graphics.setColor(0.95, 0.75, 0.20, isFlexHover and 0.45 or 0.30)
     love.graphics.rectangle("fill", pillX, pillY, pillW, pillH, 4, 4)
-    love.graphics.setColor(0.95, 0.75, 0.20, 0.80)
+    love.graphics.setColor(0.95, 0.75, 0.20, 0.90)
     love.graphics.rectangle("line", pillX, pillY, pillW, pillH, 4, 4)
     love.graphics.setColor(0.95, 0.85, 0.40, 1)
   else
-    -- Inactive: dim outline pill
-    love.graphics.setColor(0.40, 0.40, 0.45, isFlexHover and 0.25 or 0.10)
+    -- Inactive: ghost pill
+    love.graphics.setColor(0.30, 0.30, 0.35, isFlexHover and 0.20 or 0.05)
     love.graphics.rectangle("fill", pillX, pillY, pillW, pillH, 4, 4)
-    love.graphics.setColor(0.40, 0.40, 0.45, 0.50)
+    love.graphics.setColor(0.35, 0.35, 0.40, 0.35)
     love.graphics.rectangle("line", pillX, pillY, pillW, pillH, 4, 4)
-    love.graphics.setColor(0.50, 0.50, 0.55, 0.70)
+    love.graphics.setColor(0.45, 0.45, 0.50, 0.50)
   end
   love.graphics.print(flexLabel, pillX + pillPadX, bottomY)
+
+  -- Hint when flex is on but no overlay is showing
+  if wfShowFlex and not flexHasOverlay then
+    local hint = "click a flex container to see distribution"
+    local hintW = font:getWidth(hint)
+    local hintX = pillX + pillW + 10
+    love.graphics.setColor(0.55, 0.55, 0.60, 0.50)
+    love.graphics.print(hint, hintX, bottomY)
+  end
 
   -- Store flex toggle hit rect for click handling
   state._wfFlexToggle = { x = pillX, y = pillY, w = pillW, h = pillH }

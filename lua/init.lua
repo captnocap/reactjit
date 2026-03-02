@@ -1027,6 +1027,14 @@ function ReactJIT.init(config)
     return true
   end
 
+  -- Deliberate crash for testing the error overlay and event trail.
+  -- Called by the ErrorTest story "Lua crash" button.
+  rpcHandlers["dev:crash"] = function(args)
+    local reason = (args and args.reason) or "intentional test crash"
+    eventTrail.recordSemantic("dev:crash RPC triggered — " .. reason)
+    error("INTENTIONAL TEST CRASH: " .. reason)
+  end
+
   -- Expose current inspector perf counters for stress-test dashboards.
   rpcHandlers["dev:perf"] = function()
     if inspector and inspector.getPerfData then
@@ -2766,13 +2774,25 @@ end
 --- @param method string  The ReactJIT method name (e.g. "mousepressed")
 --- @param ...    any     Arguments to pass through
 function ReactJIT.safeCall(method, ...)
-  -- Record in event trail (stringify args for diagnostics)
+  -- Record in event trail — mousemoved/mousedragged are muted inside trail.record
   local args = { ... }
   local argParts = {}
   for i = 1, #args do
     argParts[i] = tostring(args[i])
   end
-  eventTrail.record(method, table.concat(argParts, ", "))
+  -- keypressed gets enriched with modifier state; everything else uses raw fallback
+  -- (clicks are enriched later in mousepressed after hitTest resolves the node)
+  if method == "keypressed" then
+    local key = args[1] or "?"
+    local mods = {
+      ctrl  = love.keyboard.isDown("lctrl")  or love.keyboard.isDown("rctrl"),
+      shift = love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift"),
+      alt   = love.keyboard.isDown("lalt")   or love.keyboard.isDown("ralt"),
+    }
+    eventTrail.recordKey(key, mods)
+  else
+    eventTrail.record(method, table.concat(argParts, ", "))
+  end
 
   -- In crash recovery — route input to errors overlay (incl. inline editor), skip everything else
   if crashRecoveryMode then
@@ -2840,6 +2860,7 @@ function ReactJIT.mousepressed(x, y, button)
 
   -- Right-click: open context menu instead of normal click handling
   if button == 2 and M.contextmenu then
+    eventTrail.recordSemantic("Right-click: opened context menu at " .. math.floor(x) .. "," .. math.floor(y))
     M.contextmenu.open(x, y, root, pushEvent)
     return
   end
@@ -2848,6 +2869,9 @@ function ReactJIT.mousepressed(x, y, button)
   if scrollbarMousePressed(root, x, y, button) then return end
 
   local hit = M.events.hitTest(root, x, y)
+
+  -- Record semantic click event in trail now that we know the target
+  eventTrail.recordClick(hit, button)
 
   -- Diagnostic: show what React found vs what the game module would claim
   if hit then
@@ -3332,6 +3356,12 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
   if M.inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
+
+  -- Ctrl+Shift+F12: deliberate crash for testing the error overlay + event trail
+  if key == "f12" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
+    eventTrail.recordSemantic("Ctrl+Shift+F12: deliberate test crash triggered")
+    error("INTENTIONAL TEST CRASH — triggered by Ctrl+Shift+F12")
+  end
 
   -- Any key: dump font metrics (temporary debug)
   io.write("[KEY-DBG] key=" .. tostring(key) .. " scancode=" .. tostring(scancode) .. "\n"); io.flush()
