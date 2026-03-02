@@ -17,15 +17,30 @@ import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
 import { Preview } from '../playground/Preview';
 
+/** Build a table-layout tooltip from custom style props. Returns undefined if no custom styles. */
+function styleTooltip(style?: Record<string, any>): { content: string; layout: string; type: string } | undefined {
+  if (!style) return undefined;
+  // Structural / layout-only keys — never interesting to surface
+  const STRUCTURAL = new Set([
+    'flexGrow', 'flexShrink', 'flexBasis', 'flexDirection', 'flexWrap',
+    'alignItems', 'alignSelf', 'justifyContent', 'overflow',
+    'position', 'zIndex', 'display',
+  ]);
+  const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
+  if (entries.length === 0) return undefined;
+  const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+  return { content, layout: 'table', type: 'cursor' };
+}
+
 function Wireframe({ label, style }: { label: string; style?: any }) {
   const c = useThemeColors();
   return (
+    // rjit-ignore-next-line
     <Box style={{
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: 6,
-      // rjit-ignore-next-line
       borderStyle: 'dashed',
       justifyContent: 'center',
       alignItems: 'center',
@@ -190,15 +205,38 @@ export function Layout1Story() {
           </>
         ) : (
           <>
-            {/* Docs: preview left, API reference right */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+            {/* Docs: preview left — hover styled elements for tooltip */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
               <Box style={{
-                flexGrow: 1,
-                justifyContent: 'center',
                 alignItems: 'center',
                 padding: 20,
+                gap: 12,
               }}>
-                <Wireframe label="Preview" style={{ width: 120, height: 120 }} />
+                {/* Styled element — tooltip shows custom styles */}
+                {(() => {
+                  const custom = { backgroundColor: '#3b82f6', borderRadius: 8, padding: 16 };
+                  return (
+                    <Box style={{ ...custom, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
+                      <Text style={{ color: 'white', fontSize: 10 }}>{'Styled element'}</Text>
+                    </Box>
+                  );
+                })()}
+
+                {/* Plain structural element — no tooltip */}
+                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <Wireframe label="A" style={{ width: 40, height: 40 }} />
+                  <Wireframe label="B" style={{ width: 40, height: 40 }} />
+                </Box>
+
+                {/* Another styled element */}
+                {(() => {
+                  const custom = { backgroundColor: '#10b981', borderRadius: 12, padding: 10, borderWidth: 2, borderColor: '#065f46' };
+                  return (
+                    <Box style={{ ...custom, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
+                      <Text style={{ color: 'white', fontSize: 10 }}>{'Another styled'}</Text>
+                    </Box>
+                  );
+                })()}
               </Box>
             </ScrollView>
 

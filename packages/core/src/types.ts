@@ -480,6 +480,7 @@ export interface ScrollEvent {
 
 export interface ScrollViewProps {
   style?: Style;
+  contentContainerStyle?: Style;
   horizontal?: boolean;
   showScrollIndicator?: boolean;
   onScroll?: (event: ScrollEvent) => void;
