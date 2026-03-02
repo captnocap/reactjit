@@ -86,9 +86,11 @@ local function detectDefaultFonts()
   if defaultFontRegular ~= nil then return end  -- already detected
 
   -- Check for fonts/base/ directory (project-local)
+  -- DejaVu Sans matches browser default metrics on Linux (line-height ~1.2x)
+  -- and has full Unicode coverage (arrows, dingbats, math, block elements, etc.)
   local paths = {
-    "fonts/base/NotoSans-Regular.ttf",
-    "fonts/base/NotoSans-Bold.ttf",
+    "fonts/base/DejaVuSans-Regular.ttf",
+    "fonts/base/DejaVuSans-Bold.ttf",
   }
 
   local info = love.filesystem.getInfo(paths[1])
@@ -315,6 +317,25 @@ function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, l
   measureCache[key] = result
 
   return result
+end
+
+--- Measure the min-content width of text (width of the longest word).
+--- Splits text by whitespace and newlines, measures each word with
+--- font:getWidth(), and returns the widest word's width.
+function Measure.measureMinContentWidth(text, fontSize, fontFamily, letterSpacing, fontWeight)
+  fontSize = fontSize or 14
+  text = tostring(text or "")
+  if text == "" then return 0 end
+
+  local font = Measure.getFont(fontSize, fontFamily, fontWeight)
+  local maxW = 0
+
+  for word in text:gmatch("%S+") do
+    local w = Measure.getWidthWithSpacing(font, word, letterSpacing)
+    if w > maxW then maxW = w end
+  end
+
+  return maxW
 end
 
 return Measure

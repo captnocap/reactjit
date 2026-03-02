@@ -31,6 +31,7 @@ local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
 local CapabilitiesModule = nil  -- Lazy-loaded for visual capability measurement
 
 local Layout = {}
+Layout._debugPrint = false  -- set true to enable [STRETCH-DBG] / [LAYOUT-DBG] prints
 
 -- ============================================================================
 -- Proportional surface fallback
@@ -86,6 +87,7 @@ end
 --- Returns nil when value is nil or unparseable.
 function Layout.resolveUnit(value, parentSize)
   if value == nil then return nil end
+  if value == "fit-content" then return nil end
   if type(value) == "number" then return value end
   if type(value) ~= "string" then return nil end
 
@@ -296,6 +298,83 @@ local function clampDim(value, minVal, maxVal)
 end
 
 -- ============================================================================
+-- Min-content size (CSS min-width: auto floor for flex items)
+-- ============================================================================
+
+--- Compute the min-content width of a node.
+--- For text: the width of the longest word (measure with availW=0).
+--- For row containers: sum of children min-content + gaps.
+--- For column containers: max of children min-content.
+local _mcwDebug = false
+-- Expose so external tools can enable MCW debug:
+function Layout.setMcwDebug(v) _mcwDebug = v end
+local function computeMinContentW(node, depth)
+  depth = depth or 0
+  local ru = Layout.resolveUnit
+  local s = node.style or {}
+  local pad = ru(s.padding, 0) or 0
+  local padL = ru(s.paddingLeft, 0) or pad
+  local padR = ru(s.paddingRight, 0) or pad
+
+  if node.type == "Text" or node.type == "__TEXT__" then
+    local text = resolveTextContent(node)
+    if not text then return 0 end
+    local ts = Measure.resolveTextScale(node)
+    local fontSize = math.floor(resolveFontSize(node) * ts)
+    local fontFamily = resolveFontFamily(node)
+    local fontWeight = resolveFontWeight(node)
+    local letterSpacing = resolveLetterSpacing(node)
+    local mw = Measure.measureMinContentWidth(text, fontSize, fontFamily, letterSpacing, fontWeight)
+    if _mcwDebug then
+      io.write(string.format("[MCW]%s type=%s text=%q mw=%s pad=%s+%s\n",
+        string.rep("  ", depth), node.type, tostring(text or ""):sub(1,30), tostring(mw), tostring(padL), tostring(padR)))
+      io.flush()
+    end
+    if mw then return mw + padL + padR end
+    return 0
+  end
+
+  local children = node.children or {}
+  if #children == 0 then
+    if _mcwDebug then
+      io.write(string.format("[MCW]%s type=%s EMPTY → 0\n", string.rep("  ", depth), node.type))
+      io.flush()
+    end
+    return 0
+  end
+
+  local childIsRow = (s.flexDirection == "row" or s.flexDirection == "row-reverse")
+  local gap = ru(s.gap, 0) or 0
+
+  local minW = 0
+  local visCount = 0
+  for _, child in ipairs(children) do
+    local cs = child.style or {}
+    if cs.display ~= "none" and cs.position ~= "absolute" then
+      local childMin = computeMinContentW(child, depth + 1)
+      if childIsRow then
+        minW = minW + childMin
+        visCount = visCount + 1
+      else
+        if childMin > minW then minW = childMin end
+      end
+    end
+  end
+
+  if childIsRow and visCount > 1 then
+    minW = minW + (visCount - 1) * gap
+  end
+
+  local result = minW + padL + padR
+  if _mcwDebug then
+    io.write(string.format("[MCW]%s type=%s dir=%s kids=%d minW=%.1f pad=%s+%s → %.1f\n",
+      string.rep("  ", depth), node.type, childIsRow and "row" or "col", visCount, minW, tostring(padL), tostring(padR), result))
+    io.flush()
+  end
+  return result
+end
+
+-- ============================================================================
 -- Cross-axis alignment helper
 -- ============================================================================
 
@@ -502,7 +581,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
        and not Layout._capabilities.rendersInOwnSurface(node.type) then
       if not Layout._layoutDbgSeen then Layout._layoutDbgSeen = {} end
       Layout._layoutDbgSeen[node.type] = (Layout._layoutDbgSeen[node.type] or 0) + 1
-      if Layout._layoutDbgSeen[node.type] <= 3 then
+      if Layout._debugPrint and Layout._layoutDbgSeen[node.type] <= 3 then
         io.write(string.format("[LAYOUT-DBG] non-visual skip: type=%s id=%s → 0x0\n", node.type, tostring(node.id))); io.flush()
       end
       node.computed = { x = px, y = py, w = 0, h = 0 }
@@ -512,7 +591,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
        and not node._isWindowRoot then
       if not Layout._layoutDbgSeen then Layout._layoutDbgSeen = {} end
       Layout._layoutDbgSeen[node.type] = (Layout._layoutDbgSeen[node.type] or 0) + 1
-      if Layout._layoutDbgSeen[node.type] <= 3 then
+      if Layout._debugPrint and Layout._layoutDbgSeen[node.type] <= 3 then
         io.write(string.format("[LAYOUT-DBG] ownSurface skip: type=%s id=%s → 0x0\n", node.type, tostring(node.id))); io.flush()
       end
       node.computed = { x = px, y = py, w = 0, h = 0 }
@@ -542,15 +621,26 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
   local ru = Layout.resolveUnit
 
+  -- Percentage dimensions resolve against the PARENT's inner dimensions,
+  -- not the node's own allocated size (pw/ph). The parent sets _parentInnerW/H
+  -- before calling layoutNode. For the root node (no parent), pw/ph IS the
+  -- viewport and is correct.
+  local pctW = node._parentInnerW or pw
+  local pctH = node._parentInnerH or ph
+  node._parentInnerW = nil
+  node._parentInnerH = nil
+
   -- Resolve min/max constraints
-  local minW = ru(s.minWidth, pw)
-  local maxW = ru(s.maxWidth, pw)
-  local minH = ru(s.minHeight, ph)
-  local maxH = ru(s.maxHeight, ph)
+  local minW = ru(s.minWidth, pctW)
+  local maxW = ru(s.maxWidth, pctW)
+  local minH = ru(s.minHeight, pctH)
+  local maxH = ru(s.maxHeight, pctH)
 
   -- Own dimensions
-  local explicitW = ru(s.width, pw)
-  local explicitH = ru(s.height, ph)
+  local explicitW = ru(s.width, pctW)
+  local explicitH = ru(s.height, pctH)
+  local fitW = (s.width == "fit-content")
+  local fitH = (s.height == "fit-content")
 
   local w, h
   local wSource, hSource  -- provenance: why this dimension has its value
@@ -559,6 +649,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
   if explicitW then
     w = explicitW
     wSource = "explicit"
+  elseif fitW then
+    w = estimateIntrinsicMain(node, true, pw, ph)
+    wSource = "fit-content"
   elseif pw then
     w = pw  -- Use parent's available width
     wSource = "parent"
@@ -571,7 +664,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- Height resolution - use existing deferred auto-height behavior
   -- (computed later after laying out children, lines 864-890)
   h = explicitH
-  if h then hSource = "explicit" end
+  if h then hSource = "explicit"
+  elseif fitH then hSource = "fit-content"
+  end
 
   -- aspectRatio: compute missing dimension from the other
   local ar = s.aspectRatio
@@ -742,6 +837,13 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
   local mainSize  = isRow and innerW or innerH
 
+  -- Debug: print sizing info for debugLayout nodes
+  if node.props and node.props.debugLayout then
+    io.write(string.format("[FLEX-ENTRY] id=%s w=%.1f h=%s innerW=%.1f mainSize=%.1f isRow=%s wrap=%s wSource=%s\n",
+      tostring(node.id), w, tostring(h), innerW, mainSize, tostring(isRow), tostring(wrap), tostring(wSource)))
+    io.flush()
+  end
+
   -- ====================================================================
   -- Filter visible children and measure them
   -- ====================================================================
@@ -793,20 +895,31 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
       -- For text children without explicit dimensions, measure intrinsic size
       if childIsText and (not cw or not ch) then
-        local outerConstraint = cw or innerW
+        local childFitW = (cs.width == "fit-content")
 
-        -- When maxWidth is set and no explicit width, clamp the constraint
-        if not cw and cMaxW then
-          outerConstraint = math.min(outerConstraint, cMaxW)
-        end
+        if childFitW then
+          -- fit-content: measure unconstrained (natural single-line width)
+          local mw, mh = measureTextNode(child, nil)
+          if mw and mh then
+            if not cw then cw = mw + cpadL + cpadR end
+            if not ch then ch = mh + cpadT + cpadB end
+          end
+        else
+          local outerConstraint = cw or innerW
 
-        local constrainW = outerConstraint - cpadL - cpadR
-        if constrainW < 0 then constrainW = 0 end
+          -- When maxWidth is set and no explicit width, clamp the constraint
+          if not cw and cMaxW then
+            outerConstraint = math.min(outerConstraint, cMaxW)
+          end
 
-        local mw, mh = measureTextNode(child, constrainW)
-        if mw and mh then
-          if not cw then cw = mw + cpadL + cpadR end
-          if not ch then ch = mh + cpadT + cpadB end
+          local constrainW = outerConstraint - cpadL - cpadR
+          if constrainW < 0 then constrainW = 0 end
+
+          local mw, mh = measureTextNode(child, constrainW)
+          if mw and mh then
+            if not cw then cw = mw + cpadL + cpadR end
+            if not ch then ch = mh + cpadT + cpadB end
+          end
         end
       end
 
@@ -820,18 +933,22 @@ function Layout.layoutNode(node, px, py, pw, ph)
       -- in when an external constraint is smaller than content).
       local childIsScroll = cs.overflow == "scroll"
       if not childIsText and (not cw or not ch) then
-        -- Don't estimate intrinsic main-axis size for flex-grow children.
-        -- Their main-axis size comes from flex distribution, not content.
-        -- Without this, content width inflates the basis and the child
-        -- overflows its parent (e.g., text at large font scales pushing
-        -- a grow container past the window edge).
-        local skipIntrinsicW = (isRow and grow > 0) or childIsScroll
-        local skipIntrinsicH = (not isRow and grow > 0) or childIsScroll
+        -- Scroll containers skip intrinsic sizing — they need explicit
+        -- dimensions or flex-grow to define their viewport.
+        local skipIntrinsicW = childIsScroll
+        local skipIntrinsicH = childIsScroll
         if not cw and not skipIntrinsicW then
-          cw = estimateIntrinsicMain(child, true, innerW, innerH)
+          local estW = (cs.width == "fit-content") and nil or innerW
+          cw = estimateIntrinsicMain(child, true, estW, innerH)
         end
         if not ch and not skipIntrinsicH then
-          ch = estimateIntrinsicMain(child, false, innerW, innerH)
+          -- Use the child's own resolved width (cw) for height estimation so
+          -- text wraps at the child's actual width, not the parent's full width.
+          -- This prevents the parent from baking in a too-short height based on
+          -- text measured at the parent's width when the child is narrower (e.g.
+          -- width: '50%'). Falls back to innerW if cw is not yet known.
+          local estPwForH = cw or innerW
+          ch = estimateIntrinsicMain(child, false, estPwForH, innerH)
         end
       end
 
@@ -916,14 +1033,25 @@ function Layout.layoutNode(node, px, py, pw, ph)
         basis = isRow and (cw or 0) or (ch or 0)
       end
 
+      -- CSS min-width: auto — compute min-content floor when no explicit minWidth
+      local minContent = nil
+      if isRow and not cMinW then
+        local wasDebug = _mcwDebug
+        if node.props and node.props.debugLayout then _mcwDebug = true end
+        minContent = computeMinContentW(child)
+        _mcwDebug = wasDebug
+      end
+
       childInfos[i] = {
         w = cw, h = ch, grow = grow, shrink = shrink, basis = basis,
         marL = cmarL, marR = cmarR, marT = cmarT, marB = cmarB,
         mainMarginStart = mainMarginStart, mainMarginEnd = mainMarginEnd,
         isText = childIsText,
         explicitH = ru(cs.height, innerH),
+        fitContentH = (cs.height == "fit-content"),
         padL = cpadL, padR = cpadR, padT = cpadT, padB = cpadB,
         minW = cMinW, maxW = cMaxW, minH = cMinH, maxH = cMaxH,
+        minContent = minContent,
       }
     end
   end
@@ -952,7 +1080,17 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
     for _, idx in ipairs(visibleIndices) do
       local ci = childInfos[idx]
-      local itemMain = ci.basis + ci.mainMarginStart + ci.mainMarginEnd
+      local floor = ci.minContent or ci.minW or 0
+      local itemMain = math.max(floor, ci.basis) + ci.mainMarginStart + ci.mainMarginEnd
+
+      -- Debug: print wrap decision for debugLayout nodes only
+      if node.props and node.props.debugLayout then
+        io.write(string.format("[WRAP] id=%s mainSize=%.1f lineMain=%.1f itemMain=%.1f floor=%.1f basis=%.1f minContent=%s gap=%.1f wouldWrap=%s\n",
+          tostring(node.id), mainSize, lineMain, itemMain, floor, ci.basis,
+          tostring(ci.minContent), gap,
+          tostring(#currentLine > 0 and (lineMain + (#currentLine > 0 and gap or 0) + itemMain) > mainSize)))
+        io.flush()
+      end
 
       -- Add gap if this isn't the first item on the line
       local gapBefore = (#currentLine > 0) and gap or 0
@@ -1011,6 +1149,19 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
     Log.log("layout", "  flex line %d: %d items basis=%s gaps=%s avail=%s totalFlex=%s", lineIdx, lineCount, tostring(lineTotalBasis), tostring(lineGaps), tostring(lineAvail), tostring(lineTotalFlex))
 
+    -- Tagged node diagnostic (debugLayout only)
+    if node.props and node.props.debugLayout then
+      io.write(string.format("[DIAG] node.tag=%s id=%s mainSize=%.1f totalBasis=%.1f gaps=%.1f margins=%.1f freeSpace=%.1f totalGrow=%.1f lineCount=%d\n",
+        tostring(node.tag), tostring(node.id), mainSize, lineTotalBasis, lineGaps, lineTotalMarginMain, lineAvail, lineTotalFlex, lineCount))
+      for _, idx in ipairs(line) do
+        local ci = childInfos[idx]
+        local child = allChildren[idx]
+        io.write(string.format("[DIAG]   child id=%s basis=%.1f grow=%s shrink=%s w=%s\n",
+          tostring(child.id), ci.basis, tostring(ci.grow), tostring(ci.shrink), tostring(ci.w)))
+      end
+      io.flush()
+    end
+
     if lineAvail > 0 and lineTotalFlex > 0 then
       -- Positive free space: distribute to flex-grow items
       for _, idx in ipairs(line) do
@@ -1036,7 +1187,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
           local sh = ci.shrink
           if sh == nil then sh = 1 end
           local shrinkAmount = (sh * ci.basis / totalShrinkScaled) * overflow
-          ci.basis = math.max(0, ci.basis - shrinkAmount)
+          ci.basis = ci.basis - shrinkAmount
         end
       end
     end
@@ -1234,7 +1385,14 @@ function Layout.layoutNode(node, px, py, pw, ph)
         elseif childAlign == "stretch" then
           cy = y + padT + crossCursor + ci.marT
           if ci.explicitH == nil then
+            local stretchBefore = ch_final
             ch_final = clampDim(crossAvail, ci.minH, ci.maxH)
+            if Layout._debugPrint then
+              io.write(string.format("[STRETCH-DBG] id=%s h=%s→%s lineCross=%s crossAvail=%s innerH=%s cardH=%s padT=%s padB=%s gap=%s\n",
+                tostring(child.id), tostring(stretchBefore), tostring(ch_final),
+                tostring(lineCrossSize), tostring(crossAvail), tostring(innerH),
+                tostring(h), tostring(padT), tostring(padB), tostring(gap))); io.flush()
+            end
           end
         else  -- "start" or default
           cy = y + padT + crossCursor + ci.marT
@@ -1278,6 +1436,12 @@ function Layout.layoutNode(node, px, py, pw, ph)
           if arW > 0 and math.abs(cw_final - arW) > 0.5 then
             child._flexW = cw_final
           end
+        elseif not explicitChildW and ci.grow > 0 and ci.isText then
+          -- Text nodes with flexGrow but no explicit width: signal the flex-distributed
+          -- width so layoutNode sets parentAssignedW = true, preventing the text
+          -- measurement at line 742 from shrink-wrapping to content width.
+          -- View containers don't need this — they get correct width from pw.
+          child._flexW = cw_final
         end
       else
         local explicitChildH = ru(cs.height, innerH)
@@ -1296,7 +1460,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
       -- Covers: row cross-axis stretch, column main-axis flex-grow,
       -- and empty surface nodes whose proportional basis would be lost
       -- if the child self-sized to zero in its own layoutNode.
-      if ci.explicitH == nil then
+      if ci.explicitH == nil and not ci.fitContentH then
         if isRow and childAlign == "stretch" then
           child._stretchH = ch_final
         elseif not isRow and ci.grow > 0 then
@@ -1306,6 +1470,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
       end
 
       child.computed = { x = cx, y = cy, w = cw_final, h = ch_final }
+      -- Pass parent's inner dimensions so child resolves percentages correctly
+      child._parentInnerW = innerW
+      child._parentInnerH = innerH
       Layout.layoutNode(child, cx, cy, cw_final, ch_final)
 
       -- Use actual computed size after layout (handles auto-sized containers
@@ -1394,14 +1561,16 @@ function Layout.layoutNode(node, px, py, pw, ph)
   Log.log("layout", "  final id=%s computed x=%d y=%d w=%d h=%d", tostring(node.id), x, y, w, h)
   -- Debug: log layout results for capability types
   if Layout._capabilities and node.type ~= "View" and node.type ~= "__TEXT__" then
-    if not Layout._layoutResultDbg then Layout._layoutResultDbg = {} end
-    Layout._layoutResultDbg[node.type] = (Layout._layoutResultDbg[node.type] or 0) + 1
-    if Layout._layoutResultDbg[node.type] <= 5 then
-      io.write(string.format("[LAYOUT-DBG] RESULT type=%s id=%s → %dx%d@(%d,%d) wSrc=%s hSrc=%s flexGrow=%s\n",
-        node.type, tostring(node.id), w, h, x, y,
-        tostring(wSource), tostring(hSource),
-        tostring(node.style and node.style.flexGrow)))
-      io.flush()
+    if Layout._debugPrint then
+      if not Layout._layoutResultDbg then Layout._layoutResultDbg = {} end
+      Layout._layoutResultDbg[node.type] = (Layout._layoutResultDbg[node.type] or 0) + 1
+      if Layout._layoutResultDbg[node.type] <= 5 then
+        io.write(string.format("[LAYOUT-DBG] RESULT type=%s id=%s → %dx%d@(%d,%d) wSrc=%s hSrc=%s flexGrow=%s\n",
+          node.type, tostring(node.id), w, h, x, y,
+          tostring(wSource), tostring(hSource),
+          tostring(node.style and node.style.flexGrow)))
+        io.flush()
+      end
     end
   end
   node.computed = { x = x, y = y, w = w, h = h, wSource = wSource or "unknown", hSource = hSource or "unknown" }
@@ -1489,6 +1658,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
     Log.log("layout", "  absolute id=%s pos=(%d,%d) size=%dx%d", tostring(child.id), cx, cy, cw, ch)
     child.computed = { x = cx, y = cy, w = cw, h = ch }
+    -- Pass parent's inner dimensions so child resolves percentages correctly
+    child._parentInnerW = innerW
+    child._parentInnerH = innerH
     Layout.layoutNode(child, cx, cy, cw, ch)
   end
 
@@ -1576,6 +1748,35 @@ function Layout.layout(node, x, y, w, h)
   local s = node.style or {}
   if not s.width  then node._flexW = w; node._rootAutoW = true end
   if not s.height then node._stretchH = h; node._rootAutoH = true end
+
+  -- Font metrics dump — press F9 to trigger
+  if Layout._dumpFontMetrics then
+    Layout._dumpFontMetrics = false
+    local sizes = {9, 10, 14, 16, 20}
+    io.write("\n[FONT-METRICS] === Love2D font measurements ===\n")
+    for _, sz in ipairs(sizes) do
+      local font = Measure.getFont(sz)
+      local boldFont = Measure.getFont(sz, nil, "bold")
+      io.write(string.format("[FONT-METRICS] fontSize=%d  getHeight=%d  ascent=%d  descent=%d  lineHeight=%d\n",
+        sz, font:getHeight(), font:getAscent(), font:getDescent(), font:getLineHeight() * font:getHeight()))
+      io.write(string.format("[FONT-METRICS] fontSize=%d (bold)  getHeight=%d\n", sz, boldFont:getHeight()))
+    end
+    -- Measure actual strings from Layout1Story
+    local texts = {
+      { "Box", 20, "bold" },
+      { '<Box bg="#3b82f6" radius={8} padding={16} />', 10, nil },
+      { "The most primitive visual element. A rectangle that contains other rectangles.", 10, nil },
+      { "Playground Mode Toggle", 9, nil },
+    }
+    io.write("[FONT-METRICS] --- Actual text measurements (no wrap constraint) ---\n")
+    for _, t in ipairs(texts) do
+      local result = Measure.measureText(t[1], t[2], nil, nil, nil, nil, nil, t[3])
+      io.write(string.format("[FONT-METRICS] \"%s\" @ %dpx%s → w=%d h=%d\n",
+        t[1]:sub(1,40), t[2], t[3] and " bold" or "", result.width, result.height))
+    end
+    io.write("[FONT-METRICS] ================================================\n\n")
+    io.flush()
+  end
 
   Layout.layoutNode(node, x, y, w, h)
 end

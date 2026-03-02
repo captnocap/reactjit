@@ -1040,6 +1040,26 @@ function ReactJIT.init(config)
     }
   end
 
+  -- ── Dev file I/O (inspector source editor) ──────────────────────────
+  -- Uses raw io.open() (not sandboxed love.filesystem) to read/write
+  -- project source files. Used by the live source editor in the inspector.
+
+  rpcHandlers["dev:readFile"] = function(args)
+    local f = io.open(args.path, "r")
+    if not f then return { error = "Cannot read: " .. args.path } end
+    local content = f:read("*a")
+    f:close()
+    return { content = content, path = args.path }
+  end
+
+  rpcHandlers["dev:writeFile"] = function(args)
+    local f = io.open(args.path, "w")
+    if not f then return { error = "Cannot write: " .. args.path } end
+    f:write(args.content)
+    f:close()
+    return { ok = true, path = args.path }
+  end
+
   -- ── Lua-side interval timer service ──────────────────────────────────
   -- JS calls timer:create to start a repeating timer. Lua ticks it in
   -- love.update(dt) and pushes a timer:tick event each interval.
@@ -3312,6 +3332,14 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
   if M.inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
+
+  -- Any key: dump font metrics (temporary debug)
+  io.write("[KEY-DBG] key=" .. tostring(key) .. " scancode=" .. tostring(scancode) .. "\n"); io.flush()
+  if key == "." or key == "period" then
+    local Layout = require("lua.layout")
+    Layout._dumpFontMetrics = true
+    io.write("[KEY-DBG] font metrics dump triggered\n"); io.flush()
+  end
 
   -- Context menu keyboard handling
   if M.contextmenu and M.contextmenu.isOpen() then

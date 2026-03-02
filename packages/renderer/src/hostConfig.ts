@@ -285,7 +285,7 @@ function buildHandlerMeta(handlers: Record<string, Function>): Record<string, st
   const meta: Record<string, string> = {};
   for (const name of keys) {
     try {
-      const src = handlers[name].toString();
+      const src = handlers[name].toString().replace(/\s+/g, ' ').trim();
       meta[name] = src.length > 80 ? src.slice(0, 80) + '\u2026' : src;
     } catch {
       meta[name] = '(native)';

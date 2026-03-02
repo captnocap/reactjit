@@ -88,8 +88,8 @@ function TokenDemo() {
 
   return (
     <>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
-        <Text style={{ fontSize: 9, color: c.textDim, flexGrow: 1 }}>libsodium randombytes_buf via Lua FFI</Text>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Text style={{ fontSize: 9, color: c.textDim }}>libsodium randombytes_buf via Lua FFI</Text>
         <Pressable onPress={regenerate}>
           <Box style={{ backgroundColor: c.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 10, color: '#000', fontWeight: 'normal' }}>Regenerate</Text>
