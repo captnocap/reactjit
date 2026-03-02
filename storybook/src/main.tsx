@@ -212,30 +212,10 @@ function StorybookPanel() {
       </Box>
 
       {/* Content */}
-      <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'hidden' }}>
-        {/* Header bar */}
-        <Box style={{
-          padding: 8,
-          paddingLeft: 12,
-          borderWidth: 0,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
-            {active?.title}
-          </Text>
-          <Text style={{ color: c.textDim, fontSize: 9 }}>
-            {active?.section}
-          </Text>
-        </Box>
-
-        {/* Story content */}
-        <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
-          <ScaleProvider reference={{ width: 800, height: 600 }}>
-            {StoryComp && <StoryComp key={active.id} />}
-          </ScaleProvider>
-        </Box>
+      <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'scroll' }}>
+        <ScaleProvider reference={{ width: 800, height: 600 }}>
+          {StoryComp && <StoryComp key={active.id} />}
+        </ScaleProvider>
       </Box>
     </Box>
   );

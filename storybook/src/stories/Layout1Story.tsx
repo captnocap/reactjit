@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, TextEditor, Pressable, ScrollView } from '../../../packages/core/src';
+import { Box, Text, TextEditor, CodeBlock, Pressable, ScrollView } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
@@ -25,6 +25,7 @@ function Wireframe({ label, style }: { label: string; style?: any }) {
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: 6,
+      // rjit-ignore-next-line
       borderStyle: 'dashed',
       justifyContent: 'center',
       alignItems: 'center',
@@ -205,6 +206,48 @@ export function Layout1Story() {
 
             <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
               <Box style={{ padding: 14, gap: 10 }}>
+
+                {/* ── Overview ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'OVERVIEW'}
+                </Text>
+                <Text style={{ color: c.text, fontSize: 10 }}>
+                  {'A short paragraph describing what this component is and when to use it.'}
+                </Text>
+
+                <HorizontalDivider />
+
+                {/* ── Usage ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'USAGE'}
+                </Text>
+                <CodeBlock
+                  language="tsx"
+                  fontSize={9}
+                  code={'<Component\n  propA="value"\n  propB={123}\n>\n  <Child />\n</Component>'}
+                />
+
+                <HorizontalDivider />
+
+                {/* ── Behavior ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'BEHAVIOR'}
+                </Text>
+                <Box style={{ gap: 4 }}>
+                  <Text style={{ color: c.text, fontSize: 10 }}>
+                    {'First behavioral note about the component.'}
+                  </Text>
+                  <Text style={{ color: c.text, fontSize: 10 }}>
+                    {'Second behavioral note about the component.'}
+                  </Text>
+                  <Text style={{ color: c.text, fontSize: 10 }}>
+                    {'Third behavioral note about the component.'}
+                  </Text>
+                </Box>
+
+                <HorizontalDivider />
+
+                {/* ── Props ── */}
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
                   {'PROPS'}
                 </Text>
