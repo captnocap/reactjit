@@ -53,6 +53,9 @@ local state = {
   -- Draggable divider between tree and detail panels
   dividerRatio    = 0.5,   -- tree takes this fraction of width (0.0-1.0)
   draggingDivider = false, -- currently dragging?
+  -- Panel height resize (drag top edge)
+  panelRatio      = 0.4,           -- user-adjustable panel height ratio
+  draggingHeight  = false,        -- currently dragging top edge?
   -- Pop-out window state (subprocess over TCP IPC)
   poppedOut      = false,    -- devtools panel in its own child process?
   server         = nil,      -- TCP server socket (parent side)
@@ -160,7 +163,8 @@ local function getPanelGeometry()
     return panelY, panelH, contentY, contentH, screenW
   end
   local screenW, screenH = love.graphics.getDimensions()
-  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
+  local ratio = state.panelRatio or PANEL_RATIO
+  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * ratio))
   local panelY = screenH - panelH
   local contentY = panelY + TAB_BAR_H
   local contentH = panelH - TAB_BAR_H - STATUS_BAR_H
@@ -204,7 +208,8 @@ function DevTools.getViewportHeight()
   if not state.open then return love.graphics.getHeight() end
   if state.poppedOut then return love.graphics.getHeight() end
   local screenH = love.graphics.getHeight()
-  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
+  local ratio = state.panelRatio or PANEL_RATIO
+  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * ratio))
   return screenH - panelH
 end
 
@@ -639,6 +644,12 @@ function DevTools.mousepressed(x, y, button)
 
   local panelY, panelH, contentY, contentH, screenW = getPanelGeometry()
 
+  -- Top-edge resize handle (6px grab zone centered on panel top border)
+  if not state.poppedOut and button == 1 and math.abs(y - panelY) <= 3 then
+    state.draggingHeight = true
+    return true
+  end
+
   -- Click above the panel: route to inspector for viewport node selection.
   -- Always consume the click when devtools is open — never let it pass through
   -- to the React tree underneath, even if the inspector has no hovered node.
@@ -731,6 +742,20 @@ function DevTools.mousepressed(x, y, button)
       inspector.selectNode(hitNode)
     end
     return true
+  elseif state.activeTab == "perf" then
+    -- Rate selector click (screen coords from last draw)
+    if perfRateRegion and button == 1 then
+      local pr = perfRateRegion
+      if x >= pr.x and x < pr.x + pr.w and y >= pr.y and y < pr.y + pr.h then
+        local idx = math.floor((x - pr.x) / pr.segW) + 1
+        if idx >= 1 and idx <= #PERF_RATE_PRESETS then
+          perfRateIdx = idx
+          perfDisplaySnapshot = nil  -- force immediate refresh
+        end
+        return true
+      end
+    end
+    return true
   elseif state.activeTab == "console" then
     return true  -- console content area consumes clicks
   elseif state.activeTab == "logs" then
@@ -753,6 +778,17 @@ function DevTools.mousemoved(x, y)
     return true
   end
 
+  -- Panel height dragging
+  if state.draggingHeight then
+    local screenW, screenH = love.graphics.getDimensions()
+    local newH = screenH - y
+    local minRatio = MIN_PANEL_H / screenH
+    local maxRatio = 0.9  -- never cover more than 90% of the viewport
+    state.panelRatio = math.max(minRatio, math.min(newH / screenH, maxRatio))
+    if tree then tree.markDirty() end  -- relayout app viewport
+    return true
+  end
+
   -- Scrollbar dragging
   if devScrollbarMoved(x, y) then return true end
 
@@ -764,15 +800,19 @@ function DevTools.mousemoved(x, y)
     return true
   end
 
-  -- Resize cursor when hovering divider
-  if state.activeTab == "elements" and inspector.getSelectedNode() then
-    local panelY, _, _, _, screenW = getPanelGeometry()
+  -- Resize cursor when hovering panel top edge or divider
+  local panelY, _, _, _, screenW = getPanelGeometry()
+  if not state.poppedOut and math.abs(y - panelY) <= 3 then
+    love.mouse.setCursor(love.mouse.getSystemCursor("sizens"))
+  elseif state.activeTab == "elements" and inspector.getSelectedNode() then
     local treeW = math.floor(screenW * state.dividerRatio)
     if y > panelY and math.abs(x - treeW) <= DIVIDER_W then
       love.mouse.setCursor(love.mouse.getSystemCursor("sizewe"))
     else
       love.mouse.setCursor()
     end
+  else
+    love.mouse.setCursor()
   end
 
   -- Wireframe tab hover tracking
@@ -800,6 +840,11 @@ end
 --- Handle mouse release. Returns true if consumed.
 function DevTools.mousereleased(x, y, button)
   if devScrollbarReleased() then return true end
+  if state.draggingHeight then
+    state.draggingHeight = false
+    love.mouse.setCursor()
+    return true
+  end
   if state.draggingDivider then
     state.draggingDivider = false
     love.mouse.setCursor()
@@ -1311,6 +1356,14 @@ local perfHistoryIdx = 0  -- next write index (wraps)
 -- Mutation stats accumulator (polled per frame)
 local lastMutationStats = { total = 0, creates = 0, updates = 0, removes = 0 }
 
+-- Display refresh throttle — controls how often the visible numbers update.
+-- Ring buffer always records at full rate; this only gates the displayed snapshot.
+local PERF_RATE_PRESETS = { 0, 0.1, 0.25, 0.5, 1.0, 2.0 }  -- seconds (0 = realtime)
+local PERF_RATE_LABELS  = { "RT", "100ms", "250ms", "500ms", "1s", "2s" }
+local perfRateIdx = 4  -- default 500ms
+local perfLastDisplayUpdate = 0  -- love.timer timestamp of last snapshot
+local perfDisplaySnapshot = nil  -- frozen copy of perf data for display
+
 -- Colors for perf tab
 local PERF_TAB_BG      = { 0.03, 0.03, 0.06, 1 }
 local PERF_BUDGET_BG   = { 0.10, 0.10, 0.16, 1 }
@@ -1415,6 +1468,9 @@ local function drawLV(font, x, y, label, value, labelCol, valueCol)
 end
 
 --- Draw the perf tab content.
+-- Perf rate selector region (for click detection)
+local perfRateRegion = nil  -- { x, y, w, h, segW }
+
 local function drawPerfTab(region)
   local font = getFont()
   love.graphics.setFont(font)
@@ -1429,8 +1485,55 @@ local function drawPerfTab(region)
   local y = region.y + pad - perfScrollY
   local contentW = region.w - pad * 2
 
+  -- == Refresh Rate Selector ==
+  local rateBarH = 20
+  local rateBarW = #PERF_RATE_PRESETS * 44
+  local rateX = region.x + region.w - pad - rateBarW
+  local rateY = y
+
+  love.graphics.setColor(PERF_LABEL_COL)
+  love.graphics.print("Refresh", x0, rateY + math.floor((rateBarH - fh) / 2))
+
+  love.graphics.setColor(PERF_BUDGET_BG)
+  love.graphics.rectangle("fill", rateX, rateY, rateBarW, rateBarH, 3, 3)
+
+  local segW = rateBarW / #PERF_RATE_PRESETS
+  for i, label in ipairs(PERF_RATE_LABELS) do
+    local sx = rateX + (i - 1) * segW
+    if i == perfRateIdx then
+      love.graphics.setColor(PERF_SPARK_LINE[1], PERF_SPARK_LINE[2], PERF_SPARK_LINE[3], 0.25)
+      love.graphics.rectangle("fill", sx, rateY, segW, rateBarH, 3, 3)
+      love.graphics.setColor(PERF_VALUE_COL)
+    else
+      love.graphics.setColor(PERF_LABEL_COL)
+    end
+    local lw = font:getWidth(label)
+    love.graphics.print(label, sx + math.floor((segW - lw) / 2), rateY + math.floor((rateBarH - fh) / 2))
+  end
+
+  -- Store in screen coords (rateY already accounts for scroll)
+  perfRateRegion = { x = rateX, y = rateY, w = rateBarW, h = rateBarH, segW = segW }
+  y = y + rateBarH + 10
+
+  -- == Throttled display snapshot ==
+  local now = love.timer.getTime()
+  local interval = PERF_RATE_PRESETS[perfRateIdx]
+  local livePerf = inspector and inspector.getPerfData()
+
+  if interval == 0 or not perfDisplaySnapshot or (now - perfLastDisplayUpdate) >= interval then
+    if livePerf then
+      perfDisplaySnapshot = {
+        layoutMs = livePerf.layoutMs,
+        paintMs = livePerf.paintMs,
+        fps = livePerf.fps,
+        nodeCount = livePerf.nodeCount,
+      }
+      perfLastDisplayUpdate = now
+    end
+  end
+
   -- == Frame Budget Bar ==
-  local perf = inspector and inspector.getPerfData()
+  local perf = perfDisplaySnapshot
   if perf then
     love.graphics.setColor(PERF_HEADER_COL)
     love.graphics.print("Frame Budget", x0, y)

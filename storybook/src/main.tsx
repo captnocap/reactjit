@@ -299,11 +299,11 @@ const root = createRoot();
 
 // Enable HMR state preservation — patches React.useState so all calls
 // automatically sync to Lua hotstate atoms and survive hot reload.
-enableStatePreservation(bridge);
+try { enableStatePreservation(bridge); } catch (_) {}
 
 // Expose toggle functions for Lua devtools (Logs tab → HMR Settings)
-(globalThis as any).__enableStatePreservation = () => enableStatePreservation(bridge);
-(globalThis as any).__disableStatePreservation = () => disableStatePreservation();
+(globalThis as any).__enableStatePreservation = () => { try { enableStatePreservation(bridge); } catch (_) {} };
+(globalThis as any).__disableStatePreservation = () => { try { disableStatePreservation(); } catch (_) {} };
 
 // When __deferMount is true (set by Lua before eval), store the mount function
 // globally so Lua can trigger it after JS_Eval returns. This avoids React's
