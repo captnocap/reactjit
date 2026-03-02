@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, useBridge } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
@@ -25,20 +25,20 @@ function ErrorButton({ label, color, onPress }: { label: string; color: string; 
 }
 
 function BombComponent() {
-  // This component throws during render
   throw new Error('Render explosion: component deliberately threw during render');
   return null;
 }
 
 export function ErrorTestStory() {
   const c = useThemeColors();
+  const bridge = useBridge();
   const [triggerRenderError, setTriggerRenderError] = useState(false);
 
   return (
     <StoryPage>
-      <StorySection index={1} title="Error Reporting Test">
+      <StorySection index={1} title="JS Error Triggers">
         <Text style={{ color: c.textSecondary, fontSize: 13 }}>
-          Click buttons below to trigger different error types. A red overlay should appear at the bottom of the screen with the error details.
+          {`Trigger JS-side errors. The error overlay should appear with a stack trace.`}
         </Text>
 
         <Box style={{ gap: 10 }}>
@@ -86,6 +86,26 @@ export function ErrorTestStory() {
         </Box>
 
         {triggerRenderError && <BombComponent />}
+      </StorySection>
+
+      <StorySection index={2} title="Lua Crash Trigger">
+        <Text style={{ color: c.textSecondary, fontSize: 13 }}>
+          {`Trigger a real Lua-side crash. The full BSOD crash report appears with the semantic event trail.`}
+        </Text>
+
+        <Box style={{ gap: 10 }}>
+          <ErrorButton
+            label="Lua crash via RPC (dev:crash)"
+            color="#ef4444"
+            onPress={() => {
+              bridge.rpc('dev:crash', { reason: 'triggered from ErrorTest story' });
+            }}
+          />
+        </Box>
+
+        <Text style={{ color: c.muted, fontSize: 12 }}>
+          {`Keyboard shortcut: Ctrl+Shift+F12 — triggers a Lua error from anywhere`}
+        </Text>
       </StorySection>
     </StoryPage>
   );

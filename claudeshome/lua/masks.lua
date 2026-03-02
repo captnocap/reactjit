@@ -184,7 +184,7 @@ function Masks.syncWithTree(nodes)
 
           if capW > 0 and capH > 0 and (inst.width ~= capW or inst.height ~= capH) then
             if inst.outputCanvas then inst.outputCanvas:release() end
-            inst.outputCanvas = love.graphics.newCanvas(capW, capH, { stencil = true })
+            inst.outputCanvas = love.graphics.newCanvas(capW, capH)
             inst.width = capW
             inst.height = capH
             inst.needsInit = true
@@ -273,16 +273,16 @@ end
 -- ============================================================================
 
 local function getPooledCanvas(w, h)
-  local key = w .. "x" .. h .. ":stencil"
+  local key = w .. "x" .. h
   local pool = canvasPool[key]
   if pool and #pool > 0 then
     return table.remove(pool)
   end
-  return love.graphics.newCanvas(w, h, { stencil = true })
+  return love.graphics.newCanvas(w, h)
 end
 
 local function returnPooledCanvas(canvas, w, h)
-  local key = w .. "x" .. h .. ":stencil"
+  local key = w .. "x" .. h
   if not canvasPool[key] then canvasPool[key] = {} end
   -- Cap pool size to prevent memory bloat
   if #canvasPool[key] < 4 then
@@ -323,7 +323,7 @@ function Masks.applyMask(parentNodeId, sourceCanvas)
   if not mod then return nil end
 
   love.graphics.push("all")
-  love.graphics.setCanvas(inst.outputCanvas)
+  love.graphics.setCanvas({inst.outputCanvas, stencil = true})
   -- Render mask modules in an unclipped local space; any parent clipping is
   -- applied later when painter composites the final output canvas.
   love.graphics.setScissor()
@@ -340,7 +340,7 @@ function Masks.applyMask(parentNodeId, sourceCanvas)
   if not okDraw then
     local okFallback = pcall(function()
       love.graphics.push("all")
-      love.graphics.setCanvas(inst.outputCanvas)
+      love.graphics.setCanvas({inst.outputCanvas, stencil = true})
       love.graphics.setScissor()
       love.graphics.setStencilTest()
       love.graphics.setBlendMode("alpha")

@@ -1,20 +1,21 @@
 /**
- * Layout 1 — Reference page layout for documenting a single primitive.
+ * Layout 1 — Component documentation page template.
  *
  * Structure:
- *   Page (100% x 100%, theme bg, justify center)
- *     Inner (80% x 100%, justify center)
- *       Header (100% x 20%, themed card, rounded, space-around row)
- *         Section 1: Title, code snippet, description, playground toggle
- *         | divider |
- *         Section 2: The primitive rendered raw — flexGrow center stage
- *         | divider |
- *         Section 3: Props/types in 2 equal columns (flexGrow:1, flexBasis:0)
+ *   Page (100% x 100%)
+ *     Header — title + snippet + description (fixed, always visible)
+ *     Center — two-column area (flexGrow:1)
+ *       Docs mode:       Left=preview wireframe, Right=API reference
+ *       Playground mode:  Left=code editor, Right=live preview
+ *     Footer — breadcrumbs + playground toggle (fixed ~5-10%, always visible)
  */
 
-import React from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Box, Text, TextEditor, Pressable, ScrollView } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { transformJSX } from '../playground/lib/jsx-transform';
+import { evalComponent } from '../playground/lib/eval-component';
+import { Preview } from '../playground/Preview';
 
 function Wireframe({ label, style }: { label: string; style?: any }) {
   const c = useThemeColors();
@@ -34,60 +35,86 @@ function Wireframe({ label, style }: { label: string; style?: any }) {
   );
 }
 
-function Divider() {
+function HorizontalDivider() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />
+  );
+}
+
+function VerticalDivider() {
   const c = useThemeColors();
   return (
     <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />
   );
 }
 
+const STARTER_CODE = `<Box style={{
+  backgroundColor: '#3b82f6',
+  borderRadius: 8,
+  padding: 16,
+  gap: 8,
+}}>
+  <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
+    Hello
+  </Text>
+  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+    Edit this code to see live changes
+  </Text>
+</Box>`;
+
+// Short props — fit in 2 columns
 const PROPS: [string, string][] = [
   ['style', 'ViewStyle'],
   ['bg', 'string'],
   ['radius', 'number'],
   ['padding', 'number'],
   ['tooltip', 'TooltipConfig'],
-  ['onPress', '() => void'],
-  ['onHoverIn', '() => void'],
-  ['onHoverOut', '() => void'],
-  ['onLayout', '(e) => void'],
   ['children', 'ReactNode'],
   ['testId', 'string'],
   ['pointerEvents', 'enum'],
   ['accessibilityLabel', 'string'],
-  ['onAccessibilityAction', '(event: AccessibilityActionEvent) => void'],
-  ['importantForAccessibility', 'auto | yes | no | no-hide-descendants'],
-  ['hitSlop', 'number | Insets'],
-  ['collapsable', 'boolean'],
-  ['needsOffscreenAlphaCompositing', 'boolean'],
-  ['renderToHardwareTextureAndroid', 'boolean'],
-  ['shouldRasterizeIOS', 'boolean'],
-  ['removeClippedSubviews', 'boolean'],
-  ['nativeID', 'string'],
-  ['focusable', 'boolean'],
-  ['onStartShouldSetResponder', '(event: GestureResponderEvent) => boolean'],
-  ['onMoveShouldSetResponder', '(event: GestureResponderEvent) => boolean'],
-  ['onResponderGrant', '(event: GestureResponderEvent) => void'],
-  ['onResponderReject', '(event: GestureResponderEvent) => void'],
-  ['onResponderMove', '(event: GestureResponderEvent) => void'],
-  ['onResponderRelease', '(event: GestureResponderEvent) => void'],
-  ['onResponderTerminate', '(event: GestureResponderEvent) => void'],
-  ['onMagicTap', '() => void'],
-  ['elevation', 'number'],
-  ['overflow', 'visible | hidden | scroll'],
-  ['backfaceVisibility', 'visible | hidden'],
-  ['opacity', 'number'],
-  ['transform', 'TransformArray'],
-  ['shadowColor', 'ColorValue'],
-  ['shadowOffset', '{ width: number, height: number }'],
-  ['shadowOpacity', 'number'],
-  ['shadowRadius', 'number'],
+];
+
+// Callbacks — full width, single column
+const CALLBACKS: [string, string][] = [
+  ['onPress', '() => void'],
+  ['onHoverIn', '() => void'],
+  ['onHoverOut', '() => void'],
+  ['onLayout', '(e) => void'],
 ];
 
 export function Layout1Story() {
   const c = useThemeColors();
+  const [playground, setPlayground] = useState(false);
+  const [code, setCode] = useState(STARTER_CODE);
+  const [UserComponent, setUserComponent] = useState<React.ComponentType | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
 
-  // Split props into 2 columns
+  const processCode = useCallback((src: string) => {
+    const result = transformJSX(src);
+    if (result.errors.length > 0) {
+      setErrors(result.errors.map(e => `Line ${e.line}:${e.col}: ${e.message}`));
+      return;
+    }
+    const evalResult = evalComponent(result.code);
+    if (evalResult.error) { setErrors([evalResult.error]); return; }
+    setErrors([]);
+    setUserComponent(() => evalResult.component);
+  }, []);
+
+  // Process starter code when entering playground mode
+  useEffect(() => {
+    if (playground && code && !UserComponent) {
+      processCode(code);
+    }
+  }, [playground]);
+
+  const handleCodeChange = useCallback((src: string) => {
+    setCode(src);
+    processCode(src);
+  }, [processCode]);
+
   const mid = Math.ceil(PROPS.length / 2);
   const col1 = PROPS.slice(0, mid);
   const col2 = PROPS.slice(mid);
@@ -97,101 +124,171 @@ export function Layout1Story() {
       width: '100%',
       height: '100%',
       backgroundColor: c.bg,
-      justifyContent: 'center',
-      alignItems: 'center',
     }}>
-      {/* Inner page container */}
+
+      {/* ── Header ── */}
       <Box style={{
-        minWidth: 'fit-content',
-        maxWidth: '80%',
-        height: '100%',
-        justifyContent: 'center',
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 14,
       }}>
-        {/* ── Header: themed card with 3 sections ── */}
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          {'Title'}
+        </Text>
+
         <Box style={{
-          width: '100%',
-          height: 'fit-content',
-          flexDirection: 'row',
-          justifyContent: 'space-around',
-          alignItems: 'stretch',
-          backgroundColor: c.bgElevated,
-          borderRadius: 12,
+          backgroundColor: c.surface,
           borderWidth: 1,
           borderColor: c.border,
-          padding: 14,
-          gap: 14,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
         }}>
-
-          {/* Section 1: Title + code snippet + desc + playground toggle */}
-          <Box style={{
-            width: 170,
-            flexShrink: 0,
-            justifyContent: 'center',
-            gap: 6,
-          }}>
-            <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold', textAlign: 'left' }}>
-              {'Box'}
-            </Text>
-
-            <Box style={{
-              backgroundColor: c.surface,
-              borderWidth: 1,
-              borderColor: c.border,
-              borderRadius: 4,
-              paddingLeft: 8,
-              paddingRight: 8,
-              paddingTop: 4,
-              paddingBottom: 4,
-            }}>
-              <Text style={{ color: c.muted, fontSize: 10, textAlign: 'left' }}>
-                {'<Box bg="#3b82f6" radius={8} padding={16} />'}
-              </Text>
-            </Box>
-
-            <Text style={{ color: c.muted, fontSize: 10, textAlign: 'left' }}>
-              {'The most primitive visual element. A rectangle that contains other rectangles.'}
-            </Text>
-
-            <Wireframe label="Playground Mode Toggle" style={{ width: 130, height: 24 }} />
-          </Box>
-
-          <Divider />
-
-          {/* Section 2: The primitive — center stage, flexGrow fills remaining space */}
-          <Box style={{
-            flexGrow: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-            <Box style={{ backgroundColor: '#ff69b4', borderRadius: 8, padding: 20 }} />
-          </Box>
-
-          <Divider />
-
-          {/* Section 3: Props/types — 2 equal columns */}
-          <Box style={{
-            flexDirection: 'row',
-            gap: 8,
-          }}>
-            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
-              {col1.map(([prop, type]) => (
-                <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left' }}>{prop}</Text>
-                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left' }}>{type}</Text>
-                </Box>
-              ))}
-            </Box>
-            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
-              {col2.map(([prop, type]) => (
-                <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left' }}>{prop}</Text>
-                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left' }}>{type}</Text>
-                </Box>
-              ))}
-            </Box>
-          </Box>
+          <Text style={{ color: c.muted, fontSize: 10 }}>
+            {'<Component prop={value} />'}
+          </Text>
         </Box>
+
+        <Box style={{ flexGrow: 1 }} />
+
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'A short description of the component and what it does.'}
+        </Text>
       </Box>
+
+      {/* ── Center ── */}
+      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+        {playground ? (
+          <>
+            {/* Playground: editor left, preview right */}
+            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+              <TextEditor
+                initialValue={code}
+                onChange={handleCodeChange}
+                onBlur={handleCodeChange}
+                onSubmit={handleCodeChange}
+                changeDelay={3}
+                syntaxHighlight
+                placeholder="Write JSX here..."
+                style={{ flexGrow: 1, width: '100%' }}
+                textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
+              />
+            </Box>
+            <VerticalDivider />
+            <Preview UserComponent={UserComponent} errors={errors} />
+          </>
+        ) : (
+          <>
+            {/* Docs: preview left, API reference right */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+              <Box style={{
+                flexGrow: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 20,
+              }}>
+                <Wireframe label="Preview" style={{ width: 120, height: 120 }} />
+              </Box>
+            </ScrollView>
+
+            <VerticalDivider />
+
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+              <Box style={{ padding: 14, gap: 10 }}>
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'PROPS'}
+                </Text>
+                <Box style={{ flexDirection: 'row', gap: 8 }}>
+                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
+                    {col1.map(([prop, type]) => (
+                      <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
+                        <Text style={{ color: c.text, fontSize: 9 }}>{prop}</Text>
+                        <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+                      </Box>
+                    ))}
+                  </Box>
+                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
+                    {col2.map(([prop, type]) => (
+                      <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
+                        <Text style={{ color: c.text, fontSize: 9 }}>{prop}</Text>
+                        <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+
+                <HorizontalDivider />
+
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'CALLBACKS'}
+                </Text>
+                <Box style={{ gap: 2 }}>
+                  {CALLBACKS.map(([name, sig]) => (
+                    <Box key={name} style={{ flexDirection: 'row', gap: 4 }}>
+                      <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
+                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            </ScrollView>
+          </>
+        )}
+      </Box>
+
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Component'}</Text>
+
+        <Box style={{ flexGrow: 1 }} />
+
+        <Pressable
+          onPress={() => setPlayground(p => !p)}
+          style={(state) => ({
+            backgroundColor: playground ? c.primary : (state.hovered ? c.surface : c.border),
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 3,
+            borderRadius: 4,
+          })}
+        >
+          <Text style={{
+            color: playground ? 'white' : c.text,
+            fontSize: 9,
+            fontWeight: 'bold',
+          }}>
+            {playground ? 'Exit Playground' : 'Playground'}
+          </Text>
+        </Pressable>
+
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+      </Box>
+
     </Box>
   );
 }

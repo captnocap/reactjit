@@ -334,7 +334,7 @@ end
 local function visibleArea(node, es)
   local c = node.computed or { x = 0, y = 0, w = 400, h = 300 }
   local lh = getLineHeight(node)
-  local gutterW = showLineNumbers(node) and 50 or 0
+  local gutterW = showLineNumbers(node) and 56 or 0
   local padding = 8
   local textAreaX = c.x + gutterW
   local textAreaY = c.y
@@ -1060,11 +1060,17 @@ function TextEditor.draw(node, effectiveOpacity)
   local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
   local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
   love.graphics.intersectScissor(sx, sy, sw, sh)
+  -- Save the actual intersected editor scissor so we can truly restore it inside the loop.
+  -- (intersectScissor is cumulative, so we need the result of this first intersection.)
+  local edScissorX, edScissorY, edScissorW, edScissorH = love.graphics.getScissor()
 
   -- Gutter
   if va.gutterW > 0 then
     setColorWithOpacity(colors.gutter, effectiveOpacity)
     love.graphics.rectangle("fill", c.x, c.y, va.gutterW, c.h)
+    -- Gutter right border (Monaco-style separator)
+    setColorWithOpacity({ colors.gutter[1] * 1.6, colors.gutter[2] * 1.6, colors.gutter[3] * 1.6, 0.7 }, effectiveOpacity)
+    love.graphics.rectangle("fill", c.x + va.gutterW - 1, c.y, 1, c.h)
   end
 
   local lastLine = math.min(va.firstLine + va.visLines, lineCount(es))
@@ -1073,10 +1079,10 @@ function TextEditor.draw(node, effectiveOpacity)
     local y = va.textAreaY + (i - 1) * lh - es.scrollY
     local lineStr = es.lines[i] or ""
 
-    -- Active line highlight
+    -- Active line highlight (extends full width including gutter, Monaco-style)
     if isFocused and i == es.cursorLine then
       setColorWithOpacity(colors.activeLine, effectiveOpacity)
-      love.graphics.rectangle("fill", va.textAreaX, y, va.textAreaW, lh)
+      love.graphics.rectangle("fill", c.x, y, c.w, lh)
     end
 
     -- Selection highlight
@@ -1151,8 +1157,8 @@ function TextEditor.draw(node, effectiveOpacity)
       end
     end
 
-    -- Restore full-node scissor
-    love.graphics.intersectScissor(sx, sy, sw, sh)
+    -- Restore editor scissor (use setScissor, not intersectScissor, to truly undo the text-area clip)
+    love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
   end
 
   -- Placeholder
@@ -1177,7 +1183,7 @@ function TextEditor.draw(node, effectiveOpacity)
     love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
     setColorWithOpacity(colors.cursor, effectiveOpacity)
     love.graphics.rectangle("fill", cx, cy + 3, 2, lh - 6)
-    love.graphics.intersectScissor(sx, sy, sw, sh)
+    love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
   end
 
   -- Scrollbar

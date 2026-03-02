@@ -103,10 +103,14 @@ local settings   = M.settings
 local themeMenu  = M.themeMenu
 local systemPanel = M.systemPanel
 local focus      = M.focus
+local tooltips   = require("lua.tooltips")
 local permit     = M.permit
 local audit      = M.audit
 local manifestMod = M.manifestMod
 local cartReader  = M.cartReader
+
+-- Mouse position tracking (for tooltip timer advancement in update loop)
+local lastMouseX, lastMouseY = 0, 0
 
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
@@ -139,7 +143,7 @@ local scrollbarDrag = nil  -- { node, axis="v"|"h", startMouse, startScroll }
 local textSelectPending = nil  -- { node, startX, startY, line, col }
 local TEXT_SELECT_THRESHOLD = 3  -- pixels of movement before drag becomes selection
 
-local mode     = nil   -- "web", "native", or "canvas"
+local mode     = nil   -- "native", "canvas", or "wasm"
 local basePath = nil   -- directory containing these modules
 local initConfig = nil -- stashed config from init() for reload()
 local settingsToggleKey = "f10"
@@ -174,7 +178,7 @@ end
 -- ============================================================================
 
 --- Detect whether we are running in the browser (love.js) or natively.
---- In web mode, the presence of a /__bridge_namespace file signals Module.FS.
+--- In canvas mode, the presence of a /__bridge_namespace file signals Module.FS.
 local function detectMode(config)
   if config and config.mode and config.mode ~= "auto" then
     return config.mode
@@ -185,7 +189,7 @@ local function detectMode(config)
   local sentinelPath = "__bridge_" .. ns .. "_ready"
   if love.filesystem.getInfo("/__bridge_namespace")
     or love.filesystem.getInfo(sentinelPath) then
-    return "web"
+    return "canvas"
   end
 
   return "native"
@@ -382,6 +386,7 @@ local function loadThemes()
     if M.painter then M.painter.setTheme(M.currentTheme) end
     if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
     if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
+    tooltips.setTheme(M.currentTheme)
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -398,6 +403,16 @@ end
 --- This runs entirely in Lua for 0-frame latency feedback.
 local function applyInteractionStyle(node)
   if not node or not node.props then return end
+
+  -- Ensure transient interaction overlays cannot mutate the declarative style
+  -- source-of-truth table (node.props.style).
+  if node.props.style and node.style == node.props.style then
+    local detached = {}
+    for k, v in pairs(node.style) do
+      detached[k] = v
+    end
+    node.style = detached
+  end
 
   local hoverStyle = node.props.hoverStyle
   local activeStyle = node.props.activeStyle
@@ -433,20 +448,21 @@ local function applyInteractionStyle(node)
     if overrideActive then
       -- Save base value before applying overlay (only on first capture)
       if base[k] == nil then
-        if node.style[k] == nil then
+        local declarativeStyle = node.props and node.props.style
+        if not declarativeStyle or declarativeStyle[k] == nil then
           base[k] = "__NIL__"
         else
-          base[k] = node.style[k]
+          base[k] = declarativeStyle[k]
         end
       end
     else
       -- No overlay active: refresh base from current node.style so React
-      -- UPDATE commands (e.g. active prop toggling backgroundColor) are
-      -- respected instead of restoring a stale captured value.
-      if node.style[k] == nil then
+      -- UPDATE commands are respected instead of restoring stale captured values.
+      local declarativeStyle = node.props and node.props.style
+      if not declarativeStyle or declarativeStyle[k] == nil then
         base[k] = "__NIL__"
       else
-        base[k] = node.style[k]
+        base[k] = declarativeStyle[k]
       end
     end
 
@@ -533,7 +549,7 @@ end
 
 --- Initialize reactjit.
 --- config fields:
----   mode       : "auto" | "web" | "native" | "canvas"  (default "auto")
+---   mode       : "auto" | "native" | "canvas" | "wasm"  (default "auto")
 ---   bundlePath : path to the JS bundle       (default "bundle.js")
 ---   namespace  : bridge namespace string     (default "default")
 ---   libpath    : path to libquickjs shared library (default "lib/libquickjs")
@@ -610,6 +626,7 @@ function ReactJIT.init(config)
           if M.painter then M.painter.setTheme(M.currentTheme) end
           if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
           if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
+          tooltips.setTheme(M.currentTheme)
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -639,14 +656,7 @@ function ReactJIT.init(config)
   mode = detectMode(config)
   local ns = config.namespace or "default"
 
-  if mode == "web" then
-    -- Web mode: use Module.FS bridge.
-    -- In web mode the DOM/browser handles rendering; Lua only bridges data.
-    M.bridge = require("lua.bridge_fs")
-    M.bridge.init(ns)
-    print("[reactjit] Initialized in WEB mode (Module.FS bridge)")
-
-  elseif mode == "canvas" then
+  if mode == "canvas" then
     -- Canvas mode: FS bridge + native rendering pipeline.
     -- React runs in the browser, reconciler commands come via /__reconciler_in.json,
     -- and Lua handles tree/layout/painter. Events go back via bridge_fs outbox.
@@ -654,6 +664,7 @@ function ReactJIT.init(config)
     M.bridge.init(ns)
 
     M.measure = require("lua.measure")
+    tooltips.setMeasure(M.measure)
     M.images  = require("lua.images")
     M.videos  = require("lua.videos")
     M.videos.initBackend()
@@ -735,6 +746,7 @@ function ReactJIT.init(config)
     M.bridge.init(ns)
 
     M.measure = require("lua.measure")
+    tooltips.setMeasure(M.measure)
     M.images  = require("lua.images")
     -- videos: SKIPPED (libmpv FFI)
     M.animate = require("lua.animate")
@@ -819,6 +831,7 @@ function ReactJIT.init(config)
     end
 
     M.measure = require("lua.measure")
+    tooltips.setMeasure(M.measure)
     M.images  = require("lua.images")
     M.animate = require("lua.animate")
     M.scene3d = require("lua.scene3d")
@@ -1014,6 +1027,14 @@ function ReactJIT.init(config)
     return true
   end
 
+  -- Deliberate crash for testing the error overlay and event trail.
+  -- Called by the ErrorTest story "Lua crash" button.
+  rpcHandlers["dev:crash"] = function(args)
+    local reason = (args and args.reason) or "intentional test crash"
+    eventTrail.recordSemantic("dev:crash RPC triggered — " .. reason)
+    error("INTENTIONAL TEST CRASH: " .. reason)
+  end
+
   -- Expose current inspector perf counters for stress-test dashboards.
   rpcHandlers["dev:perf"] = function()
     if inspector and inspector.getPerfData then
@@ -1025,6 +1046,26 @@ function ReactJIT.init(config)
       paintMs = 0,
       nodeCount = 0,
     }
+  end
+
+  -- ── Dev file I/O (inspector source editor) ──────────────────────────
+  -- Uses raw io.open() (not sandboxed love.filesystem) to read/write
+  -- project source files. Used by the live source editor in the inspector.
+
+  rpcHandlers["dev:readFile"] = function(args)
+    local f = io.open(args.path, "r")
+    if not f then return { error = "Cannot read: " .. args.path } end
+    local content = f:read("*a")
+    f:close()
+    return { content = content, path = args.path }
+  end
+
+  rpcHandlers["dev:writeFile"] = function(args)
+    local f = io.open(args.path, "w")
+    if not f then return { error = "Cannot write: " .. args.path } end
+    f:write(args.content)
+    f:close()
+    return { ok = true, path = args.path }
   end
 
   -- ── Lua-side interval timer service ──────────────────────────────────
@@ -1519,6 +1560,7 @@ function ReactJIT.init(config)
     rpcHandlers["test:key"]        = function(a) return tr.key(a) end
     rpcHandlers["test:wait"]       = function(a) return tr.wait(a) end
     rpcHandlers["test:screenshot"] = function(a) return tr.screenshot(a) end
+    rpcHandlers["test:audit"]      = function(a) return tr.audit(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0
     ReactJIT._testStarted    = false
@@ -1601,13 +1643,6 @@ function ReactJIT.update(dt)
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
 
-  if mode == "web" then
-    -- Web mode: poll the Module.FS inbox and flush the outbox
-    M.bridge.poll()
-    M.bridge.flush()
-    return
-  end
-
   if mode == "canvas" or mode == "wasm" then
     -- Canvas/WASM mode: FS bridge + native rendering pipeline -----------
 
@@ -1682,6 +1717,9 @@ function ReactJIT.update(dt)
     end
 
     if M.codeblock then M.codeblock.update(dt) end
+
+    -- Tooltip timer (advances even when mouse is stationary)
+    tooltips.update(M.events.getHoveredNode(), dt, lastMouseX, lastMouseY)
 
     -- Update VideoPlayer controls (auto-hide timer, canvas mode)
     if M.videoplayer and M.tree then
@@ -1954,6 +1992,7 @@ function ReactJIT.update(dt)
             if M.painter then M.painter.setTheme(M.currentTheme) end
             if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
             if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
+            tooltips.setTheme(M.currentTheme)
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
           end
@@ -2371,6 +2410,9 @@ function ReactJIT.update(dt)
 
   if M.codeblock then M.codeblock.update(dt) end
 
+  -- Tooltip timer (advances even when mouse is stationary)
+  tooltips.update(M.events.getHoveredNode(), dt, lastMouseX, lastMouseY)
+
   -- Update VideoPlayer controls (auto-hide timer)
   if M.videoplayer and M.tree then
     M.videoplayer.update(dt, M.tree.getNodes())
@@ -2462,6 +2504,9 @@ function ReactJIT.draw()
         context = "painter.paint",
       })
     end
+
+    -- Tooltip overlay (after tree painting, before all other overlays)
+    tooltips.draw(love.graphics.getWidth(), love.graphics.getHeight())
 
     -- Fullscreen VideoPlayer: redraw on top of everything so no UI bleeds through
     if M.videoplayer then
@@ -2729,13 +2774,25 @@ end
 --- @param method string  The ReactJIT method name (e.g. "mousepressed")
 --- @param ...    any     Arguments to pass through
 function ReactJIT.safeCall(method, ...)
-  -- Record in event trail (stringify args for diagnostics)
+  -- Record in event trail — mousemoved/mousedragged are muted inside trail.record
   local args = { ... }
   local argParts = {}
   for i = 1, #args do
     argParts[i] = tostring(args[i])
   end
-  eventTrail.record(method, table.concat(argParts, ", "))
+  -- keypressed gets enriched with modifier state; everything else uses raw fallback
+  -- (clicks are enriched later in mousepressed after hitTest resolves the node)
+  if method == "keypressed" then
+    local key = args[1] or "?"
+    local mods = {
+      ctrl  = love.keyboard.isDown("lctrl")  or love.keyboard.isDown("rctrl"),
+      shift = love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift"),
+      alt   = love.keyboard.isDown("lalt")   or love.keyboard.isDown("ralt"),
+    }
+    eventTrail.recordKey(key, mods)
+  else
+    eventTrail.record(method, table.concat(argParts, ", "))
+  end
 
   -- In crash recovery — route input to errors overlay (incl. inline editor), skip everything else
   if crashRecoveryMode then
@@ -2803,6 +2860,7 @@ function ReactJIT.mousepressed(x, y, button)
 
   -- Right-click: open context menu instead of normal click handling
   if button == 2 and M.contextmenu then
+    eventTrail.recordSemantic("Right-click: opened context menu at " .. math.floor(x) .. "," .. math.floor(y))
     M.contextmenu.open(x, y, root, pushEvent)
     return
   end
@@ -2811,6 +2869,9 @@ function ReactJIT.mousepressed(x, y, button)
   if scrollbarMousePressed(root, x, y, button) then return end
 
   local hit = M.events.hitTest(root, x, y)
+
+  -- Record semantic click event in trail now that we know the target
+  eventTrail.recordClick(hit, button)
 
   -- Diagnostic: show what React found vs what the game module would claim
   if hit then
@@ -3067,6 +3128,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
+  lastMouseX, lastMouseY = x, y
   if M.systemPanelEnabled then systemPanel.mousemoved(x, y) end
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
@@ -3294,6 +3356,20 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
   if M.inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
+
+  -- Ctrl+Shift+F12: deliberate crash for testing the error overlay + event trail
+  if key == "f12" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
+    eventTrail.recordSemantic("Ctrl+Shift+F12: deliberate test crash triggered")
+    error("INTENTIONAL TEST CRASH — triggered by Ctrl+Shift+F12")
+  end
+
+  -- Any key: dump font metrics (temporary debug)
+  io.write("[KEY-DBG] key=" .. tostring(key) .. " scancode=" .. tostring(scancode) .. "\n"); io.flush()
+  if key == "." or key == "period" then
+    local Layout = require("lua.layout")
+    Layout._dumpFontMetrics = true
+    io.write("[KEY-DBG] font metrics dump triggered\n"); io.flush()
+  end
 
   -- Context menu keyboard handling
   if M.contextmenu and M.contextmenu.isOpen() then
@@ -4322,7 +4398,7 @@ function ReactJIT.getBridge()
   return M.bridge
 end
 
---- Return the current mode ("web", "native", or "canvas").
+--- Return the current mode ("native", "canvas", or "wasm").
 function ReactJIT.getMode()
   return mode
 end

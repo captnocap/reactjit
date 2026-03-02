@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from './primitives';
 import { Pressable } from './Pressable';
+import { useThemeColorsOptional } from './context';
 import type { Style } from './types';
 
 export interface Tab {
@@ -23,13 +24,29 @@ export function Tabs({
   variant = 'underline',
   style,
 }: TabsProps) {
+  const theme = useThemeColorsOptional();
+  const colors = {
+    railBg: theme?.surface ?? '#1e293b',
+    railBorder: theme?.border ?? '#334155',
+    tabBgActive: theme?.bgElevated ?? '#111827',
+    tabBgHover: theme?.surfaceHover ?? '#2a3a52',
+    tabBgPressed: theme?.bgAlt ?? '#0f172a',
+    tabBorderActive: theme?.borderFocus ?? '#4b5563',
+    textActive: theme?.text ?? '#e2e8f0',
+    textDefault: theme?.textSecondary ?? '#94a3b8',
+    underlineActive: theme?.primary ?? '#3b82f6',
+    underlineHover: theme?.borderFocus ?? '#4b5563',
+  };
+
   if (variant === 'pill') {
     return (
       <Box style={{
         flexDirection: 'row',
         width: '100%',
         gap: 4,
-        backgroundColor: '#0f172a',
+        backgroundColor: colors.railBg,
+        borderWidth: 1,
+        borderColor: colors.railBorder,
         borderRadius: 8,
         padding: 4,
         ...style,
@@ -46,15 +63,19 @@ export function Tabs({
                 paddingTop: 6,
                 paddingBottom: 6,
                 borderRadius: 6,
+                borderWidth: isActive ? 1 : 0,
+                borderColor: isActive ? colors.tabBorderActive : 'transparent',
                 backgroundColor: isActive
-                  ? '#334155'
-                  : state.hovered
-                    ? '#1e293b'
-                    : 'transparent',
+                  ? colors.tabBgActive
+                  : state.pressed
+                    ? colors.tabBgPressed
+                    : state.hovered
+                      ? colors.tabBgHover
+                      : 'transparent',
               })}
             >
               <Text style={{
-                color: isActive ? '#e2e8f0' : '#64748b',
+                color: isActive ? colors.textActive : colors.textDefault,
                 fontSize: 11,
                 fontWeight: isActive ? 'bold' : 'normal',
               }}>
@@ -73,7 +94,7 @@ export function Tabs({
       flexDirection: 'row',
       width: '100%',
       borderBottomWidth: 1,
-      borderColor: '#1e293b',
+      borderColor: colors.railBorder,
       ...style,
     }}>
       {tabs.map((tab) => {
@@ -89,14 +110,14 @@ export function Tabs({
               paddingBottom: 8,
               borderBottomWidth: 2,
               borderColor: isActive
-                ? '#3b82f6'
+                ? colors.underlineActive
                 : state.hovered
-                  ? '#475569'
+                  ? colors.underlineHover
                   : 'transparent',
             })}
           >
             <Text style={{
-              color: isActive ? '#e2e8f0' : '#64748b',
+              color: isActive ? colors.textActive : colors.textDefault,
               fontSize: 11,
               fontWeight: isActive ? 'bold' : 'normal',
             }}>

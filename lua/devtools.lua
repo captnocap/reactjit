@@ -29,6 +29,7 @@
 ]]
 
 local Log = require("lua.debug_log")
+local eventTrail = require("lua.event_trail")
 
 local DevTools = {}
 
@@ -448,6 +449,7 @@ function DevTools.keypressed(key)
   if key == "f12" then
     if state.poppedOut then
       -- Dock back first, then close
+      eventTrail.recordSemantic("F12: closed inspector (docked back)")
       DevTools.dockBack()
       state.open = false
       inspector.disable()
@@ -459,8 +461,10 @@ function DevTools.keypressed(key)
     else
       state.open = not state.open
       if state.open then
+        eventTrail.recordSemantic("F12: opened inspector")
         inspector.enable()
       else
+        eventTrail.recordSemantic("F12: closed inspector")
         inspector.disable()
         console.hide()
         state.draggingDivider = false
