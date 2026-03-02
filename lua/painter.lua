@@ -871,7 +871,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
           else
             love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
           end
-        end, "replace", gradStencilValue)
+        end, "replace", gradStencilValue, stencilDepth > 0)
         love.graphics.setStencilTest("greater", stencilDepth)
 
         drawGradient(c.x, c.y, c.w, c.h, grad.direction, grad.colors[1], grad.colors[2], effectiveOpacity)
