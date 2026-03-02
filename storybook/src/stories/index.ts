@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 
-export type StorySection = 'Core' | 'Packages' | 'Demos' | 'Stress Test' | 'Dev';
+export type StorySection = 'Core' | 'Packages' | 'Demos' | 'Stress Test' | 'Dev' | 'Bad Habits' | 'Layouts';
 
 export interface StoryDef {
   id: string;
@@ -9,9 +9,12 @@ export interface StoryDef {
   component: ComponentType;
 }
 
+import { BoxStory } from './BoxStory';
 import { TextStory } from './TextStory';
-import { InputStory } from './InputStory';
+import { LayoutStory } from './LayoutStory';
+import { GridStory } from './GridStory';
 import { StyleStory } from './StyleStory';
+import { InputStory } from './InputStory';
 import { DemoStory } from './DemoStory';
 import { ErrorTestStory } from './ErrorTest';
 import { DataStory } from './DataStory';
@@ -47,12 +50,24 @@ import { NoclipMazeStory } from './NoclipMazeStory';
 import { FleetStory } from './FleetStory';
 import { OriginStory } from './OriginStory';
 import { IconStory } from './IconStory';
+import { TailwindStory } from './TailwindStory';
+import { HtmlCompatStory } from './HtmlCompatStory';
+import { MergePrecedenceStory } from './MergePrecedenceStory';
+import { LintTestStory } from './LintTestStory';
+import { Layout1Story } from './Layout1Story';
+import { Layout2Story } from './Layout2Story';
+import { Layout3Story } from './Layout3Story';
 
 
 export const stories: StoryDef[] = [
-  // Core
-  { id: 'style', title: 'Style', section: 'Core', component: StyleStory },
+  // DEBUG: Layout1 first so MCW debug fires on first frame
+  { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
+  // Core — framework primitives in learning order
+  { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
+  { id: 'layout', title: 'Layout', section: 'Core', component: LayoutStory },
+  { id: 'grid', title: 'Grid', section: 'Core', component: GridStory },
+  { id: 'style', title: 'Style', section: 'Core', component: StyleStory },
   { id: 'image', title: 'Image', section: 'Core', component: ImageBasicStory },
   { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },
   { id: 'video', title: 'Video', section: 'Core', component: VideoStory },
@@ -89,6 +104,11 @@ export const stories: StoryDef[] = [
   { id: 'noclip-maze', title: 'Noclip Maze', section: 'Demos', component: NoclipMazeStory },
   { id: 'origin', title: 'Origin', section: 'Demos', component: OriginStory },
 
+  // Bad Habits — Tailwind, HTML elements, merge precedence
+  { id: 'tailwind', title: 'Tailwind', section: 'Bad Habits', component: TailwindStory },
+  { id: 'html-compat', title: 'HTML Elements', section: 'Bad Habits', component: HtmlCompatStory },
+  { id: 'merge-precedence', title: 'Merge Precedence', section: 'Bad Habits', component: MergePrecedenceStory },
+
   // Stress Test
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },
 
@@ -97,4 +117,9 @@ export const stories: StoryDef[] = [
   { id: 'multi-window', title: 'Multi-Window', section: 'Dev', component: MultiWindowStory },
   { id: 'cartridge-inspector', title: 'Cartridge Inspector', section: 'Dev', component: CartridgeInspectorStory },
   { id: 'error-test', title: 'Error Test', section: 'Dev', component: ErrorTestStory },
+  { id: 'lint-test', title: 'Lint Test', section: 'Dev', component: LintTestStory },
+
+  // Layouts — story layout templates
+  { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
+  { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
 ];

@@ -136,7 +136,7 @@ export async function devCommand(args) {
 
   const esbuild = spawn('npx', [
     'esbuild',
-    ...esbuildArgs(target),
+    ...esbuildArgs(target, { dev: true }),
     `--outfile=${outfile}`,
     '--watch',
     ...getEsbuildAliases(cwd),

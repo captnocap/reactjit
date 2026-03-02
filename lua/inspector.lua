@@ -21,6 +21,7 @@
 
 local ZIndex = require("lua.zindex")
 local Measure = require("lua.measure")
+local SourceEditor = require("lua.source_editor")
 local console = nil  -- lazy-loaded to avoid circular deps
 
 -- Forward declarations (defined later in the file)
@@ -545,6 +546,16 @@ function Inspector.keypressed(key)
     return handleEditKey(key)
   end
 
+  -- Source editor gets next priority when active
+  if SourceEditor.isActive() then
+    -- Escape deactivates the source editor
+    if key == "escape" then
+      SourceEditor.deactivate()
+      return true
+    end
+    if SourceEditor.keypressed(key) then return true end
+  end
+
   -- Console toggle (backtick)
   if key == "`" then
     if console then
@@ -569,6 +580,7 @@ function Inspector.keypressed(key)
     if state.selectedNode then
       state.selectedNode = nil
       state.detailScrollY = 0
+      SourceEditor.close()
       return true
     end
   end
@@ -583,6 +595,11 @@ function Inspector.textinput(text)
   -- Edit mode
   if state.editState then
     return handleEditTextInput(text)
+  end
+
+  -- Source editor
+  if SourceEditor.isActive() then
+    if SourceEditor.textinput(text) then return true end
   end
 
   -- Route to console
@@ -602,6 +619,16 @@ function Inspector.mousepressed(x, y, button)
   if state.selectedNode and state.detailRegion then
     local dr = state.detailRegion
     if x >= dr.x and x < dr.x + dr.w and y >= dr.y and y < dr.y + dr.h then
+      -- Source editor gets first crack (it knows its own region)
+      if SourceEditor.mousepressed(x, y, button) then
+        -- Clicking in source editor deactivates inline style editing
+        if state.editState then commitEdit() end
+        return true
+      end
+
+      -- If we got here, click was NOT in the source editor — deactivate it
+      SourceEditor.deactivate()
+
       -- Check if click is on an editable property value
       for i, entry in ipairs(state.detailPropPositions) do
         if entry.y + entry.h > dr.y and entry.y < dr.y + dr.h then  -- visible
@@ -694,6 +721,11 @@ function Inspector.wheelmoved(x, y)
   -- Map horizontal tilt to vertical scroll when no vertical input
   local dy = y
   if dy == 0 and x ~= 0 then dy = x end
+
+  -- Source editor scroll (check before detail panel — editor is inside it)
+  if SourceEditor.wheelmoved(x, dy) then
+    return true
+  end
 
   -- Detail panel scroll (uses stored region)
   if state.selectedNode and state.detailRegion then
@@ -2375,6 +2407,43 @@ function drawDetailPanel(rx, ry, rw, rh)
   love.graphics.setColor(TREE_DIM)
   love.graphics.print("Click values to edit  |  Arrow keys +/-", x, y)
   y = y + lineH + pad
+
+  -- ── Source Editor ──
+  if node.debugSource and node.debugSource.fileName then
+    y = y + 4
+    love.graphics.setColor(SECTION_COL)
+    local srcLabel = "source"
+    if SourceEditor.isDirty() then srcLabel = srcLabel .. "  \xe2\x97\x8f" end -- ●
+    love.graphics.print(srcLabel, x, y)
+
+    -- Show filename on the right
+    local shortFile = node.debugSource.fileName:match("([^/]+)$") or node.debugSource.fileName
+    love.graphics.setColor(TREE_DIM)
+    local fileW = font:getWidth(shortFile)
+    love.graphics.print(shortFile, rx + rw - pad - fileW, y)
+    y = y + lineH + 4
+
+    -- Open file if not already open (or selected node changed)
+    local srcPath = node.debugSource.fileName
+    if SourceEditor.getPath() ~= srcPath then
+      SourceEditor.open(srcPath, node.debugSource.lineNumber)
+    end
+
+    -- Editor region: fixed height, rendered inline in the detail panel
+    -- Use remaining viewport height or minimum 200px
+    local editorH = math.max(200, rh - (y - ry) - 10)
+    -- Temporarily pop the detail panel's scissor so the editor can set its own
+    love.graphics.setScissor()
+    SourceEditor.draw(rx + 2, y, rw - 4, editorH, font)
+    -- Restore detail panel scissor
+    love.graphics.setScissor(rx, ry, rw, rh)
+    y = y + editorH + pad
+  else
+    -- No source info — close editor if open
+    if SourceEditor.getPath() then
+      SourceEditor.close()
+    end
+  end
 
   -- Store content height for scroll clamping
   local contentH = (y - ry) + state.detailScrollY

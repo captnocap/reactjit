@@ -34,7 +34,7 @@ let currentMode: 'stories' | 'docs' | 'playground' = 'stories';
 
 // ── Story browser (sidebar + viewer) ─────────────────────
 
-const SECTION_ORDER: StorySection[] = ['Core', 'Packages', 'Demos', 'Stress Test', 'Dev'];
+const SECTION_ORDER: StorySection[] = ['Core', 'Packages', 'Demos', 'Bad Habits', 'Stress Test', 'Dev', 'Layouts'];
 
 function groupBySection(list: StoryDef[]): Map<StorySection, StoryDef[]> {
   const map = new Map<StorySection, StoryDef[]>();
@@ -231,11 +231,11 @@ function StorybookPanel() {
         </Box>
 
         {/* Story content */}
-        <ScaleProvider reference={{ width: 800, height: 600 }}>
-          <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
+        <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
+          <ScaleProvider reference={{ width: 800, height: 600 }}>
             {StoryComp && <StoryComp key={active.id} />}
-          </Box>
-        </ScaleProvider>
+          </ScaleProvider>
+        </Box>
       </Box>
     </Box>
   );

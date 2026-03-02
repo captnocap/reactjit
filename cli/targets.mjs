@@ -71,13 +71,19 @@ export function detectHostPlatform() {
 /**
  * Build the esbuild CLI args array for a given target config.
  * Does NOT include entry point or --outfile (caller adds those).
+ *
+ * @param {object} target - Target config from TARGETS registry
+ * @param {object} [opts] - Optional flags
+ * @param {boolean} [opts.dev] - Use JSX dev runtime (populates _debugSource on fibers)
  */
-export function esbuildArgs(target) {
+export function esbuildArgs(target, opts) {
+  const isDev = opts && opts.dev;
   const args = [
     '--bundle',
     `--format=${target.format}`,
     '--target=es2020',
     '--jsx=automatic',
+    ...(isDev ? ['--jsx-dev'] : []),
   ];
   if (target.globalName) args.push(`--global-name=${target.globalName}`);
   if (target.platform) args.push(`--platform=${target.platform}`);

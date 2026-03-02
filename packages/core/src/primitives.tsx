@@ -208,6 +208,7 @@ export function Box(props: BoxProps) {
   };
   if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
   if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
+  if (anyProps.debugLayout) hostProps.debugLayout = true;
 
   return React.createElement(
     'View',

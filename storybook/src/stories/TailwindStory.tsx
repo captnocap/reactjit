@@ -10,16 +10,19 @@ import React from 'react';
 import { Box, Row, Text, tw } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
+import { StyleDemo, ways } from './_shared/StyleDemo';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function Label({ children }: { children: string }) {
   const c = useThemeColors();
   return (
-    {/* rjit-ignore-next-line */}
-    <Text style={{ color: c.muted, fontSize: 9, width: '100%', textAlign: 'left' }}>
-      {children}
-    </Text>
+    <>
+      {/* rjit-ignore-next-line */}
+      <Text style={{ color: c.muted, fontSize: 9, width: '100%', textAlign: 'left' }}>
+        {children}
+      </Text>
+    </>
   );
 }
 
@@ -56,253 +59,430 @@ export function TailwindStory() {
 
       {/* 1. Spacing */}
       <StorySection index={1} title="Spacing">
-        <Label>{'className="p-4 m-2"'}</Label>
-        <Box className="p-4 m-2 bg-blue-500 rounded-lg" style={{ width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'p-4 m-2 (padding: 16, margin: 8)'}</Text>
-        </Box>
-
-        <Label>{'className="px-6 py-2"'}</Label>
-        <Box className="px-6 py-2 bg-indigo-500 rounded-lg" style={{ width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'px-6 py-2 (paddingX: 24, paddingY: 8)'}</Text>
-        </Box>
-
-        <Label>{'className="p-8 gap-4 flex-col"'}</Label>
-        <Box className="p-8 gap-4 flex-col bg-violet-600 rounded-lg" style={{ width: '100%' }}>
-          <Box className="p-2 bg-violet-400 rounded">
-            <Text style={{ color: '#fff', fontSize: 10 }}>{'Child A'}</Text>
+        <StyleDemo properties={[{
+          property: 'padding + margin',
+          ways: ways([
+            ['tw()', 'className="p-4 m-2"'],
+            ['style={}', 'padding: 16, margin: 8'],
+          ]),
+        }]}>
+          <Label>{'className="p-4 m-2"'}</Label>
+          <Box className="p-4 m-2 bg-blue-500 rounded-lg" style={{ width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'p-4 m-2 (padding: 16, margin: 8)'}</Text>
           </Box>
-          <Box className="p-2 bg-violet-400 rounded">
-            <Text style={{ color: '#fff', fontSize: 10 }}>{'Child B'}</Text>
+        </StyleDemo>
+
+        <StyleDemo properties={[{
+          property: 'paddingLeft/Right + paddingTop/Bottom',
+          ways: ways([
+            ['tw()', 'className="px-6 py-2"'],
+            ['style={}', 'paddingLeft: 24, paddingRight: 24, paddingTop: 8, paddingBottom: 8'],
+          ]),
+        }]}>
+          <Label>{'className="px-6 py-2"'}</Label>
+          <Box className="px-6 py-2 bg-indigo-500 rounded-lg" style={{ width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'px-6 py-2 (paddingX: 24, paddingY: 8)'}</Text>
           </Box>
-        </Box>
+        </StyleDemo>
+
+        <StyleDemo properties={[{
+          property: 'padding + gap + flexDirection',
+          ways: ways([
+            ['tw()', 'className="p-8 gap-4 flex-col"'],
+            ['style={}', 'padding: 32, gap: 16, flexDirection: "column"'],
+          ]),
+        }]}>
+          <Label>{'className="p-8 gap-4 flex-col"'}</Label>
+          <Box className="p-8 gap-4 flex-col bg-violet-600 rounded-lg" style={{ width: '100%' }}>
+            <Box className="p-2 bg-violet-400 rounded">
+              <Text style={{ color: '#fff', fontSize: 10 }}>{'Child A'}</Text>
+            </Box>
+            <Box className="p-2 bg-violet-400 rounded">
+              <Text style={{ color: '#fff', fontSize: 10 }}>{'Child B'}</Text>
+            </Box>
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 2. Flex Layouts */}
       <StorySection index={2} title="Flex Layouts">
-        <Label>{'className="flex-row gap-2 items-center justify-between"'}</Label>
-        <Box className="flex-row gap-2 items-center justify-between p-3 bg-slate-800 rounded-lg" style={{ width: '100%' }}>
-          <Box className="p-2 bg-blue-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'A'}</Text></Box>
-          <Box className="p-2 bg-blue-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'B'}</Text></Box>
-          <Box className="p-2 bg-blue-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'C'}</Text></Box>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'flexDirection + gap + alignItems + justifyContent',
+          ways: ways([
+            ['tw()', 'className="flex-row gap-2 items-center justify-between"'],
+            ['style={}', 'flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "space-between"'],
+          ]),
+        }]}>
+          <Label>{'className="flex-row gap-2 items-center justify-between"'}</Label>
+          <Box className="flex-row gap-2 items-center justify-between p-3 bg-slate-800 rounded-lg" style={{ width: '100%' }}>
+            <Box className="p-2 bg-blue-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'A'}</Text></Box>
+            <Box className="p-2 bg-blue-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'B'}</Text></Box>
+            <Box className="p-2 bg-blue-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'C'}</Text></Box>
+          </Box>
+        </StyleDemo>
 
-        <Label>{'className="flex-row flex-wrap gap-2"'}</Label>
-        <Box className="flex-row flex-wrap gap-2 p-3 bg-slate-800 rounded-lg" style={{ width: '100%' }}>
-          <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
-            <Text style={{ color: '#fff', fontSize: 9 }}>{'30%'}</Text>
+        <StyleDemo properties={[{
+          property: 'flexWrap',
+          ways: ways([
+            ['tw()', 'className="flex-row flex-wrap gap-2"'],
+            ['style={}', 'flexDirection: "row", flexWrap: "wrap", gap: 8'],
+          ]),
+        }]}>
+          <Label>{'className="flex-row flex-wrap gap-2"'}</Label>
+          <Box className="flex-row flex-wrap gap-2 p-3 bg-slate-800 rounded-lg" style={{ width: '100%' }}>
+            <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
+              <Text style={{ color: '#fff', fontSize: 9 }}>{'30%'}</Text>
+            </Box>
+            <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
+              <Text style={{ color: '#fff', fontSize: 9 }}>{'30%'}</Text>
+            </Box>
+            <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
+              <Text style={{ color: '#fff', fontSize: 9 }}>{'30%'}</Text>
+            </Box>
+            <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
+              <Text style={{ color: '#fff', fontSize: 9 }}>{'wraps!'}</Text>
+            </Box>
           </Box>
-          <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
-            <Text style={{ color: '#fff', fontSize: 9 }}>{'30%'}</Text>
-          </Box>
-          <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
-            <Text style={{ color: '#fff', fontSize: 9 }}>{'30%'}</Text>
-          </Box>
-          <Box className="p-2 bg-emerald-500 rounded" style={{ width: '30%' }}>
-            <Text style={{ color: '#fff', fontSize: 9 }}>{'wraps!'}</Text>
-          </Box>
-        </Box>
+        </StyleDemo>
 
-        <Label>{'flex-1 vs flex-none'}</Label>
-        <Box className="flex-row gap-2 p-3 bg-slate-800 rounded-lg" style={{ width: '100%' }}>
-          <Box className="flex-none p-2 bg-amber-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'fixed'}</Text></Box>
-          <Box className="flex-1 p-2 bg-amber-600 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'flex-1 (grows)'}</Text></Box>
-          <Box className="flex-none p-2 bg-amber-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'fixed'}</Text></Box>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'flexGrow + flexShrink',
+          ways: ways([
+            ['tw()', 'className="flex-1" / className="flex-none"'],
+            ['style={}', 'flexGrow: 1 / flexGrow: 0, flexShrink: 0'],
+          ]),
+        }]}>
+          <Label>{'flex-1 vs flex-none'}</Label>
+          <Box className="flex-row gap-2 p-3 bg-slate-800 rounded-lg" style={{ width: '100%' }}>
+            <Box className="flex-none p-2 bg-amber-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'fixed'}</Text></Box>
+            <Box className="flex-1 p-2 bg-amber-600 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'flex-1 (grows)'}</Text></Box>
+            <Box className="flex-none p-2 bg-amber-500 rounded"><Text style={{ color: '#fff', fontSize: 9 }}>{'fixed'}</Text></Box>
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 3. Colors */}
       <StorySection index={3} title="Color Palette">
-        <Label>{'Full Tailwind 3 palette — 22 families x 11 shades'}</Label>
-        {(['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose'] as const).map(color => (
-          <Box key={color} className="flex-row gap-1" style={{ width: '100%' }}>
-            {(['300', '500', '700', '900'] as const).map(shade => (
-              <Box key={shade} style={{
-                ...tw(`bg-${color}-${shade} rounded`),
-                flexGrow: 1, height: 16, justifyContent: 'center', alignItems: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontSize: 7 }}>{`${color[0]}${shade}`}</Text>
-              </Box>
-            ))}
-          </Box>
-        ))}
+        <StyleDemo properties={[{
+          property: 'backgroundColor',
+          ways: ways([
+            ['tw()', 'className="bg-red-500" or tw("bg-red-500")'],
+            ['style={}', 'backgroundColor: "#ef4444"'],
+          ]),
+        }]}>
+          <Label>{'Full Tailwind 3 palette — 22 families x 11 shades'}</Label>
+          {(['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose'] as const).map(color => (
+            <Box key={color} className="flex-row gap-1" style={{ width: '100%' }}>
+              {(['300', '500', '700', '900'] as const).map(shade => (
+                <Box key={shade} style={{
+                  ...tw(`bg-${color}-${shade} rounded`),
+                  flexGrow: 1, height: 16, justifyContent: 'center', alignItems: 'center',
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 7 }}>{`${color[0]}${shade}`}</Text>
+                </Box>
+              ))}
+            </Box>
+          ))}
+        </StyleDemo>
       </StorySection>
 
       {/* 4. Typography */}
       <StorySection index={4} title="Typography">
-        <Label>{'text-xs through text-4xl'}</Label>
-        <Box className="gap-1" style={{ width: '100%' }}>
-          <Text style={{ ...tw('text-xs text-slate-300') }}>{'text-xs (12px)'}</Text>
-          <Text style={{ ...tw('text-sm text-slate-300') }}>{'text-sm (14px)'}</Text>
-          <Text style={{ ...tw('text-base text-slate-300') }}>{'text-base (16px)'}</Text>
-          <Text style={{ ...tw('text-lg text-slate-300') }}>{'text-lg (18px)'}</Text>
-          <Text style={{ ...tw('text-xl text-slate-300') }}>{'text-xl (20px)'}</Text>
-          <Text style={{ ...tw('text-2xl text-slate-300') }}>{'text-2xl (24px)'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'fontSize',
+          ways: ways([
+            ['tw()', 'className="text-xs" through className="text-4xl"'],
+            ['style={}', 'fontSize: 12 through fontSize: 36'],
+          ]),
+        }]}>
+          <Label>{'text-xs through text-4xl'}</Label>
+          <Box className="gap-1" style={{ width: '100%' }}>
+            <Text style={{ ...tw('text-xs text-slate-300') }}>{'text-xs (12px)'}</Text>
+            <Text style={{ ...tw('text-sm text-slate-300') }}>{'text-sm (14px)'}</Text>
+            <Text style={{ ...tw('text-base text-slate-300') }}>{'text-base (16px)'}</Text>
+            <Text style={{ ...tw('text-lg text-slate-300') }}>{'text-lg (18px)'}</Text>
+            <Text style={{ ...tw('text-xl text-slate-300') }}>{'text-xl (20px)'}</Text>
+            <Text style={{ ...tw('text-2xl text-slate-300') }}>{'text-2xl (24px)'}</Text>
+          </Box>
+        </StyleDemo>
 
-        <Label>{'font-normal, font-bold, font-black'}</Label>
-        <Box className="gap-1" style={{ width: '100%' }}>
-          <Text style={{ ...tw('text-base text-slate-300 font-normal') }}>{'font-normal'}</Text>
-          <Text style={{ ...tw('text-base text-slate-300 font-bold') }}>{'font-bold'}</Text>
-          <Text style={{ ...tw('text-base text-slate-300 font-black') }}>{'font-black (900)'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'fontWeight',
+          ways: ways([
+            ['tw()', 'className="font-normal" / "font-bold" / "font-black"'],
+            ['style={}', 'fontWeight: "normal" / "bold" / "900"'],
+          ]),
+        }]}>
+          <Label>{'font-normal, font-bold, font-black'}</Label>
+          <Box className="gap-1" style={{ width: '100%' }}>
+            <Text style={{ ...tw('text-base text-slate-300 font-normal') }}>{'font-normal'}</Text>
+            <Text style={{ ...tw('text-base text-slate-300 font-bold') }}>{'font-bold'}</Text>
+            <Text style={{ ...tw('text-base text-slate-300 font-black') }}>{'font-black (900)'}</Text>
+          </Box>
+        </StyleDemo>
 
-        <Label>{'underline, line-through'}</Label>
-        <Box className="flex-row gap-4" style={{ width: '100%' }}>
-          <Text style={{ ...tw('text-sm text-slate-300 underline') }}>{'underline'}</Text>
-          <Text style={{ ...tw('text-sm text-slate-300 line-through') }}>{'line-through'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'textDecorationLine',
+          ways: ways([
+            ['tw()', 'className="underline" / "line-through"'],
+            ['style={}', 'textDecorationLine: "underline" / "line-through"'],
+          ]),
+        }]}>
+          <Label>{'underline, line-through'}</Label>
+          <Box className="flex-row gap-4" style={{ width: '100%' }}>
+            <Text style={{ ...tw('text-sm text-slate-300 underline') }}>{'underline'}</Text>
+            <Text style={{ ...tw('text-sm text-slate-300 line-through') }}>{'line-through'}</Text>
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 5. Borders & Radius */}
       <StorySection index={5} title="Borders and Radius">
-        <Label>{'border, border-2, border-4 with colors'}</Label>
-        <Box className="flex-row gap-3" style={{ width: '100%' }}>
-          <Box className="border border-blue-500 rounded p-3">
-            <Text style={{ color: c.text, fontSize: 9 }}>{'border'}</Text>
-          </Box>
-          <Box className="border-2 border-emerald-500 rounded-md p-3">
-            <Text style={{ color: c.text, fontSize: 9 }}>{'border-2'}</Text>
-          </Box>
-          <Box className="border-4 border-rose-500 rounded-lg p-3">
-            <Text style={{ color: c.text, fontSize: 9 }}>{'border-4'}</Text>
-          </Box>
-        </Box>
-
-        <Label>{'rounded-none through rounded-full'}</Label>
-        <Box className="flex-row gap-3 items-center" style={{ width: '100%' }}>
-          {(['none', 'sm', 'md', 'lg', 'xl', '2xl', 'full'] as const).map(r => (
-            <Box key={r} style={{
-              ...tw(`bg-sky-500 rounded-${r}`),
-              width: 32, height: 32, justifyContent: 'center', alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 7 }}>{r}</Text>
+        <StyleDemo properties={[{
+          property: 'borderWidth + borderColor',
+          ways: ways([
+            ['tw()', 'className="border border-blue-500" / "border-2" / "border-4"'],
+            ['style={}', 'borderWidth: 1, borderColor: "#3b82f6"'],
+          ]),
+        }]}>
+          <Label>{'border, border-2, border-4 with colors'}</Label>
+          <Box className="flex-row gap-3" style={{ width: '100%' }}>
+            <Box className="border border-blue-500 rounded p-3">
+              <Text style={{ color: c.text, fontSize: 9 }}>{'border'}</Text>
             </Box>
-          ))}
-        </Box>
+            <Box className="border-2 border-emerald-500 rounded-md p-3">
+              <Text style={{ color: c.text, fontSize: 9 }}>{'border-2'}</Text>
+            </Box>
+            <Box className="border-4 border-rose-500 rounded-lg p-3">
+              <Text style={{ color: c.text, fontSize: 9 }}>{'border-4'}</Text>
+            </Box>
+          </Box>
+        </StyleDemo>
+
+        <StyleDemo properties={[{
+          property: 'borderRadius',
+          ways: ways([
+            ['tw()', 'className="rounded-none" through "rounded-full"'],
+            ['style={}', 'borderRadius: 0 through borderRadius: 9999'],
+          ]),
+        }]}>
+          <Label>{'rounded-none through rounded-full'}</Label>
+          <Box className="flex-row gap-3 items-center" style={{ width: '100%' }}>
+            {(['none', 'sm', 'md', 'lg', 'xl', '2xl', 'full'] as const).map(r => (
+              <Box key={r} style={{
+                ...tw(`bg-sky-500 rounded-${r}`),
+                width: 32, height: 32, justifyContent: 'center', alignItems: 'center',
+              }}>
+                <Text style={{ color: '#fff', fontSize: 7 }}>{r}</Text>
+              </Box>
+            ))}
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 6. Shadows & Opacity */}
       <StorySection index={6} title="Shadows and Opacity">
-        <Label>{'shadow-sm through shadow-2xl'}</Label>
-        <Box className="flex-row gap-3 flex-wrap" style={{ width: '100%' }}>
-          {(['sm', 'md', 'lg', 'xl', '2xl'] as const).map(s => (
-            <Box key={s} style={{
-              ...tw(`shadow-${s} bg-slate-700 rounded-lg p-3`),
-              minWidth: 60, alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 9 }}>{`shadow-${s}`}</Text>
-            </Box>
-          ))}
-        </Box>
+        <StyleDemo properties={[{
+          property: 'shadow',
+          ways: ways([
+            ['tw()', 'className="shadow-sm" through "shadow-2xl"'],
+            ['style={}', 'shadow: { radius: N, color: "rgba(...)", offsetY: N }'],
+          ]),
+        }]}>
+          <Label>{'shadow-sm through shadow-2xl'}</Label>
+          <Box className="flex-row gap-3 flex-wrap" style={{ width: '100%' }}>
+            {(['sm', 'md', 'lg', 'xl', '2xl'] as const).map(s => (
+              <Box key={s} style={{
+                ...tw(`shadow-${s} bg-slate-700 rounded-lg p-3`),
+                minWidth: 60, alignItems: 'center',
+              }}>
+                <Text style={{ color: '#fff', fontSize: 9 }}>{`shadow-${s}`}</Text>
+              </Box>
+            ))}
+          </Box>
+        </StyleDemo>
 
-        <Label>{'opacity-25, opacity-50, opacity-75, opacity-100'}</Label>
-        <Box className="flex-row gap-3" style={{ width: '100%' }}>
-          {([25, 50, 75, 100] as const).map(o => (
-            <Box key={o} style={{
-              ...tw(`opacity-${o} bg-blue-500 rounded-lg p-3`),
-              flexGrow: 1, alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 9 }}>{`${o}%`}</Text>
-            </Box>
-          ))}
-        </Box>
+        <StyleDemo properties={[{
+          property: 'opacity',
+          ways: ways([
+            ['tw()', 'className="opacity-25" / "opacity-50" / "opacity-75" / "opacity-100"'],
+            ['style={}', 'opacity: 0.25 / 0.5 / 0.75 / 1.0'],
+          ]),
+        }]}>
+          <Label>{'opacity-25, opacity-50, opacity-75, opacity-100'}</Label>
+          <Box className="flex-row gap-3" style={{ width: '100%' }}>
+            {([25, 50, 75, 100] as const).map(o => (
+              <Box key={o} style={{
+                ...tw(`opacity-${o} bg-blue-500 rounded-lg p-3`),
+                flexGrow: 1, alignItems: 'center',
+              }}>
+                <Text style={{ color: '#fff', fontSize: 9 }}>{`${o}%`}</Text>
+              </Box>
+            ))}
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 7. Transforms */}
       <StorySection index={7} title="Transforms">
-        <Label>{'rotate-12, rotate-45, rotate-90'}</Label>
-        <Box className="flex-row gap-6 items-center justify-center p-4" style={{ width: '100%' }}>
-          <Box style={{ ...tw('bg-purple-500 rounded rotate-12'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{'12'}</Text>
+        <StyleDemo properties={[{
+          property: 'rotation',
+          ways: ways([
+            ['tw()', 'className="rotate-12" / "rotate-45" / "rotate-90"'],
+            ['style={}', 'rotation: 12 / rotation: 45 / rotation: 90'],
+          ]),
+        }]}>
+          <Label>{'rotate-12, rotate-45, rotate-90'}</Label>
+          <Box className="flex-row gap-6 items-center justify-center p-4" style={{ width: '100%' }}>
+            <Box style={{ ...tw('bg-purple-500 rounded rotate-12'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>{'12'}</Text>
+            </Box>
+            <Box style={{ ...tw('bg-purple-500 rounded rotate-45'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>{'45'}</Text>
+            </Box>
+            <Box style={{ ...tw('bg-purple-500 rounded rotate-90'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>{'90'}</Text>
+            </Box>
           </Box>
-          <Box style={{ ...tw('bg-purple-500 rounded rotate-45'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{'45'}</Text>
-          </Box>
-          <Box style={{ ...tw('bg-purple-500 rounded rotate-90'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{'90'}</Text>
-          </Box>
-        </Box>
+        </StyleDemo>
 
-        <Label>{'scale-75, scale-100, scale-125'}</Label>
-        <Box className="flex-row gap-6 items-center justify-center p-4" style={{ width: '100%' }}>
-          <Box style={{ ...tw('bg-teal-500 rounded scale-75'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{'75'}</Text>
+        <StyleDemo properties={[{
+          property: 'scale',
+          ways: ways([
+            ['tw()', 'className="scale-75" / "scale-100" / "scale-125"'],
+            ['style={}', 'scale: 0.75 / scale: 1.0 / scale: 1.25'],
+          ]),
+        }]}>
+          <Label>{'scale-75, scale-100, scale-125'}</Label>
+          <Box className="flex-row gap-6 items-center justify-center p-4" style={{ width: '100%' }}>
+            <Box style={{ ...tw('bg-teal-500 rounded scale-75'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>{'75'}</Text>
+            </Box>
+            <Box style={{ ...tw('bg-teal-500 rounded scale-100'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>{'100'}</Text>
+            </Box>
+            <Box style={{ ...tw('bg-teal-500 rounded scale-125'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>{'125'}</Text>
+            </Box>
           </Box>
-          <Box style={{ ...tw('bg-teal-500 rounded scale-100'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{'100'}</Text>
-          </Box>
-          <Box style={{ ...tw('bg-teal-500 rounded scale-125'), width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{'125'}</Text>
-          </Box>
-        </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 8. Gradients */}
       <StorySection index={8} title="Gradients">
-        <Label>{'bg-gradient-to-r from-blue-500 to-purple-500'}</Label>
-        <Box style={{ ...tw('bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-4'), width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'Horizontal gradient'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'backgroundGradient (horizontal)',
+          ways: ways([
+            ['tw()', 'className="bg-gradient-to-r from-blue-500 to-purple-500"'],
+            ['style={}', 'backgroundGradient: { direction: "horizontal", colors: ["#3b82f6", "#a855f7"] }'],
+          ]),
+        }]}>
+          <Label>{'bg-gradient-to-r from-blue-500 to-purple-500'}</Label>
+          <Box style={{ ...tw('bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-4'), width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'Horizontal gradient'}</Text>
+          </Box>
+        </StyleDemo>
 
-        <Label>{'bg-gradient-to-b from-emerald-400 to-cyan-500'}</Label>
-        <Box style={{ ...tw('bg-gradient-to-b from-emerald-400 to-cyan-500 rounded-lg p-4'), width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'Vertical gradient'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'backgroundGradient (vertical)',
+          ways: ways([
+            ['tw()', 'className="bg-gradient-to-b from-emerald-400 to-cyan-500"'],
+            ['style={}', 'backgroundGradient: { direction: "vertical", colors: ["#34d399", "#06b6d4"] }'],
+          ]),
+        }]}>
+          <Label>{'bg-gradient-to-b from-emerald-400 to-cyan-500'}</Label>
+          <Box style={{ ...tw('bg-gradient-to-b from-emerald-400 to-cyan-500 rounded-lg p-4'), width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'Vertical gradient'}</Text>
+          </Box>
+        </StyleDemo>
 
-        <Label>{'bg-gradient-to-br from-rose-500 to-amber-500'}</Label>
-        <Box style={{ ...tw('bg-gradient-to-br from-rose-500 to-amber-500 rounded-lg p-4'), width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'Diagonal gradient'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'backgroundGradient (diagonal)',
+          ways: ways([
+            ['tw()', 'className="bg-gradient-to-br from-rose-500 to-amber-500"'],
+            ['style={}', 'backgroundGradient: { direction: "diagonal", colors: ["#f43f5e", "#f59e0b"] }'],
+          ]),
+        }]}>
+          <Label>{'bg-gradient-to-br from-rose-500 to-amber-500'}</Label>
+          <Box style={{ ...tw('bg-gradient-to-br from-rose-500 to-amber-500 rounded-lg p-4'), width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'Diagonal gradient'}</Text>
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 9. className + style merge precedence */}
       <StorySection index={9} title="Merge Precedence">
-        <Label>{'className="p-8 bg-red-500" padding={4} → padding is 4 (shorthand wins)'}</Label>
-        <Box className="p-8 bg-red-500 rounded-lg" padding={4} style={{ width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'padding=4 overrides p-8'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'padding (shorthand override)',
+          ways: ways([
+            ['tw()', 'className="p-8" sets padding: 32'],
+            ['shorthand', 'padding={4} overrides className to padding: 4'],
+            ['style={}', 'style takes highest priority'],
+          ]),
+        }]}>
+          <Label>{'className="p-8 bg-red-500" padding={4} -> padding is 4 (shorthand wins)'}</Label>
+          <Box className="p-8 bg-red-500 rounded-lg" padding={4} style={{ width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'padding=4 overrides p-8'}</Text>
+          </Box>
+        </StyleDemo>
 
-        <Label>{'className="bg-red-500" style={{ backgroundColor: "#3b82f6" }} → blue wins'}</Label>
-        <Box className="bg-red-500 rounded-lg p-4" style={{ backgroundColor: '#3b82f6', width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'style={{ bg: blue }} overrides bg-red-500'}</Text>
-        </Box>
+        <StyleDemo properties={[{
+          property: 'backgroundColor (style override)',
+          ways: ways([
+            ['tw()', 'className="bg-red-500" sets backgroundColor: "#ef4444"'],
+            ['style={}', 'style={{ backgroundColor: "#3b82f6" }} wins over className'],
+          ]),
+        }]}>
+          <Label>{'className="bg-red-500" style={{ backgroundColor: "#3b82f6" }} -> blue wins'}</Label>
+          <Box className="bg-red-500 rounded-lg p-4" style={{ backgroundColor: '#3b82f6', width: '100%' }}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>{'style={{ bg: blue }} overrides bg-red-500'}</Text>
+          </Box>
+        </StyleDemo>
       </StorySection>
 
       {/* 10. Equivalence Proof */}
       <StorySection index={10} title="Equivalence Proof">
-        <Label>{'Tailwind classes (left) vs native style (right) — identical output'}</Label>
-        <Row gap={8} style={{ width: '100%' }}>
-          {/* Tailwind side */}
-          <Box className="flex-1 gap-2">
-            <Box className="bg-indigo-600 rounded-lg p-3 flex-row items-center justify-between" style={{ width: '100%' }}>
-              <Text style={{ ...tw('text-sm text-white font-bold') }}>{'tw()'}</Text>
-              <Box className="bg-indigo-400 rounded px-2 py-1">
-                <Text style={{ color: '#fff', fontSize: 9 }}>{'badge'}</Text>
+        <StyleDemo properties={[{
+          property: 'className vs style={{}}',
+          ways: ways([
+            ['tw()', 'className="bg-indigo-600 rounded-lg p-3 flex-row items-center justify-between"'],
+            ['style={}', 'backgroundColor: "#4f46e5", borderRadius: 8, padding: 12, flexDirection: "row"'],
+          ]),
+        }]}>
+          <Label>{'Tailwind classes (left) vs native style (right) — identical output'}</Label>
+          <Row gap={8} style={{ width: '100%' }}>
+            {/* Tailwind side */}
+            <Box className="flex-1 gap-2">
+              <Box className="bg-indigo-600 rounded-lg p-3 flex-row items-center justify-between" style={{ width: '100%' }}>
+                <Text style={{ ...tw('text-sm text-white font-bold') }}>{'tw()'}</Text>
+                <Box className="bg-indigo-400 rounded px-2 py-1">
+                  <Text style={{ color: '#fff', fontSize: 9 }}>{'badge'}</Text>
+                </Box>
+              </Box>
+              <Box className="bg-slate-700 rounded-lg p-3 border border-slate-500" style={{ width: '100%' }}>
+                <Text style={{ ...tw('text-xs text-slate-300') }}>{'Card body with Tailwind classes'}</Text>
               </Box>
             </Box>
-            <Box className="bg-slate-700 rounded-lg p-3 border border-slate-500" style={{ width: '100%' }}>
-              <Text style={{ ...tw('text-xs text-slate-300') }}>{'Card body with Tailwind classes'}</Text>
-            </Box>
-          </Box>
-          {/* Native side */}
-          <Box style={{ flexGrow: 1, gap: 8 }}>
-            <Box style={{
-              backgroundColor: '#4f46e5', borderRadius: 8, padding: 12,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%',
-            }}>
-              <Text style={{ fontSize: 14, color: '#fff', fontWeight: 'bold' }}>{'style={{}}'}</Text>
-              <Box style={{ backgroundColor: '#818cf8', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 9 }}>{'badge'}</Text>
+            {/* Native side */}
+            <Box style={{ flexGrow: 1, gap: 8 }}>
+              <Box style={{
+                backgroundColor: '#4f46e5', borderRadius: 8, padding: 12,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+              }}>
+                <Text style={{ fontSize: 14, color: '#fff', fontWeight: 'bold' }}>{'style={{}}'}</Text>
+                <Box style={{ backgroundColor: '#818cf8', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
+                  <Text style={{ color: '#fff', fontSize: 9 }}>{'badge'}</Text>
+                </Box>
+              </Box>
+              <Box style={{
+                backgroundColor: '#334155', borderRadius: 8, padding: 12,
+                borderWidth: 1, borderColor: '#64748b', width: '100%',
+              }}>
+                <Text style={{ fontSize: 12, color: '#cbd5e1' }}>{'Card body with native style'}</Text>
               </Box>
             </Box>
-            <Box style={{
-              backgroundColor: '#334155', borderRadius: 8, padding: 12,
-              borderWidth: 1, borderColor: '#64748b', width: '100%',
-            }}>
-              <Text style={{ fontSize: 12, color: '#cbd5e1' }}>{'Card body with native style'}</Text>
-            </Box>
-          </Box>
-        </Row>
+          </Row>
+        </StyleDemo>
       </StorySection>
     </StoryPage>
   );
