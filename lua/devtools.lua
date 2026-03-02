@@ -30,6 +30,7 @@
 
 local Log = require("lua.debug_log")
 local eventTrail = require("lua.event_trail")
+local HotState = require("lua.hotstate")
 
 local DevTools = {}
 
@@ -638,9 +639,12 @@ function DevTools.mousepressed(x, y, button)
 
   local panelY, panelH, contentY, contentH, screenW = getPanelGeometry()
 
-  -- Click above the panel: route to inspector for viewport node selection
+  -- Click above the panel: route to inspector for viewport node selection.
+  -- Always consume the click when devtools is open — never let it pass through
+  -- to the React tree underneath, even if the inspector has no hovered node.
   if y < panelY then
-    return inspector.mousepressed(x, y, button)
+    inspector.mousepressed(x, y, button)
+    return true
   end
 
   -- Tab bar click: switch tabs
@@ -737,29 +741,31 @@ function DevTools.mousepressed(x, y, button)
   return true
 end
 
---- Handle mouse movement.
+--- Handle mouse movement. Returns true if devtools consumed the event
+--- (callers should skip React tree hover tracking).
 function DevTools.mousemoved(x, y)
-  if not inspector then return end
+  if not inspector then return false end
+  if not state.open then return false end
 
   -- When popped out and main has focus: only track hover overlays on canvas
   if state.poppedOut and state.mainHasFocus then
     inspector.mousemoved(x, y)
-    return
+    return true
   end
 
   -- Scrollbar dragging
-  if devScrollbarMoved(x, y) then return end
+  if devScrollbarMoved(x, y) then return true end
 
   -- Divider dragging (uses devtools window coordinates when popped out)
   if state.draggingDivider then
     local _, _, _, _, screenW = getPanelGeometry()
     local clamped = math.max(MIN_TREE_W, math.min(x, screenW - MIN_DETAIL_W))
     state.dividerRatio = clamped / screenW
-    return
+    return true
   end
 
   -- Resize cursor when hovering divider
-  if state.open and state.activeTab == "elements" and inspector.getSelectedNode() then
+  if state.activeTab == "elements" and inspector.getSelectedNode() then
     local panelY, _, _, _, screenW = getPanelGeometry()
     local treeW = math.floor(screenW * state.dividerRatio)
     if y > panelY and math.abs(x - treeW) <= DIVIDER_W then
@@ -770,14 +776,14 @@ function DevTools.mousemoved(x, y)
   end
 
   -- Wireframe tab hover tracking
-  if state.open and state.activeTab == "wireframe" then
+  if state.activeTab == "wireframe" then
     wfHoverNode = wireframeHitTest(x, y)
   else
     wfHoverNode = nil
   end
 
   -- Logs tab hover tracking
-  if state.open and state.activeTab == "logs" and logsRegion then
+  if state.activeTab == "logs" and logsRegion then
     logsMousemoved(x, y, logsRegion)
   else
     logsHoverRow = nil
@@ -786,6 +792,9 @@ function DevTools.mousemoved(x, y)
   -- Always update inspector mouse position (needed for scroll hit testing in popped-out mode).
   -- Hover overlays on the main canvas are gated separately in the inspector's draw path.
   inspector.mousemoved(x, y)
+
+  -- Devtools is open — consume the event so React tree hover doesn't fire
+  return true
 end
 
 --- Handle mouse release. Returns true if consumed.
@@ -1659,6 +1668,7 @@ local LOG_BTN_H     = 28
 local LOG_BTN_PAD   = 6
 
 -- Colors for logs tab
+local LOG_TAB_BG    = { 0.03, 0.03, 0.06, 1 }
 local LOG_ON_BG     = { 0.15, 0.30, 0.20, 1 }
 local LOG_ON_DOT    = { 0.30, 0.85, 0.40, 1 }
 local LOG_OFF_BG    = { 0.12, 0.12, 0.18, 1 }
@@ -1669,6 +1679,7 @@ local LOG_HEADER_TXT = { 0.65, 0.68, 0.75, 1 }
 local LOG_BTN_BG    = { 0.12, 0.12, 0.18, 1 }
 local LOG_BTN_TEXT  = { 0.55, 0.58, 0.65, 1 }
 local LOG_BTN_HOVER = { 0.18, 0.22, 0.32, 1 }
+local LOG_DIVIDER   = { 0.18, 0.18, 0.25, 1 }
 
 --- Toggle a channel (handles JS-side sync for recon/dispatch).
 local function toggleChannel(name)
@@ -1684,6 +1695,10 @@ local function drawLogsTab(region)
   local font = getFont()
   love.graphics.setFont(font)
   love.graphics.setScissor(region.x, region.y, region.w, region.h)
+
+  -- Opaque background (matches perf tab)
+  love.graphics.setColor(LOG_TAB_BG)
+  love.graphics.rectangle("fill", region.x, region.y, region.w, region.h)
 
   local channels = getSortedChannels()
   local fh = font:getHeight()
@@ -1765,6 +1780,54 @@ local function drawLogsTab(region)
     rowY = rowY + LOG_ROW_H
   end
 
+  -- ── HMR Settings section ──
+  rowY = rowY + 8
+  love.graphics.setColor(LOG_DIVIDER)
+  love.graphics.rectangle("fill", x0, rowY, region.w - LOG_PAD_X * 2, 1)
+  rowY = rowY + 8
+
+  love.graphics.setColor(LOG_HEADER_TXT)
+  love.graphics.print("HMR Settings", x0, rowY + math.floor((LOG_HEADER_H - fh) / 2))
+  rowY = rowY + LOG_HEADER_H
+
+  -- HMR State Preservation toggle
+  local hmrOn = HotState.isEnabled()
+  local hmrIsHovered = logsHoverRow == "hmr_state"
+
+  if hmrIsHovered then
+    love.graphics.setColor(0.10, 0.12, 0.18, 1)
+    love.graphics.rectangle("fill", region.x, rowY, region.w, LOG_ROW_H)
+  end
+
+  local hmrPillX = x0
+  local hmrPillY = rowY + math.floor((LOG_ROW_H - 18) / 2)
+  local hmrPillW = LOG_TOGGLE_W
+  local hmrPillH = 18
+  local hmrPillR = 9
+
+  love.graphics.setColor(hmrOn and LOG_ON_BG or LOG_OFF_BG)
+  love.graphics.rectangle("fill", hmrPillX, hmrPillY, hmrPillW, hmrPillH, hmrPillR, hmrPillR)
+
+  local hmrDotR = 6
+  local hmrDotX = hmrOn and (hmrPillX + hmrPillW - hmrDotR - 4) or (hmrPillX + hmrDotR + 4)
+  local hmrDotY = hmrPillY + hmrPillH / 2
+  love.graphics.setColor(hmrOn and LOG_ON_DOT or LOG_OFF_DOT)
+  love.graphics.circle("fill", hmrDotX, hmrDotY, hmrDotR)
+
+  local hmrNameX = hmrPillX + hmrPillW + 12
+  love.graphics.setColor(hmrOn and { 0.38, 0.82, 0.98, 1 } or LOG_NAME)
+  love.graphics.print("State Preservation", hmrNameX, rowY + math.floor((LOG_ROW_H - fh) / 2))
+
+  local hmrDescX = hmrNameX + font:getWidth("State Preservation") + 16
+  love.graphics.setColor(LOG_DESC)
+  local hmrDesc = hmrOn and "useState survives hot reload" or "useState resets on hot reload"
+  local hmrMaxW = region.x + region.w - hmrDescX - LOG_PAD_X
+  if hmrMaxW > 0 then
+    love.graphics.print(hmrDesc, hmrDescX, rowY + math.floor((LOG_ROW_H - fh) / 2))
+  end
+
+  rowY = rowY + LOG_ROW_H
+
   -- Hint at bottom
   local hintY = rowY + 8
   if hintY + fh < region.y + region.h + logsScrollY then
@@ -1773,7 +1836,7 @@ local function drawLogsTab(region)
     love.graphics.print("Output goes to terminal AND console tab", x0, hintY + fh + 2)
   end
 
-  local logsContentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
+  local logsContentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 16 + 1 + 8 + LOG_HEADER_H + LOG_ROW_H + 30
   logsContentHStored = logsContentH
   drawScrollbar(region.x, region.y, region.w, region.h, logsScrollY, logsContentH)
   love.graphics.setScissor()
@@ -1825,6 +1888,20 @@ logsMousepressed = function(x, y, button, region)
     rowY = rowY + LOG_ROW_H
   end
 
+  -- HMR Settings section: divider(8+1+8) + header(LOG_HEADER_H) + toggle row
+  local hmrRowY = rowY + 8 + 1 + 8 + LOG_HEADER_H
+  if y >= hmrRowY and y < hmrRowY + LOG_ROW_H then
+    HotState.setEnabled(not HotState.isEnabled())
+    if bridge then
+      if HotState.isEnabled() then
+        pcall(function() bridge:eval("if(typeof __enableStatePreservation==='function')__enableStatePreservation()") end)
+      else
+        pcall(function() bridge:eval("if(typeof __disableStatePreservation==='function')__disableStatePreservation()") end)
+      end
+    end
+    return true
+  end
+
   return true
 end
 
@@ -1863,6 +1940,12 @@ logsMousemoved = function(x, y, region)
     end
     rowY = rowY + LOG_ROW_H
   end
+
+  -- HMR Settings toggle row
+  local hmrRowY = rowY + 8 + 1 + 8 + LOG_HEADER_H
+  if y >= hmrRowY and y < hmrRowY + LOG_ROW_H then
+    logsHoverRow = "hmr_state"; return
+  end
 end
 
 --- Handle wheel scroll on logs tab.
@@ -1871,11 +1954,9 @@ logsWheelmoved = function(x, y)
   local dy = y
   if dy == 0 and x ~= 0 then dy = x end
   logsScrollY = math.max(0, logsScrollY - dy * 20)
-  -- Clamp to content height
-  if logsRegion then
-    local channels = getSortedChannels()
-    local contentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
-    local maxScroll = math.max(0, contentH - logsRegion.h)
+  -- Clamp to content height (use stored value from drawLogsTab)
+  if logsRegion and logsContentHStored > 0 then
+    local maxScroll = math.max(0, logsContentHStored - logsRegion.h)
     logsScrollY = math.min(logsScrollY, maxScroll)
   end
   return true
@@ -2099,9 +2180,18 @@ end
 --- Used by context menu "Inspect" action.
 function DevTools.inspectNode(node)
   if not node then return end
+  local wasOpen = state.open
   state.open = true
   state.activeTab = "elements"
+  if not wasOpen then
+    inspector.enable()
+  end
   inspector.inspectNode(node)
+  -- Relayout: viewport height changed (panel just opened)
+  if not wasOpen then
+    if tree then tree.markDirty() end
+    pushViewportEvent()
+  end
 end
 
 return DevTools

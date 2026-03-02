@@ -24,6 +24,17 @@ local Measure = require("lua.measure")
 local SourceEditor = require("lua.source_editor")
 local console = nil  -- lazy-loaded to avoid circular deps
 
+-- UTF-8 lib (LuaJIT doesn't have the Lua 5.3 utf8 global)
+local ok_utf8, utf8lib = pcall(function() return utf8 end)
+if not ok_utf8 or not utf8lib then
+  local ok_require, mod = pcall(require, "utf8")
+  if ok_require then
+    utf8lib = mod
+  else
+    utf8lib = nil
+  end
+end
+
 -- Forward declarations (defined later in the file)
 local handleEditKey
 local handleEditTextInput
@@ -1331,8 +1342,8 @@ function drawTreePanel(root, rx, ry, rw, rh)
   local drawY = treeTop - state.treeScrollY
   local endY = drawTreeNode(root, 0, drawY, font, lineH, pad, treeTop, treeTop + treeH, rx, rw)
 
-  -- Store content height for scroll clamping
-  state.treeContentH = (endY - drawY)
+  -- Store content height for scroll clamping (+ bottom padding so last line isn't clipped)
+  state.treeContentH = (endY - drawY) + pad
   local maxTreeScroll = math.max(0, state.treeContentH - treeH)
   if state.treeScrollY > maxTreeScroll then state.treeScrollY = maxTreeScroll end
 
@@ -2648,12 +2659,19 @@ function drawDetailPanel(rx, ry, rw, rh)
           local displaySnip = snippet
           if font:getWidth(displaySnip) > availW then
             -- Truncate at UTF-8 character boundaries to avoid invalid byte sequences
-            local len = utf8.len(displaySnip) or 0
-            while len > 0 do
-              local bytePos = utf8.offset(displaySnip, len) -- byte offset of last char
-              displaySnip = displaySnip:sub(1, bytePos - 1)
-              len = len - 1
-              if font:getWidth(displaySnip .. "\xe2\x80\xa6") <= availW then break end
+            if utf8lib then
+              local len = utf8lib.len(displaySnip) or 0
+              while len > 0 do
+                local bytePos = utf8lib.offset(displaySnip, len) -- byte offset of last char
+                displaySnip = displaySnip:sub(1, bytePos - 1)
+                len = len - 1
+                if font:getWidth(displaySnip .. "\xe2\x80\xa6") <= availW then break end
+              end
+            else
+              -- Byte-level fallback (may cut mid-codepoint but won't crash)
+              while #displaySnip > 0 and font:getWidth(displaySnip .. "\xe2\x80\xa6") > availW do
+                displaySnip = displaySnip:sub(1, -2)
+              end
             end
             displaySnip = displaySnip .. "\xe2\x80\xa6"
           end
@@ -2712,8 +2730,8 @@ function drawDetailPanel(rx, ry, rw, rh)
     end
   end
 
-  -- Store content height for scroll clamping
-  local contentH = (y - ry) + state.detailScrollY
+  -- Store content height for scroll clamping (+ bottom padding so last line isn't clipped)
+  local contentH = (y - ry) + state.detailScrollY + pad
   state.detailContentH = contentH
   local maxDetailScroll = math.max(0, contentH - rh)
   if state.detailScrollY > maxDetailScroll then state.detailScrollY = maxDetailScroll end

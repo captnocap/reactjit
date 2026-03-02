@@ -161,6 +161,8 @@ local prevFocusedNodeIds = {}  -- { [nodeId] = true }
 local hmrFrameCounter = 0
 local hmrLastMtime    = nil
 local hmrHasLoaded    = false
+local luaFileMtimes   = {}    -- { ["lua/layout.lua"] = modtime, ... }
+local luaHmrDirty     = false -- set true when any lua file changed
 
 -- Crash recovery: when true, update/draw skip the app and only poll HMR
 local crashRecoveryMode = false
@@ -1587,43 +1589,110 @@ function ReactJIT.init(config)
   end)
 end
 
---- Poll bundle.js mtime for HMR. Returns true if reload was triggered.
+--- Scan lua/ directory for modified files. Returns true if any changed.
+local function _pollLuaFiles()
+  local items = love.filesystem.getDirectoryItems("lua")
+  local changed = false
+  for _, name in ipairs(items) do
+    if name:match("%.lua$") then
+      local path = "lua/" .. name
+      local info = love.filesystem.getInfo(path)
+      if info and info.modtime then
+        local prev = luaFileMtimes[path]
+        if prev == nil then
+          luaFileMtimes[path] = info.modtime
+        elseif info.modtime ~= prev then
+          luaFileMtimes[path] = info.modtime
+          io.write("[reactjit] Lua file changed: " .. path .. "\n"); io.flush()
+          changed = true
+        end
+      end
+    end
+  end
+  -- Also scan lua/capabilities/ subdirectory
+  local capItems = love.filesystem.getDirectoryItems("lua/capabilities")
+  if capItems then
+    for _, name in ipairs(capItems) do
+      if name:match("%.lua$") then
+        local path = "lua/capabilities/" .. name
+        local info = love.filesystem.getInfo(path)
+        if info and info.modtime then
+          local prev = luaFileMtimes[path]
+          if prev == nil then
+            luaFileMtimes[path] = info.modtime
+          elseif info.modtime ~= prev then
+            luaFileMtimes[path] = info.modtime
+            io.write("[reactjit] Lua file changed: " .. path .. "\n"); io.flush()
+            changed = true
+          end
+        end
+      end
+    end
+  end
+  return changed
+end
+
+--- Poll bundle.js and lua/ file mtimes for HMR. Returns true if reload was triggered.
 --- Extracted so crash recovery mode can call it independently.
 function ReactJIT._pollHMR()
   hmrFrameCounter = hmrFrameCounter + 1
   if hmrFrameCounter % 60 == 0 and initConfig then
+    -- Check JS bundle
+    local jsChanged = false
     local info = love.filesystem.getInfo(initConfig.bundlePath)
     if info and info.modtime then
       if hmrLastMtime == nil then
         hmrLastMtime = info.modtime
       elseif info.modtime ~= hmrLastMtime then
         hmrLastMtime = info.modtime
-        if hmrHasLoaded then
-          -- In crash recovery mode, attempt reload and clear the crash
-          if crashRecoveryMode then
-            io.write("[reactjit] Crash recovery: new bundle detected, attempting reload...\n"); io.flush()
-            local rok, rerr = pcall(ReactJIT.reload)
-            if rok then
-              crashRecoveryMode = false
-              errors.clear()
-              eventTrail.clear()
-              io.write("[reactjit] Crash recovery: reload succeeded! Resuming.\n"); io.flush()
-              return true
-            else
-              io.write("[reactjit] Crash recovery: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
-              errors.push({
-                source = "lua",
-                message = "Crash recovery reload failed: " .. tostring(rerr),
-                context = "ReactJIT._pollHMR (recovery)",
-              })
-              return false
-            end
-          end
-          ReactJIT.reload()
-          return true
-        end
+        jsChanged = true
       end
       hmrHasLoaded = true
+    end
+
+    -- Check Lua files
+    local luaChanged = _pollLuaFiles()
+    if luaChanged then luaHmrDirty = true end
+
+    -- Trigger reload if anything changed
+    if (jsChanged or luaChanged) and hmrHasLoaded then
+      if luaHmrDirty then
+        io.write("[reactjit] Lua HMR: clearing module cache...\n"); io.flush()
+        -- Clear all lua.* entries from package.loaded so require() gets fresh copies
+        for modname, _ in pairs(package.loaded) do
+          if type(modname) == "string" and modname:match("^lua%.") then
+            -- Don't clear init.lua itself — we're running inside it
+            if modname ~= "lua" and modname ~= "lua.init" then
+              package.loaded[modname] = nil
+            end
+          end
+        end
+      end
+
+      -- In crash recovery mode, attempt reload and clear the crash
+      if crashRecoveryMode then
+        io.write("[reactjit] Crash recovery: change detected, attempting reload...\n"); io.flush()
+        local rok, rerr = pcall(ReactJIT.reload)
+        if rok then
+          crashRecoveryMode = false
+          errors.clear()
+          eventTrail.clear()
+          luaHmrDirty = false
+          io.write("[reactjit] Crash recovery: reload succeeded! Resuming.\n"); io.flush()
+          return true
+        else
+          io.write("[reactjit] Crash recovery: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+          errors.push({
+            source = "lua",
+            message = "Crash recovery reload failed: " .. tostring(rerr),
+            context = "ReactJIT._pollHMR (recovery)",
+          })
+          return false
+        end
+      end
+      ReactJIT.reload()
+      luaHmrDirty = false
+      return true
     end
   end
   return false
@@ -2558,7 +2627,16 @@ function ReactJIT.draw()
 
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   -- When popped out, draw() only renders canvas overlays on the main window
-  if M.inspectorEnabled then devtools.draw(root) end
+  if M.inspectorEnabled then
+    local ok, devErr = pcall(devtools.draw, root)
+    if not ok then
+      love.graphics.reset()
+      crashRecoveryMode = true
+      local errMsg = tostring(devErr)
+      io.write("[reactjit] CRASH (devtools): entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
+      errors.push({ source = "lua", message = errMsg, context = "devtools.draw" })
+    end
+  end
 
   -- System panel (draws over devtools)
   if M.systemPanelEnabled and systemPanel.isOpen() then systemPanel.draw() end
@@ -3132,7 +3210,7 @@ function ReactJIT.mousemoved(x, y)
   if M.systemPanelEnabled then systemPanel.mousemoved(x, y) end
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
-  if M.inspectorEnabled then devtools.mousemoved(x, y) end
+  if M.inspectorEnabled and devtools.mousemoved(x, y) then return end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
   if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
@@ -4266,6 +4344,49 @@ function ReactJIT.reload()
   if M.images then M.images.clearCache() end
   if M.videos then M.videos.clearCache() end
   if M.animate then M.animate.clear() end
+
+  -- 2b. Re-require Lua modules if any .lua files changed on disk
+  if luaHmrDirty then
+    io.write("[reactjit] Lua HMR: re-requiring core modules...\n"); io.flush()
+    M.measure    = require("lua.measure")
+    M.measure.init()
+    M.tree       = require("lua.tree")
+    M.layout     = require("lua.layout")
+    M.layout.init({ measure = M.measure })
+    M.painter    = require("lua.painter")
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.events     = require("lua.events")
+    M.events.setTreeModule(M.tree)
+    M.texteditor = require("lua.texteditor")
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
+    M.textinput  = require("lua.textinput")
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+    M.codeblock  = require("lua.codeblock")
+    M.codeblock.init({ measure = M.measure })
+    M.widgets    = require("lua.widgets")
+    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
+    M.textselection = require("lua.textselection")
+    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
+    focus = require("lua.focus")
+    focus.init(M.tree, pushEvent)
+    M.focus = focus
+    -- Re-require devtools stack
+    errors    = require("lua.errors")
+    M.errors  = errors
+    inspector = require("lua.inspector")
+    M.inspector = inspector
+    console   = require("lua.console")
+    M.console = console
+    devtools  = require("lua.devtools")
+    M.devtools = devtools
+    if M.videoplayer then
+      M.videoplayer = require("lua.videoplayer")
+      M.videoplayer.init({ measure = M.measure, videos = M.videos })
+    end
+    M.events.setWidgetsModule(M.widgets)
+    io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
+  end
+
   M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
   if M.animate then M.animate.init({ tree = M.tree }) end
   M.events.clearHover()
@@ -4348,7 +4469,8 @@ function ReactJIT.reload()
   ReactJIT._loggedCommands = nil
   ReactJIT._loggedDraw = nil
 
-  io.write("[reactjit] Hot reload complete (" .. #bundleJS .. " bytes)\n"); io.flush()
+  local luaTag = luaHmrDirty and " +lua" or ""
+  io.write("[reactjit] Hot reload complete (" .. #bundleJS .. " bytes" .. luaTag .. ")\n"); io.flush()
 end
 
 --- Call when a secondary window's close button is clicked.
