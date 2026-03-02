@@ -94,7 +94,12 @@ function Layout.resolveUnit(value, parentSize)
   -- calc(X% ± Ypx) support
   local cpct, csign, cpx = value:match("^calc%(([%d%.]+)%% ([%+%-]) ([%d%.]+)px%)$")
   if cpct then
-    local base = (tonumber(cpct) / 100) * (parentSize or 0)
+    -- When parentSize is unknown (nil), percentage-based values are unresolvable.
+    -- Return nil so callers treat the dimension as "unknown" and fall through to
+    -- content-based sizing, instead of returning 0 which Lua treats as truthy
+    -- and masquerades as a known explicit dimension of zero.
+    if not parentSize then return nil end
+    local base = (tonumber(cpct) / 100) * parentSize
     local px   = tonumber(cpx) or 0
     return csign == "+" and base + px or base - px
   end
@@ -104,7 +109,8 @@ function Layout.resolveUnit(value, parentSize)
   if not num then return nil end
 
   if unit == "%" then
-    return (num / 100) * (parentSize or 0)
+    if not parentSize then return nil end
+    return (num / 100) * parentSize
   elseif unit == "vw" then
     return (num / 100) * (Layout._viewportW or (love and love.graphics and love.graphics.getWidth() or 1280))
   elseif unit == "vh" then
@@ -1216,13 +1222,20 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- ----------------------------------------------------------------
     -- Re-measure text nodes after flex distribution
     -- ----------------------------------------------------------------
-    -- Flex grow may have changed a text node's width. If the node has no
-    -- explicit height, re-measure with the new width so the wrapped height
-    -- is correct.
+    -- Flex distribution (grow OR shrink) may have changed a text node's
+    -- width. If the node has no explicit height, re-measure with the new
+    -- width so the wrapped height is correct. Previously only checked
+    -- grow > 0, which missed shrunk text nodes that wrap to more lines
+    -- and need a taller height for correct lineCrossSize calculation.
+    -- Save original intrinsic widths BEFORE remeasure — the _flexW
+    -- signaling below needs to compare against pre-remeasure values.
+    for _, idx in ipairs(line) do
+      childInfos[idx]._origIntrinsicW = childInfos[idx].w
+    end
     for _, idx in ipairs(line) do
       local child = allChildren[idx]
       local ci = childInfos[idx]
-      if ci.isText and ci.grow > 0 and not ci.explicitH then
+      if ci.isText and not ci.explicitH then
         local finalW
         if isRow then
           finalW = ci.basis
@@ -1436,12 +1449,20 @@ function Layout.layoutNode(node, px, py, pw, ph)
           if arW > 0 and math.abs(cw_final - arW) > 0.5 then
             child._flexW = cw_final
           end
-        elseif not explicitChildW and ci.grow > 0 and ci.isText then
-          -- Text nodes with flexGrow but no explicit width: signal the flex-distributed
-          -- width so layoutNode sets parentAssignedW = true, preventing the text
-          -- measurement at line 742 from shrink-wrapping to content width.
-          -- View containers don't need this — they get correct width from pw.
-          child._flexW = cw_final
+        elseif not explicitChildW then
+          -- Auto-width children: signal flex-distributed width when it differs
+          -- from intrinsic width. Covers grow (cw_final > intrinsic), shrink
+          -- (cw_final < intrinsic), and any flex redistribution. This ensures:
+          --   - Text nodes get parentAssignedW=true, preventing shrink-wrap
+          --     at line 742 from overriding the flex allocation
+          --   - View containers use the flex allocation as innerW for their
+          --     children, instead of auto-sizing from content
+          -- Use _origIntrinsicW (pre-remeasure) because the remeasure step
+          -- may have updated ci.w to match cw_final, masking the difference.
+          local intrinsicW = ci._origIntrinsicW or ci.w or 0
+          if math.abs(cw_final - intrinsicW) > 0.5 then
+            child._flexW = cw_final
+          end
         end
       else
         local explicitChildH = ru(cs.height, innerH)
@@ -1573,7 +1594,90 @@ function Layout.layoutNode(node, px, py, pw, ph)
       end
     end
   end
-  node.computed = { x = x, y = y, w = w, h = h, wSource = wSource or "unknown", hSource = hSource or "unknown" }
+  -- Build sizing detail tables for inspector math chain
+  local wDetail, hDetail
+  local ws = wSource or "unknown"
+  local hs = hSource or "unknown"
+  if ws == "parent" then
+    wDetail = { parentW = pw, padL = padL, padR = padR }
+  elseif ws == "flex" then
+    -- Look up this node's flex info from parent's flexInfo
+    local pfi = node.parent and node.parent.computed and node.parent.computed.flexInfo
+    if pfi then
+      for _, fl in ipairs(pfi.lines or {}) do
+        for _, item in ipairs(fl.items or {}) do
+          if item.id == node.id then
+            wDetail = {
+              parentMainSize = pfi.mainSize,
+              origBasis = item.origBasis,
+              finalBasis = item.finalBasis,
+              grow = item.grow,
+              shrink = item.shrink,
+              delta = item.delta,
+              freeSpace = fl.freeSpace,
+              totalGrow = fl.totalFlex,
+              siblingCount = #fl.items,
+              gap = pfi.gap,
+            }
+            break
+          end
+        end
+        if wDetail then break end
+      end
+    end
+  elseif ws == "content" then
+    local nc = node.children and #node.children or 0
+    wDetail = { childCount = nc, innerW = innerW }
+  elseif ws == "explicit" then
+    wDetail = { styleValue = s.width }
+  elseif ws == "surface-fallback" then
+    wDetail = { parentW = pw, viewportW = Layout._viewportW or 800 }
+  elseif ws == "stretch" then
+    local parentW2 = node.parent and node.parent.computed and node.parent.computed.w
+    wDetail = { parentW = parentW2, padL = padL, padR = padR }
+  end
+
+  if hs == "parent" then
+    hDetail = { parentH = ph, padT = padT, padB = padB }
+  elseif hs == "flex" then
+    local pfi = node.parent and node.parent.computed and node.parent.computed.flexInfo
+    if pfi and not pfi.isRow then
+      for _, fl in ipairs(pfi.lines or {}) do
+        for _, item in ipairs(fl.items or {}) do
+          if item.id == node.id then
+            hDetail = {
+              parentMainSize = pfi.mainSize,
+              origBasis = item.origBasis,
+              finalBasis = item.finalBasis,
+              grow = item.grow,
+              shrink = item.shrink,
+              delta = item.delta,
+              freeSpace = fl.freeSpace,
+              totalGrow = fl.totalFlex,
+              siblingCount = #fl.items,
+              gap = pfi.gap,
+            }
+            break
+          end
+        end
+        if hDetail then break end
+      end
+    end
+  elseif hs == "content" then
+    local nc = node.children and #node.children or 0
+    hDetail = { childCount = nc, innerH = innerH }
+  elseif hs == "explicit" then
+    hDetail = { styleValue = s.height }
+  elseif hs == "stretch" then
+    local parentH2 = node.parent and node.parent.computed and node.parent.computed.h
+    hDetail = { parentH = parentH2, padT = padT, padB = padB }
+  elseif hs == "surface-fallback" then
+    hDetail = { parentH = ph, viewportH = Layout._viewportH or 600 }
+  elseif hs == "text" then
+    hDetail = { fontSize = s.fontSize }
+  end
+
+  node.computed = { x = x, y = y, w = w, h = h, wSource = ws, hSource = hs, wDetail = wDetail, hDetail = hDetail }
 
   -- ====================================================================
   -- Absolute positioning: lay out position:absolute children

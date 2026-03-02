@@ -9,7 +9,7 @@
  *         | divider |
  *         Section 2: The primitive rendered raw — flexGrow center stage
  *         | divider |
- *         Section 3: Props/types in 2 equal columns
+ *         Section 3: Props/types in 2 equal columns (flexGrow:1, flexBasis:0)
  */
 
 import React from 'react';
@@ -55,22 +55,42 @@ const PROPS: [string, string][] = [
   ['testId', 'string'],
   ['pointerEvents', 'enum'],
   ['accessibilityLabel', 'string'],
+  ['onAccessibilityAction', '(event: AccessibilityActionEvent) => void'],
+  ['importantForAccessibility', 'auto | yes | no | no-hide-descendants'],
+  ['hitSlop', 'number | Insets'],
+  ['collapsable', 'boolean'],
+  ['needsOffscreenAlphaCompositing', 'boolean'],
+  ['renderToHardwareTextureAndroid', 'boolean'],
+  ['shouldRasterizeIOS', 'boolean'],
+  ['removeClippedSubviews', 'boolean'],
+  ['nativeID', 'string'],
+  ['focusable', 'boolean'],
+  ['onStartShouldSetResponder', '(event: GestureResponderEvent) => boolean'],
+  ['onMoveShouldSetResponder', '(event: GestureResponderEvent) => boolean'],
+  ['onResponderGrant', '(event: GestureResponderEvent) => void'],
+  ['onResponderReject', '(event: GestureResponderEvent) => void'],
+  ['onResponderMove', '(event: GestureResponderEvent) => void'],
+  ['onResponderRelease', '(event: GestureResponderEvent) => void'],
+  ['onResponderTerminate', '(event: GestureResponderEvent) => void'],
+  ['onMagicTap', '() => void'],
+  ['elevation', 'number'],
+  ['overflow', 'visible | hidden | scroll'],
+  ['backfaceVisibility', 'visible | hidden'],
+  ['opacity', 'number'],
+  ['transform', 'TransformArray'],
+  ['shadowColor', 'ColorValue'],
+  ['shadowOffset', '{ width: number, height: number }'],
+  ['shadowOpacity', 'number'],
+  ['shadowRadius', 'number'],
 ];
 
 export function Layout1Story() {
   const c = useThemeColors();
 
-  const q = Math.floor(PROPS.length / 4);
-  const r = PROPS.length % 4;
-  // Distribute remainder across last columns so they're roughly equal
-  const n1 = q;
-  const n2 = q;
-  const n3 = q + (r > 1 ? 1 : 0);
-  const n4 = q + (r > 0 ? 1 : 0);
-  const col1 = PROPS.slice(0, n1);
-  const col2 = PROPS.slice(n1, n1 + n2);
-  const col3 = PROPS.slice(n1 + n2, n1 + n2 + n3);
-  const col4 = PROPS.slice(n1 + n2 + n3);
+  // Split props into 2 columns
+  const mid = Math.ceil(PROPS.length / 2);
+  const col1 = PROPS.slice(0, mid);
+  const col2 = PROPS.slice(mid);
 
   return (
     <Box style={{
@@ -104,6 +124,8 @@ export function Layout1Story() {
 
           {/* Section 1: Title + code snippet + desc + playground toggle */}
           <Box style={{
+            width: 170,
+            flexShrink: 0,
             justifyContent: 'center',
             gap: 6,
           }}>
@@ -146,41 +168,24 @@ export function Layout1Story() {
 
           <Divider />
 
-          {/* Section 3: Props/types — 4 equal columns */}
-          <Box debugLayout style={{
+          {/* Section 3: Props/types — 2 equal columns */}
+          <Box style={{
             flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 12,
+            gap: 8,
           }}>
-            <Box style={{ width: '25%', gap: 2, justifyContent: 'center' }}>
+            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
               {col1.map(([prop, type]) => (
                 <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{prop}</Text>
-                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{type}</Text>
+                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left' }}>{prop}</Text>
+                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left' }}>{type}</Text>
                 </Box>
               ))}
             </Box>
-            <Box style={{ width: '25%', gap: 2, justifyContent: 'center' }}>
+            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
               {col2.map(([prop, type]) => (
                 <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{prop}</Text>
-                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{type}</Text>
-                </Box>
-              ))}
-            </Box>
-            <Box style={{ width: '25%', gap: 2, justifyContent: 'center' }}>
-              {col3.map(([prop, type]) => (
-                <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{prop}</Text>
-                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{type}</Text>
-                </Box>
-              ))}
-            </Box>
-            <Box style={{ width: '25%', gap: 2, justifyContent: 'center' }}>
-              {col4.map(([prop, type]) => (
-                <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{prop}</Text>
-                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left', flexShrink: 0 }}>{type}</Text>
+                  <Text style={{ color: c.text, fontSize: 9, textAlign: 'left' }}>{prop}</Text>
+                  <Text style={{ color: c.muted, fontSize: 9, textAlign: 'left' }}>{type}</Text>
                 </Box>
               ))}
             </Box>

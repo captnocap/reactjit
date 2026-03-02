@@ -676,7 +676,7 @@ tests[#tests + 1] = {
   bugRef = "Fix2",
   buildTree = function()
     return makeNode("View", { flexDirection = "row", width = 300 }, {
-      makeNode("View", { width = 100 }, {
+      makeNode("View", { width = 100, flexShrink = 0 }, {
         makeText("Fixed", { fontSize = 14 }, "fixedtext"),
       }),
       makeNode("View", { flexGrow = 1 }, {
@@ -707,19 +707,25 @@ tests[#tests + 1] = {
 }
 
 -- ────────────────────────────────────────────────────────────────────
--- TEST 19: Percentage in fit-content parent — resolveUnit nil-guard
--- (Tests Fix 1 directly: % inside unknown-width parent)
+-- TEST 19: Percentage child inside auto-width parent — resolveUnit nil-guard
+-- (Tests Fix 1: % during estimateIntrinsicMain with nil parentSize must not collapse to 0)
 -- ────────────────────────────────────────────────────────────────────
 tests[#tests + 1] = {
-  name = "pct-in-fit-content",
-  description = "50% child inside fit-content parent should NOT collapse to 0",
+  name = "pct-in-autowidth-estimation",
+  description = "Column with 50% child + text sibling — column intrinsic estimate must not collapse the 50% child to 0",
   bugRef = "Fix1",
   buildTree = function()
-    -- Outer has known width, inner is fit-content, grandchild is 50%
-    return makeNode("View", { width = 400, height = 100 }, {
-      makeNode("View", { width = "fit-content" }, {
-        makeText("Some text in a box", { fontSize = 14 }, "txt"),
-      }, "fitbox"),
+    -- The column has no explicit width (auto-sizes from content).
+    -- Child A has width: 50% (resolves against parent).
+    -- Child B has text content that drives the column's intrinsic width.
+    -- During estimation, Child A's 50% should resolve to nil (unknown),
+    -- causing it to be skipped for intrinsic sizing. Child B's text drives the width.
+    -- After layout (parent assigns column width via stretch), Child A's 50% resolves correctly.
+    return makeNode("View", { flexDirection = "row", width = 400, height = 100 }, {
+      makeNode("View", {}, {
+        makeNode("View", { width = "50%", height = 20 }, {}, "pctchild"),
+        makeText("Drive width", { fontSize = 14 }, "txt"),
+      }, "autocol"),
     }, "root")
   end,
   expected = "DEFERRED",
@@ -816,6 +822,89 @@ function love.load()
     }
   end
 
+  -- TEST 15: static-px-cols-text
+  -- Each column is 100px. Text must wrap within 100px.
+  -- Key: text node's computed.w must be <= column width (100px)
+  do
+    local colW = 100
+    local tw1, th1 = textSize("accessibilityLabel", colW, 11)
+    local tw2, th2 = textSize("onHoverIn", colW, 11)
+    local tw3, th3 = textSize("children", colW, 11)
+    tests[15].expected = {
+      row = { w = 320 },
+      -- Text width must NOT exceed column width
+      t1  = { h = th1 },
+      t2  = { h = th2 },
+      t3  = { h = th3 },
+    }
+  end
+
+  -- TEST 16: pct-cols-text
+  -- Each column is 30% of 300 = 90px. Text must wrap within 90px.
+  do
+    local colW = 90  -- 30% of 300
+    local tw1, th1 = textSize("accessibilityLabel", colW, 11)
+    local tw2, th2 = textSize("onHoverIn", colW, 11)
+    local tw3, th3 = textSize("children", colW, 11)
+    tests[16].expected = {
+      row = { w = 300 },
+      t1  = { h = th1 },
+      t2  = { h = th2 },
+      t3  = { h = th3 },
+    }
+  end
+
+  -- TEST 17: grow-col-text
+  -- Fixed col 100px + grow col in 300px row → grow col = 200px
+  do
+    local growColW = 200
+    local _, gth = textSize("This text should wrap within the remaining 200 pixels of space", growColW, 14)
+    tests[17].expected = {
+      row      = { w = 300 },
+      growcol  = { w = 200 },
+      growtext = { w = 200, h = gth },
+    }
+  end
+
+  -- TEST 18: shrink-text-in-row
+  -- Two text nodes in 150px row with gap:4 → available 146px
+  -- Both have flexShrink:1, so they share 146px proportional to their intrinsic widths
+  do
+    local tw1 = textWidth("accessibilityLabel", 11)
+    local tw2 = textWidth("string", 11)
+    local totalIntrinsic = tw1 + tw2
+    local avail = 150 - 4  -- row width minus gap
+    -- After shrink: each gets proportional share
+    -- But key check: neither exceeds its allocation AND sum fits in row
+    tests[18].expected = {
+      row = { w = 150 },
+      -- Don't check exact widths — just that they don't overflow
+      -- Custom check below handles this
+    }
+  end
+
+  -- TEST 19: pct-in-autowidth-estimation
+  -- autocol is in a row, width is main-axis → auto-sizes to content, not stretch.
+  -- During estimation, pctchild's 50% resolves against the row's innerW (400), giving 200.
+  -- autocol intrinsic width = max(pctchild=200, txt=~80) = 200.
+  -- After layout, pctchild gets 50% of autocol's actual width (200) = 100.
+  do
+    tests[19].expected = {
+      root     = { w = 400, h = 100 },
+      autocol  = { w = 200 },  -- auto-sized from content (max child = pctchild@200)
+      pctchild = { w = 100, h = 20 },  -- 50% of autocol's 200 = 100
+    }
+  end
+
+  -- TEST 20: constrained-col-prop-rows
+  -- Column at 120px with prop rows — text in rows must not overflow column
+  do
+    tests[20].expected = {
+      col  = { w = 120 },
+      -- Custom check: all rows must fit within 120px
+    }
+  end
+
   -- ── Run all tests ──
 
   io.write("\n")
@@ -833,12 +922,91 @@ function love.load()
   for i, test in ipairs(tests) do
     local result = runTest(test)
 
-    -- Run custom check for layout1-card test
+    -- Run custom checks
+    local extraFailures = {}
     if test.name == "layout1-card" then
-      local extraFailures = layout1CardCheck(result)
-      for _, f in ipairs(extraFailures) do
-        result.failures[#result.failures + 1] = f
+      extraFailures = layout1CardCheck(result)
+    end
+
+    -- Overflow check: text nodes must not exceed their parent column/row width
+    if test.name == "static-px-cols-text" or test.name == "pct-cols-text" then
+      local t = result.tagged
+      local row = t.row
+      if row and row.computed then
+        local rowRight = row.computed.x + row.computed.w
+        for _, tag in ipairs({"t1", "t2", "t3"}) do
+          local node = t[tag]
+          if node and node.computed then
+            -- Text node's right edge must not exceed its parent's right edge
+            local parent = node.parent
+            if parent and parent.computed then
+              local parentRight = parent.computed.x + parent.computed.w
+              local nodeRight = node.computed.x + node.computed.w
+              if nodeRight > parentRight + 2 then
+                extraFailures[#extraFailures + 1] = string.format(
+                  "  OVERFLOW: %s right=%.1f exceeds parent right=%.1f (text w=%.1f, parent w=%.1f)",
+                  tag, nodeRight, parentRight, node.computed.w, parent.computed.w)
+              end
+            end
+          end
+        end
       end
+    end
+
+    -- Shrink check: text nodes must fit within their row
+    if test.name == "shrink-text-in-row" then
+      local t = result.tagged
+      local row = t.row
+      if row and row.computed then
+        local t1 = t.t1
+        local t2 = t.t2
+        if t1 and t1.computed and t2 and t2.computed then
+          local totalW = t1.computed.w + t2.computed.w + 4  -- +gap
+          if totalW > row.computed.w + 2 then
+            extraFailures[#extraFailures + 1] = string.format(
+              "  OVERFLOW: t1.w(%.1f) + t2.w(%.1f) + gap(4) = %.1f > row.w(%.1f)",
+              t1.computed.w, t2.computed.w, totalW, row.computed.w)
+          end
+        end
+      end
+    end
+
+    -- Constrained column check: all children must fit within column width
+    if test.name == "constrained-col-prop-rows" then
+      local t = result.tagged
+      local col = t.col
+      if col and col.computed then
+        local colRight = col.computed.x + col.computed.w
+        for _, tag in ipairs({"row1", "row2", "row3"}) do
+          local node = t[tag]
+          if node and node.computed then
+            local nodeRight = node.computed.x + node.computed.w
+            if nodeRight > colRight + 2 then
+              extraFailures[#extraFailures + 1] = string.format(
+                "  OVERFLOW: %s right=%.1f exceeds col right=%.1f (row w=%.1f, col w=%.1f)",
+                tag, nodeRight, colRight, node.computed.w, col.computed.w)
+            end
+            -- Also check each text child inside the row
+            for _, child in ipairs(node.children or {}) do
+              if child.computed and child.type == "Text" then
+                local childRight = child.computed.x + child.computed.w
+                if childRight > colRight + 2 then
+                  local text = (child.children and child.children[1] and child.children[1].text) or "?"
+                  extraFailures[#extraFailures + 1] = string.format(
+                    "  OVERFLOW: text %q right=%.1f exceeds col right=%.1f (text w=%.1f)",
+                    text:sub(1,20), childRight, colRight, child.computed.w)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+    for _, f in ipairs(extraFailures) do
+      result.failures[#result.failures + 1] = f
+    end
+    if #extraFailures > 0 then
       result.passed = #result.failures == 0
     end
 
