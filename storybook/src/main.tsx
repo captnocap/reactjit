@@ -13,6 +13,11 @@ import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
 import { BridgeProvider, useBridge } from '../../packages/core/src/context';
+import {
+  enableStatePreservation,
+  disableStatePreservation,
+  setPreservationBridge,
+} from '../../packages/core/src/preserveState';
 import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
@@ -292,10 +297,19 @@ const bridge = new NativeBridge();
 setCryptoBridge(bridge);
 const root = createRoot();
 
+// Enable HMR state preservation — patches React.useState so all calls
+// automatically sync to Lua hotstate atoms and survive hot reload.
+enableStatePreservation(bridge);
+
+// Expose toggle functions for Lua devtools (Logs tab → HMR Settings)
+(globalThis as any).__enableStatePreservation = () => enableStatePreservation(bridge);
+(globalThis as any).__disableStatePreservation = () => disableStatePreservation();
+
 // When __deferMount is true (set by Lua before eval), store the mount function
 // globally so Lua can trigger it after JS_Eval returns. This avoids React's
 // synchronous LegacyRoot render blocking the entire JS_Eval call.
 (globalThis as any).__mount = () => {
+  setPreservationBridge(bridge);
   root.render(
     <BridgeProvider bridge={bridge}>
       <ThemeProvider>
