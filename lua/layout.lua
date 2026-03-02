@@ -1342,7 +1342,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- because the container will shrink-wrap to its content. Without this
     -- guard, the 9999 auto-height fallback produces enormous offsets that
     -- push content off-screen.
-    local hasDefiniteMainAxis = isRow or (explicitH ~= nil)
+    -- NOTE: check h (resolved height) not explicitH — flex-grow and stretch
+    -- assign a definite height that isn't from style.height but is still real.
+    local hasDefiniteMainAxis = isRow or (h ~= nil)
 
     if hasDefiniteMainAxis then
       if justify == "center" then
