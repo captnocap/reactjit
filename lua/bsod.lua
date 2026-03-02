@@ -198,41 +198,33 @@ return function(msg)
         end
 
       elseif name == "keypressed" then
-        -- Editor gets first crack at keypresses
-        if editorActive then
-          local eok, result = pcall(bsodEditor.keypressed, a)
-          if eok and result == "save" then
-            -- Save and reboot
-            local sok, saved = pcall(bsodEditor.save)
-            if sok and saved then
-              doReboot()
-              return
-            end
-          end
-        end
+        local ctrl = love.keyboard.isDown("lctrl", "rctrl")
 
-        -- Escape: quit
-        if a == "escape" then
-          return 1
-        end
-        -- R: reboot (only when not typing in editor)
-        if a == "r" and not editorActive then
-          doReboot()
-          return
-        end
-        -- Ctrl+C: copy to clipboard
-        if a == "c" and love.keyboard.isDown("lctrl", "rctrl") then
+        -- Global shortcuts — always work, never swallowed by editor
+        if a == "c" and ctrl then
           pcall(love.system.setClipboardText, crashReport)
           copied = true
           copiedTimer = 2.0
-        end
-        -- Ctrl+S: save from editor
-        if a == "s" and love.keyboard.isDown("lctrl", "rctrl") and editorActive then
+        elseif a == "s" and ctrl and editorActive then
           local sok, saved = pcall(bsodEditor.save)
           if sok and saved then
             doReboot()
             return
           end
+        elseif a == "escape" then
+          return 1
+        elseif a == "r" then
+          -- Block R only when cursor is placed in editor (user is typing)
+          local editorTyping = editorActive and bsodEditor.getCursorLine and bsodEditor.getCursorLine() > 0
+          if not editorTyping then
+            doReboot()
+            return
+          end
+        end
+
+        -- Non-global keys route to editor (arrow keys, typing, etc.)
+        if editorActive then
+          pcall(bsodEditor.keypressed, a)
         end
       end
     end
@@ -379,7 +371,7 @@ return function(msg)
       hints = "Copied to clipboard!"
       love.graphics.setColor(COPIED_COL)
     elseif editorActive then
-      hints = "Ctrl+S  save+reload   |   Ctrl+C  copy   |   Esc  quit"
+      hints = "Ctrl+S  save+reload   |   R  reboot   |   Ctrl+C  copy   |   Esc  quit"
       love.graphics.setColor(DIM)
     else
       hints = "R  reboot   |   Ctrl+C  copy   |   Esc  quit"

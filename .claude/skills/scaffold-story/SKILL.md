@@ -7,6 +7,10 @@ description: "Scaffold and populate a Layout1-style documentation story for a Re
 
 Generate a Layout1 documentation page for a ReactJIT component.
 
+## How it works
+
+Stories use `<ComponentDoc>` from `_shared/ComponentDoc.tsx`. Pass a `docKey` and the OVERVIEW, USAGE, BEHAVIOR, PROPS, and CALLBACKS sections auto-populate from `content/sections/*.txt` via `content.json`. No manual doc writing needed.
+
 ## Step 1: Generate
 
 ```bash
@@ -17,97 +21,77 @@ Section defaults to `Core`. Valid: `Core | Packages | Demos | Stress Test | Dev 
 
 Creates `storybook/src/stories/<Name>Story.tsx` and registers it in `index.ts`.
 
-## Step 2: Find real props
+## Step 2: Verify docs exist
 
-Read the component source to get actual props and callbacks:
+Check that a corresponding doc file exists in `content/sections/`:
 
-- Core primitives: `packages/core/src/types.ts` (BoxProps, TextProps, etc.) and `packages/core/src/primitives.tsx`
-- Other components: search `packages/*/src/` for the export
-- Capabilities: check `lua/capabilities/` for the Lua-side schema
+```bash
+ls content/sections/*/$(echo "<ComponentName>" | tr '[:upper:]' '[:lower:]').txt
+```
 
-Split into data/layout props vs event callbacks.
+The `docKey` is the lowercase filename without extension (e.g. `"box"`, `"scrollview"`, `"textinput"`). If no doc file exists, omit `docKey` and the story renders with placeholder content.
 
 ## Step 3: Edit the generated file
 
-Open `storybook/src/stories/<Name>Story.tsx`. Edit these sections:
-
-### A. PROPS array (~line 67)
-
-Replace placeholder with real props. These render in a 2-column grid.
+The scaffold generates a thin file like this:
 
 ```tsx
-const PROPS: [string, string][] = [
-  ['style', 'ViewStyle'],
-  ['source', 'ImageSource'],
-  ['resizeMode', "'cover' | 'contain' | 'stretch'"],
-  ['borderRadius', 'number'],
-  ['children', 'ReactNode'],
-];
+import React from 'react';
+import { ComponentDoc } from './_shared/ComponentDoc';
+
+export function BoxStory() {
+  return <ComponentDoc docKey="box" />;
+}
 ```
 
-### B. CALLBACKS array (~line 73)
+Customize as needed:
 
-Replace with real event handlers. These render full-width, single column.
+### A. docKey (required for docs integration)
+
+The lowercase name matching a file in `content/sections/`. This auto-populates:
+- **OVERVIEW** — from the doc's overview section
+- **USAGE** — from the second code block in the API section
+- **BEHAVIOR** — from criticalRules in the doc
+- **PROPS** — parsed from the API markdown table (non-on* entries)
+- **CALLBACKS** — parsed from the API markdown table (on* entries)
+- **Header** — title, description, import snippet all from metadata
+
+### B. starterCode (optional)
+
+Override the playground's initial code. Falls back to the doc's first example.
 
 ```tsx
-const CALLBACKS: [string, string][] = [
-  ['onLoad', '(e: LoadEvent) => void'],
-  ['onError', '(e: ErrorEvent) => void'],
-];
-```
-
-### C. STARTER_CODE (~line 52)
-
-A self-contained JSX snippet demonstrating the component. Only `Box` and `Text` are guaranteed available in the playground eval context.
-
-```tsx
-const STARTER_CODE = `<Box style={{ padding: 16, gap: 8 }}>
-  <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
-    Hello from the playground
-  </Text>
+const STARTER_CODE = `<Box style={{ padding: 16 }}>
+  <Text style={{ fontSize: 14 }}>Hello</Text>
 </Box>`;
+
+<ComponentDoc docKey="box" starterCode={STARTER_CODE} />
 ```
 
-### D. Header text (~lines 133, 147, 154)
+### C. preview (optional)
 
-Three strings to replace:
+Custom left-column preview content. Falls back to default wireframes.
 
-- **Title** (~line 133): Already set to `<Name>` by the scaffold — usually fine as-is
-- **Snippet** (~line 147): Replace `'<Name prop={value} />'` with a realistic one-liner usage
-- **Description** (~line 154): Replace with a real one-sentence description
-
-### E. Documentation sections (right column)
-
-The right column has five sections separated by dividers. Fill in real content:
-
-- **OVERVIEW** — one paragraph describing what this component is and when to use it
-- **USAGE** — a `<CodeBlock language="tsx">` showing a realistic usage example
-- **BEHAVIOR** — 2-4 bullet-style `<Text>` nodes describing key behaviors and defaults
-- **PROPS** — auto-generated 2-column grid (from the PROPS array)
-- **CALLBACKS** — auto-generated single-column list (from the CALLBACKS array)
-
-### F. Preview panel with style tooltips (left column)
-
-The left side of docs mode shows preview elements. **Any element with custom visual styles must show those styles in a tooltip on hover.**
-
-Use `styleTooltip()` (defined in the template) to auto-generate tooltips:
+Use `styleTooltip()` for hover tooltips on styled elements:
 
 ```tsx
-{(() => {
+import { ComponentDoc, styleTooltip, Wireframe } from './_shared/ComponentDoc';
+
+function BoxPreview() {
   const custom = { backgroundColor: '#3b82f6', borderRadius: 8, padding: 16 };
   return (
-    <Box style={{ ...custom, justifyContent: 'center' }} tooltip={styleTooltip(custom)}>
+    <Box style={{ ...custom, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
       <Text style={{ color: 'white', fontSize: 10 }}>{'Styled element'}</Text>
     </Box>
   );
-})()}
+}
+
+<ComponentDoc docKey="box" preview={<BoxPreview />} />
 ```
 
-**Pattern:** Define custom styles as a separate `const`, spread into the Box's `style`, pass to `styleTooltip()`. This keeps custom styles co-located and the tooltip auto-generated.
+### D. section (optional)
 
-**Gets a tooltip:** `backgroundColor`, `borderRadius`, `borderWidth`, `borderColor`, `padding`, `width`, `height`, `opacity`, `shadowColor` — any visual property.
-
-**No tooltip:** `flexGrow`, `flexShrink`, `flexBasis`, `flexDirection`, `flexWrap`, `alignItems`, `alignSelf`, `justifyContent`, `overflow`, `position`, `zIndex`, `display` — pure structural properties. A Box that only has structural styles gets no tooltip.
+Override the footer breadcrumb. Defaults to the doc's category.
 
 ## Step 4: Validate
 
@@ -119,16 +103,16 @@ rjit lint
 
 ```
 ┌─────────────────────────────────────────┐
-│ Title  <snippet />        description   │  Header
+│ Title  <import />           description │  Header (from docs metadata)
 ├───────────────────┬─────────────────────┤
-│                   │ OVERVIEW            │
-│  Preview          │ USAGE (CodeBlock)   │
-│  (ScrollView)     │ BEHAVIOR            │  Center
-│  hover styled     │ ───────────────     │  (flexGrow:1)
-│  elements for     │ PROPS               │
-│  style tooltips   │  name   Type        │
+│                   │ OVERVIEW            │  (from docs)
+│  Preview          │ USAGE (CodeBlock)   │  (from docs API section)
+│  (ScrollView)     │ BEHAVIOR            │  (from docs criticalRules)
+│  custom or        │ ───────────────     │
+│  default          │ PROPS               │  (from docs API table)
+│  wireframes       │  name   Type        │
 │                   │ ───────────────     │
-│                   │ CALLBACKS           │
+│                   │ CALLBACKS           │  (from docs API table, on* entries)
 │                   │  onX    sig         │
 ├───────────────────┴─────────────────────┤
 │ Section / Name         [Playground] v0  │  Footer
@@ -139,10 +123,10 @@ Playground mode flips center to: left=TextEditor, right=live Preview.
 
 ## Rules
 
-- Import from `'../../../packages/core/src'` — never `@reactjit/core`
+- Import `ComponentDoc` from `'./_shared/ComponentDoc'`
+- Import helpers (`styleTooltip`, `Wireframe`) from the same path if needed
+- Import primitives from `'../../../packages/core/src'` — never `@reactjit/core`
 - Import theme from `'../../../packages/theme/src'`
-- Always `useThemeColors()` — never hardcode hex colors
 - Export must be named `<Name>Story`
-- Max ~10 props (auto-split into 2 columns)
-- Callbacks render single-column, full-width
-- Preview elements with custom visual styles MUST use `styleTooltip()` for hover tooltips
+- The docKey handles all documentation — do NOT manually write OVERVIEW, USAGE, PROPS, etc.
+- If no doc .txt file exists for this component, omit docKey (placeholders render)

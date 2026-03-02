@@ -43,6 +43,29 @@ function love.load()
 
   love.graphics.setBackgroundColor(0.04, 0.04, 0.06)
 
+  -- Apply window position from env vars
+  local envX = tonumber(os.getenv("REACTJIT_WINDOW_X"))
+  local envY = tonumber(os.getenv("REACTJIT_WINDOW_Y"))
+  if envX and envY then
+    love.window.setPosition(envX, envY)
+  end
+
+  -- Apply alwaysOnTop via SDL2 FFI
+  if os.getenv("REACTJIT_WINDOW_ALWAYS_ON_TOP") == "1" then
+    local ffi = require("ffi")
+    pcall(ffi.cdef, [[
+      typedef struct SDL_Window SDL_Window;
+      SDL_Window* SDL_GetKeyboardFocus(void);
+      void SDL_SetWindowAlwaysOnTop(SDL_Window* window, int on_top);
+    ]])
+    pcall(function()
+      local win = ffi.C.SDL_GetKeyboardFocus()
+      if win ~= nil then
+        ffi.C.SDL_SetWindowAlwaysOnTop(win, 1)
+      end
+    end)
+  end
+
   -- Initialize modules (child has no images/videos/animations)
   Tree.init()
   Layout.init({ measure = Measure })

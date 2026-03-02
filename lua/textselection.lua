@@ -21,6 +21,15 @@ local TextSelection = {}
 local Measure = nil
 local Events = nil
 local Tree = nil
+local CodeBlockModule = nil
+
+local function getCodeBlock()
+  if not CodeBlockModule then
+    local ok, mod = pcall(require, "lua.codeblock")
+    if ok then CodeBlockModule = mod end
+  end
+  return CodeBlockModule
+end
 
 function TextSelection.init(config)
   config = config or {}
@@ -65,6 +74,11 @@ end
 local function canonicalTextNode(node)
   if not node then return nil end
 
+  -- CodeBlock nodes are their own canonical node
+  if node.type == "CodeBlock" then
+    return node
+  end
+
   local current = node
   if current.type == "__TEXT__" and current.parent then
     current = current.parent
@@ -84,6 +98,12 @@ end
 --- Check if a node allows text selection.
 --- Default is selectable (true) unless userSelect == "none".
 function TextSelection.isSelectable(node)
+  if not node then return false end
+  -- CodeBlock is always selectable (unless userSelect == "none")
+  if node.type == "CodeBlock" then
+    local s = node.style or {}
+    return s.userSelect ~= "none"
+  end
   local canonical = canonicalTextNode(node)
   if not canonical then return false end
   local s = canonical.style or {}
@@ -91,8 +111,11 @@ function TextSelection.isSelectable(node)
 end
 
 local function isTopLevelTextNode(node)
-  return node
-    and node.type == "Text"
+  if not node then return false end
+  if node.type == "CodeBlock" then
+    return TextSelection.isSelectable(node)
+  end
+  return node.type == "Text"
     and not hasTextParent(node)
     and TextSelection.isSelectable(node)
 end
@@ -238,6 +261,10 @@ end
 
 --- Resolve text content from a node (same as layout.lua's resolveTextContent).
 local function resolveTextContent(node)
+  if node.type == "CodeBlock" then
+    return (node.props or {}).code or ""
+  end
+
   if node.type == "__TEXT__" then
     return node.text or ""
   end
@@ -267,6 +294,16 @@ end
 
 --- Get wrapped lines for a text node (mirrors painter.lua's getVisibleLines).
 local function getWrappedLines(node)
+  -- CodeBlock has its own line splitting (no wrapping)
+  if node.type == "CodeBlock" then
+    local cb = getCodeBlock()
+    if cb and cb.getLines then
+      local lines, font, lineH, _ = cb.getLines(node)
+      return lines, font, 0, lineH, 0
+    end
+    return {}, nil, 0, 14, 0
+  end
+
   local fontSize, fontFamily, fontWeight, lineHeight, letterSpacing = resolveTextStyle(node)
   local font = Measure.getFont(fontSize, fontFamily, fontWeight)
   local c = node.computed
@@ -463,6 +500,15 @@ end
 function TextSelection.screenToPos(node, mx, my)
   local canonical = canonicalTextNode(node)
   if not canonical or not canonical.computed then return 1, 0 end
+
+  -- Delegate to CodeBlock's own screenToPos
+  if canonical.type == "CodeBlock" then
+    local cb = getCodeBlock()
+    if cb and cb.screenToPos then
+      return cb.screenToPos(canonical, mx, my)
+    end
+    return 1, 0
+  end
 
   local c = canonical.computed
   local lines, font, _, lineHeight, letterSpacing = getWrappedLines(canonical)
@@ -760,7 +806,10 @@ end
 --- Call this BEFORE drawing the text so text renders on top.
 function TextSelection.drawHighlight(node)
   if not selection then return end
-  if not node or node.type ~= "Text" then return end
+  if not node then return end
+  -- CodeBlock draws its own highlight in codeblock.lua render()
+  if node.type == "CodeBlock" then return end
+  if node.type ~= "Text" then return end
   if canonicalTextNode(node) ~= node then return end
 
   local rangeStart, rangeEnd, order = normalizedRange()

@@ -213,6 +213,11 @@ function Editor.isActive()
   return state.filePath ~= nil and state.lines ~= nil
 end
 
+--- Get the cursor line (0 = view mode / no cursor placed).
+function Editor.getCursorLine()
+  return state.cursorLine
+end
+
 --- Get the resolved file path.
 function Editor.getFilePath()
   return state.filePath

@@ -261,6 +261,7 @@ function Capabilities.loadAll()
     -- Registering Scene3D as a non-visual capability causes layout/paint to skip all 3D scenes.
     "terminal",
     "semantic_terminal",
+    "notification",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

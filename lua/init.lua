@@ -1690,7 +1690,17 @@ function ReactJIT._pollHMR()
           return false
         end
       end
-      ReactJIT.reload()
+      local rok, rerr = pcall(ReactJIT.reload)
+      if not rok then
+        crashRecoveryMode = true
+        io.write("[reactjit] HMR reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+        io.write("[reactjit] Fix your code and save to trigger reload.\n"); io.flush()
+        errors.push({
+          source = "lua",
+          message = tostring(rerr),
+          context = "ReactJIT._pollHMR (reload)",
+        })
+      end
       luaHmrDirty = false
       return true
     end
@@ -4423,7 +4433,7 @@ function ReactJIT.reload()
       message = initConfig.bundlePath .. " not found during reload",
       context = "ReactJIT.reload",
     })
-    return
+    error("[reactjit] " .. initConfig.bundlePath .. " not found during reload")
   end
 
   -- 5. Set up deferred mount + inject cached dev state + hot state atoms
@@ -4456,7 +4466,7 @@ function ReactJIT.reload()
       message = tostring(eerr),
       context = "ReactJIT.reload (bundle eval)",
     })
-    return
+    error("[reactjit] Bundle eval failed: " .. tostring(eerr))
   end
 
   -- 7. Update console refs (bridge was recreated)

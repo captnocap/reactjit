@@ -68,8 +68,8 @@ export function VerticalDivider() {
 // ── ComponentDoc ─────────────────────────────────────────
 
 interface ComponentDocProps {
-  /** Doc key linking to content.json (e.g. "box", "text", "scrollview") */
-  docKey: string;
+  /** Doc key linking to content.json (e.g. "box", "text", "scrollview"). Omit for template/placeholder mode. */
+  docKey?: string;
   /** Playground starter code. Falls back to first example from docs. */
   starterCode?: string;
   /** Left column preview content in docs mode. Falls back to default wireframes. */
@@ -80,7 +80,7 @@ interface ComponentDocProps {
 
 export function ComponentDoc({ docKey, starterCode, preview, section }: ComponentDocProps) {
   const c = useThemeColors();
-  const doc = useDocContent(docKey);
+  const doc = docKey ? useDocContent(docKey) : null;
 
   // Resolve starter code: explicit prop > first example > fallback
   const resolvedStarter = starterCode
@@ -115,23 +115,44 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
     processCode(src);
   }, [processCode]);
 
+  // ── Template-mode placeholders (match the original Layout1 screenshot) ──
+  const PLACEHOLDER_PROPS: [string, string][] = [
+    ['style', 'ViewStyle'],
+    ['bg', 'string'],
+    ['radius', 'number'],
+    ['padding', 'number'],
+    ['tooltip', 'TooltipConfig'],
+    ['children', 'ReactNode'],
+    ['testId', 'string'],
+    ['pointerEvents', 'enum'],
+    ['accessibilityLabel', 'string'],
+  ];
+  const PLACEHOLDER_CALLBACKS: [string, string][] = [
+    ['onPress', '() => void'],
+    ['onHoverIn', '() => void'],
+    ['onHoverOut', '() => void'],
+    ['onLayout', '(e) => void'],
+  ];
+  const PLACEHOLDER_BEHAVIOR = [
+    'First behavioral note about the component.',
+    'Second behavioral note about the component.',
+    'Third behavioral note about the component.',
+  ];
+
   // Derive display values from doc content (or placeholders)
-  const title = doc?.title ?? 'Component';
-  const description = doc?.description ?? 'A component description.';
-  const importSnippet = doc?.importSnippet
-    ? `<${title} ${doc.importSnippet.includes('import') ? '' : ''}...>`
-    : `<${title} />`;
-  const overview = doc?.overview ?? 'Overview not available.';
-  const usageCode = doc?.usageSnippet || doc?.examples[0]?.code || `<${title} />`;
-  const criticalRules = doc?.criticalRules ?? [];
-  const props = doc?.props ?? [];
-  const callbacks = doc?.callbacks ?? [];
+  const title = doc?.title ?? 'Title';
+  const description = doc?.description ?? 'A short description of the component and what it does.';
+  const overview = doc?.overview ?? 'A short paragraph describing what this component is and when to use it.';
+  const usageCode = doc?.usageSnippet || doc?.examples[0]?.code || '<Component\n  propA="value"\n  propB={123}\n>\n  <Child />\n</Component>';
+  const criticalRules = doc?.criticalRules ?? PLACEHOLDER_BEHAVIOR;
+  const props = doc?.props ?? PLACEHOLDER_PROPS;
+  const callbacks = doc?.callbacks ?? PLACEHOLDER_CALLBACKS;
   const breadcrumb = section || doc?.category || 'Core';
 
   // Build the import pill display text
   const importPill = doc?.importSnippet
     ? doc.importSnippet.trim().split('\n')[0]
-    : `import { ${title} } from '@reactjit/core'`;
+    : '<Component prop={value} />';
 
   // Split props into two columns
   const mid = Math.ceil(props.length / 2);
@@ -304,7 +325,7 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
       }}>
         <Text style={{ color: c.muted, fontSize: 9 }}>{breadcrumb}</Text>
         <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Text style={{ color: c.text, fontSize: 9 }}>{title}</Text>
+        <Text style={{ color: c.text, fontSize: 9 }}>{doc?.title ?? 'Component'}</Text>
 
         <Box style={{ flexGrow: 1 }} />
 

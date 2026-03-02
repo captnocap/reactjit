@@ -753,12 +753,34 @@ export interface WindowProps {
   height?: number;
   x?: number;
   y?: number;
+  borderless?: boolean;
+  alwaysOnTop?: boolean;
   onClose?: (event: LoveEvent) => void;
   onResize?: (event: LoveEvent) => void;
   onFocus?: (event: LoveEvent) => void;
   onBlur?: (event: LoveEvent) => void;
   children?: React.ReactNode;
   key?: string | number;
+}
+
+/**
+ * Native OS notification via a borderless subprocess window.
+ * Fire-and-forget: mounts → shows notification → auto-dismisses.
+ *
+ * @example
+ * <Notification title="Build Complete" body="All tests passed" />
+ * <Notification title="Error" body="Connection lost" duration={8} position="bottom-right" />
+ */
+export interface NotificationProps {
+  title?: string;
+  body?: string;
+  /** Seconds before auto-dismiss (default 5) */
+  duration?: number;
+  /** Screen position (default "top-right") */
+  position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  /** Hex color for accent stripe (default "4C9EFF") */
+  accent?: string;
+  onDismiss?: () => void;
 }
 
 /**
