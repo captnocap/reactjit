@@ -33,6 +33,7 @@ import { SessionTimeline } from './components/SessionTimeline';
 import { StatsStrip } from './components/StatsStrip';
 import { AmbientSound } from './components/AmbientSound';
 import { IdleScreen } from './components/IdleScreen';
+import { CurlReceiver } from './components/CurlReceiver';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -562,6 +563,7 @@ export function App() {
         onQuestionPrompt={claude.onQuestion}
       />
       <AmbientSound status={claude.status} />
+      <CurlReceiver />
 
       {/* Shell — everything Claude edits, sandboxed */}
       <ShellBoundary onCrash={handleCrash}>

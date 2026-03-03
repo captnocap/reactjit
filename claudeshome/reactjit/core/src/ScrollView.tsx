@@ -24,6 +24,7 @@ export const ScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
   function ScrollView(
     {
       style,
+      contentContainerStyle,
       horizontal = false,
       showScrollIndicator = true,
       onScroll,
@@ -73,6 +74,10 @@ export const ScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
     if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
     if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
 
-    return React.createElement('View', hostProps, children);
+    const inner = contentContainerStyle
+      ? React.createElement('View', { style: contentContainerStyle }, children)
+      : children;
+
+    return React.createElement('View', hostProps, inner);
   }
 );

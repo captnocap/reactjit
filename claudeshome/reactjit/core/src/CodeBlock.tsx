@@ -23,7 +23,7 @@ export function CodeBlock({ code, language, fontSize = 10, style }: CodeBlockPro
     code,
     language: language ?? 'auto',
     fontSize: Math.round(fontSize * scale),
-    style: scaledStyle || {},
+    style: { padding: 10, ...scaledStyle },
   };
 
   return React.createElement('CodeBlock', props);
