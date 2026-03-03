@@ -6,7 +6,7 @@
   directly like texteditor.lua does.
 
   Provides:
-    - CodeBlock.measure(node) -> { width, height }
+    - CodeBlock.measure(node, includeWidth?) -> { width, height }
     - CodeBlock.render(node, c, effectiveOpacity)
 ]]
 
@@ -23,6 +23,15 @@ local function getMeasure()
 end
 
 local CodeBlock = {}
+-- Weak-keyed per-node cache so removed nodes are GC'd without explicit cleanup.
+local renderCache = setmetatable({}, { __mode = "k" }) -- [node] = entry
+local debugStatsEnabled = os.getenv("RJIT_CODEBLOCK_STATS") == "1"
+local debugStats = {
+  hits = 0,
+  misses = 0,
+  tokenLinesBuilt = 0,
+  printTimer = 0,
+}
 
 -- ============================================================================
 -- Init
@@ -34,18 +43,49 @@ function CodeBlock.init(config)
 end
 
 -- ============================================================================
--- Syntax highlighting (dispatches to per-language tokenizer)
+-- Helpers
 -- ============================================================================
 
+local function setColorWithOpacity(color, opacity)
+  love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1) * opacity)
+end
+
+--- Split code into lines. Returns a table of strings.
+local function splitLines(code)
+  local lines = {}
+  for line in (code .. "\n"):gmatch("([^\n]*)\n") do
+    lines[#lines + 1] = line
+  end
+  if #lines == 0 then lines[1] = "" end
+  return lines
+end
+
+local function getNodeEntry(node)
+  local entry = renderCache[node]
+  if not entry then
+    entry = {}
+    renderCache[node] = entry
+  end
+  return entry
+end
+
+local function ensureLines(entry, code)
+  if entry.lines and entry.code == code then
+    return entry.lines
+  end
+  entry.code = code
+  entry.lines = splitLines(code)
+  entry.langKey = nil
+  entry.langResolved = nil
+  entry.tokenLines = nil
+  entry.measure = nil
+  return entry.lines
+end
+
 --- Resolve the language string, running auto-detect if needed.
-local function resolveLanguage(lang, code)
+local function resolveLanguage(lang, lines, code)
   if not lang or lang == "" or lang == "auto" then
-    -- Split into lines for detection
-    local lines = {}
-    for line in (code .. "\n"):gmatch("([^\n]*)\n") do
-      lines[#lines + 1] = line
-    end
-    return Syntax.detectLanguage(lines)
+    return Syntax.detectLanguage(lines or splitLines(code or ""))
   end
   return lang
 end
@@ -54,57 +94,79 @@ end
 -- Measurement
 -- ============================================================================
 
-function CodeBlock.measure(node)
+function CodeBlock.measure(node, includeWidth)
   local props = node.props or {}
   local code = props.code or ""
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
-  local s = node.style or {}
-  local padding = s.padding or 10
-
-  -- Split into lines
-  local lines = {}
-  for line in (code .. "\n"):gmatch("([^\n]*)\n") do
-    lines[#lines + 1] = line
+  local entry = getNodeEntry(node)
+  local lines = ensureLines(entry, code)
+  local measureBySize = entry.measure
+  if not measureBySize then
+    measureBySize = {}
+    entry.measure = measureBySize
   end
-  if #lines == 0 then lines[1] = "" end
+  local m = measureBySize[fontSize]
+  local needWidth = (includeWidth == true)
+  if not m or (needWidth and m.width == nil) then
+    local font = getMeasure().getFont(fontSize, nil, nil)
+    if not m then
+      m = { lineHeight = font:getHeight() }
+      measureBySize[fontSize] = m
+    end
+    if needWidth and m.width == nil then
+      local maxWidth = 0
+      for _, line in ipairs(lines) do
+        local w = font:getWidth(line)
+        if w > maxWidth then maxWidth = w end
+      end
+      m.width = maxWidth
+    end
+  end
 
-  -- Get font and line height
-  local font = getMeasure().getFont(fontSize, nil, nil)
-  local lineHeight = font:getHeight()
-
-  -- Calculate dimensions
   local maxWidth = 0
-  for _, line in ipairs(lines) do
-    local w = font:getWidth(line)
-    if w > maxWidth then maxWidth = w end
+  if needWidth then
+    maxWidth = m.width or 0
   end
 
-  -- Return content-only dimensions (no padding).
-  -- The layout engine resolves padding from the style and adds it,
-  -- matching how Text nodes are measured.
-  return { width = maxWidth, height = #lines * lineHeight }
+  return { width = maxWidth, height = #lines * (m.lineHeight or 0) }
 end
 
--- ============================================================================
--- Rendering
--- ============================================================================
+local function getTokenizedLinesCached(node, code, langProp)
+  local entry = getNodeEntry(node)
+  local lines = ensureLines(entry, code)
+  local langKey = langProp or "auto"
+  if entry.tokenLines and entry.langKey == langKey then
+    if debugStatsEnabled then
+      debugStats.hits = debugStats.hits + 1
+    end
+    return lines, entry.langResolved, entry.tokenLines
+  end
 
-local function setColorWithOpacity(color, opacity)
-  love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1) * opacity)
+  local langResolved = resolveLanguage(langProp, lines, code)
+  local tokenLines = {}
+  for i, line in ipairs(lines) do
+    tokenLines[i] = Syntax.tokenizeLine(line, langResolved)
+  end
+  if debugStatsEnabled then
+    debugStats.misses = debugStats.misses + 1
+    debugStats.tokenLinesBuilt = debugStats.tokenLinesBuilt + #lines
+  end
+
+  entry.langKey = langKey
+  entry.langResolved = langResolved
+  entry.tokenLines = tokenLines
+  return lines, langResolved, tokenLines
 end
 
--- ============================================================================
--- Copy button state (per-node, keyed by node id)
--- ============================================================================
-
-local copyStates = {}  -- [nodeId] = { copied = false, timer = 0 }
+local copyStates = setmetatable({}, { __mode = "k" })  -- [node] = { copied = false, timer = 0 }
 
 local function getCopyState(node)
-  local id = node.id or tostring(node)
-  if not copyStates[id] then
-    copyStates[id] = { copied = false, timer = 0 }
+  local state = copyStates[node]
+  if not state then
+    state = { copied = false, timer = 0 }
+    copyStates[node] = state
   end
-  return copyStates[id]
+  return state
 end
 
 --- Returns the bounding rect of the copy button for a given node's computed rect.
@@ -141,7 +203,7 @@ function CodeBlock.handleMousePressed(node, mx, my, button)
 end
 
 function CodeBlock.update(dt)
-  for id, cs in pairs(copyStates) do
+  for _, cs in pairs(copyStates) do
     if cs.copied then
       cs.timer = cs.timer - dt
       if cs.timer <= 0 then
@@ -150,12 +212,33 @@ function CodeBlock.update(dt)
       end
     end
   end
+
+  if debugStatsEnabled then
+    debugStats.printTimer = debugStats.printTimer + (dt or 0)
+    if debugStats.printTimer >= 1.0 then
+      debugStats.printTimer = 0
+      local cacheEntries = 0
+      for _ in pairs(renderCache) do
+        cacheEntries = cacheEntries + 1
+      end
+      local luaMemMB = collectgarbage("count") / 1024
+      io.write(string.format(
+        "[CB-STATS] hits=%d misses=%d tokenLines=%d cacheEntries=%d luaMem=%.1fMB\n",
+        debugStats.hits, debugStats.misses, debugStats.tokenLinesBuilt, cacheEntries, luaMemMB
+      ))
+      io.flush()
+    end
+  end
 end
+
+-- ============================================================================
+-- Rendering
+-- ============================================================================
 
 function CodeBlock.render(node, c, effectiveOpacity)
   local props = node.props or {}
   local code = props.code or ""
-  local lang = resolveLanguage(props.language, code)
+  local lang
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
@@ -164,9 +247,7 @@ function CodeBlock.render(node, c, effectiveOpacity)
   local bgColor = s.backgroundColor
   if type(bgColor) == "string" then
     bgColor = Color.toTable(bgColor)
-  elseif type(bgColor) == "table" then
-    -- Already RGBA array
-  else
+  elseif type(bgColor) ~= "table" then
     bgColor = Color.toTable("#0d1117")
   end
   setColorWithOpacity(bgColor, effectiveOpacity)
@@ -178,9 +259,7 @@ function CodeBlock.render(node, c, effectiveOpacity)
     local borderColor = s.borderColor
     if type(borderColor) == "string" then
       borderColor = Color.toTable(borderColor)
-    elseif type(borderColor) == "table" then
-      -- Already RGBA array
-    else
+    elseif type(borderColor) ~= "table" then
       borderColor = Color.toTable("#1e293b")
     end
     setColorWithOpacity(borderColor, effectiveOpacity)
@@ -188,29 +267,34 @@ function CodeBlock.render(node, c, effectiveOpacity)
     love.graphics.rectangle("line", c.x, c.y, c.w, c.h, br, br)
   end
 
-  -- Split into lines
-  local lines = {}
-  for line in (code .. "\n"):gmatch("([^\n]*)\n") do
-    lines[#lines + 1] = line
-  end
-  if #lines == 0 then lines[1] = "" end
+  -- Split lines
+  local lines, resolvedLang, tokenLines = getTokenizedLinesCached(node, code, props.language)
+  lang = resolvedLang
 
   -- Get font and line height
   local font = getMeasure().getFont(fontSize, nil, nil)
   love.graphics.setFont(font)
   local lineHeight = font:getHeight()
 
-  -- Scissor to code area (transform-aware, intersects parent scissor)
+  -- Scissor to code area
   local prevScissor = {love.graphics.getScissor()}
   local sx, sy = love.graphics.transformPoint(c.x, c.y)
   local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
   local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
   love.graphics.intersectScissor(sx, sy, sw, sh)
 
+  -- Center content vertically when allocated more height than needed
+  local contentHeight = #lines * lineHeight
+  local innerHeight = c.h - 2 * padding
+  local yOffset = 0
+  if contentHeight < innerHeight then
+    yOffset = math.floor((innerHeight - contentHeight) / 2)
+  end
+
   -- Render each line with token-based syntax highlighting
   for i, line in ipairs(lines) do
-    local y = c.y + padding + (i - 1) * lineHeight
-    local tokens = Syntax.tokenizeLine(line, lang)
+    local y = c.y + padding + yOffset + (i - 1) * lineHeight
+    local tokens = tokenLines[i] or Syntax.tokenizeLine(line, lang)
     local x = c.x + padding
     for _, tok in ipairs(tokens) do
       setColorWithOpacity(tok.color, effectiveOpacity)
@@ -219,8 +303,8 @@ function CodeBlock.render(node, c, effectiveOpacity)
     end
   end
 
-  -- Draw text selection highlight (inside scissor so it clips with content)
-  CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity)
+  -- Draw text selection highlight
+  CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
 
   -- Restore previous scissor state
   if prevScissor[1] then
@@ -229,7 +313,7 @@ function CodeBlock.render(node, c, effectiveOpacity)
     love.graphics.setScissor()
   end
 
-  -- Copy button (rendered on top, outside scissor) — only when hovered or showing "Copied!"
+  -- Copy button — only when hovered or showing "Copied!"
   local cs = getCopyState(node)
   local mx, my = love.mouse.getPosition()
   local isHovered = mx >= c.x and mx <= c.x + c.w and my >= c.y and my <= c.y + c.h
@@ -264,12 +348,8 @@ function CodeBlock.getLines(node)
   local font = getMeasure().getFont(fontSize, nil, nil)
   local lineHeight = font:getHeight()
 
-  local lines = {}
-  for line in (code .. "\n"):gmatch("([^\n]*)\n") do
-    lines[#lines + 1] = line
-  end
-  if #lines == 0 then lines[1] = "" end
-
+  local entry = getNodeEntry(node)
+  local lines = ensureLines(entry, code)
   return lines, font, lineHeight, padding
 end
 
@@ -288,7 +368,15 @@ function CodeBlock.screenToPos(node, mx, my)
     sx, sy = Events.screenToContent(node, mx, my)
   end
 
-  local relY = sy - c.y - padding
+  -- Account for vertical centering offset (same calculation as render)
+  local contentHeight = #lines * lineHeight
+  local innerHeight = c.h - 2 * padding
+  local yOffset = 0
+  if contentHeight < innerHeight then
+    yOffset = math.floor((innerHeight - contentHeight) / 2)
+  end
+
+  local relY = sy - c.y - padding - yOffset
   local line = math.floor(relY / lineHeight) + 1
   line = math.max(1, math.min(line, #lines))
 
@@ -320,7 +408,7 @@ end
 
 --- Draw selection highlight rectangles for this CodeBlock.
 --- Called during render, inside the scissor region.
-function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity)
+function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
   -- Lazy-require to avoid circular dependency at load time
   local ok, TextSelection = pcall(require, "lua.textselection")
   if not ok or not TextSelection then return end
@@ -332,7 +420,6 @@ function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effe
   local startNode = sel.startNode
   local endNode = sel.endNode
   if startNode ~= node and endNode ~= node then
-    -- Also check multi-node range via order
     local order = sel.order
     if not order then return end
     local idx = order.indexByNode and order.indexByNode[node]
@@ -382,28 +469,29 @@ function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effe
 
   love.graphics.setColor(0.22, 0.35, 0.55, 0.55 * effectiveOpacity)
 
+  yOffset = yOffset or 0
   for i = startLine, endLine do
     local lineText = lines[i] or ""
     local x0 = c.x + padding
-    local y0 = c.y + padding + (i - 1) * lineHeight
+    local y0 = c.y + padding + yOffset + (i - 1) * lineHeight
 
-    local sx, ex
+    local lsx, lex
     if i == startLine and startCol > 0 then
-      sx = font:getWidth(lineText:sub(1, startCol))
+      lsx = font:getWidth(lineText:sub(1, startCol))
     else
-      sx = 0
+      lsx = 0
     end
 
     if i == endLine and endCol > 0 then
-      ex = font:getWidth(lineText:sub(1, endCol))
+      lex = font:getWidth(lineText:sub(1, endCol))
     elseif i == endLine then
-      ex = 0
+      lex = 0
     else
-      ex = font:getWidth(lineText)
+      lex = font:getWidth(lineText)
     end
 
-    if ex > sx then
-      love.graphics.rectangle("fill", x0 + sx, y0, ex - sx, lineHeight)
+    if lex > lsx then
+      love.graphics.rectangle("fill", x0 + lsx, y0, lex - lsx, lineHeight)
     end
   end
 end
