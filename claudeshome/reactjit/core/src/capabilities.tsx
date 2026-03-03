@@ -19,7 +19,7 @@
 import React from 'react';
 import { Native } from './Native';
 import type {
-  AudioProps, TimerProps, LLMAgentProps, WindowProps,
+  AudioProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
   BoidsProps, ImageSelectProps, ImageProcessProps,
 } from './types';
@@ -85,6 +85,17 @@ export function LLMAgent(props: LLMAgentProps) {
  */
 export function Window(props: WindowProps) {
   return <Native type="Window" {...props} />;
+}
+
+/**
+ * Native OS notification via a borderless subprocess window.
+ * Mounts → shows notification → auto-dismisses after duration.
+ *
+ * @example
+ * {showNotif && <Notification title="Done" body="Build complete" onDismiss={() => setShowNotif(false)} />}
+ */
+export function Notification(props: NotificationProps) {
+  return <Native type="Notification" {...props} />;
 }
 
 /**

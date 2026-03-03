@@ -59,6 +59,7 @@ export function Input(rawProps: InputProps) {
     escapeTarget,
     submitOnEnter,
     spellCheck,
+    wordWrap,
     cursorColor,
     cursorPosition,
   } = rawProps as any;
@@ -142,6 +143,7 @@ export function Input(rawProps: InputProps) {
     };
 
     if (spellCheck) props.spellCheck = true;
+    if (wordWrap) props.wordWrap = true;
     if (keystrokeTarget) props.keystrokeTarget = keystrokeTarget;
     if (submitTarget) props.submitTarget = submitTarget;
     if (playgroundLine !== undefined) props.__rjitPlaygroundLine = playgroundLine;

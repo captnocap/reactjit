@@ -18,7 +18,7 @@
  * });
  */
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useLoveRPC } from './hooks';
 
 // ── Public types ──────────────────────────────────────────────
@@ -121,11 +121,11 @@ export function useFleet(options: FleetOptions): FleetResult {
   const [autoAccept, setAutoAccept] = useState(false);
 
   // Sync auto-accept from Lua on mount
-  useState(() => {
+  useEffect(() => {
     rpcAutoAccept({}).then((res: any) => {
       setAutoAccept(!!res?.autoAccept);
     }).catch(() => {});
-  });
+  }, [rpcAutoAccept]);
 
   const toggleAutoAccept = useCallback(async () => {
     try {

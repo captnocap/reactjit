@@ -344,8 +344,11 @@ local function spawnClaude(state, props)
   local tmuxAvailable = os.execute("command -v tmux >/dev/null 2>&1")
   -- os.execute returns different types in Lua 5.1 vs 5.2+
   if tmuxAvailable == 0 or tmuxAvailable == true then
+    -- Kill any stale session from a previous crash (destroy didn't run).
+    -- Without this, -A reattaches to a dead session instead of creating fresh.
+    os.execute("tmux kill-session -t " .. tmuxSession .. " 2>/dev/null")
     shell = "tmux"
-    args = { "new-session", "-A", "-s", tmuxSession, fullCmd }
+    args = { "new-session", "-s", tmuxSession, fullCmd }
     io.write("[claude_session] Spawning in tmux session: " .. tmuxSession .. "\n"); io.flush()
   else
     -- Fallback: spawn directly (no crash recovery, but still works)
@@ -370,6 +373,10 @@ local function spawnClaude(state, props)
       TERM            = "xterm-256color",
       FORCE_COLOR     = "1",
       COLORTERM       = "truecolor",
+      -- Force tmux to use /bin/sh for spawning the command.
+      -- Without this, tmux uses $SHELL (user's zsh/bash) which loads
+      -- .zshrc/.bashrc on every session — adding 5-15s of startup delay.
+      SHELL           = "/bin/sh",
     },
   })
 
@@ -1229,6 +1236,11 @@ Capabilities.register("ClaudeCode", {
     end
     if state.proc then state.proc:kill(); state.proc:close(); state.proc = nil end
     if state.vterm then state.vterm:free(); state.vterm = nil end
+    -- Kill the tmux session so stale sessions don't accumulate.
+    -- On next app start, -A creates a fresh session instead of reattaching to a dead one.
+    if state._tmuxSession then
+      os.execute("tmux kill-session -t " .. state._tmuxSession .. " 2>/dev/null")
+    end
   end,
 })
 

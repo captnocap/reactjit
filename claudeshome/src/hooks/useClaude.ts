@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLoveRPC } from '@reactjit/core';
 
 export interface PermissionInfo {
@@ -31,7 +31,7 @@ export function useClaude() {
     setAutoAccept(!!res?.autoAccept);
   }, [rpcAutoAccept]);
   // Fire once on mount
-  useState(() => { syncAutoAccept(); });
+  useEffect(() => { syncAutoAccept(); }, [syncAutoAccept]);
 
   const onPerm = useCallback((e: any) => {
     // Auto-accept is handled in Lua now — this only fires when auto-accept is off
