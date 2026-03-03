@@ -231,10 +231,14 @@ safe_cdef[[
 ]]
 
 -- ============================================================================
--- Load libraries
+-- Load libraries (lazy — deferred until first crypto RPC call)
 -- ============================================================================
 
 local sodium, crypto_lib, blake3
+local libsLoadAttempted = false
+
+-- Base64 variant constants (libsodium)
+local BASE64_VARIANT_ORIGINAL = 1
 
 -- libsodium
 local function loadSodium()
@@ -279,31 +283,45 @@ local function loadBlake3()
   return loader.try_load("blake3")
 end
 
-sodium = loadSodium()
-if not sodium then
-  if _G._reactjit_verbose then io.write("[crypto] libsodium not found — crypto module disabled\n"); io.flush() end
-  return Crypto
+--- Load all crypto libraries on demand. Called on first RPC invocation.
+--- Safe to call multiple times — only attempts once.
+function Crypto.loadLibraries()
+  if Crypto.available then return true end
+  if libsLoadAttempted then return false end
+  libsLoadAttempted = true
+
+  sodium = loadSodium()
+  if not sodium then
+    io.write("[crypto] libsodium not found — crypto module disabled\n"); io.flush()
+    return false
+  end
+
+  if sodium.sodium_init() < 0 then
+    io.write("[crypto] sodium_init() failed — crypto module disabled\n"); io.flush()
+    sodium = nil
+    return false
+  end
+
+  crypto_lib = loadCrypto()
+  if not crypto_lib then
+    io.write("[crypto] libcrypto (OpenSSL) not found — BLAKE2s and PBKDF2 unavailable\n"); io.flush()
+  end
+
+  blake3 = loadBlake3()
+  if not blake3 then
+    io.write("[crypto] libblake3 not found — BLAKE3 unavailable\n"); io.flush()
+  end
+
+  -- Build AEAD table now that sodium is loaded
+  Crypto._buildAEAD()
+
+  Crypto.available = true
+  io.write("[crypto] Loaded — libsodium")
+  if crypto_lib then io.write(" + libcrypto") end
+  if blake3 then io.write(" + libblake3") end
+  io.write(" (lazy)\n"); io.flush()
+  return true
 end
-
-if sodium.sodium_init() < 0 then
-  if _G._reactjit_verbose then io.write("[crypto] sodium_init() failed — crypto module disabled\n"); io.flush() end
-  return Crypto
-end
-
-crypto_lib = loadCrypto()
-if not crypto_lib then
-  if _G._reactjit_verbose then io.write("[crypto] libcrypto (OpenSSL) not found — BLAKE2s and PBKDF2 unavailable\n"); io.flush() end
-end
-
-blake3 = loadBlake3()
-if not blake3 then
-  if _G._reactjit_verbose then io.write("[crypto] libblake3 not found — BLAKE3 unavailable\n"); io.flush() end
-end
-
-Crypto.available = true
-
--- Base64 variant constants (libsodium)
-local BASE64_VARIANT_ORIGINAL = 1
 
 -- ============================================================================
 -- Helpers
@@ -450,29 +468,32 @@ end
 
 local AEAD = {}
 
-AEAD["xchacha20-poly1305"] = {
-  nonce_bytes = function() return tonumber(sodium.crypto_aead_xchacha20poly1305_ietf_npubbytes()) end,
-  tag_bytes = function() return tonumber(sodium.crypto_aead_xchacha20poly1305_ietf_abytes()) end,
-  encrypt = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt,
-  decrypt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt,
-}
-
-AEAD["chacha20-poly1305"] = {
-  nonce_bytes = function() return tonumber(sodium.crypto_aead_chacha20poly1305_ietf_npubbytes()) end,
-  tag_bytes = function() return tonumber(sodium.crypto_aead_chacha20poly1305_ietf_abytes()) end,
-  encrypt = sodium.crypto_aead_chacha20poly1305_ietf_encrypt,
-  decrypt = sodium.crypto_aead_chacha20poly1305_ietf_decrypt,
-}
-
-if sodium.crypto_aead_aes256gcm_is_available() ~= 0 then
-  AEAD["aes-256-gcm"] = {
-    nonce_bytes = function() return tonumber(sodium.crypto_aead_aes256gcm_npubbytes()) end,
-    tag_bytes = function() return tonumber(sodium.crypto_aead_aes256gcm_abytes()) end,
-    encrypt = sodium.crypto_aead_aes256gcm_encrypt,
-    decrypt = sodium.crypto_aead_aes256gcm_decrypt,
+--- Build AEAD algorithm table. Called from loadLibraries() after sodium is loaded.
+function Crypto._buildAEAD()
+  AEAD["xchacha20-poly1305"] = {
+    nonce_bytes = function() return tonumber(sodium.crypto_aead_xchacha20poly1305_ietf_npubbytes()) end,
+    tag_bytes = function() return tonumber(sodium.crypto_aead_xchacha20poly1305_ietf_abytes()) end,
+    encrypt = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt,
+    decrypt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt,
   }
-else
-  if _G._reactjit_verbose then io.write("[crypto] AES-256-GCM not available (no AES-NI) — using ChaCha20/XChaCha20 only\n"); io.flush() end
+
+  AEAD["chacha20-poly1305"] = {
+    nonce_bytes = function() return tonumber(sodium.crypto_aead_chacha20poly1305_ietf_npubbytes()) end,
+    tag_bytes = function() return tonumber(sodium.crypto_aead_chacha20poly1305_ietf_abytes()) end,
+    encrypt = sodium.crypto_aead_chacha20poly1305_ietf_encrypt,
+    decrypt = sodium.crypto_aead_chacha20poly1305_ietf_decrypt,
+  }
+
+  if sodium.crypto_aead_aes256gcm_is_available() ~= 0 then
+    AEAD["aes-256-gcm"] = {
+      nonce_bytes = function() return tonumber(sodium.crypto_aead_aes256gcm_npubbytes()) end,
+      tag_bytes = function() return tonumber(sodium.crypto_aead_aes256gcm_abytes()) end,
+      encrypt = sodium.crypto_aead_aes256gcm_encrypt,
+      decrypt = sodium.crypto_aead_aes256gcm_decrypt,
+    }
+  else
+    io.write("[crypto] AES-256-GCM not available (no AES-NI) — using ChaCha20/XChaCha20 only\n"); io.flush()
+  end
 end
 
 local function aead_encrypt(plaintext, key, algo)
@@ -810,8 +831,18 @@ end
 function Crypto.getHandlers()
   local handlers = {}
 
+  local function ensureLoaded()
+    if not Crypto.available then
+      Crypto.loadLibraries()
+      if not Crypto.available then
+        error("Crypto libraries not available — install libsodium-dev")
+      end
+    end
+  end
+
   -- Hash
   handlers["crypto:hash"] = function(args)
+    ensureLoaded()
     if not args or not args.input then error("crypto:hash requires 'input'") end
     local algo = args.algorithm or "sha256"
     if algo == "sha256" then
@@ -831,6 +862,7 @@ function Crypto.getHandlers()
 
   -- HMAC
   handlers["crypto:hmac"] = function(args)
+    ensureLoaded()
     if not args or not args.key or not args.message then
       error("crypto:hmac requires 'key' and 'message'")
     end
@@ -846,6 +878,7 @@ function Crypto.getHandlers()
 
   -- Encrypt (password-based)
   handlers["crypto:encrypt"] = function(args)
+    ensureLoaded()
     if not args or not args.plaintext or not args.password then
       error("crypto:encrypt requires 'plaintext' and 'password'")
     end
@@ -858,6 +891,7 @@ function Crypto.getHandlers()
 
   -- Decrypt
   handlers["crypto:decrypt"] = function(args)
+    ensureLoaded()
     if not args or not args.data or not args.password then
       error("crypto:decrypt requires 'data' and 'password'")
     end
@@ -866,6 +900,7 @@ function Crypto.getHandlers()
 
   -- Raw encrypt
   handlers["crypto:encryptRaw"] = function(args)
+    ensureLoaded()
     if not args or not args.plaintext or not args.key then
       error("crypto:encryptRaw requires 'plaintext' and 'key' (hex)")
     end
@@ -874,6 +909,7 @@ function Crypto.getHandlers()
 
   -- Raw decrypt
   handlers["crypto:decryptRaw"] = function(args)
+    ensureLoaded()
     if not args or not args.ciphertext or not args.key or not args.nonce then
       error("crypto:decryptRaw requires 'ciphertext', 'key', and 'nonce' (hex)")
     end
@@ -882,6 +918,7 @@ function Crypto.getHandlers()
 
   -- Sign
   handlers["crypto:sign"] = function(args)
+    ensureLoaded()
     if not args or not args.privateKey or not args.message then
       error("crypto:sign requires 'privateKey' and 'message'")
     end
@@ -890,6 +927,7 @@ function Crypto.getHandlers()
 
   -- Verify
   handlers["crypto:verify"] = function(args)
+    ensureLoaded()
     if not args or not args.message or not args.signature or not args.publicKey then
       error("crypto:verify requires 'message', 'signature', and 'publicKey'")
     end
@@ -898,16 +936,19 @@ function Crypto.getHandlers()
 
   -- Generate signing keys
   handlers["crypto:generateSigningKeys"] = function()
+    ensureLoaded()
     return Crypto.generateSigningKeys()
   end
 
   -- Generate DH keys
   handlers["crypto:generateDHKeys"] = function()
+    ensureLoaded()
     return Crypto.generateDHKeys()
   end
 
   -- Diffie-Hellman
   handlers["crypto:diffieHellman"] = function(args)
+    ensureLoaded()
     if not args or not args.privateKey or not args.publicKey then
       error("crypto:diffieHellman requires 'privateKey' and 'publicKey'")
     end
@@ -916,24 +957,29 @@ function Crypto.getHandlers()
 
   -- Random tokens
   handlers["crypto:randomToken"] = function(args)
+    ensureLoaded()
     return { token = Crypto.randomToken(args and args.bytes) }
   end
 
   handlers["crypto:randomBase64"] = function(args)
+    ensureLoaded()
     return { token = Crypto.randomBase64(args and args.bytes) }
   end
 
   handlers["crypto:randomId"] = function(args)
+    ensureLoaded()
     return { id = Crypto.randomId(args and args.length) }
   end
 
   handlers["crypto:randomBytes"] = function(args)
+    ensureLoaded()
     local count = args and args.count or 32
     return { bytes = Crypto.randomBytesHex(count) }
   end
 
   -- Timing-safe compare
   handlers["crypto:timingSafeEqual"] = function(args)
+    ensureLoaded()
     if not args or not args.a or not args.b then
       error("crypto:timingSafeEqual requires 'a' and 'b'")
     end
@@ -941,13 +987,6 @@ function Crypto.getHandlers()
   end
 
   return handlers
-end
-
-if _G._reactjit_verbose then
-  io.write("[crypto] Loaded — libsodium")
-  if crypto_lib then io.write(" + libcrypto") end
-  if blake3 then io.write(" + libblake3") end
-  io.write("\n"); io.flush()
 end
 
 return Crypto

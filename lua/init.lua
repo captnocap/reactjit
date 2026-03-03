@@ -1354,14 +1354,14 @@ function ReactJIT.init(config)
     end
   end
 
-  -- Register crypto RPC handlers (libsodium + libcrypto + libblake3)
+  -- Register crypto RPC handlers — libraries lazy-load on first invocation
   do
     local cok, cryptomod = pcall(require, "lua.crypto")
-    if cok and cryptomod.available then
+    if cok then
       for method, handler in pairs(cryptomod.getHandlers()) do
         rpcHandlers[method] = gated("crypto", handler)
       end
-    elseif not cok then
+    else
       startupLog("[reactjit] crypto module not loaded: " .. tostring(cryptomod))
     end
   end
