@@ -61,8 +61,6 @@ import { Layout3Story } from './Layout3Story';
 
 
 export const stories: StoryDef[] = [
-  // DEBUG: Layout1 first to test CodeBlock memory fix
-  { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   // Core — framework primitives in learning order
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
@@ -122,6 +120,7 @@ export const stories: StoryDef[] = [
   { id: 'lint-test', title: 'Lint Test', section: 'Dev', component: LintTestStory },
 
   // Layouts — story layout templates
+  { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
 ];
