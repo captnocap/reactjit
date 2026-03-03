@@ -34,6 +34,98 @@ local debugStats = {
 }
 
 -- ============================================================================
+-- Churn detection — catch wrapper re-renders that feed new string identity
+-- ============================================================================
+
+local CHURN_WARN_THRESHOLD  = 10   -- identity changes/sec before warning
+local CHURN_KILL_THRESHOLD  = 30   -- identity changes/sec before kill switch
+local churnTracker = setmetatable({}, { __mode = "k" }) -- [node] = state
+
+local function getChurnState(node)
+  local cs = churnTracker[node]
+  if not cs then
+    cs = {
+      identityChanges = 0,    -- identity changes this window
+      contentChanges = 0,     -- actual content changes this window
+      windowStart = 0,        -- love.timer.getTime() at window start
+      rate = 0,               -- computed identity changes/sec
+      contentRate = 0,        -- computed content changes/sec
+      killed = false,         -- syntax highlighting disabled
+      warned = false,         -- warning already emitted this window
+      lastContentSig = nil,   -- length + prefix hash for content comparison
+    }
+    churnTracker[node] = cs
+  end
+  return cs
+end
+
+--- Cheap content signature: length .. ":" .. first 64 bytes.
+--- Same content = same sig, even if string pointer differs.
+local function contentSig(code)
+  local len = #code
+  if len <= 64 then return len .. ":" .. code end
+  return len .. ":" .. code:sub(1, 64)
+end
+
+--- Call on every render/measure to track prop identity churn.
+--- Returns true if syntax highlighting should be suppressed (kill switch active).
+local function checkChurn(node, code)
+  local cs = getChurnState(node)
+  local now = love.timer.getTime()
+
+  -- Reset window every second
+  if now - cs.windowStart >= 1.0 then
+    cs.rate = cs.identityChanges
+    cs.contentRate = cs.contentChanges
+    cs.identityChanges = 0
+    cs.contentChanges = 0
+    cs.windowStart = now
+    cs.warned = false
+
+    -- Recover from kill switch if churn stopped
+    if cs.killed and cs.rate < CHURN_WARN_THRESHOLD then
+      cs.killed = false
+      io.write("[CODEBLOCK] churn subsided — re-enabling syntax highlighting\n")
+      io.flush()
+    end
+  end
+
+  -- Check if code prop identity changed
+  local sig = contentSig(code)
+  if cs.lastContentSig ~= nil then
+    cs.identityChanges = cs.identityChanges + 1
+    if sig ~= cs.lastContentSig then
+      cs.contentChanges = cs.contentChanges + 1
+    end
+  end
+  cs.lastContentSig = sig
+
+  -- Warn on churn
+  if not cs.warned and cs.rate >= CHURN_WARN_THRESHOLD then
+    io.write(string.format(
+      "[CODEBLOCK WARNING] code prop identity changed %d/sec but content hash changed %d/sec. " ..
+      "Suspect wrapper re-rendering. Node: %s\n",
+      cs.rate, cs.contentRate, tostring(node.id or node)
+    ))
+    io.flush()
+    cs.warned = true
+  end
+
+  -- Kill switch
+  if not cs.killed and cs.rate >= CHURN_KILL_THRESHOLD and cs.contentRate == 0 then
+    cs.killed = true
+    io.write(string.format(
+      "[CODEBLOCK KILL SWITCH] syntax highlighting DISABLED — %d identity changes/sec, " ..
+      "0 content changes. Freezing token cache. Node: %s\n",
+      cs.rate, tostring(node.id or node)
+    ))
+    io.flush()
+  end
+
+  return cs.killed
+end
+
+-- ============================================================================
 -- Init
 -- ============================================================================
 
@@ -70,10 +162,14 @@ local function getNodeEntry(node)
 end
 
 local function ensureLines(entry, code)
-  if entry.lines and entry.code == code then
+  -- Content-based memoization: compare by signature, not pointer identity.
+  -- This survives wrapper re-renders that produce new string objects with same content.
+  local sig = contentSig(code)
+  if entry.lines and entry.codeSig == sig then
     return entry.lines
   end
   entry.code = code
+  entry.codeSig = sig
   entry.lines = splitLines(code)
   entry.langKey = nil
   entry.langResolved = nil
@@ -134,12 +230,34 @@ end
 local function getTokenizedLinesCached(node, code, langProp)
   local entry = getNodeEntry(node)
   local lines = ensureLines(entry, code)
+
+  -- Churn detection: track identity changes, engage kill switch if needed
+  local killed = checkChurn(node, code)
+
+  -- If kill switch active, return frozen cache or plain text
+  if killed and entry.tokenLines then
+    return lines, entry.langResolved or "plain", entry.tokenLines
+  end
+
   local langKey = langProp or "auto"
   if entry.tokenLines and entry.langKey == langKey then
     if debugStatsEnabled then
       debugStats.hits = debugStats.hits + 1
     end
     return lines, entry.langResolved, entry.tokenLines
+  end
+
+  -- If kill switch active but no cached tokens, use plain text (no tokenizer)
+  if killed then
+    local plainColor = Syntax.colors and Syntax.colors.text or {0.8, 0.8, 0.8, 1.0}
+    local tokenLines = {}
+    for i, line in ipairs(lines) do
+      tokenLines[i] = {{text = line, color = plainColor}}
+    end
+    entry.langKey = langKey
+    entry.langResolved = "plain"
+    entry.tokenLines = tokenLines
+    return lines, "plain", tokenLines
   end
 
   local langResolved = resolveLanguage(langProp, lines, code)
@@ -222,13 +340,50 @@ function CodeBlock.update(dt)
         cacheEntries = cacheEntries + 1
       end
       local luaMemMB = collectgarbage("count") / 1024
+      -- Collect churn stats across all tracked nodes
+      local maxChurnRate, maxContentRate, killedCount = 0, 0, 0
+      for _, cs in pairs(churnTracker) do
+        if cs.rate > maxChurnRate then maxChurnRate = cs.rate end
+        if cs.contentRate > maxContentRate then maxContentRate = cs.contentRate end
+        if cs.killed then killedCount = killedCount + 1 end
+      end
       io.write(string.format(
-        "[CB-STATS] hits=%d misses=%d tokenLines=%d cacheEntries=%d luaMem=%.1fMB\n",
-        debugStats.hits, debugStats.misses, debugStats.tokenLinesBuilt, cacheEntries, luaMemMB
+        "[CB-STATS] hits=%d misses=%d tokenLines=%d cache=%d mem=%.1fMB | churn: id=%d/s content=%d/s killed=%d\n",
+        debugStats.hits, debugStats.misses, debugStats.tokenLinesBuilt,
+        cacheEntries, luaMemMB, maxChurnRate, maxContentRate, killedCount
       ))
       io.flush()
     end
   end
+end
+
+--- Return diagnostic stats for crash reports / panic snapshots.
+function CodeBlock.getDiagnostics()
+  local cacheEntries = 0
+  for _ in pairs(renderCache) do
+    cacheEntries = cacheEntries + 1
+  end
+  local maxChurnRate, maxContentRate, killedCount = 0, 0, 0
+  local worstNode = nil
+  for node, cs in pairs(churnTracker) do
+    if cs.rate > maxChurnRate then
+      maxChurnRate = cs.rate
+      worstNode = node
+    end
+    if cs.contentRate > maxContentRate then maxContentRate = cs.contentRate end
+    if cs.killed then killedCount = killedCount + 1 end
+  end
+  return {
+    cacheEntries = cacheEntries,
+    cacheHits = debugStats.hits,
+    cacheMisses = debugStats.misses,
+    tokenLinesBuilt = debugStats.tokenLinesBuilt,
+    churnIdentityRate = maxChurnRate,
+    churnContentRate = maxContentRate,
+    churnKilledNodes = killedCount,
+    churnWorstNode = worstNode and tostring(worstNode.id or worstNode) or nil,
+    luaMemMB = collectgarbage("count") / 1024,
+  }
 end
 
 -- ============================================================================
