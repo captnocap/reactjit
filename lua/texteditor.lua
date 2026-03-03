@@ -218,6 +218,7 @@ end
 local function markDirty(es)
   es.dirty = true
   es.changeTimer = 0
+  es._wrapDirty = true
 end
 
 local function pushUndo(es)
@@ -359,37 +360,215 @@ local function visibleArea(node, es)
   }
 end
 
+-- ============================================================================
+-- Word wrap
+-- ============================================================================
+
+local function isWordWrap(node)
+  local props = node.props or {}
+  return props.wordWrap == true
+end
+
+--- Wrap a single line into visual sub-lines that fit within maxW pixels.
+--- Returns array of { text = string, startCol = number (0-based byte offset) }.
+local function wrapLine(lineStr, font, maxW)
+  if lineStr == "" then return { { text = "", startCol = 0 } } end
+  if maxW <= 0 then return { { text = lineStr, startCol = 0 } } end
+
+  -- Fast path: whole line fits
+  if font:getWidth(lineStr) <= maxW then
+    return { { text = lineStr, startCol = 0 } }
+  end
+
+  local results = {}
+  local pos = 1
+
+  while pos <= #lineStr do
+    -- Binary-ish search for how many chars fit
+    local fitEnd = pos
+    for i = pos, #lineStr do
+      if font:getWidth(lineStr:sub(pos, i)) > maxW then
+        break
+      end
+      fitEnd = i
+    end
+
+    if fitEnd >= #lineStr then
+      -- Rest of line fits
+      results[#results + 1] = { text = lineStr:sub(pos), startCol = pos - 1 }
+      break
+    end
+
+    if fitEnd < pos then
+      -- Single char doesn't fit — force at least one char to avoid infinite loop
+      fitEnd = pos
+    end
+
+    -- Walk back to find a word boundary (space, tab, hyphen)
+    local breakAt = fitEnd
+    if fitEnd > pos then
+      for i = fitEnd, pos, -1 do
+        local ch = lineStr:sub(i, i)
+        if ch == " " or ch == "\t" then
+          breakAt = i
+          break
+        end
+      end
+      -- If no word boundary found between pos and fitEnd, hard break at fitEnd
+    end
+
+    results[#results + 1] = { text = lineStr:sub(pos, breakAt), startCol = pos - 1 }
+
+    -- Skip whitespace at the break point when starting next visual line
+    pos = breakAt + 1
+  end
+
+  if #results == 0 then
+    results[1] = { text = "", startCol = 0 }
+  end
+  return results
+end
+
+--- Build or return cached wrap data for the editor.
+--- Returns nil when wordWrap is off.
+--- When on, returns { visualLines = {...}, sourceLineStart = {...}, totalVisualLines = N }.
+---   visualLines[v] = { text, sourceLine, startCol, isFirst }
+---   sourceLineStart[rawLine] = first visual line index for that raw line
+local function getWrapData(node, es)
+  if not isWordWrap(node) then return nil end
+
+  local font = getFont(node)
+  local va = visibleArea(node, es)
+  local textW = va.textAreaW - va.padding * 2
+
+  -- Cache key: text version + width
+  local cacheKey = tostring(textW) .. ":" .. tostring(#es.lines)
+  if es._wrapCache and es._wrapCacheKey == cacheKey and not es._wrapDirty then
+    return es._wrapCache
+  end
+
+  local visualLines = {}
+  local sourceLineStart = {}
+  local vi = 0
+
+  for i = 1, #es.lines do
+    sourceLineStart[i] = vi + 1
+    local subLines = wrapLine(es.lines[i], font, textW)
+    for j, sl in ipairs(subLines) do
+      vi = vi + 1
+      visualLines[vi] = {
+        text = sl.text,
+        sourceLine = i,
+        startCol = sl.startCol,
+        isFirst = (j == 1),
+      }
+    end
+  end
+
+  local data = {
+    visualLines = visualLines,
+    sourceLineStart = sourceLineStart,
+    totalVisualLines = vi,
+  }
+  es._wrapCache = data
+  es._wrapCacheKey = cacheKey
+  es._wrapDirty = false
+  return data
+end
+
+--- Convert raw cursor position to visual row (1-based).
+local function cursorToVisualRow(wrapData, cursorLine, cursorCol)
+  local start = wrapData.sourceLineStart[cursorLine] or 1
+  -- Walk visual lines for this source line to find which sub-line the cursor is on
+  for vi = start, wrapData.totalVisualLines do
+    local vl = wrapData.visualLines[vi]
+    if vl.sourceLine ~= cursorLine then break end
+    local nextStart = vl.startCol + #vl.text
+    if cursorCol <= nextStart or vi == wrapData.totalVisualLines or
+       wrapData.visualLines[vi + 1].sourceLine ~= cursorLine then
+      return vi
+    end
+  end
+  return start
+end
+
+--- Convert visual row + pixel X offset to raw (line, col).
+local function visualRowToCursor(wrapData, visualRow, font, textX)
+  visualRow = math.max(1, math.min(visualRow, wrapData.totalVisualLines))
+  local vl = wrapData.visualLines[visualRow]
+  if not vl then return 1, 0 end
+
+  -- Find column within this visual line's text
+  local col = 0
+  local text = vl.text
+  for i = 1, #text do
+    local w = font:getWidth(text:sub(1, i))
+    if w > textX then
+      local prevW = font:getWidth(text:sub(1, i - 1))
+      col = (textX - prevW < w - textX) and (i - 1) or i
+      return vl.sourceLine, vl.startCol + col
+    end
+    col = i
+  end
+  return vl.sourceLine, vl.startCol + col
+end
+
 local function ensureCursorVisible(node, es)
   local va = visibleArea(node, es)
   local font = getFont(node)
-  local cursorY = (es.cursorLine - 1) * va.lineHeight
+  local wrapData = getWrapData(node, es)
 
-  if cursorY < es.scrollY then
-    es.scrollY = cursorY
-  elseif cursorY + va.lineHeight > es.scrollY + va.textAreaH then
-    es.scrollY = cursorY + va.lineHeight - va.textAreaH
+  if wrapData then
+    -- Word wrap mode: use visual row for vertical, no horizontal scroll
+    local visRow = cursorToVisualRow(wrapData, es.cursorLine, es.cursorCol)
+    local cursorY = (visRow - 1) * va.lineHeight
+
+    if cursorY < es.scrollY then
+      es.scrollY = cursorY
+    elseif cursorY + va.lineHeight > es.scrollY + va.textAreaH then
+      es.scrollY = cursorY + va.lineHeight - va.textAreaH
+    end
+
+    local maxScrollY = math.max(0, wrapData.totalVisualLines * va.lineHeight - va.textAreaH + va.lineHeight)
+    es.scrollY = math.max(0, math.min(es.scrollY, maxScrollY))
+    es.scrollX = 0  -- no horizontal scroll when wrapping
+  else
+    -- Code mode: raw line for vertical, scrollX for horizontal
+    local cursorY = (es.cursorLine - 1) * va.lineHeight
+
+    if cursorY < es.scrollY then
+      es.scrollY = cursorY
+    elseif cursorY + va.lineHeight > es.scrollY + va.textAreaH then
+      es.scrollY = cursorY + va.lineHeight - va.textAreaH
+    end
+
+    local maxScrollY = math.max(0, lineCount(es) * va.lineHeight - va.textAreaH + va.lineHeight)
+    es.scrollY = math.max(0, math.min(es.scrollY, maxScrollY))
+
+    local cursorX = font:getWidth(currentLine(es):sub(1, es.cursorCol))
+    local textW = va.textAreaW - va.padding * 2
+    if cursorX - es.scrollX > textW - 20 then
+      es.scrollX = cursorX - textW + 40
+    elseif cursorX - es.scrollX < 0 then
+      es.scrollX = math.max(0, cursorX - 20)
+    end
+    es.scrollX = math.max(0, es.scrollX)
   end
-
-  -- Clamp vertical scroll to valid bounds (matches handleWheel logic)
-  local maxScrollY = math.max(0, lineCount(es) * va.lineHeight - va.textAreaH + va.lineHeight)
-  es.scrollY = math.max(0, math.min(es.scrollY, maxScrollY))
-
-  local cursorX = font:getWidth(currentLine(es):sub(1, es.cursorCol))
-  local textW = va.textAreaW - va.padding * 2
-  if cursorX - es.scrollX > textW - 20 then
-    es.scrollX = cursorX - textW + 40
-  elseif cursorX - es.scrollX < 0 then
-    es.scrollX = math.max(0, cursorX - 20)
-  end
-
-  -- Clamp horizontal scroll to valid bounds
-  es.scrollX = math.max(0, es.scrollX)
 end
 
 --- Convert screen coordinates to line/col within the editor.
 local function screenToPos(node, es, mx, my)
   local va = visibleArea(node, es)
   local font = getFont(node)
+  local wrapData = getWrapData(node, es)
+
+  if wrapData then
+    -- Word wrap: convert screen Y to visual row, then to source line+col
+    local visRow = math.floor((my - va.textAreaY + es.scrollY) / va.lineHeight) + 1
+    visRow = math.max(1, math.min(visRow, wrapData.totalVisualLines))
+    local textX = mx - va.textAreaX - va.padding
+    return visualRowToCursor(wrapData, visRow, font, textX)
+  end
 
   local line = math.floor((my - va.textAreaY + es.scrollY) / va.lineHeight) + 1
   line = math.max(1, math.min(line, lineCount(es)))
@@ -634,6 +813,7 @@ function TextEditor.syncValue(node)
     es.lines = textToLines(props.value)
     es.lastValue = props.value
     clampCursor(es)
+    es._wrapDirty = true
     -- Reset scroll when content changes externally (e.g. file drop)
     es.scrollY = 0
     es.scrollX = 0
@@ -810,8 +990,24 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
   elseif key == "up" then
     if shift then startOrExtendSelection(es) end
     if not shift then clearSelection(es) end
-    if es.cursorLine > 1 then
-      es.cursorLine = es.cursorLine - 1
+    local wrapData = getWrapData(node, es)
+    if wrapData then
+      -- Move up one visual row
+      local visRow = cursorToVisualRow(wrapData, es.cursorLine, es.cursorCol)
+      if visRow > 1 then
+        local font = getFont(node)
+        -- Preserve approximate X position across visual rows
+        local curVl = wrapData.visualLines[visRow]
+        local curColInSub = es.cursorCol - (curVl and curVl.startCol or 0)
+        local curX = font:getWidth((curVl and curVl.text or ""):sub(1, curColInSub))
+        local targetLine, targetCol = visualRowToCursor(wrapData, visRow - 1, font, curX)
+        es.cursorLine = targetLine
+        es.cursorCol = targetCol
+      end
+    else
+      if es.cursorLine > 1 then
+        es.cursorLine = es.cursorLine - 1
+      end
     end
     if shift then updateSelectionEnd(es) end
     clampCursor(es); resetBlink(es); ensureCursorVisible(node, es)
@@ -819,8 +1015,23 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
   elseif key == "down" then
     if shift then startOrExtendSelection(es) end
     if not shift then clearSelection(es) end
-    if es.cursorLine < lineCount(es) then
-      es.cursorLine = es.cursorLine + 1
+    local wrapData = getWrapData(node, es)
+    if wrapData then
+      -- Move down one visual row
+      local visRow = cursorToVisualRow(wrapData, es.cursorLine, es.cursorCol)
+      if visRow < wrapData.totalVisualLines then
+        local font = getFont(node)
+        local curVl = wrapData.visualLines[visRow]
+        local curColInSub = es.cursorCol - (curVl and curVl.startCol or 0)
+        local curX = font:getWidth((curVl and curVl.text or ""):sub(1, curColInSub))
+        local targetLine, targetCol = visualRowToCursor(wrapData, visRow + 1, font, curX)
+        es.cursorLine = targetLine
+        es.cursorCol = targetCol
+      end
+    else
+      if es.cursorLine < lineCount(es) then
+        es.cursorLine = es.cursorLine + 1
+      end
     end
     if shift then updateSelectionEnd(es) end
     clampCursor(es); resetBlink(es); ensureCursorVisible(node, es)
@@ -828,14 +1039,28 @@ function TextEditor.handleKeyPressed(node, key, scancode, isRepeat)
   elseif key == "home" then
     if shift then startOrExtendSelection(es) end
     if not shift then clearSelection(es) end
-    es.cursorCol = 0
+    local wrapData = getWrapData(node, es)
+    if wrapData then
+      local visRow = cursorToVisualRow(wrapData, es.cursorLine, es.cursorCol)
+      local vl = wrapData.visualLines[visRow]
+      es.cursorCol = vl and vl.startCol or 0
+    else
+      es.cursorCol = 0
+    end
     if shift then updateSelectionEnd(es) end
     resetBlink(es); ensureCursorVisible(node, es)
     return true
   elseif key == "end" then
     if shift then startOrExtendSelection(es) end
     if not shift then clearSelection(es) end
-    es.cursorCol = #currentLine(es)
+    local wrapData = getWrapData(node, es)
+    if wrapData then
+      local visRow = cursorToVisualRow(wrapData, es.cursorLine, es.cursorCol)
+      local vl = wrapData.visualLines[visRow]
+      es.cursorCol = vl and (vl.startCol + #vl.text) or #currentLine(es)
+    else
+      es.cursorCol = #currentLine(es)
+    end
     if shift then updateSelectionEnd(es) end
     resetBlink(es); ensureCursorVisible(node, es)
     return true
@@ -996,12 +1221,21 @@ end
 function TextEditor.handleWheel(node, dx, dy)
   local es = ensureState(node)
   local va = visibleArea(node, es)
-  -- Map horizontal tilt to vertical scroll when no vertical input
-  local scrollDy = dy
-  if scrollDy == 0 and dx ~= 0 then scrollDy = dx end
-  es.scrollY = es.scrollY - scrollDy * va.lineHeight * 3
-  local maxScroll = math.max(0, lineCount(es) * va.lineHeight - va.textAreaH + va.lineHeight)
-  es.scrollY = math.max(0, math.min(es.scrollY, maxScroll))
+  local wrapData = getWrapData(node, es)
+  local totalLines = wrapData and wrapData.totalVisualLines or lineCount(es)
+  -- Vertical scroll
+  if dy ~= 0 then
+    es.scrollY = es.scrollY - dy * va.lineHeight * 3
+    local maxScroll = math.max(0, totalLines * va.lineHeight - va.textAreaH + va.lineHeight)
+    es.scrollY = math.max(0, math.min(es.scrollY, maxScroll))
+  end
+  -- Horizontal scroll (shift+wheel or trackpad horizontal swipe) — disabled when wrapping
+  if dx ~= 0 and not wrapData then
+    local font = getFont(node)
+    local charW = font:getWidth("m")
+    es.scrollX = es.scrollX - dx * charW * 3
+    es.scrollX = math.max(0, es.scrollX)
+  end
   return true
 end
 
@@ -1030,9 +1264,11 @@ function TextEditor.draw(node, effectiveOpacity)
   TextEditor.syncValue(node)
 
   -- Clamp scroll bounds every frame (layout or content changes can invalidate scroll position)
-  local maxScrollY = math.max(0, lineCount(es) * lh - va.textAreaH + lh)
+  local wrapData = getWrapData(node, es)
+  local totalLines = wrapData and wrapData.totalVisualLines or lineCount(es)
+  local maxScrollY = math.max(0, totalLines * lh - va.textAreaH + lh)
   es.scrollY = math.max(0, math.min(es.scrollY, maxScrollY))
-  es.scrollX = math.max(0, es.scrollX)
+  if wrapData then es.scrollX = 0 else es.scrollX = math.max(0, es.scrollX) end
 
   love.graphics.setFont(font)
 
@@ -1073,127 +1309,246 @@ function TextEditor.draw(node, effectiveOpacity)
     love.graphics.rectangle("fill", c.x + va.gutterW - 1, c.y, 1, c.h)
   end
 
-  local lastLine = math.min(va.firstLine + va.visLines, lineCount(es))
+  if wrapData then
+    -- ── Word-wrap rendering path ──
+    local firstVis = math.floor(es.scrollY / lh) + 1
+    local lastVis = math.min(firstVis + va.visLines, wrapData.totalVisualLines)
 
-  for i = va.firstLine, lastLine do
-    local y = va.textAreaY + (i - 1) * lh - es.scrollY
-    local lineStr = es.lines[i] or ""
+    -- Pre-compute cursor visual row for active line highlight
+    local cursorVisRow = cursorToVisualRow(wrapData, es.cursorLine, es.cursorCol)
 
-    -- Active line highlight (extends full width including gutter, Monaco-style)
-    if isFocused and i == es.cursorLine then
-      setColorWithOpacity(colors.activeLine, effectiveOpacity)
-      love.graphics.rectangle("fill", c.x, y, c.w, lh)
-    end
-
-    -- Selection highlight
+    -- Pre-compute selection in visual-row space
+    local selS, selE
     if isFocused and hasSelection(es) then
-      local selS, selE = selectionOrdered(es)
-      if i >= selS[1] and i <= selE[1] then
-        local sx, ex
-        if i == selS[1] then
-          sx = font:getWidth(lineStr:sub(1, selS[2]))
-        else
-          sx = 0
-        end
-        if i == selE[1] then
-          ex = font:getWidth(lineStr:sub(1, selE[2]))
-        else
-          ex = font:getWidth(lineStr) + font:getWidth("m")
-        end
-        setColorWithOpacity(colors.selection, effectiveOpacity)
-        love.graphics.rectangle("fill",
-          va.textAreaX + va.padding + sx - es.scrollX, y,
-          ex - sx, lh)
-      end
+      selS, selE = selectionOrdered(es)
     end
 
-    -- Line numbers
-    if va.gutterW > 0 then
-      local numColor = (isFocused and i == es.cursorLine) and colors.lineNum or colors.gutterText
-      setColorWithOpacity(numColor, effectiveOpacity)
-      love.graphics.printf(tostring(i), c.x + 4, y + (lh - font:getHeight()) / 2,
-        va.gutterW - 12, "right")
-    end
+    for vi = firstVis, lastVis do
+      local vl = wrapData.visualLines[vi]
+      if not vl then break end
+      local y = va.textAreaY + (vi - 1) * lh - es.scrollY
 
-    -- Text (clip to text area, not gutter)
-    local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
-    local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
-    love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
-
-    local textY = y + (lh - font:getHeight()) / 2
-    local textX = va.textAreaX + va.padding - es.scrollX
-
-    if useSyntax then
-      -- Per-token colored rendering
-      local tokens = tokenizeLine(lineStr)
-      local xOff = textX
-      for _, tok in ipairs(tokens) do
-        setColorWithOpacity(tok.color, effectiveOpacity)
-        love.graphics.print(tok.text, xOff, textY)
-        xOff = xOff + font:getWidth(tok.text)
+      -- Active line highlight
+      if isFocused and vi == cursorVisRow then
+        setColorWithOpacity(colors.activeLine, effectiveOpacity)
+        love.graphics.rectangle("fill", c.x, y, c.w, lh)
       end
-    else
-      -- Monochrome fallback
+
+      -- Selection highlight (map raw selection to visual sub-lines)
+      if selS and selE then
+        local sl = vl.sourceLine
+        if sl >= selS[1] and sl <= selE[1] then
+          local subStart = vl.startCol
+          local subEnd = vl.startCol + #vl.text
+
+          -- Compute selection intersection with this visual line
+          local rawSelStart = (sl == selS[1]) and selS[2] or 0
+          local rawSelEnd = (sl == selE[1]) and selE[2] or #(es.lines[sl] or "")
+
+          local visSelStart = math.max(rawSelStart, subStart) - subStart
+          local visSelEnd = math.min(rawSelEnd, subEnd) - subStart
+
+          if visSelEnd > visSelStart then
+            local sx = font:getWidth(vl.text:sub(1, visSelStart))
+            local ex = font:getWidth(vl.text:sub(1, visSelEnd))
+            setColorWithOpacity(colors.selection, effectiveOpacity)
+            love.graphics.rectangle("fill",
+              va.textAreaX + va.padding + sx, y, ex - sx, lh)
+          end
+        end
+      end
+
+      -- Line numbers (only on first sub-line of each source line)
+      if va.gutterW > 0 then
+        if vl.isFirst then
+          local numColor = (isFocused and vl.sourceLine == es.cursorLine) and colors.lineNum or colors.gutterText
+          setColorWithOpacity(numColor, effectiveOpacity)
+          love.graphics.printf(tostring(vl.sourceLine), c.x + 4, y + (lh - font:getHeight()) / 2,
+            va.gutterW - 12, "right")
+        end
+      end
+
+      -- Text (clip to text area, not gutter)
+      local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
+      local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
+      love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
+
+      local textY = y + (lh - font:getHeight()) / 2
+      local textX = va.textAreaX + va.padding
+
       local textColor = colors.text
       if s.color and type(s.color) == "table" then
         textColor = s.color
       end
       setColorWithOpacity(textColor, effectiveOpacity)
-      love.graphics.print(lineStr, textX, textY)
+      love.graphics.print(vl.text, textX, textY)
+
+      love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
     end
 
-    -- Beginner-only dynamic inline hints (visual aid; does not mutate source text).
-    if tooltipLevel == "beginner" and TooltipDict.inlineHint and (i == es.cursorLine or i == es.hoverLine) then
-      local hint = TooltipDict.inlineHint(lineStr, tooltipLevel)
-      if hint and hint ~= "" then
-        local commentText = " // " .. hint
-        local lineW = font:getWidth(lineStr)
-        local hintX = textX + lineW + font:getWidth("  ")
-        local maxX = va.textAreaX + va.textAreaW - va.padding
-        if hintX + font:getWidth(commentText) <= maxX then
-          setColorWithOpacity(syntaxColors.comment or colors.gutterText, effectiveOpacity * 0.9)
-          love.graphics.print(commentText, hintX, textY)
-        end
+    -- Placeholder
+    if lineCount(es) == 1 and es.lines[1] == "" and not isFocused then
+      local props = node.props or {}
+      local ph = props.placeholder
+      if ph and ph ~= "" then
+        setColorWithOpacity(colors.placeholder, effectiveOpacity)
+        love.graphics.print(ph,
+          va.textAreaX + va.padding,
+          va.textAreaY + (lh - font:getHeight()) / 2)
       end
     end
 
-    -- Restore editor scissor (use setScissor, not intersectScissor, to truly undo the text-area clip)
-    love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
-  end
-
-  -- Placeholder
-  if lineCount(es) == 1 and es.lines[1] == "" and not isFocused then
-    local props = node.props or {}
-    local ph = props.placeholder
-    if ph and ph ~= "" then
-      setColorWithOpacity(colors.placeholder, effectiveOpacity)
-      love.graphics.print(ph,
-        va.textAreaX + va.padding,
-        va.textAreaY + (lh - font:getHeight()) / 2)
+    -- Cursor
+    if isFocused and es.blinkOn then
+      local visRow = cursorVisRow
+      local vl = wrapData.visualLines[visRow]
+      if vl then
+        local cy = va.textAreaY + (visRow - 1) * lh - es.scrollY
+        local colInSub = es.cursorCol - vl.startCol
+        local cx = va.textAreaX + va.padding + font:getWidth(vl.text:sub(1, colInSub))
+        local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
+        local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
+        love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
+        setColorWithOpacity(colors.cursor, effectiveOpacity)
+        love.graphics.rectangle("fill", cx, cy + 3, 2, lh - 6)
+        love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
+      end
     end
-  end
 
-  -- Cursor
-  if isFocused and es.blinkOn then
-    local cy = va.textAreaY + (es.cursorLine - 1) * lh - es.scrollY
-    local cx = va.textAreaX + va.padding +
-      font:getWidth(currentLine(es):sub(1, es.cursorCol)) - es.scrollX
-    local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
-    local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
-    love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
-    setColorWithOpacity(colors.cursor, effectiveOpacity)
-    love.graphics.rectangle("fill", cx, cy + 3, 2, lh - 6)
-    love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
-  end
+    -- Scrollbar
+    local totalContentH = wrapData.totalVisualLines * lh
+    if totalContentH > va.textAreaH then
+      local ratio = va.textAreaH / totalContentH
+      local barH = math.max(20, va.textAreaH * ratio)
+      local barY = c.y + (es.scrollY / totalContentH) * (va.textAreaH - barH)
+      setColorWithOpacity(colors.scrollbar, effectiveOpacity)
+      love.graphics.rectangle("fill", c.x + c.w - 6, barY, 4, barH, 2, 2)
+    end
 
-  -- Scrollbar
-  local totalContentH = lineCount(es) * lh
-  if totalContentH > va.textAreaH then
-    local ratio = va.textAreaH / totalContentH
-    local barH = math.max(20, va.textAreaH * ratio)
-    local barY = c.y + (es.scrollY / totalContentH) * (va.textAreaH - barH)
-    setColorWithOpacity(colors.scrollbar, effectiveOpacity)
-    love.graphics.rectangle("fill", c.x + c.w - 6, barY, 4, barH, 2, 2)
+  else
+    -- ── Non-wrap rendering path (code mode) ──
+    local lastLine = math.min(va.firstLine + va.visLines, lineCount(es))
+
+    for i = va.firstLine, lastLine do
+      local y = va.textAreaY + (i - 1) * lh - es.scrollY
+      local lineStr = es.lines[i] or ""
+
+      -- Active line highlight (extends full width including gutter, Monaco-style)
+      if isFocused and i == es.cursorLine then
+        setColorWithOpacity(colors.activeLine, effectiveOpacity)
+        love.graphics.rectangle("fill", c.x, y, c.w, lh)
+      end
+
+      -- Selection highlight
+      if isFocused and hasSelection(es) then
+        local selS, selE = selectionOrdered(es)
+        if i >= selS[1] and i <= selE[1] then
+          local sx, ex
+          if i == selS[1] then
+            sx = font:getWidth(lineStr:sub(1, selS[2]))
+          else
+            sx = 0
+          end
+          if i == selE[1] then
+            ex = font:getWidth(lineStr:sub(1, selE[2]))
+          else
+            ex = font:getWidth(lineStr) + font:getWidth("m")
+          end
+          setColorWithOpacity(colors.selection, effectiveOpacity)
+          love.graphics.rectangle("fill",
+            va.textAreaX + va.padding + sx - es.scrollX, y,
+            ex - sx, lh)
+        end
+      end
+
+      -- Line numbers
+      if va.gutterW > 0 then
+        local numColor = (isFocused and i == es.cursorLine) and colors.lineNum or colors.gutterText
+        setColorWithOpacity(numColor, effectiveOpacity)
+        love.graphics.printf(tostring(i), c.x + 4, y + (lh - font:getHeight()) / 2,
+          va.gutterW - 12, "right")
+      end
+
+      -- Text (clip to text area, not gutter)
+      local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
+      local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
+      love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
+
+      local textY = y + (lh - font:getHeight()) / 2
+      local textX = va.textAreaX + va.padding - es.scrollX
+
+      if useSyntax then
+        -- Per-token colored rendering
+        local tokens = tokenizeLine(lineStr)
+        local xOff = textX
+        for _, tok in ipairs(tokens) do
+          setColorWithOpacity(tok.color, effectiveOpacity)
+          love.graphics.print(tok.text, xOff, textY)
+          xOff = xOff + font:getWidth(tok.text)
+        end
+      else
+        -- Monochrome fallback
+        local textColor = colors.text
+        if s.color and type(s.color) == "table" then
+          textColor = s.color
+        end
+        setColorWithOpacity(textColor, effectiveOpacity)
+        love.graphics.print(lineStr, textX, textY)
+      end
+
+      -- Beginner-only dynamic inline hints (visual aid; does not mutate source text).
+      if tooltipLevel == "beginner" and TooltipDict.inlineHint and (i == es.cursorLine or i == es.hoverLine) then
+        local hint = TooltipDict.inlineHint(lineStr, tooltipLevel)
+        if hint and hint ~= "" then
+          local commentText = " // " .. hint
+          local lineW = font:getWidth(lineStr)
+          local hintX = textX + lineW + font:getWidth("  ")
+          local maxX = va.textAreaX + va.textAreaW - va.padding
+          if hintX + font:getWidth(commentText) <= maxX then
+            setColorWithOpacity(syntaxColors.comment or colors.gutterText, effectiveOpacity * 0.9)
+            love.graphics.print(commentText, hintX, textY)
+          end
+        end
+      end
+
+      -- Restore editor scissor (use setScissor, not intersectScissor, to truly undo the text-area clip)
+      love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
+    end
+
+    -- Placeholder
+    if lineCount(es) == 1 and es.lines[1] == "" and not isFocused then
+      local props = node.props or {}
+      local ph = props.placeholder
+      if ph and ph ~= "" then
+        setColorWithOpacity(colors.placeholder, effectiveOpacity)
+        love.graphics.print(ph,
+          va.textAreaX + va.padding,
+          va.textAreaY + (lh - font:getHeight()) / 2)
+      end
+    end
+
+    -- Cursor
+    if isFocused and es.blinkOn then
+      local cy = va.textAreaY + (es.cursorLine - 1) * lh - es.scrollY
+      local cx = va.textAreaX + va.padding +
+        font:getWidth(currentLine(es):sub(1, es.cursorCol)) - es.scrollX
+      local tax, tay = love.graphics.transformPoint(va.textAreaX, c.y)
+      local tax2, tay2 = love.graphics.transformPoint(va.textAreaX + va.textAreaW, c.y + c.h)
+      love.graphics.intersectScissor(tax, tay, math.max(0, tax2 - tax), math.max(0, tay2 - tay))
+      setColorWithOpacity(colors.cursor, effectiveOpacity)
+      love.graphics.rectangle("fill", cx, cy + 3, 2, lh - 6)
+      love.graphics.setScissor(edScissorX, edScissorY, edScissorW, edScissorH)
+    end
+
+    -- Scrollbar
+    local totalContentH = lineCount(es) * lh
+    if totalContentH > va.textAreaH then
+      local ratio = va.textAreaH / totalContentH
+      local barH = math.max(20, va.textAreaH * ratio)
+      local barY = c.y + (es.scrollY / totalContentH) * (va.textAreaH - barH)
+      setColorWithOpacity(colors.scrollbar, effectiveOpacity)
+      love.graphics.rectangle("fill", c.x + c.w - 6, barY, 4, barH, 2, 2)
+    end
   end
 
   -- Border (theme-aware: always thin, focus color on focus)
