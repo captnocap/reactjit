@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, CodeBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 export function Layout3Story() {
@@ -54,8 +54,17 @@ export function Layout3Story() {
         </Text>
       </Box>
 
-      {/* ── Center ── */}
-      <Box style={{ flexGrow: 1 }} />
+      {/* ── Center: CodeBlock in row test ── */}
+      <Box style={{ flexGrow: 1, padding: 20 }}>
+        <Box style={{ flexDirection: 'row', gap: 20 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <Text style={{ color: c.text, fontSize: 10 }}>{'Left side text'}</Text>
+          </Box>
+          <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <CodeBlock language="tsx" fontSize={9} code={"const x = 1;\nconst y = 2;"} />
+          </Box>
+        </Box>
+      </Box>
 
       {/* ── Footer ── */}
       <Box style={{

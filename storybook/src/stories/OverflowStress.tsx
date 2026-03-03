@@ -1,102 +1,295 @@
 import React from 'react';
-import { Box, Text, ScrollView } from '../../../packages/core/src';
+import { Box, ScrollView, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
-// RGBA test colors — decorative, kept hardcoded
-const rgbaTest = {
-  accent: [0.35, 0.55, 0.95, 1] as [number, number, number, number],
-  green: [0.2, 0.75, 0.4, 1] as [number, number, number, number],
-  orange: [0.95, 0.65, 0.15, 1] as [number, number, number, number],
-  red: [0.9, 0.3, 0.3, 1] as [number, number, number, number],
-  purple: [0.6, 0.4, 0.9, 1] as [number, number, number, number],
+type ReachColumnProps = {
+  title: string;
+  subtitle: string;
+  color: string;
+  rows: string[];
 };
 
-function RGBADebugBar() {
+type WideLaneProps = {
+  title: string;
+  color: string;
+  packets: string[];
+};
+
+function makeRows(prefix: string, count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const segment = ['cache', 'layout', 'paint', 'events', 'focus'][i % 5];
+    const lane = (i % 7) + 1;
+    return `${prefix} ${String(i + 1).padStart(3, '0')} ${segment} lane ${lane} wraps through viewport`;
+  });
+}
+
+function makePackets(prefix: string, count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const chunk = `${prefix}_${String(i + 1).padStart(2, '0')}`;
+    const repeat = 14 + (i % 6) * 6;
+    return `${chunk}_${'x'.repeat(repeat)}`;
+  });
+}
+
+function ReachTag({ label, color }: { label: string; color: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', gap: 4, padding: 4, backgroundColor: c.bg }}>
-      <Text style={{ fontSize: 10, color: c.textDim }}>RGBA:</Text>
-      {Object.entries(rgbaTest).map(([name, color]) => (
-        <Box key={name} style={{ backgroundColor: color, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-          <Text style={{ fontSize: 9, color: '#ffffff' }}>{name}</Text>
-        </Box>
-      ))}
-      <Text style={{ fontSize: 10, color: c.textDim }}>HEX:</Text>
-      <Box style={{ backgroundColor: c.primary, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-        <Text style={{ fontSize: 9, color: '#ffffff' }}>accent</Text>
-      </Box>
-      <Box style={{ backgroundColor: c.success, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-        <Text style={{ fontSize: 9, color: '#ffffff' }}>green</Text>
-      </Box>
-      <Box style={{ backgroundColor: c.warning, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-        <Text style={{ fontSize: 9, color: '#ffffff' }}>orange</Text>
-      </Box>
-      <Box style={{ backgroundColor: c.error, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-        <Text style={{ fontSize: 9, color: '#ffffff' }}>red</Text>
-      </Box>
-      <Box style={{ backgroundColor: c.accent, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-        <Text style={{ fontSize: 9, color: '#ffffff' }}>purple</Text>
-      </Box>
+    <Box
+      style={{
+        alignSelf: 'flex-start',
+        backgroundColor: color,
+        borderRadius: 4,
+        paddingLeft: 6,
+        paddingRight: 6,
+        paddingTop: 2,
+        paddingBottom: 2,
+      }}
+    >
+      <Text style={{ fontSize: 9, color: c.bg, fontWeight: 'normal' }}>{label}</Text>
     </Box>
   );
 }
 
-function makeItems(prefix: string, count: number) {
-  return Array.from({ length: count }, (_, i) => `${prefix} ${i + 1}`);
-}
-
-function MiniCard({ title, subtitle, color }: { title: string; subtitle: string; color: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10, marginBottom: 6 }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-        <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>{title}</Text>
-      </Box>
-      <Text style={{ fontSize: 11, color: c.textDim, marginTop: 4 }}>{subtitle}</Text>
-    </Box>
-  );
-}
-
-function TallList({ items, color }: { items: string[]; color: string }) {
-  const c = useThemeColors();
-  return (
-    <>
-      {items.map((item, i) => (
-        <Box key={i} style={{
-          backgroundColor: i % 2 === 0 ? c.surface : c.surfaceHover,
-          paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6,
-          borderRadius: 4, marginBottom: 2,
-        }}>
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
-            <Text style={{ fontSize: 12, color: c.text }}>{item}</Text>
-          </Box>
-        </Box>
-      ))}
-    </>
-  );
-}
-
-function PanelHeader({ title, subtitle, color }: { title: string; subtitle: string; color: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ padding: 8, borderBottomWidth: 1, borderBottomColor: c.border }}>
-      <Text style={{ fontSize: 13, color, fontWeight: 'normal' }}>{title}</Text>
-      <Text style={{ fontSize: 10, color: c.textDim }}>{subtitle}</Text>
-    </Box>
-  );
-}
-
-function ScrollPanel({ title, subtitle, titleColor, children }: {
-  title: string; subtitle: string; titleColor: string; children: React.ReactNode;
+function SectionBlock({
+  title,
+  subtitle,
+  height,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  height: number;
+  children: React.ReactNode;
 }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexGrow: 1, backgroundColor: c.bgElevated, borderRadius: 8, overflow: 'hidden' }}>
-      <PanelHeader title={title} subtitle={subtitle} color={titleColor} />
+    <Box
+      style={{
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: c.border,
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: c.border,
+          paddingLeft: 10,
+          paddingRight: 10,
+          paddingTop: 8,
+          paddingBottom: 8,
+        }}
+      >
+        <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>{title}</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>{subtitle}</Text>
+      </Box>
+      <Box
+        style={{
+          width: '100%',
+          height,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 8,
+          paddingBottom: 8,
+        }}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+function ReachColumn({ title, subtitle, color, rows }: ReachColumnProps) {
+  const c = useThemeColors();
+  return (
+    <Box
+      style={{
+        flexGrow: 1,
+        borderWidth: 1,
+        borderColor: c.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: c.surface,
+      }}
+    >
+      <Box
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: c.border,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+        }}
+      >
+        <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>{subtitle}</Text>
+      </Box>
       <ScrollView style={{ flexGrow: 1 }}>
-        <Box style={{ padding: 6 }}>{children}</Box>
+        <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 4 }}>
+          <ReachTag label="TOP REACHABLE" color={color} />
+          {rows.map((line, i) => (
+            <Box
+              key={`${title}-row-${i}`}
+              style={{
+                backgroundColor: i % 2 === 0 ? c.surface : c.surfaceHover,
+                borderRadius: 5,
+                paddingLeft: 6,
+                paddingRight: 6,
+                paddingTop: 6,
+                paddingBottom: 6,
+              }}
+            >
+              <Text style={{ fontSize: 10, color: c.textDim }}>{`line ${String(i + 1).padStart(3, '0')}`}</Text>
+              <Text style={{ fontSize: 11, color: c.text }}>{line}</Text>
+            </Box>
+          ))}
+          <ReachTag label="BOTTOM REACHABLE" color={color} />
+        </Box>
+      </ScrollView>
+    </Box>
+  );
+}
+
+function WideLane({ title, color, packets }: WideLaneProps) {
+  const c = useThemeColors();
+  return (
+    <Box
+      style={{
+        width: 280,
+        height: '100%',
+        backgroundColor: c.surface,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: c.border,
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: c.border,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+        }}
+      >
+        <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>Vertical and horizontal pressure in one lane</Text>
+      </Box>
+      <ScrollView style={{ flexGrow: 1 }}>
+        <Box style={{ gap: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }}>
+          <ReachTag label="LANE TOP" color={color} />
+          {packets.map((packet, i) => (
+            <Box
+              key={`${title}-packet-${i}`}
+              style={{
+                borderRadius: 5,
+                borderWidth: 1,
+                borderColor: c.border,
+                backgroundColor: i % 2 === 0 ? c.surface : c.surfaceHover,
+                paddingLeft: 6,
+                paddingRight: 6,
+                paddingTop: 6,
+                paddingBottom: 6,
+                gap: 3,
+              }}
+            >
+              <Text style={{ fontSize: 10, color: c.textDim }}>{`packet ${String(i + 1).padStart(2, '0')}`}</Text>
+              <ScrollView horizontal style={{ width: '100%' }}>
+                <Box style={{ paddingRight: 12 }}>
+                  <Text style={{ fontSize: 11, color: c.text }}>{packet}</Text>
+                </Box>
+              </ScrollView>
+            </Box>
+          ))}
+          <ReachTag label="LANE BOTTOM" color={color} />
+        </Box>
+      </ScrollView>
+    </Box>
+  );
+}
+
+function ClipProbePanel({
+  title,
+  color,
+  rows,
+}: {
+  title: string;
+  color: string;
+  rows: string[];
+}) {
+  const c = useThemeColors();
+  return (
+    <Box
+      style={{
+        flexGrow: 1,
+        borderWidth: 1,
+        borderColor: c.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: c.surface,
+      }}
+    >
+      <Box
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: c.border,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+        }}
+      >
+        <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>Rounded clipping with nested scroll and long labels</Text>
+      </Box>
+      <ScrollView style={{ flexGrow: 1 }}>
+        <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 6 }}>
+          <ReachTag label="CLIP TOP" color={color} />
+          {rows.map((row, i) => (
+            <Box
+              key={`${title}-clip-${i}`}
+              style={{
+                height: 56,
+                borderRadius: 6,
+                overflow: 'hidden',
+                borderWidth: 1,
+                borderColor: c.border,
+                backgroundColor: c.bgElevated,
+              }}
+            >
+              <Box
+                style={{
+                  height: 4,
+                  width: `${25 + (i * 11) % 70}%`,
+                  backgroundColor: color,
+                }}
+              />
+              <Box
+                style={{
+                  paddingLeft: 6,
+                  paddingRight: 6,
+                  paddingTop: 5,
+                  paddingBottom: 5,
+                  gap: 2,
+                }}
+              >
+                <Text style={{ fontSize: 10, color: c.textDim }}>{`probe ${String(i + 1).padStart(2, '0')}`}</Text>
+                <ScrollView horizontal style={{ width: '100%' }}>
+                  <Box style={{ paddingRight: 12 }}>
+                    <Text style={{ fontSize: 11, color: c.text }}>{row}</Text>
+                  </Box>
+                </ScrollView>
+              </Box>
+            </Box>
+          ))}
+          <ReachTag label="CLIP BOTTOM" color={color} />
+        </Box>
       </ScrollView>
     </Box>
   );
@@ -104,125 +297,94 @@ function ScrollPanel({ title, subtitle, titleColor, children }: {
 
 export function OverflowStressStory() {
   const c = useThemeColors();
-  const tagColors = [c.primary, c.success, c.warning, c.accent, c.error];
 
-  const navItems = makeItems('Nav Link', 40);
-  const logEntries = makeItems('Log entry', 60);
-  const notifications = makeItems('Notification', 30);
-  const fileList = makeItems('document_', 50).map((f, i) =>
-    `${f}.${['tsx', 'lua', 'json', 'md', 'ts'][i % 5]}`
-  );
-  const chatMessages = makeItems('User message', 45);
-  const tags = makeItems('Tag #', 80);
+  const feedRows = makeRows('feed', 70);
+  const taskRows = makeRows('task', 78);
+  const metricRows = makeRows('metric', 72);
+
+  const primaryPackets = makePackets('primary', 20);
+  const warningPackets = makePackets('warning', 20);
+  const errorPackets = makePackets('error', 20);
+  const accentPackets = makePackets('accent', 20);
+
+  const clipRowsA = makePackets('clipA', 26);
+  const clipRowsB = makePackets('clipB', 26);
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
-      {/* RGBA vs HEX comparison bar */}
-      <RGBADebugBar />
-
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
-
-      {/* Left sidebar */}
-      <Box style={{ width: 160, height: '100%', backgroundColor: c.bgElevated, borderRightWidth: 1, borderRightColor: c.border }}>
-        <PanelHeader title="Navigation" subtitle={`${navItems.length} items`} color={c.primary} />
-        <ScrollView style={{ flexGrow: 1 }}>
-          <Box style={{ padding: 4 }}>
-            <TallList items={navItems} color={c.primary} />
+      <ScrollView style={{ width: '100%', height: '100%' }}>
+        <Box
+          style={{
+            width: '100%',
+            gap: 10,
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 12,
+            paddingBottom: 24,
+          }}
+        >
+          <Box
+            style={{
+              width: '100%',
+              backgroundColor: c.bgElevated,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: c.border,
+              paddingLeft: 10,
+              paddingRight: 10,
+              paddingTop: 8,
+              paddingBottom: 8,
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 14, color: c.text, fontWeight: 'normal' }}>Overflow Stress Harness</Text>
+            <Text style={{ fontSize: 11, color: c.textDim }}>
+              This scenario is heavy on purpose. Every panel includes top and bottom reachable markers.
+            </Text>
+            <Text style={{ fontSize: 11, color: c.textDim }}>
+              If any marker cannot be brought into view, overflow behavior has regressed.
+            </Text>
           </Box>
-        </ScrollView>
-      </Box>
 
-      {/* Center content */}
-      <Box style={{ flexGrow: 1, height: '100%', padding: 8, gap: 8 }}>
-
-        {/* Top row */}
-        <Box style={{ flexDirection: 'row', gap: 8, flexGrow: 1 }}>
-          <ScrollPanel title="System Logs" subtitle={`${logEntries.length} entries`} titleColor={c.success}>
-            {logEntries.map((entry, i) => (
-              <Box key={i} style={{
-                paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-                marginBottom: 1,
-                backgroundColor: i % 2 === 0 ? c.surface : c.surfaceHover,
-                borderRadius: 3,
-              }}>
-                <Box style={{ flexDirection: 'row', gap: 6 }}>
-                  <Text style={{ fontSize: 10, color: c.textDim }}>{String(i).padStart(3, '0')}</Text>
-                  <Text style={{ fontSize: 11, color: i % 7 === 0 ? c.warning : c.text }}>{entry}</Text>
-                </Box>
-              </Box>
-            ))}
-          </ScrollPanel>
-
-          <ScrollPanel title="Chat" subtitle={`${chatMessages.length} messages`} titleColor={c.accent}>
-            {chatMessages.map((msg, i) => (
-              <MiniCard
-                key={i}
-                title={`User ${(i % 5) + 1}`}
-                subtitle={msg}
-                color={tagColors[i % 5]}
-              />
-            ))}
-          </ScrollPanel>
-        </Box>
-
-        {/* Bottom row */}
-        <Box style={{ flexDirection: 'row', gap: 8, flexGrow: 1 }}>
-          <ScrollPanel title="Files" subtitle={`${fileList.length} files`} titleColor={c.warning}>
-            <TallList items={fileList} color={c.warning} />
-          </ScrollPanel>
-
-          <ScrollPanel title="Notifications" subtitle={`${notifications.length} alerts`} titleColor={c.error}>
-            {notifications.map((n, i) => (
-              <MiniCard
-                key={i}
-                title={n}
-                subtitle={`Priority: ${['Low', 'Medium', 'High', 'Critical'][i % 4]}`}
-                color={[c.textDim, c.warning, c.error, c.error][i % 4]}
-              />
-            ))}
-          </ScrollPanel>
-        </Box>
-
-        {/* Tag bar */}
-        <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, overflow: 'hidden', height: 50 }}>
-          <Box style={{ padding: 6, borderBottomWidth: 1, borderBottomColor: c.border }}>
-            <Text style={{ fontSize: 10, color: c.textDim }}>{`Tags (${tags.length})`}</Text>
-          </Box>
-          <ScrollView style={{ flexGrow: 1 }} horizontal>
-            <Box style={{ flexDirection: 'row', gap: 4, padding: 4 }}>
-              {tags.map((tag, i) => (
-                <Box key={i} style={{
-                  backgroundColor: tagColors[i % 5],
-                  borderRadius: 10,
-                  paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2,
-                }}>
-                  <Text style={{ fontSize: 10, color: '#ffffff' }}>{tag}</Text>
-                </Box>
-              ))}
+          <SectionBlock
+            title="1) Vertical reachability under heavy row pressure"
+            subtitle="Three independent columns with dense content and wrapped text"
+            height={280}
+          >
+            <Box style={{ width: '100%', height: '100%', flexDirection: 'row', gap: 8 }}>
+              <ReachColumn title="Event Feed" subtitle={`${feedRows.length} rows`} color={c.primary} rows={feedRows} />
+              <ReachColumn title="Task Queue" subtitle={`${taskRows.length} rows`} color={c.success} rows={taskRows} />
+              <ReachColumn title="Metrics" subtitle={`${metricRows.length} rows`} color={c.warning} rows={metricRows} />
             </Box>
-          </ScrollView>
-        </Box>
-      </Box>
+          </SectionBlock>
 
-      {/* Right sidebar */}
-      <Box style={{ width: 150, height: '100%', backgroundColor: c.bgElevated, borderLeftWidth: 1, borderLeftColor: c.border }}>
-        <PanelHeader title="Details" subtitle="" color={c.success} />
-        <ScrollView style={{ flexGrow: 1 }}>
-          <Box style={{ padding: 6 }}>
-            {Array.from({ length: 25 }, (_, i) => (
-              <Box key={i} style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 11, color: c.primary, fontWeight: 'normal' }}>{`Section ${i + 1}`}</Text>
-                <Text style={{ fontSize: 10, color: c.textDim }}>Lorem ipsum dolor sit amet consectetur adipiscing elit</Text>
-                <Box style={{ height: 3, backgroundColor: c.border, borderRadius: 1, marginTop: 4 }}>
-                  <Box style={{ height: 3, width: `${20 + (i * 13) % 80}%`, backgroundColor: c.success, borderRadius: 1 }} />
-                </Box>
+          <SectionBlock
+            title="2) Wide board with mixed-axis overflow"
+            subtitle="Horizontal board overflow plus vertical lane overflow plus unbroken packets"
+            height={300}
+          >
+            <ScrollView horizontal style={{ width: '100%', height: '100%' }}>
+              <Box style={{ flexDirection: 'row', gap: 8, height: '100%', paddingRight: 12 }}>
+                <WideLane title="Primary Lane" color={c.primary} packets={primaryPackets} />
+                <WideLane title="Warning Lane" color={c.warning} packets={warningPackets} />
+                <WideLane title="Error Lane" color={c.error} packets={errorPackets} />
+                <WideLane title="Accent Lane" color={c.accent} packets={accentPackets} />
               </Box>
-            ))}
-          </Box>
-        </ScrollView>
-      </Box>
+            </ScrollView>
+          </SectionBlock>
 
-      </Box>{/* close row wrapper */}
+          <SectionBlock
+            title="3) Rounded clipping and nested horizontal probes"
+            subtitle="Clip boundaries should stay correct while inner content remains scroll-reachable"
+            height={280}
+          >
+            <Box style={{ width: '100%', height: '100%', flexDirection: 'row', gap: 8 }}>
+              <ClipProbePanel title="Clip Probe A" color={c.accent} rows={clipRowsA} />
+              <ClipProbePanel title="Clip Probe B" color={c.error} rows={clipRowsB} />
+            </Box>
+          </SectionBlock>
+        </Box>
+      </ScrollView>
     </Box>
   );
 }

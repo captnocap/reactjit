@@ -143,7 +143,7 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
   const title = doc?.title ?? 'Title';
   const description = doc?.description ?? 'A short description of the component and what it does.';
   const overview = doc?.overview ?? 'A short paragraph describing what this component is and when to use it.';
-  const usageCode = doc?.usageSnippet || doc?.examples[0]?.code || '<Component\n  propA="value"\n  propB={123}\n>\n  <Child />\n</Component>';
+  const usageCode = doc?.usageSnippet || doc?.examples[0]?.code || '<Component propA="value" propB={123}>\n  <Child />\n</Component>';
   const criticalRules = doc?.criticalRules ?? PLACEHOLDER_BEHAVIOR;
   const props = doc?.props ?? PLACEHOLDER_PROPS;
   const callbacks = doc?.callbacks ?? PLACEHOLDER_CALLBACKS;
@@ -234,8 +234,8 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
             <VerticalDivider />
 
             {/* Right: doc sections */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-              <Box style={{ padding: 14, gap: 10 }}>
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
 
                 {/* ── Overview ── */}
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'OVERVIEW'}</Text>

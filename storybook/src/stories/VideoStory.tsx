@@ -140,17 +140,29 @@ export function VideoStory() {
   const c = useThemeColors();
   const [status, setStatus] = useState('Idle');
   const [time, setTime] = useState('0:00');
+  const [droppedSrc, setDroppedSrc] = useState<string | null>(null);
+
+  const videoSrc = droppedSrc || DEMO_VIDEO_SRC;
 
   return (
     <StoryPage>
       <StorySection index={1} title="Video primitive (`Video`)">
         <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-          The Love2D runtime renders through libmpv. Formats like MP4, WebM, MKV, and OGV
-          are loaded directly without a Theora conversion pass.
+          {droppedSrc
+            ? `Playing: ${droppedSrc.split('/').pop()}`
+            : 'Drop a video file onto this window to test playback.'}
         </Text>
-        <Box style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}>
+        <Box
+          onFileDrop={(e: any) => {
+            if (e?.filePath) {
+              setDroppedSrc(e.filePath);
+              setStatus('Loading...');
+            }
+          }}
+          style={{ width: '100%', maxWidth: 520, gap: 8, alignItems: 'center' }}
+        >
           <Video
-            src={DEMO_VIDEO_SRC}
+            src={videoSrc}
             style={{
               width: '100%',
               aspectRatio: 16 / 9,

@@ -24,7 +24,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const STRESS_TESTS: StressDef[] = [
-  { id: 'overflow', name: 'Overflow Stress', description: 'Dense scrolling regions and nested layout pressure.', category: 'Layout', component: OverflowStressStory },
+  { id: 'overflow', name: 'Overflow Stress', description: 'Reachability probes with mixed-axis overflow and nested clipping.', category: 'Layout', component: OverflowStressStory },
   { id: 'trading', name: 'Trading Perf Lab', description: 'High-frequency charting and order-book rendering stress.', category: 'Performance', component: TradingPerfLabStory },
   { id: 'galaxy', name: '3D Cube Galaxy', description: '3D framework scene load with interactive updates.', category: 'Graphics', component: Scene3DFrameworkGalaxyStory },
   { id: 'llms', name: 'llms.txt Reader', description: 'Large text/content parsing and render throughput.', category: 'I/O', component: LlmsTxtReader },
