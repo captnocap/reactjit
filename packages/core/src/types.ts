@@ -539,6 +539,8 @@ export interface InputProps {
   submitOnEnter?: boolean;
   /** Enable inline spell checking with red underlines (default: false). */
   spellCheck?: boolean;
+  /** Wrap long lines at the viewport edge instead of horizontal scroll (default: false). */
+  wordWrap?: boolean;
   /** Show line numbers in the gutter (default: false). Implies multiline. */
   lineNumbers?: boolean;
   /** Enable JSX syntax highlighting (default: false). Implies multiline. */
