@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useLuaInterval } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { Slider } from '../../../packages/core/src';
 import {
   Knob,
   Fader,
@@ -12,6 +13,44 @@ import {
 } from '../../../packages/controls/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
+function SliderDemo() {
+  const c = useThemeColors();
+  const [v1, setV1] = useState(0.5);
+  const [v2, setV2] = useState(30);
+
+  return (
+    <StorySection index={1} title="Sliders">
+      <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+        Horizontal sliders with drag interaction. Supports custom ranges, step snapping, and colors.
+      </Text>
+      <Box style={{ width: '100%', maxWidth: 420, gap: 8, alignItems: 'center' }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Slider (0-1)</Text>
+        <Slider
+          style={{ width: 320 }}
+          value={v1}
+          onValueChange={setV1}
+          activeTrackColor={c.primary}
+        />
+        <Text style={{ color: c.text, fontSize: 12 }}>{`Value: ${v1.toFixed(2)}`}</Text>
+      </Box>
+      <Box style={{ width: '100%', maxWidth: 420, gap: 8, alignItems: 'center' }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Slider (0-100, step 10)</Text>
+        <Slider
+          style={{ width: 320 }}
+          value={v2}
+          minimumValue={0}
+          maximumValue={100}
+          step={10}
+          onValueChange={setV2}
+          activeTrackColor="#22c55e"
+          thumbColor="#22c55e"
+        />
+        <Text style={{ color: c.text, fontSize: 12 }}>{`Value: ${v2}`}</Text>
+      </Box>
+    </StorySection>
+  );
+}
+
 function KnobDemo() {
   const c = useThemeColors();
   const [v1, setV1] = useState(0.5);
@@ -20,7 +59,7 @@ function KnobDemo() {
   const [v4, setV4] = useState(440);
 
   return (
-    <StorySection index={1} title="Knobs">
+    <StorySection index={2} title="Knobs">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Rotary controls with drag interaction. Supports custom ranges, colors, sizes, and disabled state.
       </Text>
@@ -66,7 +105,7 @@ function FaderDemo() {
   const [v4, setV4] = useState(0.3);
 
   return (
-    <StorySection index={2} title="Faders">
+    <StorySection index={3} title="Faders">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Vertical channel faders for mixer-style layouts. Drag to set level.
       </Text>
@@ -96,7 +135,7 @@ function MeterDemo() {
   });
 
   return (
-    <StorySection index={3} title="Meters">
+    <StorySection index={4} title="Meters">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Animated level meters with peak hold. Vertical and horizontal orientations.
       </Text>
@@ -121,7 +160,7 @@ function LEDDemo() {
   useLuaInterval(500, () => setBlink((b) => !b));
 
   return (
-    <StorySection index={4} title="LED Indicators">
+    <StorySection index={5} title="LED Indicators">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Status indicators with on/off glow. Supports custom colors and sizes.
       </Text>
@@ -142,7 +181,7 @@ function PadDemo() {
   const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444', '#8b5cf6', '#14b8a6'];
 
   return (
-    <StorySection index={5} title="Pad Buttons">
+    <StorySection index={6} title="Pad Buttons">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         Toggle pads for triggering samples or toggling states. Click to activate.
       </Text>
@@ -190,7 +229,7 @@ function SequencerDemo() {
   });
 
   return (
-    <StorySection index={6} title="Step Sequencer + Transport">
+    <StorySection index={7} title="Step Sequencer + Transport">
       <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
         16-step pattern sequencer with 4 tracks. Transport bar controls playback and shows position.
       </Text>
@@ -223,6 +262,7 @@ function SequencerDemo() {
 export function ControlsStory() {
   return (
     <StoryPage>
+      <SliderDemo />
       <KnobDemo />
       <FaderDemo />
       <MeterDemo />

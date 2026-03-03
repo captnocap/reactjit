@@ -7,181 +7,151 @@ description: "Scaffold and populate a Layout1-style documentation story for a Re
 
 Generate a Layout1 documentation page for a ReactJIT component.
 
-## How it works
+## THE RULE (NON-NEGOTIABLE)
 
-Stories use `<ComponentDoc>` from `_shared/ComponentDoc.tsx`. Pass a `docKey` and the OVERVIEW, USAGE, BEHAVIOR, PROPS, and CALLBACKS sections auto-populate from `content/sections/*.txt` via `content.json`. No manual doc writing needed.
+**There is no ComponentDoc. There is no shared wrapper. There never will be again.**
 
-## Step 1: Generate
+Every story is a FLAT file that inlines all its documentation as static hoisted constants.
+You read the .txt doc file, you copy the values by hand into const declarations at the top
+of the story file, and the JSX references those constants. That's it.
 
-```bash
-bash scripts/scaffold_story.sh <ComponentName> <Section>
-```
+**WHY:** A previous version of this used a `<ComponentDoc>` wrapper component. That wrapper
+re-rendered every frame, fed CodeBlock a new string identity at 60fps, and caused the Lua
+tokenizer to re-run continuously — an 18-hour memory leak. The fix is structural: static
+constants hoisted outside the component body = stable identity = no churn. Never re-wrap.
 
-Section defaults to `Core`. Valid: `Core | Packages | Demos | Stress Test | Dev | Bad Habits | Layouts`.
+## Step 1: Read the doc file
 
-Creates `storybook/src/stories/<Name>Story.tsx` and registers it in `index.ts`.
-
-## Step 2: Verify docs exist
-
-Check that a corresponding doc file exists in `content/sections/`:
+Find the corresponding doc .txt file:
 
 ```bash
 ls content/sections/*/$(echo "<ComponentName>" | tr '[:upper:]' '[:lower:]').txt
 ```
 
-The `docKey` is the lowercase filename without extension (e.g. `"box"`, `"scrollview"`, `"textinput"`). If no doc file exists, omit `docKey` and the story renders with placeholder content.
+Read it. You'll need values from these sections:
 
-## Step 3: Edit the generated file
+| Doc section          | Maps to story constant     | Maps to UI section     |
+|----------------------|----------------------------|------------------------|
+| METADATA.title       | Used inline in header      | Header title           |
+| METADATA.description | Used inline in header      | Header description     |
+| METADATA.category    | Used inline in footer      | Footer breadcrumb      |
+| API/SYNTAX import    | Header snippet pill        | Syntax-colored pill    |
+| API/SYNTAX usage     | `USAGE_CODE` const         | USAGE CodeBlock        |
+| API/SYNTAX props     | `PROPS` const (non-on*)    | PROPS two-column       |
+| API/SYNTAX props     | `CALLBACKS` const (on*)    | CALLBACKS list         |
+| OVERVIEW paragraph   | Used inline                | OVERVIEW section       |
+| CRITICAL RULES       | `BEHAVIOR_NOTES` const     | BEHAVIOR bullet list   |
+| EXAMPLES first block | `STARTER_CODE` const       | Playground starter     |
 
-The scaffold generates a thin file like this:
+## Step 2: Create the story file
 
-```tsx
-import React from 'react';
-import { ComponentDoc } from './_shared/ComponentDoc';
+Copy the structure from `storybook/src/stories/Layout1Story.tsx` — the canonical template.
 
-export function BoxStory() {
-  return <ComponentDoc docKey="box" />;
-}
-```
-
-Customize as needed:
-
-### A. docKey (required for docs integration)
-
-The lowercase name matching a file in `content/sections/`. This auto-populates:
-- **OVERVIEW** — from the doc's overview section
-- **USAGE** — from the second code block in the API section
-- **BEHAVIOR** — from criticalRules in the doc
-- **PROPS** — parsed from the API markdown table (non-on* entries)
-- **CALLBACKS** — parsed from the API markdown table (on* entries)
-- **Header** — title, description, import snippet all from metadata
-
-### B. starterCode (optional)
-
-Override the playground's initial code. Falls back to the doc's first example.
+Replace ALL placeholder text with real values from the doc file. Every value goes into a
+`const` declaration at the TOP of the file, outside the component function.
 
 ```tsx
-const STARTER_CODE = `<Box style={{ padding: 16 }}>
-  <Text style={{ fontSize: 14 }}>Hello</Text>
+// ── Static data from content/sections/05-components/box.txt ──
+
+const USAGE_CODE = `<Box style={{ padding: 16 }}>
+  <Text>Hello</Text>
 </Box>`;
 
-<ComponentDoc docKey="box" starterCode={STARTER_CODE} />
+const STARTER_CODE = `<Box style={{...}}>...</Box>`;
+
+const PROPS: [string, string, string][] = [
+  ['style', 'Style', 'layout'],
+  ['children', 'ReactNode', 'layers'],
+  // ... every prop from the doc, by hand
+];
+
+const CALLBACKS: [string, string, string][] = [
+  ['onClick', '(e) => void', 'pointer'],
+  // ... every on* handler from the doc, by hand
+];
+
+const BEHAVIOR_NOTES = [
+  'Box is a flex container. Default direction is column.',
+  // ... from critical rules or key behavioral notes
+];
 ```
 
-### C. preview (optional — but you should always write one)
+**Prop tuples are [name, type, icon].** Pick a relevant Lucide icon name for each prop.
 
-Custom left-column preview content. Falls back to default wireframes, but a custom preview
-that uses icons relevant to the component is **always better**.
+## Step 3: Build the preview
 
-**Use icons in previews.** The framework ships ~1936 Lucide icons. Use `<Image src="icon-name" />`
-with bare icon names (no path, no extension). This renders as a vector icon automatically.
-Icon names are case-insensitive and support kebab-case: `"heart"`, `"Heart"`, `"arrow-down"` all work.
+The left panel shows a visual demonstration of the component. Use:
+- Styled boxes with `tooltip={styleTooltip({...})}` for hover info
+- `<Image src="icon-name" />` with icons relevant to the component
+- `<Wireframe label="X" style={{...}} />` for structural placeholders
 
-Pick icons that **relate to what the component does** — not random decoration:
-- A Button story → `mouse-pointer-click`, `pointer`
-- A Search story → `search`, `filter`, `list-filter`
-- A Timer story → `clock`, `timer`, `alarm-clock`
-- A Modal story → `panel-top`, `maximize-2`, `x`
-- An Audio story → `volume-2`, `music`, `headphones`
-- A Chart story → `bar-chart`, `trending-up`, `pie-chart`
+Pick 1-3 icons that represent the component's core function. Examples:
+- Button → `mouse-pointer-click`, `pointer`
+- Search → `search`, `filter`
+- Modal → `panel-top`, `x`
+- Chart → `bar-chart`, `trending-up`
 
-Browse all icons in the storybook's Icons page or check `packages/icons/src/iconNames.ts`.
+## Step 4: Syntax-color the header snippet
 
-Use `styleTooltip()` for hover tooltips on styled elements:
+The header pill uses colored Text fragments for JSX syntax:
 
 ```tsx
-import { ComponentDoc, styleTooltip, Wireframe } from './_shared/ComponentDoc';
-import { Box, Text, Image } from '../../../../packages/core/src';
-import { useThemeColors } from '../../../../packages/theme/src';
-
-function ButtonPreview() {
-  const c = useThemeColors();
-  return (
-    <>
-      <Box style={{
-        flexDirection: 'row', alignItems: 'center', gap: 8,
-        backgroundColor: c.primary, borderRadius: 8, padding: 12,
-      }}>
-        <Image src="mouse-pointer-click" w={16} h={16} style={{ color: 'white' }} />
-        <Text style={{ color: 'white', fontSize: 11 }}>{'Click me'}</Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Image src="pointer" w={14} h={14} style={{ color: c.muted }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Hover, press, release states'}</Text>
-      </Box>
-    </>
-  );
-}
-
-<ComponentDoc docKey="button" preview={<ButtonPreview />} />
+<Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
+<Text style={{ color: SYN.component, fontSize: 10 }}>{'Box'}</Text>
+<Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+<Text style={{ color: SYN.prop, fontSize: 10 }}>{'style'}</Text>
+<Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+<Text style={{ color: SYN.value, fontSize: 10 }}>{'{...}'}</Text>
+<Text style={{ color: SYN.tag, fontSize: 10 }}>{' />'}</Text>
 ```
 
-### D. section (optional)
+## Step 5: Register and validate
 
-Override the footer breadcrumb. Defaults to the doc's category.
+Add the import + entry in `storybook/src/stories/index.ts`:
 
-## Step 4: Validate
+```tsx
+import { BoxStory } from './BoxStory';
+// ...
+{ id: 'box', title: 'Box', section: 'Core', component: BoxStory },
+```
+
+Then:
 
 ```bash
-rjit lint
+make build-storybook-love   # verify it builds
+rjit lint                   # if inside a project context
 ```
+
+## What NOT to do
+
+- **NEVER** create a shared ComponentDoc, DocPage, StoryDoc, or ANY wrapper component
+- **NEVER** build a hook/loader that reads .txt files at runtime (useDocContent is dead)
+- **NEVER** pass doc content as props to a shared component
+- **NEVER** create strings/objects inside the component body — hoist everything as `const`
+- **NEVER** import from `_shared/ComponentDoc` — it no longer exists
+- Import primitives from `'../../../packages/core/src'` — never `@reactjit/core`
+- Import theme from `'../../../packages/theme/src'`
+- Export must be named `<Name>Story`
 
 ## Layout reference
 
 ```
 ┌─────────────────────────────────────────┐
-│ Title  <import />           description │  Header (from docs metadata)
+│ [icon] Title  <Snippet />  description  │  Header (from docs metadata)
 ├───────────────────┬─────────────────────┤
-│                   │ OVERVIEW            │  (from docs)
-│  Preview          │ USAGE (CodeBlock)   │  (from docs API section)
-│  (ScrollView)     │ BEHAVIOR            │  (from docs criticalRules)
-│  custom or        │ ───────────────     │
-│  default          │ PROPS               │  (from docs API table)
-│  wireframes       │  name   Type        │
-│                   │ ───────────────     │
-│                   │ CALLBACKS           │  (from docs API table, on* entries)
-│                   │  onX    sig         │
+│                   │ OVERVIEW            │  inline from docs
+│  Preview          │ USAGE (CodeBlock)   │  USAGE_CODE const
+│  (centered)       │ BEHAVIOR            │  BEHAVIOR_NOTES const
+│  styled boxes     │ ───────────────     │
+│  + icons          │ PROPS               │  PROPS const [name,type,icon]
+│  + tooltips       │  [icon] name  Type  │
+│  + wireframes     │ ───────────────     │
+│                   │ CALLBACKS           │  CALLBACKS const [name,sig,icon]
+│  (centered)       │  [icon] onX  sig    │  (centered)
 ├───────────────────┴─────────────────────┤
-│ Section / Name         [Playground] v0  │  Footer
+│ [folder] Section / [icon] Name  [Play]  │  Footer
 └─────────────────────────────────────────┘
 ```
 
+Both panels are centered (ScrollView with justifyContent/alignItems center).
 Playground mode flips center to: left=TextEditor, right=live Preview.
-
-## Rules
-
-- Import `ComponentDoc` from `'./_shared/ComponentDoc'`
-- Import helpers (`styleTooltip`, `Wireframe`) from the same path if needed
-- Import primitives from `'../../../../packages/core/src'` — never `@reactjit/core`
-- Import theme from `'../../../../packages/theme/src'`
-- Export must be named `<Name>Story`
-- The docKey handles all documentation — do NOT manually write OVERVIEW, USAGE, PROPS, etc.
-- If no doc .txt file exists for this component, omit docKey (placeholders render)
-
-## Icons (NON-NEGOTIABLE)
-
-Every story with a custom preview MUST use at least one `<Image src="icon-name" />` that is
-**relevant to the component being documented.** The shared layout already uses icons for section
-headers, breadcrumbs, and the playground button. Your job is to bring domain-relevant icons
-into the preview area so the story visually communicates what the component does at a glance.
-
-**How it works:** `<Image src="icon-name" />` resolves bare names (no `/`, no `.`) to vector
-icons from the Lucide set (~1936 icons). Case-insensitive, kebab-case supported.
-
-```tsx
-<Image src="heart" w={16} h={16} />                          {/* sized */}
-<Image src="search" w={12} h={12} style={{ color: c.muted }} /> {/* colored */}
-<Image src="arrow-right" w={10} h={10} style={{ color: c.primary }} />
-```
-
-**Do NOT:**
-- Use icons as meaningless decoration — every icon must relate to the component's purpose
-- Use only wireframes when an icon would communicate better
-- Skip icons entirely and ship a wireframe-only preview
-- Import from `@reactjit/icons` in stories — use `<Image src="name" />` instead
-
-**Do:**
-- Pick 1-3 icons that represent the component's core function
-- Use icons at small sizes (10-20px) as visual anchors alongside text
-- Color icons with theme tokens (`c.muted`, `c.primary`, `c.text`)
-- Combine icons with styled boxes to create mini-demonstrations
