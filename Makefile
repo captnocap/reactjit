@@ -448,6 +448,7 @@ endif
 	cp -r packages/controls cli/runtime/reactjit/controls
 	cp -r packages/geo cli/runtime/reactjit/geo
 	cp -r packages/theme cli/runtime/reactjit/theme
+	cp -r packages/math cli/runtime/reactjit/math
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts/base ]; then \

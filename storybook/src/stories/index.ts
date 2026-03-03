@@ -50,6 +50,7 @@ import { NoclipMazeStory } from './NoclipMazeStory';
 import { FleetStory } from './FleetStory';
 import { OriginStory } from './OriginStory';
 import { IconStory } from './IconStory';
+import { MathStory } from './MathStory';
 import { TailwindStory } from './TailwindStory';
 import { HtmlCompatStory } from './HtmlCompatStory';
 import { MergePrecedenceStory } from './MergePrecedenceStory';
@@ -93,6 +94,7 @@ export const stories: StoryDef[] = [
   { id: 'terminal', title: 'Terminal (PTY)', section: 'Packages', component: TerminalStory },
   { id: 'semantic-terminal', title: 'Semantic Terminal', section: 'Packages', component: SemanticTerminalStory },
   { id: 'fleet', title: 'Fleet', section: 'Packages', component: FleetStory },
+  { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
