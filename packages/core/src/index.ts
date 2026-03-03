@@ -95,6 +95,9 @@ export {
 // GIF recorder (capture Love2D window as animated GIF via ffmpeg)
 export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
 
+// Icon registry (populated by @reactjit/icons on import)
+export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
+
 // Primitives
 export { Box, Row, Col, Text, Image, FocusGroup } from './primitives';
 
@@ -378,3 +381,25 @@ export {
   type FleetQuestion,
   type FleetResult,
 } from './useFleet';
+
+// Utilities (Lua-backed: IDs, strings, time, deep equality, safe JSON)
+export {
+  useId,
+  useUUID,
+  useDeepEqual,
+  useTruncate,
+  useSlugify,
+  useCamelCase,
+  useSnakeCase,
+  useKebabCase,
+  usePascalCase,
+  usePluralize,
+  useTimeAgo,
+  useFormatDate,
+  useMsParse,
+  useMsFormat,
+  useDuration,
+  useSafeStringify,
+  useUtilsBatch,
+  type Duration,
+} from './useUtils';
