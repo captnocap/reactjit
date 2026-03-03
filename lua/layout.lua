@@ -923,14 +923,16 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
       if not CodeBlockModule then
         CodeBlockModule = require("lua.codeblock")
       end
-      local measured = CodeBlockModule.measure(node, false)
+      local measured = CodeBlockModule.measure(node, true)
       if measured then
-        -- CodeBlock never overrides width — it accepts the parent's width
-        -- and clips content with a scissor. Reporting content width (which
-        -- can be 1500px+ for long lines) causes layout oscillation when
-        -- the parent is narrower than the measured content.
-        if not explicitW and not parentAssignedW and not w then
-          w = math.max(50, measured.width + padL + padR)
+        if not explicitW then
+          local contentW = math.max(50, measured.width + padL + padR)
+          if parentAssignedW and w then
+            -- Shrink-wrap to content but never exceed parent bounds
+            w = math.min(contentW, w)
+          elseif not w then
+            w = contentW
+          end
           wSource = "text"
         end
         if not explicitH and h == nil then
