@@ -95,6 +95,9 @@ export {
 // GIF recorder (capture Love2D window as animated GIF via ffmpeg)
 export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
 
+// Icon registry (populated by @reactjit/icons on import)
+export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
+
 // Primitives
 export { Box, Row, Col, Text, Image, FocusGroup } from './primitives';
 
@@ -329,10 +332,10 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent, Window, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess } from './capabilities';
+export { Audio, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type {
-  NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps,
+  NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
   BoidsProps, ImageSelectProps, ImageProcessProps,
   CapabilitySchema,
