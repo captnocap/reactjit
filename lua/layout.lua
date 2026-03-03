@@ -584,12 +584,10 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     if not CodeBlockModule then
       CodeBlockModule = require("lua.codeblock")
     end
-    local measured = CodeBlockModule.measure(node, false)
+    local measured = CodeBlockModule.measure(node, isRow)
     if measured then
-      -- CodeBlock width is parent-constrained; reporting content width here
-      -- can create intrinsic/flex oscillation for long unwrapped lines.
       if isRow then
-        return padMain
+        return measured.width + padMain
       end
       return measured.height + padMain
     end
@@ -1676,6 +1674,11 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
             child._flexW = cw_final
             profileCount("flexSignalTotal")
             profileCount("flexSignalAutoWidth")
+            if child.type == "CodeBlock" then
+              io.write(string.format("[LAYOUT-DEBUG] CodeBlock _flexW set: cw_final=%.1f intrinsicW=%.1f delta=%.1f id=%s\n",
+                cw_final, intrinsicW, cw_final - intrinsicW, tostring(child.id or "?")))
+              io.flush()
+            end
           end
         end
       else

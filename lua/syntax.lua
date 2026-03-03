@@ -134,7 +134,7 @@ local function tokenizeJS(line)
 
     -- Single-line comment
     if ch == '/' and line:sub(i+1,i+1) == '/' then
-      tokens[#tokens+1] = {text=line:sub(i), color=sc.comment}; break
+      tokens[#tokens+1] = {text=line:sub(i), color=sc.comment}; i=len+1; break
     end
 
     -- Block comment
@@ -143,7 +143,7 @@ local function tokenizeJS(line)
       if e then
         tokens[#tokens+1] = {text=line:sub(i,e+1), color=sc.comment}; i=e+2
       else
-        tokens[#tokens+1] = {text=line:sub(i), color=sc.comment}; break
+        tokens[#tokens+1] = {text=line:sub(i), color=sc.comment}; i=len+1; break
       end
       break
     end
@@ -323,7 +323,7 @@ local function tokenizePython(line)
     local ch = line:sub(i,i)
 
     -- Comment
-    if ch=='#' then tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+    if ch=='#' then tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
 
     -- Triple-quoted string (single line portion)
     if line:sub(i,i+2)=='"""' or line:sub(i,i+2)=="'''" then
@@ -332,7 +332,7 @@ local function tokenizePython(line)
       if e then
         tokens[#tokens+1]={text=line:sub(i,e+2),color=sc.string}; i=e+3
       else
-        tokens[#tokens+1]={text=line:sub(i),color=sc.string}; break
+        tokens[#tokens+1]={text=line:sub(i),color=sc.string}; i=len+1; break
       end
       break
     end
@@ -465,10 +465,10 @@ local function tokenizeLua(line)
         if e then
           tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
         else
-          tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+          tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
         end
       else
-        tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+        tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
       end
       break
     end
@@ -479,7 +479,7 @@ local function tokenizeLua(line)
       if e then
         tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.string}; i=e+2
       else
-        tokens[#tokens+1]={text=line:sub(i),color=sc.string}; break
+        tokens[#tokens+1]={text=line:sub(i),color=sc.string}; i=len+1; break
       end
       break
     end
@@ -595,7 +595,7 @@ local function tokenizeBash(line)
     local ch = line:sub(i,i)
 
     -- Comment
-    if ch=='#' then tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+    if ch=='#' then tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
 
     -- Strings
     if ch=='"' or ch=="'" then
@@ -786,11 +786,11 @@ local function tokenizeCSS(line)
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
     if ch=='/' and line:sub(i+1,i+1)=='/' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
 
     -- At-rules
@@ -905,7 +905,7 @@ local function tokenizeHTML(line)
     if line:sub(i,i+3)=='<!--' then
       local e=line:find("-->", i+4, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+2),color=sc.comment}; i=e+3
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -913,7 +913,7 @@ local function tokenizeHTML(line)
     if line:sub(i,i+1)=='<!' then
       local e=line:find(">", i, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e),color=sc.keyword}; i=e+1
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.keyword}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.keyword}; i=len+1; break end
       break
     end
 
@@ -1007,14 +1007,14 @@ local function tokenizeRust(line)
     -- Line comment // or doc ///
     if ch=='/' and line:sub(i+1,i+1)=='/' then
       local color=line:sub(i+2,i+2)=='/' and sc.property or sc.comment
-      tokens[#tokens+1]={text=line:sub(i),color=color}; break
+      tokens[#tokens+1]={text=line:sub(i),color=color}; i=len+1; break
     end
 
     -- Block comment /* */
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -1168,12 +1168,12 @@ local function tokenizeGo(line)
     local ch = line:sub(i,i)
 
     if ch=='/' and line:sub(i+1,i+1)=='/' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -1287,12 +1287,12 @@ local function tokenizeC(line)
     end
 
     if ch=='/' and line:sub(i+1,i+1)=='/' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -1408,12 +1408,12 @@ local function tokenizeJava(line)
     local ch = line:sub(i,i)
 
     if ch=='/' and line:sub(i+1,i+1)=='/' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -1525,16 +1525,16 @@ local function tokenizeSQL(line)
 
     -- Comment -- or #
     if ch=='-' and line:sub(i+1,i+1)=='-' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
     if ch=='#' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
     -- Block comment /* */
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -1644,12 +1644,12 @@ local function tokenizeGLSL(line)
     end
 
     if ch=='/' and line:sub(i+1,i+1)=='/' then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break
     end
     if ch=='/' and line:sub(i+1,i+1)=='*' then
       local e=line:find("%*/", i+2, true)
       if e then tokens[#tokens+1]={text=line:sub(i,e+1),color=sc.comment}; i=e+2
-      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+      else tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
       break
     end
 
@@ -1738,7 +1738,7 @@ local function tokenizeYAML(line)
     local ch = line:sub(i,i)
 
     -- Inline comment
-    if ch=='#' then tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; break end
+    if ch=='#' then tokens[#tokens+1]={text=line:sub(i),color=sc.comment}; i=len+1; break end
 
     -- Anchors & aliases
     if ch=='&' or ch=='*' then
@@ -1762,7 +1762,7 @@ local function tokenizeYAML(line)
 
     -- Block scalars | and >
     if (ch=='|' or ch=='>') and i==1 then
-      tokens[#tokens+1]={text=line:sub(i),color=sc.string}; break
+      tokens[#tokens+1]={text=line:sub(i),color=sc.string}; i=len+1; break
     end
 
     -- List item -

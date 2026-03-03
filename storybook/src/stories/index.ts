@@ -55,6 +55,7 @@ import { TailwindStory } from './TailwindStory';
 import { HtmlCompatStory } from './HtmlCompatStory';
 import { MergePrecedenceStory } from './MergePrecedenceStory';
 import { LintTestStory } from './LintTestStory';
+import { SyntaxStressStory } from './SyntaxStressStory';
 import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
@@ -111,6 +112,7 @@ export const stories: StoryDef[] = [
 
   // Stress Test
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },
+  { id: 'syntax-stress', title: 'Syntax Stress', section: 'Stress Test', component: SyntaxStressStory },
 
   // Dev
   { id: 'tsl-boids', title: 'TSL Boids', section: 'Dev', component: TslBoidsStory },

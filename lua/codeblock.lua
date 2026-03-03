@@ -81,7 +81,6 @@ local function checkChurn(node, code)
     cs.contentChanges = 0
     cs.windowStart = now
     cs.warned = false
-
     -- Recover from kill switch if churn stopped
     if cs.killed and cs.rate < CHURN_WARN_THRESHOLD then
       cs.killed = false
@@ -90,7 +89,13 @@ local function checkChurn(node, code)
     end
   end
 
-  -- Check if code prop identity changed
+  -- Fast path: same string pointer = no identity change, zero allocations.
+  -- Hoisted constants (the correct pattern) always hit this path.
+  if cs.lastCodePtr == code then
+    return cs.killed
+  end
+
+  -- Pointer changed — check if content actually changed (costs a contentSig allocation).
   local sig = contentSig(code)
   if cs.lastContentSig ~= nil then
     cs.identityChanges = cs.identityChanges + 1
@@ -98,6 +103,7 @@ local function checkChurn(node, code)
       cs.contentChanges = cs.contentChanges + 1
     end
   end
+  cs.lastCodePtr = code
   cs.lastContentSig = sig
 
   -- Warn on churn
@@ -161,13 +167,47 @@ local function getNodeEntry(node)
   return entry
 end
 
+--- Extract code string from node: reads children Text nodes, falls back to props.code.
+--- Each Text child becomes one line.
+local function extractCode(node)
+  local children = node.children
+  if children and #children > 0 then
+    local lines = {}
+    for _, child in ipairs(children) do
+      if child.type == "Text" then
+        -- Text nodes have __TEXT__ children with .text
+        local textParts = {}
+        local textChildren = child.children
+        if textChildren then
+          for _, tc in ipairs(textChildren) do
+            if tc.type == "__TEXT__" and tc.text then
+              textParts[#textParts + 1] = tc.text
+            end
+          end
+        end
+        lines[#lines + 1] = table.concat(textParts)
+      elseif child.type == "__TEXT__" and child.text then
+        lines[#lines + 1] = child.text
+      end
+    end
+    if #lines > 0 then return table.concat(lines, "\n") end
+  end
+  return (node.props or {}).code or ""
+end
+
 local function ensureLines(entry, code)
-  -- Content-based memoization: compare by signature, not pointer identity.
-  -- This survives wrapper re-renders that produce new string objects with same content.
-  local sig = contentSig(code)
-  if entry.lines and entry.codeSig == sig then
+  -- Fast path: same string pointer = same content, zero allocations.
+  -- Hoisted constants (the correct pattern) always hit this path.
+  if entry.lines and entry.codePtr == code then
     return entry.lines
   end
+  -- Slow path: content-based memoization (survives new string identity with same content).
+  local sig = contentSig(code)
+  if entry.lines and entry.codeSig == sig then
+    entry.codePtr = code  -- update pointer for future fast path
+    return entry.lines
+  end
+  entry.codePtr = code
   entry.code = code
   entry.codeSig = sig
   entry.lines = splitLines(code)
@@ -192,7 +232,7 @@ end
 
 function CodeBlock.measure(node, includeWidth)
   local props = node.props or {}
-  local code = props.code or ""
+  local code = extractCode(node)
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local entry = getNodeEntry(node)
   local lines = ensureLines(entry, code)
@@ -219,12 +259,16 @@ function CodeBlock.measure(node, includeWidth)
     end
   end
 
-  local maxWidth = 0
-  if needWidth then
-    maxWidth = m.width or 0
+  -- Reuse a cached result table to avoid per-call allocations.
+  -- The caller reads width/height immediately and doesn't hold a reference.
+  local result = entry._measureResult
+  if not result then
+    result = { width = 0, height = 0 }
+    entry._measureResult = result
   end
-
-  return { width = maxWidth, height = #lines * (m.lineHeight or 0) }
+  result.width = needWidth and (m.width or 0) or 0
+  result.height = #lines * (m.lineHeight or 0)
+  return result
 end
 
 local function getTokenizedLinesCached(node, code, langProp)
@@ -310,7 +354,7 @@ function CodeBlock.handleMousePressed(node, mx, my, button)
   local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
   if mx >= bx and mx <= bx + bw and my >= by and my <= by + bh then
-    local code = (node.props or {}).code or ""
+    local code = extractCode(node)
     pcall(function() love.system.setClipboardText(code) end)
     local cs = getCopyState(node)
     cs.copied = true
@@ -390,20 +434,41 @@ end
 -- Rendering
 -- ============================================================================
 
+-- Pre-computed color tables (allocated once, reused every frame)
+local DEFAULT_BG_COLOR    = Color.toTable("#0d1117")
+local DEFAULT_BORDER_COLOR = Color.toTable("#1e293b")
+local BTN_BG_NORMAL       = Color.toTable("#1e293b")
+local BTN_BG_COPIED       = Color.toTable("#1a3a2a")
+local BTN_TEXT_NORMAL      = Color.toTable("#64748b")
+local BTN_TEXT_COPIED      = Color.toTable("#4ade80")
+
+-- Per-node color cache (weak-keyed, avoids Color.toTable per-frame for string bg/border)
+local colorCache = setmetatable({}, { __mode = "k" }) -- [node] = { bgStr, bg, borderStr, border }
+
+local function getCachedColor(node, colorStr, field)
+  local cc = colorCache[node]
+  if not cc then cc = {}; colorCache[node] = cc end
+  if cc[field .. "Str"] == colorStr then return cc[field] end
+  local tbl = Color.toTable(colorStr)
+  cc[field .. "Str"] = colorStr
+  cc[field] = tbl
+  return tbl
+end
+
 function CodeBlock.render(node, c, effectiveOpacity)
   local props = node.props or {}
-  local code = props.code or ""
+  local code = extractCode(node)
   local lang
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
 
-  -- Background
+  -- Background (zero allocations for default or cached string colors)
   local bgColor = s.backgroundColor
   if type(bgColor) == "string" then
-    bgColor = Color.toTable(bgColor)
+    bgColor = getCachedColor(node, bgColor, "bg")
   elseif type(bgColor) ~= "table" then
-    bgColor = Color.toTable("#0d1117")
+    bgColor = DEFAULT_BG_COLOR
   end
   setColorWithOpacity(bgColor, effectiveOpacity)
   local br = s.borderRadius or 4
@@ -413,9 +478,9 @@ function CodeBlock.render(node, c, effectiveOpacity)
   if s.borderWidth and s.borderWidth > 0 then
     local borderColor = s.borderColor
     if type(borderColor) == "string" then
-      borderColor = Color.toTable(borderColor)
+      borderColor = getCachedColor(node, borderColor, "border")
     elseif type(borderColor) ~= "table" then
-      borderColor = Color.toTable("#1e293b")
+      borderColor = DEFAULT_BORDER_COLOR
     end
     setColorWithOpacity(borderColor, effectiveOpacity)
     love.graphics.setLineWidth(s.borderWidth)
@@ -431,8 +496,8 @@ function CodeBlock.render(node, c, effectiveOpacity)
   love.graphics.setFont(font)
   local lineHeight = font:getHeight()
 
-  -- Scissor to code area
-  local prevScissor = {love.graphics.getScissor()}
+  -- Scissor to code area (avoid table allocation — use 4 locals instead)
+  local psx, psy, psw, psh = love.graphics.getScissor()
   local sx, sy = love.graphics.transformPoint(c.x, c.y)
   local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
   local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
@@ -462,8 +527,8 @@ function CodeBlock.render(node, c, effectiveOpacity)
   CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
 
   -- Restore previous scissor state
-  if prevScissor[1] then
-    love.graphics.setScissor(prevScissor[1], prevScissor[2], prevScissor[3], prevScissor[4])
+  if psx then
+    love.graphics.setScissor(psx, psy, psw, psh)
   else
     love.graphics.setScissor()
   end
@@ -476,11 +541,11 @@ function CodeBlock.render(node, c, effectiveOpacity)
     local btnFont = getMeasure().getFont(9, nil, nil)
     local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
-    local btnBg = cs.copied and Color.toTable("#1a3a2a") or Color.toTable("#1e293b")
+    local btnBg = cs.copied and BTN_BG_COPIED or BTN_BG_NORMAL
     setColorWithOpacity(btnBg, effectiveOpacity)
     love.graphics.rectangle("fill", bx, by, bw, bh, 3, 3)
 
-    local btnColor = cs.copied and Color.toTable("#4ade80") or Color.toTable("#64748b")
+    local btnColor = cs.copied and BTN_TEXT_COPIED or BTN_TEXT_NORMAL
     setColorWithOpacity(btnColor, effectiveOpacity)
     love.graphics.setFont(btnFont)
     local label = cs.copied and "Copied!" or "Copy"
@@ -496,7 +561,7 @@ end
 --- Used by textselection.lua to extract selected text.
 function CodeBlock.getLines(node)
   local props = node.props or {}
-  local code = props.code or ""
+  local code = extractCode(node)
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10

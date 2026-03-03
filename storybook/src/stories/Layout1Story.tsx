@@ -5,17 +5,78 @@
  *   Page (100% x 100%)
  *     Header — title + snippet + description (fixed, always visible)
  *     Center — two-column area (flexGrow:1)
- *       Docs mode:       Left=preview wireframe, Right=API reference
+ *       Docs mode:       Left=preview (centered), Right=API reference (centered)
  *       Playground mode:  Left=code editor, Right=live preview
- *     Footer — breadcrumbs + playground toggle (fixed ~5-10%, always visible)
+ *     Footer — breadcrumbs + playground toggle (fixed, always visible)
+ *
+ * This is a TEMPLATE — all text is placeholder. No ComponentDoc wrapper.
+ * CodeBlock uses the `code` string prop — Lua reads it directly.
+ * Static string constants = no identity churn = no memory leaks.
+ *
+ * ─── DOC SECTION MAPPING ───────────────────────────────────────────────
+ *
+ * Each section in this template maps to a field in the content .txt files
+ * at content/sections/05-components/<name>.txt (or 06-hooks/, etc.).
+ *
+ *   Header title          → METADATA.title
+ *   Header snippet pill   → API/SYNTAX import line (first ```tsx block)
+ *   Header description    → METADATA.description
+ *   OVERVIEW section      → === OVERVIEW === paragraph
+ *   USAGE CodeBlock       → API/SYNTAX usage code (second ```tsx block)
+ *   BEHAVIOR notes        → === CRITICAL RULES === or key notes from OVERVIEW
+ *   PROPS two-column      → API/SYNTAX Props table (filter out on* handlers)
+ *   CALLBACKS list        → API/SYNTAX Props table (only on* handlers)
+ *   Footer breadcrumb     → METADATA.category
+ *   Playground starter    → === EXAMPLES === first code block
+ *
+ * ─── NON-NEGOTIABLE: NO WRAPPER COMPONENT ──────────────────────────────
+ *
+ * When scaffolding a new component story from this template, Claude MUST
+ * read the .txt doc file and manually inline every value into static
+ * hoisted constants (PROPS, CALLBACKS, USAGE_CODE, BEHAVIOR_NOTES, etc).
+ *
+ * NEVER extract these sections into a shared "ComponentDoc" component.
+ * NEVER build a loader/hook that reads .txt files at runtime.
+ * NEVER create any abstraction that wraps CodeBlock or renders doc sections
+ * dynamically. This exact pattern — static constants, inline JSX — is the
+ * only pattern that doesn't leak memory. A wrapper component re-renders
+ * every frame, feeds CodeBlock new string identities at 60fps, and causes
+ * the tokenizer to re-run continuously. This cost us 18 hours.
+ *
+ * The extra 5 minutes of copy-paste is the price of not leaking.
+ * ────────────────────────────────────────────────────────────────────────
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, TextEditor, CodeBlock, Pressable, ScrollView } from '../../../packages/core/src';
+import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
 import { Preview } from '../playground/Preview';
+
+// ── Syntax colors for the header snippet pill ───────────
+
+const SYN = {
+  tag: '#f38ba8',       // punctuation: < / >
+  component: '#89b4fa', // component name
+  prop: '#cba6f7',      // attribute name
+  value: '#f9e2af',     // expression / string literal
+};
+
+// ── Helpers ──────────────────────────────────────────────
+
+/** Build a table-layout tooltip from visual style props (filters out structural ones). */
+function styleTooltip(style: Record<string, any>): { content: string; layout: string; type: string } | undefined {
+  const STRUCTURAL = new Set([
+    'flexGrow', 'flexShrink', 'flexBasis', 'flexDirection', 'flexWrap',
+    'alignItems', 'alignSelf', 'justifyContent', 'overflow',
+    'position', 'zIndex', 'display',
+  ]);
+  const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
+  if (entries.length === 0) return undefined;
+  const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+  return { content, layout: 'table', type: 'cursor' };
+}
 
 function Wireframe({ label, style }: { label: string; style?: any }) {
   const c = useThemeColors();
@@ -25,8 +86,6 @@ function Wireframe({ label, style }: { label: string; style?: any }) {
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: 6,
-      // rjit-ignore-next-line
-      borderStyle: 'dashed',
       justifyContent: 'center',
       alignItems: 'center',
       ...style,
@@ -38,17 +97,17 @@ function Wireframe({ label, style }: { label: string; style?: any }) {
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return (
-    <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />
-  );
+  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
 }
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return (
-    <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />
-  );
+  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
 }
+
+// ── Static data (hoisted — never recreated) ──────────────
+
+const USAGE_CODE = '<Component propA="value" propB={123}>\n  <Child />\n</Component>';
 
 const STARTER_CODE = `<Box style={{
   backgroundColor: '#3b82f6',
@@ -64,26 +123,38 @@ const STARTER_CODE = `<Box style={{
   </Text>
 </Box>`;
 
-// Short props — fit in 2 columns
-const PROPS: [string, string][] = [
-  ['style', 'ViewStyle'],
-  ['bg', 'string'],
-  ['radius', 'number'],
-  ['padding', 'number'],
-  ['tooltip', 'TooltipConfig'],
-  ['children', 'ReactNode'],
-  ['testId', 'string'],
-  ['pointerEvents', 'enum'],
-  ['accessibilityLabel', 'string'],
+// Props — [name, type, icon]
+const PROPS: [string, string, string][] = [
+  ['style', 'ViewStyle', 'layout'],
+  ['bg', 'string', 'palette'],
+  ['radius', 'number', 'circle'],
+  ['padding', 'number', 'move'],
+  ['tooltip', 'TooltipConfig', 'message-circle'],
+  ['children', 'ReactNode', 'layers'],
+  ['testId', 'string', 'tag'],
+  ['pointerEvents', 'enum', 'mouse-pointer'],
+  ['accessibilityLabel', 'string', 'accessibility'],
 ];
 
-// Callbacks — full width, single column
-const CALLBACKS: [string, string][] = [
-  ['onPress', '() => void'],
-  ['onHoverIn', '() => void'],
-  ['onHoverOut', '() => void'],
-  ['onLayout', '(e) => void'],
+// Callbacks — [name, signature, icon]
+const CALLBACKS: [string, string, string][] = [
+  ['onPress', '() => void', 'pointer'],
+  ['onHoverIn', '() => void', 'log-in'],
+  ['onHoverOut', '() => void', 'log-out'],
+  ['onLayout', '(e) => void', 'ruler'],
 ];
+
+const BEHAVIOR_NOTES = [
+  'First behavioral note about the component.',
+  'Second behavioral note about the component.',
+  'Third behavioral note about the component.',
+];
+
+// Preview styled boxes
+const STYLED_1 = { backgroundColor: '#3b82f6', borderRadius: 8, padding: 16 };
+const STYLED_2 = { backgroundColor: '#10b981', borderRadius: 12, padding: 10, borderWidth: 2, borderColor: '#065f46' };
+
+// ── Component ────────────────────────────────────────────
 
 export function Layout1Story() {
   const c = useThemeColors();
@@ -104,7 +175,6 @@ export function Layout1Story() {
     setUserComponent(() => evalResult.component);
   }, []);
 
-  // Process starter code when entering playground mode
   useEffect(() => {
     if (playground && code && !UserComponent) {
       processCode(code);
@@ -121,11 +191,7 @@ export function Layout1Story() {
   const col2 = PROPS.slice(mid);
 
   return (
-    <Box style={{
-      width: '100%',
-      height: '100%',
-      backgroundColor: c.bg,
-    }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
 
       {/* ── Header ── */}
       <Box style={{
@@ -141,11 +207,14 @@ export function Layout1Story() {
         paddingBottom: 12,
         gap: 14,
       }}>
+        <Image src="component" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+
         <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
           {'Title'}
         </Text>
 
         <Box style={{
+          flexDirection: 'row',
           backgroundColor: c.surface,
           borderWidth: 1,
           borderColor: c.border,
@@ -155,9 +224,14 @@ export function Layout1Story() {
           paddingTop: 3,
           paddingBottom: 3,
         }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'<Component prop={value} />'}
-          </Text>
+          <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
+          <Text style={{ color: SYN.component, fontSize: 10 }}>{'Component'}</Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <Text style={{ color: SYN.prop, fontSize: 10 }}>{'prop'}</Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <Text style={{ color: SYN.value, fontSize: 10 }}>{'{value}'}</Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <Text style={{ color: SYN.tag, fontSize: 10 }}>{'/>'}</Text>
         </Box>
 
         <Box style={{ flexGrow: 1 }} />
@@ -171,7 +245,6 @@ export function Layout1Story() {
       <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
         {playground ? (
           <>
-            {/* Playground: editor left, preview right */}
             <Box style={{ flexGrow: 1, flexBasis: 0 }}>
               <TextEditor
                 initialValue={code}
@@ -190,22 +263,37 @@ export function Layout1Story() {
           </>
         ) : (
           <>
-            {/* Docs: preview left, API reference right */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-              <Box style={{
-                flexGrow: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: 20,
-              }}>
-                <Wireframe label="Preview" style={{ width: 120, height: 120 }} />
+            {/* ── Left: Preview (centered) ── */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+              <Box style={{ alignItems: 'center', padding: 20, gap: 12 }}>
+
+                <Box
+                  style={{ ...STYLED_1, justifyContent: 'center', alignItems: 'center' }}
+                  tooltip={styleTooltip(STYLED_1)}
+                >
+                  <Text style={{ color: 'white', fontSize: 10 }}>{'Styled element'}</Text>
+                </Box>
+
+                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <Wireframe label="A" style={{ width: 40, height: 40 }} />
+                  <Wireframe label="B" style={{ width: 40, height: 40 }} />
+                </Box>
+
+                <Box
+                  style={{ ...STYLED_2, justifyContent: 'center', alignItems: 'center' }}
+                  tooltip={styleTooltip(STYLED_2)}
+                >
+                  <Text style={{ color: 'white', fontSize: 10 }}>{'Another styled'}</Text>
+                </Box>
+
               </Box>
             </ScrollView>
 
             <VerticalDivider />
 
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-              <Box style={{ padding: 14, gap: 10 }}>
+            {/* ── Right: API Reference (centered) ── */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
 
                 {/* ── Overview ── */}
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
@@ -221,11 +309,7 @@ export function Layout1Story() {
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
                   {'USAGE'}
                 </Text>
-                <CodeBlock
-                  language="tsx"
-                  fontSize={9}
-                  code={'<Component\n  propA="value"\n  propB={123}\n>\n  <Child />\n</Component>'}
-                />
+                <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
@@ -234,15 +318,12 @@ export function Layout1Story() {
                   {'BEHAVIOR'}
                 </Text>
                 <Box style={{ gap: 4 }}>
-                  <Text style={{ color: c.text, fontSize: 10 }}>
-                    {'First behavioral note about the component.'}
-                  </Text>
-                  <Text style={{ color: c.text, fontSize: 10 }}>
-                    {'Second behavioral note about the component.'}
-                  </Text>
-                  <Text style={{ color: c.text, fontSize: 10 }}>
-                    {'Third behavioral note about the component.'}
-                  </Text>
+                  {BEHAVIOR_NOTES.map((note, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="chevron-right" style={{ width: 8, height: 8 }} tintColor={c.muted} />
+                      <Text style={{ color: c.text, fontSize: 10 }}>{note}</Text>
+                    </Box>
+                  ))}
                 </Box>
 
                 <HorizontalDivider />
@@ -252,17 +333,19 @@ export function Layout1Story() {
                   {'PROPS'}
                 </Text>
                 <Box style={{ flexDirection: 'row', gap: 8 }}>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
-                    {col1.map(([prop, type]) => (
-                      <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
+                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
+                    {col1.map(([prop, type, icon]) => (
+                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                        <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
                         <Text style={{ color: c.text, fontSize: 9 }}>{prop}</Text>
                         <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
                       </Box>
                     ))}
                   </Box>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
-                    {col2.map(([prop, type]) => (
-                      <Box key={prop} style={{ flexDirection: 'row', gap: 4 }}>
+                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
+                    {col2.map(([prop, type, icon]) => (
+                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                        <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
                         <Text style={{ color: c.text, fontSize: 9 }}>{prop}</Text>
                         <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
                       </Box>
@@ -272,17 +355,20 @@ export function Layout1Story() {
 
                 <HorizontalDivider />
 
+                {/* ── Callbacks ── */}
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
                   {'CALLBACKS'}
                 </Text>
-                <Box style={{ gap: 2 }}>
-                  {CALLBACKS.map(([name, sig]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 4 }}>
+                <Box style={{ gap: 3 }}>
+                  {CALLBACKS.map(([name, sig, icon]) => (
+                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
                       <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
                       <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
                     </Box>
                   ))}
                 </Box>
+
               </Box>
             </ScrollView>
           </>
@@ -303,8 +389,10 @@ export function Layout1Story() {
         paddingBottom: 6,
         gap: 12,
       }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
         <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
         <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="component" style={{ width: 12, height: 12 }} tintColor={c.text} />
         <Text style={{ color: c.text, fontSize: 9 }}>{'Component'}</Text>
 
         <Box style={{ flexGrow: 1 }} />
@@ -312,6 +400,9 @@ export function Layout1Story() {
         <Pressable
           onPress={() => setPlayground(p => !p)}
           style={(state) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
             backgroundColor: playground ? c.primary : (state.hovered ? c.surface : c.border),
             paddingLeft: 10,
             paddingRight: 10,
@@ -320,6 +411,11 @@ export function Layout1Story() {
             borderRadius: 4,
           })}
         >
+          <Image
+            src={playground ? 'book-open' : 'play'}
+            style={{ width: 10, height: 10 }}
+            tintColor={playground ? 'white' : c.text}
+          />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,

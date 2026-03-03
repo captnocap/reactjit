@@ -1,21 +1,60 @@
 /**
- * Layout 2 — Package documentation page template.
+ * Layout 2 — Package/hook documentation page template.
  *
- * Mixed-band layout: alternating full-width, text+artifact, and
- * artifact+text rows so the page never reads like a flat document
- * or a rigid two-column grid.
+ * Zigzag narrative: bands alternate sides so the eye sweeps back and forth
+ * down the page. Code blocks sit next to their explanations, multi-line
+ * is fine now that CodeBlock does fit-content sizing.
  *
- * Band types:
- *   full          — full-width text or card, no split
- *   text-artifact — text left, code/card right
- *   artifact-text — code/card left, text right
+ * Band rhythm:
+ *   hero        — full bleed title card with accent stripe
+ *   text | code — explanation left, snippet right
+ *   code | text — snippet left, explanation right (zigzag)
+ *   callout     — full-width highlighted insight
+ *   repeat...
  *
  * TEMPLATE: All content below is placeholder.
  */
 
 import React from 'react';
-import { Box, Text, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+
+// ── Palette ──────────────────────────────────────────────
+
+const C = {
+  accent: '#8b5cf6',
+  accentDim: 'rgba(139, 92, 246, 0.12)',
+  callout: 'rgba(59, 130, 246, 0.08)',
+  calloutBorder: 'rgba(59, 130, 246, 0.25)',
+};
+
+// ── Static code blocks (hoisted — never recreated) ──────
+
+const INSTALL_CODE = `import { usePackage } from '@reactjit/package'
+import { PackageProvider } from '@reactjit/package'`;
+
+const PROVIDER_CODE = `<PackageProvider config={{ cache: true, ttl: 5000 }}>
+  <App />
+</PackageProvider>`;
+
+const BASIC_CODE = `const [state, actions] = usePackage('user-prefs')
+
+// Reactive — re-renders when data changes
+if (state.loading) return <Spinner />
+if (state.error)   return <Error msg={state.error} />
+
+return <Settings data={state.data} />`;
+
+const ACTIONS_CODE = `actions.set({ theme: 'dark' })    // replace
+actions.merge({ fontSize: 14 })    // shallow merge
+actions.reset()                    // clear to default
+actions.subscribe(fn)              // listen to changes`;
+
+const OPTIONS_CODE = `const [state] = usePackage('analytics', {
+  ttl: 30000,           // cache for 30s
+  staleWhileRevalidate: true,
+  onError: (e) => log(e),
+})`;
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -24,55 +63,14 @@ function Divider() {
   return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
 }
 
-function SectionLabel({ children }: { children: string }) {
+function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-      {children}
-    </Text>
-  );
-}
-
-function Pill({ children }: { children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 4,
-      paddingLeft: 8,
-      paddingRight: 8,
-      paddingTop: 3,
-      paddingBottom: 3,
-    }}>
-      <Text style={{ color: c.muted, fontSize: 10 }}>{children}</Text>
-    </Box>
-  );
-}
-
-function Tag({ children }: { children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{
-      backgroundColor: c.border,
-      borderRadius: 3,
-      paddingLeft: 6,
-      paddingRight: 6,
-      paddingTop: 2,
-      paddingBottom: 2,
-    }}>
-      <Text style={{ color: c.text, fontSize: 8 }}>{children}</Text>
-    </Box>
-  );
-}
-
-function BulletItem({ children }: { children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-      <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: c.primary }} />
-      <Text style={{ color: c.text, fontSize: 10 }}>{children}</Text>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        {children}
+      </Text>
     </Box>
   );
 }
@@ -99,36 +97,50 @@ export function Layout2Story() {
         paddingBottom: 12,
         gap: 14,
       }}>
+        <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
         <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
           {'usePackage'}
         </Text>
-        <Pill>{'@reactjit/package'}</Pill>
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/package'}</Text>
+        </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Reactive hooks for package integration'}
+          {'Reactive state hooks for package integration'}
         </Text>
       </Box>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
-        {/* ── Band 1: full — overview ── */}
+        {/* ── Hero band: accent stripe + overview ── */}
         <Box style={{
-          paddingLeft: 28,
+          borderLeftWidth: 3,
+          borderColor: C.accent,
+          paddingLeft: 25,
           paddingRight: 28,
           paddingTop: 24,
-          paddingBottom: 20,
+          paddingBottom: 24,
           gap: 8,
         }}>
-          <SectionLabel>{'OVERVIEW'}</SectionLabel>
-          <Text style={{ color: c.text, fontSize: 11 }}>
-            {'A comprehensive hook for managing package state, subscriptions, and lifecycle.'}
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+            {'Manage package state without the ceremony.'}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>
+            {'usePackage gives you a reactive [state, actions] tuple — loading, error, and data tracking built in. Wrap once with a provider, subscribe from anywhere.'}
           </Text>
         </Box>
 
         <Divider />
 
-        {/* ── Band 2: text + code row ── */}
+        {/* ── Band: text left | code right ── */}
         <Box style={{
           flexDirection: 'row',
           paddingLeft: 28,
@@ -136,30 +148,120 @@ export function Layout2Story() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
+          alignItems: 'flex-start',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, flexShrink: 1, gap: 8 }}>
-            <SectionLabel>{'INSTALL'}</SectionLabel>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Import the hook from the package.'}
+              {'Import the hook and the provider. The provider enables caching and manages the package registry.'}
             </Text>
           </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, flexShrink: 1 }}>
-            <CodeBlock language="tsx" fontSize={9} code={"import { usePackage } from '@reactjit/package';\nimport { PackageProvider } from '@reactjit/package';"} />
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: code left | text right (zigzag) ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'flex-start',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={PROVIDER_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="layers">{'PROVIDER'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Wrap your app once at the root. Config options control caching, TTL, and error boundaries.'}
+            </Text>
           </Box>
         </Box>
 
         <Divider />
 
-        {/* ── Band 3: full — API signature ── */}
+        {/* ── Callout band ── */}
         <Box style={{
+          backgroundColor: C.callout,
+          borderLeftWidth: 3,
+          borderColor: C.calloutBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'The hook is reactive — your component re-renders automatically when the package state changes. No manual subscriptions.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: text left | code right ── */}
+        <Box style={{
+          flexDirection: 'row',
           paddingLeft: 28,
           paddingRight: 28,
           paddingTop: 20,
           paddingBottom: 20,
-          gap: 10,
+          gap: 24,
+          alignItems: 'flex-start',
         }}>
-          <SectionLabel>{'API'}</SectionLabel>
-          <CodeBlock language="tsx" fontSize={9} code={"const [state, actions] = usePackage(key: string, options?: PackageOptions)\n\n// state\nstate.data\nstate.loading\nstate.error"} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="code">{'BASIC USAGE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Destructure state for loading, error, and data. The hook handles the lifecycle — you just read.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={BASIC_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: code left | text right (zigzag) ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'flex-start',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={ACTIONS_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="zap">{'ACTIONS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'The second element in the tuple. Set, merge, reset, or subscribe to changes imperatively.'}
+            </Text>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: text left | code right ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 24,
+          gap: 24,
+          alignItems: 'flex-start',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="settings">{'OPTIONS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Second argument configures caching, TTL, stale-while-revalidate, and error callbacks.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={OPTIONS_CODE} />
         </Box>
 
       </ScrollView>
@@ -178,8 +280,10 @@ export function Layout2Story() {
         paddingBottom: 6,
         gap: 12,
       }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
         <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
         <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
         <Text style={{ color: c.text, fontSize: 9 }}>{'usePackage'}</Text>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
