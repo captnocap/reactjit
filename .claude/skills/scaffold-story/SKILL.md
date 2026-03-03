@@ -68,25 +68,52 @@ const STARTER_CODE = `<Box style={{ padding: 16 }}>
 <ComponentDoc docKey="box" starterCode={STARTER_CODE} />
 ```
 
-### C. preview (optional)
+### C. preview (optional — but you should always write one)
 
-Custom left-column preview content. Falls back to default wireframes.
+Custom left-column preview content. Falls back to default wireframes, but a custom preview
+that uses icons relevant to the component is **always better**.
+
+**Use icons in previews.** The framework ships ~1936 Lucide icons. Use `<Image src="icon-name" />`
+with bare icon names (no path, no extension). This renders as a vector icon automatically.
+Icon names are case-insensitive and support kebab-case: `"heart"`, `"Heart"`, `"arrow-down"` all work.
+
+Pick icons that **relate to what the component does** — not random decoration:
+- A Button story → `mouse-pointer-click`, `pointer`
+- A Search story → `search`, `filter`, `list-filter`
+- A Timer story → `clock`, `timer`, `alarm-clock`
+- A Modal story → `panel-top`, `maximize-2`, `x`
+- An Audio story → `volume-2`, `music`, `headphones`
+- A Chart story → `bar-chart`, `trending-up`, `pie-chart`
+
+Browse all icons in the storybook's Icons page or check `packages/icons/src/iconNames.ts`.
 
 Use `styleTooltip()` for hover tooltips on styled elements:
 
 ```tsx
 import { ComponentDoc, styleTooltip, Wireframe } from './_shared/ComponentDoc';
+import { Box, Text, Image } from '../../../../packages/core/src';
+import { useThemeColors } from '../../../../packages/theme/src';
 
-function BoxPreview() {
-  const custom = { backgroundColor: '#3b82f6', borderRadius: 8, padding: 16 };
+function ButtonPreview() {
+  const c = useThemeColors();
   return (
-    <Box style={{ ...custom, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-      <Text style={{ color: 'white', fontSize: 10 }}>{'Styled element'}</Text>
-    </Box>
+    <>
+      <Box style={{
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: c.primary, borderRadius: 8, padding: 12,
+      }}>
+        <Image src="mouse-pointer-click" w={16} h={16} style={{ color: 'white' }} />
+        <Text style={{ color: 'white', fontSize: 11 }}>{'Click me'}</Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Image src="pointer" w={14} h={14} style={{ color: c.muted }} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Hover, press, release states'}</Text>
+      </Box>
+    </>
   );
 }
 
-<ComponentDoc docKey="box" preview={<BoxPreview />} />
+<ComponentDoc docKey="button" preview={<ButtonPreview />} />
 ```
 
 ### D. section (optional)
@@ -125,8 +152,36 @@ Playground mode flips center to: left=TextEditor, right=live Preview.
 
 - Import `ComponentDoc` from `'./_shared/ComponentDoc'`
 - Import helpers (`styleTooltip`, `Wireframe`) from the same path if needed
-- Import primitives from `'../../../packages/core/src'` — never `@reactjit/core`
-- Import theme from `'../../../packages/theme/src'`
+- Import primitives from `'../../../../packages/core/src'` — never `@reactjit/core`
+- Import theme from `'../../../../packages/theme/src'`
 - Export must be named `<Name>Story`
 - The docKey handles all documentation — do NOT manually write OVERVIEW, USAGE, PROPS, etc.
 - If no doc .txt file exists for this component, omit docKey (placeholders render)
+
+## Icons (NON-NEGOTIABLE)
+
+Every story with a custom preview MUST use at least one `<Image src="icon-name" />` that is
+**relevant to the component being documented.** The shared layout already uses icons for section
+headers, breadcrumbs, and the playground button. Your job is to bring domain-relevant icons
+into the preview area so the story visually communicates what the component does at a glance.
+
+**How it works:** `<Image src="icon-name" />` resolves bare names (no `/`, no `.`) to vector
+icons from the Lucide set (~1936 icons). Case-insensitive, kebab-case supported.
+
+```tsx
+<Image src="heart" w={16} h={16} />                          {/* sized */}
+<Image src="search" w={12} h={12} style={{ color: c.muted }} /> {/* colored */}
+<Image src="arrow-right" w={10} h={10} style={{ color: c.primary }} />
+```
+
+**Do NOT:**
+- Use icons as meaningless decoration — every icon must relate to the component's purpose
+- Use only wireframes when an icon would communicate better
+- Skip icons entirely and ship a wireframe-only preview
+- Import from `@reactjit/icons` in stories — use `<Image src="name" />` instead
+
+**Do:**
+- Pick 1-3 icons that represent the component's core function
+- Use icons at small sizes (10-20px) as visual anchors alongside text
+- Color icons with theme tokens (`c.muted`, `c.primary`, `c.text`)
+- Combine icons with styled boxes to create mini-demonstrations

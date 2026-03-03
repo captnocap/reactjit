@@ -131,31 +131,54 @@ function CodeBlock.measure(node, includeWidth)
   return { width = maxWidth, height = #lines * (m.lineHeight or 0) }
 end
 
-local function getTokenizedLinesCached(node, code, langProp)
+-- Build a pixel grid: array of lines, each line is array of {filled, color}.
+-- String is consumed once here, then thrown away. Only geometry survives.
+local function getPixelGridCached(node, code, langProp)
   local entry = getNodeEntry(node)
   local lines = ensureLines(entry, code)
   local langKey = langProp or "auto"
-  if entry.tokenLines and entry.langKey == langKey then
+  if entry.pixelGrid and entry.langKey == langKey then
     if debugStatsEnabled then
       debugStats.hits = debugStats.hits + 1
     end
-    return lines, entry.langResolved, entry.tokenLines
+    return entry.pixelGrid, #lines
   end
 
-  local langResolved = resolveLanguage(langProp, lines, code)
-  local tokenLines = {}
+  -- Step 1: convert string to pixel grid (consume the string)
+  local grid = {}
   for i, line in ipairs(lines) do
-    tokenLines[i] = Syntax.tokenizeLine(line, langResolved)
+    local row = {}
+    for ci = 1, #line do
+      row[ci] = { filled = line:sub(ci, ci) ~= " ", color = nil }
+    end
+    grid[i] = row
   end
+
+  -- Step 2: tokenize and assign colors onto the grid
+  local langResolved = resolveLanguage(langProp, lines, code)
+  for i, line in ipairs(lines) do
+    local tokens = Syntax.tokenizeLine(line, langResolved)
+    local col = 1
+    for _, tok in ipairs(tokens) do
+      for ci = 1, #tok.text do
+        if grid[i][col] then
+          grid[i][col].color = tok.color
+        end
+        col = col + 1
+      end
+    end
+  end
+
   if debugStatsEnabled then
     debugStats.misses = debugStats.misses + 1
     debugStats.tokenLinesBuilt = debugStats.tokenLinesBuilt + #lines
   end
 
+  -- Step 3: throw away string data, only grid survives
   entry.langKey = langKey
-  entry.langResolved = langResolved
-  entry.tokenLines = tokenLines
-  return lines, langResolved, tokenLines
+  entry.pixelGrid = grid
+  entry.tokenLines = nil  -- discard old token cache if any
+  return grid, #lines
 end
 
 local copyStates = setmetatable({}, { __mode = "k" })  -- [node] = { copied = false, timer = 0 }
@@ -267,14 +290,15 @@ function CodeBlock.render(node, c, effectiveOpacity)
     love.graphics.rectangle("line", c.x, c.y, c.w, c.h, br, br)
   end
 
-  -- Split lines
-  local lines, resolvedLang, tokenLines = getTokenizedLinesCached(node, code, props.language)
-  lang = resolvedLang
+  -- Build pixel grid (string consumed once, only geometry survives)
+  local pixelGrid, lineCount = getPixelGridCached(node, code, props.language)
 
   -- Get font and line height
   local font = getMeasure().getFont(fontSize, nil, nil)
   love.graphics.setFont(font)
   local lineHeight = font:getHeight()
+  local charW = font:getWidth("M")
+  local charH = lineHeight
 
   -- Scissor to code area
   local prevScissor = {love.graphics.getScissor()}
@@ -284,22 +308,23 @@ function CodeBlock.render(node, c, effectiveOpacity)
   love.graphics.intersectScissor(sx, sy, sw, sh)
 
   -- Center content vertically when allocated more height than needed
-  local contentHeight = #lines * lineHeight
+  local contentHeight = lineCount * charH
   local innerHeight = c.h - 2 * padding
   local yOffset = 0
   if contentHeight < innerHeight then
     yOffset = math.floor((innerHeight - contentHeight) / 2)
   end
 
-  -- Render each line with token-based syntax highlighting
-  for i, line in ipairs(lines) do
-    local y = c.y + padding + yOffset + (i - 1) * lineHeight
-    local tokens = tokenLines[i] or Syntax.tokenizeLine(line, lang)
+  -- Render from pixel grid — no strings touch the renderer
+  for i, row in ipairs(pixelGrid) do
+    local y = c.y + padding + yOffset + (i - 1) * charH
     local x = c.x + padding
-    for _, tok in ipairs(tokens) do
-      setColorWithOpacity(tok.color, effectiveOpacity)
-      love.graphics.print(tok.text, x, y)
-      x = x + font:getWidth(tok.text)
+    for _, pixel in ipairs(row) do
+      if pixel.filled and pixel.color then
+        setColorWithOpacity(pixel.color, effectiveOpacity)
+        love.graphics.rectangle("fill", x, y, charW, charH)
+      end
+      x = x + charW
     end
   end
 

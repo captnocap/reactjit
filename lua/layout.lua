@@ -584,9 +584,14 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     if not CodeBlockModule then
       CodeBlockModule = require("lua.codeblock")
     end
-    local measured = CodeBlockModule.measure(node)
+    local measured = CodeBlockModule.measure(node, false)
     if measured then
-      return (isRow and measured.width or measured.height) + padMain
+      -- CodeBlock width is parent-constrained; reporting content width here
+      -- can create intrinsic/flex oscillation for long unwrapped lines.
+      if isRow then
+        return padMain
+      end
+      return measured.height + padMain
     end
     return padMain
   end
@@ -918,13 +923,17 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
       if not CodeBlockModule then
         CodeBlockModule = require("lua.codeblock")
       end
-      local measured = CodeBlockModule.measure(node)
+      local measured = CodeBlockModule.measure(node, false)
       if measured then
-        if not explicitW and not parentAssignedW then
+        -- CodeBlock never overrides width — it accepts the parent's width
+        -- and clips content with a scissor. Reporting content width (which
+        -- can be 1500px+ for long lines) causes layout oscillation when
+        -- the parent is narrower than the measured content.
+        if not explicitW and not parentAssignedW and not w then
           w = math.max(50, measured.width + padL + padR)
           wSource = "text"
         end
-        if not explicitH then
+        if not explicitH and h == nil then
           h = measured.height + padT + padB
           hSource = "text"
         end

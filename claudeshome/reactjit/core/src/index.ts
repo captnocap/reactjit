@@ -381,3 +381,25 @@ export {
   type FleetQuestion,
   type FleetResult,
 } from './useFleet';
+
+// Utilities (Lua-backed: IDs, strings, time, deep equality, safe JSON)
+export {
+  useId,
+  useUUID,
+  useDeepEqual,
+  useTruncate,
+  useSlugify,
+  useCamelCase,
+  useSnakeCase,
+  useKebabCase,
+  usePascalCase,
+  usePluralize,
+  useTimeAgo,
+  useFormatDate,
+  useMsParse,
+  useMsFormat,
+  useDuration,
+  useSafeStringify,
+  useUtilsBatch,
+  type Duration,
+} from './useUtils';

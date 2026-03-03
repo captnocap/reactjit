@@ -13,6 +13,7 @@ import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
 import { BridgeProvider, useBridge } from '../../packages/core/src/context';
+import '../../packages/icons/src'; // register icons so <Image src="icon-name" /> works
 // State preservation disabled — it patches React.useState globally which
 // breaks HMR reload (microtask flood causes TypeError in fresh QuickJS context).
 // Use useHotState() explicitly for state that should survive hot reload.

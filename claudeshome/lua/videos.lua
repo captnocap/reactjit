@@ -30,8 +30,10 @@ ffi.cdef[[
   // --- SDL2 (Love2D already has it loaded) ---
   void *SDL_GL_GetProcAddress(const char *proc);
 
-  // --- dlopen ---
+  // --- dlopen / dlclose ---
   void *dlopen(const char *filename, int flags);
+  int dlclose(void *handle);
+  char *dlerror(void);
 
   // --- mpv client API ---
   typedef struct mpv_handle mpv_handle;
@@ -179,9 +181,15 @@ local MPV_FORMAT_DOUBLE = 5
 local libmpvAvailable = false
 local libmpvLoadAttempted = false
 local mpv = nil
+local dlopen_handle = nil  -- explicit dlopen handle for dlclose support
+local backendReady = false
 
 -- Shared GL proc address callback (anchored at module level — never GC'd)
 local get_proc_address_cb = nil
+
+-- Unload debounce: seconds to wait after last video node disappears before dlclose
+local UNLOAD_DEBOUNCE = 3.0
+local unloadTimer = nil  -- love.timer.getTime() when last video node disappeared
 
 --- Load libmpv on demand. Called from loadVideo() on first use.
 --- Returns true if libmpv is available, false otherwise.
@@ -215,7 +223,7 @@ function Videos.loadLibrary()
   local lastErr
   for _, path in ipairs(paths) do
     local ok, err = pcall(function()
-      ffi.C.dlopen(path, bit.bor(RTLD_LAZY, RTLD_DEEPBIND))
+      dlopen_handle = ffi.C.dlopen(path, bit.bor(RTLD_LAZY, RTLD_DEEPBIND))
       mpv = ffi.load(path)
     end)
     if ok then
@@ -240,6 +248,54 @@ function Videos.loadLibrary()
     end
   )
 
+  return true
+end
+
+--- Fully unload libmpv: destroy all video objects, free the callback,
+--- dlclose both handles (ffi.load's internal + our explicit one), and
+--- reset all flags so the next loadVideo() triggers a fresh load.
+--- Returns true if the library was unloaded, false if it wasn't loaded.
+function Videos.unloadLibrary()
+  if not libmpvAvailable then return false end
+
+  io.write("[videos] unloadLibrary: tearing down mpv...\n"); io.flush()
+
+  -- 1. Destroy all mpv handles, render contexts, FBOs, textures, canvases
+  Videos.clearCache()
+  backendReady = false
+
+  -- 2. Free the GL proc address callback
+  if get_proc_address_cb ~= nil then
+    get_proc_address_cb:free()
+    get_proc_address_cb = nil
+  end
+
+  -- 3. Drop the ffi.load library namespace — LuaJIT's GC will dlclose its
+  --    internal handle when it collects this object
+  mpv = nil
+
+  -- 4. Force GC to collect the ffi library object (two cycles for weak refs)
+  collectgarbage("collect")
+  collectgarbage("collect")
+
+  -- 5. dlclose our explicit handle (the one with RTLD_DEEPBIND)
+  if dlopen_handle ~= nil then
+    local ret = ffi.C.dlclose(dlopen_handle)
+    if ret ~= 0 then
+      local err = ffi.string(ffi.C.dlerror())
+      io.write("[videos] dlclose warning: " .. err .. "\n"); io.flush()
+    else
+      io.write("[videos] dlclose: explicit handle closed\n"); io.flush()
+    end
+    dlopen_handle = nil
+  end
+
+  -- 6. Reset flags so loadLibrary() can be called again
+  libmpvAvailable = false
+  libmpvLoadAttempted = false
+  unloadTimer = nil
+
+  io.write("[videos] unloadLibrary: complete — mpv fully unloaded\n"); io.flush()
   return true
 end
 
@@ -570,8 +626,6 @@ end
 -- Per-source mpv instances (each video source gets its own handle + render ctx)
 -- ============================================================================
 
-local backendReady = false
-
 --- Eagerly load libmpv and mark backend ready.
 --- Called by storybook or apps that want mpv available at startup.
 --- For lazy loading, skip this — loadVideo() will call loadLibrary() on demand.
@@ -793,6 +847,22 @@ function Videos.syncWithTree(nodes)
   end
   for src in pairs(staleSrcs) do
     clearSource(src)
+  end
+
+  -- Auto-unload: if no video nodes remain and mpv is loaded, start debounce timer.
+  -- If timer expires, fully unload the library to reclaim ~111 MB of RSS.
+  local hasAnyVideo = next(activeSrcs) ~= nil
+  if hasAnyVideo then
+    -- Video nodes exist — cancel any pending unload
+    unloadTimer = nil
+  elseif libmpvAvailable then
+    -- No video nodes — start or check debounce timer
+    if unloadTimer == nil then
+      unloadTimer = now
+    elseif now - unloadTimer >= UNLOAD_DEBOUNCE then
+      io.write("[videos] No video nodes for " .. UNLOAD_DEBOUNCE .. "s — unloading libmpv\n"); io.flush()
+      Videos.unloadLibrary()
+    end
   end
 end
 
@@ -1065,8 +1135,7 @@ function Videos.clearCache()
 end
 
 function Videos.shutdown()
-  Videos.clearCache()
-  backendReady = false
+  Videos.unloadLibrary()
 end
 
 --- Return count of loaded videos (for panic snapshot diagnostics).

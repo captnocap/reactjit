@@ -15,6 +15,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, TextEditor, CodeBlock, Pressable, ScrollView } from '../../../../packages/core/src';
 import { useThemeColors } from '../../../../packages/theme/src';
+import { Icon } from '../../../../packages/icons/src';
+import { Layers, BookOpen, Code, ShieldAlert, SlidersHorizontal, Zap, ChevronRight, Play, X, Component } from '../../../../packages/icons/src/icons';
 import { transformJSX } from '../../playground/lib/jsx-transform';
 import { evalComponent } from '../../playground/lib/eval-component';
 import { Preview } from '../../playground/Preview';
@@ -51,6 +53,17 @@ export function Wireframe({ label, style }: { label: string; style?: any }) {
       ...style,
     }}>
       <Text style={{ color: c.muted, fontSize: 9, textAlign: 'center' }}>{label}</Text>
+    </Box>
+  );
+}
+
+/** Section label with a leading icon. Used in the doc right-column. */
+function SectionHead({ icon, label }: { icon: number[][]; label: string }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Icon icon={icon} size={10} color={c.textDim} />
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{label}</Text>
     </Box>
   );
 }
@@ -176,6 +189,7 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
         paddingBottom: 12,
         gap: 14,
       }}>
+        <Icon icon={Layers} size={18} color={c.text} />
         <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
           {title}
         </Text>
@@ -238,21 +252,21 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
               <Box style={{ width: '100%', padding: 14, gap: 10 }}>
 
                 {/* ── Overview ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'OVERVIEW'}</Text>
+                <SectionHead icon={BookOpen} label="OVERVIEW" />
                 <Text style={{ color: c.text, fontSize: 10 }}>{overview}</Text>
 
                 <HorizontalDivider />
 
                 {/* ── Usage ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'USAGE'}</Text>
-                <CodeBlock language="tsx" fontSize={9} code={usageCode} />
+                <SectionHead icon={Code} label="USAGE" />
+                <CodeBlock code={usageCode} fontSize={9} />
 
                 <HorizontalDivider />
 
                 {/* ── Behavior (critical rules) ── */}
                 {criticalRules.length > 0 && (
                   <>
-                    <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'BEHAVIOR'}</Text>
+                    <SectionHead icon={ShieldAlert} label="BEHAVIOR" />
                     <Box style={{ gap: 4 }}>
                       {criticalRules.map((rule, i) => (
                         <Text key={i} style={{ color: c.text, fontSize: 10 }}>{rule}</Text>
@@ -265,7 +279,7 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
                 {/* ── Props ── */}
                 {props.length > 0 && (
                   <>
-                    <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'PROPS'}</Text>
+                    <SectionHead icon={SlidersHorizontal} label="PROPS" />
                     <Box style={{ flexDirection: 'row', gap: 8 }}>
                       <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
                         {col1.map(([prop, type]) => (
@@ -291,7 +305,7 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
                 {callbacks.length > 0 && (
                   <>
                     <HorizontalDivider />
-                    <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'CALLBACKS'}</Text>
+                    <SectionHead icon={Zap} label="CALLBACKS" />
                     <Box style={{ gap: 2 }}>
                       {callbacks.map(([name, sig]) => (
                         <Box key={name} style={{ flexDirection: 'row', gap: 4 }}>
@@ -324,7 +338,7 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
         gap: 12,
       }}>
         <Text style={{ color: c.muted, fontSize: 9 }}>{breadcrumb}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Icon icon={ChevronRight} size={8} color={c.textDim} />
         <Text style={{ color: c.text, fontSize: 9 }}>{doc?.title ?? 'Component'}</Text>
 
         <Box style={{ flexGrow: 1 }} />
@@ -340,13 +354,16 @@ export function ComponentDoc({ docKey, starterCode, preview, section }: Componen
             borderRadius: 4,
           })}
         >
-          <Text style={{
-            color: playground ? 'white' : c.text,
-            fontSize: 9,
-            fontWeight: 'bold',
-          }}>
-            {playground ? 'Exit Playground' : 'Playground'}
-          </Text>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Icon icon={playground ? X : Play} size={10} color={playground ? 'white' : c.text} />
+            <Text style={{
+              color: playground ? 'white' : c.text,
+              fontSize: 9,
+              fontWeight: 'bold',
+            }}>
+              {playground ? 'Exit Playground' : 'Playground'}
+            </Text>
+          </Box>
         </Pressable>
 
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>

@@ -727,6 +727,7 @@ end
 --- @param inheritedOpacity number Accumulated opacity from parent chain (default 1)
 --- @param stencilDepth number Current stencil nesting depth (default 0)
 -- Debug: log first N frames of paint decisions for each node type
+local _paintDbgEnabled = false  -- flip to true to re-enable PAINT-DBG spam
 local _paintDbgCount = 0
 local _paintDbgSeen = {}  -- type -> count
 
@@ -740,11 +741,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   end
   local _pt0 = love.timer.getTime()
 
-  -- Debug logging for first 3 encounters of each type
+  -- Debug logging for first 3 encounters of each type (set to true to re-enable)
   local dbgType = node.type or "nil"
   _paintDbgSeen[dbgType] = (_paintDbgSeen[dbgType] or 0) + 1
   local dbgN = _paintDbgSeen[dbgType]
-  local dbgLog = dbgN <= 3
+  local dbgLog = _paintDbgEnabled and dbgN <= 3
   if dbgLog then
     local c = node.computed
     io.write(string.format("[PAINT-DBG] type=%s id=%s computed=%dx%d@(%d,%d) children=%d\n",

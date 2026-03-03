@@ -59,13 +59,35 @@ if [ -n "$DOC_EXISTS" ]; then
  * ${NAME} — Component documentation page.
  *
  * Auto-populates docs from content/sections/ via docKey="${DOC_KEY}".
+ *
+ * TODO: Add a custom preview with icons relevant to ${NAME}.
+ *       Use <Image src="icon-name" w={16} h={16} /> for vector icons.
+ *       Browse available icons at packages/icons/src/iconNames.ts.
  */
 
 import React from 'react';
-import { ComponentDoc } from './_shared/ComponentDoc';
+import { Box, Text, Image } from '../../../../packages/core/src';
+import { useThemeColors } from '../../../../packages/theme/src';
+import { ComponentDoc, styleTooltip } from './_shared/ComponentDoc';
 
 export function ${NAME}Story() {
-  return <ComponentDoc docKey="${DOC_KEY}" />;
+  return <ComponentDoc docKey="${DOC_KEY}" preview={<${NAME}Preview />} />;
+}
+
+function ${NAME}Preview() {
+  const c = useThemeColors();
+  return (
+    <>
+      <Box style={{
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: c.surface, borderRadius: 8, padding: 12,
+        borderWidth: 1, borderColor: c.border,
+      }}>
+        <Image src="component" w={16} h={16} style={{ color: c.primary }} />
+        <Text style={{ color: c.text, fontSize: 11 }}>{'${NAME}'}</Text>
+      </Box>
+    </>
+  );
 }
 EOF
 else
@@ -76,13 +98,35 @@ else
  * No doc file found for "${DOC_KEY}". Using placeholder content.
  * To connect docs, create content/sections/05-components/${DOC_KEY}.txt
  * and add docKey="${DOC_KEY}" to the ComponentDoc below.
+ *
+ * TODO: Add a custom preview with icons relevant to ${NAME}.
+ *       Use <Image src="icon-name" w={16} h={16} /> for vector icons.
+ *       Browse available icons at packages/icons/src/iconNames.ts.
  */
 
 import React from 'react';
-import { ComponentDoc } from './_shared/ComponentDoc';
+import { Box, Text, Image } from '../../../../packages/core/src';
+import { useThemeColors } from '../../../../packages/theme/src';
+import { ComponentDoc, styleTooltip } from './_shared/ComponentDoc';
 
 export function ${NAME}Story() {
-  return <ComponentDoc />;
+  return <ComponentDoc preview={<${NAME}Preview />} />;
+}
+
+function ${NAME}Preview() {
+  const c = useThemeColors();
+  return (
+    <>
+      <Box style={{
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: c.surface, borderRadius: 8, padding: 12,
+        borderWidth: 1, borderColor: c.border,
+      }}>
+        <Image src="component" w={16} h={16} style={{ color: c.primary }} />
+        <Text style={{ color: c.text, fontSize: 11 }}>{'${NAME}'}</Text>
+      </Box>
+    </>
+  );
 }
 EOF
 fi

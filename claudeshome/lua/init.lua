@@ -140,6 +140,13 @@ local function netTraceId(kind, id)
   return tostring(kind) .. ":" .. tostring(id)
 end
 
+local function netNowSec()
+  if type(love) == "table" and love.timer and love.timer.getTime then
+    return love.timer.getTime()
+  end
+  return os.clock()
+end
+
 local function netSizeOf(value)
   if type(value) == "string" then return #value end
   if value == nil then return nil end
@@ -150,6 +157,24 @@ local function netEmit(evt)
   if M.inspectorEnabled and devtools and devtools.recordNetworkEvent then
     devtools.recordNetworkEvent(evt)
   end
+end
+
+local netTraceStartedAt = {}
+
+local function netMarkTraceStart(traceId)
+  if not traceId then return end
+  netTraceStartedAt[traceId] = netNowSec()
+end
+
+local function netDurationMs(traceId)
+  local started = traceId and netTraceStartedAt[traceId] or nil
+  if not started then return nil end
+  return math.max(0, (netNowSec() - started) * 1000)
+end
+
+local function netClearTraceStart(traceId)
+  if not traceId then return end
+  netTraceStartedAt[traceId] = nil
 end
 
 local netStreamFirstByteSeen = {}
@@ -1329,14 +1354,14 @@ function ReactJIT.init(config)
     end
   end
 
-  -- Register crypto RPC handlers (libsodium + libcrypto + libblake3)
+  -- Register crypto RPC handlers — libraries lazy-load on first invocation
   do
     local cok, cryptomod = pcall(require, "lua.crypto")
-    if cok and cryptomod.available then
+    if cok then
       for method, handler in pairs(cryptomod.getHandlers()) do
         rpcHandlers[method] = gated("crypto", handler)
       end
-    elseif not cok then
+    else
       startupLog("[reactjit] crypto module not loaded: " .. tostring(cryptomod))
     end
   end
@@ -2007,6 +2032,7 @@ function ReactJIT.update(dt)
           local payload = cmd.payload
           local traceId = payload and payload.id and netTraceId("http", payload.id) or nil
           if payload and traceId and payload.url then
+            netMarkTraceStart(traceId)
             netEmit({
               traceId = traceId,
               origin = "runtime",
@@ -2075,11 +2101,13 @@ function ReactJIT.update(dt)
                   responseHeaders = immediate.headers,
                   payloadPreview = immediate.error or immediate.body,
                   size = netSizeOf(immediate.body),
+                  durationMs = netDurationMs(traceId),
                 })
                 pushEvent({
                   type = "http:response",
                   payload = { _json = json.encode(immediate) },
                 })
+                netClearTraceStart(traceId)
               end
             else
               if traceId then
@@ -2095,6 +2123,7 @@ function ReactJIT.update(dt)
                   blockedReason = "http_module_unavailable",
                   error = "HTTP module not available",
                 })
+                netClearTraceStart(traceId)
               end
               pushEvent({
                 type = "http:response",
@@ -2113,6 +2142,7 @@ function ReactJIT.update(dt)
           local payload = cmd.payload
           local traceId = payload and payload.id and netTraceId("http", payload.id) or nil
           if payload and traceId and payload.url then
+            netMarkTraceStart(traceId)
             netEmit({
               traceId = traceId,
               origin = "runtime",
@@ -2181,11 +2211,13 @@ function ReactJIT.update(dt)
                   responseHeaders = immediate.headers,
                   payloadPreview = immediate.error or immediate.body,
                   size = netSizeOf(immediate.body),
+                  durationMs = netDurationMs(traceId),
                 })
                 pushEvent({
                   type = "http:response",
                   payload = { _json = json.encode(immediate) },
                 })
+                netClearTraceStart(traceId)
               end
             else
               if traceId then
@@ -2201,6 +2233,7 @@ function ReactJIT.update(dt)
                   blockedReason = "http_module_unavailable",
                   error = "HTTP module not available",
                 })
+                netClearTraceStart(traceId)
               end
               pushEvent({
                 type = "http:stream:error",
@@ -2226,6 +2259,7 @@ function ReactJIT.update(dt)
           local payload = cmd.payload
           local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
           if payload and traceId and payload.url then
+            netMarkTraceStart(traceId)
             netEmit({
               traceId = traceId,
               origin = "runtime",
@@ -2278,6 +2312,7 @@ function ReactJIT.update(dt)
               blockedReason = "network_module_unavailable",
               error = "Network module not available",
             })
+            netClearTraceStart(traceId)
           end
         elseif type(cmd) == "table" and cmd.type == "ws:send" then
           -- WebSocket send
@@ -2567,6 +2602,7 @@ function ReactJIT.update(dt)
             status = "ok",
             size = netSizeOf(resp.data),
             payloadPreview = resp.data,
+            durationMs = phase == "firstByte" and netDurationMs(traceId) or nil,
           })
         end
         pushEvent({
@@ -2584,8 +2620,10 @@ function ReactJIT.update(dt)
             status = (tonumber(resp.status) or 0) >= 400 and "error" or "ok",
             code = resp.status,
             responseHeaders = resp.headers,
+            durationMs = netDurationMs(traceId),
           })
           netStreamFirstByteSeen[traceId] = nil
+          netClearTraceStart(traceId)
         end
         pushEvent({
           type = "http:stream:done",
@@ -2602,8 +2640,10 @@ function ReactJIT.update(dt)
             status = "error",
             error = resp.error,
             payloadPreview = resp.error,
+            durationMs = netDurationMs(traceId),
           })
           netStreamFirstByteSeen[traceId] = nil
+          netClearTraceStart(traceId)
         end
         pushEvent({
           type = "http:stream:error",
@@ -2625,8 +2665,10 @@ function ReactJIT.update(dt)
             payloadPreview = isError and resp.error or resp.body,
             size = netSizeOf(resp.body),
             error = resp.error,
+            durationMs = netDurationMs(traceId),
           })
           netStreamFirstByteSeen[traceId] = nil
+          netClearTraceStart(traceId)
         end
         -- Regular buffered response
         pushEvent({
@@ -2656,6 +2698,8 @@ function ReactJIT.update(dt)
       local preview = nil
       local code = nil
       local size = nil
+      local durationMs = nil
+      local clearTraceAfterEmit = false
 
       -- Scan incoming WebSocket messages for mining protocol patterns
       if evtType == "ws:message" and evt.data and M.quarantine and not M.quarantine.isActive() then
@@ -2679,6 +2723,7 @@ function ReactJIT.update(dt)
       if evtType == "ws:open" then
         traceId = evt.id and netTraceId("ws", evt.id) or nil
         phase = "open"
+        durationMs = netDurationMs(traceId)
       elseif evtType == "ws:message" then
         traceId = evt.id and netTraceId("ws", evt.id) or nil
         phase = "message"
@@ -2689,10 +2734,14 @@ function ReactJIT.update(dt)
         phase = "error"
         status = "error"
         preview = evt.error
+        durationMs = netDurationMs(traceId)
+        clearTraceAfterEmit = true
       elseif evtType == "ws:close" then
         traceId = evt.id and netTraceId("ws", evt.id) or nil
         phase = "close"
         code = evt.code
+        durationMs = netDurationMs(traceId)
+        clearTraceAfterEmit = true
       elseif evtType == "ws:server:ready" then
         transport = "peer"
         traceId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
@@ -2739,7 +2788,11 @@ function ReactJIT.update(dt)
           code = code,
           error = evt.error,
           clientId = evt.clientId,
+          durationMs = durationMs,
         })
+        if clearTraceAfterEmit then
+          netClearTraceStart(traceId)
+        end
       end
 
       evt.type = nil  -- remove type from payload

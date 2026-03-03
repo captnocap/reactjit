@@ -298,8 +298,11 @@ export function Image(props: ImageProps) {
   const iconPaths = isBareName ? lookupIcon(src) : undefined;
 
   if (iconPaths) {
+    const iconStyle: any = { ...scaledStyle, strokePaths: iconPaths, strokeWidth: 2 };
+    // Map color → strokeColor so theme tokens color the icon
+    if (scaledStyle?.color && !iconStyle.strokeColor) iconStyle.strokeColor = scaledStyle.color;
     const hostProps: any = {
-      style: { ...scaledStyle, strokePaths: iconPaths, strokeWidth: 2 },
+      style: iconStyle,
       onClick,
       onWheel,
     };

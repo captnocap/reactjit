@@ -70,6 +70,7 @@ local state = {
   lastNetSend    = 0,        -- throttle network delta updates to child
   lastNetSentId  = 0,        -- latest network event ID sent to child
   forceNetSnapshot = false,  -- force full network snapshot on next child sync
+  netPingSeq = 0,            -- counter for "Ping Tor" test button
   -- Mutation batching: accumulate mutations, flush at ~15fps to match child
   pendingMutations = {},     -- queued mutation commands
   mutationFlushTimer = 0,    -- time since last flush
@@ -2395,7 +2396,7 @@ local function drawNetworkTab(region)
   local lineH = font:getHeight() + 4
   local controlsH = 52
   local tableHeaderH = lineH + 6
-  local detailH = 156
+  local detailH = netSelectedEventId and 156 or 0
   local headerY = region.y + controlsH
   local rowsY = headerY + tableHeaderH
   local rowsH = math.max(40, region.h - controlsH - tableHeaderH - detailH - 4)
@@ -2445,6 +2446,8 @@ local function drawNetworkTab(region)
   sx = sx + netButton(sx, region.y + 28, "Clear", false, "clear", nil)
   sx = sx + netButton(sx, region.y + 28, "Copy curl", false, "copy_curl", nil)
   sx = sx + netButton(sx, region.y + 28, "Export JSON", false, "export_json", nil)
+  sx = sx + 8  -- gap before test button
+  sx = sx + netButton(sx, region.y + 28, "Ping Tor", false, "ping_tor", nil)
 
   local fillPct = math.floor((netCount / NET_MAX_EVENTS) * 100)
   local health = string.format(
@@ -2738,6 +2741,48 @@ networkMousepressed = function(x, y, button, region)
           netClipboardWrite(exported)
         else
           netSetStatus("No trace selected for JSON export.")
+        end
+      elseif r.kind == "ping_tor" then
+        state.netPingSeq = state.netPingSeq + 1
+        local pingId = "devtools_ping_" .. state.netPingSeq
+        local traceId = "http:" .. pingId
+        local url = "https://check.torproject.org/"
+        DevTools.recordNetworkEvent({
+          traceId = traceId,
+          origin = "devtools",
+          transport = "http",
+          direction = "out",
+          phase = "queued",
+          status = "ok",
+          method = "GET",
+          target = url,
+        })
+        local http = require("lua.http")
+        if http and http.request then
+          DevTools.recordNetworkEvent({
+            traceId = traceId,
+            origin = "devtools",
+            transport = "http",
+            direction = "out",
+            phase = "sent",
+            status = "ok",
+            method = "GET",
+            target = url,
+          })
+          http.request(pingId, { url = url, method = "GET" })
+          netSetStatus("Ping sent → check.torproject.org")
+        else
+          DevTools.recordNetworkEvent({
+            traceId = traceId,
+            origin = "devtools",
+            transport = "http",
+            direction = "out",
+            phase = "error",
+            status = "error",
+            error = "http module not available",
+            target = url,
+          })
+          netSetStatus("HTTP module not available.")
         end
       elseif r.kind == "toggle_trace" then
         netExpanded[r.value] = not netExpanded[r.value]

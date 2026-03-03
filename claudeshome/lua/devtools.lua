@@ -70,6 +70,7 @@ local state = {
   lastNetSend    = 0,        -- throttle network delta updates to child
   lastNetSentId  = 0,        -- latest network event ID sent to child
   forceNetSnapshot = false,  -- force full network snapshot on next child sync
+  netPingSeq = 0,            -- counter for "Ping Tor" test button
   -- Mutation batching: accumulate mutations, flush at ~15fps to match child
   pendingMutations = {},     -- queued mutation commands
   mutationFlushTimer = 0,    -- time since last flush
@@ -170,6 +171,7 @@ local netCount = 0
 local netNextEventId = 1
 local netNewestEventId = 0
 local netSeqByTrace = {}
+local netTraceRefs = {}
 local netTraceMeta = {}
 local netSelectedEventId = nil
 local netScrollY = 0
@@ -265,7 +267,7 @@ local function pushViewportEvent()
 end
 
 local function nowSec()
-  if love.timer and love.timer.getTime then
+  if type(love) == "table" and love.timer and love.timer.getTime then
     return love.timer.getTime()
   end
   return os.clock()
@@ -370,12 +372,15 @@ local function updateTraceMeta(evt)
     m = { traceId = traceId, firstSeen = evt.ts, lastSeen = evt.ts }
     netTraceMeta[traceId] = m
   end
-  m.lastSeen = evt.ts
-  if evt.phase == "queued" and not m.queuedTs then m.queuedTs = evt.ts end
-  if evt.phase == "sent" and not m.sentTs then m.sentTs = evt.ts end
-  if (evt.phase == "firstByte" or evt.phase == "open") and not m.firstByteTs then m.firstByteTs = evt.ts end
+  m.firstSeen = math.min(m.firstSeen or evt.ts, evt.ts)
+  m.lastSeen = math.max(m.lastSeen or evt.ts, evt.ts)
+  if evt.phase == "queued" then m.queuedTs = math.min(m.queuedTs or evt.ts, evt.ts) end
+  if evt.phase == "sent" then m.sentTs = math.min(m.sentTs or evt.ts, evt.ts) end
+  if evt.phase == "firstByte" or evt.phase == "open" then
+    m.firstByteTs = math.min(m.firstByteTs or evt.ts, evt.ts)
+  end
   if evt.phase == "done" or evt.phase == "close" or evt.phase == "error" or evt.phase == "blocked" then
-    m.doneTs = evt.ts
+    m.doneTs = math.max(m.doneTs or evt.ts, evt.ts)
   end
   if evt.method and not m.method then m.method = evt.method end
   if evt.target and not m.target then m.target = evt.target end
@@ -414,6 +419,20 @@ local function pushNetworkEvent(evt, fromSync)
   if netCount == NET_MAX_EVENTS then replaced = netEvents[netHead] end
   netEvents[netHead] = evt
   if netCount < NET_MAX_EVENTS then netCount = netCount + 1 end
+  if replaced then
+    local replacedTrace = traceOf(replaced)
+    local nextCount = (netTraceRefs[replacedTrace] or 0) - 1
+    if nextCount <= 0 then
+      netTraceRefs[replacedTrace] = nil
+      netTraceMeta[replacedTrace] = nil
+      netSeqByTrace[replacedTrace] = nil
+      netExpanded[replacedTrace] = nil
+    else
+      netTraceRefs[replacedTrace] = nextCount
+    end
+  end
+  local traceId = traceOf(evt)
+  netTraceRefs[traceId] = (netTraceRefs[traceId] or 0) + 1
   if replaced and replaced.eventId == netSelectedEventId then
     netSelectedEventId = nil
   end
@@ -494,7 +513,6 @@ function DevTools.beginFrame(dt)
       responseHeaders = {},
     }, true)
     netNextEventId = netNextEventId + 1
-    state.netRecentDropped = state.netRecentDropped + dropped
   end
 
   state.netStatsTimer = state.netStatsTimer + (dt or 0)
@@ -523,15 +541,44 @@ function DevTools.clearNetworkEvents()
   netEvents = {}
   netHead = 0
   netCount = 0
+  netNextEventId = 1
+  netNewestEventId = 0
+  netTraceRefs = {}
   netTraceMeta = {}
   netSeqByTrace = {}
+  netExpanded = {}
   netSelectedEventId = nil
   netScrollY = 0
+  state.netCapturedThisFrame = 0
+  state.netDroppedThisFrame = 0
+  state.netStatsTimer = 0
+  state.netRecentEvents = 0
+  state.netRecentDropped = 0
+  state.netEventsPerSec = 0
+  state.netDroppedPerSec = 0
+  state.netLastErrorTs = nil
   state.forceNetSnapshot = true
 end
 
 function DevTools.getLatestNetworkEventId()
   return netNewestEventId
+end
+
+function DevTools.getNetworkDebugStats()
+  local traces = 0
+  local metas = 0
+  local seqs = 0
+  for _ in pairs(netTraceRefs) do traces = traces + 1 end
+  for _ in pairs(netTraceMeta) do metas = metas + 1 end
+  for _ in pairs(netSeqByTrace) do seqs = seqs + 1 end
+  return {
+    eventCount = netCount,
+    maxEvents = NET_MAX_EVENTS,
+    traceRefCount = traces,
+    traceMetaCount = metas,
+    seqMapCount = seqs,
+    newestEventId = netNewestEventId,
+  }
 end
 
 function DevTools.getNetworkSnapshotForChild(limit)
@@ -547,7 +594,13 @@ function DevTools.getNetworkSnapshotForChild(limit)
       sentUpTo = evt.eventId
     end
   end)
-  return { mode = "snapshot", events = out, newestEventId = netNewestEventId, sentUpToEventId = sentUpTo }
+  return {
+    mode = "snapshot",
+    events = out,
+    newestEventId = netNewestEventId,
+    sentUpToEventId = sentUpTo,
+    startEventId = out[1] and out[1].eventId or (netNewestEventId + 1),
+  }
 end
 
 function DevTools.getNetworkDeltaForChild(lastEventId, maxEvents)
@@ -561,7 +614,13 @@ function DevTools.getNetworkDeltaForChild(lastEventId, maxEvents)
       sentUpTo = evt.eventId
     end
   end)
-  return { mode = "delta", events = out, newestEventId = netNewestEventId, sentUpToEventId = sentUpTo }
+  return {
+    mode = "delta",
+    events = out,
+    newestEventId = netNewestEventId,
+    sentUpToEventId = sentUpTo,
+    startEventId = out[1] and out[1].eventId or (minId + 1),
+  }
 end
 
 function DevTools.ingestNetworkDelta(payload)
@@ -570,8 +629,10 @@ function DevTools.ingestNetworkDelta(payload)
     netEvents = {}
     netHead = 0
     netCount = 0
+    netTraceRefs = {}
     netTraceMeta = {}
     netSeqByTrace = {}
+    netExpanded = {}
     netSelectedEventId = nil
     netScrollY = 0
     netNewestEventId = 0
@@ -581,6 +642,11 @@ function DevTools.ingestNetworkDelta(payload)
     if evt then
       pushNetworkEvent(evt, true)
     end
+  end
+  local newest = tonumber(payload.newestEventId)
+  if newest then
+    netNewestEventId = math.max(netNewestEventId, newest)
+    netNextEventId = math.max(netNextEventId, netNewestEventId + 1)
   end
 end
 
@@ -2277,7 +2343,13 @@ local function netEventBadge(evt)
 end
 
 local function netEventSummary(evt)
-  local target = trimTo(evt.target or "", 56)
+  local target = tostring(evt.target or "")
+  local _, host, path = target:match("^([%w+%-%.]+)://([^/%?]+)([^%?]*)")
+  if host then
+    target = host .. ((path and path ~= "") and path or "/")
+  elseif target == "" then
+    target = "-"
+  end
   if evt.transport == "http" then
     return (evt.method or "HTTP") .. " " .. target
   elseif evt.transport == "ws" then
@@ -2323,10 +2395,35 @@ local function drawNetworkTab(region)
   local pad = 10
   local lineH = font:getHeight() + 4
   local controlsH = 52
-  local detailH = 138
-  local rowsY = region.y + controlsH
-  local rowsH = math.max(40, region.h - controlsH - detailH - 4)
+  local tableHeaderH = lineH + 6
+  local detailH = netSelectedEventId and 156 or 0
+  local headerY = region.y + controlsH
+  local rowsY = headerY + tableHeaderH
+  local rowsH = math.max(40, region.h - controlsH - tableHeaderH - detailH - 4)
   local detailY = rowsY + rowsH + 4
+  local colTimeX = region.x + pad
+  local colBadgeX = colTimeX + 54
+  local colTypeX = colBadgeX + 48
+  local colDirX = colTypeX + 44
+  local colOriginX = colDirX + 50
+  local colNameX = colOriginX + 58
+
+  local function trimWidth(s, maxW)
+    s = tostring(s or "")
+    if maxW <= 12 then return "..." end
+    if font:getWidth(s) <= maxW then return s end
+    local out = s
+    while #out > 1 and font:getWidth(out .. "...") > maxW do
+      out = out:sub(1, -2)
+    end
+    return out .. "..."
+  end
+
+  local function statusText(evt)
+    local statusStr = evt.code and (tostring(evt.status) .. ":" .. tostring(evt.code)) or tostring(evt.status or "")
+    if evt.durationMs then statusStr = statusStr .. string.format(" %.1fms", evt.durationMs) end
+    return statusStr
+  end
 
   -- Controls row
   love.graphics.setColor(NET_HDR_COL)
@@ -2342,9 +2439,15 @@ local function drawNetworkTab(region)
   sx = sx + netButton(sx, region.y + 28, "Any", netFilterStatus == "all", "filter_status", "all")
   sx = sx + netButton(sx, region.y + 28, "Errors", netFilterStatus == "errors", "filter_status", "errors")
   sx = sx + netButton(sx, region.y + 28, "Blocked", netFilterStatus == "blocked", "filter_status", "blocked")
+  if netGroupByTrace then
+    sx = sx + netButton(sx, region.y + 28, "Expand", false, "expand_all", nil)
+    sx = sx + netButton(sx, region.y + 28, "Collapse", false, "collapse_all", nil)
+  end
   sx = sx + netButton(sx, region.y + 28, "Clear", false, "clear", nil)
   sx = sx + netButton(sx, region.y + 28, "Copy curl", false, "copy_curl", nil)
   sx = sx + netButton(sx, region.y + 28, "Export JSON", false, "export_json", nil)
+  sx = sx + 8  -- gap before test button
+  sx = sx + netButton(sx, region.y + 28, "Ping Tor", false, "ping_tor", nil)
 
   local fillPct = math.floor((netCount / NET_MAX_EVENTS) * 100)
   local health = string.format(
@@ -2364,6 +2467,22 @@ local function drawNetworkTab(region)
     love.graphics.setColor(NET_WARN)
     love.graphics.print(netStatusMessage, region.x + region.w - font:getWidth(netStatusMessage) - pad, region.y + 8)
   end
+
+  -- Column header
+  love.graphics.setColor(NET_ROW_HOVER)
+  love.graphics.rectangle("fill", region.x, headerY, region.w, tableHeaderH)
+  love.graphics.setColor(BORDER_COLOR)
+  love.graphics.rectangle("fill", region.x, headerY + tableHeaderH - 1, region.w, 1)
+  love.graphics.setColor(NET_HDR_COL)
+  local hdrY = headerY + 3
+  love.graphics.print("Time", colTimeX, hdrY)
+  love.graphics.print("Flag", colBadgeX, hdrY)
+  love.graphics.print("Type", colTypeX, hdrY)
+  love.graphics.print("Dir", colDirX, hdrY)
+  love.graphics.print("Origin", colOriginX, hdrY)
+  love.graphics.print("Name", colNameX, hdrY)
+  local statusLabel = "Status"
+  love.graphics.print(statusLabel, region.x + region.w - pad - font:getWidth(statusLabel), hdrY)
 
   -- Build filtered rows
   local filtered = {}
@@ -2386,17 +2505,22 @@ local function drawNetworkTab(region)
       g.events[#g.events + 1] = evt
       g.last = evt
     end
+    table.sort(groupOrder, function(a, b)
+      local aId = a.last and a.last.eventId or 0
+      local bId = b.last and b.last.eventId or 0
+      return aId > bId
+    end)
     for _, g in ipairs(groupOrder) do
       rows[#rows + 1] = { kind = "group", group = g }
       if netExpanded[g.traceId] then
-        for _, evt in ipairs(g.events) do
-          rows[#rows + 1] = { kind = "event", evt = evt, depth = 1 }
+        for i = #g.events, 1, -1 do
+          rows[#rows + 1] = { kind = "event", evt = g.events[i], depth = 1 }
         end
       end
     end
   else
-    for _, evt in ipairs(filtered) do
-      rows[#rows + 1] = { kind = "event", evt = evt, depth = 0 }
+    for i = #filtered, 1, -1 do
+      rows[#rows + 1] = { kind = "event", evt = filtered[i], depth = 0 }
     end
   end
 
@@ -2416,9 +2540,16 @@ local function drawNetworkTab(region)
         local prefix = open and "- " or "+ "
         local label = prefix .. trimTo(g.traceId, 34) .. " (" .. tostring(#g.events) .. ")"
         local summary = g.last and netEventSummary(g.last) or ""
-        love.graphics.print(label, region.x + pad, y)
+        love.graphics.print(label, colTimeX, y)
         love.graphics.setColor(NET_DIM_COL)
-        love.graphics.print(trimTo(summary, 48), region.x + 260, y)
+        local right = region.x + region.w - 12
+        local groupStatus = g.last and statusText(g.last) or ""
+        local groupStatusW = font:getWidth(groupStatus)
+        local nameW = math.max(40, right - groupStatusW - 8 - colNameX)
+        love.graphics.print(trimWidth(summary, nameW), colNameX, y)
+        if groupStatus ~= "" then
+          love.graphics.print(groupStatus, right - groupStatusW, y)
+        end
         netHitRects[#netHitRects + 1] = {
           x = region.x + 2, y = y - 1, w = region.w - 10, h = lineH + 2,
           kind = "toggle_trace", value = g.traceId
@@ -2429,26 +2560,23 @@ local function drawNetworkTab(region)
         love.graphics.setColor(isSel and NET_ROW_SEL or NET_TAB_BG)
         love.graphics.rectangle("fill", region.x + 2, y - 1, region.w - 10, lineH + 2, 3, 3)
         local badge, badgeCol = netEventBadge(evt)
-        local x = region.x + pad + (row.depth or 0) * 14
-        love.graphics.setColor(NET_DIM_COL)
-        love.graphics.print(string.format("%.3f", evt.ts % 1000), x, y)
-        x = x + 52
-        love.graphics.setColor(badgeCol)
-        love.graphics.print(badge, x, y)
-        x = x + 46
-        love.graphics.setColor(NET_DIM_COL)
-        love.graphics.print(trimTo(evt.transport or "-", 6), x, y)
-        x = x + 42
-        love.graphics.print(trimTo(evt.direction or "-", 8), x, y)
-        x = x + 48
-        love.graphics.setColor(NET_VAL_COL)
-        love.graphics.print(netEventSummary(evt), x, y)
+        local depthX = (row.depth or 0) * 14
         local right = region.x + region.w - 12
-        local statusStr = evt.code and (tostring(evt.status) .. ":" .. tostring(evt.code)) or tostring(evt.status or "")
-        if evt.durationMs then statusStr = statusStr .. string.format(" %.1fms", evt.durationMs) end
-        local sw = font:getWidth(statusStr)
+        local statusStr = statusText(evt)
+        local statusW = font:getWidth(statusStr)
+        local nameW = math.max(40, right - statusW - 8 - (colNameX + depthX))
         love.graphics.setColor(NET_DIM_COL)
-        love.graphics.print(statusStr, right - sw, y)
+        love.graphics.print(string.format("%.3f", evt.ts % 1000), colTimeX + depthX, y)
+        love.graphics.setColor(badgeCol)
+        love.graphics.print(badge, colBadgeX + depthX, y)
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(trimTo(evt.transport or "-", 6), colTypeX + depthX, y)
+        love.graphics.print(trimTo(evt.direction or "-", 8), colDirX + depthX, y)
+        love.graphics.print(trimTo(evt.origin or "-", 8), colOriginX + depthX, y)
+        love.graphics.setColor(NET_VAL_COL)
+        love.graphics.print(trimWidth(netEventSummary(evt), nameW), colNameX + depthX, y)
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(statusStr, right - statusW, y)
         netHitRects[#netHitRects + 1] = {
           x = region.x + 2, y = y - 1, w = region.w - 10, h = lineH + 2,
           kind = "select_event", value = evt.eventId
@@ -2480,29 +2608,89 @@ local function drawNetworkTab(region)
     love.graphics.setColor(NET_VAL_COL)
     love.graphics.print(selected.phase .. "  " .. netEventSummary(selected), dx, dy)
     dy = dy + lineH
-    if meta and meta.queuedTs and meta.doneTs then
+
+    love.graphics.setColor(NET_DIM_COL)
+    local eventMeta = string.format(
+      "event #%d  seq %s  parent %s  origin %s",
+      selected.eventId or 0,
+      tostring(selected.seq or "-"),
+      tostring(selected.parentId or "-"),
+      tostring(selected.origin or "-")
+    )
+    love.graphics.print(trimWidth(eventMeta, region.w - pad * 2), dx, dy)
+    dy = dy + lineH + 2
+
+    local barW = math.max(80, region.w - pad * 2)
+    local queued = meta and meta.queuedTs or nil
+    local sent = meta and meta.sentTs or nil
+    local first = meta and meta.firstByteTs or nil
+    local done = meta and meta.doneTs or nil
+    local startTs = queued or sent or selected.ts
+    local endTs = done or (meta and meta.lastSeen) or selected.ts
+    if startTs then
+      if not endTs or endTs < startTs then endTs = startTs end
+      local span = math.max(0.001, endTs - startTs)
+      local function marker(ts)
+        return dx + ((ts - startTs) / span) * barW
+      end
       love.graphics.setColor(NET_DIM_COL)
-      love.graphics.print(string.format(
-        "queued %.3f  first %.3f  done %.3f  total %.1fms",
-        meta.queuedTs, meta.firstByteTs or meta.sentTs or meta.queuedTs, meta.doneTs,
-        (meta.doneTs - meta.queuedTs) * 1000
-      ), dx, dy)
-      dy = dy + lineH
+      love.graphics.rectangle("fill", dx, dy + 8, barW, 2)
+      if queued then
+        local px = marker(queued)
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.rectangle("fill", px - 1, dy + 5, 3, 8, 1, 1)
+        love.graphics.print("Q", px - 3, dy - font:getHeight())
+      end
+      if sent then
+        local px = marker(sent)
+        love.graphics.setColor(NET_VAL_COL)
+        love.graphics.rectangle("fill", px - 1, dy + 5, 3, 8, 1, 1)
+        love.graphics.print("S", px - 3, dy - font:getHeight())
+      end
+      if first then
+        local px = marker(first)
+        love.graphics.setColor(NET_WARN)
+        love.graphics.rectangle("fill", px - 1, dy + 5, 3, 8, 1, 1)
+        love.graphics.print("F", px - 3, dy - font:getHeight())
+      end
+      if done then
+        local px = marker(done)
+        love.graphics.setColor(selected.status == "error" and NET_ERR or NET_GOOD)
+        love.graphics.rectangle("fill", px - 1, dy + 5, 3, 8, 1, 1)
+        love.graphics.print("D", px - 3, dy - font:getHeight())
+      end
+
+      local timingParts = {}
+      if queued and first then
+        timingParts[#timingParts + 1] = string.format("ttfb %.1fms", (first - queued) * 1000)
+      end
+      if queued and done then
+        timingParts[#timingParts + 1] = string.format("total %.1fms", (done - queued) * 1000)
+      elseif selected.durationMs then
+        timingParts[#timingParts + 1] = string.format("total %.1fms", selected.durationMs)
+      end
+      if #timingParts > 0 then
+        local timing = table.concat(timingParts, "  ")
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(timing, dx + math.max(0, barW - font:getWidth(timing)), dy + 12)
+      end
+      dy = dy + 30
     end
+    dy = dy + 2
 
     if selected.error then
       love.graphics.setColor(NET_ERR)
-      love.graphics.print("error: " .. trimTo(selected.error, 120), dx, dy)
+      love.graphics.print(trimWidth("error: " .. selected.error, region.w - pad * 2), dx, dy)
       dy = dy + lineH
     elseif selected.message then
       love.graphics.setColor(NET_DIM_COL)
-      love.graphics.print("message: " .. trimTo(selected.message, 120), dx, dy)
+      love.graphics.print(trimWidth("message: " .. selected.message, region.w - pad * 2), dx, dy)
       dy = dy + lineH
     end
 
     if selected.payloadPreview and selected.payloadPreview ~= "" then
       love.graphics.setColor(NET_DIM_COL)
-      love.graphics.print("payload: " .. trimTo(selected.payloadPreview, 120), dx, dy)
+      love.graphics.print(trimWidth("payload: " .. selected.payloadPreview, region.w - pad * 2), dx, dy)
       dy = dy + lineH
     end
   else
@@ -2527,6 +2715,13 @@ networkMousepressed = function(x, y, button, region)
         netFilterTransport = r.value or "all"
       elseif r.kind == "filter_status" then
         netFilterStatus = r.value or "all"
+      elseif r.kind == "expand_all" then
+        netExpanded = {}
+        iterNetworkEvents(function(evt)
+          if netMatchesFilters(evt) then netExpanded[traceOf(evt)] = true end
+        end)
+      elseif r.kind == "collapse_all" then
+        netExpanded = {}
       elseif r.kind == "clear" then
         DevTools.clearNetworkEvents()
       elseif r.kind == "copy_curl" then
@@ -2546,6 +2741,48 @@ networkMousepressed = function(x, y, button, region)
           netClipboardWrite(exported)
         else
           netSetStatus("No trace selected for JSON export.")
+        end
+      elseif r.kind == "ping_tor" then
+        state.netPingSeq = state.netPingSeq + 1
+        local pingId = "devtools_ping_" .. state.netPingSeq
+        local traceId = "http:" .. pingId
+        local url = "https://check.torproject.org/"
+        DevTools.recordNetworkEvent({
+          traceId = traceId,
+          origin = "devtools",
+          transport = "http",
+          direction = "out",
+          phase = "queued",
+          status = "ok",
+          method = "GET",
+          target = url,
+        })
+        local http = require("lua.http")
+        if http and http.request then
+          DevTools.recordNetworkEvent({
+            traceId = traceId,
+            origin = "devtools",
+            transport = "http",
+            direction = "out",
+            phase = "sent",
+            status = "ok",
+            method = "GET",
+            target = url,
+          })
+          http.request(pingId, { url = url, method = "GET" })
+          netSetStatus("Ping sent → check.torproject.org")
+        else
+          DevTools.recordNetworkEvent({
+            traceId = traceId,
+            origin = "devtools",
+            transport = "http",
+            direction = "out",
+            phase = "error",
+            status = "error",
+            error = "http module not available",
+            target = url,
+          })
+          netSetStatus("HTTP module not available.")
         end
       elseif r.kind == "toggle_trace" then
         netExpanded[r.value] = not netExpanded[r.value]
