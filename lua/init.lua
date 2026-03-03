@@ -136,6 +136,49 @@ local function gated(category, handler, details_fn)
   end
 end
 
+local function netTraceId(kind, id)
+  return tostring(kind) .. ":" .. tostring(id)
+end
+
+local function netNowSec()
+  if type(love) == "table" and love.timer and love.timer.getTime then
+    return love.timer.getTime()
+  end
+  return os.clock()
+end
+
+local function netSizeOf(value)
+  if type(value) == "string" then return #value end
+  if value == nil then return nil end
+  return #tostring(value)
+end
+
+local function netEmit(evt)
+  if M.inspectorEnabled and devtools and devtools.recordNetworkEvent then
+    devtools.recordNetworkEvent(evt)
+  end
+end
+
+local netTraceStartedAt = {}
+
+local function netMarkTraceStart(traceId)
+  if not traceId then return end
+  netTraceStartedAt[traceId] = netNowSec()
+end
+
+local function netDurationMs(traceId)
+  local started = traceId and netTraceStartedAt[traceId] or nil
+  if not started then return nil end
+  return math.max(0, (netNowSec() - started) * 1000)
+end
+
+local function netClearTraceStart(traceId)
+  if not traceId then return end
+  netTraceStartedAt[traceId] = nil
+end
+
+local netStreamFirstByteSeen = {}
+
 -- Scrollbar drag state
 local scrollbarDrag = nil  -- { node, axis="v"|"h", startMouse, startScroll }
 
@@ -835,9 +878,8 @@ function ReactJIT.init(config)
       bundlePath = config.bundlePath or "bundle.js",
     }
 
-    -- Init mpv BEFORE QuickJS — libquickjs dlopen can interfere with mpv's GL setup
+    -- Videos module loads as stub — libmpv deferred until first <Video> mounts
     M.videos  = require("lua.videos")
-    M.videos.initBackend()
 
     local BridgeQJS = require("lua.bridge_quickjs")
     M.bridge = BridgeQJS.new(initConfig.libpath)
@@ -1500,6 +1542,15 @@ function ReactJIT.init(config)
     startupLog("[reactjit] Math module loaded")
   end
 
+  -- Load general utilities module (IDs, strings, time, deep equality, safe JSON)
+  local utilsOk, utilsMod = pcall(require, "lua.utils")
+  if utilsOk and utilsMod then
+    for method, handler in pairs(utilsMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    startupLog("[reactjit] Utils module loaded")
+  end
+
   -- Load media scanner module (optional — directory scanning + indexing)
   local mdOk, mdMod = pcall(require, "lua.media")
   if mdOk and mdMod then
@@ -1748,6 +1799,9 @@ function ReactJIT.update(dt)
 
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
+  if M.inspectorEnabled and devtools and devtools.beginFrame then
+    devtools.beginFrame(dt)
+  end
 
   if mode == "canvas" or mode == "wasm" then
     -- Canvas/WASM mode: FS bridge + native rendering pipeline -----------
@@ -1894,7 +1948,27 @@ function ReactJIT.update(dt)
     end
   end
 
+  -- Flight recorder: write crisis data to disk every 10 frames BEFORE tick().
+  -- This is the "black box" — always has the last few seconds of op/component
+  -- data on disk. When the watchdog SIGKILL's us during a seizure, the last
+  -- checkpoint is already there. Rolling window: counters reset every 180 frames
+  -- (~3s at 60fps) so the file only ever has recent data, no growth from idling.
+  M._flightFrame = (M._flightFrame or 0) + 1
+  if M.bridge._crisisOps then
+    -- Write checkpoint every 10 frames (~166ms at 60fps)
+    if M._flightFrame % 10 == 0 and next(M.bridge._crisisOps) then
+      M.bridge:_directWriteCrisis()
+    end
+    -- Reset rolling window every ~3s (180 frames at 60fps).
+    -- Done AFTER write so the last window's data is on disk before clearing.
+    if M._flightFrame % 180 == 1 then
+      M.bridge:resetCrisis()
+    end
+  end
+
   -- 1. Tick JS timers + microtasks
+  -- Reset per-tick flush counter so seizure detection works (>10 flushes = stuck)
+  if M.bridge.resetTickFlush then M.bridge:resetTickFlush() end
   M.bridge:tick()
 
   -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
@@ -1956,14 +2030,55 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "http:request" then
           -- HTTP fetch request: scan URL for mining pool indicators
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("http", payload.id) or nil
+          if payload and traceId and payload.url then
+            netMarkTraceStart(traceId)
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "http",
+              direction = "out",
+              phase = "queued",
+              status = "ok",
+              method = payload.method,
+              target = payload.url,
+              headers = payload.headers,
+              requestBody = payload.body,
+              payloadPreview = payload.body,
+            })
+          end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
             local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "quarantine",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "mining_pool_connection",
+                  payloadPreview = urlResult.matches,
+                })
+              end
               M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url then
             if M.http then
+              netEmit({
+                traceId = traceId,
+                origin = "runtime",
+                transport = "http",
+                direction = "out",
+                phase = "sent",
+                status = "ok",
+                method = payload.method,
+                target = payload.url,
+              })
               local immediate = M.http.request(payload.id, {
                 url = payload.url,
                 method = payload.method,
@@ -1973,12 +2088,43 @@ function ReactJIT.update(dt)
               })
               -- Local file reads return immediately
               if immediate then
+                netEmit({
+                  traceId = traceId,
+                  origin = "runtime",
+                  transport = "http",
+                  direction = "in",
+                  phase = immediate.error and "error" or "done",
+                  status = immediate.error and "error" or "ok",
+                  method = payload.method,
+                  target = payload.url,
+                  code = immediate.status,
+                  responseHeaders = immediate.headers,
+                  payloadPreview = immediate.error or immediate.body,
+                  size = netSizeOf(immediate.body),
+                  durationMs = netDurationMs(traceId),
+                })
                 pushEvent({
                   type = "http:response",
                   payload = { _json = json.encode(immediate) },
                 })
+                netClearTraceStart(traceId)
               end
             else
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "capability",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "http_module_unavailable",
+                  error = "HTTP module not available",
+                })
+                netClearTraceStart(traceId)
+              end
               pushEvent({
                 type = "http:response",
                 payload = { _json = json.encode({
@@ -1994,14 +2140,55 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "http:stream" then
           -- HTTP streaming request: scan URL for mining pool indicators
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("http", payload.id) or nil
+          if payload and traceId and payload.url then
+            netMarkTraceStart(traceId)
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "http",
+              direction = "out",
+              phase = "queued",
+              status = "ok",
+              method = payload.method,
+              target = payload.url,
+              headers = payload.headers,
+              requestBody = payload.body,
+              payloadPreview = payload.body,
+            })
+          end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
             local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "quarantine",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "mining_pool_connection",
+                  payloadPreview = urlResult.matches,
+                })
+              end
               M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url then
             if M.http then
+              netEmit({
+                traceId = traceId,
+                origin = "runtime",
+                transport = "http",
+                direction = "out",
+                phase = "sent",
+                status = "ok",
+                method = payload.method,
+                target = payload.url,
+              })
               local immediate = M.http.streamRequest(payload.id, {
                 url = payload.url,
                 method = payload.method,
@@ -2011,12 +2198,43 @@ function ReactJIT.update(dt)
               })
               -- Local file reads return immediately (no streaming for local files)
               if immediate then
+                netEmit({
+                  traceId = traceId,
+                  origin = "runtime",
+                  transport = "http",
+                  direction = "in",
+                  phase = immediate.error and "error" or "done",
+                  status = immediate.error and "error" or "ok",
+                  method = payload.method,
+                  target = payload.url,
+                  code = immediate.status,
+                  responseHeaders = immediate.headers,
+                  payloadPreview = immediate.error or immediate.body,
+                  size = netSizeOf(immediate.body),
+                  durationMs = netDurationMs(traceId),
+                })
                 pushEvent({
                   type = "http:response",
                   payload = { _json = json.encode(immediate) },
                 })
+                netClearTraceStart(traceId)
               end
             else
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "capability",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "http_module_unavailable",
+                  error = "HTTP module not available",
+                })
+                netClearTraceStart(traceId)
+              end
               pushEvent({
                 type = "http:stream:error",
                 payload = { id = payload.id, error = "HTTP module not available" },
@@ -2039,50 +2257,228 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "ws:connect" then
           -- WebSocket connect — scan URL for mining pool indicators
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
+          if payload and traceId and payload.url then
+            netMarkTraceStart(traceId)
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "queued",
+              status = "ok",
+              target = payload.url,
+            })
+          end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
             local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "quarantine",
+                  transport = "ws",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  target = payload.url,
+                  blockedReason = "mining_pool_connection",
+                  payloadPreview = urlResult.matches,
+                })
+              end
               M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "sent",
+              status = "ok",
+              target = payload.url,
+            })
             M.network.connect(payload.id, payload.url)
+          elseif payload and payload.id and payload.url then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "ws",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              target = payload.url,
+              blockedReason = "network_module_unavailable",
+              error = "Network module not available",
+            })
+            netClearTraceStart(traceId)
           end
         elseif type(cmd) == "table" and cmd.type == "ws:send" then
           -- WebSocket send
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
           if payload and payload.id and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "message",
+              status = "ok",
+              size = netSizeOf(payload.data or ""),
+              payloadPreview = payload.data or "",
+            })
             M.network.send(payload.id, payload.data or "")
+          elseif payload and payload.id then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "ws",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+              error = "Network module not available",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:close" then
           -- WebSocket close
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
           if payload and payload.id and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "close",
+              status = "ok",
+              code = payload.code,
+              payloadPreview = payload.reason or "",
+            })
             M.network.close(payload.id, payload.code, payload.reason)
+          elseif payload and payload.id then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "ws",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+              error = "Network module not available",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:listen" then
           -- Start WebSocket server
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and payload.port and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "listen",
+              status = "ok",
+              target = tostring(payload.host or "127.0.0.1") .. ":" .. tostring(payload.port),
+              payloadPreview = payload.serverId,
+            })
             M.network.listen(payload.serverId, payload.port, payload.host)
+          elseif payload and payload.serverId and payload.port then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              target = tostring(payload.host or "127.0.0.1") .. ":" .. tostring(payload.port),
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:broadcast" then
           -- Broadcast to all server clients
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "broadcast",
+              status = "ok",
+              size = netSizeOf(payload.data or ""),
+              payloadPreview = payload.data or "",
+            })
             M.network.broadcast(payload.serverId, payload.data or "")
+          elseif payload and payload.serverId then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:peer:send" then
           -- Send to specific client on server
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and payload.clientId and M.network then
+            netEmit({
+              traceId = traceId,
+              parentId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "peer_send",
+              status = "ok",
+              clientId = payload.clientId,
+              size = netSizeOf(payload.data or ""),
+              payloadPreview = payload.data or "",
+            })
             M.network.sendToClient(payload.serverId, payload.clientId, payload.data or "")
+          elseif payload and payload.serverId and payload.clientId then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:server:stop" then
           -- Stop a server
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "stop",
+              status = "ok",
+              payloadPreview = payload.serverId,
+            })
             M.network.stopServer(payload.serverId)
+          elseif payload and payload.serverId then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "theme:set" then
           -- Switch active theme
@@ -2189,22 +2585,91 @@ function ReactJIT.update(dt)
   if M.http then
     local responses = M.http.poll()
     for _, resp in ipairs(responses) do
+      local traceId = resp and resp.id and netTraceId("http", resp.id) or nil
       if resp.type == "chunk" then
+        local phase = "chunk"
+        if traceId and not netStreamFirstByteSeen[traceId] then
+          netStreamFirstByteSeen[traceId] = true
+          phase = "firstByte"
+        end
+        if traceId then
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = phase,
+            status = "ok",
+            size = netSizeOf(resp.data),
+            payloadPreview = resp.data,
+            durationMs = phase == "firstByte" and netDurationMs(traceId) or nil,
+          })
+        end
         pushEvent({
           type = "http:stream:chunk",
           payload = { id = resp.id, data = resp.data },
         })
       elseif resp.type == "done" then
+        if traceId then
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = "done",
+            status = (tonumber(resp.status) or 0) >= 400 and "error" or "ok",
+            code = resp.status,
+            responseHeaders = resp.headers,
+            durationMs = netDurationMs(traceId),
+          })
+          netStreamFirstByteSeen[traceId] = nil
+          netClearTraceStart(traceId)
+        end
         pushEvent({
           type = "http:stream:done",
           payload = { id = resp.id, status = resp.status, headers = resp.headers },
         })
       elseif resp.type == "error" then
+        if traceId then
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = "error",
+            status = "error",
+            error = resp.error,
+            payloadPreview = resp.error,
+            durationMs = netDurationMs(traceId),
+          })
+          netStreamFirstByteSeen[traceId] = nil
+          netClearTraceStart(traceId)
+        end
         pushEvent({
           type = "http:stream:error",
           payload = { id = resp.id, error = resp.error },
         })
       else
+        if traceId then
+          local isError = resp.error ~= nil and resp.error ~= ""
+          local statusNum = tonumber(resp.status) or 0
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = isError and "error" or "done",
+            status = (isError or statusNum >= 400) and "error" or "ok",
+            code = resp.status,
+            responseHeaders = resp.headers,
+            payloadPreview = isError and resp.error or resp.body,
+            size = netSizeOf(resp.body),
+            error = resp.error,
+            durationMs = netDurationMs(traceId),
+          })
+          netStreamFirstByteSeen[traceId] = nil
+          netClearTraceStart(traceId)
+        end
         -- Regular buffered response
         pushEvent({
           type = "http:response",
@@ -2223,13 +2688,113 @@ function ReactJIT.update(dt)
     local wsEvents = M.network.poll()
     for _, evt in ipairs(wsEvents) do
       local evtType = evt.type
+      local traceId = nil
+      local parentId = nil
+      local transport = "ws"
+      local phase = "info"
+      local status = "ok"
+      local direction = "in"
+      local target = nil
+      local preview = nil
+      local code = nil
+      local size = nil
+      local durationMs = nil
+      local clearTraceAfterEmit = false
+
       -- Scan incoming WebSocket messages for mining protocol patterns
       if evtType == "ws:message" and evt.data and M.quarantine and not M.quarantine.isActive() then
         local frameResult = M.quarantine.scanWSFrame(evt.data)
         if frameResult.detected then
+          traceId = evt.id and netTraceId("ws", evt.id) or traceId
+          netEmit({
+            traceId = traceId,
+            origin = "quarantine",
+            transport = "ws",
+            direction = "in",
+            phase = "blocked",
+            status = "blocked",
+            blockedReason = "stratum_traffic_detected",
+            payloadPreview = frameResult.matches,
+          })
           M.quarantine.activate("stratum_traffic_detected", frameResult.matches)
         end
       end
+
+      if evtType == "ws:open" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "open"
+        durationMs = netDurationMs(traceId)
+      elseif evtType == "ws:message" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "message"
+        preview = evt.data
+        size = netSizeOf(evt.data)
+      elseif evtType == "ws:error" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "error"
+        status = "error"
+        preview = evt.error
+        durationMs = netDurationMs(traceId)
+        clearTraceAfterEmit = true
+      elseif evtType == "ws:close" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "close"
+        code = evt.code
+        durationMs = netDurationMs(traceId)
+        clearTraceAfterEmit = true
+      elseif evtType == "ws:server:ready" then
+        transport = "peer"
+        traceId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        phase = "ready"
+        target = evt.port and ("127.0.0.1:" .. tostring(evt.port)) or nil
+      elseif evtType == "ws:server:error" then
+        transport = "peer"
+        traceId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        phase = "error"
+        status = "error"
+        preview = evt.error
+      elseif evtType == "ws:peer:connect" then
+        transport = "peer"
+        parentId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        traceId = evt.serverId and evt.clientId and netTraceId("wspeer", evt.serverId .. ":" .. evt.clientId) or parentId
+        phase = "connect"
+      elseif evtType == "ws:peer:message" then
+        transport = "peer"
+        parentId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        traceId = evt.serverId and evt.clientId and netTraceId("wspeer", evt.serverId .. ":" .. evt.clientId) or parentId
+        phase = "message"
+        preview = evt.data
+        size = netSizeOf(evt.data)
+      elseif evtType == "ws:peer:disconnect" then
+        transport = "peer"
+        parentId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        traceId = evt.serverId and evt.clientId and netTraceId("wspeer", evt.serverId .. ":" .. evt.clientId) or parentId
+        phase = "disconnect"
+        code = evt.code
+      end
+
+      if traceId then
+        netEmit({
+          traceId = traceId,
+          parentId = parentId,
+          origin = "runtime",
+          transport = transport,
+          direction = direction,
+          phase = phase,
+          status = status,
+          target = target,
+          payloadPreview = preview,
+          size = size,
+          code = code,
+          error = evt.error,
+          clientId = evt.clientId,
+          durationMs = durationMs,
+        })
+        if clearTraceAfterEmit then
+          netClearTraceStart(traceId)
+        end
+      end
+
       evt.type = nil  -- remove type from payload
       pushEvent({ type = evtType, payload = evt })
     end

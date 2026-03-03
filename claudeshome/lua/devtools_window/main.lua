@@ -32,6 +32,8 @@ local mainW, mainH         -- main app window dimensions (for layout accuracy)
 local treeDirty    = true
 local connected    = false
 local shuttingDown = false
+local lastAckedNetworkId = 0
+local sendEvent
 
 -- Frame throttle: devtools don't need high fps.
 -- Low rate avoids GPU contention on multi-monitor setups (e.g. 240hz + 60hz).
@@ -87,6 +89,10 @@ function love.load()
       if msg.type == "init" and msg.commands then
         io.write("[devtools_window] received init with " .. #msg.commands .. " commands\n"); io.flush()
         Tree.applyCommands(msg.commands)
+        if msg.network and DevTools.ingestNetworkDelta then
+          DevTools.ingestNetworkDelta(msg.network)
+          lastAckedNetworkId = DevTools.getLatestNetworkEventId and DevTools.getLatestNetworkEventId() or 0
+        end
         -- Use main window dimensions for layout so computed values match
         mainW = msg.mainWidth or windowW
         mainH = msg.mainHeight or windowH
@@ -135,6 +141,14 @@ function love.update(dt)
         -- Feed the ring buffer so the frametime sparkline renders
         DevTools.recordFrame(msg.perf.layoutMs, msg.perf.paintMs)
       end
+      if msg.network and DevTools.ingestNetworkDelta then
+        DevTools.ingestNetworkDelta(msg.network)
+        local latest = DevTools.getLatestNetworkEventId and DevTools.getLatestNetworkEventId() or 0
+        if latest > lastAckedNetworkId then
+          lastAckedNetworkId = latest
+          sendEvent({ type = "devtools_network_ack", eventId = latest })
+        end
+      end
     elseif msg.type == "quit" then
       shuttingDown = true
       love.event.quit()
@@ -167,7 +181,7 @@ end
 -- Input events — handle locally + send selections back to parent
 -- ============================================================================
 
-local function sendEvent(payload)
+sendEvent = function(payload)
   if not connected then return end
   IPC.send(conn, payload)
 end

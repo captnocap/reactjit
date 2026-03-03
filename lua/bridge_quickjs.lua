@@ -890,17 +890,121 @@ function Bridge:_setupHostFunctions()
   --
   -- Track recent flushes for crash diagnostics.
   -- Ring buffer of last 20 flush summaries, written to disk when budget exceeded.
-  -- Panic snapshot: at 500K (pre-budget), collect full subsystem snapshot.
-  -- At 1M (budget), write crash error data. Watchdog merges both on kill.
+  -- Crisis data written via FFI direct write every 500 flushes (survives SIGKILL).
+  -- At 1M (budget), write crash error data. Watchdog merges crisis file on kill.
   local FLUSH_BUDGET = 1000000
-  local SNAPSHOT_THRESHOLD = 500000
+  local SEIZURE_THRESHOLD = 10  -- flushes per tick that trigger aggressive writes
   local flushLog = {}       -- ring buffer of { count, ops, timestamp }
   local flushLogIdx = 0
   local flushLogMax = 20
   local flushCrashWritten = false
-  local flushSnapshotWritten = false
   local flushCallCount = 0
+  local tickFlushCount = 0  -- flushes in current tick (reset by init.lua before tick())
   local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+
+  -- Crisis analysis: tracks WHO is flooding the command buffer.
+  -- Always active from the first flush — overhead is negligible (a few table increments).
+  -- Data is written to disk periodically by init.lua (flight recorder pattern).
+  -- When the watchdog kills, the last checkpoint is already on disk.
+  --
+  -- Additionally: during a seizure, __hostFlush uses FFI direct write() syscalls
+  -- (bypassing stdio buffering) to push the latest crisis data to disk every 500
+  -- flushes. This catches the exact component that caused the seizure.
+  local crisisOps = {}        -- op name -> count  (CREATE, UPDATE, REMOVE, etc.)
+  local crisisTypes = {}      -- node type -> count (View, Text, __TEXT__, CodeBlock, etc.)
+  local crisisComponents = {} -- debugName -> count (which React component is creating/updating)
+  local nodeDebugNames = {}   -- nodeId -> debugName (lookup for UPDATE attribution)
+
+  -- Expose crisis tables on self so init.lua can read them each frame
+  selfRef._crisisOps = crisisOps
+  selfRef._crisisTypes = crisisTypes
+  selfRef._crisisComponents = crisisComponents
+  selfRef._crisisFlushCount = 0
+
+  -- Reset crisis tables (called by init.lua for rolling window)
+  function selfRef:resetCrisis()
+    for k in pairs(crisisOps) do crisisOps[k] = nil end
+    for k in pairs(crisisTypes) do crisisTypes[k] = nil end
+    for k in pairs(crisisComponents) do crisisComponents[k] = nil end
+    selfRef._crisisFlushCount = 0
+  end
+
+  -- Reset per-tick flush counter (called by init.lua BEFORE bridge:tick())
+  function selfRef:resetTickFlush()
+    tickFlushCount = 0
+  end
+
+  -- FFI direct write: bypasses stdio buffering so data reaches disk even
+  -- when the process is about to be SIGKILL'd. Previous attempts using
+  -- io.open/io.write failed because stdio buffers were never flushed.
+  -- Uses creat() instead of open() to avoid variadic arg issues in LuaJIT FFI.
+  pcall(ffi.cdef, "int creat(const char *pathname, int mode);")
+  pcall(ffi.cdef, "long write(int fd, const void *buf, unsigned long count);")
+  pcall(ffi.cdef, "int close(int fd);")
+  local crisisPath = tmpDir .. "/reactjit_crisis.lua"
+  local crisisPathC = ffi.new("char[?]", #crisisPath + 1, crisisPath)
+
+  local function directWriteCrisis()
+    if not next(crisisOps) then return end
+
+    -- Build crisis text in-memory
+    local lines = {}
+    lines[#lines + 1] = "--- Op Breakdown ---"
+    local opKeys = {}
+    for k in pairs(crisisOps) do opKeys[#opKeys + 1] = k end
+    table.sort(opKeys)
+    for _, k in ipairs(opKeys) do
+      lines[#lines + 1] = string.format("  %-20s %d", k, crisisOps[k])
+    end
+    if next(crisisTypes) then
+      lines[#lines + 1] = ""
+      lines[#lines + 1] = "--- Node Types Created ---"
+      local typeList = {}
+      for k, v in pairs(crisisTypes) do typeList[#typeList + 1] = { name = k, count = v } end
+      table.sort(typeList, function(a, b) return a.count > b.count end)
+      for i = 1, math.min(15, #typeList) do
+        lines[#lines + 1] = string.format("  %-20s %d", typeList[i].name, typeList[i].count)
+      end
+    end
+    if next(crisisComponents) then
+      lines[#lines + 1] = ""
+      lines[#lines + 1] = "--- Components (creates + updates) ---"
+      local compList = {}
+      for k, v in pairs(crisisComponents) do compList[#compList + 1] = { name = k, count = v } end
+      table.sort(compList, function(a, b) return a.count > b.count end)
+      for i = 1, math.min(15, #compList) do
+        lines[#lines + 1] = string.format("  %-20s %d", compList[i].name, compList[i].count)
+      end
+    end
+    local creates = (crisisOps["CREATE"] or 0) + (crisisOps["CREATE_TEXT"] or 0)
+    local removes = (crisisOps["REMOVE"] or 0) + (crisisOps["REMOVE_FROM_ROOT"] or 0)
+    if creates > 0 then
+      lines[#lines + 1] = ""
+      if removes == 0 then
+        lines[#lines + 1] = string.format("LEAK CONFIRMED: %d creates, 0 removes", creates)
+      else
+        lines[#lines + 1] = string.format("Create/Remove ratio: %d / %d (%.1fx)", creates, removes, creates / removes)
+      end
+    end
+    local text = table.concat(lines, "\n")
+
+    -- Write using raw syscalls — survives SIGKILL
+    -- creat() = open(O_CREAT|O_WRONLY|O_TRUNC), mode 0644
+    -- Cast Lua string to const char* — LuaJIT auto-converts for const char*
+    -- but NOT for const void* (write's actual signature).
+    local content = string.format("return {\n  crisisAnalysis = %q,\n}\n", text)
+    local buf = ffi.cast("const char *", content)
+    local fd = ffi.C.creat(crisisPathC, 420)
+    if fd >= 0 then
+      ffi.C.write(fd, buf, #content)
+      ffi.C.close(fd)
+    end
+  end
+
+  -- Expose for init.lua flight recorder
+  function selfRef:_directWriteCrisis()
+    directWriteCrisis()
+  end
 
   local flushCb = ffi.cast("HostCallback", function(ctx, argc, argv, ret)
     if argc < 1 then return end
@@ -929,39 +1033,38 @@ function Bridge:_setupHostFunctions()
           selfRef.commandBuffer[#selfRef.commandBuffer + 1] = cmd
         end
 
-        flushCallCount = flushCallCount + 1
-
-        -- Check for watchdog panic signal every 100 flushes.
-        -- The watchdog writes this file on spike #2 to request a subsystem snapshot.
-        if not flushSnapshotWritten and flushCallCount % 100 == 0 then
-          local sigFile = io.open(tmpDir .. "/reactjit_panic.signal", "r")
-          if sigFile then
-            sigFile:close()
-            -- Watchdog detected spike #2 — collect subsystem snapshot NOW
-            local snapOk, PanicSnapshot = pcall(require, "lua.panic_snapshot")
-            if snapOk then
-              local snap = PanicSnapshot.collect()
-              local path = PanicSnapshot.writeToDisk(snap)
-              if path then
-                io.write("[PANIC] Subsystem snapshot written to " .. path .. "\n"); io.flush()
-              end
+        -- Track per-command breakdown (always active — negligible overhead)
+        for _, cmd in ipairs(commands) do
+          local op = cmd.op or "?"
+          crisisOps[op] = (crisisOps[op] or 0) + 1
+          if op == "CREATE" then
+            local t = cmd.type or "?"
+            crisisTypes[t] = (crisisTypes[t] or 0) + 1
+            local dn = cmd.debugName or cmd.type or "?"
+            crisisComponents[dn] = (crisisComponents[dn] or 0) + 1
+            -- Remember node → component mapping for UPDATE attribution
+            if cmd.id then nodeDebugNames[cmd.id] = dn end
+          elseif op == "CREATE_TEXT" then
+            crisisTypes["__TEXT__"] = (crisisTypes["__TEXT__"] or 0) + 1
+          elseif op == "UPDATE" then
+            -- Attribute UPDATE to the component that created this node
+            local dn = cmd.id and nodeDebugNames[cmd.id]
+            if dn then
+              crisisComponents[dn] = (crisisComponents[dn] or 0) + 1
             end
-            flushSnapshotWritten = true
           end
         end
 
-        -- At pre-budget threshold (500K), collect subsystem snapshot if not already done.
-        -- This catches cases where budget is exceeded without watchdog (non-Linux, etc.)
-        if #selfRef.commandBuffer > SNAPSHOT_THRESHOLD and not flushSnapshotWritten then
-          flushSnapshotWritten = true
-          local snapOk, PanicSnapshot = pcall(require, "lua.panic_snapshot")
-          if snapOk then
-            local snap = PanicSnapshot.collect()
-            local path = PanicSnapshot.writeToDisk(snap)
-            if path then
-              io.write("[PANIC] Subsystem snapshot written (buffer at " .. #selfRef.commandBuffer .. ")\n"); io.flush()
-            end
-          end
+        flushCallCount = flushCallCount + 1
+        tickFlushCount = tickFlushCount + 1
+        selfRef._crisisFlushCount = flushCallCount
+
+        -- Seizure detection: normal operation = 1-2 flushes per tick.
+        -- If we exceed SEIZURE_THRESHOLD, this tick is stuck in an infinite
+        -- commit loop. Write crisis data on EVERY subsequent flush via FFI
+        -- direct write (bypasses stdio buffering — survives SIGKILL).
+        if tickFlushCount > SEIZURE_THRESHOLD then
+          directWriteCrisis()
         end
 
         -- Once over budget, write crash file to disk and stop appending.
@@ -978,6 +1081,10 @@ function Bridge:_setupHostFunctions()
               trail[#trail + 1] = string.format("flush #%d: %d cmds (buf=%d) [%s]", flushLogMax - i + 1, entry.n, entry.buf, entry.ops)
             end
           end
+
+          -- Final crisis write via FFI (belt + suspenders)
+          directWriteCrisis()
+
           -- Write as a Lua table literal — the crash reporter just load()s it
           local f = io.open(tmpDir .. "/reactjit_crash.lua", "w")
           if f then
@@ -987,7 +1094,6 @@ function Bridge:_setupHostFunctions()
             f:write(string.format("  timestamp = %q,\n", os.date("%Y-%m-%d %H:%M:%S")))
             f:write(string.format("  luaMemMB = %.1f,\n", luaMem))
             f:write(string.format("  trail = %q,\n", table.concat(trail, "\n")))
-            f:write(string.format("  hasLuaSnapshot = %s,\n", tostring(flushSnapshotWritten)))
             f:write("}\n")
             f:close()
           end

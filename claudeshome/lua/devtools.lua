@@ -30,6 +30,9 @@
 
 local Log = require("lua.debug_log")
 local eventTrail = require("lua.event_trail")
+local HotState = require("lua.hotstate")
+local layoutColorizer = require("lua.layout_colorizer")
+local json = require("lua.json")
 
 local DevTools = {}
 
@@ -52,6 +55,9 @@ local state = {
   -- Draggable divider between tree and detail panels
   dividerRatio    = 0.5,   -- tree takes this fraction of width (0.0-1.0)
   draggingDivider = false, -- currently dragging?
+  -- Panel height resize (drag top edge)
+  panelRatio      = 0.4,           -- user-adjustable panel height ratio
+  draggingHeight  = false,        -- currently dragging top edge?
   -- Pop-out window state (subprocess over TCP IPC)
   poppedOut      = false,    -- devtools panel in its own child process?
   server         = nil,      -- TCP server socket (parent side)
@@ -61,9 +67,21 @@ local state = {
   mainHasFocus   = true,     -- true when main window has focus
   lastPerfSend   = 0,        -- throttle perf updates to child
   lastSentSelId  = nil,      -- last selected node ID sent to child
+  lastNetSend    = 0,        -- throttle network delta updates to child
+  lastNetSentId  = 0,        -- latest network event ID sent to child
+  forceNetSnapshot = false,  -- force full network snapshot on next child sync
   -- Mutation batching: accumulate mutations, flush at ~15fps to match child
   pendingMutations = {},     -- queued mutation commands
   mutationFlushTimer = 0,    -- time since last flush
+  -- Network ingest guardrails
+  netCapturedThisFrame = 0,
+  netDroppedThisFrame = 0,
+  netStatsTimer = 0,
+  netRecentEvents = 0,
+  netRecentDropped = 0,
+  netEventsPerSec = 0,
+  netDroppedPerSec = 0,
+  netLastErrorTs = nil,
 }
 
 -- ============================================================================
@@ -100,6 +118,7 @@ local TABS = {
   { id = "elements",  label = "Elements" },
   { id = "wireframe", label = "Wireframe" },
   { id = "perf",      label = "Perf" },
+  { id = "network",   label = "Network" },
   { id = "console",   label = "Console" },
   { id = "logs",      label = "Logs" },
 }
@@ -140,6 +159,30 @@ local devScrollDrag = nil  -- { tab, startMouse, startScroll, maxScroll, trackH,
 local perfRegion   = nil
 local perfContentHStored = 0
 
+-- Network tab state
+local NET_MAX_EVENTS = 1600
+local NET_MAX_PER_TICK = 220
+local NET_MAX_HEADERS = 24
+local NET_MAX_PREVIEW = 240
+local netEvents = {}
+local netHead = 0
+local netCount = 0
+local netNextEventId = 1
+local netNewestEventId = 0
+local netSeqByTrace = {}
+local netTraceMeta = {}
+local netSelectedEventId = nil
+local netScrollY = 0
+local netRegion = nil
+local netContentHStored = 0
+local netHitRects = {}
+local netGroupByTrace = true
+local netExpanded = {}
+local netFilterTransport = "all" -- all | http | ws | peer
+local netFilterStatus = "all"    -- all | errors | blocked
+local netStatusMessage = ""
+local netStatusMessageTimer = 0
+
 -- ============================================================================
 -- Geometry helpers
 -- ============================================================================
@@ -159,7 +202,8 @@ local function getPanelGeometry()
     return panelY, panelH, contentY, contentH, screenW
   end
   local screenW, screenH = love.graphics.getDimensions()
-  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
+  local ratio = state.panelRatio or PANEL_RATIO
+  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * ratio))
   local panelY = screenH - panelH
   local contentY = panelY + TAB_BAR_H
   local contentH = panelH - TAB_BAR_H - STATUS_BAR_H
@@ -203,7 +247,8 @@ function DevTools.getViewportHeight()
   if not state.open then return love.graphics.getHeight() end
   if state.poppedOut then return love.graphics.getHeight() end
   local screenH = love.graphics.getHeight()
-  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
+  local ratio = state.panelRatio or PANEL_RATIO
+  local panelH = math.max(MIN_PANEL_H, math.floor(screenH * ratio))
   return screenH - panelH
 end
 
@@ -217,6 +262,326 @@ local function pushViewportEvent()
       height = DevTools.getViewportHeight(),
     },
   })
+end
+
+local function nowSec()
+  if love.timer and love.timer.getTime then
+    return love.timer.getTime()
+  end
+  return os.clock()
+end
+
+local function trimTo(s, n)
+  s = tostring(s or "")
+  if #s <= n then return s end
+  return s:sub(1, n - 1) .. "..."
+end
+
+local function copyTable(src)
+  local out = {}
+  if type(src) ~= "table" then return out end
+  for k, v in pairs(src) do out[k] = v end
+  return out
+end
+
+local SENSITIVE_KEYS = {
+  ["authorization"] = true,
+  ["proxy-authorization"] = true,
+  ["cookie"] = true,
+  ["set-cookie"] = true,
+  ["x-api-key"] = true,
+  ["x-amz-signature"] = true,
+}
+
+local function isSensitiveKey(key)
+  local k = tostring(key or ""):lower()
+  if SENSITIVE_KEYS[k] then return true end
+  if k:find("token", 1, true) then return true end
+  if k:find("secret", 1, true) then return true end
+  if k:find("key", 1, true) then return true end
+  if k:find("password", 1, true) then return true end
+  return false
+end
+
+local function sanitizeURL(url)
+  local s = tostring(url or "")
+  local base, query = s:match("^([^?]+)%?(.*)$")
+  if not base then return s end
+  local parts = {}
+  for chunk in query:gmatch("[^&]+") do
+    local k, v = chunk:match("^([^=]+)=(.*)$")
+    if not k then
+      parts[#parts + 1] = chunk
+    elseif isSensitiveKey(k) then
+      parts[#parts + 1] = k .. "=<redacted>"
+    else
+      parts[#parts + 1] = k .. "=" .. v
+    end
+  end
+  return base .. "?" .. table.concat(parts, "&")
+end
+
+local function sanitizeHeaders(headers)
+  if type(headers) ~= "table" then return {} end
+  local out = {}
+  local count = 0
+  for k, v in pairs(headers) do
+    count = count + 1
+    if count > NET_MAX_HEADERS then break end
+    local key = tostring(k)
+    if isSensitiveKey(key) then
+      out[key] = "<redacted>"
+    else
+      out[key] = trimTo(v, 120)
+    end
+  end
+  return out
+end
+
+local function sanitizePreview(value)
+  local s
+  if type(value) == "string" then
+    s = value
+  elseif type(value) == "table" then
+    local ok, encoded = pcall(json.encode, value)
+    s = ok and encoded or tostring(value)
+  else
+    s = tostring(value or "")
+  end
+
+  s = s:gsub("eyJ[%w%-_]+%.[%w%-_]+%.[%w%-_]+", "<redacted-jwt>")
+  s = s:gsub("Bearer%s+[A-Za-z0-9%._%-]+", "Bearer <redacted>")
+  s = s:gsub("([A-Za-z0-9%+/_%-=]+)", function(tok)
+    if #tok >= 40 then return "<redacted-token>" end
+    return tok
+  end)
+  return trimTo(s, NET_MAX_PREVIEW)
+end
+
+local function traceOf(evt)
+  if evt.traceId then return tostring(evt.traceId) end
+  return "event:" .. tostring(evt.eventId or 0)
+end
+
+local function updateTraceMeta(evt)
+  local traceId = traceOf(evt)
+  local m = netTraceMeta[traceId]
+  if not m then
+    m = { traceId = traceId, firstSeen = evt.ts, lastSeen = evt.ts }
+    netTraceMeta[traceId] = m
+  end
+  m.lastSeen = evt.ts
+  if evt.phase == "queued" and not m.queuedTs then m.queuedTs = evt.ts end
+  if evt.phase == "sent" and not m.sentTs then m.sentTs = evt.ts end
+  if (evt.phase == "firstByte" or evt.phase == "open") and not m.firstByteTs then m.firstByteTs = evt.ts end
+  if evt.phase == "done" or evt.phase == "close" or evt.phase == "error" or evt.phase == "blocked" then
+    m.doneTs = evt.ts
+  end
+  if evt.method and not m.method then m.method = evt.method end
+  if evt.target and not m.target then m.target = evt.target end
+  if evt.status then m.status = evt.status end
+end
+
+local function iterNetworkEvents(fn)
+  for i = 1, netCount do
+    local idx = ((netHead - netCount + i - 1) % NET_MAX_EVENTS) + 1
+    local evt = netEvents[idx]
+    if evt then fn(evt) end
+  end
+end
+
+local function getEventById(eventId)
+  if not eventId then return nil end
+  local found = nil
+  iterNetworkEvents(function(evt)
+    if evt.eventId == eventId then found = evt end
+  end)
+  return found
+end
+
+local function pushNetworkEvent(evt, fromSync)
+  if not fromSync then
+    if state.netCapturedThisFrame >= NET_MAX_PER_TICK then
+      state.netDroppedThisFrame = state.netDroppedThisFrame + 1
+      state.netRecentDropped = state.netRecentDropped + 1
+      return false
+    end
+    state.netCapturedThisFrame = state.netCapturedThisFrame + 1
+  end
+
+  local replaced = nil
+  netHead = (netHead % NET_MAX_EVENTS) + 1
+  if netCount == NET_MAX_EVENTS then replaced = netEvents[netHead] end
+  netEvents[netHead] = evt
+  if netCount < NET_MAX_EVENTS then netCount = netCount + 1 end
+  if replaced and replaced.eventId == netSelectedEventId then
+    netSelectedEventId = nil
+  end
+  netNewestEventId = math.max(netNewestEventId, evt.eventId or 0)
+  state.netRecentEvents = state.netRecentEvents + 1
+  if evt.status == "error" then state.netLastErrorTs = evt.ts end
+  updateTraceMeta(evt)
+  return true
+end
+
+local function normalizeNetworkEvent(raw, fromSync)
+  if type(raw) ~= "table" then return nil end
+  local evt = copyTable(raw)
+  local traceId = evt.traceId and tostring(evt.traceId) or nil
+  if not evt.eventId then
+    evt.eventId = netNextEventId
+  end
+  netNextEventId = math.max(netNextEventId, (evt.eventId or 0) + 1)
+  if evt.eventId <= netNewestEventId and fromSync then
+    return nil
+  end
+
+  if not traceId then
+    traceId = "event:" .. tostring(evt.eventId)
+  end
+  evt.traceId = traceId
+
+  if not evt.seq then
+    local nextSeq = (netSeqByTrace[traceId] or 0) + 1
+    netSeqByTrace[traceId] = nextSeq
+    evt.seq = nextSeq
+  else
+    netSeqByTrace[traceId] = math.max(netSeqByTrace[traceId] or 0, tonumber(evt.seq) or 0)
+  end
+
+  evt.ts = tonumber(evt.ts) or nowSec()
+  evt.origin = evt.origin or "runtime"
+  evt.transport = evt.transport or "http"
+  evt.direction = evt.direction or "out"
+  evt.phase = evt.phase or "info"
+  evt.status = evt.status or "ok"
+  evt.target = sanitizeURL(evt.target or evt.url or "")
+  evt.method = evt.method and tostring(evt.method):upper() or nil
+  evt.message = evt.message and trimTo(evt.message, 140) or nil
+  evt.error = evt.error and trimTo(evt.error, 180) or nil
+  evt.blockedReason = evt.blockedReason and trimTo(evt.blockedReason, 100) or nil
+  evt.payloadPreview = sanitizePreview(evt.payloadPreview or evt.payload or "")
+  evt.requestBody = sanitizePreview(evt.requestBody or evt.body or "")
+  evt.headers = sanitizeHeaders(evt.headers)
+  evt.responseHeaders = sanitizeHeaders(evt.responseHeaders)
+  evt.size = tonumber(evt.size) or nil
+  evt.code = tonumber(evt.code) or nil
+  evt.durationMs = tonumber(evt.durationMs) or nil
+  return evt
+end
+
+function DevTools.beginFrame(dt)
+  state.netCapturedThisFrame = 0
+  if state.netDroppedThisFrame > 0 then
+    local dropped = state.netDroppedThisFrame
+    state.netDroppedThisFrame = 0
+    local seq = (netSeqByTrace["devtools:drops"] or 0) + 1
+    netSeqByTrace["devtools:drops"] = seq
+    pushNetworkEvent({
+      eventId = netNextEventId,
+      traceId = "devtools:drops",
+      parentId = nil,
+      seq = seq,
+      ts = nowSec(),
+      origin = "devtools",
+      transport = "synthetic",
+      direction = "internal",
+      phase = "dropped",
+      status = "warn",
+      message = "Dropped " .. tostring(dropped) .. " network events this frame (rate limit).",
+      payloadPreview = "",
+      headers = {},
+      responseHeaders = {},
+    }, true)
+    netNextEventId = netNextEventId + 1
+    state.netRecentDropped = state.netRecentDropped + dropped
+  end
+
+  state.netStatsTimer = state.netStatsTimer + (dt or 0)
+  if state.netStatsTimer >= 1 then
+    local window = state.netStatsTimer
+    state.netEventsPerSec = state.netRecentEvents / window
+    state.netDroppedPerSec = state.netRecentDropped / window
+    state.netRecentEvents = 0
+    state.netRecentDropped = 0
+    state.netStatsTimer = 0
+  end
+
+  if netStatusMessageTimer > 0 then
+    netStatusMessageTimer = netStatusMessageTimer - (dt or 0)
+    if netStatusMessageTimer <= 0 then netStatusMessage = "" end
+  end
+end
+
+function DevTools.recordNetworkEvent(raw)
+  local evt = normalizeNetworkEvent(raw, false)
+  if not evt then return false end
+  return pushNetworkEvent(evt, false)
+end
+
+function DevTools.clearNetworkEvents()
+  netEvents = {}
+  netHead = 0
+  netCount = 0
+  netTraceMeta = {}
+  netSeqByTrace = {}
+  netSelectedEventId = nil
+  netScrollY = 0
+  state.forceNetSnapshot = true
+end
+
+function DevTools.getLatestNetworkEventId()
+  return netNewestEventId
+end
+
+function DevTools.getNetworkSnapshotForChild(limit)
+  local out = {}
+  local maxCount = math.max(0, tonumber(limit) or 300)
+  local start = math.max(1, netCount - maxCount + 1)
+  local n = 0
+  local sentUpTo = 0
+  iterNetworkEvents(function(evt)
+    n = n + 1
+    if n >= start then
+      out[#out + 1] = evt
+      sentUpTo = evt.eventId
+    end
+  end)
+  return { mode = "snapshot", events = out, newestEventId = netNewestEventId, sentUpToEventId = sentUpTo }
+end
+
+function DevTools.getNetworkDeltaForChild(lastEventId, maxEvents)
+  local out = {}
+  local minId = tonumber(lastEventId) or 0
+  local budget = math.max(1, tonumber(maxEvents) or 200)
+  local sentUpTo = minId
+  iterNetworkEvents(function(evt)
+    if evt.eventId > minId and #out < budget then
+      out[#out + 1] = evt
+      sentUpTo = evt.eventId
+    end
+  end)
+  return { mode = "delta", events = out, newestEventId = netNewestEventId, sentUpToEventId = sentUpTo }
+end
+
+function DevTools.ingestNetworkDelta(payload)
+  if type(payload) ~= "table" or type(payload.events) ~= "table" then return end
+  if payload.mode == "snapshot" then
+    netEvents = {}
+    netHead = 0
+    netCount = 0
+    netTraceMeta = {}
+    netSeqByTrace = {}
+    netSelectedEventId = nil
+    netScrollY = 0
+    netNewestEventId = 0
+  end
+  for _, raw in ipairs(payload.events) do
+    local evt = normalizeNetworkEvent(raw, true)
+    if evt then
+      pushNetworkEvent(evt, true)
+    end
+  end
 end
 
 -- ============================================================================
@@ -241,6 +606,9 @@ function DevTools.popOut()
   state.initSent    = false
   state.lastPerfSend = 0
   state.lastSentSelId = nil
+  state.lastNetSend = 0
+  state.lastNetSentId = 0
+  state.forceNetSnapshot = false
 
   -- Resolve devtools_window path relative to this file
   local info = debug.getinfo(1, "S")
@@ -286,6 +654,9 @@ function DevTools.dockBack()
   state.initSent = false
   state.mainHasFocus = true
   state.lastSentSelId = nil
+  state.lastNetSend = 0
+  state.lastNetSentId = 0
+  state.forceNetSnapshot = false
   state.pendingMutations = {}
   state.mutationFlushTimer = 0
   -- Main app loses viewport space to the docked panel
@@ -346,12 +717,15 @@ function DevTools.tick(dt)
       if root then
         local commands = IPC.serializeSubtree({ children = { root } })
         local mainW, mainH = love.graphics.getDimensions()
+        local netSnap = DevTools.getNetworkSnapshotForChild(350)
         IPC.send(state.conn, {
           type = "init",
           commands = commands,
           mainWidth = mainW,
           mainHeight = mainH,
+          network = netSnap,
         })
+        state.lastNetSentId = netSnap.sentUpToEventId or 0
         state.initSent = true
         io.write("[devtools] sent init (" .. #commands .. " commands)\n"); io.flush()
       end
@@ -387,7 +761,25 @@ function DevTools.tick(dt)
     IPC.send(state.conn, { type = "devtools_state", selectedNodeId = selId })
   end
 
-  -- 6. Poll for events from child
+  -- 6. Send network deltas (throttled, delta-only)
+  state.lastNetSend = state.lastNetSend + dt
+  if state.lastNetSend >= (1.0 / 15) then
+    state.lastNetSend = 0
+    if state.forceNetSnapshot then
+      local snap = DevTools.getNetworkSnapshotForChild(350)
+      IPC.send(state.conn, { type = "devtools_state", network = snap })
+      state.lastNetSentId = snap.sentUpToEventId or 0
+      state.forceNetSnapshot = false
+    else
+      local delta = DevTools.getNetworkDeltaForChild(state.lastNetSentId or 0, 240)
+      if delta and delta.events and #delta.events > 0 then
+        IPC.send(state.conn, { type = "devtools_state", network = delta })
+        state.lastNetSentId = delta.sentUpToEventId or state.lastNetSentId
+      end
+    end
+  end
+
+  -- 7. Poll for events from child
   local msgs, dead = IPC.poll(state.conn)
   if dead then
     io.write("[devtools] child connection lost, docking back\n"); io.flush()
@@ -398,6 +790,9 @@ function DevTools.tick(dt)
     state.initSent = false
     state.mainHasFocus = true
     state.lastSentSelId = nil
+    state.lastNetSend = 0
+    state.lastNetSentId = 0
+    state.forceNetSnapshot = false
     state.pendingMutations = {}
     state.mutationFlushTimer = 0
     if tree then tree.markDirty() end
@@ -417,6 +812,8 @@ function DevTools.tick(dt)
       -- Child window X clicked — dock back
       DevTools.dockBack()
       return
+    elseif msg.type == "devtools_network_ack" and msg.eventId then
+      state.lastNetSentId = math.max(state.lastNetSentId or 0, tonumber(msg.eventId) or 0)
     end
   end
 end
@@ -442,6 +839,13 @@ function DevTools.keypressed(key)
   -- Ctrl+Shift+D: toggle pop-out
   if key == "d" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
     DevTools.togglePopOut()
+    return true
+  end
+
+  -- Ctrl+Shift+L: toggle layout colorizer
+  if key == "l" and love.keyboard.isDown("lctrl", "rctrl") and love.keyboard.isDown("lshift", "rshift") then
+    layoutColorizer.toggle()
+    eventTrail.recordSemantic(layoutColorizer.active and "Layout colorizer ON" or "Layout colorizer OFF")
     return true
   end
 
@@ -550,6 +954,8 @@ end
 local logsMousepressed
 local logsMousemoved
 local logsWheelmoved
+local networkMousepressed
+local networkWheelmoved
 local wireframeHitTest
 local perfWheelmoved
 local logsHoverRow = nil  -- index into sortedChannels, or "all"/"none"
@@ -568,6 +974,8 @@ local function devScrollbarPressed(mx, my, button)
   local tab, region, scrollY, contentH
   if state.activeTab == "perf" and perfRegion then
     tab, region, scrollY, contentH = "perf", perfRegion, perfScrollY, perfContentHStored
+  elseif state.activeTab == "network" and netRegion then
+    tab, region, scrollY, contentH = "network", netRegion, netScrollY, netContentHStored
   elseif state.activeTab == "logs" and logsRegion then
     tab, region, scrollY, contentH = "logs", logsRegion, logsScrollY, logsContentHStored
   else
@@ -591,8 +999,13 @@ local function devScrollbarPressed(mx, my, button)
     -- Click on track → jump to position, then start drag
     local ratio = (my - geo.trackY) / geo.trackH
     local newScroll = math.max(0, math.min(ratio * geo.maxScroll, geo.maxScroll))
-    if tab == "perf" then perfScrollY = newScroll
-    else logsScrollY = newScroll end
+    if tab == "perf" then
+      perfScrollY = newScroll
+    elseif tab == "network" then
+      netScrollY = newScroll
+    else
+      logsScrollY = newScroll
+    end
     devScrollDrag = { tab = tab, startMouse = my, startScroll = newScroll,
                       maxScroll = geo.maxScroll, trackH = geo.trackH,
                       thumbH = geo.thumbH, trackY = geo.trackY }
@@ -608,8 +1021,13 @@ local function devScrollbarMoved(mx, my)
   local thumbTravel = math.max(1, d.trackH - d.thumbH)
   local scrollDelta = (delta / thumbTravel) * d.maxScroll
   local newScroll = math.max(0, math.min(d.startScroll + scrollDelta, d.maxScroll))
-  if d.tab == "perf" then perfScrollY = newScroll
-  else logsScrollY = newScroll end
+  if d.tab == "perf" then
+    perfScrollY = newScroll
+  elseif d.tab == "network" then
+    netScrollY = newScroll
+  else
+    logsScrollY = newScroll
+  end
   return true
 end
 
@@ -638,9 +1056,18 @@ function DevTools.mousepressed(x, y, button)
 
   local panelY, panelH, contentY, contentH, screenW = getPanelGeometry()
 
-  -- Click above the panel: route to inspector for viewport node selection
+  -- Top-edge resize handle (6px grab zone centered on panel top border)
+  if not state.poppedOut and button == 1 and math.abs(y - panelY) <= 3 then
+    state.draggingHeight = true
+    return true
+  end
+
+  -- Click above the panel: route to inspector for viewport node selection.
+  -- Always consume the click when devtools is open — never let it pass through
+  -- to the React tree underneath, even if the inspector has no hovered node.
   if y < panelY then
-    return inspector.mousepressed(x, y, button)
+    inspector.mousepressed(x, y, button)
+    return true
   end
 
   -- Tab bar click: switch tabs
@@ -659,6 +1086,14 @@ function DevTools.mousepressed(x, y, button)
       tabX = tabX + tabW + 2
     end
 
+    -- Layout colors toggle button
+    local colorsX = screenW - 100
+    if x >= colorsX and x < colorsX + 20 then
+      layoutColorizer.toggle()
+      eventTrail.recordSemantic(layoutColorizer.active and "Layout colorizer ON" or "Layout colorizer OFF")
+      return true
+    end
+
     -- Refresh button — clears stale state for the active panel
     local refreshX = screenW - 76
     if x >= refreshX and x < refreshX + 20 then
@@ -669,6 +1104,10 @@ function DevTools.mousepressed(x, y, button)
       -- Logs
       sortedChannels = nil
       logsScrollY = 0
+      -- Network
+      if state.activeTab == "network" then
+        DevTools.clearNetworkEvents()
+      end
       -- Inspector (clear selection, re-walk tree)
       if inspector then
         inspector.clearSelection()
@@ -727,6 +1166,23 @@ function DevTools.mousepressed(x, y, button)
       inspector.selectNode(hitNode)
     end
     return true
+  elseif state.activeTab == "perf" then
+    -- Rate selector click (screen coords from last draw)
+    if perfRateRegion and button == 1 then
+      local pr = perfRateRegion
+      if x >= pr.x and x < pr.x + pr.w and y >= pr.y and y < pr.y + pr.h then
+        local idx = math.floor((x - pr.x) / pr.segW) + 1
+        if idx >= 1 and idx <= #PERF_RATE_PRESETS then
+          perfRateIdx = idx
+          perfDisplaySnapshot = nil  -- force immediate refresh
+        end
+        return true
+      end
+    end
+    return true
+  elseif state.activeTab == "network" then
+    local region = { x = 0, y = contentY, w = screenW, h = contentH }
+    return networkMousepressed(x, y, button, region)
   elseif state.activeTab == "console" then
     return true  -- console content area consumes clicks
   elseif state.activeTab == "logs" then
@@ -737,47 +1193,64 @@ function DevTools.mousepressed(x, y, button)
   return true
 end
 
---- Handle mouse movement.
+--- Handle mouse movement. Returns true if devtools consumed the event
+--- (callers should skip React tree hover tracking).
 function DevTools.mousemoved(x, y)
-  if not inspector then return end
+  if not inspector then return false end
+  if not state.open then return false end
 
   -- When popped out and main has focus: only track hover overlays on canvas
   if state.poppedOut and state.mainHasFocus then
     inspector.mousemoved(x, y)
-    return
+    return true
+  end
+
+  -- Panel height dragging
+  if state.draggingHeight then
+    local screenW, screenH = love.graphics.getDimensions()
+    local newH = screenH - y
+    local minRatio = MIN_PANEL_H / screenH
+    local maxRatio = 0.9  -- never cover more than 90% of the viewport
+    state.panelRatio = math.max(minRatio, math.min(newH / screenH, maxRatio))
+    if tree then tree.markDirty() end  -- relayout app viewport
+    return true
   end
 
   -- Scrollbar dragging
-  if devScrollbarMoved(x, y) then return end
+  if devScrollbarMoved(x, y) then return true end
 
   -- Divider dragging (uses devtools window coordinates when popped out)
   if state.draggingDivider then
     local _, _, _, _, screenW = getPanelGeometry()
     local clamped = math.max(MIN_TREE_W, math.min(x, screenW - MIN_DETAIL_W))
     state.dividerRatio = clamped / screenW
-    return
+    return true
   end
 
-  -- Resize cursor when hovering divider
-  if state.open and state.activeTab == "elements" and inspector.getSelectedNode() then
-    local panelY, _, _, _, screenW = getPanelGeometry()
+  -- Resize cursor when hovering panel top edge or divider
+  local panelY, _, _, _, screenW = getPanelGeometry()
+  if not state.poppedOut and math.abs(y - panelY) <= 3 then
+    love.mouse.setCursor(love.mouse.getSystemCursor("sizens"))
+  elseif state.activeTab == "elements" and inspector.getSelectedNode() then
     local treeW = math.floor(screenW * state.dividerRatio)
     if y > panelY and math.abs(x - treeW) <= DIVIDER_W then
       love.mouse.setCursor(love.mouse.getSystemCursor("sizewe"))
     else
       love.mouse.setCursor()
     end
+  else
+    love.mouse.setCursor()
   end
 
   -- Wireframe tab hover tracking
-  if state.open and state.activeTab == "wireframe" then
+  if state.activeTab == "wireframe" then
     wfHoverNode = wireframeHitTest(x, y)
   else
     wfHoverNode = nil
   end
 
   -- Logs tab hover tracking
-  if state.open and state.activeTab == "logs" and logsRegion then
+  if state.activeTab == "logs" and logsRegion then
     logsMousemoved(x, y, logsRegion)
   else
     logsHoverRow = nil
@@ -786,11 +1259,19 @@ function DevTools.mousemoved(x, y)
   -- Always update inspector mouse position (needed for scroll hit testing in popped-out mode).
   -- Hover overlays on the main canvas are gated separately in the inspector's draw path.
   inspector.mousemoved(x, y)
+
+  -- Devtools is open — consume the event so React tree hover doesn't fire
+  return true
 end
 
 --- Handle mouse release. Returns true if consumed.
 function DevTools.mousereleased(x, y, button)
   if devScrollbarReleased() then return true end
+  if state.draggingHeight then
+    state.draggingHeight = false
+    love.mouse.setCursor()
+    return true
+  end
   if state.draggingDivider then
     state.draggingDivider = false
     love.mouse.setCursor()
@@ -811,6 +1292,8 @@ function DevTools.wheelmoved(x, y)
       return inspector.wheelmoved(x, y)
     elseif state.activeTab == "perf" then
       return perfWheelmoved(x, y)
+    elseif state.activeTab == "network" then
+      return networkWheelmoved(x, y)
     elseif state.activeTab == "console" then
       return console.wheelmoved(x, y)
     elseif state.activeTab == "logs" then
@@ -829,6 +1312,8 @@ function DevTools.wheelmoved(x, y)
     return inspector.wheelmoved(x, y)
   elseif state.activeTab == "perf" then
     return perfWheelmoved(x, y)
+  elseif state.activeTab == "network" then
+    return networkWheelmoved(x, y)
   elseif state.activeTab == "console" then
     return console.wheelmoved(x, y)
   elseif state.activeTab == "logs" then
@@ -1302,6 +1787,14 @@ local perfHistoryIdx = 0  -- next write index (wraps)
 -- Mutation stats accumulator (polled per frame)
 local lastMutationStats = { total = 0, creates = 0, updates = 0, removes = 0 }
 
+-- Display refresh throttle — controls how often the visible numbers update.
+-- Ring buffer always records at full rate; this only gates the displayed snapshot.
+local PERF_RATE_PRESETS = { 0, 0.1, 0.25, 0.5, 1.0, 2.0 }  -- seconds (0 = realtime)
+local PERF_RATE_LABELS  = { "RT", "100ms", "250ms", "500ms", "1s", "2s" }
+local perfRateIdx = 4  -- default 500ms
+local perfLastDisplayUpdate = 0  -- love.timer timestamp of last snapshot
+local perfDisplaySnapshot = nil  -- frozen copy of perf data for display
+
 -- Colors for perf tab
 local PERF_TAB_BG      = { 0.03, 0.03, 0.06, 1 }
 local PERF_BUDGET_BG   = { 0.10, 0.10, 0.16, 1 }
@@ -1406,6 +1899,9 @@ local function drawLV(font, x, y, label, value, labelCol, valueCol)
 end
 
 --- Draw the perf tab content.
+-- Perf rate selector region (for click detection)
+local perfRateRegion = nil  -- { x, y, w, h, segW }
+
 local function drawPerfTab(region)
   local font = getFont()
   love.graphics.setFont(font)
@@ -1420,8 +1916,55 @@ local function drawPerfTab(region)
   local y = region.y + pad - perfScrollY
   local contentW = region.w - pad * 2
 
+  -- == Refresh Rate Selector ==
+  local rateBarH = 20
+  local rateBarW = #PERF_RATE_PRESETS * 44
+  local rateX = region.x + region.w - pad - rateBarW
+  local rateY = y
+
+  love.graphics.setColor(PERF_LABEL_COL)
+  love.graphics.print("Refresh", x0, rateY + math.floor((rateBarH - fh) / 2))
+
+  love.graphics.setColor(PERF_BUDGET_BG)
+  love.graphics.rectangle("fill", rateX, rateY, rateBarW, rateBarH, 3, 3)
+
+  local segW = rateBarW / #PERF_RATE_PRESETS
+  for i, label in ipairs(PERF_RATE_LABELS) do
+    local sx = rateX + (i - 1) * segW
+    if i == perfRateIdx then
+      love.graphics.setColor(PERF_SPARK_LINE[1], PERF_SPARK_LINE[2], PERF_SPARK_LINE[3], 0.25)
+      love.graphics.rectangle("fill", sx, rateY, segW, rateBarH, 3, 3)
+      love.graphics.setColor(PERF_VALUE_COL)
+    else
+      love.graphics.setColor(PERF_LABEL_COL)
+    end
+    local lw = font:getWidth(label)
+    love.graphics.print(label, sx + math.floor((segW - lw) / 2), rateY + math.floor((rateBarH - fh) / 2))
+  end
+
+  -- Store in screen coords (rateY already accounts for scroll)
+  perfRateRegion = { x = rateX, y = rateY, w = rateBarW, h = rateBarH, segW = segW }
+  y = y + rateBarH + 10
+
+  -- == Throttled display snapshot ==
+  local now = love.timer.getTime()
+  local interval = PERF_RATE_PRESETS[perfRateIdx]
+  local livePerf = inspector and inspector.getPerfData()
+
+  if interval == 0 or not perfDisplaySnapshot or (now - perfLastDisplayUpdate) >= interval then
+    if livePerf then
+      perfDisplaySnapshot = {
+        layoutMs = livePerf.layoutMs,
+        paintMs = livePerf.paintMs,
+        fps = livePerf.fps,
+        nodeCount = livePerf.nodeCount,
+      }
+      perfLastDisplayUpdate = now
+    end
+  end
+
   -- == Frame Budget Bar ==
-  local perf = inspector and inspector.getPerfData()
+  local perf = perfDisplaySnapshot
   if perf then
     love.graphics.setColor(PERF_HEADER_COL)
     love.graphics.print("Frame Budget", x0, y)
@@ -1633,6 +2176,404 @@ perfWheelmoved = function(x, y)
 end
 
 -- ============================================================================
+-- Network tab: HTTP/WS observability timeline
+-- ============================================================================
+
+local NET_TAB_BG = { 0.03, 0.03, 0.06, 1 }
+local NET_HDR_COL = { 0.65, 0.68, 0.75, 1 }
+local NET_DIM_COL = { 0.45, 0.48, 0.56, 1 }
+local NET_VAL_COL = { 0.88, 0.90, 0.94, 1 }
+local NET_BTN_BG = { 0.12, 0.12, 0.18, 1 }
+local NET_BTN_ON = { 0.18, 0.28, 0.42, 1 }
+local NET_ROW_HOVER = { 0.12, 0.14, 0.20, 1 }
+local NET_ROW_SEL = { 0.18, 0.24, 0.36, 0.95 }
+local NET_ERR = { 0.95, 0.42, 0.32, 1 }
+local NET_WARN = { 0.95, 0.75, 0.20, 1 }
+local NET_GOOD = { 0.30, 0.80, 0.40, 1 }
+local NET_QUIET = { 0.55, 0.58, 0.65, 1 }
+
+local function netSetStatus(msg)
+  netStatusMessage = tostring(msg or "")
+  netStatusMessageTimer = 3.0
+end
+
+local function netClipboardWrite(text)
+  if love.system and love.system.setClipboardText then
+    local ok = pcall(love.system.setClipboardText, tostring(text or ""))
+    if ok then
+      netSetStatus("Copied to clipboard.")
+    else
+      netSetStatus("Clipboard write failed.")
+    end
+  else
+    netSetStatus("Clipboard not available in this target.")
+  end
+end
+
+local function netShellQuote(s)
+  s = tostring(s or "")
+  return "'" .. s:gsub("'", "'\\''") .. "'"
+end
+
+local function netGetTraceEvents(traceId)
+  local list = {}
+  if not traceId then return list end
+  iterNetworkEvents(function(evt)
+    if traceOf(evt) == traceId then list[#list + 1] = evt end
+  end)
+  table.sort(list, function(a, b)
+    if a.ts == b.ts then return (a.seq or 0) < (b.seq or 0) end
+    return a.ts < b.ts
+  end)
+  return list
+end
+
+local function netBuildCurl(traceId)
+  local events = netGetTraceEvents(traceId)
+  local req = nil
+  for _, evt in ipairs(events) do
+    if evt.transport == "http" and evt.direction == "out" and evt.target and evt.target ~= "" then
+      req = evt
+      break
+    end
+  end
+  if not req then return nil end
+  local method = req.method or "GET"
+  local parts = { "curl", "-X", method }
+  local keys = {}
+  for k in pairs(req.headers or {}) do keys[#keys + 1] = k end
+  table.sort(keys)
+  for _, k in ipairs(keys) do
+    local v = req.headers[k]
+    parts[#parts + 1] = "-H"
+    parts[#parts + 1] = netShellQuote(k .. ": " .. tostring(v))
+  end
+  if req.requestBody and req.requestBody ~= "" then
+    parts[#parts + 1] = "--data"
+    parts[#parts + 1] = netShellQuote(req.requestBody)
+  end
+  parts[#parts + 1] = netShellQuote(req.target)
+  return table.concat(parts, " ")
+end
+
+local function netExportTrace(traceId)
+  local events = netGetTraceEvents(traceId)
+  local payload = {
+    traceId = traceId,
+    exportedAt = nowSec(),
+    events = events,
+  }
+  local ok, encoded = pcall(json.encode, payload)
+  if not ok then return nil end
+  return encoded
+end
+
+local function netEventBadge(evt)
+  if evt.phase == "dropped" then return "DROP", NET_WARN end
+  if evt.origin == "quarantine" then return "QUAR", NET_WARN end
+  if evt.status == "blocked" or evt.phase == "blocked" then return "BLOCK", NET_WARN end
+  if evt.status == "error" or evt.phase == "error" then return "ERR", NET_ERR end
+  return "", NET_QUIET
+end
+
+local function netEventSummary(evt)
+  local target = trimTo(evt.target or "", 56)
+  if evt.transport == "http" then
+    return (evt.method or "HTTP") .. " " .. target
+  elseif evt.transport == "ws" then
+    return (evt.phase or "ws") .. " " .. target
+  elseif evt.transport == "peer" then
+    local c = evt.clientId and ("#" .. tostring(evt.clientId) .. " ") or ""
+    return c .. (evt.phase or "peer") .. " " .. target
+  end
+  return trimTo(evt.message or evt.phase or "event", 56)
+end
+
+local function netMatchesFilters(evt)
+  if netFilterTransport ~= "all" and evt.transport ~= netFilterTransport then return false end
+  if netFilterStatus == "errors" then
+    return evt.status == "error" or evt.phase == "error"
+  elseif netFilterStatus == "blocked" then
+    return evt.status == "blocked" or evt.phase == "blocked" or evt.origin == "quarantine"
+  end
+  return true
+end
+
+local function netButton(x, y, label, active, kind, value)
+  local font = getFont()
+  local h = 18
+  local w = font:getWidth(label) + 14
+  love.graphics.setColor(active and NET_BTN_ON or NET_BTN_BG)
+  love.graphics.rectangle("fill", x, y, w, h, 4, 4)
+  love.graphics.setColor(active and NET_VAL_COL or NET_DIM_COL)
+  love.graphics.print(label, x + 7, y + math.floor((h - font:getHeight()) / 2))
+  netHitRects[#netHitRects + 1] = { x = x, y = y, w = w, h = h, kind = kind, value = value }
+  return w + 6
+end
+
+local function drawNetworkTab(region)
+  local font = getFont()
+  love.graphics.setFont(font)
+  love.graphics.setScissor(region.x, region.y, region.w, region.h)
+
+  love.graphics.setColor(NET_TAB_BG)
+  love.graphics.rectangle("fill", region.x, region.y, region.w, region.h)
+  netHitRects = {}
+
+  local pad = 10
+  local lineH = font:getHeight() + 4
+  local controlsH = 52
+  local detailH = 138
+  local rowsY = region.y + controlsH
+  local rowsH = math.max(40, region.h - controlsH - detailH - 4)
+  local detailY = rowsY + rowsH + 4
+
+  -- Controls row
+  love.graphics.setColor(NET_HDR_COL)
+  love.graphics.print("Network", region.x + pad, region.y + 7)
+  local cx = region.x + pad + font:getWidth("Network") + 12
+  cx = cx + netButton(cx, region.y + 6, netGroupByTrace and "Grouped" or "Flat", netGroupByTrace, "toggle_group", nil)
+  cx = cx + netButton(cx, region.y + 6, "All", netFilterTransport == "all", "filter_transport", "all")
+  cx = cx + netButton(cx, region.y + 6, "HTTP", netFilterTransport == "http", "filter_transport", "http")
+  cx = cx + netButton(cx, region.y + 6, "WS", netFilterTransport == "ws", "filter_transport", "ws")
+  cx = cx + netButton(cx, region.y + 6, "Peer", netFilterTransport == "peer", "filter_transport", "peer")
+
+  local sx = region.x + pad
+  sx = sx + netButton(sx, region.y + 28, "Any", netFilterStatus == "all", "filter_status", "all")
+  sx = sx + netButton(sx, region.y + 28, "Errors", netFilterStatus == "errors", "filter_status", "errors")
+  sx = sx + netButton(sx, region.y + 28, "Blocked", netFilterStatus == "blocked", "filter_status", "blocked")
+  sx = sx + netButton(sx, region.y + 28, "Clear", false, "clear", nil)
+  sx = sx + netButton(sx, region.y + 28, "Copy curl", false, "copy_curl", nil)
+  sx = sx + netButton(sx, region.y + 28, "Export JSON", false, "export_json", nil)
+
+  local fillPct = math.floor((netCount / NET_MAX_EVENTS) * 100)
+  local health = string.format(
+    "evt/s %.1f  drop/s %.1f  fill %d%%",
+    state.netEventsPerSec or 0,
+    state.netDroppedPerSec or 0,
+    fillPct
+  )
+  if state.netLastErrorTs then
+    health = health .. string.format("  last err %.1fs ago", math.max(0, nowSec() - state.netLastErrorTs))
+  end
+  love.graphics.setColor(NET_DIM_COL)
+  local hw = font:getWidth(health)
+  love.graphics.print(health, region.x + region.w - hw - pad, region.y + 30)
+
+  if netStatusMessage ~= "" then
+    love.graphics.setColor(NET_WARN)
+    love.graphics.print(netStatusMessage, region.x + region.w - font:getWidth(netStatusMessage) - pad, region.y + 8)
+  end
+
+  -- Build filtered rows
+  local filtered = {}
+  iterNetworkEvents(function(evt)
+    if netMatchesFilters(evt) then filtered[#filtered + 1] = evt end
+  end)
+
+  local rows = {}
+  if netGroupByTrace then
+    local groupMap = {}
+    local groupOrder = {}
+    for _, evt in ipairs(filtered) do
+      local traceId = traceOf(evt)
+      local g = groupMap[traceId]
+      if not g then
+        g = { traceId = traceId, events = {} }
+        groupMap[traceId] = g
+        groupOrder[#groupOrder + 1] = g
+      end
+      g.events[#g.events + 1] = evt
+      g.last = evt
+    end
+    for _, g in ipairs(groupOrder) do
+      rows[#rows + 1] = { kind = "group", group = g }
+      if netExpanded[g.traceId] then
+        for _, evt in ipairs(g.events) do
+          rows[#rows + 1] = { kind = "event", evt = evt, depth = 1 }
+        end
+      end
+    end
+  else
+    for _, evt in ipairs(filtered) do
+      rows[#rows + 1] = { kind = "event", evt = evt, depth = 0 }
+    end
+  end
+
+  -- Scrollable rows area
+  netRegion = { x = region.x, y = rowsY, w = region.w, h = rowsH }
+  love.graphics.setScissor(netRegion.x, netRegion.y, netRegion.w, netRegion.h)
+
+  local y = rowsY + 4 - netScrollY
+  for _, row in ipairs(rows) do
+    if y + lineH >= rowsY and y <= rowsY + rowsH then
+      if row.kind == "group" then
+        local g = row.group
+        local open = netExpanded[g.traceId] == true
+        love.graphics.setColor(NET_ROW_HOVER)
+        love.graphics.rectangle("fill", region.x + 2, y - 1, region.w - 10, lineH + 2, 3, 3)
+        love.graphics.setColor(NET_VAL_COL)
+        local prefix = open and "- " or "+ "
+        local label = prefix .. trimTo(g.traceId, 34) .. " (" .. tostring(#g.events) .. ")"
+        local summary = g.last and netEventSummary(g.last) or ""
+        love.graphics.print(label, region.x + pad, y)
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(trimTo(summary, 48), region.x + 260, y)
+        netHitRects[#netHitRects + 1] = {
+          x = region.x + 2, y = y - 1, w = region.w - 10, h = lineH + 2,
+          kind = "toggle_trace", value = g.traceId
+        }
+      else
+        local evt = row.evt
+        local isSel = evt.eventId == netSelectedEventId
+        love.graphics.setColor(isSel and NET_ROW_SEL or NET_TAB_BG)
+        love.graphics.rectangle("fill", region.x + 2, y - 1, region.w - 10, lineH + 2, 3, 3)
+        local badge, badgeCol = netEventBadge(evt)
+        local x = region.x + pad + (row.depth or 0) * 14
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(string.format("%.3f", evt.ts % 1000), x, y)
+        x = x + 52
+        love.graphics.setColor(badgeCol)
+        love.graphics.print(badge, x, y)
+        x = x + 46
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(trimTo(evt.transport or "-", 6), x, y)
+        x = x + 42
+        love.graphics.print(trimTo(evt.direction or "-", 8), x, y)
+        x = x + 48
+        love.graphics.setColor(NET_VAL_COL)
+        love.graphics.print(netEventSummary(evt), x, y)
+        local right = region.x + region.w - 12
+        local statusStr = evt.code and (tostring(evt.status) .. ":" .. tostring(evt.code)) or tostring(evt.status or "")
+        if evt.durationMs then statusStr = statusStr .. string.format(" %.1fms", evt.durationMs) end
+        local sw = font:getWidth(statusStr)
+        love.graphics.setColor(NET_DIM_COL)
+        love.graphics.print(statusStr, right - sw, y)
+        netHitRects[#netHitRects + 1] = {
+          x = region.x + 2, y = y - 1, w = region.w - 10, h = lineH + 2,
+          kind = "select_event", value = evt.eventId
+        }
+      end
+    end
+    y = y + lineH + 2
+  end
+
+  netContentHStored = (y - rowsY) + netScrollY + 6
+  drawScrollbar(netRegion.x, netRegion.y, netRegion.w, netRegion.h, netScrollY, netContentHStored)
+  love.graphics.setScissor()
+
+  -- Detail pane
+  love.graphics.setColor(NET_ROW_HOVER)
+  love.graphics.rectangle("fill", region.x, detailY, region.w, detailH)
+  love.graphics.setColor(BORDER_COLOR)
+  love.graphics.rectangle("fill", region.x, detailY, region.w, 1)
+
+  local selected = getEventById(netSelectedEventId)
+  local dx = region.x + pad
+  local dy = detailY + 6
+  if selected then
+    local traceId = traceOf(selected)
+    local meta = netTraceMeta[traceId]
+    love.graphics.setColor(NET_HDR_COL)
+    love.graphics.print("Trace " .. traceId, dx, dy)
+    dy = dy + lineH
+    love.graphics.setColor(NET_VAL_COL)
+    love.graphics.print(selected.phase .. "  " .. netEventSummary(selected), dx, dy)
+    dy = dy + lineH
+    if meta and meta.queuedTs and meta.doneTs then
+      love.graphics.setColor(NET_DIM_COL)
+      love.graphics.print(string.format(
+        "queued %.3f  first %.3f  done %.3f  total %.1fms",
+        meta.queuedTs, meta.firstByteTs or meta.sentTs or meta.queuedTs, meta.doneTs,
+        (meta.doneTs - meta.queuedTs) * 1000
+      ), dx, dy)
+      dy = dy + lineH
+    end
+
+    if selected.error then
+      love.graphics.setColor(NET_ERR)
+      love.graphics.print("error: " .. trimTo(selected.error, 120), dx, dy)
+      dy = dy + lineH
+    elseif selected.message then
+      love.graphics.setColor(NET_DIM_COL)
+      love.graphics.print("message: " .. trimTo(selected.message, 120), dx, dy)
+      dy = dy + lineH
+    end
+
+    if selected.payloadPreview and selected.payloadPreview ~= "" then
+      love.graphics.setColor(NET_DIM_COL)
+      love.graphics.print("payload: " .. trimTo(selected.payloadPreview, 120), dx, dy)
+      dy = dy + lineH
+    end
+  else
+    love.graphics.setColor(NET_DIM_COL)
+    love.graphics.print("Select a row to inspect details.", dx, dy)
+  end
+
+  love.graphics.setScissor()
+end
+
+networkMousepressed = function(x, y, button, region)
+  if button ~= 1 then return false end
+  if x < region.x or x > region.x + region.w then return false end
+  if y < region.y or y > region.y + region.h then return false end
+
+  for i = #netHitRects, 1, -1 do
+    local r = netHitRects[i]
+    if x >= r.x and x < r.x + r.w and y >= r.y and y < r.y + r.h then
+      if r.kind == "toggle_group" then
+        netGroupByTrace = not netGroupByTrace
+      elseif r.kind == "filter_transport" then
+        netFilterTransport = r.value or "all"
+      elseif r.kind == "filter_status" then
+        netFilterStatus = r.value or "all"
+      elseif r.kind == "clear" then
+        DevTools.clearNetworkEvents()
+      elseif r.kind == "copy_curl" then
+        local selected = getEventById(netSelectedEventId)
+        local traceId = selected and traceOf(selected) or nil
+        local curl = netBuildCurl(traceId)
+        if curl then
+          netClipboardWrite(curl)
+        else
+          netSetStatus("No HTTP request selected for curl.")
+        end
+      elseif r.kind == "export_json" then
+        local selected = getEventById(netSelectedEventId)
+        local traceId = selected and traceOf(selected) or nil
+        local exported = netExportTrace(traceId)
+        if exported then
+          netClipboardWrite(exported)
+        else
+          netSetStatus("No trace selected for JSON export.")
+        end
+      elseif r.kind == "toggle_trace" then
+        netExpanded[r.value] = not netExpanded[r.value]
+      elseif r.kind == "select_event" then
+        netSelectedEventId = r.value
+        if netGroupByTrace then
+          local selected = getEventById(netSelectedEventId)
+          if selected then netExpanded[traceOf(selected)] = true end
+        end
+      end
+      return true
+    end
+  end
+  return true
+end
+
+networkWheelmoved = function(x, y)
+  local dy = y
+  if dy == 0 and x ~= 0 then dy = x end
+  netScrollY = math.max(0, netScrollY - dy * 20)
+  if netRegion and netContentHStored > 0 then
+    local maxScroll = math.max(0, netContentHStored - netRegion.h)
+    netScrollY = math.min(netScrollY, maxScroll)
+  end
+  return true
+end
+
+-- ============================================================================
 -- Logs tab: channel toggle grid
 -- ============================================================================
 
@@ -1659,6 +2600,7 @@ local LOG_BTN_H     = 28
 local LOG_BTN_PAD   = 6
 
 -- Colors for logs tab
+local LOG_TAB_BG    = { 0.03, 0.03, 0.06, 1 }
 local LOG_ON_BG     = { 0.15, 0.30, 0.20, 1 }
 local LOG_ON_DOT    = { 0.30, 0.85, 0.40, 1 }
 local LOG_OFF_BG    = { 0.12, 0.12, 0.18, 1 }
@@ -1669,6 +2611,7 @@ local LOG_HEADER_TXT = { 0.65, 0.68, 0.75, 1 }
 local LOG_BTN_BG    = { 0.12, 0.12, 0.18, 1 }
 local LOG_BTN_TEXT  = { 0.55, 0.58, 0.65, 1 }
 local LOG_BTN_HOVER = { 0.18, 0.22, 0.32, 1 }
+local LOG_DIVIDER   = { 0.18, 0.18, 0.25, 1 }
 
 --- Toggle a channel (handles JS-side sync for recon/dispatch).
 local function toggleChannel(name)
@@ -1684,6 +2627,10 @@ local function drawLogsTab(region)
   local font = getFont()
   love.graphics.setFont(font)
   love.graphics.setScissor(region.x, region.y, region.w, region.h)
+
+  -- Opaque background (matches perf tab)
+  love.graphics.setColor(LOG_TAB_BG)
+  love.graphics.rectangle("fill", region.x, region.y, region.w, region.h)
 
   local channels = getSortedChannels()
   local fh = font:getHeight()
@@ -1765,6 +2712,54 @@ local function drawLogsTab(region)
     rowY = rowY + LOG_ROW_H
   end
 
+  -- ── HMR Settings section ──
+  rowY = rowY + 8
+  love.graphics.setColor(LOG_DIVIDER)
+  love.graphics.rectangle("fill", x0, rowY, region.w - LOG_PAD_X * 2, 1)
+  rowY = rowY + 8
+
+  love.graphics.setColor(LOG_HEADER_TXT)
+  love.graphics.print("HMR Settings", x0, rowY + math.floor((LOG_HEADER_H - fh) / 2))
+  rowY = rowY + LOG_HEADER_H
+
+  -- HMR State Preservation toggle
+  local hmrOn = HotState.isEnabled()
+  local hmrIsHovered = logsHoverRow == "hmr_state"
+
+  if hmrIsHovered then
+    love.graphics.setColor(0.10, 0.12, 0.18, 1)
+    love.graphics.rectangle("fill", region.x, rowY, region.w, LOG_ROW_H)
+  end
+
+  local hmrPillX = x0
+  local hmrPillY = rowY + math.floor((LOG_ROW_H - 18) / 2)
+  local hmrPillW = LOG_TOGGLE_W
+  local hmrPillH = 18
+  local hmrPillR = 9
+
+  love.graphics.setColor(hmrOn and LOG_ON_BG or LOG_OFF_BG)
+  love.graphics.rectangle("fill", hmrPillX, hmrPillY, hmrPillW, hmrPillH, hmrPillR, hmrPillR)
+
+  local hmrDotR = 6
+  local hmrDotX = hmrOn and (hmrPillX + hmrPillW - hmrDotR - 4) or (hmrPillX + hmrDotR + 4)
+  local hmrDotY = hmrPillY + hmrPillH / 2
+  love.graphics.setColor(hmrOn and LOG_ON_DOT or LOG_OFF_DOT)
+  love.graphics.circle("fill", hmrDotX, hmrDotY, hmrDotR)
+
+  local hmrNameX = hmrPillX + hmrPillW + 12
+  love.graphics.setColor(hmrOn and { 0.38, 0.82, 0.98, 1 } or LOG_NAME)
+  love.graphics.print("State Preservation", hmrNameX, rowY + math.floor((LOG_ROW_H - fh) / 2))
+
+  local hmrDescX = hmrNameX + font:getWidth("State Preservation") + 16
+  love.graphics.setColor(LOG_DESC)
+  local hmrDesc = hmrOn and "useState survives hot reload" or "useState resets on hot reload"
+  local hmrMaxW = region.x + region.w - hmrDescX - LOG_PAD_X
+  if hmrMaxW > 0 then
+    love.graphics.print(hmrDesc, hmrDescX, rowY + math.floor((LOG_ROW_H - fh) / 2))
+  end
+
+  rowY = rowY + LOG_ROW_H
+
   -- Hint at bottom
   local hintY = rowY + 8
   if hintY + fh < region.y + region.h + logsScrollY then
@@ -1773,7 +2768,7 @@ local function drawLogsTab(region)
     love.graphics.print("Output goes to terminal AND console tab", x0, hintY + fh + 2)
   end
 
-  local logsContentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
+  local logsContentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 16 + 1 + 8 + LOG_HEADER_H + LOG_ROW_H + 30
   logsContentHStored = logsContentH
   drawScrollbar(region.x, region.y, region.w, region.h, logsScrollY, logsContentH)
   love.graphics.setScissor()
@@ -1825,6 +2820,20 @@ logsMousepressed = function(x, y, button, region)
     rowY = rowY + LOG_ROW_H
   end
 
+  -- HMR Settings section: divider(8+1+8) + header(LOG_HEADER_H) + toggle row
+  local hmrRowY = rowY + 8 + 1 + 8 + LOG_HEADER_H
+  if y >= hmrRowY and y < hmrRowY + LOG_ROW_H then
+    HotState.setEnabled(not HotState.isEnabled())
+    if bridge then
+      if HotState.isEnabled() then
+        pcall(function() bridge:eval("if(typeof __enableStatePreservation==='function')__enableStatePreservation()") end)
+      else
+        pcall(function() bridge:eval("if(typeof __disableStatePreservation==='function')__disableStatePreservation()") end)
+      end
+    end
+    return true
+  end
+
   return true
 end
 
@@ -1863,6 +2872,12 @@ logsMousemoved = function(x, y, region)
     end
     rowY = rowY + LOG_ROW_H
   end
+
+  -- HMR Settings toggle row
+  local hmrRowY = rowY + 8 + 1 + 8 + LOG_HEADER_H
+  if y >= hmrRowY and y < hmrRowY + LOG_ROW_H then
+    logsHoverRow = "hmr_state"; return
+  end
 end
 
 --- Handle wheel scroll on logs tab.
@@ -1871,11 +2886,9 @@ logsWheelmoved = function(x, y)
   local dy = y
   if dy == 0 and x ~= 0 then dy = x end
   logsScrollY = math.max(0, logsScrollY - dy * 20)
-  -- Clamp to content height
-  if logsRegion then
-    local channels = getSortedChannels()
-    local contentH = LOG_PAD_Y + LOG_HEADER_H + #channels * LOG_ROW_H + 30
-    local maxScroll = math.max(0, contentH - logsRegion.h)
+  -- Clamp to content height (use stored value from drawLogsTab)
+  if logsRegion and logsContentHStored > 0 then
+    local maxScroll = math.max(0, logsContentHStored - logsRegion.h)
     logsScrollY = math.min(logsScrollY, maxScroll)
   end
   return true
@@ -1927,8 +2940,13 @@ local function drawTabBar(panelY, screenW)
     tabX = tabX + tabW + 2
   end
 
-  -- Right-side buttons: refresh, pop-out, close
+  -- Right-side buttons: layout colors, refresh, pop-out, close
   local btnY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
+
+  -- Layout colors toggle button
+  local colorsX = screenW - 100
+  love.graphics.setColor(layoutColorizer.active and TAB_ACCENT or TAB_TEXT)
+  love.graphics.print("#", colorsX + 4, btnY)
 
   -- Refresh button
   local refreshX = screenW - 76
@@ -2045,6 +3063,9 @@ local function drawPanelContent(root)
   elseif state.activeTab == "perf" then
     drawPerfTab({ x = 0, y = contentY, w = screenW, h = contentH })
 
+  elseif state.activeTab == "network" then
+    drawNetworkTab({ x = 0, y = contentY, w = screenW, h = contentH })
+
   elseif state.activeTab == "console" then
     console.drawInRegion({ x = 0, y = contentY, w = screenW, h = contentH })
 
@@ -2066,6 +3087,9 @@ end
 --- When popped out, only draws canvas overlays on the main window — the panel
 --- is rendered separately by drawInWindow() after GL context switch.
 function DevTools.draw(root)
+  -- Layout colorizer overlay (Ctrl+Shift+L)
+  layoutColorizer.draw(root)
+
   -- Playground code/preview cross-link overlay (always available).
   if inspector and inspector.drawPlaygroundLinkOverlay then
     inspector.drawPlaygroundLinkOverlay(root)
@@ -2099,9 +3123,18 @@ end
 --- Used by context menu "Inspect" action.
 function DevTools.inspectNode(node)
   if not node then return end
+  local wasOpen = state.open
   state.open = true
   state.activeTab = "elements"
+  if not wasOpen then
+    inspector.enable()
+  end
   inspector.inspectNode(node)
+  -- Relayout: viewport height changed (panel just opened)
+  if not wasOpen then
+    if tree then tree.markDirty() end
+    pushViewportEvent()
+  end
 end
 
 return DevTools

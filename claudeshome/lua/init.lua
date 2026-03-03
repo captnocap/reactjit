@@ -136,6 +136,24 @@ local function gated(category, handler, details_fn)
   end
 end
 
+local function netTraceId(kind, id)
+  return tostring(kind) .. ":" .. tostring(id)
+end
+
+local function netSizeOf(value)
+  if type(value) == "string" then return #value end
+  if value == nil then return nil end
+  return #tostring(value)
+end
+
+local function netEmit(evt)
+  if M.inspectorEnabled and devtools and devtools.recordNetworkEvent then
+    devtools.recordNetworkEvent(evt)
+  end
+end
+
+local netStreamFirstByteSeen = {}
+
 -- Scrollbar drag state
 local scrollbarDrag = nil  -- { node, axis="v"|"h", startMouse, startScroll }
 
@@ -161,6 +179,8 @@ local prevFocusedNodeIds = {}  -- { [nodeId] = true }
 local hmrFrameCounter = 0
 local hmrLastMtime    = nil
 local hmrHasLoaded    = false
+local luaFileMtimes   = {}    -- { ["lua/layout.lua"] = modtime, ... }
+local luaHmrDirty     = false -- set true when any lua file changed
 
 -- Crash recovery: when true, update/draw skip the app and only poll HMR
 local crashRecoveryMode = false
@@ -295,6 +315,10 @@ local function initContextMenuModule()
       toggleDevTools = M.inspectorEnabled and function()
         devtools.keypressed("f12")
       end or nil,
+      toggleLayoutColors = function()
+        local colorizer = require("lua.layout_colorizer")
+        colorizer.toggle()
+      end,
     },
     shortcuts = {
       refresh = "F5 / Ctrl+R",
@@ -303,6 +327,7 @@ local function initContextMenuModule()
       settings = settingsToggleKey:upper(),
       systemPanel = systemPanelToggleKey:upper(),
       devtools = "F12",
+      layoutColors = "Ctrl+Shift+L",
     },
   })
 end
@@ -563,6 +588,19 @@ function ReactJIT.init(config)
   M._startupVerbose = verbose
   _G._reactjit_verbose = verbose
 
+  -- Memory spike watchdog: external process that monitors /proc/self/statm
+  -- and kill -9's us if RSS spikes >50MB in 100ms (infinite allocation loop).
+  -- Must launch before any module loading that could loop.
+  if config.watchdog ~= false and os.getenv("RJIT_NO_WATCHDOG") ~= "1" then
+    local wOk, watchdog = pcall(require, "lua.watchdog")
+    if wOk then
+      local launched = watchdog.launch(type(config.watchdog) == "table" and config.watchdog or nil)
+      io.write("[WATCHDOG] " .. (launched and "Active" or "Failed to launch") .. "\n"); io.flush()
+    else
+      io.write("[WATCHDOG] Module load failed: " .. tostring(watchdog) .. "\n"); io.flush()
+    end
+  end
+
   basePath = resolveBasePath()
 
   -- Load cartridge manifest and mint capability permits.
@@ -815,9 +853,8 @@ function ReactJIT.init(config)
       bundlePath = config.bundlePath or "bundle.js",
     }
 
-    -- Init mpv BEFORE QuickJS — libquickjs dlopen can interfere with mpv's GL setup
+    -- Videos module loads as stub — libmpv deferred until first <Video> mounts
     M.videos  = require("lua.videos")
-    M.videos.initBackend()
 
     local BridgeQJS = require("lua.bridge_quickjs")
     M.bridge = BridgeQJS.new(initConfig.libpath)
@@ -1471,6 +1508,24 @@ function ReactJIT.init(config)
     startupLog("[reactjit] Archive module loaded")
   end
 
+  -- Load math utilities module (noise, FFT, bezier, batch compute)
+  local mathOk, mathMod = pcall(require, "lua.math_utils")
+  if mathOk and mathMod then
+    for method, handler in pairs(mathMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    startupLog("[reactjit] Math module loaded")
+  end
+
+  -- Load general utilities module (IDs, strings, time, deep equality, safe JSON)
+  local utilsOk, utilsMod = pcall(require, "lua.utils")
+  if utilsOk and utilsMod then
+    for method, handler in pairs(utilsMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    startupLog("[reactjit] Utils module loaded")
+  end
+
   -- Load media scanner module (optional — directory scanning + indexing)
   local mdOk, mdMod = pcall(require, "lua.media")
   if mdOk and mdMod then
@@ -1587,43 +1642,120 @@ function ReactJIT.init(config)
   end)
 end
 
---- Poll bundle.js mtime for HMR. Returns true if reload was triggered.
+--- Scan lua/ directory for modified files. Returns true if any changed.
+local function _pollLuaFiles()
+  local items = love.filesystem.getDirectoryItems("lua")
+  local changed = false
+  for _, name in ipairs(items) do
+    if name:match("%.lua$") then
+      local path = "lua/" .. name
+      local info = love.filesystem.getInfo(path)
+      if info and info.modtime then
+        local prev = luaFileMtimes[path]
+        if prev == nil then
+          luaFileMtimes[path] = info.modtime
+        elseif info.modtime ~= prev then
+          luaFileMtimes[path] = info.modtime
+          io.write("[reactjit] Lua file changed: " .. path .. "\n"); io.flush()
+          changed = true
+        end
+      end
+    end
+  end
+  -- Also scan lua/capabilities/ subdirectory
+  local capItems = love.filesystem.getDirectoryItems("lua/capabilities")
+  if capItems then
+    for _, name in ipairs(capItems) do
+      if name:match("%.lua$") then
+        local path = "lua/capabilities/" .. name
+        local info = love.filesystem.getInfo(path)
+        if info and info.modtime then
+          local prev = luaFileMtimes[path]
+          if prev == nil then
+            luaFileMtimes[path] = info.modtime
+          elseif info.modtime ~= prev then
+            luaFileMtimes[path] = info.modtime
+            io.write("[reactjit] Lua file changed: " .. path .. "\n"); io.flush()
+            changed = true
+          end
+        end
+      end
+    end
+  end
+  return changed
+end
+
+--- Poll bundle.js and lua/ file mtimes for HMR. Returns true if reload was triggered.
 --- Extracted so crash recovery mode can call it independently.
 function ReactJIT._pollHMR()
   hmrFrameCounter = hmrFrameCounter + 1
   if hmrFrameCounter % 60 == 0 and initConfig then
+    -- Check JS bundle
+    local jsChanged = false
     local info = love.filesystem.getInfo(initConfig.bundlePath)
     if info and info.modtime then
       if hmrLastMtime == nil then
         hmrLastMtime = info.modtime
       elseif info.modtime ~= hmrLastMtime then
         hmrLastMtime = info.modtime
-        if hmrHasLoaded then
-          -- In crash recovery mode, attempt reload and clear the crash
-          if crashRecoveryMode then
-            io.write("[reactjit] Crash recovery: new bundle detected, attempting reload...\n"); io.flush()
-            local rok, rerr = pcall(ReactJIT.reload)
-            if rok then
-              crashRecoveryMode = false
-              errors.clear()
-              eventTrail.clear()
-              io.write("[reactjit] Crash recovery: reload succeeded! Resuming.\n"); io.flush()
-              return true
-            else
-              io.write("[reactjit] Crash recovery: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
-              errors.push({
-                source = "lua",
-                message = "Crash recovery reload failed: " .. tostring(rerr),
-                context = "ReactJIT._pollHMR (recovery)",
-              })
-              return false
-            end
-          end
-          ReactJIT.reload()
-          return true
-        end
+        jsChanged = true
       end
       hmrHasLoaded = true
+    end
+
+    -- Check Lua files
+    local luaChanged = _pollLuaFiles()
+    if luaChanged then luaHmrDirty = true end
+
+    -- Trigger reload if anything changed
+    if (jsChanged or luaChanged) and hmrHasLoaded then
+      if luaHmrDirty then
+        io.write("[reactjit] Lua HMR: clearing module cache...\n"); io.flush()
+        -- Clear all lua.* entries from package.loaded so require() gets fresh copies
+        for modname, _ in pairs(package.loaded) do
+          if type(modname) == "string" and modname:match("^lua%.") then
+            -- Don't clear init.lua itself — we're running inside it
+            if modname ~= "lua" and modname ~= "lua.init" then
+              package.loaded[modname] = nil
+            end
+          end
+        end
+      end
+
+      -- In crash recovery mode, attempt reload and clear the crash
+      if crashRecoveryMode then
+        io.write("[reactjit] Crash recovery: change detected, attempting reload...\n"); io.flush()
+        local rok, rerr = pcall(ReactJIT.reload)
+        if rok then
+          crashRecoveryMode = false
+          errors.clear()
+          eventTrail.clear()
+          luaHmrDirty = false
+          io.write("[reactjit] Crash recovery: reload succeeded! Resuming.\n"); io.flush()
+          return true
+        else
+          io.write("[reactjit] Crash recovery: reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+          errors.push({
+            source = "lua",
+            message = "Crash recovery reload failed: " .. tostring(rerr),
+            context = "ReactJIT._pollHMR (recovery)",
+          })
+          return false
+        end
+      end
+      local rok, rerr = pcall(ReactJIT.reload)
+      if not rok then
+        crashRecoveryMode = true
+        io.write("[reactjit] HMR reload failed: " .. tostring(rerr) .. "\n"); io.flush()
+        io.write("[reactjit] Fix your code and save to trigger reload.\n"); io.flush()
+        errors.push({
+          source = "lua",
+          message = tostring(rerr),
+          context = "ReactJIT._pollHMR (reload)",
+        })
+      end
+      luaHmrDirty = false
+      return true
     end
   end
   return false
@@ -1642,6 +1774,9 @@ function ReactJIT.update(dt)
 
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
+  if M.inspectorEnabled and devtools and devtools.beginFrame then
+    devtools.beginFrame(dt)
+  end
 
   if mode == "canvas" or mode == "wasm" then
     -- Canvas/WASM mode: FS bridge + native rendering pipeline -----------
@@ -1788,7 +1923,27 @@ function ReactJIT.update(dt)
     end
   end
 
+  -- Flight recorder: write crisis data to disk every 10 frames BEFORE tick().
+  -- This is the "black box" — always has the last few seconds of op/component
+  -- data on disk. When the watchdog SIGKILL's us during a seizure, the last
+  -- checkpoint is already there. Rolling window: counters reset every 180 frames
+  -- (~3s at 60fps) so the file only ever has recent data, no growth from idling.
+  M._flightFrame = (M._flightFrame or 0) + 1
+  if M.bridge._crisisOps then
+    -- Write checkpoint every 10 frames (~166ms at 60fps)
+    if M._flightFrame % 10 == 0 and next(M.bridge._crisisOps) then
+      M.bridge:_directWriteCrisis()
+    end
+    -- Reset rolling window every ~3s (180 frames at 60fps).
+    -- Done AFTER write so the last window's data is on disk before clearing.
+    if M._flightFrame % 180 == 1 then
+      M.bridge:resetCrisis()
+    end
+  end
+
   -- 1. Tick JS timers + microtasks
+  -- Reset per-tick flush counter so seizure detection works (>10 flushes = stuck)
+  if M.bridge.resetTickFlush then M.bridge:resetTickFlush() end
   M.bridge:tick()
 
   -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
@@ -1850,14 +2005,54 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "http:request" then
           -- HTTP fetch request: scan URL for mining pool indicators
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("http", payload.id) or nil
+          if payload and traceId and payload.url then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "http",
+              direction = "out",
+              phase = "queued",
+              status = "ok",
+              method = payload.method,
+              target = payload.url,
+              headers = payload.headers,
+              requestBody = payload.body,
+              payloadPreview = payload.body,
+            })
+          end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
             local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "quarantine",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "mining_pool_connection",
+                  payloadPreview = urlResult.matches,
+                })
+              end
               M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url then
             if M.http then
+              netEmit({
+                traceId = traceId,
+                origin = "runtime",
+                transport = "http",
+                direction = "out",
+                phase = "sent",
+                status = "ok",
+                method = payload.method,
+                target = payload.url,
+              })
               local immediate = M.http.request(payload.id, {
                 url = payload.url,
                 method = payload.method,
@@ -1867,12 +2062,40 @@ function ReactJIT.update(dt)
               })
               -- Local file reads return immediately
               if immediate then
+                netEmit({
+                  traceId = traceId,
+                  origin = "runtime",
+                  transport = "http",
+                  direction = "in",
+                  phase = immediate.error and "error" or "done",
+                  status = immediate.error and "error" or "ok",
+                  method = payload.method,
+                  target = payload.url,
+                  code = immediate.status,
+                  responseHeaders = immediate.headers,
+                  payloadPreview = immediate.error or immediate.body,
+                  size = netSizeOf(immediate.body),
+                })
                 pushEvent({
                   type = "http:response",
                   payload = { _json = json.encode(immediate) },
                 })
               end
             else
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "capability",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "http_module_unavailable",
+                  error = "HTTP module not available",
+                })
+              end
               pushEvent({
                 type = "http:response",
                 payload = { _json = json.encode({
@@ -1888,14 +2111,54 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "http:stream" then
           -- HTTP streaming request: scan URL for mining pool indicators
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("http", payload.id) or nil
+          if payload and traceId and payload.url then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "http",
+              direction = "out",
+              phase = "queued",
+              status = "ok",
+              method = payload.method,
+              target = payload.url,
+              headers = payload.headers,
+              requestBody = payload.body,
+              payloadPreview = payload.body,
+            })
+          end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
             local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "quarantine",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "mining_pool_connection",
+                  payloadPreview = urlResult.matches,
+                })
+              end
               M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url then
             if M.http then
+              netEmit({
+                traceId = traceId,
+                origin = "runtime",
+                transport = "http",
+                direction = "out",
+                phase = "sent",
+                status = "ok",
+                method = payload.method,
+                target = payload.url,
+              })
               local immediate = M.http.streamRequest(payload.id, {
                 url = payload.url,
                 method = payload.method,
@@ -1905,12 +2168,40 @@ function ReactJIT.update(dt)
               })
               -- Local file reads return immediately (no streaming for local files)
               if immediate then
+                netEmit({
+                  traceId = traceId,
+                  origin = "runtime",
+                  transport = "http",
+                  direction = "in",
+                  phase = immediate.error and "error" or "done",
+                  status = immediate.error and "error" or "ok",
+                  method = payload.method,
+                  target = payload.url,
+                  code = immediate.status,
+                  responseHeaders = immediate.headers,
+                  payloadPreview = immediate.error or immediate.body,
+                  size = netSizeOf(immediate.body),
+                })
                 pushEvent({
                   type = "http:response",
                   payload = { _json = json.encode(immediate) },
                 })
               end
             else
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "capability",
+                  transport = "http",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  method = payload.method,
+                  target = payload.url,
+                  blockedReason = "http_module_unavailable",
+                  error = "HTTP module not available",
+                })
+              end
               pushEvent({
                 type = "http:stream:error",
                 payload = { id = payload.id, error = "HTTP module not available" },
@@ -1933,50 +2224,226 @@ function ReactJIT.update(dt)
         elseif type(cmd) == "table" and cmd.type == "ws:connect" then
           -- WebSocket connect — scan URL for mining pool indicators
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
+          if payload and traceId and payload.url then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "queued",
+              status = "ok",
+              target = payload.url,
+            })
+          end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
             local urlResult = M.quarantine.scanURL(payload.url)
             if urlResult.detected then
+              if traceId then
+                netEmit({
+                  traceId = traceId,
+                  origin = "quarantine",
+                  transport = "ws",
+                  direction = "out",
+                  phase = "blocked",
+                  status = "blocked",
+                  target = payload.url,
+                  blockedReason = "mining_pool_connection",
+                  payloadPreview = urlResult.matches,
+                })
+              end
               M.quarantine.activate("mining_pool_connection", urlResult.matches)
             end
           end
           if payload and payload.id and payload.url and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "sent",
+              status = "ok",
+              target = payload.url,
+            })
             M.network.connect(payload.id, payload.url)
+          elseif payload and payload.id and payload.url then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "ws",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              target = payload.url,
+              blockedReason = "network_module_unavailable",
+              error = "Network module not available",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:send" then
           -- WebSocket send
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
           if payload and payload.id and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "message",
+              status = "ok",
+              size = netSizeOf(payload.data or ""),
+              payloadPreview = payload.data or "",
+            })
             M.network.send(payload.id, payload.data or "")
+          elseif payload and payload.id then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "ws",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+              error = "Network module not available",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:close" then
           -- WebSocket close
           local payload = cmd.payload
+          local traceId = payload and payload.id and netTraceId("ws", payload.id) or nil
           if payload and payload.id and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "ws",
+              direction = "out",
+              phase = "close",
+              status = "ok",
+              code = payload.code,
+              payloadPreview = payload.reason or "",
+            })
             M.network.close(payload.id, payload.code, payload.reason)
+          elseif payload and payload.id then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "ws",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+              error = "Network module not available",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:listen" then
           -- Start WebSocket server
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and payload.port and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "listen",
+              status = "ok",
+              target = tostring(payload.host or "127.0.0.1") .. ":" .. tostring(payload.port),
+              payloadPreview = payload.serverId,
+            })
             M.network.listen(payload.serverId, payload.port, payload.host)
+          elseif payload and payload.serverId and payload.port then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              target = tostring(payload.host or "127.0.0.1") .. ":" .. tostring(payload.port),
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:broadcast" then
           -- Broadcast to all server clients
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "broadcast",
+              status = "ok",
+              size = netSizeOf(payload.data or ""),
+              payloadPreview = payload.data or "",
+            })
             M.network.broadcast(payload.serverId, payload.data or "")
+          elseif payload and payload.serverId then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:peer:send" then
           -- Send to specific client on server
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and payload.clientId and M.network then
+            netEmit({
+              traceId = traceId,
+              parentId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "peer_send",
+              status = "ok",
+              clientId = payload.clientId,
+              size = netSizeOf(payload.data or ""),
+              payloadPreview = payload.data or "",
+            })
             M.network.sendToClient(payload.serverId, payload.clientId, payload.data or "")
+          elseif payload and payload.serverId and payload.clientId then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "ws:server:stop" then
           -- Stop a server
           local payload = cmd.payload
+          local traceId = payload and payload.serverId and netTraceId("wssrv", payload.serverId) or nil
           if payload and payload.serverId and M.network then
+            netEmit({
+              traceId = traceId,
+              origin = "runtime",
+              transport = "peer",
+              direction = "out",
+              phase = "stop",
+              status = "ok",
+              payloadPreview = payload.serverId,
+            })
             M.network.stopServer(payload.serverId)
+          elseif payload and payload.serverId then
+            netEmit({
+              traceId = traceId,
+              origin = "capability",
+              transport = "peer",
+              direction = "out",
+              phase = "blocked",
+              status = "blocked",
+              blockedReason = "network_module_unavailable",
+            })
           end
         elseif type(cmd) == "table" and cmd.type == "theme:set" then
           -- Switch active theme
@@ -2083,22 +2550,84 @@ function ReactJIT.update(dt)
   if M.http then
     local responses = M.http.poll()
     for _, resp in ipairs(responses) do
+      local traceId = resp and resp.id and netTraceId("http", resp.id) or nil
       if resp.type == "chunk" then
+        local phase = "chunk"
+        if traceId and not netStreamFirstByteSeen[traceId] then
+          netStreamFirstByteSeen[traceId] = true
+          phase = "firstByte"
+        end
+        if traceId then
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = phase,
+            status = "ok",
+            size = netSizeOf(resp.data),
+            payloadPreview = resp.data,
+          })
+        end
         pushEvent({
           type = "http:stream:chunk",
           payload = { id = resp.id, data = resp.data },
         })
       elseif resp.type == "done" then
+        if traceId then
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = "done",
+            status = (tonumber(resp.status) or 0) >= 400 and "error" or "ok",
+            code = resp.status,
+            responseHeaders = resp.headers,
+          })
+          netStreamFirstByteSeen[traceId] = nil
+        end
         pushEvent({
           type = "http:stream:done",
           payload = { id = resp.id, status = resp.status, headers = resp.headers },
         })
       elseif resp.type == "error" then
+        if traceId then
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = "error",
+            status = "error",
+            error = resp.error,
+            payloadPreview = resp.error,
+          })
+          netStreamFirstByteSeen[traceId] = nil
+        end
         pushEvent({
           type = "http:stream:error",
           payload = { id = resp.id, error = resp.error },
         })
       else
+        if traceId then
+          local isError = resp.error ~= nil and resp.error ~= ""
+          local statusNum = tonumber(resp.status) or 0
+          netEmit({
+            traceId = traceId,
+            origin = "runtime",
+            transport = "http",
+            direction = "in",
+            phase = isError and "error" or "done",
+            status = (isError or statusNum >= 400) and "error" or "ok",
+            code = resp.status,
+            responseHeaders = resp.headers,
+            payloadPreview = isError and resp.error or resp.body,
+            size = netSizeOf(resp.body),
+            error = resp.error,
+          })
+          netStreamFirstByteSeen[traceId] = nil
+        end
         -- Regular buffered response
         pushEvent({
           type = "http:response",
@@ -2117,13 +2646,102 @@ function ReactJIT.update(dt)
     local wsEvents = M.network.poll()
     for _, evt in ipairs(wsEvents) do
       local evtType = evt.type
+      local traceId = nil
+      local parentId = nil
+      local transport = "ws"
+      local phase = "info"
+      local status = "ok"
+      local direction = "in"
+      local target = nil
+      local preview = nil
+      local code = nil
+      local size = nil
+
       -- Scan incoming WebSocket messages for mining protocol patterns
       if evtType == "ws:message" and evt.data and M.quarantine and not M.quarantine.isActive() then
         local frameResult = M.quarantine.scanWSFrame(evt.data)
         if frameResult.detected then
+          traceId = evt.id and netTraceId("ws", evt.id) or traceId
+          netEmit({
+            traceId = traceId,
+            origin = "quarantine",
+            transport = "ws",
+            direction = "in",
+            phase = "blocked",
+            status = "blocked",
+            blockedReason = "stratum_traffic_detected",
+            payloadPreview = frameResult.matches,
+          })
           M.quarantine.activate("stratum_traffic_detected", frameResult.matches)
         end
       end
+
+      if evtType == "ws:open" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "open"
+      elseif evtType == "ws:message" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "message"
+        preview = evt.data
+        size = netSizeOf(evt.data)
+      elseif evtType == "ws:error" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "error"
+        status = "error"
+        preview = evt.error
+      elseif evtType == "ws:close" then
+        traceId = evt.id and netTraceId("ws", evt.id) or nil
+        phase = "close"
+        code = evt.code
+      elseif evtType == "ws:server:ready" then
+        transport = "peer"
+        traceId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        phase = "ready"
+        target = evt.port and ("127.0.0.1:" .. tostring(evt.port)) or nil
+      elseif evtType == "ws:server:error" then
+        transport = "peer"
+        traceId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        phase = "error"
+        status = "error"
+        preview = evt.error
+      elseif evtType == "ws:peer:connect" then
+        transport = "peer"
+        parentId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        traceId = evt.serverId and evt.clientId and netTraceId("wspeer", evt.serverId .. ":" .. evt.clientId) or parentId
+        phase = "connect"
+      elseif evtType == "ws:peer:message" then
+        transport = "peer"
+        parentId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        traceId = evt.serverId and evt.clientId and netTraceId("wspeer", evt.serverId .. ":" .. evt.clientId) or parentId
+        phase = "message"
+        preview = evt.data
+        size = netSizeOf(evt.data)
+      elseif evtType == "ws:peer:disconnect" then
+        transport = "peer"
+        parentId = evt.serverId and netTraceId("wssrv", evt.serverId) or nil
+        traceId = evt.serverId and evt.clientId and netTraceId("wspeer", evt.serverId .. ":" .. evt.clientId) or parentId
+        phase = "disconnect"
+        code = evt.code
+      end
+
+      if traceId then
+        netEmit({
+          traceId = traceId,
+          parentId = parentId,
+          origin = "runtime",
+          transport = transport,
+          direction = direction,
+          phase = phase,
+          status = status,
+          target = target,
+          payloadPreview = preview,
+          size = size,
+          code = code,
+          error = evt.error,
+          clientId = evt.clientId,
+        })
+      end
+
       evt.type = nil  -- remove type from payload
       pushEvent({ type = evtType, payload = evt })
     end
@@ -2443,6 +3061,23 @@ function ReactJIT.update(dt)
       message = errMsg,
       context = "ReactJIT.update (crash recovery)",
     })
+
+    -- Spawn external crash report window for budget errors (the kind that
+    -- indicate an infinite loop was stopped). The in-process BSOD still
+    -- renders, but the external window survives even if we die.
+    if errMsg:find("%[BUDGET%]") then
+      -- Collect panic snapshot (Lua has control — budget error was caught by pcall)
+      local snapOk, PanicSnapshot = pcall(require, "lua.panic_snapshot")
+      if snapOk then
+        local snap = PanicSnapshot.collect()
+        PanicSnapshot.writeToDisk(snap)
+      end
+
+      local crOk, crashreport = pcall(require, "lua.crashreport")
+      if crOk then
+        crashreport.spawn(errMsg, "ReactJIT.update (budget exceeded)")
+      end
+    end
   end
 end
 
@@ -2558,7 +3193,16 @@ function ReactJIT.draw()
 
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   -- When popped out, draw() only renders canvas overlays on the main window
-  if M.inspectorEnabled then devtools.draw(root) end
+  if M.inspectorEnabled then
+    local ok, devErr = pcall(devtools.draw, root)
+    if not ok then
+      love.graphics.reset()
+      crashRecoveryMode = true
+      local errMsg = tostring(devErr)
+      io.write("[reactjit] CRASH (devtools): entering recovery mode. Error: " .. errMsg .. "\n"); io.flush()
+      errors.push({ source = "lua", message = errMsg, context = "devtools.draw" })
+    end
+  end
 
   -- System panel (draws over devtools)
   if M.systemPanelEnabled and systemPanel.isOpen() then systemPanel.draw() end
@@ -2604,6 +3248,22 @@ local function getScrollAxisFlags(node)
   return true, true
 end
 
+--- Convert a node-local content-space point to screen-space by subtracting
+--- ancestor scroll offsets.
+local function contentToScreen(node, x, y)
+  local sx, sy = x, y
+  local current = node and node.parent
+  while current do
+    local s = current.style or {}
+    if (s.overflow == "scroll" or s.overflow == "auto") and current.scrollState then
+      sx = sx - (current.scrollState.scrollX or 0)
+      sy = sy - (current.scrollState.scrollY or 0)
+    end
+    current = current.parent
+  end
+  return sx, sy
+end
+
 --- Check if screen point (mx,my) is on a scrollbar of any scroll container.
 --- Walks the tree to find scroll containers whose scrollbar area contains the point.
 --- Returns { node, axis, thumbPos, thumbSize, trackSize, maxScroll } or nil.
@@ -2622,40 +3282,41 @@ local function hitTestScrollbar(root, mx, my)
       local viewW, viewH = c.w, c.h
       local contentW = ss.contentW or viewW
       local contentH = ss.contentH or viewH
+      local screenX, screenY = contentToScreen(node, c.x, c.y)
 
       -- Vertical scrollbar hit area (right edge)
       if allowY and contentH > viewH then
-        local barX = c.x + viewW - SCROLLBAR_THICKNESS
-        if mx >= barX and mx <= c.x + viewW and my >= c.y and my <= c.y + viewH then
+        local barX = screenX + viewW - SCROLLBAR_THICKNESS
+        if mx >= barX and mx <= screenX + viewW and my >= screenY and my <= screenY + viewH then
           local trackH = viewH
           local thumbH = math.max(20, (viewH / contentH) * trackH)
           local maxScroll = math.max(0, contentH - viewH)
           local scrollY = ss.scrollY or 0
           local thumbTravel = math.max(1, trackH - thumbH)
-          local thumbY = c.y
+          local thumbY = screenY
           if maxScroll > 0 then
-            thumbY = c.y + (scrollY / maxScroll) * thumbTravel
+            thumbY = screenY + (scrollY / maxScroll) * thumbTravel
           end
           best = { node = node, axis = "v", thumbY = thumbY, thumbH = thumbH,
-                   trackSize = trackH, maxScroll = maxScroll, trackStart = c.y }
+                   trackSize = trackH, maxScroll = maxScroll, trackStart = screenY }
         end
       end
 
       -- Horizontal scrollbar hit area (bottom edge)
       if allowX and contentW > viewW then
-        local barY = c.y + viewH - SCROLLBAR_THICKNESS
-        if mx >= c.x and mx <= c.x + viewW and my >= barY and my <= c.y + viewH then
+        local barY = screenY + viewH - SCROLLBAR_THICKNESS
+        if mx >= screenX and mx <= screenX + viewW and my >= barY and my <= screenY + viewH then
           local trackW = viewW
           local thumbW = math.max(20, (viewW / contentW) * trackW)
           local maxScroll = math.max(0, contentW - viewW)
           local scrollX = ss.scrollX or 0
           local thumbTravel = math.max(1, trackW - thumbW)
-          local thumbX = c.x
+          local thumbX = screenX
           if maxScroll > 0 then
-            thumbX = c.x + (scrollX / maxScroll) * thumbTravel
+            thumbX = screenX + (scrollX / maxScroll) * thumbTravel
           end
           best = { node = node, axis = "h", thumbX = thumbX, thumbW = thumbW,
-                   trackSize = trackW, maxScroll = maxScroll, trackStart = c.x }
+                   trackSize = trackW, maxScroll = maxScroll, trackStart = screenX }
         end
       end
     end
@@ -3132,7 +3793,7 @@ function ReactJIT.mousemoved(x, y)
   if M.systemPanelEnabled then systemPanel.mousemoved(x, y) end
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
-  if M.inspectorEnabled then devtools.mousemoved(x, y) end
+  if M.inspectorEnabled and devtools.mousemoved(x, y) then return end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
   if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
@@ -4266,6 +4927,49 @@ function ReactJIT.reload()
   if M.images then M.images.clearCache() end
   if M.videos then M.videos.clearCache() end
   if M.animate then M.animate.clear() end
+
+  -- 2b. Re-require Lua modules if any .lua files changed on disk
+  if luaHmrDirty then
+    io.write("[reactjit] Lua HMR: re-requiring core modules...\n"); io.flush()
+    M.measure    = require("lua.measure")
+    M.measure.init()
+    M.tree       = require("lua.tree")
+    M.layout     = require("lua.layout")
+    M.layout.init({ measure = M.measure })
+    M.painter    = require("lua.painter")
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.events     = require("lua.events")
+    M.events.setTreeModule(M.tree)
+    M.texteditor = require("lua.texteditor")
+    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
+    M.textinput  = require("lua.textinput")
+    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+    M.codeblock  = require("lua.codeblock")
+    M.codeblock.init({ measure = M.measure })
+    M.widgets    = require("lua.widgets")
+    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
+    M.textselection = require("lua.textselection")
+    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
+    focus = require("lua.focus")
+    focus.init(M.tree, pushEvent)
+    M.focus = focus
+    -- Re-require devtools stack
+    errors    = require("lua.errors")
+    M.errors  = errors
+    inspector = require("lua.inspector")
+    M.inspector = inspector
+    console   = require("lua.console")
+    M.console = console
+    devtools  = require("lua.devtools")
+    M.devtools = devtools
+    if M.videoplayer then
+      M.videoplayer = require("lua.videoplayer")
+      M.videoplayer.init({ measure = M.measure, videos = M.videos })
+    end
+    M.events.setWidgetsModule(M.widgets)
+    io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
+  end
+
   M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
   if M.animate then M.animate.init({ tree = M.tree }) end
   M.events.clearHover()
@@ -4302,7 +5006,7 @@ function ReactJIT.reload()
       message = initConfig.bundlePath .. " not found during reload",
       context = "ReactJIT.reload",
     })
-    return
+    error("[reactjit] " .. initConfig.bundlePath .. " not found during reload")
   end
 
   -- 5. Set up deferred mount + inject cached dev state + hot state atoms
@@ -4335,7 +5039,7 @@ function ReactJIT.reload()
       message = tostring(eerr),
       context = "ReactJIT.reload (bundle eval)",
     })
-    return
+    error("[reactjit] Bundle eval failed: " .. tostring(eerr))
   end
 
   -- 7. Update console refs (bridge was recreated)
@@ -4348,7 +5052,8 @@ function ReactJIT.reload()
   ReactJIT._loggedCommands = nil
   ReactJIT._loggedDraw = nil
 
-  io.write("[reactjit] Hot reload complete (" .. #bundleJS .. " bytes)\n"); io.flush()
+  local luaTag = luaHmrDirty and " +lua" or ""
+  io.write("[reactjit] Hot reload complete (" .. #bundleJS .. " bytes" .. luaTag .. ")\n"); io.flush()
 end
 
 --- Call when a secondary window's close button is clicked.
