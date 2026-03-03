@@ -24,6 +24,17 @@ local Measure = require("lua.measure")
 local SourceEditor = require("lua.source_editor")
 local console = nil  -- lazy-loaded to avoid circular deps
 
+-- UTF-8 lib (LuaJIT doesn't have the Lua 5.3 utf8 global)
+local ok_utf8, utf8lib = pcall(function() return utf8 end)
+if not ok_utf8 or not utf8lib then
+  local ok_require, mod = pcall(require, "utf8")
+  if ok_require then
+    utf8lib = mod
+  else
+    utf8lib = nil
+  end
+end
+
 -- Forward declarations (defined later in the file)
 local handleEditKey
 local handleEditTextInput
@@ -424,6 +435,7 @@ function Inspector.selectNode(node)
   if not node then return end
   state.selectedNode = node
   state.detailScrollY = 0
+  state.scrollToSelected = true
 end
 
 --- Set perf data from external source (used by devtools child process).
@@ -739,11 +751,26 @@ function Inspector.mousepressed(x, y, button)
 
   -- Clicking in viewport: select hovered node
   if state.hoveredNode then
-    if state.selectedNode == state.hoveredNode then
+    -- Resolve to a node that actually appears in the tree panel:
+    -- - Empty __TEXT__ nodes are skipped by drawTreeNode
+    -- - Single-text-child __TEXT__ nodes are inlined into their parent row
+    -- In both cases, select the parent instead so scroll-to can find a match.
+    local target = state.hoveredNode
+    if target.type == "__TEXT__" and target.parent then
+      local parent = target.parent
+      local siblings = parent.children or {}
+      local isOnlyTextChild = #siblings == 1 and (target.text or "") ~= ""
+      local isEmpty = (target.text or "") == ""
+      if isEmpty or isOnlyTextChild then
+        target = parent
+      end
+    end
+
+    if state.selectedNode == target then
       state.selectedNode = nil
       state.detailScrollY = 0
     else
-      state.selectedNode = state.hoveredNode
+      state.selectedNode = target
       state.detailScrollY = 0
       state.scrollToSelected = true  -- tree panel will auto-scroll on next draw
     end
@@ -1331,15 +1358,17 @@ function drawTreePanel(root, rx, ry, rw, rh)
   local drawY = treeTop - state.treeScrollY
   local endY = drawTreeNode(root, 0, drawY, font, lineH, pad, treeTop, treeTop + treeH, rx, rw)
 
-  -- Store content height for scroll clamping
-  state.treeContentH = (endY - drawY)
+  -- Store content height for scroll clamping (+ bottom padding so last line isn't clipped)
+  state.treeContentH = (endY - drawY) + pad
   local maxTreeScroll = math.max(0, state.treeContentH - treeH)
   if state.treeScrollY > maxTreeScroll then state.treeScrollY = maxTreeScroll end
 
   -- Auto-scroll to selected node (after positions are cached)
   if state.scrollToSelected and state.selectedNode then
+    local found = false
     for _, entry in ipairs(state.treeNodePositions) do
       if entry.node == state.selectedNode then
+        found = true
         -- entry.y is the drawn position (includes current scroll offset)
         -- Convert to absolute position in the tree content
         local absY = entry.y + state.treeScrollY - treeTop
@@ -1351,6 +1380,23 @@ function drawTreePanel(root, rx, ry, rw, rh)
         break
       end
     end
+
+    if not found then
+      -- Node wasn't drawn — likely hidden under a collapsed ancestor.
+      -- Uncollapse all ancestors and retry on next frame.
+      local ancestor = state.selectedNode.parent
+      local uncollapsed = false
+      while ancestor do
+        if state.collapsed[ancestor.id] then
+          state.collapsed[ancestor.id] = nil
+          uncollapsed = true
+        end
+        ancestor = ancestor.parent
+      end
+      -- Keep scrollToSelected = true so the next frame (with expanded tree) retries
+      if uncollapsed then return end
+    end
+
     state.scrollToSelected = false
   end
 
@@ -2648,12 +2694,19 @@ function drawDetailPanel(rx, ry, rw, rh)
           local displaySnip = snippet
           if font:getWidth(displaySnip) > availW then
             -- Truncate at UTF-8 character boundaries to avoid invalid byte sequences
-            local len = utf8.len(displaySnip) or 0
-            while len > 0 do
-              local bytePos = utf8.offset(displaySnip, len) -- byte offset of last char
-              displaySnip = displaySnip:sub(1, bytePos - 1)
-              len = len - 1
-              if font:getWidth(displaySnip .. "\xe2\x80\xa6") <= availW then break end
+            if utf8lib then
+              local len = utf8lib.len(displaySnip) or 0
+              while len > 0 do
+                local bytePos = utf8lib.offset(displaySnip, len) -- byte offset of last char
+                displaySnip = displaySnip:sub(1, bytePos - 1)
+                len = len - 1
+                if font:getWidth(displaySnip .. "\xe2\x80\xa6") <= availW then break end
+              end
+            else
+              -- Byte-level fallback (may cut mid-codepoint but won't crash)
+              while #displaySnip > 0 and font:getWidth(displaySnip .. "\xe2\x80\xa6") > availW do
+                displaySnip = displaySnip:sub(1, -2)
+              end
             end
             displaySnip = displaySnip .. "\xe2\x80\xa6"
           end
@@ -2712,8 +2765,8 @@ function drawDetailPanel(rx, ry, rw, rh)
     end
   end
 
-  -- Store content height for scroll clamping
-  local contentH = (y - ry) + state.detailScrollY
+  -- Store content height for scroll clamping (+ bottom padding so last line isn't clipped)
+  local contentH = (y - ry) + state.detailScrollY + pad
   state.detailContentH = contentH
   local maxDetailScroll = math.max(0, contentH - rh)
   if state.detailScrollY > maxDetailScroll then state.detailScrollY = maxDetailScroll end

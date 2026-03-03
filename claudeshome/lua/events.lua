@@ -151,8 +151,11 @@ function Events.textHitTest(node, mx, my)
     if hit then return hit end
   end
 
-  -- Return this node only if it's a Text node and selectable
+  -- Return this node only if it's a Text/CodeBlock node and selectable
   if node.type == "Text" and s.userSelect ~= "none" then
+    return node
+  end
+  if node.type == "CodeBlock" and s.userSelect ~= "none" then
     return node
   end
   if node.type == "__TEXT__" then

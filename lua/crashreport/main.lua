@@ -70,6 +70,24 @@ function love.load()
             end
         end
     end
+
+    -- Read crisis analysis directly (flight recorder writes this via FFI syscalls).
+    -- This is independent of the crash file — the flight recorder always has the
+    -- latest data on disk, even if the watchdog couldn't merge it.
+    if not crashData.crisisAnalysis or crashData.crisisAnalysis == "" then
+        local cf = io.open(tmpDir .. "/reactjit_crisis.lua", "r")
+        if cf then
+            local raw = cf:read("*a")
+            cf:close()
+            local fn = load(raw)
+            if fn then
+                local ok, result = pcall(fn)
+                if ok and result and result.crisisAnalysis then
+                    crashData.crisisAnalysis = result.crisisAnalysis
+                end
+            end
+        end
+    end
 end
 
 local function drawWrappedText(text, x, y, maxW, f)
@@ -159,6 +177,45 @@ function love.draw()
     love.graphics.setColor(0.25, 0.25, 0.3)
     love.graphics.line(pad, y, W - pad, y)
     y = y + 12
+
+    -- ================================================================
+    -- Crisis Analysis: WHO is leaking
+    -- ================================================================
+    if crashData.crisisAnalysis and crashData.crisisAnalysis ~= "" then
+        y = drawSectionHeader("Crisis Analysis (command buffer breakdown)", pad, y, W)
+
+        -- Parse and render with color coding
+        for line in crashData.crisisAnalysis:gmatch("[^\n]+") do
+            if line:match("^%-%-%-") then
+                -- Section header within analysis
+                love.graphics.setFont(fontSmall)
+                love.graphics.setColor(0.6, 0.8, 1.0)
+                love.graphics.print(line, pad + 8, y)
+                y = y + fontSmall:getHeight() + 2
+            elseif line:match("^LEAK CONFIRMED") then
+                -- Leak confirmation — bright red
+                love.graphics.setFont(fontMono)
+                love.graphics.setColor(1, 0.2, 0.2)
+                love.graphics.print(line, pad + 8, y)
+                y = y + fontMono:getHeight() + 2
+            elseif line:match("^Create/Remove") then
+                -- Ratio line — orange warning
+                love.graphics.setFont(fontMono)
+                love.graphics.setColor(1, 0.7, 0.3)
+                love.graphics.print(line, pad + 8, y)
+                y = y + fontMono:getHeight() + 2
+            elseif line ~= "" then
+                -- Data row
+                love.graphics.setFont(fontMono)
+                love.graphics.setColor(0.9, 0.9, 0.9)
+                love.graphics.print(line, pad + 8, y)
+                y = y + fontMono:getHeight() + 1
+            else
+                y = y + 4
+            end
+        end
+        y = y + 12
+    end
 
     -- ================================================================
     -- Panic Snapshot: Subsystem Counters
@@ -365,6 +422,13 @@ function love.keypressed(key)
             "Error:",
             crashData.error or "",
         }
+
+        -- Crisis analysis
+        if crashData.crisisAnalysis and crashData.crisisAnalysis ~= "" then
+            parts[#parts + 1] = ""
+            parts[#parts + 1] = "=== CRISIS ANALYSIS ==="
+            parts[#parts + 1] = crashData.crisisAnalysis
+        end
 
         -- Snapshot data
         if snapshot then

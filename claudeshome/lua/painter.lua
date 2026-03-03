@@ -37,6 +37,10 @@ local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
 local Log = require("lua.debug_log")
+
+-- Frame budget: max paintNode calls per paint pass.
+local _paintBudget = 100000
+local _paintCount = 0
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
@@ -497,7 +501,8 @@ local function drawStrokePaths(c, paths, strokeWidth)
   local sy = c.h / 24
   local scale = math.min(sx, sy)
   love.graphics.setLineWidth((strokeWidth or 2) * scale)
-  love.graphics.setLineJoin("round")
+  -- Love build in this repo accepts only: none/miter/bevel.
+  love.graphics.setLineJoin("bevel")
   love.graphics.setLineStyle("smooth")
   for _, path in ipairs(paths) do
     if #path >= 4 then
@@ -727,6 +732,12 @@ local _paintDbgSeen = {}  -- type -> count
 
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
+  _paintCount = _paintCount + 1
+  if _paintCount > _paintBudget then
+    error(string.format(
+      "[BUDGET] Paint pass exceeded %d nodes (last node: id=%s type=%s). Likely infinite loop.",
+      _paintBudget, tostring(node.id), tostring(node.type)))
+  end
   local _pt0 = love.timer.getTime()
 
   -- Debug logging for first 3 encounters of each type
@@ -871,7 +882,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
           else
             love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
           end
-        end, "replace", gradStencilValue)
+        end, "replace", gradStencilValue, stencilDepth > 0)
         love.graphics.setStencilTest("greater", stencilDepth)
 
         drawGradient(c.x, c.y, c.w, c.h, grad.direction, grad.colors[1], grad.colors[2], effectiveOpacity)
@@ -1796,6 +1807,7 @@ end
 --- Paint the entire tree. Resets color to white after painting.
 function Painter.paint(node)
   if not node then return end
+  _paintCount = 0  -- reset per pass
   Log.log("paint", "paint pass root=%s children=%d", tostring(node.type), #(node.children or {}))
   Painter.paintNode(node)
 

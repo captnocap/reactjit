@@ -30,8 +30,10 @@ ffi.cdef[[
   // --- SDL2 (Love2D already has it loaded) ---
   void *SDL_GL_GetProcAddress(const char *proc);
 
-  // --- dlopen ---
+  // --- dlopen / dlclose ---
   void *dlopen(const char *filename, int flags);
+  int dlclose(void *handle);
+  char *dlerror(void);
 
   // --- mpv client API ---
   typedef struct mpv_handle mpv_handle;
@@ -173,13 +175,29 @@ local MPV_FORMAT_INT64  = 4
 local MPV_FORMAT_DOUBLE = 5
 
 -- ============================================================================
--- Load libmpv (graceful fallback if not installed)
+-- Load libmpv (lazy — deferred until first video is requested)
 -- ============================================================================
 
 local libmpvAvailable = false
+local libmpvLoadAttempted = false
 local mpv = nil
+local dlopen_handle = nil  -- explicit dlopen handle for dlclose support
 
-do
+-- Shared GL proc address callback (anchored at module level — never GC'd)
+local get_proc_address_cb = nil
+
+-- Unload debounce: seconds to wait after last video node disappears before dlclose
+local UNLOAD_DEBOUNCE = 3.0
+local unloadTimer = nil  -- love.timer.getTime() when last video node disappeared
+
+--- Load libmpv on demand. Called from loadVideo() on first use.
+--- Returns true if libmpv is available, false otherwise.
+--- Safe to call multiple times — only attempts the dlopen once.
+function Videos.loadLibrary()
+  if libmpvAvailable then return true end
+  if libmpvLoadAttempted then return false end
+  libmpvLoadAttempted = true
+
   local loader = require("lua.lib_loader")
   local isLinux = ffi.os == "Linux"
 
@@ -204,33 +222,32 @@ do
   local lastErr
   for _, path in ipairs(paths) do
     local ok, err = pcall(function()
-      ffi.C.dlopen(path, bit.bor(RTLD_LAZY, RTLD_DEEPBIND))
+      dlopen_handle = ffi.C.dlopen(path, bit.bor(RTLD_LAZY, RTLD_DEEPBIND))
       mpv = ffi.load(path)
     end)
     if ok then
       libmpvAvailable = true
-      if _G._reactjit_verbose then io.write("[videos] libmpv loaded from " .. path .. "\n"); io.flush() end
+      io.write("[videos] libmpv lazy-loaded from " .. path .. "\n"); io.flush()
       break
     end
     lastErr = err
   end
-  if not libmpvAvailable then
-    if _G._reactjit_verbose then
-      io.write("[videos] libmpv not available: " .. tostring(lastErr) .. "\n"); io.flush()
-      io.write("[videos] Install libmpv for video playback\n"); io.flush()
-    end
-  end
-end
 
--- Shared GL proc address callback (anchored at module level — never GC'd)
-local get_proc_address_cb = nil
-if libmpvAvailable then
+  if not libmpvAvailable then
+    io.write("[videos] libmpv not available: " .. tostring(lastErr) .. "\n"); io.flush()
+    io.write("[videos] Install libmpv for video playback\n"); io.flush()
+    return false
+  end
+
+  -- Create the GL proc address callback now that mpv is loaded
   get_proc_address_cb = ffi.cast(
     "void *(*)(void *, const char *)",
     function(_, name)
       return ffi.C.SDL_GL_GetProcAddress(name)
     end
   )
+
+  return true
 end
 
 -- ============================================================================
@@ -562,19 +579,31 @@ end
 
 local backendReady = false
 
---- Verify libmpv is available. Called during love.load().
+--- Eagerly load libmpv and mark backend ready.
+--- Called by storybook or apps that want mpv available at startup.
+--- For lazy loading, skip this — loadVideo() will call loadLibrary() on demand.
 function Videos.initBackend()
+  Videos.loadLibrary()
   if not libmpvAvailable then
-    if _G._reactjit_verbose then io.write("[videos] initBackend: libmpv not available\n"); io.flush() end
+    io.write("[videos] initBackend: libmpv not available\n"); io.flush()
     return
   end
   backendReady = true
-  if _G._reactjit_verbose then io.write("[videos] initBackend: ready (per-source instances)\n"); io.flush() end
+  io.write("[videos] initBackend: ready (per-source instances)\n"); io.flush()
 end
 
 --- Create a per-source mpv handle + render context + load the file.
 --- Each video source gets its own independent mpv pipeline.
 local function loadVideo(src)
+  -- Lazy-load libmpv on first actual video request
+  if not libmpvAvailable then
+    Videos.loadLibrary()
+    if libmpvAvailable then
+      backendReady = true
+      io.write("[videos] libmpv lazy-loaded on first video request\n"); io.flush()
+    end
+  end
+
   lastLoadAttempt[src] = love.timer.getTime()
 
   -- If we're retrying the same src, clear stale render resources first.

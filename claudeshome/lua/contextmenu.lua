@@ -104,6 +104,16 @@ local function buildItems(hitNode, textNode, root)
   local sel = TextSelection and TextSelection.get()
   local hasSelection = sel and sel.text
 
+  -- Built-in: Inspect — opens inspector on the right-clicked node (top of menu)
+  if Inspector then
+    items[#items + 1] = {
+      label = "Inspect",
+      action = "__inspect",
+      disabled = false,
+    }
+    items[#items + 1] = { separator = true }
+  end
+
   -- Built-in: Copy — always present, disabled when no selection
   items[#items + 1] = {
     label = "Copy",
@@ -180,12 +190,13 @@ local function buildItems(hitNode, textNode, root)
         shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.systemPanel or nil),
       }
     end
-    if AppActions.toggleDevTools then
+    if AppActions.toggleLayoutColors then
+      local colorizer = require("lua.layout_colorizer")
       appItems[#appItems + 1] = {
-        label = "Inspector",
-        action = "__inspector_toggle",
+        label = colorizer.active and "Layout Colors  ON" or "Layout Colors",
+        action = "__layout_colors",
         disabled = false,
-        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.devtools or nil),
+        shortcut = normalizeShortcut(ShortcutHints and ShortcutHints.layoutColors or nil),
       }
     end
   end
@@ -197,15 +208,6 @@ local function buildItems(hitNode, textNode, root)
     end
   end
 
-  -- Built-in: Inspect — opens inspector on the right-clicked node
-  if Inspector then
-    items[#items + 1] = { separator = true }
-    items[#items + 1] = {
-      label = "Inspect",
-      action = "__inspect",
-      disabled = false,
-    }
-  end
 
   return items, cmNode
 end
@@ -416,6 +418,10 @@ local function selectItem(index)
   elseif action == "__inspector_toggle" then
     if AppActions and AppActions.toggleDevTools then
       pcall(AppActions.toggleDevTools)
+    end
+  elseif action == "__layout_colors" then
+    if AppActions and AppActions.toggleLayoutColors then
+      pcall(AppActions.toggleLayoutColors)
     end
   elseif action == "__inspect" then
     -- Prefer the most specific node: textNode > hitNode

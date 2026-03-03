@@ -49,12 +49,27 @@ do
 end
 
 --- Spawn a child Love2D process with the given config.
-local function spawnChild(title, width, height, ipcPort)
-  local cmd = string.format(
-    'REACTJIT_WINDOW_TITLE=%q REACTJIT_WINDOW_WIDTH=%d REACTJIT_WINDOW_HEIGHT=%d REACTJIT_IPC_PORT=%d love %s &',
-    title, width, height, ipcPort,
-    childWindowPath
-  )
+local function spawnChild(title, width, height, ipcPort, opts)
+  opts = opts or {}
+  local envParts = {
+    string.format('REACTJIT_WINDOW_TITLE=%q', title),
+    string.format('REACTJIT_WINDOW_WIDTH=%d', width),
+    string.format('REACTJIT_WINDOW_HEIGHT=%d', height),
+    string.format('REACTJIT_IPC_PORT=%d', ipcPort),
+  }
+  if opts.borderless then
+    envParts[#envParts + 1] = 'REACTJIT_WINDOW_BORDERLESS=1'
+  end
+  if opts.alwaysOnTop then
+    envParts[#envParts + 1] = 'REACTJIT_WINDOW_ALWAYS_ON_TOP=1'
+  end
+  if opts.x then
+    envParts[#envParts + 1] = string.format('REACTJIT_WINDOW_X=%d', opts.x)
+  end
+  if opts.y then
+    envParts[#envParts + 1] = string.format('REACTJIT_WINDOW_Y=%d', opts.y)
+  end
+  local cmd = table.concat(envParts, ' ') .. ' love ' .. childWindowPath .. ' &'
   io.write("[window] spawning child: " .. cmd .. "\n"); io.flush()
   os.execute(cmd)
 end
@@ -64,11 +79,13 @@ Capabilities.register("Window", {
   rendersInOwnSurface = true,
 
   schema = {
-    title  = { type = "string", default = "ReactJIT", desc = "Window title" },
-    width  = { type = "number", default = 640, desc = "Window width in pixels" },
-    height = { type = "number", default = 480, desc = "Window height in pixels" },
-    x      = { type = "number", desc = "Window x position (centered if omitted)" },
-    y      = { type = "number", desc = "Window y position (centered if omitted)" },
+    title       = { type = "string",  default = "ReactJIT", desc = "Window title" },
+    width       = { type = "number",  default = 640, desc = "Window width in pixels" },
+    height      = { type = "number",  default = 480, desc = "Window height in pixels" },
+    x           = { type = "number",  desc = "Window x position (centered if omitted)" },
+    y           = { type = "number",  desc = "Window y position (centered if omitted)" },
+    borderless  = { type = "boolean", default = false, desc = "Remove window decorations" },
+    alwaysOnTop = { type = "boolean", default = false, desc = "Keep window above all others" },
   },
 
   events = { "onClose", "onResize", "onFocus", "onBlur" },
@@ -99,7 +116,12 @@ Capabilities.register("Window", {
     }
 
     -- Spawn the child Love2D process
-    spawnChild(title, width, height, port)
+    spawnChild(title, width, height, port, {
+      borderless  = props.borderless,
+      alwaysOnTop = props.alwaysOnTop,
+      x           = props.x,
+      y           = props.y,
+    })
 
     io.write("[window] created child window #" .. windowId .. " for node " .. tostring(nodeId) .. " (port " .. port .. ")\n"); io.flush()
     return { windowId = windowId }

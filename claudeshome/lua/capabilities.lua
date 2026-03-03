@@ -261,6 +261,7 @@ function Capabilities.loadAll()
     -- Registering Scene3D as a non-visual capability causes layout/paint to skip all 3D scenes.
     "terminal",
     "semantic_terminal",
+    "notification",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do
@@ -273,6 +274,14 @@ function Capabilities.loadAll()
     end
   end
   if _G._reactjit_verbose then io.write("[capabilities] " .. #loaded .. " capabilities registered\n"); io.flush() end
+end
+
+--- Return counts of registered types and active instances (for panic snapshot diagnostics).
+function Capabilities.count()
+  local types, insts = 0, 0
+  for _ in pairs(registry) do types = types + 1 end
+  for _ in pairs(instances) do insts = insts + 1 end
+  return types, insts
 end
 
 return Capabilities

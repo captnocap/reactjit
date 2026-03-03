@@ -435,6 +435,7 @@ function Inspector.selectNode(node)
   if not node then return end
   state.selectedNode = node
   state.detailScrollY = 0
+  state.scrollToSelected = true
 end
 
 --- Set perf data from external source (used by devtools child process).
@@ -750,11 +751,26 @@ function Inspector.mousepressed(x, y, button)
 
   -- Clicking in viewport: select hovered node
   if state.hoveredNode then
-    if state.selectedNode == state.hoveredNode then
+    -- Resolve to a node that actually appears in the tree panel:
+    -- - Empty __TEXT__ nodes are skipped by drawTreeNode
+    -- - Single-text-child __TEXT__ nodes are inlined into their parent row
+    -- In both cases, select the parent instead so scroll-to can find a match.
+    local target = state.hoveredNode
+    if target.type == "__TEXT__" and target.parent then
+      local parent = target.parent
+      local siblings = parent.children or {}
+      local isOnlyTextChild = #siblings == 1 and (target.text or "") ~= ""
+      local isEmpty = (target.text or "") == ""
+      if isEmpty or isOnlyTextChild then
+        target = parent
+      end
+    end
+
+    if state.selectedNode == target then
       state.selectedNode = nil
       state.detailScrollY = 0
     else
-      state.selectedNode = state.hoveredNode
+      state.selectedNode = target
       state.detailScrollY = 0
       state.scrollToSelected = true  -- tree panel will auto-scroll on next draw
     end
@@ -1349,8 +1365,10 @@ function drawTreePanel(root, rx, ry, rw, rh)
 
   -- Auto-scroll to selected node (after positions are cached)
   if state.scrollToSelected and state.selectedNode then
+    local found = false
     for _, entry in ipairs(state.treeNodePositions) do
       if entry.node == state.selectedNode then
+        found = true
         -- entry.y is the drawn position (includes current scroll offset)
         -- Convert to absolute position in the tree content
         local absY = entry.y + state.treeScrollY - treeTop
@@ -1362,6 +1380,23 @@ function drawTreePanel(root, rx, ry, rw, rh)
         break
       end
     end
+
+    if not found then
+      -- Node wasn't drawn — likely hidden under a collapsed ancestor.
+      -- Uncollapse all ancestors and retry on next frame.
+      local ancestor = state.selectedNode.parent
+      local uncollapsed = false
+      while ancestor do
+        if state.collapsed[ancestor.id] then
+          state.collapsed[ancestor.id] = nil
+          uncollapsed = true
+        end
+        ancestor = ancestor.parent
+      end
+      -- Keep scrollToSelected = true so the next frame (with expanded tree) retries
+      if uncollapsed then return end
+    end
+
     state.scrollToSelected = false
   end
 

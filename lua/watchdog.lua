@@ -43,6 +43,7 @@ function Watchdog.launch(opts)
   os.remove(tmpDir .. "/reactjit_crash.lua")
   os.remove(tmpDir .. "/reactjit_snapshot.lua")
   os.remove(tmpDir .. "/reactjit_panic.signal")
+  os.remove(tmpDir .. "/reactjit_crisis.lua")
 
   -- Get our own PID via C call (not shell — shell gives the subprocess PID)
   local pid = tostring(ffi.C.getpid())

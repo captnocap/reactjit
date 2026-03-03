@@ -173,6 +173,9 @@ while kill -0 "$PID" 2>/dev/null; do
         LUA_SNAPSHOT=$(cat "$SNAPSHOT_FILE")
       fi
 
+      # Crisis analysis: the crash reporter reads /tmp/reactjit_crisis.lua directly
+      # (written by the flight recorder via FFI syscalls). No extraction needed here.
+
       # Build comprehensive crash file
       CRASH_FILE="$TMPDIR/reactjit_crash.lua"
       CMDLINE_ESC=$(echo "$CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
@@ -190,6 +193,9 @@ while kill -0 "$PID" 2>/dev/null; do
         echo "  procSnapshot = \"${PROC_ESC}\"," >> "$CRASH_FILE"
         echo "  procFinal = \"${FINAL_PROC_ESC}\"," >> "$CRASH_FILE"
         echo "  rssMB = ${RSS_MB}," >> "$CRASH_FILE"
+        if [ -n "$LUA_SNAPSHOT" ]; then
+          echo "  hasLuaSnapshot = true," >> "$CRASH_FILE"
+        fi
         echo "}" >> "$CRASH_FILE"
       else
         cat > "$CRASH_FILE" << CRASHEOF
@@ -203,15 +209,10 @@ return {
   procSnapshot = "${PROC_ESC}",
   procFinal = "${FINAL_PROC_ESC}",
   rssMB = ${RSS_MB},
-}
 CRASHEOF
-      fi
-
-      # Embed Lua-side snapshot into crash file if available
-      if [ -n "$LUA_SNAPSHOT" ]; then
-        # Write as a separate field — the crash reporter will load both
-        sed -i 's/}$//' "$CRASH_FILE"
-        echo "  hasLuaSnapshot = true," >> "$CRASH_FILE"
+        if [ -n "$LUA_SNAPSHOT" ]; then
+          echo "  hasLuaSnapshot = true," >> "$CRASH_FILE"
+        fi
         echo "}" >> "$CRASH_FILE"
       fi
 

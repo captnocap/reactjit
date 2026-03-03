@@ -1213,4 +1213,11 @@ function Scene3D.hasScenes()
   return next(scenes) ~= nil
 end
 
+--- Return count of active 3D scenes (for panic snapshot diagnostics).
+function Scene3D.count()
+  local n = 0
+  for _ in pairs(scenes) do n = n + 1 end
+  return n
+end
+
 return Scene3D

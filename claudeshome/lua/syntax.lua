@@ -22,9 +22,11 @@ Syntax.colors = {
   number      = Color.toTable("#fab387"),  -- peach
   constant    = Color.toTable("#fab387"),  -- peach
   comment     = Color.toTable("#9399b2"),  -- overlay2
-  component   = Color.toTable("#89b4fa"),  -- blue
+  component   = Color.toTable("#b4befe"),  -- lavender (distinct from props)
   tag         = Color.toTable("#f38ba8"),  -- red
   prop        = Color.toTable("#89b4fa"),  -- blue
+  jsxBrace    = Color.toTable("#5f7fd1"),  -- darker blue for { }
+  jsxEquals   = Color.toTable("#ffffff"),  -- white for JSX attribute assignment
   funcCall    = Color.toTable("#89b4fa"),  -- blue
   property    = Color.toTable("#94e2d5"),  -- teal
   builtin     = Color.toTable("#f38ba8"),  -- red
@@ -52,6 +54,18 @@ Syntax.colors = {
 -- ============================================================================
 -- Shared utilities
 -- ============================================================================
+
+--- Return the byte length of the UTF-8 codepoint starting at byte position i.
+--- Falls back to 1 for invalid sequences (never gets stuck).
+local function utf8charLen(line, i)
+  local b = line:byte(i)
+  if not b then return 1 end
+  if b < 0x80 then return 1 end
+  if b < 0xC0 then return 1 end       -- continuation byte (invalid start)
+  if b < 0xE0 then return 2 end
+  if b < 0xF0 then return 3 end
+  return 4
+end
 
 --- Scan from i consuming whitespace, return start, advance i.
 local function skipWS(line, i)
@@ -189,6 +203,11 @@ local function tokenizeJS(line)
       tokens[#tokens+1] = {text='>', color=sc.tag}; i=i+1; inJSXTag=false; break
     end
 
+    -- JSX prop assignment
+    if ch=='=' and inJSXTag then
+      tokens[#tokens+1] = {text='=', color=sc.jsxEquals or sc.text}; i=i+1; break
+    end
+
     -- Numbers
     if ch:match("[0-9]") or (ch=='-' and line:sub(i+1,i+1):match("[0-9]") and i>1 and line:sub(i-1,i-1):match("[^%w_]")) then
       local s=i
@@ -259,10 +278,14 @@ local function tokenizeJS(line)
 
     -- Punctuation
     if JS_PUNCT[ch] then
+      if inJSXTag and (ch=='{' or ch=='}') then
+        tokens[#tokens+1]={text=ch, color=sc.jsxBrace or sc.punctuation}; i=i+1; break
+      end
       tokens[#tokens+1]={text=ch, color=sc.punctuation}; i=i+1; break
     end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -401,7 +424,8 @@ local function tokenizePython(line)
     local punct2={}; for c in ("{}()[];:,"):gmatch(".") do punct2[c]=true end
     if punct2[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -532,7 +556,8 @@ local function tokenizeLua(line)
     end
     if luapunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -656,7 +681,8 @@ local function tokenizeBash(line)
       i=i+1; break
     end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -711,7 +737,8 @@ local function tokenizeJSON(line)
     if jpunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
     if ch==':' then tokens[#tokens+1]={text=ch,color=sc.operator}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -850,7 +877,8 @@ local function tokenizeCSS(line)
     local cpunct={}; for c in ("{}[];(),>+~"):gmatch(".") do cpunct[c]=true end
     if cpunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1105,7 +1133,8 @@ local function tokenizeRust(line)
     end
     if rustpunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch, color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1), color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1207,7 +1236,8 @@ local function tokenizeGo(line)
     end
     if gopunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch,color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1),color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1336,7 +1366,8 @@ local function tokenizeC(line)
     end
     if cpunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch,color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1),color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1445,7 +1476,8 @@ local function tokenizeJava(line)
     end
     if jpunct2[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch,color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1),color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1555,7 +1587,8 @@ local function tokenizeSQL(line)
     end
     if sqlpunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch,color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1),color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1668,7 +1701,8 @@ local function tokenizeGLSL(line)
     end
     if gpunct[ch] then tokens[#tokens+1]={text=ch,color=sc.punctuation}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch,color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1),color=sc.text}; i=i+cl
   until true end
   return tokens
 end
@@ -1768,7 +1802,8 @@ local function tokenizeYAML(line)
     local ypunct={}; for c in ("{}[],:|>"):gmatch(".") do ypunct[c]=true end
     if ypunct[ch] then tokens[#tokens+1]={text=ch,color=sc.operator}; i=i+1; break end
 
-    tokens[#tokens+1]={text=ch,color=sc.text}; i=i+1
+    local cl = utf8charLen(line, i)
+    tokens[#tokens+1]={text=line:sub(i, i+cl-1),color=sc.text}; i=i+cl
   until true end
   return tokens
 end

@@ -79,10 +79,10 @@ function CodeBlock.measure(node)
     if w > maxWidth then maxWidth = w end
   end
 
-  local width = maxWidth + padding * 2
-  local height = #lines * lineHeight + padding * 2
-
-  return { width = width, height = height }
+  -- Return content-only dimensions (no padding).
+  -- The layout engine resolves padding from the style and adds it,
+  -- matching how Text nodes are measured.
+  return { width = maxWidth, height = #lines * lineHeight }
 end
 
 -- ============================================================================
@@ -229,20 +229,24 @@ function CodeBlock.render(node, c, effectiveOpacity)
     love.graphics.setScissor()
   end
 
-  -- Copy button (rendered on top, outside scissor)
+  -- Copy button (rendered on top, outside scissor) — only when hovered or showing "Copied!"
   local cs = getCopyState(node)
-  local btnFont = getMeasure().getFont(9, nil, nil)
-  local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
+  local mx, my = love.mouse.getPosition()
+  local isHovered = mx >= c.x and mx <= c.x + c.w and my >= c.y and my <= c.y + c.h
+  if isHovered or cs.copied then
+    local btnFont = getMeasure().getFont(9, nil, nil)
+    local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
-  local btnBg = cs.copied and Color.toTable("#1a3a2a") or Color.toTable("#1e293b")
-  setColorWithOpacity(btnBg, effectiveOpacity)
-  love.graphics.rectangle("fill", bx, by, bw, bh, 3, 3)
+    local btnBg = cs.copied and Color.toTable("#1a3a2a") or Color.toTable("#1e293b")
+    setColorWithOpacity(btnBg, effectiveOpacity)
+    love.graphics.rectangle("fill", bx, by, bw, bh, 3, 3)
 
-  local btnColor = cs.copied and Color.toTable("#4ade80") or Color.toTable("#64748b")
-  setColorWithOpacity(btnColor, effectiveOpacity)
-  love.graphics.setFont(btnFont)
-  local label = cs.copied and "Copied!" or "Copy"
-  love.graphics.print(label, bx + 8, by + 3)
+    local btnColor = cs.copied and Color.toTable("#4ade80") or Color.toTable("#64748b")
+    setColorWithOpacity(btnColor, effectiveOpacity)
+    love.graphics.setFont(btnFont)
+    local label = cs.copied and "Copied!" or "Copy"
+    love.graphics.print(label, bx + 8, by + 3)
+  end
 end
 
 -- ============================================================================
