@@ -28,10 +28,116 @@ local Log = require("lua.debug_log")
 
 local Measure = nil  -- Injected at init time via Layout.init()
 local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
+
+-- Frame budget: max layoutNode calls per layout pass.
+-- Empirical: 5,000-node tree ≈ 5,000 calls. 10,000 is generous headroom.
+-- An infinite loop hits this in microseconds. A legitimate tree never will.
+local _layoutBudget = 100000
+local _layoutCount = 0
 local CapabilitiesModule = nil  -- Lazy-loaded for visual capability measurement
 
 local Layout = {}
 Layout._debugPrint = false  -- set true to enable [STRETCH-DBG] / [LAYOUT-DBG] prints
+Layout._profilingEnabled = false
+Layout._activeProfile = nil
+Layout._profileLastPass = nil
+Layout._profileTotals = nil
+Layout._profilePassSeq = 0
+
+local function profileNow()
+  if love and love.timer and love.timer.getTime then
+    return love.timer.getTime()
+  end
+  return os.clock()
+end
+
+local function profileDeepCopy(value)
+  if type(value) ~= "table" then return value end
+  local out = {}
+  for k, v in pairs(value) do
+    out[k] = profileDeepCopy(v)
+  end
+  return out
+end
+
+local function profileMergeMap(dst, src)
+  if not src then return end
+  for k, v in pairs(src) do
+    dst[k] = (dst[k] or 0) + v
+  end
+end
+
+local function profileCount(name, delta)
+  local pass = Layout._activeProfile
+  if not pass then return end
+  local counters = pass.counters
+  counters[name] = (counters[name] or 0) + (delta or 1)
+end
+
+local function profileSectionStart(_)
+  if not Layout._activeProfile then return nil end
+  return profileNow()
+end
+
+local function profileSectionEnd(name, t0)
+  if not t0 then return end
+  local pass = Layout._activeProfile
+  if not pass then return end
+  local ms = (profileNow() - t0) * 1000
+  local sections = pass.sections
+  sections[name] = (sections[name] or 0) + ms
+end
+
+local function profileBuildTopRevisits(seenNodeIds, limit)
+  local rows = {}
+  for id, visits in pairs(seenNodeIds) do
+    if visits > 1 then
+      rows[#rows + 1] = { id = id, visits = visits }
+    end
+  end
+  table.sort(rows, function(a, b) return a.visits > b.visits end)
+  if #rows > limit then
+    local trimmed = {}
+    for i = 1, limit do
+      trimmed[i] = rows[i]
+    end
+    return trimmed
+  end
+  return rows
+end
+
+local function profileFinishPass(pass)
+  pass.passMs = (profileNow() - pass._startT) * 1000
+  pass.revisitVisits = pass.nodeVisits - pass.uniqueNodes
+  pass.topRevisitedNodes = profileBuildTopRevisits(pass._seenNodeIds, 10)
+  pass._startT = nil
+  pass._seenNodeIds = nil
+  return pass
+end
+
+function Layout.setProfilingEnabled(v)
+  Layout._profilingEnabled = not not v
+  if not Layout._profilingEnabled then
+    Layout._activeProfile = nil
+  end
+end
+
+function Layout.resetProfilingData()
+  Layout._profileLastPass = nil
+  Layout._profileTotals = nil
+  Layout._profilePassSeq = 0
+  if Layout._activeProfile then
+    Layout._activeProfile = nil
+  end
+end
+
+function Layout.getProfilingData()
+  return {
+    enabled = Layout._profilingEnabled,
+    lastPass = profileDeepCopy(Layout._profileLastPass),
+    totals = profileDeepCopy(Layout._profileTotals),
+  }
+end
 
 -- ============================================================================
 -- Proportional surface fallback
@@ -275,6 +381,7 @@ end
 --- Measure a text node's intrinsic size given an available width constraint.
 --- Returns measuredW, measuredH or nil, nil if the node is not a text node.
 local function measureTextNode(node, availW)
+  profileCount("measureTextInvocations")
   local text = resolveTextContent(node)
   if not text then return nil, nil end
 
@@ -417,6 +524,7 @@ end
 --- @param ph number|nil  Parent height (for percentage resolution)
 --- @return number  Estimated size in pixels
 local function estimateIntrinsicMain(node, isRow, pw, ph)
+  profileCount("intrinsicEstimateInvocations")
   local s = node.style or {}
   local ru = Layout.resolveUnit
 
@@ -469,6 +577,18 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
       return font:getHeight() + padMain
     end
     return padMain  -- width: let parent provide
+  end
+
+  -- 2c. CodeBlock nodes: intrinsic size from code content (opaque leaf, no children)
+  if node.type == "CodeBlock" then
+    if not CodeBlockModule then
+      CodeBlockModule = require("lua.codeblock")
+    end
+    local measured = CodeBlockModule.measure(node)
+    if measured then
+      return (isRow and measured.width or measured.height) + padMain
+    end
+    return padMain
   end
 
   -- 3. Container nodes: recursively estimate from children
@@ -557,9 +677,30 @@ end
 --- Lay out a single node and all of its descendants.
 --- px, py  = parent's content origin (top-left)
 --- pw, ph  = available width and height from parent
-function Layout.layoutNode(node, px, py, pw, ph)
+function Layout.layoutNode(node, px, py, pw, ph, depth)
   if not node then return end
-  local _lt0 = love.timer.getTime()
+  depth = depth or 0
+  _layoutCount = _layoutCount + 1
+  if _layoutCount > _layoutBudget then
+    error(string.format(
+      "[BUDGET] Layout pass exceeded %d nodes (last node: id=%s type=%s debugName=%s). Likely infinite loop.",
+      _layoutBudget, tostring(node.id), tostring(node.type), tostring(node.debugName or "?")))
+  end
+  local activeProfile = Layout._activeProfile
+  if activeProfile then
+    activeProfile.nodeVisits = activeProfile.nodeVisits + 1
+    if depth > activeProfile.maxDepth then
+      activeProfile.maxDepth = depth
+    end
+    local nodeKey = tostring(node.id or node.debugName or node.type or "<unknown>")
+    local seen = activeProfile._seenNodeIds
+    local visits = (seen[nodeKey] or 0) + 1
+    seen[nodeKey] = visits
+    if visits == 1 then
+      activeProfile.uniqueNodes = activeProfile.uniqueNodes + 1
+    end
+  end
+  local _lt0 = profileNow()
   local s = node.style or {}
   Log.log("layout", "layoutNode id=%s type=%s debugName=%s avail=%sx%s", tostring(node.id), tostring(node.type), tostring(node.debugName or "-"), tostring(pw), tostring(ph))
 
@@ -656,14 +797,20 @@ function Layout.layoutNode(node, px, py, pw, ph)
     w = explicitW
     wSource = "explicit"
   elseif fitW then
+    local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
     w = estimateIntrinsicMain(node, true, pw, ph)
+    profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+    profileCount("intrinsicEstimateCalls")
     wSource = "fit-content"
   elseif pw then
     w = pw  -- Use parent's available width
     wSource = "parent"
   else
     -- No explicit width and no parent width: auto-size from content
+    local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
     w = estimateIntrinsicMain(node, true, pw, ph)
+    profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+    profileCount("intrinsicEstimateCalls")
     wSource = "content"
   end
 
@@ -696,6 +843,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
     node._flexW = nil
     node._rootAutoW = nil
     parentAssignedW = true
+    profileCount("parentAssignedWidthNodes")
   end
 
   -- Flex-stretch: if parent assigned a cross-axis dimension, use it
@@ -742,7 +890,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
       local constrainW = outerConstraint - padL - padR
       if constrainW < 0 then constrainW = 0 end
 
+      local _tMeasure = profileSectionStart("textMeasureInitialMs")
       local mw, mh = measureTextNode(node, constrainW)
+      profileSectionEnd("textMeasureInitialMs", _tMeasure)
+      profileCount("textMeasureInitialCalls")
       Log.log("layout", "  measureText id=%s constraint=%s -> %sx%s text=%q", tostring(node.id), tostring(constrainW), tostring(mw), tostring(mh), tostring(resolveTextContent(node) or ""):sub(1, 40))
       if mw and mh then
         if not explicitW and not parentAssignedW then
@@ -759,16 +910,24 @@ function Layout.layoutNode(node, px, py, pw, ph)
     end
   elseif isCodeBlock then
     -- Measure CodeBlock via codeblock.lua
-    -- Width: always fill available space (from parent stretch/pw).
+    -- Width: shrink-wrap to content (like <pre><code> on the web).
     -- Height: auto-size to content if not explicit.
-    if not explicitH then
+    -- CodeBlock.measure returns content-only dimensions (no padding),
+    -- matching the Text pattern where the layout adds padding.
+    if not explicitW or not explicitH then
       if not CodeBlockModule then
         CodeBlockModule = require("lua.codeblock")
       end
       local measured = CodeBlockModule.measure(node)
       if measured then
-        h = measured.height
-        hSource = "text"
+        if not explicitW and not parentAssignedW then
+          w = math.max(50, measured.width + padL + padR)
+          wSource = "text"
+        end
+        if not explicitH then
+          h = measured.height + padT + padB
+          hSource = "text"
+        end
       end
     end
   elseif isTextInput then
@@ -809,7 +968,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
   if isTextNode and w ~= wBefore and not explicitH then
     local innerConstraint = w - padL - padR
     if innerConstraint < 0 then innerConstraint = 0 end
+    local _tRemeasure = profileSectionStart("textRemeasureClampMs")
     local _, mh = measureTextNode(node, innerConstraint)
+    profileSectionEnd("textRemeasureClampMs", _tRemeasure)
+    profileCount("textRemeasureClampCalls")
     if mh then
       h = mh + padT + padB
     end
@@ -861,6 +1023,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   local absoluteIndices = {} -- list of indices for position:absolute children
   local childInfos = {}      -- keyed by index in allChildren
 
+  local _tChildCollect = profileSectionStart("childCollectMs")
   for i, child in ipairs(allChildren) do
     local cs = child.style or {}
 
@@ -905,7 +1068,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
         if childFitW then
           -- fit-content: measure unconstrained (natural single-line width)
+          local _tMeasure = profileSectionStart("textMeasureInitialMs")
           local mw, mh = measureTextNode(child, nil)
+          profileSectionEnd("textMeasureInitialMs", _tMeasure)
+          profileCount("textMeasureInitialCalls")
           if mw and mh then
             if not cw then cw = mw + cpadL + cpadR end
             if not ch then ch = mh + cpadT + cpadB end
@@ -921,7 +1087,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
           local constrainW = outerConstraint - cpadL - cpadR
           if constrainW < 0 then constrainW = 0 end
 
+          local _tMeasure = profileSectionStart("textMeasureInitialMs")
           local mw, mh = measureTextNode(child, constrainW)
+          profileSectionEnd("textMeasureInitialMs", _tMeasure)
+          profileCount("textMeasureInitialCalls")
           if mw and mh then
             if not cw then cw = mw + cpadL + cpadR end
             if not ch then ch = mh + cpadT + cpadB end
@@ -945,7 +1114,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
         local skipIntrinsicH = childIsScroll
         if not cw and not skipIntrinsicW then
           local estW = (cs.width == "fit-content") and nil or innerW
+          local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
           cw = estimateIntrinsicMain(child, true, estW, innerH)
+          profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+          profileCount("intrinsicEstimateCalls")
         end
         if not ch and not skipIntrinsicH then
           -- Use the child's own resolved width (cw) for height estimation so
@@ -954,7 +1126,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
           -- text measured at the parent's width when the child is narrower (e.g.
           -- width: '50%'). Falls back to innerW if cw is not yet known.
           local estPwForH = cw or innerW
+          local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
           ch = estimateIntrinsicMain(child, false, estPwForH, innerH)
+          profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+          profileCount("intrinsicEstimateCalls")
         end
       end
 
@@ -988,7 +1163,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
         if childIsText and cw ~= cwBefore and not ru(cs.height, innerH) then
           local constrainW = cw - cpadL - cpadR
           if constrainW < 0 then constrainW = 0 end
+          local _tRemeasure = profileSectionStart("textRemeasureClampMs")
           local _, mh = measureTextNode(child, constrainW)
+          profileSectionEnd("textRemeasureClampMs", _tRemeasure)
+          profileCount("textRemeasureClampCalls")
           if mh then
             ch = mh + cpadT + cpadB
           end
@@ -1044,7 +1222,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
       if isRow and not cMinW then
         local wasDebug = _mcwDebug
         if node.props and node.props.debugLayout then _mcwDebug = true end
+        local _tMinContent = profileSectionStart("minContentFloorMs")
         minContent = computeMinContentW(child)
+        profileSectionEnd("minContentFloorMs", _tMinContent)
+        profileCount("minContentFloorCalls")
         _mcwDebug = wasDebug
       end
 
@@ -1061,6 +1242,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
       }
     end
   end
+  profileSectionEnd("childCollectMs", _tChildCollect)
 
   local numVisible = #visibleIndices
 
@@ -1128,10 +1310,12 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
   for lineIdx, line in ipairs(lines) do
     local lineCount = #line
+    profileCount("flexLinesProcessed")
 
     -- ----------------------------------------------------------------
     -- Flex-grow / flex-shrink distribution within this line
     -- ----------------------------------------------------------------
+    local _tFlexDistribute = profileSectionStart("flexDistributeMs")
     local lineTotalBasis = 0
     local lineTotalFlex = 0
     local lineTotalMarginMain = 0
@@ -1149,6 +1333,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
         lineTotalFlex = lineTotalFlex + ci.grow
       end
     end
+    profileSectionEnd("flexDistributeMs", _tFlexDistribute)
 
     local lineGaps = math.max(0, lineCount - 1) * gap
     local lineAvail = mainSize - lineTotalBasis - lineGaps - lineTotalMarginMain
@@ -1232,10 +1417,12 @@ function Layout.layoutNode(node, px, py, pw, ph)
     for _, idx in ipairs(line) do
       childInfos[idx]._origIntrinsicW = childInfos[idx].w
     end
+    local _tTextRemeasure = profileSectionStart("textRemeasureFlexMs")
     for _, idx in ipairs(line) do
       local child = allChildren[idx]
       local ci = childInfos[idx]
       if ci.isText and not ci.explicitH then
+        profileCount("textRemeasureFlexCandidates")
         local finalW
         if isRow then
           finalW = ci.basis
@@ -1250,6 +1437,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
         if math.abs(finalW - prevW) > 0.5 then
           local constrainW = finalW - ci.padL - ci.padR
           if constrainW < 0 then constrainW = 0 end
+          profileCount("textRemeasureFlexCalls")
           local _, mh = measureTextNode(child, constrainW)
           if mh then
             local newH = mh + ci.padT + ci.padB
@@ -1264,6 +1452,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
         end
       end
     end
+    profileSectionEnd("textRemeasureFlexMs", _tTextRemeasure)
 
     -- ----------------------------------------------------------------
     -- Re-estimate container heights after flex distribution (row only).
@@ -1272,6 +1461,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- lineCrossSize (computed next) reflects the correct content height.
     -- ----------------------------------------------------------------
     if isRow then
+      local _tContainerRemeasure = profileSectionStart("containerRemeasureFlexMs")
       for _, idx in ipairs(line) do
         local child = allChildren[idx]
         local ci = childInfos[idx]
@@ -1280,13 +1470,18 @@ function Layout.layoutNode(node, px, py, pw, ph)
           finalW = clampDim(finalW, ci.minW, ci.maxW)
           local prevW = ci.w or 0
           if math.abs(finalW - prevW) > 0.5 then
+            local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
             local newH = estimateIntrinsicMain(child, false, finalW, innerH)
+            profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+            profileCount("intrinsicEstimateCalls")
+            profileCount("containerRemeasureFlexCalls")
             newH = clampDim(newH, ci.minH, ci.maxH)
             ci.h = newH
             ci.w = finalW
           end
         end
       end
+      profileSectionEnd("containerRemeasureFlexMs", _tContainerRemeasure)
     end
 
     -- ----------------------------------------------------------------
@@ -1342,7 +1537,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- because the container will shrink-wrap to its content. Without this
     -- guard, the 9999 auto-height fallback produces enormous offsets that
     -- push content off-screen.
-    local hasDefiniteMainAxis = isRow or (explicitH ~= nil)
+    -- NOTE: check h (resolved height) not explicitH — flex-grow and stretch
+    -- assign a definite height that isn't from style.height but is still real.
+    local hasDefiniteMainAxis = isRow or (h ~= nil)
 
     if hasDefiniteMainAxis then
       if justify == "center" then
@@ -1441,6 +1638,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
         local explicitChildW = ru(cs.width, innerW)
         if explicitChildW and cw_final ~= explicitChildW then
           child._flexW = cw_final
+          profileCount("flexSignalTotal")
+          profileCount("flexSignalExplicitWidth")
         elseif not explicitChildW and cs.aspectRatio and cs.aspectRatio > 0 then
           -- aspectRatio children without explicit width: signal flex-adjusted
           -- width so layoutNode respects flex distribution (e.g. flex-shrink)
@@ -1448,6 +1647,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
           local arW = (ci.h or 0) * cs.aspectRatio
           if arW > 0 and math.abs(cw_final - arW) > 0.5 then
             child._flexW = cw_final
+            profileCount("flexSignalTotal")
+            profileCount("flexSignalAspectRatio")
           end
         elseif not explicitChildW then
           -- Auto-width children: signal flex-distributed width when it differs
@@ -1462,6 +1663,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
           local intrinsicW = ci._origIntrinsicW or ci.w or 0
           if math.abs(cw_final - intrinsicW) > 0.5 then
             child._flexW = cw_final
+            profileCount("flexSignalTotal")
+            profileCount("flexSignalAutoWidth")
           end
         end
       else
@@ -1473,6 +1676,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
         -- keep the parent-assigned width instead of shrinking to content.
         if childAlign == "stretch" and not ru(cs.width, innerW) then
           child._flexW = cw_final
+          profileCount("flexSignalTotal")
+          profileCount("flexSignalColumnStretch")
         end
       end
 
@@ -1494,7 +1699,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
       -- Pass parent's inner dimensions so child resolves percentages correctly
       child._parentInnerW = innerW
       child._parentInnerH = innerH
-      Layout.layoutNode(child, cx, cy, cw_final, ch_final)
+      local _tChildLayout = profileSectionStart("childLayoutMs")
+      profileCount("childLayoutCalls")
+      Layout.layoutNode(child, cx, cy, cw_final, ch_final, depth + 1)
+      profileSectionEnd("childLayoutMs", _tChildLayout)
 
       -- Use actual computed size after layout (handles auto-sized containers
       -- whose basis was 0 because content size wasn't known pre-layout)
@@ -1686,6 +1894,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- the parent's padding box using top/left/right/bottom offsets.
   -- They use intrinsic sizing (content-based) unless explicit dimensions
   -- are provided, or both opposing offsets define the size.
+  local _tAbsoluteLayout = profileSectionStart("absoluteLayoutMs")
   for _, idx in ipairs(absoluteIndices) do
     local child = allChildren[idx]
     local cs = child.style or {}
@@ -1713,7 +1922,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
         cw = w - padL - padR - offLeft - offRight - cmarL - cmarR
         if cw < 0 then cw = 0 end
       else
+        local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
         cw = estimateIntrinsicMain(child, true, w, h)
+        profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+        profileCount("intrinsicEstimateCalls")
       end
     end
 
@@ -1723,7 +1935,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
         ch = h - padT - padB - offTop - offBottom - cmarT - cmarB
         if ch < 0 then ch = 0 end
       else
+        local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
         ch = estimateIntrinsicMain(child, false, w, h)
+        profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
+        profileCount("intrinsicEstimateCalls")
       end
     end
 
@@ -1765,8 +1980,12 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- Pass parent's inner dimensions so child resolves percentages correctly
     child._parentInnerW = innerW
     child._parentInnerH = innerH
-    Layout.layoutNode(child, cx, cy, cw, ch)
+    local _tAbsoluteChild = profileSectionStart("absoluteChildLayoutMs")
+    profileCount("absoluteChildLayoutCalls")
+    Layout.layoutNode(child, cx, cy, cw, ch, depth + 1)
+    profileSectionEnd("absoluteChildLayoutMs", _tAbsoluteChild)
   end
+  profileSectionEnd("absoluteLayoutMs", _tAbsoluteLayout)
 
   -- ====================================================================
   -- Scroll state: track content dimensions for scroll containers
@@ -1818,7 +2037,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   end
   -- Per-node layout timing (inclusive — includes children)
   if node.computed then
-    node.computed.layoutMs = (love.timer.getTime() - _lt0) * 1000
+    node.computed.layoutMs = (profileNow() - _lt0) * 1000
   end
 end
 
@@ -1833,11 +2052,33 @@ end
 --- explicit width or height.  This eliminates the requirement to write
 --- `width: '100%', height: '100%'` on the outermost container.
 function Layout.layout(node, x, y, w, h)
+  _layoutCount = 0  -- reset per pass
   x = x or 0
   y = y or 0
   w = w or love.graphics.getWidth()
   h = h or love.graphics.getHeight()
   Log.log("layout", "=== layout pass === viewport=%dx%d root.type=%s", w, h, tostring(node.type))
+
+  local activePass = nil
+  if Layout._profilingEnabled then
+    Layout._profilePassSeq = Layout._profilePassSeq + 1
+    activePass = {
+      passId = Layout._profilePassSeq,
+      viewportW = w,
+      viewportH = h,
+      nodeVisits = 0,
+      uniqueNodes = 0,
+      revisitVisits = 0,
+      maxDepth = 0,
+      sections = {},
+      counters = {},
+      _seenNodeIds = {},
+      _startT = profileNow(),
+    }
+    Layout._activeProfile = activePass
+  else
+    Layout._activeProfile = nil
+  end
 
   -- Store viewport dimensions for the proportional surface fallback.
   -- Used by layoutNode to give empty surfaces a sensible default size
@@ -1882,7 +2123,39 @@ function Layout.layout(node, x, y, w, h)
     io.flush()
   end
 
-  Layout.layoutNode(node, x, y, w, h)
+  Layout.layoutNode(node, x, y, w, h, 0)
+
+  if activePass then
+    local finishedPass = profileFinishPass(activePass)
+    Layout._profileLastPass = finishedPass
+
+    if not Layout._profileTotals then
+      Layout._profileTotals = {
+        passCount = 0,
+        totalMs = 0,
+        nodeVisits = 0,
+        uniqueNodes = 0,
+        revisitVisits = 0,
+        maxDepth = 0,
+        sections = {},
+        counters = {},
+      }
+    end
+
+    local totals = Layout._profileTotals
+    totals.passCount = totals.passCount + 1
+    totals.totalMs = totals.totalMs + finishedPass.passMs
+    totals.nodeVisits = totals.nodeVisits + finishedPass.nodeVisits
+    totals.uniqueNodes = totals.uniqueNodes + finishedPass.uniqueNodes
+    totals.revisitVisits = totals.revisitVisits + finishedPass.revisitVisits
+    if finishedPass.maxDepth > totals.maxDepth then
+      totals.maxDepth = finishedPass.maxDepth
+    end
+    profileMergeMap(totals.sections, finishedPass.sections)
+    profileMergeMap(totals.counters, finishedPass.counters)
+
+    Layout._activeProfile = nil
+  end
 end
 
 return Layout
