@@ -9,6 +9,7 @@ import React, { createContext, useContext } from 'react';
 import { useThemeColorsOptional } from './context';
 import { useScaledStyle } from './ScaleContext';
 import type { BoxProps, ColProps, TextProps, ImageProps, FocusGroupProps, Style, Color } from './types';
+import { lookupIcon } from './iconRegistry';
 import { useBreakpoint, resolveSpan, spanToFlexBasis, RESPONSIVE_DEFAULTS } from './useBreakpoint';
 import type { Breakpoint } from './useBreakpoint';
 
@@ -290,6 +291,22 @@ export function Image(props: ImageProps) {
   const { src, onClick, onWheel } = props;
   const resolvedStyle = resolveImageStyle(props);
   const scaledStyle = useScaledStyle(resolvedStyle);
+
+  // If src looks like a bare name (no path separators, no file extension),
+  // check the icon registry. Renders as vector strokePaths when matched.
+  const isBareName = src && !src.includes('/') && !src.includes('\\') && !src.includes('.');
+  const iconPaths = isBareName ? lookupIcon(src) : undefined;
+
+  if (iconPaths) {
+    const hostProps: any = {
+      style: { ...scaledStyle, strokePaths: iconPaths, strokeWidth: 2 },
+      onClick,
+      onWheel,
+    };
+    if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
+    if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
+    return React.createElement('View', hostProps);
+  }
 
   const hostProps: any = { src, style: scaledStyle, onClick, onWheel };
   if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
