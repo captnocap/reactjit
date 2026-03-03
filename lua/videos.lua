@@ -1047,4 +1047,11 @@ function Videos.shutdown()
   backendReady = false
 end
 
+--- Return count of loaded videos (for panic snapshot diagnostics).
+function Videos.count()
+  local n = 0
+  for _ in pairs(videoCache) do n = n + 1 end
+  return n
+end
+
 return Videos

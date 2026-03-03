@@ -887,6 +887,21 @@ function Bridge:_setupHostFunctions()
   -- so we receive a single string and decode it here. This bypasses the
   -- QuickJS GC race condition that silently drops large string properties
   -- during recursive FFI object traversal.
+  --
+  -- Track recent flushes for crash diagnostics.
+  -- Ring buffer of last 20 flush summaries, written to disk when budget exceeded.
+  -- Panic snapshot: at 500K (pre-budget), collect full subsystem snapshot.
+  -- At 1M (budget), write crash error data. Watchdog merges both on kill.
+  local FLUSH_BUDGET = 1000000
+  local SNAPSHOT_THRESHOLD = 500000
+  local flushLog = {}       -- ring buffer of { count, ops, timestamp }
+  local flushLogIdx = 0
+  local flushLogMax = 20
+  local flushCrashWritten = false
+  local flushSnapshotWritten = false
+  local flushCallCount = 0
+  local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+
   local flushCb = ffi.cast("HostCallback", function(ctx, argc, argv, ret)
     if argc < 1 then return end
 
@@ -898,8 +913,90 @@ function Bridge:_setupHostFunctions()
 
       local ok, commands = pcall(json.decode, jsonStr)
       if ok and type(commands) == "table" then
+        -- Log this flush to the ring buffer
+        local ops = {}
+        for i = 1, math.min(5, #commands) do
+          ops[i] = (commands[i].op or "?") .. ":" .. tostring(commands[i].id or "?")
+        end
+        flushLogIdx = (flushLogIdx % flushLogMax) + 1
+        flushLog[flushLogIdx] = {
+          n = #commands,
+          buf = #selfRef.commandBuffer,
+          ops = table.concat(ops, ", "),
+        }
+
         for _, cmd in ipairs(commands) do
           selfRef.commandBuffer[#selfRef.commandBuffer + 1] = cmd
+        end
+
+        flushCallCount = flushCallCount + 1
+
+        -- Check for watchdog panic signal every 100 flushes.
+        -- The watchdog writes this file on spike #2 to request a subsystem snapshot.
+        if not flushSnapshotWritten and flushCallCount % 100 == 0 then
+          local sigFile = io.open(tmpDir .. "/reactjit_panic.signal", "r")
+          if sigFile then
+            sigFile:close()
+            -- Watchdog detected spike #2 — collect subsystem snapshot NOW
+            local snapOk, PanicSnapshot = pcall(require, "lua.panic_snapshot")
+            if snapOk then
+              local snap = PanicSnapshot.collect()
+              local path = PanicSnapshot.writeToDisk(snap)
+              if path then
+                io.write("[PANIC] Subsystem snapshot written to " .. path .. "\n"); io.flush()
+              end
+            end
+            flushSnapshotWritten = true
+          end
+        end
+
+        -- At pre-budget threshold (500K), collect subsystem snapshot if not already done.
+        -- This catches cases where budget is exceeded without watchdog (non-Linux, etc.)
+        if #selfRef.commandBuffer > SNAPSHOT_THRESHOLD and not flushSnapshotWritten then
+          flushSnapshotWritten = true
+          local snapOk, PanicSnapshot = pcall(require, "lua.panic_snapshot")
+          if snapOk then
+            local snap = PanicSnapshot.collect()
+            local path = PanicSnapshot.writeToDisk(snap)
+            if path then
+              io.write("[PANIC] Subsystem snapshot written (buffer at " .. #selfRef.commandBuffer .. ")\n"); io.flush()
+            end
+          end
+        end
+
+        -- Once over budget, write crash file to disk and stop appending.
+        -- The file persists when the watchdog kills us.
+        if #selfRef.commandBuffer > FLUSH_BUDGET and not flushCrashWritten then
+          flushCrashWritten = true
+          local luaMem = collectgarbage("count") / 1024
+          -- Dump the flush ring buffer as trail text
+          local trail = {}
+          for i = 1, flushLogMax do
+            local idx = ((flushLogIdx - i) % flushLogMax) + 1
+            local entry = flushLog[idx]
+            if entry then
+              trail[#trail + 1] = string.format("flush #%d: %d cmds (buf=%d) [%s]", flushLogMax - i + 1, entry.n, entry.buf, entry.ops)
+            end
+          end
+          -- Write as a Lua table literal — the crash reporter just load()s it
+          local f = io.open(tmpDir .. "/reactjit_crash.lua", "w")
+          if f then
+            f:write("return {\n")
+            f:write(string.format("  error = %q,\n", "[BUDGET] " .. tostring(#selfRef.commandBuffer) .. " commands buffered in one frame (limit " .. tostring(FLUSH_BUDGET) .. "). Infinite React reconciliation loop."))
+            f:write(string.format("  context = %q,\n", "__hostFlush budget exceeded"))
+            f:write(string.format("  timestamp = %q,\n", os.date("%Y-%m-%d %H:%M:%S")))
+            f:write(string.format("  luaMemMB = %.1f,\n", luaMem))
+            f:write(string.format("  trail = %q,\n", table.concat(trail, "\n")))
+            f:write(string.format("  hasLuaSnapshot = %s,\n", tostring(flushSnapshotWritten)))
+            f:write("}\n")
+            f:close()
+          end
+          io.write("[BUDGET] Crash data written to " .. tmpDir .. "/reactjit_crash.lua\n"); io.flush()
+        end
+
+        -- Stop feeding the leak once over budget
+        if #selfRef.commandBuffer > FLUSH_BUDGET then
+          selfRef.commandBuffer = {}
         end
       else
         print("[reactjit] __hostFlush JSON decode failed: " .. tostring(commands))
@@ -1191,6 +1288,9 @@ end
 --- Tick the JS event loop (promises, microtasks, timers)
 function Bridge:tick()
   -- Drain pending microtasks (and clear any exceptions)
+  -- Budget: max microtask drains per tick. Prevents infinite promise chains.
+  local MICROTASK_BUDGET = 1000000
+  local microtaskCount = 0
   local ctx_ptr = ffi.new("JSContext*[1]")
   while true do
     local ret = self.qjs.JS_ExecutePendingJob(self.rt, ctx_ptr)
@@ -1209,6 +1309,10 @@ function Bridge:tick()
       end
       break
     end
+    microtaskCount = microtaskCount + 1
+    if microtaskCount > MICROTASK_BUDGET then
+      error(string.format("[BUDGET] JS microtask drain exceeded %d iterations. Likely infinite promise chain.", MICROTASK_BUDGET))
+    end
   end
 
   -- Tick polyfilled timers (use callGlobal to avoid JS_Eval hang)
@@ -1216,9 +1320,15 @@ function Bridge:tick()
 end
 
 --- Drain the command buffer (called by Love2D each frame)
+local COMMAND_BUDGET = 1000000
 function Bridge:drainCommands()
   local cmds = self.commandBuffer
   self.commandBuffer = {}
+  if #cmds > COMMAND_BUDGET then
+    error(string.format(
+      "[BUDGET] %d commands buffered in one frame (limit %d). Infinite React reconciliation loop.",
+      #cmds, COMMAND_BUDGET))
+  end
   return cmds
 end
 

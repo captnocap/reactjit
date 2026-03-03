@@ -84,4 +84,11 @@ function Images.clearCache()
   imageRefCounts = {}
 end
 
+--- Return count of loaded images (for panic snapshot diagnostics).
+function Images.count()
+  local n = 0
+  for _ in pairs(imageCache) do n = n + 1 end
+  return n
+end
+
 return Images

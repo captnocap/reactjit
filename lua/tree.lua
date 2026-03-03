@@ -114,7 +114,14 @@ function Tree.getMutationStats()
   return s
 end
 
+local COMMAND_BUDGET = 1000000
+
 function Tree.applyCommands(commands)
+  if #commands > COMMAND_BUDGET then
+    error(string.format(
+      "[BUDGET] Tree received %d commands in one frame (limit %d). Likely infinite reconciler loop.",
+      #commands, COMMAND_BUDGET))
+  end
   mutationStats.total = mutationStats.total + #commands
   for _, cmd in ipairs(commands) do
     local op = cmd.op

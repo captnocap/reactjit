@@ -628,4 +628,11 @@ Animate.parseColor = parseColor
 Animate.colorToHex = colorToHex
 Animate.lerp = lerp
 
+--- Return count of nodes with active animations/transitions (for panic snapshot diagnostics).
+function Animate.activeCount()
+  local n = 0
+  for _ in pairs(activeNodes) do n = n + 1 end
+  return n
+end
+
 return Animate

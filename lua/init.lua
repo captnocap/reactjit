@@ -297,6 +297,10 @@ local function initContextMenuModule()
       toggleDevTools = M.inspectorEnabled and function()
         devtools.keypressed("f12")
       end or nil,
+      toggleLayoutColors = function()
+        local colorizer = require("lua.layout_colorizer")
+        colorizer.toggle()
+      end,
     },
     shortcuts = {
       refresh = "F5 / Ctrl+R",
@@ -305,6 +309,7 @@ local function initContextMenuModule()
       settings = settingsToggleKey:upper(),
       systemPanel = systemPanelToggleKey:upper(),
       devtools = "F12",
+      layoutColors = "Ctrl+Shift+L",
     },
   })
 end
@@ -564,6 +569,19 @@ function ReactJIT.init(config)
   local verbose = config.verbose or (os.getenv("REACTJIT_VERBOSE") == "1")
   M._startupVerbose = verbose
   _G._reactjit_verbose = verbose
+
+  -- Memory spike watchdog: external process that monitors /proc/self/statm
+  -- and kill -9's us if RSS spikes >50MB in 100ms (infinite allocation loop).
+  -- Must launch before any module loading that could loop.
+  if config.watchdog ~= false and os.getenv("RJIT_NO_WATCHDOG") ~= "1" then
+    local wOk, watchdog = pcall(require, "lua.watchdog")
+    if wOk then
+      local launched = watchdog.launch(type(config.watchdog) == "table" and config.watchdog or nil)
+      io.write("[WATCHDOG] " .. (launched and "Active" or "Failed to launch") .. "\n"); io.flush()
+    else
+      io.write("[WATCHDOG] Module load failed: " .. tostring(watchdog) .. "\n"); io.flush()
+    end
+  end
 
   basePath = resolveBasePath()
 
@@ -1471,6 +1489,15 @@ function ReactJIT.init(config)
       rpcHandlers[method] = handler
     end
     startupLog("[reactjit] Archive module loaded")
+  end
+
+  -- Load math utilities module (noise, FFT, bezier, batch compute)
+  local mathOk, mathMod = pcall(require, "lua.math_utils")
+  if mathOk and mathMod then
+    for method, handler in pairs(mathMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    startupLog("[reactjit] Math module loaded")
   end
 
   -- Load media scanner module (optional — directory scanning + indexing)
@@ -2522,6 +2549,23 @@ function ReactJIT.update(dt)
       message = errMsg,
       context = "ReactJIT.update (crash recovery)",
     })
+
+    -- Spawn external crash report window for budget errors (the kind that
+    -- indicate an infinite loop was stopped). The in-process BSOD still
+    -- renders, but the external window survives even if we die.
+    if errMsg:find("%[BUDGET%]") then
+      -- Collect panic snapshot (Lua has control — budget error was caught by pcall)
+      local snapOk, PanicSnapshot = pcall(require, "lua.panic_snapshot")
+      if snapOk then
+        local snap = PanicSnapshot.collect()
+        PanicSnapshot.writeToDisk(snap)
+      end
+
+      local crOk, crashreport = pcall(require, "lua.crashreport")
+      if crOk then
+        crashreport.spawn(errMsg, "ReactJIT.update (budget exceeded)")
+      end
+    end
   end
 end
 
@@ -2692,6 +2736,22 @@ local function getScrollAxisFlags(node)
   return true, true
 end
 
+--- Convert a node-local content-space point to screen-space by subtracting
+--- ancestor scroll offsets.
+local function contentToScreen(node, x, y)
+  local sx, sy = x, y
+  local current = node and node.parent
+  while current do
+    local s = current.style or {}
+    if (s.overflow == "scroll" or s.overflow == "auto") and current.scrollState then
+      sx = sx - (current.scrollState.scrollX or 0)
+      sy = sy - (current.scrollState.scrollY or 0)
+    end
+    current = current.parent
+  end
+  return sx, sy
+end
+
 --- Check if screen point (mx,my) is on a scrollbar of any scroll container.
 --- Walks the tree to find scroll containers whose scrollbar area contains the point.
 --- Returns { node, axis, thumbPos, thumbSize, trackSize, maxScroll } or nil.
@@ -2710,40 +2770,41 @@ local function hitTestScrollbar(root, mx, my)
       local viewW, viewH = c.w, c.h
       local contentW = ss.contentW or viewW
       local contentH = ss.contentH or viewH
+      local screenX, screenY = contentToScreen(node, c.x, c.y)
 
       -- Vertical scrollbar hit area (right edge)
       if allowY and contentH > viewH then
-        local barX = c.x + viewW - SCROLLBAR_THICKNESS
-        if mx >= barX and mx <= c.x + viewW and my >= c.y and my <= c.y + viewH then
+        local barX = screenX + viewW - SCROLLBAR_THICKNESS
+        if mx >= barX and mx <= screenX + viewW and my >= screenY and my <= screenY + viewH then
           local trackH = viewH
           local thumbH = math.max(20, (viewH / contentH) * trackH)
           local maxScroll = math.max(0, contentH - viewH)
           local scrollY = ss.scrollY or 0
           local thumbTravel = math.max(1, trackH - thumbH)
-          local thumbY = c.y
+          local thumbY = screenY
           if maxScroll > 0 then
-            thumbY = c.y + (scrollY / maxScroll) * thumbTravel
+            thumbY = screenY + (scrollY / maxScroll) * thumbTravel
           end
           best = { node = node, axis = "v", thumbY = thumbY, thumbH = thumbH,
-                   trackSize = trackH, maxScroll = maxScroll, trackStart = c.y }
+                   trackSize = trackH, maxScroll = maxScroll, trackStart = screenY }
         end
       end
 
       -- Horizontal scrollbar hit area (bottom edge)
       if allowX and contentW > viewW then
-        local barY = c.y + viewH - SCROLLBAR_THICKNESS
-        if mx >= c.x and mx <= c.x + viewW and my >= barY and my <= c.y + viewH then
+        local barY = screenY + viewH - SCROLLBAR_THICKNESS
+        if mx >= screenX and mx <= screenX + viewW and my >= barY and my <= screenY + viewH then
           local trackW = viewW
           local thumbW = math.max(20, (viewW / contentW) * trackW)
           local maxScroll = math.max(0, contentW - viewW)
           local scrollX = ss.scrollX or 0
           local thumbTravel = math.max(1, trackW - thumbW)
-          local thumbX = c.x
+          local thumbX = screenX
           if maxScroll > 0 then
-            thumbX = c.x + (scrollX / maxScroll) * thumbTravel
+            thumbX = screenX + (scrollX / maxScroll) * thumbTravel
           end
           best = { node = node, axis = "h", thumbX = thumbX, thumbW = thumbW,
-                   trackSize = trackW, maxScroll = maxScroll, trackStart = c.x }
+                   trackSize = trackW, maxScroll = maxScroll, trackStart = screenX }
         end
       end
     end
