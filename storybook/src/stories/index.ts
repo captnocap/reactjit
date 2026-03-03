@@ -61,7 +61,7 @@ import { Layout3Story } from './Layout3Story';
 
 
 export const stories: StoryDef[] = [
-  // DEBUG: Layout1 first so MCW debug fires on first frame
+  // DEBUG: Layout1 first to test CodeBlock memory fix
   { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   // Core — framework primitives in learning order
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
