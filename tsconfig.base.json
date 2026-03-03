@@ -29,7 +29,8 @@
       "@reactjit/geo": ["./packages/geo/src"],
       "@reactjit/layouts": ["./packages/layouts/src"],
       "@reactjit/terminal": ["./packages/terminal/src"],
-      "@reactjit/icons": ["./packages/icons/src"]
+      "@reactjit/icons": ["./packages/icons/src"],
+      "@reactjit/math": ["./packages/math/src"]
     }
   }
 }
