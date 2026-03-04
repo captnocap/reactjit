@@ -279,12 +279,14 @@ export function LayoutStory() {
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'JUSTIFY CONTENT'}</Text>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {(['start', 'center', 'space-between'] as const).map(justify => (
-                    <Box key={justify} style={{
-                      backgroundColor: c.surface, borderRadius: 6, padding: 6, width: '100%',
-                      flexDirection: 'row', justifyContent: justify,
-                    }}>
-                      <Chip label="A" color={P.blue} size={24} />
-                      <Chip label="B" color={P.indigo} size={24} />
+                    <Box key={justify} style={{ gap: 2 }}>
+                      <Box style={{
+                        backgroundColor: c.surface, borderRadius: 6, padding: 6, width: '100%',
+                        flexDirection: 'row', justifyContent: justify,
+                      }}>
+                        <Chip label="A" color={P.blue} size={24} />
+                        <Chip label="B" color={P.indigo} size={24} />
+                      </Box>
                       <Text style={{ color: c.muted, fontSize: 7 }}>{justify}</Text>
                     </Box>
                   ))}
