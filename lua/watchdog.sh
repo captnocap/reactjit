@@ -86,9 +86,18 @@ collect_proc_snapshot() {
   printf '%b' "$snap"
 }
 
+CACHED_CMDLINE=""
+CACHED_CWD=""
+
 while kill -0 "$PID" 2>/dev/null; do
   if [ ! -f "/proc/$PID/statm" ]; then
-    exit 0
+    break  # process gone — fall through to crash detection
+  fi
+
+  # Cache command line and cwd while alive (needed for crash report if process dies)
+  if [ -z "$CACHED_CMDLINE" ] && [ -f "/proc/$PID/cmdline" ]; then
+    CACHED_CMDLINE=$(tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null | sed 's/ $//' || true)
+    CACHED_CWD=$(readlink "/proc/$PID/cwd" 2>/dev/null || true)
   fi
 
   RSS_PAGES=$(awk '{print $2}' "/proc/$PID/statm" 2>/dev/null || echo 0)
@@ -228,3 +237,155 @@ CRASHEOF
   LAST_RSS=$RSS_KB
   sleep "$SLEEP_S"
 done
+
+# ================================================================
+# POST-LOOP: Process vanished (we didn't kill it)
+# ================================================================
+# If we reach here, the while loop exited because kill -0 failed —
+# the process is gone. The watchdog's own kill path exits before
+# reaching here (exit 0 after spawning crash reporter). So if we're
+# here, the process died on its own.
+#
+# Check for a clean-exit marker written by ReactJIT.quit().
+# If the marker exists → normal quit (user closed window, love.event.quit()).
+# If the marker is missing → crash (segfault, SIGABRT, SIGBUS, etc.).
+
+CLEAN_EXIT_MARKER="$TMPDIR/reactjit_clean_exit"
+
+if [ -f "$CLEAN_EXIT_MARKER" ]; then
+  # Normal exit — clean up marker and go
+  rm -f "$CLEAN_EXIT_MARKER"
+  exit 0
+fi
+
+# ── Crash detected ──────────────────────────────────────────────
+echo "" >&2
+echo "[WATCHDOG] Process $PID vanished without clean exit — probable crash (segfault/signal)" >&2
+
+# Capture the original command line if we saved it during monitoring
+# (process is already dead, /proc is gone — we need to have cached it)
+# We poll cmdline on each sample if available; stash it while alive.
+# Since we didn't capture it in the loop, reconstruct from what we know.
+
+CRASH_FILE="$TMPDIR/reactjit_crash.lua"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ── Forensics: find the segfault line and decode it ──────────────
+DMESG_LINE=""
+FAULT_LIB=""
+FAULT_ADDR=""
+FAULT_OFFSET=""
+FAULT_SYMBOL=""
+
+# Try journalctl -k first (works without root), fall back to dmesg
+if command -v journalctl >/dev/null 2>&1; then
+  DMESG_LINE=$(journalctl -k -g "segfault" --no-pager -n 20 2>/dev/null | grep "\[$PID\]" | tail -1 || true)
+fi
+if [ -z "$DMESG_LINE" ] && command -v dmesg >/dev/null 2>&1; then
+  DMESG_LINE=$(dmesg --time-format iso 2>/dev/null | grep -i "segfault" | grep "\[$PID\]" | tail -1 || true)
+  if [ -z "$DMESG_LINE" ]; then
+    DMESG_LINE=$(dmesg 2>/dev/null | grep -i "segfault" | grep "\[$PID\]" | tail -1 || true)
+  fi
+fi
+
+# Parse the kernel segfault line:
+#   love[PID]: segfault at <addr> ip <ip> sp <sp> error N in <lib>[<offset>,<base>+<size>]
+if [ -n "$DMESG_LINE" ]; then
+  # Extract faulting library name (e.g. "libc.so.6", "libsodium.so.23")
+  FAULT_LIB=$(echo "$DMESG_LINE" | grep -oP 'in \K[^\[]+' | head -1 | xargs)
+  # Extract the offset within the library (first value in brackets)
+  FAULT_OFFSET=$(echo "$DMESG_LINE" | grep -oP 'in [^\[]+\[\K[0-9a-f]+' | head -1)
+  # Extract the faulting address (the memory being accessed — often a guard page)
+  FAULT_ADDR=$(echo "$DMESG_LINE" | grep -oP 'segfault at \K[0-9a-f]+' | head -1)
+
+  echo "[WATCHDOG] Segfault in: ${FAULT_LIB:-unknown} at offset 0x${FAULT_OFFSET:-?}" >&2
+  echo "[WATCHDOG] Faulting address: 0x${FAULT_ADDR:-?}" >&2
+
+  # Try to resolve the symbol via addr2line
+  if [ -n "$FAULT_OFFSET" ] && command -v addr2line >/dev/null 2>&1; then
+    # Find the actual .so path on disk
+    LIB_PATH=""
+    if [ -n "$FAULT_LIB" ]; then
+      LIB_PATH=$(find /usr/lib /lib -name "$FAULT_LIB" -type f 2>/dev/null | head -1)
+      # Also check LD_LIBRARY_PATH and the app's lib/ directory
+      if [ -z "$LIB_PATH" ] && [ -n "$CACHED_CWD" ]; then
+        LIB_PATH=$(find "$CACHED_CWD" -name "$FAULT_LIB" -type f 2>/dev/null | head -1)
+      fi
+    fi
+    if [ -n "$LIB_PATH" ]; then
+      FAULT_SYMBOL=$(addr2line -f -e "$LIB_PATH" "0x$FAULT_OFFSET" 2>/dev/null | head -2 | tr '\n' ' ' || true)
+      if [ -n "$FAULT_SYMBOL" ]; then
+        echo "[WATCHDOG] Symbol: $FAULT_SYMBOL" >&2
+      fi
+    fi
+  fi
+
+  # Check if the faulting address looks like a guard page (ends near page boundary)
+  if [ -n "$FAULT_ADDR" ]; then
+    PAGE_OFFSET=$((0x$FAULT_ADDR & 0xFFF))
+    if [ "$PAGE_OFFSET" -ge 4088 ] || [ "$PAGE_OFFSET" -le 8 ]; then
+      echo "[WATCHDOG] Faulting address 0x$FAULT_ADDR is at page boundary (offset $PAGE_OFFSET) — guard page hit" >&2
+    fi
+  fi
+fi
+
+# Check coredump info if available
+COREDUMP_INFO=""
+if command -v coredumpctl >/dev/null 2>&1; then
+  COREDUMP_INFO=$(coredumpctl info "$PID" 2>/dev/null | head -30 || true)
+fi
+
+# Build crash report — escape for Lua string literals
+DMESG_ESC=$(echo "$DMESG_LINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+COREDUMP_ESC=$(echo "$COREDUMP_INFO" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+FAULT_LIB_ESC=$(echo "$FAULT_LIB" | sed 's/\\/\\\\/g; s/"/\\"/g')
+FAULT_SYMBOL_ESC=$(echo "$FAULT_SYMBOL" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+# Merge into existing crash file or create new one
+if [ -f "$CRASH_FILE" ] && [ -s "$CRASH_FILE" ]; then
+  # Lua-side crash file exists (e.g. budget error wrote one before segfault)
+  CMDLINE_ESC=$(echo "$CACHED_CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  CWD_ESC=$(echo "$CACHED_CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+  sed -i 's/}$//' "$CRASH_FILE"
+  echo "  crashType = \"signal\"," >> "$CRASH_FILE"
+  [ -n "$DMESG_LINE" ] && echo "  dmesg = \"${DMESG_ESC}\"," >> "$CRASH_FILE"
+  [ -n "$COREDUMP_INFO" ] && echo "  coredump = \"${COREDUMP_ESC}\"," >> "$CRASH_FILE"
+  [ -n "$FAULT_LIB" ] && echo "  faultLib = \"${FAULT_LIB_ESC}\"," >> "$CRASH_FILE"
+  [ -n "$FAULT_OFFSET" ] && echo "  faultOffset = \"0x${FAULT_OFFSET}\"," >> "$CRASH_FILE"
+  [ -n "$FAULT_SYMBOL" ] && echo "  faultSymbol = \"${FAULT_SYMBOL_ESC}\"," >> "$CRASH_FILE"
+  [ -n "$FAULT_ADDR" ] && echo "  faultAddr = \"0x${FAULT_ADDR}\"," >> "$CRASH_FILE"
+  [ -n "$CACHED_CMDLINE" ] && echo "  rebootCmd = \"${CMDLINE_ESC}\"," >> "$CRASH_FILE"
+  [ -n "$CACHED_CWD" ] && echo "  rebootCwd = \"${CWD_ESC}\"," >> "$CRASH_FILE"
+  echo "  rssMB = $((LAST_RSS / 1024))," >> "$CRASH_FILE"
+  echo "}" >> "$CRASH_FILE"
+else
+  CMDLINE_ESC=$(echo "$CACHED_CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  CWD_ESC=$(echo "$CACHED_CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+  cat > "$CRASH_FILE" << CRASHEOF
+return {
+  error = "[WATCHDOG] Process $PID crashed (no clean exit marker — likely segfault or fatal signal)",
+  context = "process crash (signal)",
+  crashType = "signal",
+  timestamp = "$(date '+%Y-%m-%d %H:%M:%S')",
+  dmesg = "${DMESG_ESC}",
+  coredump = "${COREDUMP_ESC}",
+  faultLib = "${FAULT_LIB_ESC}",
+  faultOffset = "0x${FAULT_OFFSET}",
+  faultSymbol = "${FAULT_SYMBOL_ESC}",
+  faultAddr = "0x${FAULT_ADDR}",
+  rebootCmd = "${CMDLINE_ESC}",
+  rebootCwd = "${CWD_ESC}",
+  rssMB = $((LAST_RSS / 1024)),
+}
+CRASHEOF
+fi
+
+echo "[WATCHDOG] Crash report written to $CRASH_FILE" >&2
+
+# Spawn crash report window
+if [ -f "$SCRIPT_DIR/crashreport/main.lua" ]; then
+  echo "[WATCHDOG] Spawning crash reporter" >&2
+  love "$SCRIPT_DIR/crashreport" &
+fi

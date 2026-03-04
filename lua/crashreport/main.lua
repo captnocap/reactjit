@@ -179,6 +179,62 @@ function love.draw()
     y = y + 12
 
     -- ================================================================
+    -- Signal crash info (faulting library, symbol, dmesg, coredump)
+    -- ================================================================
+    if crashData.crashType == "signal" then
+        -- Prominent fault summary box
+        if crashData.faultLib and crashData.faultLib ~= "" then
+            y = drawSectionHeader("Crash Location", pad, y, W)
+            local col1 = pad + 8
+            local kvW = 140
+
+            -- Library name — big and red
+            love.graphics.setFont(font)
+            love.graphics.setColor(1, 0.35, 0.35)
+            love.graphics.print("Faulting library: " .. crashData.faultLib, col1, y)
+            y = y + font:getHeight() + 6
+
+            love.graphics.setFont(fontMono)
+            if crashData.faultOffset and crashData.faultOffset ~= "0x" then
+                y = drawKV("Offset", crashData.faultOffset, col1, y, kvW)
+            end
+            if crashData.faultSymbol and crashData.faultSymbol ~= "" then
+                love.graphics.setColor(1, 0.8, 0.4)
+                love.graphics.setFont(fontMono)
+                love.graphics.print("Symbol: " .. crashData.faultSymbol, col1, y)
+                y = y + fontMono:getHeight() + 2
+            end
+            if crashData.faultAddr and crashData.faultAddr ~= "0x" then
+                y = drawKV("Fault address", crashData.faultAddr, col1, y, kvW)
+                -- Detect guard page hit
+                local addrNum = tonumber(crashData.faultAddr)
+                if addrNum then
+                    local pageOff = addrNum % 4096
+                    if pageOff >= 4088 or pageOff <= 8 then
+                        love.graphics.setColor(1, 0.6, 0.2)
+                        love.graphics.print("  ^ page boundary — guard page hit (mprotect)", col1, y)
+                        y = y + fontMono:getHeight() + 2
+                    end
+                end
+            end
+            y = y + 8
+        end
+
+        if crashData.dmesg and crashData.dmesg ~= "" then
+            y = drawSectionHeader("Kernel log (dmesg)", pad, y, W)
+            love.graphics.setColor(1, 0.6, 0.4)
+            local dH = drawWrappedText(crashData.dmesg, pad + 8, y, contentW - 8, fontMono)
+            y = y + dH + 12
+        end
+        if crashData.coredump and crashData.coredump ~= "" then
+            y = drawSectionHeader("Coredump info", pad, y, W)
+            love.graphics.setColor(0.8, 0.8, 0.8)
+            local cH = drawWrappedText(crashData.coredump, pad + 8, y, contentW - 8, fontMono)
+            y = y + cH + 12
+        end
+    end
+
+    -- ================================================================
     -- Crisis Analysis: WHO is leaking
     -- ================================================================
     if crashData.crisisAnalysis and crashData.crisisAnalysis ~= "" then
@@ -422,6 +478,26 @@ function love.keypressed(key)
             "Error:",
             crashData.error or "",
         }
+
+        -- Signal crash details
+        if crashData.faultLib and crashData.faultLib ~= "" then
+            parts[#parts + 1] = ""
+            parts[#parts + 1] = "--- Crash Location ---"
+            parts[#parts + 1] = "Faulting library: " .. crashData.faultLib
+            if crashData.faultOffset then parts[#parts + 1] = "Offset: " .. crashData.faultOffset end
+            if crashData.faultSymbol and crashData.faultSymbol ~= "" then parts[#parts + 1] = "Symbol: " .. crashData.faultSymbol end
+            if crashData.faultAddr then parts[#parts + 1] = "Fault address: " .. crashData.faultAddr end
+        end
+        if crashData.dmesg and crashData.dmesg ~= "" then
+            parts[#parts + 1] = ""
+            parts[#parts + 1] = "--- Kernel log (dmesg) ---"
+            parts[#parts + 1] = crashData.dmesg
+        end
+        if crashData.coredump and crashData.coredump ~= "" then
+            parts[#parts + 1] = ""
+            parts[#parts + 1] = "--- Coredump ---"
+            parts[#parts + 1] = crashData.coredump
+        end
 
         -- Crisis analysis
         if crashData.crisisAnalysis and crashData.crisisAnalysis ~= "" then
