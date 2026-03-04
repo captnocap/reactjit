@@ -31,6 +31,11 @@ export const ALIAS_MAP = {
   webhooks: '@reactjit/webhooks',
   apis: '@reactjit/apis',
   icons: '@reactjit/icons',
+  layouts: '@reactjit/layouts',
+  terminal: '@reactjit/terminal',
+  math: '@reactjit/math',
+  time: '@reactjit/time',
+  privacy: '@reactjit/privacy',
 };
 
 /**

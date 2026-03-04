@@ -12,6 +12,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
+import { setPrivacyBridge } from '../../packages/privacy/src/rpc';
 import { BridgeProvider, useBridge } from '../../packages/core/src/context';
 import '../../packages/icons/src'; // register icons so <Image src="icon-name" /> works
 // State preservation disabled — it patches React.useState globally which
@@ -298,7 +299,9 @@ function Storybook() {
 // ── Bootstrap ─────────────────────────────────────────────
 
 const bridge = new NativeBridge();
+(globalThis as any).__rjitBridge = bridge;
 setCryptoBridge(bridge);
+setPrivacyBridge(bridge);
 const root = createRoot();
 
 // When __deferMount is true (set by Lua before eval), store the mount function
