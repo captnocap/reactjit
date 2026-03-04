@@ -144,7 +144,7 @@ endif
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
 	# Bundle goes into love/ subdir — matches bundlePath = "love/bundle.js" in main.lua.
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/masks $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/masks $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/lua/devtools $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -156,6 +156,7 @@ endif
 	cp lua/masks/*.lua $(STAGING_DIR)/lua/masks/
 	cp lua/capabilities/*.lua $(STAGING_DIR)/lua/capabilities/
 	cp lua/classifiers/*.lua $(STAGING_DIR)/lua/classifiers/
+	cp lua/devtools/*.lua $(STAGING_DIR)/lua/devtools/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	# ── Assemble payload directory ──
 	# Don't fuse — ld-linux invocation breaks /proc/self/exe detection.
@@ -259,7 +260,7 @@ dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-wi
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/masks $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/love
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/lua/effects $(STAGING_DIR)/lua/masks $(STAGING_DIR)/lua/capabilities $(STAGING_DIR)/lua/classifiers $(STAGING_DIR)/lua/devtools $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
@@ -271,6 +272,7 @@ dist-storybook-windows: build-storybook-love $(LOVE_WIN_DIR)/love.exe zig-out-wi
 	cp lua/masks/*.lua $(STAGING_DIR)/lua/masks/
 	cp lua/capabilities/*.lua $(STAGING_DIR)/lua/capabilities/
 	cp lua/classifiers/*.lua $(STAGING_DIR)/lua/classifiers/
+	cp lua/devtools/*.lua $(STAGING_DIR)/lua/devtools/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/reactjit-demo.love .
 	rm -rf $(STAGING_DIR)
 	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll + mpv-2.dll ──
@@ -325,6 +327,8 @@ cli-setup: setup
 	cp lua/masks/*.lua cli/runtime/lua/masks/
 	mkdir -p cli/runtime/lua/child_window
 	cp lua/child_window/*.lua cli/runtime/lua/child_window/
+	mkdir -p cli/runtime/lua/devtools
+	cp lua/devtools/*.lua cli/runtime/lua/devtools/
 	mkdir -p cli/runtime/lua/devtools_window
 	cp lua/devtools_window/*.lua cli/runtime/lua/devtools_window/
 	mkdir -p cli/runtime/lua/notification_window
@@ -449,6 +453,7 @@ endif
 	cp -r packages/geo cli/runtime/reactjit/geo
 	cp -r packages/theme cli/runtime/reactjit/theme
 	cp -r packages/math cli/runtime/reactjit/math
+	cp -r packages/time cli/runtime/reactjit/time
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts/base ]; then \

@@ -437,6 +437,7 @@ local function loadThemes()
     if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
     if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
     tooltips.setTheme(M.currentTheme)
+    if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -690,6 +691,7 @@ function ReactJIT.init(config)
           if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
           if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
           tooltips.setTheme(M.currentTheme)
+          if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -1165,6 +1167,142 @@ function ReactJIT.init(config)
     end
   end
 
+  -- ── @reactjit/time — stopwatches, countdowns, wall clock ──────────────
+  -- time:now              → { epoch, mono, localStr, utcStr }
+  -- time:stopwatch:*      → create / control / destroy per-component stopwatches
+  -- time:countdown:*      → create / control / destroy per-component countdowns
+
+  local luaStopwatches = {}
+  local luaSwNextId    = 0
+  local luaCountdowns  = {}
+  local luaCdNextId    = 0
+
+  rpcHandlers["time:now"] = function()
+    local mono = love.timer.getTime()
+    return {
+      epoch    = os.time() * 1000,           -- Unix ms (integer-second precision)
+      mono     = mono,                        -- seconds since Love2D start (float)
+      localStr = os.date("%Y-%m-%dT%H:%M:%S"),
+      utcStr   = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    }
+  end
+
+  rpcHandlers["time:stopwatch:create"] = function(args)
+    luaSwNextId = luaSwNextId + 1
+    local id    = luaSwNextId
+    local event = "time:sw:" .. id
+    luaStopwatches[id] = {
+      elapsed   = 0,
+      running   = args and args.running == true,
+      tickRate  = (args and args.tickRate or 100) / 1000,
+      tickAccum = 0,
+      event     = event,
+    }
+    return { id = id, event = event }
+  end
+
+  rpcHandlers["time:stopwatch:control"] = function(args)
+    local sw = args and luaStopwatches[args.id]
+    if not sw then return { error = "not found" } end
+    local action = args.action
+    if     action == "start"   then sw.running = true
+    elseif action == "stop"    then sw.running = false
+    elseif action == "reset"   then sw.elapsed = 0; sw.tickAccum = 0
+    elseif action == "restart" then sw.elapsed = 0; sw.tickAccum = 0; sw.running = true
+    end
+    return { elapsed = sw.elapsed * 1000, running = sw.running }
+  end
+
+  rpcHandlers["time:stopwatch:destroy"] = function(args)
+    if args and args.id then luaStopwatches[args.id] = nil end
+  end
+
+  rpcHandlers["time:countdown:create"] = function(args)
+    luaCdNextId = luaCdNextId + 1
+    local id    = luaCdNextId
+    local dur   = (args and args.duration or 60000) / 1000
+    local event = "time:cd:" .. id
+    luaCountdowns[id] = {
+      duration  = dur,
+      remaining = dur,
+      running   = args and args.running == true,
+      complete  = false,
+      tickRate  = (args and args.tickRate or 100) / 1000,
+      tickAccum = 0,
+      event     = event,
+    }
+    return { id = id, event = event }
+  end
+
+  rpcHandlers["time:countdown:control"] = function(args)
+    local cd = args and luaCountdowns[args.id]
+    if not cd then return { error = "not found" } end
+    local action = args.action
+    if     action == "start"   then cd.running = true;  cd.complete = false
+    elseif action == "stop"    then cd.running = false
+    elseif action == "reset"   then cd.remaining = cd.duration; cd.tickAccum = 0; cd.complete = false
+    elseif action == "restart" then cd.remaining = cd.duration; cd.tickAccum = 0; cd.complete = false; cd.running = true
+    end
+    return { remaining = cd.remaining * 1000, running = cd.running }
+  end
+
+  rpcHandlers["time:countdown:destroy"] = function(args)
+    if args and args.id then luaCountdowns[args.id] = nil end
+  end
+
+  M._tickLuaTime = function(dt)
+    for _, sw in pairs(luaStopwatches) do
+      if sw.running then
+        sw.elapsed   = sw.elapsed   + dt
+        sw.tickAccum = sw.tickAccum + dt
+        while sw.tickAccum >= sw.tickRate do
+          sw.tickAccum = sw.tickAccum - sw.tickRate
+          pushEvent({ type = sw.event, payload = { elapsed = sw.elapsed * 1000, running = true } })
+        end
+      end
+    end
+    for _, cd in pairs(luaCountdowns) do
+      if cd.running and not cd.complete then
+        cd.remaining = cd.remaining - dt
+        cd.tickAccum = cd.tickAccum + dt
+        if cd.remaining <= 0 then
+          cd.remaining = 0
+          cd.running   = false
+          cd.complete  = true
+          pushEvent({ type = cd.event, payload = { remaining = 0, complete = true } })
+        else
+          while cd.tickAccum >= cd.tickRate do
+            cd.tickAccum = cd.tickAccum - cd.tickRate
+            pushEvent({ type = cd.event, payload = { remaining = cd.remaining * 1000, complete = false } })
+          end
+        end
+      end
+    end
+  end
+
+  -- ── State toggle (for useIFTTT) ──────────────────────────────────────
+  -- Reads the current value from the shared state table, flips it, pushes
+  -- a state:<key> event so useLoveState subscribers pick it up.
+
+  local sharedState = {}   -- key -> value (shadow of bridge.setState)
+
+  -- Intercept state:update commands to keep the shadow in sync.
+  -- Called from the command drain loop below.
+  M._handleStateUpdate = function(key, value)
+    sharedState[key] = value
+    pushEvent({ type = "state:" .. key, payload = value })
+  end
+
+  rpcHandlers["state:toggle"] = function(args)
+    if not args or not args.key then return { error = "missing key" } end
+    local key = args.key
+    local cur = sharedState[key]
+    local next = not cur  -- nil → true, false → true, true → false
+    sharedState[key] = next
+    pushEvent({ type = "state:" .. key, payload = next })
+    return { key = key, value = next }
+  end
+
   -- App-wide text search RPC handlers
   rpcHandlers["search:query"] = function(args)
     if not M.search then return {} end
@@ -1596,7 +1734,7 @@ function ReactJIT.init(config)
   if isRendering() and M.inspectorEnabled then
     console.init({ bridge = M.bridge, tree = M.tree, inspector = inspector })
     inspector.setConsole(console)
-    devtools.init({ inspector = inspector, console = console, tree = M.tree, bridge = M.bridge, pushEvent = pushEvent })
+    devtools.init({ inspector = inspector, console = console, tree = M.tree, bridge = M.bridge, pushEvent = pushEvent, theme = M.currentTheme })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
@@ -1834,6 +1972,7 @@ function ReactJIT.update(dt)
     -- 3. Tick Lua-side transitions, animations, and interval timers (before layout)
     if M.animate then M.animate.tick(dt) end
     if M._tickLuaTimers then M._tickLuaTimers(dt) end
+    if M._tickLuaTime   then M._tickLuaTime(dt)   end
 
     -- 4. Relayout if tree changed
     if M.tree.isDirty() then
@@ -1973,6 +2112,7 @@ function ReactJIT.update(dt)
 
   -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
   if M._tickLuaTimers then M._tickLuaTimers(dt) end
+  if M._tickLuaTime   then M._tickLuaTime(dt)   end
 
   -- 2. Tell JS to process any pending input events
   local ok, err = pcall(function() M.bridge:callGlobal("_pollAndDispatchEvents") end)
@@ -2002,6 +2142,7 @@ function ReactJIT.update(dt)
            or t == "ws:connect" or t == "ws:send" or t == "ws:close"
            or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop"
            or t == "theme:set"
+           or t == "state:update"
            or t == "settings:registry" or t == "settings:keys:set" then
           hasSpecial = true
           break
@@ -2495,8 +2636,16 @@ function ReactJIT.update(dt)
             if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
             if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
             tooltips.setTheme(M.currentTheme)
+            if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
+          end
+
+        elseif type(cmd) == "table" and cmd.type == "state:update" then
+          -- Shared state update — keep shadow in sync for state:toggle
+          local payload = cmd.payload
+          if payload and payload.key then
+            M._handleStateUpdate(payload.key, payload.value)
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:registry" then
