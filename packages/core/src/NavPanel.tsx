@@ -34,6 +34,9 @@ export function NavPanel({
   style,
 }: NavPanelProps) {
   const centered = contentAlign === 'center';
+  // Keep nav rows visually clear of the vertical scrollbar gutter.
+  const itemInsetLeft = 8;
+  const itemInsetRight = 12;
   const theme = useThemeColorsOptional();
   const colors = {
     panelBg: theme?.bgElevated ?? '#111827',
@@ -102,14 +105,14 @@ export function NavPanel({
                   key={item.id}
                   onPress={() => onSelect?.(item.id)}
                   style={(state) => ({
-                    marginLeft: 8,
-                    marginRight: 8,
+                    marginLeft: itemInsetLeft,
+                    marginRight: itemInsetRight,
                     paddingLeft: centered ? 8 : 10,
                     paddingRight: 8,
                     paddingTop: 6,
                     paddingBottom: 6,
                     borderRadius: 6,
-                    borderWidth: isActive ? 1 : 0,
+                    borderWidth: 1,
                     borderColor: isActive ? colors.itemBorderActive : 'transparent',
                     alignItems: centered ? 'center' : 'start',
                     backgroundColor: isActive
