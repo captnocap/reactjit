@@ -78,6 +78,83 @@ const BEHAVIOR_NOTES = [
 
 **Prop tuples are [name, type, icon].** Pick a relevant Lucide icon name for each prop.
 
+### SYN color palette (REQUIRED)
+
+Every story MUST define the syntax color palette at the top of the file:
+
+```tsx
+const SYN = {
+  tag: '#f38ba8',        // pink — JSX brackets, callback icons
+  component: '#89b4fa',  // blue — component names
+  prop: '#cba6f7',       // mauve — prop names and icons
+  value: '#f9e2af',      // yellow — style property names and icons
+};
+```
+
+### Rendering props (color: SYN.prop — mauve)
+
+```tsx
+<Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>PROPS</Text>
+<Box style={{ gap: 3 }}>
+  {PROPS.map(([prop, type, icon]) => (
+    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+      <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
+      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+    </Box>
+  ))}
+</Box>
+```
+
+### Rendering style properties (color: SYN.value — yellow)
+
+If the component has notable style-specific props (like Text's fontSize, color, etc.),
+separate them into a `STYLE_PROPS` constant and render with `SYN.value`:
+
+```tsx
+const STYLE_PROPS: [string, string, string][] = [
+  ['fontSize', 'number', 'ruler'],
+  ['color', 'Color', 'palette'],
+];
+
+// In the JSX:
+<Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>STYLE PROPERTIES</Text>
+<Box style={{ gap: 3 }}>
+  {STYLE_PROPS.map(([prop, type, icon]) => (
+    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.value} />
+      <Text style={{ color: SYN.value, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
+      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+    </Box>
+  ))}
+</Box>
+```
+
+### Rendering callbacks (color: SYN.tag — pink)
+
+```tsx
+<Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>CALLBACKS</Text>
+<Box style={{ gap: 3 }}>
+  {CALLBACKS.map(([name, sig, icon]) => (
+    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+      <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
+      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
+    </Box>
+  ))}
+</Box>
+```
+
+### Color summary
+
+| Section          | Icon tintColor | Text color   | Mnemonic          |
+|------------------|----------------|--------------|-------------------|
+| Props            | `SYN.prop`     | `SYN.prop`   | mauve (#cba6f7)   |
+| Style properties | `SYN.value`    | `SYN.value`  | yellow (#f9e2af)  |
+| Callbacks        | `SYN.tag`      | `SYN.tag`    | pink (#f38ba8)    |
+| Type annotations | —              | `c.muted`    | theme muted       |
+| Section headers  | —              | `c.muted`    | fontSize: 8, bold |
+
 ## Step 3: Build the preview
 
 The left panel shows a visual demonstration of the component. Use:
@@ -153,5 +230,32 @@ rjit lint                   # if inside a project context
 └─────────────────────────────────────────┘
 ```
 
-Both panels are centered (ScrollView with justifyContent/alignItems center).
+## ScrollView centering (NON-NEGOTIABLE)
+
+**BOTH** the left preview panel and right API reference panel use centered ScrollViews:
+
+```tsx
+<ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+  <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+    {/* content */}
+  </Box>
+</ScrollView>
+```
+
+This is NOT optional. Do NOT remove `justifyContent: 'center'` or `alignItems: 'center'`
+from the ScrollView style. It centers the content block vertically within the panel when
+the content is shorter than the viewport. Every Layout1 story (BoxStory, TextStory,
+LayoutStory, StyleStory) uses this pattern. If you remove it, the content floats to the
+top-left and looks misaligned.
+
+**Right panel inner Box** uses `padding: 14, gap: 10` — not 20/16.
+
 Playground mode flips center to: left=TextEditor, right=live Preview.
+
+## Header description length
+
+Keep the header description SHORT (under ~40 characters). Long descriptions cause the
+title text to wrap on narrow windows. Examples:
+- Good: `'Visual properties beyond layout.'`
+- Good: `'Root layout primitive.'`
+- Bad: `'Gradients, borders, shadows, transforms, position, overflow, transitions.'`
