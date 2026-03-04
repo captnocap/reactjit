@@ -58,6 +58,7 @@ import { LintTestStory } from './LintTestStory';
 import { SyntaxStressStory } from './SyntaxStressStory';
 import { IFTTTStory } from './IFTTTStory';
 import { TimeStory } from './TimeStory';
+import { ConvertStory } from './ConvertStory';
 import { ScrapeStory } from './ScrapeStory';
 import { EventsStory } from './EventsStory';
 import { Layout1Story } from './Layout1Story';
@@ -102,6 +103,7 @@ export const stories: StoryDef[] = [
   { id: 'semantic-terminal', title: 'Semantic Terminal', section: 'Packages', component: SemanticTerminalStory },
   { id: 'fleet', title: 'Fleet', section: 'Packages', component: FleetStory },
   { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
+  { id: 'convert', title: 'Convert', section: 'Packages', component: ConvertStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
