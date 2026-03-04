@@ -1,23 +1,22 @@
 /**
- * Time Story — @reactjit/time package demo.
+ * Time — Package documentation page (Layout2 zigzag narrative).
  *
  * Showcases: Clock, Stopwatch, Countdown, Ticker widgets + hooks + utilities.
+ * Live demos sit on the "code" side of zigzag bands — widgets are visual,
+ * so showing them running is better than showing a CodeBlock.
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { StoryPage, StorySection } from './_shared/StoryScaffold';
 import {
   Clock,
   Stopwatch,
   Countdown,
   Ticker,
   useTime,
-  useLuaTime,
   useStopwatch,
   useCountdown,
-  useOnTime,
   useInterval,
   formatDuration,
   formatDurationLong,
@@ -32,412 +31,526 @@ import {
   isTomorrow,
 } from '../../../packages/time/src';
 
-// ── Palette ───────────────────────────────────────────────────────────────────
+// ── Palette ──────────────────────────────────────────────
 
 const C = {
-  blue:   '#60a5fa',
-  green:  '#4ade80',
+  accent: '#8b5cf6',
+  accentDim: 'rgba(139, 92, 246, 0.12)',
+  callout: 'rgba(59, 130, 246, 0.08)',
+  calloutBorder: 'rgba(59, 130, 246, 0.25)',
+  blue: '#60a5fa',
+  green: '#4ade80',
   orange: '#fb923c',
-  purple: '#a78bfa',
-  red:    '#f87171',
-  teal:   '#2dd4bf',
-  dim:    'rgba(255,255,255,0.12)',
+  teal: '#2dd4bf',
+  red: '#f87171',
+  dim: 'rgba(255,255,255,0.12)',
 };
 
-// ── Demo: Wall clock ──────────────────────────────────────────────────────────
+// ── Static code blocks (hoisted — never recreated) ──────
 
-function ClockDemo() {
-  const c   = useThemeColors();
-  const now = useTime(1000);
+const INSTALL_CODE = `import {
+  Clock, Stopwatch, Countdown, Ticker,
+  useTime, useStopwatch, useCountdown,
+  useOnTime, useInterval,
+  formatDuration, relativeTime, parseDuration,
+} from '@reactjit/time'`;
 
-  return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'useTime(1000) — updates every second via JS setInterval'}
-      </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 6 }}>
-        <Text style={{ fontSize: 28, fontWeight: 'bold', color: C.blue, letterSpacing: 2 }}>
-          {formatTimeOfDay(now)}
-        </Text>
-        <Text style={{ fontSize: 13, color: c.text }}>
-          {formatDate(now, { intl: { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' } })}
-        </Text>
-        <Text style={{ fontSize: 11, color: c.muted }}>
-          {`Unix ms: ${now}`}
-        </Text>
-      </Box>
-    </Box>
-  );
-}
+const WIDGET_CODE = `<Clock />
+<Clock format="datetime" timezone="Asia/Tokyo" />
+<Stopwatch autoStart showMs />
+<Countdown duration={30_000} autoStart showBar />
+<Ticker interval={500} onTick={() => step()} />`;
 
-// ── Demo: Lua wall clock ──────────────────────────────────────────────────────
+const STOPWATCH_CODE = `const sw = useStopwatch({ tickRate: 50 })
 
-function LuaClockDemo() {
+// sw.elapsed   — ms elapsed
+// sw.running   — boolean
+// sw.start()  sw.stop()  sw.reset()  sw.restart()
+
+<Text>{formatDuration(sw.elapsed, { ms: true })}</Text>`;
+
+const COUNTDOWN_CODE = `const cd = useCountdown(10_000, {
+  tickRate: 50,
+  onComplete: () => celebrate(),
+})
+
+// cd.remaining  cd.progress (0–1)  cd.complete
+<Text>{formatDuration(cd.remaining)}</Text>`;
+
+const SCHEDULING_CODE = `// Fire once after 2 seconds — frame-perfect in Love2D
+useOnTime(() => {
+  playSound('ding')
+}, 2000, [armed])
+
+// Repeat every 500ms — Lua dt accumulation, not JS setInterval
+useInterval(() => {
+  setTicks(n => n + 1)
+}, 500)`;
+
+const UTILS_CODE = `formatDuration(3_723_456)           // "1:02:03"
+formatDuration(3_723_456, {ms:true}) // "1:02:03.456"
+formatDurationLong(3_723_000)        // "1h 2m 3s"
+relativeTime(Date.now() - 90_000)    // "2 minutes ago"
+parseDuration("1h30m")               // 5400000
+isToday(Date.now())                  // true
+addDays(Date.now(), -1)              // yesterday's timestamp`;
+
+// ── Helpers ──────────────────────────────────────────────
+
+function Divider() {
   const c = useThemeColors();
-  const t = useLuaTime(500);
+  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+}
 
+function SectionLabel({ icon, children }: { icon: string; children: string }) {
+  const c = useThemeColors();
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'useLuaTime() — polls love.timer.getTime() + os.time() via RPC'}
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        {children}
       </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 6 }}>
-        {t ? (
-          <>
-            <Box style={{ flexDirection: 'row', gap: 24 }}>
-              <Box style={{ gap: 2 }}>
-                <Text style={{ fontSize: 10, color: c.muted }}>{'LOCAL'}</Text>
-                <Text style={{ fontSize: 14, color: C.teal }}>{t.localStr}</Text>
-              </Box>
-              <Box style={{ gap: 2 }}>
-                <Text style={{ fontSize: 10, color: c.muted }}>{'UTC'}</Text>
-                <Text style={{ fontSize: 14, color: C.teal }}>{t.utcStr}</Text>
-              </Box>
-            </Box>
-            <Text style={{ fontSize: 11, color: c.muted }}>
-              {`Monotonic: ${t.mono.toFixed(3)}s  |  Epoch: ${t.epoch}ms`}
-            </Text>
-          </>
-        ) : (
-          <Text style={{ fontSize: 13, color: c.muted }}>{'Connecting to Lua...'}</Text>
-        )}
-      </Box>
     </Box>
   );
 }
 
-// ── Demo: Stopwatch ───────────────────────────────────────────────────────────
+// ── Inline demos ─────────────────────────────────────────
+
+function WorldClockDemo() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ gap: 10 }}>
+      <Clock textStyle={{ fontSize: 22, color: C.blue, fontWeight: 'bold', letterSpacing: 2 }} />
+      <Clock format="datetime" textStyle={{ fontSize: 11, color: c.text }} />
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'Tokyo'}</Text>
+          <Clock timezone="Asia/Tokyo" textStyle={{ fontSize: 12, color: C.teal }} />
+        </Box>
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'New York'}</Text>
+          <Clock timezone="America/New_York" textStyle={{ fontSize: 12, color: C.teal }} />
+        </Box>
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'London'}</Text>
+          <Clock timezone="Europe/London" textStyle={{ fontSize: 12, color: C.teal }} />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
 
 function StopwatchDemo() {
-  const c  = useThemeColors();
+  const c = useThemeColors();
   const sw = useStopwatch({ tickRate: 50 });
 
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'useStopwatch() — Lua dt accumulation, 50ms update rate'}
+    <Box style={{ gap: 10 }}>
+      <Text style={{ fontSize: 28, fontWeight: 'bold', color: sw.running ? C.green : c.text, letterSpacing: 2 }}>
+        {formatDuration(sw.elapsed, { ms: true })}
       </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 12 }}>
-        <Text style={{ fontSize: 36, fontWeight: 'bold', color: sw.running ? C.green : c.text, letterSpacing: 2 }}>
-          {formatDuration(sw.elapsed, { ms: true })}
-        </Text>
-        <Text style={{ fontSize: 11, color: c.muted }}>
-          {formatDurationLong(sw.elapsed)}
-        </Text>
-        <Box style={{ flexDirection: 'row', gap: 8 }}>
-          {!sw.running ? (
-            <Pressable onPress={sw.start} style={{ backgroundColor: C.green, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-              <Text style={{ fontSize: 12, color: '#000', fontWeight: 'bold' }}>{'Start'}</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={sw.stop} style={{ backgroundColor: C.orange, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-              <Text style={{ fontSize: 12, color: '#000', fontWeight: 'bold' }}>{'Stop'}</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={sw.reset} style={{ backgroundColor: C.dim, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-            <Text style={{ fontSize: 12, color: c.text }}>{'Reset'}</Text>
+      <Text style={{ fontSize: 9, color: c.muted }}>{formatDurationLong(sw.elapsed)}</Text>
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        {!sw.running ? (
+          <Pressable onPress={sw.start} style={{ backgroundColor: C.green, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
+            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Start'}</Text>
           </Pressable>
-          <Pressable onPress={sw.restart} style={{ backgroundColor: C.blue, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-            <Text style={{ fontSize: 12, color: '#000', fontWeight: 'bold' }}>{'Restart'}</Text>
+        ) : (
+          <Pressable onPress={sw.stop} style={{ backgroundColor: C.orange, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
+            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Stop'}</Text>
           </Pressable>
-        </Box>
+        )}
+        <Pressable onPress={sw.reset} style={{ backgroundColor: C.dim, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
+          <Text style={{ fontSize: 10, color: c.text }}>{'Reset'}</Text>
+        </Pressable>
       </Box>
     </Box>
   );
 }
-
-// ── Demo: Countdown ───────────────────────────────────────────────────────────
 
 function CountdownDemo() {
-  const c        = useThemeColors();
-  const duration = 10_000;
-  const cd       = useCountdown(duration, { tickRate: 50, onComplete: () => {} });
-
-  const barColor = cd.complete
-    ? C.green
-    : cd.remaining < 3000 ? C.red : C.blue;
+  const c = useThemeColors();
+  const cd = useCountdown(15_000, { tickRate: 50 });
+  const barColor = cd.complete ? C.green : cd.remaining < 3000 ? C.red : C.blue;
 
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'useCountdown(10_000) — Lua countdown, fires onComplete at zero'}
+    <Box style={{ gap: 10 }}>
+      <Text style={{ fontSize: 24, fontWeight: 'bold', color: barColor, letterSpacing: 2 }}>
+        {cd.complete ? 'Done!' : formatDuration(cd.remaining, { ms: true })}
       </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 12 }}>
-        <Text style={{ fontSize: 32, fontWeight: 'bold', color: barColor, letterSpacing: 2 }}>
-          {cd.complete ? 'Done!' : formatDuration(cd.remaining, { ms: true })}
-        </Text>
-
-        {/* Progress bar */}
-        <Box style={{ width: '100%', height: 6, backgroundColor: C.dim, borderRadius: 3 }}>
-          <Box style={{
-            width: `${(1 - cd.progress) * 100}%`,
-            height: 6,
-            backgroundColor: barColor,
-            borderRadius: 3,
-          }} />
-        </Box>
-
-        <Text style={{ fontSize: 11, color: c.muted }}>
-          {`${(cd.progress * 100).toFixed(1)}% elapsed`}
-        </Text>
-
-        <Box style={{ flexDirection: 'row', gap: 8 }}>
-          {!cd.running ? (
-            <Pressable onPress={cd.start} style={{ backgroundColor: C.green, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-              <Text style={{ fontSize: 12, color: '#000', fontWeight: 'bold' }}>{'Start'}</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={cd.stop} style={{ backgroundColor: C.orange, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-              <Text style={{ fontSize: 12, color: '#000', fontWeight: 'bold' }}>{'Pause'}</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={cd.restart} style={{ backgroundColor: C.blue, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 14, paddingRight: 14 }}>
-            <Text style={{ fontSize: 12, color: '#000', fontWeight: 'bold' }}>{'Restart'}</Text>
+      <Box style={{ width: '100%', height: 4, backgroundColor: C.dim, borderRadius: 2 }}>
+        <Box style={{
+          width: `${(1 - cd.progress) * 100}%`,
+          height: 4,
+          backgroundColor: barColor,
+          borderRadius: 2,
+        }} />
+      </Box>
+      <Text style={{ fontSize: 9, color: c.muted }}>
+        {`${(cd.progress * 100).toFixed(1)}% elapsed`}
+      </Text>
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        {!cd.running ? (
+          <Pressable onPress={cd.start} style={{ backgroundColor: C.green, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
+            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Start'}</Text>
           </Pressable>
-        </Box>
+        ) : (
+          <Pressable onPress={cd.stop} style={{ backgroundColor: C.orange, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
+            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Pause'}</Text>
+          </Pressable>
+        )}
+        <Pressable onPress={cd.restart} style={{ backgroundColor: C.blue, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
+          <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Restart'}</Text>
+        </Pressable>
       </Box>
     </Box>
   );
 }
 
-// ── Demo: useOnTime precision scheduler ───────────────────────────────────────
-
-function OnTimeDemo() {
-  const c               = useThemeColors();
-  const [log, setLog]   = useState<string[]>([]);
-  const [armed, setArmed] = useState(false);
-  const [delay, setDelay] = useState(2000);
-
-  const addLog = (msg: string) =>
-    setLog(prev => [`${formatTimeOfDay(Date.now())} ${msg}`, ...prev.slice(0, 7)]);
-
-  useOnTime(() => {
-    if (!armed) return;
-    setArmed(false);
-    addLog(`Fired! (scheduled ${delay}ms ago via Lua timer)`);
-  }, armed ? delay : 0, [armed, delay]);
-
-  const schedule = (ms: number) => {
-    setDelay(ms);
-    setArmed(true);
-    addLog(`Scheduled in ${ms}ms...`);
-  };
+function TickerDemo() {
+  const c = useThemeColors();
+  const [ticks, setTicks] = useState(0);
 
   return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'useOnTime(fn, delayMs) — fires in exact Love2D frame, not JS event loop'}
-      </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 10 }}>
-        <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          {[500, 1000, 2000, 5000].map(ms => (
-            <Pressable
-              key={ms}
-              onPress={() => schedule(ms)}
-              style={{ backgroundColor: armed && delay === ms ? C.purple : C.dim, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 12, paddingRight: 12 }}
-            >
-              <Text style={{ fontSize: 12, color: c.text }}>{`+${ms}ms`}</Text>
-            </Pressable>
-          ))}
-        </Box>
-        {log.length > 0 ? (
-          <Box style={{ gap: 3 }}>
-            {log.map((entry, i) => (
-              <Text key={i} style={{ fontSize: 11, color: i === 0 ? C.green : c.muted }}>
-                {entry}
-              </Text>
-            ))}
-          </Box>
-        ) : (
-          <Text style={{ fontSize: 11, color: c.muted }}>{'Click a button to schedule a callback.'}</Text>
-        )}
+    <Box style={{ gap: 6 }}>
+      <Ticker interval={500} onTick={() => setTicks(n => n + 1)} />
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ticks % 2 === 0 ? C.accent : c.muted }} />
+        <Text style={{ fontSize: 14, fontWeight: 'bold', color: C.accent }}>{String(ticks)}</Text>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'ticks @ 500ms'}</Text>
       </Box>
     </Box>
   );
 }
-
-// ── Demo: useInterval ─────────────────────────────────────────────────────────
 
 function IntervalDemo() {
-  const c     = useThemeColors();
-  const [ticks, setTicks] = useState(0);
-  const [rate,  setRate]  = useState(1000);
+  const c = useThemeColors();
+  const [count, setCount] = useState(0);
+  const [rate, setRate] = useState(1000);
 
-  useInterval(() => setTicks(n => n + 1), rate);
+  useInterval(() => setCount(n => n + 1), rate);
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'useInterval(fn, ms) — Lua-driven repeating callback'}
-      </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 10 }}>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-          <Text style={{ fontSize: 28, fontWeight: 'bold', color: C.purple }}>{String(ticks)}</Text>
-          <Text style={{ fontSize: 12, color: c.muted }}>{'ticks'}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 8 }}>
-          {[250, 500, 1000, 2000].map(ms => (
-            <Pressable
-              key={ms}
-              onPress={() => setRate(ms)}
-              style={{ backgroundColor: rate === ms ? C.purple : C.dim, borderRadius: 6, paddingTop: 4, paddingBottom: 4, paddingLeft: 10, paddingRight: 10 }}
-            >
-              <Text style={{ fontSize: 11, color: rate === ms ? '#000' : c.text }}>{`${ms}ms`}</Text>
-            </Pressable>
-          ))}
-        </Box>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.accent }}>{String(count)}</Text>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'ticks'}</Text>
       </Box>
-    </Box>
-  );
-}
-
-// ── Demo: Utilities ───────────────────────────────────────────────────────────
-
-function UtilsDemo() {
-  const c   = useThemeColors();
-  const now = nowMs();
-
-  const samples: [string, string][] = [
-    ['relativeTime(now - 5_000)',     relativeTime(now - 5_000)],
-    ['relativeTime(now - 90_000)',    relativeTime(now - 90_000)],
-    ['relativeTime(now + 300_000)',   relativeTime(now + 300_000)],
-    ['relativeTime(now - 3_600_000)', relativeTime(now - 3_600_000)],
-    ['formatDuration(3_723_456)',     formatDuration(3_723_456)],
-    ['formatDuration(3_723_456, {ms:true})', formatDuration(3_723_456, { ms: true })],
-    ['formatDurationLong(3_723_000)', formatDurationLong(3_723_000)],
-    ['parseDuration("1h30m")',        String(parseDuration('1h30m'))],
-    ['parseDuration("1:30:00")',      String(parseDuration('1:30:00'))],
-    ['isToday(now)',                  String(isToday(now))],
-    ['isYesterday(addDays(now,-1))',  String(isYesterday(addDays(now, -1)))],
-    ['isTomorrow(addDays(now,+1))',   String(isTomorrow(addDays(now, +1)))],
-    ['formatDate(now)',               formatDate(now)],
-    ['formatDate(now, {timezone: "Asia/Tokyo"})',
-      formatDate(now, { timezone: 'Asia/Tokyo' })],
-  ];
-
-  return (
-    <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'Pure utility functions — no hooks, no bridge, just Date math'}
-      </Text>
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 4 }}>
-        {samples.map(([expr, result]) => (
-          <Box key={expr} style={{ flexDirection: 'row', gap: 12, paddingTop: 3, paddingBottom: 3 }}>
-            <Text style={{ fontSize: 10, color: c.muted, flexShrink: 1 }}>{expr}</Text>
-            <Text style={{ fontSize: 10, color: C.teal }}>{result}</Text>
-          </Box>
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        {[250, 500, 1000, 2000].map(ms => (
+          <Pressable
+            key={ms}
+            onPress={() => setRate(ms)}
+            style={{ backgroundColor: rate === ms ? C.accent : C.dim, borderRadius: 5, paddingTop: 4, paddingBottom: 4, paddingLeft: 8, paddingRight: 8 }}
+          >
+            <Text style={{ fontSize: 9, color: rate === ms ? '#000' : c.text }}>{`${ms}ms`}</Text>
+          </Pressable>
         ))}
       </Box>
     </Box>
   );
 }
 
-// ── Widget demos ──────────────────────────────────────────────────────────────
-
-function WidgetsDemo() {
+function UtilsDemo() {
   const c = useThemeColors();
-  const [tickCount, setTickCount] = useState(0);
+  const now = nowMs();
+
+  const samples: [string, string][] = [
+    ['relativeTime(now - 90s)', relativeTime(now - 90_000)],
+    ['formatDuration(3_723_456)', formatDuration(3_723_456)],
+    ['formatDurationLong(3_723_000)', formatDurationLong(3_723_000)],
+    ['parseDuration("1h30m")', String(parseDuration('1h30m'))],
+    ['isToday(now)', String(isToday(now))],
+    ['isYesterday(now - 1d)', String(isYesterday(addDays(now, -1)))],
+    ['isTomorrow(now + 1d)', String(isTomorrow(addDays(now, +1)))],
+    ['formatDate(now)', formatDate(now)],
+  ];
 
   return (
-    <Box style={{ gap: 16 }}>
-      <Text style={{ fontSize: 11, color: c.muted }}>
-        {'Drop-in widgets — no hooks, no wiring. One import, one line.'}
-      </Text>
-
-      {/* Clock variants */}
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 10 }}>
-        <Label c={c}>{'<Clock />'}</Label>
-        <Clock textStyle={{ fontSize: 22, color: C.blue }} />
-
-        <Label c={c}>{'<Clock format="datetime" />'}</Label>
-        <Clock format="datetime" textStyle={{ fontSize: 13, color: c.text }} />
-
-        <Label c={c}>{'<Clock timezone="Asia/Tokyo" /> + <Clock timezone="America/New_York" />'}</Label>
-        <Box style={{ flexDirection: 'row', gap: 24 }}>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 9, color: c.muted }}>{'Tokyo'}</Text>
-            <Clock timezone="Asia/Tokyo" textStyle={{ fontSize: 14, color: C.teal }} />
-          </Box>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 9, color: c.muted }}>{'New York'}</Text>
-            <Clock timezone="America/New_York" textStyle={{ fontSize: 14, color: C.teal }} />
-          </Box>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 9, color: c.muted }}>{'London'}</Text>
-            <Clock timezone="Europe/London" textStyle={{ fontSize: 14, color: C.teal }} />
-          </Box>
+    <Box style={{ gap: 3 }}>
+      {samples.map(([expr, result]) => (
+        <Box key={expr} style={{ flexDirection: 'row', gap: 10, paddingTop: 2, paddingBottom: 2 }}>
+          <Text style={{ fontSize: 9, color: c.muted, flexShrink: 1 }}>{expr}</Text>
+          <Text style={{ fontSize: 9, color: C.teal, fontWeight: 'bold' }}>{result}</Text>
         </Box>
-      </Box>
-
-      {/* Stopwatch */}
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 6 }}>
-        <Label c={c}>{'<Stopwatch autoStart showMs />'}</Label>
-        <Stopwatch autoStart showMs textStyle={{ fontSize: 22, color: C.green }} />
-      </Box>
-
-      {/* Countdown */}
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 6 }}>
-        <Label c={c}>{'<Countdown duration={20_000} autoStart showBar />'}</Label>
-        <Countdown duration={20_000} autoStart showBar textStyle={{ fontSize: 22, color: C.orange }} />
-      </Box>
-
-      {/* Ticker */}
-      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 6 }}>
-        <Label c={c}>{'<Ticker interval={500} onTick={step} />  — invisible, just ticks'}</Label>
-        <Ticker interval={500} onTick={() => setTickCount(n => n + 1)} />
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tickCount % 2 === 0 ? C.purple : c.muted }} />
-          <Text style={{ fontSize: 12, color: c.text }}>{`${tickCount} ticks`}</Text>
-        </Box>
-      </Box>
+      ))}
     </Box>
   );
 }
 
-function Label({ c, children }: { c: any; children: string }) {
-  return <Text style={{ fontSize: 10, color: c.muted }}>{children}</Text>;
-}
-
-// ── Story root ────────────────────────────────────────────────────────────────
+// ── TimeStory ────────────────────────────────────────────
 
 export function TimeStory() {
+  const c = useThemeColors();
+
   return (
-    <StoryPage
-      title="Time"
-      subtitle="Stopwatches, countdowns, precision scheduling, date utilities, and timezone conversions — all frame-accurate."
-      packageName="@reactjit/time"
-    >
-      <StorySection title="Widgets">
-        <WidgetsDemo />
-      </StorySection>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
 
-      <StorySection title="Wall Clock — hook">
-        <ClockDemo />
-      </StorySection>
+      {/* ── Header ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 14,
+      }}>
+        <Image src="clock" style={{ width: 18, height: 18 }} tintColor={C.accent} />
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          {'Time'}
+        </Text>
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/time'}</Text>
+        </Box>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'Clocks, stopwatches, countdowns, scheduling, and date utilities'}
+        </Text>
+      </Box>
 
-      <StorySection title="Lua Wall Clock">
-        <LuaClockDemo />
-      </StorySection>
+      {/* ── Center ── */}
+      <ScrollView style={{ flexGrow: 1 }}>
 
-      <StorySection title="Stopwatch — hook">
-        <StopwatchDemo />
-      </StorySection>
+        {/* ── Hero band ── */}
+        <Box style={{
+          borderLeftWidth: 3,
+          borderColor: C.accent,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 24,
+          paddingBottom: 24,
+          gap: 8,
+        }}>
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+            {'Frame-accurate time for everything.'}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>
+            {'Drop-in widgets for clocks and timers. Hooks that run in Lua\u2019s update loop for precision scheduling. Pure utilities for formatting, parsing, and date math \u2014 no bridge required.'}
+          </Text>
+        </Box>
 
-      <StorySection title="Countdown — hook">
-        <CountdownDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection title="useOnTime — precision scheduler">
-        <OnTimeDemo />
-      </StorySection>
+        {/* ── Band: text | code — Install ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'start',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Everything in one import \u2014 widgets, hooks, and pure utilities. Pick what you need.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+        </Box>
 
-      <StorySection title="useInterval — repeating callback">
-        <IntervalDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection title="Utility Functions">
-        <UtilsDemo />
-      </StorySection>
-    </StoryPage>
+        {/* ── Band: demo | text — Widgets (zigzag) ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'start',
+        }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 10 }}>
+              <WorldClockDemo />
+              <Box style={{ height: 1, backgroundColor: c.border }} />
+              <TickerDemo />
+            </Box>
+          </Box>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="clock">{'WIDGETS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'One-liner components \u2014 no hooks, no wiring. Clock shows local or any IANA timezone. Stopwatch and Countdown have built-in controls. Ticker is invisible \u2014 just fires callbacks.'}
+            </Text>
+            <Box style={{ paddingTop: 4 }}>
+              <CodeBlock language="tsx" fontSize={8} code={WIDGET_CODE} />
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: text | demo — Stopwatch ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'start',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="timer">{'STOPWATCH'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Lua-driven elapsed timer with start, stop, reset, and restart. Accumulates dt in the Love2D update loop \u2014 immune to JS garbage collection pauses.'}
+            </Text>
+            <Box style={{ paddingTop: 4 }}>
+              <CodeBlock language="tsx" fontSize={8} code={STOPWATCH_CODE} />
+            </Box>
+          </Box>
+          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14 }}>
+              <StopwatchDemo />
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout band ── */}
+        <Box style={{
+          backgroundColor: C.callout,
+          borderLeftWidth: 3,
+          borderColor: C.calloutBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'All timing hooks (useStopwatch, useCountdown, useOnTime, useInterval) run in Lua\u2019s update(dt) loop. They fire in the exact Love2D frame that crosses the threshold \u2014 no JS event-loop jitter.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: demo | text — Countdown (zigzag) ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'start',
+        }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14 }}>
+              <CountdownDemo />
+            </Box>
+          </Box>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="hourglass">{'COUNTDOWN'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Count down from a duration in milliseconds. Tracks remaining time, progress (0\u20131), and fires onComplete when it hits zero. Progress bar turns red below 3 seconds.'}
+            </Text>
+            <Box style={{ paddingTop: 4 }}>
+              <CodeBlock language="tsx" fontSize={8} code={COUNTDOWN_CODE} />
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: text | demo — Scheduling ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'start',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="zap">{'SCHEDULING'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'useOnTime fires once after a delay. useInterval repeats. Both run frame-perfect in Lua \u2014 not the JS event loop. Use for audio cues, game events, or data polling.'}
+            </Text>
+            <Box style={{ paddingTop: 4 }}>
+              <CodeBlock language="tsx" fontSize={8} code={SCHEDULING_CODE} />
+            </Box>
+          </Box>
+          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 12 }}>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'useInterval \u2014 pick a rate:'}</Text>
+              <IntervalDemo />
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: demo | text — Utilities (zigzag) ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 24,
+          gap: 24,
+          alignItems: 'start',
+        }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12 }}>
+              <UtilsDemo />
+            </Box>
+          </Box>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+            <SectionLabel icon="code">{'UTILITIES'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Pure functions \u2014 no hooks, no bridge. Format durations, parse time strings, do date arithmetic, check day boundaries. Works anywhere.'}
+            </Text>
+            <Box style={{ paddingTop: 4 }}>
+              <CodeBlock language="tsx" fontSize={8} code={UTILS_CODE} />
+            </Box>
+          </Box>
+        </Box>
+
+      </ScrollView>
+
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="clock" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Time'}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+      </Box>
+
+    </Box>
   );
 }

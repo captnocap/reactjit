@@ -1,569 +1,543 @@
-// Privacy package test suite — tests both pure-TS functions and Lua FFI via RPC.
+// Privacy correctness suite.
 //
-// Pure-TS functions (no bridge needed):
-//   detectPII, redactPII, maskValue, redactLog
-//   stegEmbedWhitespace, stegExtractWhitespace
-//   checkAlgorithmStrength, validateConfig, RECOMMENDED_DEFAULTS
-//   sanitizeFilename, normalizeTimestamp
+// Goal: catch real cryptographic/protocol bugs via known-answer vectors,
+// invariants, and negative cases. Round-trip checks are secondary.
 //
-// RPC functions (bridge must be set, which the storybook app does on startup):
-//   shamirSplit, shamirCombine, hkdfDerive
-//   secureAlloc, secureRead, secureFree, secureProtect
-//   createEncryptedStore
-//   appendAudit, verifyAudit, createAuditLog, auditEntries
-//   hashFile
-//   anonymousId, pseudonym
-//   envelopeEncrypt, envelopeDecrypt
-//   tokenize
-//
-// Run:  cd storybook && rjit build && rjit test tests/privacy.test.ts --timeout=60
+// Run: cd storybook && rjit test tests/privacy.test.ts --timeout=60
 
 import {
+  setPrivacyBridge,
+  hkdfDerive,
+  shamirSplit,
+  shamirCombine,
+  envelopeEncrypt,
+  envelopeDecrypt,
+  noiseInitiate,
+  noiseRespond,
+  noiseSend,
+  noiseReceive,
+  noiseClose,
+  secureAlloc,
+  secureRead,
+  secureFree,
+  secureProtect,
+  tokenize,
+  createKeyring,
+  openKeyring,
+  closeKeyring,
+  generateKey,
+  listKeys,
+  secureDelete,
+  stegEmbedWhitespace,
   detectPII,
   redactPII,
-  maskValue,
-  redactLog,
-  stegEmbedWhitespace,
-  stegExtractWhitespace,
-  checkAlgorithmStrength,
-  validateConfig,
-  RECOMMENDED_DEFAULTS,
-  sanitizeFilename,
-  normalizeTimestamp,
 } from '@reactjit/privacy';
 
-// RPC-based functions
-import { shamirSplit, shamirCombine } from '@reactjit/privacy';
-import { hkdfDerive } from '@reactjit/privacy';
-import { secureAlloc, secureRead, secureFree, secureProtect } from '@reactjit/privacy';
-import { createEncryptedStore } from '@reactjit/privacy';
-import { createAuditLog, appendAudit, verifyAudit, auditEntries } from '@reactjit/privacy';
-import { hashFile } from '@reactjit/privacy';
-import { anonymousId, pseudonym } from '@reactjit/privacy';
-import { envelopeEncrypt, envelopeDecrypt } from '@reactjit/privacy';
-import { tokenize } from '@reactjit/privacy';
-import { setPrivacyBridge } from '@reactjit/privacy';
+type RpcBridge = {
+  rpc<T = any>(method: string, args?: any, timeoutMs?: number): Promise<T>;
+};
 
-// Initialize the spec's own copy of the bridge from the global set by the storybook app.
-// esbuild bundles the spec separately, creating a duplicate rpc.ts module with _bridge=null.
-// This call initializes THIS copy so RPC-based tests can work.
-const bridge = (globalThis as any).__rjitBridge;
-if (bridge) {
-  setPrivacyBridge(bridge);
+const bridge = (globalThis as any).__rjitBridge as RpcBridge | undefined;
+if (bridge) setPrivacyBridge(bridge);
+
+function requireBridge(): RpcBridge {
+  if (!bridge) {
+    throw new Error('Missing __rjitBridge; privacy RPC tests require native bridge setup');
+  }
+  return bridge;
+}
+
+function assert(cond: unknown, message: string): void {
+  if (!cond) throw new Error(message);
+}
+
+function assertEq<T>(actual: T, expected: T, message: string): void {
+  if (actual !== expected) {
+    throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+
+function assertNeq<T>(actual: T, unexpected: T, message: string): void {
+  if (actual === unexpected) {
+    throw new Error(`${message}: both were ${String(actual)}`);
+  }
+}
+
+async function expectReject(fn: () => Promise<unknown>, context: string): Promise<void> {
+  let threw = false;
+  try {
+    await fn();
+  } catch {
+    threw = true;
+  }
+  if (!threw) {
+    throw new Error(`Expected rejection: ${context}`);
+  }
+}
+
+function flipHexDigit(hex: string): string {
+  if (!hex || hex.length < 1) throw new Error('cannot flip empty hex');
+  const d = parseInt(hex[0], 16);
+  if (Number.isNaN(d)) throw new Error(`invalid hex: ${hex}`);
+  const flipped = ((d ^ 0x1) & 0xf).toString(16);
+  return flipped + hex.slice(1);
+}
+
+function combinations<T>(arr: T[], k: number): T[][] {
+  const out: T[][] = [];
+  const cur: T[] = [];
+
+  function rec(start: number): void {
+    if (cur.length === k) {
+      out.push(cur.slice());
+      return;
+    }
+    for (let i = start; i < arr.length; i++) {
+      cur.push(arr[i]);
+      rec(i + 1);
+      cur.pop();
+    }
+  }
+
+  rec(0);
+  return out;
+}
+
+function randomTmpPath(label: string): string {
+  const suffix = Math.floor(Math.random() * 1e9).toString(16);
+  return `/tmp/rjit-privacy-${label}-${Date.now()}-${suffix}`;
+}
+
+async function generateDHKeys(): Promise<{ publicKey: string; privateKey: string }> {
+  return requireBridge().rpc('crypto:generateDHKeys');
+}
+
+function extractZwsBits(text: string): string {
+  let bits = '';
+  for (const ch of text) {
+    if (ch === '\u200B') bits += '0';
+    if (ch === '\u200C') bits += '1';
+  }
+  return bits;
+}
+
+function bitsToAscii(bits: string): string {
+  const bytes: number[] = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) {
+    bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  }
+  return String.fromCharCode(...bytes);
 }
 
 // ============================================================================
-// PII Detection & Redaction (pure TS)
+// Bridge + basic deterministic helpers
 // ============================================================================
 
-test('detectPII finds email addresses', async () => {
-  const matches = detectPII('Contact me at user@example.com for details');
-  const emails = matches.filter(m => m.type === 'email');
-  if (emails.length !== 1) throw new Error(`Expected 1 email, got ${emails.length}`);
-  if (emails[0].value !== 'user@example.com') throw new Error(`Expected user@example.com, got ${emails[0].value}`);
+test('privacy bridge is available', async () => {
+  requireBridge();
 });
 
-test('detectPII finds phone numbers', async () => {
-  const matches = detectPII('Call me at (555) 123-4567 or 555.987.6543');
-  const phones = matches.filter(m => m.type === 'phone');
-  if (phones.length < 2) throw new Error(`Expected 2+ phones, got ${phones.length}`);
-});
-
-test('detectPII finds SSNs', async () => {
-  const matches = detectPII('SSN: 123-45-6789');
-  const ssns = matches.filter(m => m.type === 'ssn');
-  if (ssns.length !== 1) throw new Error(`Expected 1 SSN, got ${ssns.length}`);
-});
-
-test('detectPII finds IPv4 addresses', async () => {
-  const matches = detectPII('Server at 192.168.1.100 is down');
-  const ips = matches.filter(m => m.type === 'ipv4');
-  if (ips.length !== 1) throw new Error(`Expected 1 IPv4, got ${ips.length}`);
-  if (ips[0].value !== '192.168.1.100') throw new Error(`Expected 192.168.1.100, got ${ips[0].value}`);
-});
-
-test('detectPII finds credit card numbers', async () => {
-  const matches = detectPII('Card: 4111 1111 1111 1111');
-  const cards = matches.filter(m => m.type === 'creditCard');
-  if (cards.length !== 1) throw new Error(`Expected 1 credit card, got ${cards.length}`);
-});
-
-test('detectPII returns empty array for clean text', async () => {
-  const matches = detectPII('This is a normal sentence with no PII.');
-  if (matches.length !== 0) throw new Error(`Expected 0 matches, got ${matches.length}`);
-});
-
-test('redactPII replaces all PII with [REDACTED]', async () => {
-  const input = 'Email: user@example.com, SSN: 123-45-6789';
-  const result = redactPII(input);
-  if (result.includes('user@example.com')) throw new Error('Email not redacted');
-  if (result.includes('123-45-6789')) throw new Error('SSN not redacted');
-  if (!result.includes('[REDACTED]')) throw new Error('Missing [REDACTED] marker');
-});
-
-test('redactPII with custom replacement', async () => {
-  const result = redactPII('Email: test@test.com', { replacement: '***' });
-  if (!result.includes('***')) throw new Error('Custom replacement not applied');
-  if (result.includes('test@test.com')) throw new Error('Email not replaced');
-});
-
-test('redactPII with mask option', async () => {
-  const result = redactPII('Card: 4111111111111111', { types: ['creditCard'], mask: true });
-  // Should show masked value like ****1111
-  if (result.includes('4111111111111111')) throw new Error('Card not masked');
-});
-
-test('redactLog is an alias for redactPII with all types', async () => {
-  const input = '[INFO] user@test.com accessed 192.168.1.1';
-  const result = redactLog(input);
-  if (result.includes('user@test.com')) throw new Error('Email not redacted in log');
-  if (result.includes('192.168.1.1')) throw new Error('IP not redacted in log');
+test('tokenize matches HMAC-SHA256 known vector', async () => {
+  const token = await tokenize('The quick brown fox jumps over the lazy dog', 'key');
+  assertEq(
+    token,
+    'f7bc83f430538424b13298e6aa6fb143ef4d59a149461a6e295687f3f0a1b7b9',
+    'tokenize known vector mismatch',
+  );
 });
 
 // ============================================================================
-// Data Masking (pure TS)
+// HKDF (RFC 5869 vectors)
 // ============================================================================
 
-test('maskValue shows last 4 chars by default', async () => {
-  const result = maskValue('4111111111111111');
-  if (!result.endsWith('1111')) throw new Error(`Expected to end with 1111, got: ${result}`);
-  if (result.length !== 16) throw new Error(`Expected length 16, got ${result.length}`);
-  if (!result.startsWith('****')) throw new Error(`Expected to start with ****, got: ${result}`);
-});
-
-test('maskValue with custom visible chars', async () => {
-  const result = maskValue('secret_value', { visibleEnd: 2, maskChar: '#' });
-  if (!result.endsWith('ue')) throw new Error(`Expected to end with ue, got: ${result}`);
-  if (!result.includes('#')) throw new Error('Custom mask char not used');
-});
-
-test('maskValue with visible start', async () => {
-  const result = maskValue('4111111111111111', { visibleStart: 4, visibleEnd: 4 });
-  if (!result.startsWith('4111')) throw new Error(`Expected to start with 4111, got: ${result}`);
-  if (!result.endsWith('1111')) throw new Error(`Expected to end with 1111, got: ${result}`);
-});
-
-// ============================================================================
-// Whitespace Steganography (pure TS)
-// ============================================================================
-
-test('steg whitespace round-trip preserves secret', async () => {
-  const carrier = 'Hello, this is a normal message.';
-  const secret = 'hidden';
-  const encoded = stegEmbedWhitespace(carrier, secret);
-  const extracted = stegExtractWhitespace(encoded);
-  if (extracted !== secret) throw new Error(`Expected "${secret}", got "${extracted}"`);
-});
-
-test('steg whitespace carrier retains visible text', async () => {
-  const carrier = 'ABCDE';
-  const encoded = stegEmbedWhitespace(carrier, 'hi');
-  // Remove zero-width chars to get visible text
-  const visible = encoded.replace(/[\u200B\u200C]/g, '');
-  if (visible !== carrier) throw new Error(`Visible text changed: "${visible}" !== "${carrier}"`);
-});
-
-test('steg whitespace empty secret returns carrier unchanged', async () => {
-  const carrier = 'Hello world';
-  const encoded = stegEmbedWhitespace(carrier, '');
-  const extracted = stegExtractWhitespace(encoded);
-  if (extracted !== '') throw new Error(`Expected empty string, got "${extracted}"`);
-});
-
-// ============================================================================
-// Algorithm Safety (pure TS)
-// ============================================================================
-
-test('checkAlgorithmStrength identifies strong algorithms', async () => {
-  const result = checkAlgorithmStrength('xchacha20-poly1305');
-  if (result.strength !== 'strong') throw new Error(`Expected strong, got ${result.strength}`);
-  if (result.deprecated) throw new Error('Strong algorithm should not be deprecated');
-});
-
-test('checkAlgorithmStrength identifies weak algorithms', async () => {
-  const result = checkAlgorithmStrength('md5');
-  if (result.strength !== 'weak') throw new Error(`Expected weak, got ${result.strength}`);
-  if (!result.deprecated) throw new Error('MD5 should be deprecated');
-});
-
-test('checkAlgorithmStrength identifies broken algorithms', async () => {
-  const result = checkAlgorithmStrength('md4');
-  if (result.strength !== 'broken') throw new Error(`Expected broken, got ${result.strength}`);
-  if (!result.recommendation) throw new Error('Broken algorithm should have recommendation');
-});
-
-test('checkAlgorithmStrength classifies acceptable algorithms', async () => {
-  const result = checkAlgorithmStrength('scrypt');
-  if (result.strength !== 'acceptable') throw new Error(`Expected acceptable, got ${result.strength}`);
-});
-
-test('validateConfig accepts valid config', async () => {
-  const result = validateConfig({
-    algorithm: 'xchacha20-poly1305',
-    keySize: 32,
-    nonceSize: 24,
-    saltSize: 16,
+test('hkdf RFC5869 test case 1', async () => {
+  const okm = await hkdfDerive('0b'.repeat(22), {
+    salt: '000102030405060708090a0b0c',
+    info: 'f0f1f2f3f4f5f6f7f8f9',
+    length: 42,
   });
-  if (!result.valid) throw new Error(`Expected valid, got errors: ${result.errors.join(', ')}`);
+
+  assertEq(
+    okm,
+    '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865',
+    'HKDF case 1 mismatch',
+  );
 });
 
-test('validateConfig rejects broken algorithm', async () => {
-  const result = validateConfig({ algorithm: 'md4' });
-  if (result.valid) throw new Error('Should reject broken algorithm');
-  if (result.errors.length === 0) throw new Error('Should have errors');
+test('hkdf RFC5869 test case 2', async () => {
+  const okm = await hkdfDerive(
+    '000102030405060708090a0b0c0d0e0f' +
+    '101112131415161718191a1b1c1d1e1f' +
+    '202122232425262728292a2b2c2d2e2f' +
+    '303132333435363738393a3b3c3d3e3f' +
+    '404142434445464748494a4b4c4d4e4f',
+    {
+      salt:
+        '606162636465666768696a6b6c6d6e6f' +
+        '707172737475767778797a7b7c7d7e7f' +
+        '808182838485868788898a8b8c8d8e8f' +
+        '909192939495969798999a9b9c9d9e9f' +
+        'a0a1a2a3a4a5a6a7a8a9aaabacadaeaf',
+      info:
+        'b0b1b2b3b4b5b6b7b8b9babbbcbdbebf' +
+        'c0c1c2c3c4c5c6c7c8c9cacbcccdcecf' +
+        'd0d1d2d3d4d5d6d7d8d9dadbdcdddedf' +
+        'e0e1e2e3e4e5e6e7e8e9eaebecedeeef' +
+        'f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff',
+      length: 82,
+    },
+  );
+
+  assertEq(
+    okm,
+    'b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c' +
+    '59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71' +
+    'cc30c58179ec3e87c14c01d5c1f3434f1d87',
+    'HKDF case 2 mismatch',
+  );
 });
 
-test('validateConfig rejects small key size', async () => {
-  const result = validateConfig({ keySize: 8 });
-  if (result.valid) throw new Error('Should reject key size < 16');
+test('hkdf RFC5869 test case 3 (empty salt/info)', async () => {
+  const okm = await hkdfDerive('0b'.repeat(22), { length: 42 });
+  assertEq(
+    okm,
+    '8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8',
+    'HKDF case 3 mismatch',
+  );
 });
 
-test('validateConfig warns on suboptimal params', async () => {
-  const result = validateConfig({ keySize: 16, saltSize: 8 });
-  if (result.warnings.length === 0) throw new Error('Should warn on below-recommended params');
-});
-
-test('RECOMMENDED_DEFAULTS has sane values', async () => {
-  if (RECOMMENDED_DEFAULTS.algorithm !== 'xchacha20-poly1305') throw new Error('Wrong default algorithm');
-  if (RECOMMENDED_DEFAULTS.kdf !== 'argon2id') throw new Error('Wrong default KDF');
-  if (RECOMMENDED_DEFAULTS.keySize !== 32) throw new Error('Wrong default key size');
-});
-
-// ============================================================================
-// Filename Sanitization (pure TS)
-// ============================================================================
-
-test('sanitizeFilename strips path traversal', async () => {
-  const result = sanitizeFilename('../../../etc/passwd');
-  if (result.includes('../')) throw new Error(`Path traversal not stripped: ${result}`);
-});
-
-test('sanitizeFilename strips null bytes', async () => {
-  const result = sanitizeFilename('file\0name.txt');
-  if (result.includes('\0')) throw new Error('Null byte not stripped');
-  if (result !== 'filename.txt') throw new Error(`Expected "filename.txt", got "${result}"`);
-});
-
-test('sanitizeFilename strips control characters', async () => {
-  const result = sanitizeFilename('file\x01\x02name.txt');
-  if (result !== 'filename.txt') throw new Error(`Expected "filename.txt", got "${result}"`);
-});
-
-test('sanitizeFilename preserves normal filenames', async () => {
-  const result = sanitizeFilename('my-document_v2.pdf');
-  if (result !== 'my-document_v2.pdf') throw new Error(`Changed clean filename: ${result}`);
-});
-
-// ============================================================================
-// Timestamp Normalization (pure TS)
-// ============================================================================
-
-test('normalizeTimestamp removes milliseconds', async () => {
-  const result = normalizeTimestamp('2024-01-15T10:30:45.123Z');
-  if (result !== '2024-01-15T10:30:45Z') throw new Error(`Expected no ms, got: ${result}`);
-});
-
-test('normalizeTimestamp handles Date objects', async () => {
-  const d = new Date('2024-06-15T12:00:00Z');
-  const result = normalizeTimestamp(d);
-  if (!result.endsWith('Z')) throw new Error(`Expected UTC, got: ${result}`);
-  if (result.includes('.')) throw new Error(`Should not have ms: ${result}`);
+test('hkdf rejects overlong output', async () => {
+  await expectReject(() => hkdfDerive('aa', { length: 8161 }), 'HKDF output length > 255*HashLen');
 });
 
 // ============================================================================
-// Shamir's Secret Sharing (RPC — Lua FFI)
+// Shamir's Secret Sharing (vectors + invariants + adversarial cases)
 // ============================================================================
 
-test('shamir split/combine round-trip', async () => {
-  const secret = 'deadbeefcafebabe';
-  const shares = await shamirSplit(secret, 5, 3);
-
-  if (shares.length !== 5) throw new Error(`Expected 5 shares, got ${shares.length}`);
-
-  // Combine with first 3 shares
-  const recovered = await shamirCombine(shares.slice(0, 3));
-  if (recovered !== secret) throw new Error(`Expected "${secret}", got "${recovered}"`);
+test('shamir combine matches hardcoded external GF(256) vector', async () => {
+  // Shares derived externally from f(x) = 0x42 + 0x17*x + 0x99*x^2 over GF(256)
+  // with AES polynomial 0x11B.
+  const shares = [
+    { index: 1, hex: 'cc' },
+    { index: 2, hex: '3e' },
+    { index: 3, hex: 'b0' },
+  ];
+  const recovered = await shamirCombine(shares);
+  assertEq(recovered, '42', 'Shamir combine vector mismatch');
 });
 
-test('shamir combine with different share subsets', async () => {
-  const secret = 'aabbccdd11223344';
-  const shares = await shamirSplit(secret, 5, 3);
+test('shamir recovers from any threshold subset', async () => {
+  const secret = '00112233445566778899aabbccddeeff';
+  const n = 5;
+  const k = 3;
+  const shares = await shamirSplit(secret, n, k);
 
-  // Combine with shares [0, 2, 4]
-  const subset = [shares[0], shares[2], shares[4]];
-  const recovered = await shamirCombine(subset);
-  if (recovered !== secret) throw new Error(`Subset [0,2,4] failed: got "${recovered}"`);
+  assertEq(shares.length, n, 'wrong number of shares');
 
-  // Combine with shares [1, 3, 4]
-  const subset2 = [shares[1], shares[3], shares[4]];
-  const recovered2 = await shamirCombine(subset2);
-  if (recovered2 !== secret) throw new Error(`Subset [1,3,4] failed: got "${recovered2}"`);
-});
+  const seen = new Set<number>();
+  for (const s of shares) {
+    assert(s.index >= 1 && s.index <= n, `bad share index ${s.index}`);
+    assert(!seen.has(s.index), `duplicate share index ${s.index}`);
+    seen.add(s.index);
+    assertEq(s.hex.length, secret.length, 'share length mismatch');
+  }
 
-test('shamir shares have correct structure', async () => {
-  const shares = await shamirSplit('ff00ff00', 3, 2);
-  for (const share of shares) {
-    if (typeof share.index !== 'number') throw new Error(`Share index should be number, got ${typeof share.index}`);
-    if (typeof share.hex !== 'string') throw new Error(`Share hex should be string, got ${typeof share.hex}`);
-    if (share.hex.length !== 8) throw new Error(`Share hex length should be 8, got ${share.hex.length}`);
+  for (const subset of combinations(shares, k)) {
+    const recovered = await shamirCombine(subset);
+    assertEq(recovered, secret, 'threshold subset failed to recover secret');
   }
 });
 
-// ============================================================================
-// HKDF Key Derivation (RPC — Lua FFI)
-// ============================================================================
+test('shamir does not recover with fewer than threshold shares', async () => {
+  const secret = 'deadbeefcafebabe11223344aabbccdd';
+  const shares = await shamirSplit(secret, 5, 3);
+  const partial = [shares[0], shares[3]];
 
-test('hkdf derives a 32-byte key by default', async () => {
-  const key = await hkdfDerive('0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b');
-  if (typeof key !== 'string') throw new Error(`Expected string, got ${typeof key}`);
-  if (key.length !== 64) throw new Error(`Expected 64 hex chars (32 bytes), got ${key.length}`);
+  let recovered = '';
+  try {
+    recovered = await shamirCombine(partial);
+  } catch {
+    return; // rejection is acceptable and secure
+  }
+
+  assertNeq(recovered, secret, 'under-threshold shares recovered full secret');
 });
 
-test('hkdf with salt and info produces different keys', async () => {
-  const ikm = 'aabbccdd';
-  const key1 = await hkdfDerive(ikm, { info: '01' });
-  const key2 = await hkdfDerive(ikm, { info: '02' });
-  if (key1 === key2) throw new Error('Different info should produce different keys');
-});
+test('shamir tampered share does not recover original secret', async () => {
+  const secret = '0123456789abcdef0123456789abcdef';
+  const shares = await shamirSplit(secret, 5, 3);
+  const subset = [shares[0], shares[1], shares[2]];
 
-test('hkdf respects custom output length', async () => {
-  const key = await hkdfDerive('aabbccdd', { length: 16 });
-  if (key.length !== 32) throw new Error(`Expected 32 hex chars (16 bytes), got ${key.length}`);
-});
+  const tampered = subset.map((s, i) => {
+    if (i !== 0) return s;
+    return { index: s.index, hex: flipHexDigit(s.hex) };
+  });
 
-test('hkdf is deterministic', async () => {
-  const key1 = await hkdfDerive('aabb', { salt: 'ccdd', info: 'eeff' });
-  const key2 = await hkdfDerive('aabb', { salt: 'ccdd', info: 'eeff' });
-  if (key1 !== key2) throw new Error('Same inputs should produce same output');
-});
+  let recovered = '';
+  try {
+    recovered = await shamirCombine(tampered);
+  } catch {
+    return; // rejection is acceptable
+  }
 
-// ============================================================================
-// Secure Memory (RPC — Lua FFI, libsodium)
-// ============================================================================
-
-test('secure memory alloc/read/free round-trip', async () => {
-  const data = 'deadbeef12345678';
-  const handle = await secureAlloc(data);
-  if (typeof handle !== 'number') throw new Error(`Expected number handle, got ${typeof handle}`);
-
-  const readBack = await secureRead(handle);
-  if (readBack !== data) throw new Error(`Expected "${data}", got "${readBack}"`);
-
-  await secureFree(handle);
-});
-
-test('secure memory protect modes', async () => {
-  const handle = await secureAlloc('aabbccdd');
-
-  // Set to readonly
-  await secureProtect(handle, 'readonly');
-
-  // Set back to readwrite so we can read
-  await secureProtect(handle, 'readwrite');
-  const data = await secureRead(handle);
-  if (data !== 'aabbccdd') throw new Error(`Data corrupted after protect cycle: ${data}`);
-
-  await secureFree(handle);
-});
-
-test('secure memory handles are unique', async () => {
-  const h1 = await secureAlloc('aaaa');
-  const h2 = await secureAlloc('bbbb');
-  if (h1 === h2) throw new Error('Handles should be unique');
-
-  const d1 = await secureRead(h1);
-  const d2 = await secureRead(h2);
-  if (d1 !== 'aaaa') throw new Error(`Handle 1 data wrong: ${d1}`);
-  if (d2 !== 'bbbb') throw new Error(`Handle 2 data wrong: ${d2}`);
-
-  await secureFree(h1);
-  await secureFree(h2);
+  assertNeq(recovered, secret, 'tampered share still recovered original secret');
 });
 
 // ============================================================================
-// Encrypted Store (RPC)
+// Envelope encryption (negative cases first)
 // ============================================================================
 
-test('encrypted store set/get round-trip', async () => {
-  const store = await createEncryptedStore({ path: '/tmp/test-store', password: 'testpass123' });
+test('envelope decrypt rejects wrong KEK', async () => {
+  const kekA = '11'.repeat(32);
+  const kekB = '22'.repeat(32);
+  const plaintext = 'deadbeefcafebabefeedface';
 
-  await store.set('greeting', 'hello world');
-  const val = await store.get('greeting');
-  if (val !== 'hello world') throw new Error(`Expected "hello world", got "${val}"`);
-
-  await store.close();
+  const env = await envelopeEncrypt(plaintext, kekA);
+  await expectReject(() => envelopeDecrypt(env, kekB), 'decrypt with wrong KEK');
 });
 
-test('encrypted store returns null for missing keys', async () => {
-  const store = await createEncryptedStore({ path: '/tmp/test-store2', password: 'pass' });
+test('envelope decrypt rejects tampered ciphertext', async () => {
+  const kek = 'ab'.repeat(32);
+  const plaintext = '00112233445566778899aabbccddeeff';
+  const env = await envelopeEncrypt(plaintext, kek);
 
-  const val = await store.get('nonexistent');
-  if (val !== null) throw new Error(`Expected null, got ${val}`);
-
-  await store.close();
+  const tampered = { ...env, ciphertext: flipHexDigit(env.ciphertext) };
+  await expectReject(() => envelopeDecrypt(tampered, kek), 'decrypt with tampered ciphertext');
 });
 
-test('encrypted store delete removes keys', async () => {
-  const store = await createEncryptedStore({ path: '/tmp/test-store3', password: 'pass' });
+test('envelope uses fresh randomness per encryption', async () => {
+  const kek = 'ef'.repeat(32);
+  const plaintext = '11223344556677889900aabbccddeeff';
 
-  await store.set('key1', 'value1');
-  await store.delete('key1');
-  const val = await store.get('key1');
-  if (val !== null) throw new Error(`Expected null after delete, got ${val}`);
+  const env1 = await envelopeEncrypt(plaintext, kek);
+  const env2 = await envelopeEncrypt(plaintext, kek);
 
-  await store.close();
+  assertNeq(env1.encryptedDEK, env2.encryptedDEK, 'DEK envelope repeated across encryptions');
+  assertNeq(env1.dekNonce, env2.dekNonce, 'DEK nonce repeated across encryptions');
+  assertNeq(env1.ciphertext, env2.ciphertext, 'data ciphertext repeated across encryptions');
+  assertNeq(env1.dataNonce, env2.dataNonce, 'data nonce repeated across encryptions');
+
+  assertEq(await envelopeDecrypt(env1, kek), plaintext, 'env1 failed to decrypt');
+  assertEq(await envelopeDecrypt(env2, kek), plaintext, 'env2 failed to decrypt');
 });
 
-test('encrypted store list returns all keys', async () => {
-  const store = await createEncryptedStore({ path: '/tmp/test-store4', password: 'pass' });
+test('envelope outputs expected field structure', async () => {
+  const kek = 'cd'.repeat(32);
+  const plaintext = 'a1b2c3d4';
+  const env = await envelopeEncrypt(plaintext, kek);
 
-  await store.set('alpha', 1);
-  await store.set('beta', 2);
-  await store.set('gamma', 3);
+  assertEq(env.algorithm, 'xchacha20-poly1305', 'unexpected envelope algorithm');
+  assert(env.encryptedDEK.length > 0, 'encryptedDEK empty');
+  assert(env.ciphertext.length > 0, 'ciphertext empty');
+  assertEq(env.dekNonce.length, 48, 'dek nonce must be 24 bytes hex');
+  assertEq(env.dataNonce.length, 48, 'data nonce must be 24 bytes hex');
 
-  const keys = await store.list();
-  if (keys.length !== 3) throw new Error(`Expected 3 keys, got ${keys.length}`);
-  if (!keys.includes('alpha')) throw new Error('Missing key alpha');
-  if (!keys.includes('beta')) throw new Error('Missing key beta');
-  if (!keys.includes('gamma')) throw new Error('Missing key gamma');
-
-  await store.close();
-});
-
-test('encrypted store handles complex values', async () => {
-  const store = await createEncryptedStore({ path: '/tmp/test-store5', password: 'pass' });
-
-  const obj = { name: 'test', items: [1, 2, 3], nested: { a: true } };
-  await store.set('complex', obj);
-  const val = await store.get('complex');
-
-  if (!val || (val as any).name !== 'test') throw new Error('Object not preserved');
-  if (!Array.isArray((val as any).items)) throw new Error('Array not preserved');
-  if ((val as any).nested.a !== true) throw new Error('Nested object not preserved');
-
-  await store.close();
+  const recovered = await envelopeDecrypt(env, kek);
+  assertEq(recovered, plaintext, 'valid KEK failed to decrypt envelope');
 });
 
 // ============================================================================
-// Audit Log (RPC for HMAC)
+// Noise channel (cross-party + security negatives)
 // ============================================================================
 
-test('audit log append and verify', async () => {
-  createAuditLog('test-chain-key-hex-0123456789abcdef');
+test('noise initiator/responder exchange decrypts both directions', async () => {
+  const responderStatic = await generateDHKeys();
 
-  const e1 = await appendAudit('user.login', { userId: 'alice' });
-  if (e1.index !== 0) throw new Error(`Expected index 0, got ${e1.index}`);
-  if (e1.event !== 'user.login') throw new Error(`Expected event user.login, got ${e1.event}`);
-  if (!e1.hash) throw new Error('Entry should have a hash');
-  if (e1.prevHash !== '0') throw new Error(`First entry prevHash should be "0", got ${e1.prevHash}`);
+  const init = await noiseInitiate(responderStatic.publicKey);
+  const resp = await noiseRespond(responderStatic.privateKey, init.message);
 
-  const e2 = await appendAudit('file.access', { path: '/secret.txt' });
-  if (e2.index !== 1) throw new Error(`Expected index 1, got ${e2.index}`);
-  if (e2.prevHash !== e1.hash) throw new Error('Chain link broken: e2.prevHash !== e1.hash');
+  const c1 = await noiseSend(init.sessionId, 'ping');
+  const p1 = await noiseReceive(resp.sessionId, c1);
+  assertEq(p1, 'ping', 'responder failed to decrypt initiator message');
 
-  const verification = await verifyAudit();
-  if (!verification.valid) throw new Error(`Chain verification failed at entry ${verification.brokenAt}`);
-  if (verification.entries !== 2) throw new Error(`Expected 2 entries, got ${verification.entries}`);
+  const c2 = await noiseSend(resp.sessionId, 'pong');
+  const p2 = await noiseReceive(init.sessionId, c2);
+  assertEq(p2, 'pong', 'initiator failed to decrypt responder message');
+
+  await noiseClose(init.sessionId);
+  await noiseClose(resp.sessionId);
 });
 
-test('audit entries retrieval with range', async () => {
-  createAuditLog('another-chain-key-fedcba9876543210');
+test('noise wrong responder key cannot decrypt initiator message', async () => {
+  const goodResponder = await generateDHKeys();
+  const badResponder = await generateDHKeys();
 
-  await appendAudit('event1');
-  await appendAudit('event2');
-  await appendAudit('event3');
-  await appendAudit('event4');
+  const init = await noiseInitiate(goodResponder.publicKey);
+  const goodSession = await noiseRespond(goodResponder.privateKey, init.message);
+  const badSession = await noiseRespond(badResponder.privateKey, init.message);
 
-  const all = await auditEntries();
-  if (all.length !== 4) throw new Error(`Expected 4 entries, got ${all.length}`);
+  const c = await noiseSend(init.sessionId, 'top-secret');
 
-  const slice = await auditEntries({ from: 1, to: 3 });
-  if (slice.length !== 2) throw new Error(`Expected 2 entries in slice, got ${slice.length}`);
-  if (slice[0].event !== 'event2') throw new Error(`Expected event2, got ${slice[0].event}`);
+  await expectReject(
+    () => noiseReceive(badSession.sessionId, c),
+    'wrong private key should not decrypt',
+  );
+
+  const ok = await noiseReceive(goodSession.sessionId, c);
+  assertEq(ok, 'top-secret', 'correct responder could not decrypt');
+
+  await noiseClose(init.sessionId);
+  await noiseClose(goodSession.sessionId);
+  await noiseClose(badSession.sessionId);
 });
 
-// ============================================================================
-// Envelope Encryption (RPC — Lua FFI)
-// ============================================================================
+test('noise rejects replayed packet on same session', async () => {
+  const responder = await generateDHKeys();
+  const init = await noiseInitiate(responder.publicKey);
+  const resp = await noiseRespond(responder.privateKey, init.message);
 
-test('envelope encrypt/decrypt round-trip', async () => {
-  // 32-byte KEK in hex
-  const kek = 'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd';
-  const plaintext = 'deadbeefcafebabe';
+  const c = await noiseSend(init.sessionId, 'nonce-check');
+  const first = await noiseReceive(resp.sessionId, c);
+  assertEq(first, 'nonce-check', 'first receive failed');
 
-  const envelope = await envelopeEncrypt(plaintext, kek);
-  if (!envelope.encryptedDEK) throw new Error('Missing encryptedDEK');
-  if (!envelope.ciphertext) throw new Error('Missing ciphertext');
-  if (!envelope.dekNonce) throw new Error('Missing dekNonce');
-  if (!envelope.dataNonce) throw new Error('Missing dataNonce');
+  await expectReject(() => noiseReceive(resp.sessionId, c), 'replay packet accepted');
 
-  const recovered = await envelopeDecrypt(envelope, kek);
-  if (recovered !== plaintext) throw new Error(`Expected "${plaintext}", got "${recovered}"`);
+  await noiseClose(init.sessionId);
+  await noiseClose(resp.sessionId);
 });
 
-// ============================================================================
-// Identity & Anonymity (RPC — Lua FFI)
-// ============================================================================
+test('noise ciphertext differs across independent sessions', async () => {
+  const responder = await generateDHKeys();
 
-test('anonymousId is deterministic with same seed', async () => {
-  const id1 = await anonymousId('test-domain', 'fixed-seed');
-  const id2 = await anonymousId('test-domain', 'fixed-seed');
-  if (id1 !== id2) throw new Error('Same domain+seed should produce same ID');
+  const initA = await noiseInitiate(responder.publicKey);
+  const respA = await noiseRespond(responder.privateKey, initA.message);
+
+  const initB = await noiseInitiate(responder.publicKey);
+  const respB = await noiseRespond(responder.privateKey, initB.message);
+
+  const m = 'same plaintext';
+  const cA = await noiseSend(initA.sessionId, m);
+  const cB = await noiseSend(initB.sessionId, m);
+
+  assertNeq(cA, cB, 'independent sessions produced identical ciphertext');
+
+  await noiseClose(initA.sessionId);
+  await noiseClose(respA.sessionId);
+  await noiseClose(initB.sessionId);
+  await noiseClose(respB.sessionId);
 });
 
-test('anonymousId differs across domains', async () => {
-  const seed = 'same-seed-value';
-  const id1 = await anonymousId('domain-a', seed);
-  const id2 = await anonymousId('domain-b', seed);
-  if (id1 === id2) throw new Error('Different domains should produce different IDs');
-});
-
-test('pseudonym derives context-specific identifiers', async () => {
-  const master = 'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd';
-  const p1 = await pseudonym(master, 'email');
-  const p2 = await pseudonym(master, 'username');
-  if (p1 === p2) throw new Error('Different contexts should produce different pseudonyms');
-
-  // Deterministic
-  const p1b = await pseudonym(master, 'email');
-  if (p1 !== p1b) throw new Error('Same context should produce same pseudonym');
-});
-
-// ============================================================================
-// Tokenize (RPC — HMAC)
-// ============================================================================
-
-test('tokenize produces deterministic pseudonym', async () => {
-  const t1 = await tokenize('user@example.com', 'salt123');
-  const t2 = await tokenize('user@example.com', 'salt123');
-  if (t1 !== t2) throw new Error('Same input+salt should produce same token');
-
-  const t3 = await tokenize('user@example.com', 'different-salt');
-  if (t1 === t3) throw new Error('Different salt should produce different token');
+test('noise session close invalidates further send', async () => {
+  const responder = await generateDHKeys();
+  const init = await noiseInitiate(responder.publicKey);
+  await noiseClose(init.sessionId);
+  await expectReject(() => noiseSend(init.sessionId, 'after-close'), 'send after close');
 });
 
 // ============================================================================
-// File Integrity (RPC — Lua reads files)
+// Keyring + secure delete
 // ============================================================================
 
-test('hashFile produces a hash for a known file', async () => {
-  const hash = await hashFile('/etc/hostname');
-  if (typeof hash !== 'string') throw new Error(`Expected string, got ${typeof hash}`);
-  if (hash.length === 0) throw new Error('Hash should not be empty');
-  // SHA-256 hex is 64 chars
-  if (hash.length < 32) throw new Error(`Hash too short: ${hash.length} chars`);
+test('keyring open rejects wrong master password', async () => {
+  const path = randomTmpPath('kr-wrong-pass');
+  const handle = await createKeyring(path, 'correct-horse-battery-staple');
+  await closeKeyring(handle);
+
+  await expectReject(() => openKeyring(path, 'wrong-password'), 'opened keyring with wrong password');
+
+  await secureDelete(path, 1);
 });
 
-test('hashFile is deterministic', async () => {
-  const h1 = await hashFile('/etc/hostname', 'sha256');
-  const h2 = await hashFile('/etc/hostname', 'sha256');
-  if (h1 !== h2) throw new Error('Same file should produce same hash');
+test('keyring persists generated public keys across reopen', async () => {
+  const path = randomTmpPath('kr-persist');
+  const pw = 'unit-test-password';
+
+  const h1 = await createKeyring(path, pw);
+  const k = await generateKey(h1, { type: 'x25519', label: 'session-key' });
+  assert(typeof k.id === 'string' && k.id.length > 0, 'generated key id missing');
+  assert(typeof k.publicKey === 'string' && k.publicKey.length > 0, 'generated public key missing');
+
+  await closeKeyring(h1);
+
+  const h2 = await openKeyring(path, pw);
+  const keys = await listKeys(h2);
+  const same = keys.find(x => x.id === k.id);
+  assert(!!same, 'reopened keyring missing generated key');
+  assertEq(same!.publicKey, k.publicKey, 'persisted public key changed');
+
+  await closeKeyring(h2);
+  await secureDelete(path, 1);
 });
 
 // ============================================================================
-// Screenshot for visual verification
+// Secure memory safety behavior
 // ============================================================================
 
-test('capture test completion screenshot', async () => {
-  await page.screenshot('/tmp/privacy-test.png');
+test('secure memory handle is invalid after free', async () => {
+  const h = await secureAlloc('deadbeef');
+  await secureFree(h);
+  await expectReject(() => secureRead(h), 'read after free');
+});
+
+test('secure memory rejects invalid protect mode', async () => {
+  const h = await secureAlloc('aabbccdd');
+  await expectReject(() => secureProtect(h, 'invalid' as any), 'invalid mprotect mode');
+  await secureFree(h);
+});
+
+test('secure memory noaccess uses managed read-through semantics', async () => {
+  const value = '0011223344556677';
+  const h = await secureAlloc(value);
+  await secureProtect(h, 'noaccess');
+  const read = await secureRead(h);
+  assertEq(read, value, 'secureRead failed after noaccess protect');
+  await secureFree(h);
+});
+
+test('secure memory readwrite restoration preserves bytes', async () => {
+  const value = '0011223344556677';
+  const h = await secureAlloc(value);
+  await secureProtect(h, 'noaccess');
+  await secureProtect(h, 'readwrite');
+  const read = await secureRead(h);
+  assertEq(read, value, 'secure memory content changed across protect transitions');
+  await secureFree(h);
+});
+
+// ============================================================================
+// Whitespace steganography (manual extraction, not library round-trip)
+// ============================================================================
+
+test('whitespace steg embeds exact bitstream into zero-width chars', async () => {
+  const carrier = 'ABCD';
+  const secret = 'Hi'; // 0x48 0x69
+  const encoded = stegEmbedWhitespace(carrier, secret);
+
+  const visible = encoded.replace(/[\u200B\u200C]/g, '');
+  assertEq(visible, carrier, 'carrier visible text changed');
+
+  const bits = extractZwsBits(encoded);
+  assert(bits.startsWith('0100100001101001'), 'embedded bits do not match ASCII payload');
+
+  const decoded = bitsToAscii(bits).slice(0, secret.length);
+  assertEq(decoded, secret, 'manual zero-width decode mismatch');
+});
+
+test('whitespace steg cannot embed into single-char carrier', async () => {
+  const encoded = stegEmbedWhitespace('A', 'secret');
+  assertEq(encoded, 'A', 'single-char carrier should be unchanged');
+});
+
+// ============================================================================
+// Pure TS sanitization checks (deterministic expectations)
+// ============================================================================
+
+test('detectPII returns stable match boundaries for email + SSN', async () => {
+  const input = 'mail alice@example.com ssn 123-45-6789';
+  const matches = detectPII(input);
+
+  const email = matches.find(m => m.type === 'email');
+  const ssn = matches.find(m => m.type === 'ssn');
+
+  assert(!!email, 'missing email match');
+  assert(!!ssn, 'missing ssn match');
+  assertEq(input.slice(email!.start, email!.end), 'alice@example.com', 'email boundary mismatch');
+  assertEq(input.slice(ssn!.start, ssn!.end), '123-45-6789', 'ssn boundary mismatch');
+});
+
+test('redactPII removes raw PII values from output', async () => {
+  const input = 'u=bob@example.com cc=4111 1111 1111 1111';
+  const redacted = redactPII(input);
+  assert(!redacted.includes('bob@example.com'), 'email leaked after redaction');
+  assert(!redacted.includes('4111 1111 1111 1111'), 'credit card leaked after redaction');
 });

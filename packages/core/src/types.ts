@@ -304,6 +304,7 @@ export interface BoxProps {
   align?: 'start' | 'center' | 'end' | 'stretch';
   justify?: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly';
   fill?: boolean;
+  fit?: boolean;
   grow?: boolean;
   bg?: Color;
   radius?: number;
