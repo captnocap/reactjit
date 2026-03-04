@@ -1504,6 +1504,18 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register privacy RPC handlers — libraries lazy-load on first invocation
+  do
+    local pok, privmod = pcall(require, "lua.privacy")
+    if pok then
+      for method, handler in pairs(privmod.getHandlers()) do
+        rpcHandlers[method] = gated("privacy", handler)
+      end
+    else
+      startupLog("[reactjit] privacy module not loaded: " .. tostring(privmod))
+    end
+  end
+
   -- Register clipboard RPC handlers — gated by clipboard permit
   if isRendering() then
     rpcHandlers["clipboard:read"] = gated("clipboard", function()
@@ -1753,7 +1765,10 @@ function ReactJIT.init(config)
       local f = io.open(shimPath, "r")
       if f then
         local src = f:read("*a"); f:close()
-        pcall(function() M.bridge:eval(src, "<test-shim>") end)
+        local shimOk, shimErr = pcall(function() M.bridge:eval(src, "<test-shim>") end)
+        if not shimOk then
+          io.write("[rjit test] shim eval error: " .. tostring(shimErr) .. "\n"); io.flush()
+        end
       end
     end
     if specPath then

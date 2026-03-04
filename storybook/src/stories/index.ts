@@ -61,6 +61,7 @@ import { TimeStory } from './TimeStory';
 import { ConvertStory } from './ConvertStory';
 import { ScrapeStory } from './ScrapeStory';
 import { EventsStory } from './EventsStory';
+import { PrivacyStory } from './PrivacyStory';
 import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
@@ -104,6 +105,7 @@ export const stories: StoryDef[] = [
   { id: 'fleet', title: 'Fleet', section: 'Packages', component: FleetStory },
   { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
   { id: 'convert', title: 'Convert', section: 'Packages', component: ConvertStory },
+  { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
