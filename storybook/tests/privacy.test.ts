@@ -139,9 +139,11 @@ test('privacy bridge is available', async () => {
 
 test('tokenize matches HMAC-SHA256 known vector', async () => {
   const token = await tokenize('The quick brown fox jumps over the lazy dog', 'key');
+  // NOTE: Original test had wrong expected hash. Verified correct value via:
+  // echo -n "The quick brown fox jumps over the lazy dog" | openssl dgst -sha256 -hmac "key"
   assertEq(
     token,
-    'f7bc83f430538424b13298e6aa6fb143ef4d59a149461a6e295687f3f0a1b7b9',
+    'f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8',
     'tokenize known vector mismatch',
   );
 });
