@@ -422,6 +422,23 @@ local formatters = {
 local MARGIN = 8
 local BORDER_RADIUS = 6
 
+--- Walk up the node tree and accumulate scroll offsets from ancestor ScrollViews.
+--- node.computed gives content-space coordinates; the painter applies
+--- love.graphics.translate(-scrollX, -scrollY) per scroll container.
+--- We need to subtract those same offsets so the tooltip lands on-screen.
+local function getScrollOffset(node)
+  local ox, oy = 0, 0
+  local cur = node and node.parent
+  while cur do
+    if cur.scrollState then
+      ox = ox + (cur.scrollState.scrollX or 0)
+      oy = oy + (cur.scrollState.scrollY or 0)
+    end
+    cur = cur.parent
+  end
+  return ox, oy
+end
+
 --- Compute tooltip position. Returns tooltipX, tooltipY after clamping.
 local function computePosition(cfg, formatted, node, mx, my, windowW, windowH)
   local boxW = formatted.width
@@ -446,38 +463,42 @@ local function computePosition(cfg, formatted, node, mx, my, windowW, windowH)
 
   elseif cfg.type == "anchor" and node and node.computed then
     local nc = node.computed
+    local sox, soy = getScrollOffset(node)
+    local nx, ny = nc.x - sox, nc.y - soy
     local a = cfg.anchor
     local gap = 6
     if a == "top" then
-      tx = nc.x + nc.w / 2 - boxW / 2
-      ty = nc.y - boxH - gap
+      tx = nx + nc.w / 2 - boxW / 2
+      ty = ny - boxH - gap
     elseif a == "bottom" then
-      tx = nc.x + nc.w / 2 - boxW / 2
-      ty = nc.y + nc.h + gap
+      tx = nx + nc.w / 2 - boxW / 2
+      ty = ny + nc.h + gap
     elseif a == "left" then
-      tx = nc.x - boxW - gap
-      ty = nc.y
+      tx = nx - boxW - gap
+      ty = ny
     elseif a == "right" then
-      tx = nc.x + nc.w + gap
-      ty = nc.y
+      tx = nx + nc.w + gap
+      ty = ny
     else
-      tx = nc.x + nc.w / 2 - boxW / 2
-      ty = nc.y - boxH - gap
+      tx = nx + nc.w / 2 - boxW / 2
+      ty = ny - boxH - gap
     end
 
   else -- cursor (default)
     if node and node.computed then
       local nc = node.computed
-      tx = nc.x + nc.w / 2 - boxW / 2
+      local sox, soy = getScrollOffset(node)
+      local nx, ny = nc.x - sox, nc.y - soy
+      tx = nx + nc.w / 2 - boxW / 2
       if cfg.prefer == "below" then
-        ty = nc.y + nc.h + 6
+        ty = ny + nc.h + 6
         if ty + boxH > windowH - MARGIN then
-          ty = nc.y - boxH - 6
+          ty = ny - boxH - 6
         end
       else
-        ty = nc.y - boxH - 6
+        ty = ny - boxH - 6
         if ty < MARGIN then
-          ty = nc.y + nc.h + 6
+          ty = ny + nc.h + 6
         end
       end
     else

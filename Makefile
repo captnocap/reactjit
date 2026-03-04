@@ -454,6 +454,10 @@ endif
 	cp -r packages/theme cli/runtime/reactjit/theme
 	cp -r packages/math cli/runtime/reactjit/math
 	cp -r packages/time cli/runtime/reactjit/time
+	cp -r packages/privacy cli/runtime/reactjit/privacy
+	cp -r packages/icons cli/runtime/reactjit/icons
+	cp -r packages/layouts cli/runtime/reactjit/layouts
+	cp -r packages/terminal cli/runtime/reactjit/terminal
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts/base ]; then \

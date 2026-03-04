@@ -43,7 +43,6 @@ import { TslBoidsStory } from './TslBoidsStory';
 import { MasksStory } from './MasksStory';
 import { APIsStory } from './APIsStory';
 import { LayoutsStory } from './LayoutsStory';
-import { SearchStory } from './SearchStory';
 import { TerminalStory } from './TerminalStory';
 import { SemanticTerminalStory } from './SemanticTerminalStory';
 import { NoclipMazeStory } from './NoclipMazeStory';
@@ -79,7 +78,6 @@ export const stories: StoryDef[] = [
   { id: 'video', title: 'Video', section: 'Core', component: VideoStory },
   { id: 'composition', title: 'Composition', section: 'Core', component: CompositionStory },
   { id: 'input', title: 'Input', section: 'Core', component: InputStory },
-  { id: 'search', title: 'Search', section: 'Core', component: SearchStory },
   { id: 'icons', title: 'Icons', section: 'Core', component: IconStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },

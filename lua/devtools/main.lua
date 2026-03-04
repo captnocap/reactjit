@@ -213,6 +213,26 @@ function DevTools.setTheme(theme)
   Style.setTheme(theme)
 end
 
+local function nowSec()
+  if type(love) == "table" and love.timer and love.timer.getTime then
+    return love.timer.getTime()
+  end
+  return os.clock()
+end
+
+local function trimTo(s, n)
+  s = tostring(s or "")
+  if #s <= n then return s end
+  return s:sub(1, n - 1) .. "..."
+end
+
+local function copyTable(src)
+  local out = {}
+  if type(src) ~= "table" then return out end
+  for k, v in pairs(src) do out[k] = v end
+  return out
+end
+
 --- Build the shared context table passed to tab modules.
 local function buildCtx()
   return {
@@ -264,26 +284,6 @@ local function pushViewportEvent()
       height = DevTools.getViewportHeight(),
     },
   })
-end
-
-local function nowSec()
-  if type(love) == "table" and love.timer and love.timer.getTime then
-    return love.timer.getTime()
-  end
-  return os.clock()
-end
-
-local function trimTo(s, n)
-  s = tostring(s or "")
-  if #s <= n then return s end
-  return s:sub(1, n - 1) .. "..."
-end
-
-local function copyTable(src)
-  local out = {}
-  if type(src) ~= "table" then return out end
-  for k, v in pairs(src) do out[k] = v end
-  return out
 end
 
 function DevTools.beginFrame(dt)

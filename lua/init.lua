@@ -264,7 +264,7 @@ end
 --- Push an event to the bridge (handles mode differences).
 --- In native mode bridge:pushEvent() is used; in canvas mode bridge.emit() is used.
 local function pushEvent(evt)
-  Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(evt.payload and evt.payload.targetId or "-"))
+  Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(type(evt.payload) == "table" and evt.payload.targetId or "-"))
   if mode == "native" then
     M.bridge:pushEvent(evt)
   elseif mode == "canvas" or mode == "wasm" then
