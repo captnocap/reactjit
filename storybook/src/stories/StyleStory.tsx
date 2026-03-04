@@ -225,7 +225,7 @@ export function StyleStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Gradients, borders, shadows, transforms, position, overflow, transitions.'}
+          {'Visual properties beyond layout.'}
         </Text>
       </Box>
 
@@ -252,7 +252,7 @@ export function StyleStory() {
         ) : (
           <>
             {/* ── Left: Preview ── */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
               <Box style={{ width: '100%', padding: 20, gap: 14 }}>
 
                 {/* Gradients */}
@@ -404,18 +404,18 @@ export function StyleStory() {
 
                 {/* Overflow */}
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'OVERFLOW'}</Text>
-                <Box style={{ flexDirection: 'row', gap: 10, justifyContent: 'center' }}>
+                <Box style={{ flexDirection: 'row', gap: 40, justifyContent: 'center', paddingTop: 10, paddingBottom: 30 }}>
                   <Box style={{ alignItems: 'center', gap: 4 }}>
-                    <Box style={{ width: 80, height: 56, overflow: 'hidden', borderRadius: 6, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
-                      <Box style={{ width: 120, height: 80, backgroundColor: P.blue, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                    <Box style={{ width: 80, height: 56, overflow: 'hidden', borderWidth: 2, borderColor: P.blue, borderRadius: 6, backgroundColor: c.surface }}>
+                      <Box style={{ width: 120, height: 80, backgroundColor: P.blue, opacity: 0.4, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
                         <Text style={{ color: '#fff', fontSize: 8 }}>{'clipped'}</Text>
                       </Box>
                     </Box>
                     <Text style={{ color: c.muted, fontSize: 8 }}>{'hidden'}</Text>
                   </Box>
                   <Box style={{ alignItems: 'center', gap: 4 }}>
-                    <Box style={{ width: 80, height: 56, overflow: 'visible', borderRadius: 6, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
-                      <Box style={{ width: 120, height: 80, backgroundColor: P.orange, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                    <Box style={{ width: 80, height: 56, overflow: 'visible', borderWidth: 2, borderColor: P.orange, borderRadius: 6, backgroundColor: c.surface }}>
+                      <Box style={{ width: 120, height: 80, backgroundColor: P.orange, opacity: 0.4, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
                         <Text style={{ color: '#fff', fontSize: 8 }}>{'paints out'}</Text>
                       </Box>
                     </Box>
@@ -483,7 +483,7 @@ export function StyleStory() {
             <VerticalDivider />
 
             {/* ── Right: API Reference ── */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
               <Box style={{ width: '100%', padding: 14, gap: 10 }}>
 
                 {/* Overview */}

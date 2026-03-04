@@ -1,807 +1,862 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Pressable, TextInput } from '../../../packages/core/src';
-import { useThemeColors } from '../../../packages/theme/src';
-import { StoryPage, StorySection } from './_shared/StoryScaffold';
-import {
-  detectPII,
-  redactPII,
-  maskValue,
-  stegEmbedWhitespace,
-  stegExtractWhitespace,
-  checkAlgorithmStrength,
-  sanitizeFilename,
-  normalizeTimestamp,
-  RECOMMENDED_DEFAULTS,
-} from '../../../packages/privacy/src';
-import { usePrivacy } from '../../../packages/privacy/src/hooks';
-import type { PIIMatch, AlgorithmAssessment, ShamirShare } from '../../../packages/privacy/src/types';
+/**
+ * Privacy — Package documentation page (Layout2 zigzag narrative).
+ *
+ * Visual demos for each privacy capability. All heavy crypto runs in C
+ * via libsodium/OpenSSL FFI — these demos show the concepts visually.
+ *
+ * Static hoist ALL code strings and style objects outside the component.
+ */
 
-// ── PII Detection & Redaction ────────────────────────
+import React from 'react';
+import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { useThemeColors } from '../../../packages/theme/src';
+
+// ── Palette ──────────────────────────────────────────────
+
+const C = {
+  accent: '#8b5cf6',
+  accentDim: 'rgba(139, 92, 246, 0.12)',
+  callout: 'rgba(59, 130, 246, 0.08)',
+  calloutBorder: 'rgba(59, 130, 246, 0.25)',
+  warn: 'rgba(245, 158, 11, 0.08)',
+  warnBorder: 'rgba(245, 158, 11, 0.25)',
+  green: '#a6e3a1',
+  red: '#f38ba8',
+  blue: '#89b4fa',
+  yellow: '#f9e2af',
+  mauve: '#cba6f7',
+  peach: '#fab387',
+  teal: '#94e2d5',
+};
+
+// ── Static code blocks (hoisted — never recreated) ──────
+
+const INSTALL_CODE = `import { usePrivacy } from '@reactjit/privacy'
+import { detectPII, redactPII, maskValue } from '@reactjit/privacy'`;
+
+const PII_CODE = `const matches = detectPII('Email: alice@acme.com SSN: 123-45-6789')
+// [{type:'email', value:'alice@acme.com'}, {type:'ssn', ...}]
+
+const safe = redactPII(text, { mask: true })
+// "Email: *****@*******.*** SSN: ***-**-****"`;
+
+const SHAMIR_CODE = `const shares = await privacy.shamir.split('deadbeef', 5, 3)
+const secret = await privacy.shamir.combine([shares[0], shares[2], shares[4]])
+// 'deadbeef' — any 3 of 5 recovers it`;
+
+const NOISE_CODE = `const init = await privacy.noise.initiate(serverPubKey)
+const resp = await privacy.noise.respond(serverPrivKey, init.message)
+const cipher = await privacy.noise.send(init.sessionId, 'ping')
+const plain  = await privacy.noise.receive(resp.sessionId, cipher)`;
+
+const KEYRING_CODE = `const kr = await privacy.keyring.create('/keys.kr', 'master-pass')
+await privacy.keyring.generateKey(kr, { type: 'x25519', label: 'session' })
+await privacy.keyring.close(kr)
+// Persists — wrong password rejects on reopen`;
+
+const STEG_CODE = `const hidden = stegEmbedWhitespace('This looks normal.', 'SECRET')
+// Visible text unchanged, zero-width chars injected between letters
+const recovered = stegExtractWhitespace(hidden)  // 'SECRET'`;
+
+const AUDIT_CODE = `createAuditLog('chain-key-hex')
+await appendAudit('user.login', { userId: 'alice' })
+await appendAudit('data.access', { table: 'users' })
+const { valid } = await verifyAudit()  // detects tampering`;
+
+// ── Helpers ──────────────────────────────────────────────
+
+function Divider() {
+  const c = useThemeColors();
+  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+}
+
+function SectionLabel({ icon, children }: { icon: string; children: string }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        {children}
+      </Text>
+    </Box>
+  );
+}
+
+// ── Band layout helpers ─────────────────────────────────
+
+const BAND_STYLE = {
+  flexDirection: 'row' as const,
+  paddingLeft: 28,
+  paddingRight: 28,
+  paddingTop: 20,
+  paddingBottom: 20,
+  gap: 24,
+  alignItems: 'start' as const,
+};
+
+const TEXT_SIDE = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+
+// ── Visual Demos ────────────────────────────────────────
 
 function PIIDemo() {
   const c = useThemeColors();
-  const C = { bg: c.bg, text: c.text, dim: c.textDim, sec: c.textSecondary, ok: c.success, warn: c.warning, err: c.error, info: c.info, accent: c.accent, border: c.border };
 
-  const [input, setInput] = useState('Contact john@acme.com or call 555-123-4567. SSN: 123-45-6789. Card: 4111 1111 1111 1111');
-  const [matches, setMatches] = useState<PIIMatch[]>([]);
-  const [redacted, setRedacted] = useState('');
-
-  useEffect(() => {
-    const m = detectPII(input);
-    setMatches(m);
-    setRedacted(redactPII(input, { mask: true }));
-  }, [input]);
-
-  const typeColors: Record<string, string> = {
-    email: C.info, phone: C.accent, ssn: C.err, creditCard: C.warn, ipv4: C.ok, ipv6: C.ok,
-  };
+  const detections = [
+    { type: 'email', value: 'alice@acme.com', color: C.red, bg: 'rgba(243,139,168,0.15)' },
+    { type: 'phone', value: '555-0123', color: C.peach, bg: 'rgba(250,179,135,0.15)' },
+    { type: 'ssn', value: '123-45-6789', color: C.yellow, bg: 'rgba(249,226,175,0.15)' },
+    { type: 'ipv4', value: '192.168.1.1', color: C.teal, bg: 'rgba(148,226,213,0.15)' },
+    { type: 'credit', value: '4111...1111', color: C.mauve, bg: 'rgba(203,166,247,0.15)' },
+  ];
 
   return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Pure TypeScript -- regex-based PII scanner with masking</Text>
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+      <Text style={{ fontSize: 9, color: c.muted }}>{'detectPII() \u2192 finds + classifies:'}</Text>
 
-      <Box style={{ gap: 4, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>Input text:</Text>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          style={{ fontSize: 10, color: C.text, backgroundColor: C.bg, padding: 6, borderRadius: 4, width: '100%' }}
-        />
+      {detections.map(d => (
+        <Box key={d.type} style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <Box style={{
+            backgroundColor: d.bg,
+            borderRadius: 3,
+            paddingLeft: 6,
+            paddingRight: 6,
+            paddingTop: 2,
+            paddingBottom: 2,
+            width: 44,
+            alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 8, color: d.color }}>{d.type}</Text>
+          </Box>
+          <Text style={{ fontSize: 10, color: d.color }}>{d.value}</Text>
+        </Box>
+      ))}
+
+      <Text style={{ fontSize: 9, color: c.muted, paddingTop: 4 }}>{'redactPII() \u2192 masks in place:'}</Text>
+      <Box style={{
+        backgroundColor: c.surface,
+        borderRadius: 6,
+        padding: 8,
+      }}>
+        <Text style={{ fontSize: 10, color: c.muted }}>
+          {'*****@***.*** | ***-**** | ***-**-****'}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+function ShamirDemo() {
+  const c = useThemeColors();
+  const used = [true, false, true, false, true]; // shares used for recovery
+  const shareColors = [C.blue, C.green, C.peach, C.mauve, C.teal];
+
+  return (
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+      {/* Secret in */}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 3,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ fontSize: 10, color: C.accent }}>{'deadbeef'}</Text>
+        </Box>
+        <Text style={{ fontSize: 8, color: c.muted }}>{'\u2192 split(5,3)'}</Text>
       </Box>
 
-      <Box style={{ gap: 4, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>{`Detected PII (${matches.length} matches):`}</Text>
-        {matches.map((m, i) => (
-          <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: typeColors[m.type] || C.dim }} />
-            <Text style={{ fontSize: 10, color: typeColors[m.type] || C.dim, width: 80 }}>{m.type}</Text>
-            <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3 }}>
-              <Text style={{ fontSize: 9, color: C.sec }}>{m.value}</Text>
-            </Box>
+      {/* 5 shares — vertical list, compact */}
+      <Box style={{ gap: 3, paddingLeft: 8 }}>
+        {[0, 1, 2, 3, 4].map(i => (
+          <Box key={i} style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+          }}>
+            <Box style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: used[i] ? shareColors[i] : c.border,
+            }} />
+            <Text style={{
+              fontSize: 9,
+              color: used[i] ? shareColors[i] : c.muted,
+            }}>{`share ${i + 1}`}</Text>
+            {used[i] && (
+              <Text style={{ fontSize: 8, color: c.muted }}>{'\u2713'}</Text>
+            )}
           </Box>
         ))}
       </Box>
 
-      <Box style={{ gap: 4, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.ok, fontWeight: 'normal' }}>Redacted (masked):</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 6, borderRadius: 4 }}>
-          <Text style={{ fontSize: 9, color: C.sec }}>{redacted}</Text>
+      {/* Recovered */}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={{ fontSize: 8, color: c.muted }}>{'any 3 \u2192'}</Text>
+        <Box style={{
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: C.green,
+        }} />
+        <Box style={{
+          backgroundColor: 'rgba(166,227,161,0.12)',
+          borderRadius: 3,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ fontSize: 10, color: C.green }}>{'deadbeef'}</Text>
         </Box>
       </Box>
-    </>
+
+      <Text style={{ fontSize: 8, color: c.muted }}>{'GF(256) / 0x11B / gen 3'}</Text>
+    </Box>
   );
 }
 
-// ── Data Masking ─────────────────────────────────────
-
-function MaskDemo() {
+function NoiseDemo() {
   const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, info: c.info, warn: c.warning, ok: c.success };
 
-  const samples = [
-    { label: 'Credit Card', value: '4111111111111111', color: C.warn },
-    { label: 'SSN', value: '123-45-6789', color: C.info },
-    { label: 'Email', value: 'alice@example.com', color: C.ok },
+  const steps = [
+    { from: 'Client', to: 'Server', label: 'ephemeral X25519 pubkey', color: C.blue },
+    { from: 'Server', to: 'Client', label: 'session established', color: C.green },
+    { from: 'Client', to: 'Server', label: 'AEAD ciphertext', color: C.mauve },
+    { from: 'Server', to: 'Client', label: 'AEAD ciphertext', color: C.peach },
   ];
 
   return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>maskValue() -- configurable visible start/end + mask character</Text>
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+      {/* Endpoints header */}
+      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 4, paddingRight: 4 }}>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.blue }} />
+          <Text style={{ fontSize: 10, color: C.blue }}>{'Client'}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Text style={{ fontSize: 10, color: C.teal }}>{'Server'}</Text>
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.teal }} />
+        </Box>
+      </Box>
 
-      {samples.map(s => (
-        <Box key={s.label} style={{ gap: 2, width: '100%' }}>
-          <Text style={{ fontSize: 10, color: s.color, fontWeight: 'normal' }}>{s.label}</Text>
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 3, flexGrow: 1 }}>
-              <Text style={{ fontSize: 10, color: C.sec }}>{s.value}</Text>
-            </Box>
-            <Text style={{ fontSize: 10, color: C.dim }}>{'->'}</Text>
-            <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 3, flexGrow: 1 }}>
-              <Text style={{ fontSize: 10, color: s.color }}>{maskValue(s.value)}</Text>
-            </Box>
-          </Box>
+      {/* Message arrows */}
+      {steps.map((s, i) => (
+        <Box key={i} style={{
+          backgroundColor: `${s.color}15`,
+          borderRadius: 4,
+          padding: 6,
+          paddingLeft: 10,
+          paddingRight: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <Text style={{ fontSize: 10, color: s.color }}>
+            {s.from === 'Client' ? '\u2192' : '\u2190'}
+          </Text>
+          <Text style={{ fontSize: 9, color: s.color }}>{s.label}</Text>
         </Box>
       ))}
 
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.info, fontWeight: 'normal' }}>Custom mask (visibleStart: 2, visibleEnd: 2, maskChar: '#')</Text>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 10, color: C.sec }}>sensitive-data-here</Text>
+      {/* Features */}
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', paddingTop: 4 }}>
+        {['forward secrecy', 'replay protection', 'HKDF session keys'].map(f => (
+          <Box key={f} style={{
+            backgroundColor: c.surface,
+            borderRadius: 3,
+            paddingLeft: 6,
+            paddingRight: 6,
+            paddingTop: 2,
+            paddingBottom: 2,
+          }}>
+            <Text style={{ fontSize: 8, color: c.muted }}>{f}</Text>
           </Box>
-          <Text style={{ fontSize: 10, color: C.dim }}>{'->'}</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 10, color: C.info }}>{maskValue('sensitive-data-here', { visibleStart: 2, visibleEnd: 2, maskChar: '#' })}</Text>
-          </Box>
-        </Box>
+        ))}
       </Box>
-    </>
+    </Box>
   );
 }
 
-// ── Whitespace Steganography ─────────────────────────
-
-function StegDemo() {
+function KeyringDemo() {
   const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, info: c.info, accent: c.accent };
 
-  const carrier = 'This is a perfectly normal sentence with nothing hidden.';
-  const secret = 'TOP SECRET';
-  const embedded = stegEmbedWhitespace(carrier, secret);
-  const extracted = stegExtractWhitespace(embedded);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Zero-width characters (U+200B / U+200C) encode binary in whitespace</Text>
-
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>Carrier text:</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 6, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.info }}>{carrier}</Text>
-        </Box>
-      </Box>
-
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.accent, fontWeight: 'normal' }}>Secret to embed:</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 6, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.accent }}>{secret}</Text>
-        </Box>
-      </Box>
-
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>{`Embedded text (${embedded.length} chars vs ${carrier.length} visible):`}</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 6, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.info }}>{carrier}</Text>
-        </Box>
-        <Text style={{ fontSize: 8, color: C.dim }}>{`Hidden bytes: ${embedded.length - carrier.length} zero-width characters injected`}</Text>
-      </Box>
-
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-        <Box style={{
-          width: 8, height: 8, borderRadius: 4,
-          backgroundColor: extracted === secret ? C.ok : c.error,
-        }} />
-        <Text style={{ fontSize: 11, color: extracted === secret ? C.ok : c.error, fontWeight: 'normal' }}>
-          {extracted === secret ? `Extracted: "${extracted}" -- round-trip OK` : `Extraction failed: "${extracted}"`}
-        </Text>
-      </Box>
-    </>
-  );
-}
-
-// ── Algorithm Safety ─────────────────────────────────
-
-function AlgorithmSafetyDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, warn: c.warning, err: c.error, info: c.info };
-
-  const algorithms = [
-    'xchacha20-poly1305', 'aes-256-gcm', 'blake3', 'argon2id',
-    'aes-128-gcm', 'scrypt', 'pbkdf2',
-    'sha1', 'md5', 'des',
-    'md4', 'des-ecb', 'none',
+  const keys = [
+    { label: 'session-key', type: 'x25519', status: 'active', color: C.green },
+    { label: 'signing-key', type: 'ed25519', status: 'active', color: C.green },
+    { label: 'backup-key', type: 'x25519', status: 'rotated', color: C.yellow },
+    { label: 'legacy-key', type: 'ed25519', status: 'revoked', color: C.red },
   ];
 
-  const strengthColors: Record<string, string> = {
-    strong: C.ok, acceptable: C.info, weak: C.warn, broken: C.err,
-  };
+  return (
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+      <Box style={{
+        backgroundColor: c.surface,
+        borderRadius: 6,
+        padding: 10,
+        gap: 6,
+      }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Image src="lock" style={{ width: 10, height: 10 }} tintColor={C.accent} />
+          <Text style={{ fontSize: 10, color: c.text }}>{'keys.kr'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'AEAD encrypted'}</Text>
+        </Box>
 
-  const results: AlgorithmAssessment[] = algorithms.map(a => checkAlgorithmStrength(a));
+        {keys.map(k => (
+          <Box key={k.label} style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingLeft: 16,
+          }}>
+            <Box style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: k.color,
+            }} />
+            <Text style={{ fontSize: 10, color: c.text, width: 90 }}>{k.label}</Text>
+            <Box style={{
+              backgroundColor: `${k.color}22`,
+              borderRadius: 3,
+              paddingLeft: 5,
+              paddingRight: 5,
+              paddingTop: 1,
+              paddingBottom: 1,
+            }}>
+              <Text style={{ fontSize: 8, color: k.color }}>{k.type}</Text>
+            </Box>
+            <Text style={{ fontSize: 8, color: k.color }}>{k.status}</Text>
+          </Box>
+        ))}
+      </Box>
+      <Text style={{ fontSize: 9, color: c.muted }}>
+        {'generate \u2192 store \u2192 rotate \u2192 revoke \u2192 close/reopen'}
+      </Text>
+    </Box>
+  );
+}
+
+function SecureMemoryDemo() {
+  const c = useThemeColors();
+
+  const stages = [
+    { label: 'alloc', desc: 'sodium_malloc + guard pages', icon: '\u25cb', color: C.blue },
+    { label: 'write', desc: 'cafebabe12345678', icon: '\u25cf', color: C.green },
+    { label: 'protect', desc: 'noaccess mode', icon: '\u25a0', color: C.yellow },
+    { label: 'read', desc: 'managed read-through', icon: '\u25b6', color: C.mauve },
+    { label: 'free', desc: 'sodium_memzero + free', icon: '\u2715', color: C.red },
+  ];
 
   return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Pure TypeScript -- checks algorithm against known strength tiers</Text>
+    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0 }}>
+      <Box style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingBottom: 4,
+      }}>
+        <Text style={{ fontSize: 9, color: c.muted }}>{'handle: opaque int'}</Text>
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 3,
+          paddingLeft: 6,
+          paddingRight: 6,
+          paddingTop: 2,
+          paddingBottom: 2,
+        }}>
+          <Text style={{ fontSize: 10, color: C.accent }}>{'#7'}</Text>
+        </Box>
+        <Text style={{ fontSize: 9, color: c.muted }}>{'(TS never sees raw bytes)'}</Text>
+      </Box>
 
-      {results.map(r => (
-        <Box key={r.algorithm} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
-          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: strengthColors[r.strength] || C.dim }} />
-          <Text style={{ fontSize: 10, color: c.text, width: 160 }}>{r.algorithm}</Text>
-          <Text style={{ fontSize: 10, color: strengthColors[r.strength] || C.dim, width: 80, fontWeight: 'normal' }}>{r.strength}</Text>
-          {r.deprecated && (
-            <Text style={{ fontSize: 8, color: C.err }}>DEPRECATED</Text>
+      {stages.map((s, i) => (
+        <Box key={s.label} style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          paddingLeft: 4,
+        }}>
+          <Text style={{ fontSize: 10, color: s.color }}>{s.icon}</Text>
+          <Text style={{ fontSize: 10, color: s.color, width: 50 }}>{s.label}</Text>
+          <Text style={{ fontSize: 9, color: c.muted }}>{s.desc}</Text>
+          {i < stages.length - 1 && (
+            <Text style={{ fontSize: 8, color: c.border }}>{''}</Text>
           )}
         </Box>
-      ))}
-
-      <Box style={{ backgroundColor: C.bg, padding: 8, borderRadius: 4, gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 9, color: C.dim }}>Recommended defaults:</Text>
-        <Text style={{ fontSize: 9, color: C.ok }}>{`cipher: ${RECOMMENDED_DEFAULTS.algorithm}  kdf: ${RECOMMENDED_DEFAULTS.kdf}  hash: ${RECOMMENDED_DEFAULTS.hashAlgorithm}`}</Text>
-        <Text style={{ fontSize: 9, color: C.ok }}>{`keySize: ${RECOMMENDED_DEFAULTS.keySize}B  nonce: ${RECOMMENDED_DEFAULTS.nonceSize}B  salt: ${RECOMMENDED_DEFAULTS.saltSize}B`}</Text>
-      </Box>
-    </>
-  );
-}
-
-// ── Shamir's Secret Sharing ──────────────────────────
-
-function ShamirDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, warn: c.warning, err: c.error, info: c.info, accent: c.accent };
-
-  const privacy = usePrivacy();
-  const secretHex = 'deadbeefcafebabe';
-
-  const [shares, setShares] = useState<ShamirShare[]>([]);
-  const [recovered, setRecovered] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const runDemo = useCallback(async () => {
-    try {
-      const s = await privacy.shamir.split(secretHex, 5, 3);
-      setShares(s);
-      // Combine using only shares 0, 2, 4 (any 3 of 5)
-      const rec = await privacy.shamir.combine([s[0], s[2], s[4]]);
-      setRecovered(rec);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [privacy]);
-
-  useEffect(() => { runDemo(); }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Lua FFI -- split secret into N shares, recover with any K (threshold)</Text>
-
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>Secret (hex):</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.info }}>{secretHex}</Text>
-        </Box>
-      </Box>
-
-      <Text style={{ fontSize: 10, color: C.sec }}>{`Split into 5 shares (threshold: 3):`}</Text>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: C.err }}>{`Shamir error: ${error}`}</Text>
-      )}
-
-      {shares.map(s => (
-        <Box key={s.index} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', width: '100%' }}>
-          <Text style={{ fontSize: 10, color: C.accent, width: 60 }}>{`Share ${s.index}`}</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 8, color: C.sec }}>{s.hex}</Text>
-          </Box>
-        </Box>
-      ))}
-
-      {recovered && (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <Box style={{
-            width: 8, height: 8, borderRadius: 4,
-            backgroundColor: recovered === secretHex ? C.ok : C.err,
-          }} />
-          <Text style={{ fontSize: 11, color: recovered === secretHex ? C.ok : C.err, fontWeight: 'normal' }}>
-            {recovered === secretHex ? `Recovered with shares [0,2,4]: ${recovered}` : `Recovery mismatch: ${recovered}`}
-          </Text>
-        </Box>
-      )}
-
-      <Pressable onPress={runDemo}>
-        <Box style={{ backgroundColor: C.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.bg, fontWeight: 'normal' }}>Re-split</Text>
-        </Box>
-      </Pressable>
-    </>
-  );
-}
-
-// ── HKDF Key Derivation ──────────────────────────────
-
-function HKDFDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, info: c.info, accent: c.accent };
-
-  const privacy = usePrivacy();
-  const [derivedKey, setDerivedKey] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const ikm = 'user-provided-input-key-material';
-  const salt = 'application-salt-2026';
-  const info = 'encryption-key-v1';
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const key = await privacy.hkdf.derive(ikm, { salt, info, length: 32 });
-        setDerivedKey(key);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-  }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Lua FFI -- HMAC-based Extract-and-Expand Key Derivation Function</Text>
-
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>Input key material:</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.info }}>{ikm}</Text>
-        </Box>
-      </Box>
-
-      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-        <Box style={{ gap: 2, flexGrow: 1 }}>
-          <Text style={{ fontSize: 9, color: C.dim }}>salt:</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3 }}>
-            <Text style={{ fontSize: 9, color: C.accent }}>{salt}</Text>
-          </Box>
-        </Box>
-        <Box style={{ gap: 2, flexGrow: 1 }}>
-          <Text style={{ fontSize: 9, color: C.dim }}>info:</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3 }}>
-            <Text style={{ fontSize: 9, color: C.accent }}>{info}</Text>
-          </Box>
-        </Box>
-      </Box>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>{`HKDF error: ${error}`}</Text>
-      )}
-
-      {derivedKey && (
-        <Box style={{ gap: 2, width: '100%' }}>
-          <Text style={{ fontSize: 10, color: C.ok, fontWeight: 'normal' }}>Derived key (32 bytes, hex):</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 4 }}>
-            <Text style={{ fontSize: 9, color: C.sec }}>{derivedKey}</Text>
-          </Box>
-        </Box>
-      )}
-    </>
-  );
-}
-
-// ── Secure Memory ────────────────────────────────────
-
-function SecureMemDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, warn: c.warning, err: c.error, info: c.info };
-
-  const privacy = usePrivacy();
-  const [steps, setSteps] = useState<{ label: string; value: string; color: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const runDemo = useCallback(async () => {
-    setSteps([]);
-    setError(null);
-    try {
-      const data = 'cafebabe12345678';
-      const log: typeof steps = [];
-
-      log.push({ label: 'Allocating secure memory with data', value: data, color: C.info });
-      setSteps([...log]);
-
-      const handle = await privacy.secureMem.alloc(data);
-      log.push({ label: 'Handle obtained', value: `#${handle}`, color: C.ok });
-      setSteps([...log]);
-
-      const readBack = await privacy.secureMem.read(handle);
-      log.push({ label: 'Read back from secure memory', value: readBack, color: C.ok });
-      setSteps([...log]);
-
-      await privacy.secureMem.protect(handle, 'readonly');
-      log.push({ label: 'Protected (readonly)', value: 'mprotect applied', color: C.warn });
-      setSteps([...log]);
-
-      await privacy.secureMem.free(handle);
-      log.push({ label: 'Freed (sodium_memzero + munlock)', value: 'wiped', color: C.ok });
-      setSteps([...log]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [privacy]);
-
-  useEffect(() => { runDemo(); }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Lua FFI -- mlock + mprotect + sodium_memzero lifecycle</Text>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: C.err }}>{`Secure memory error: ${error}`}</Text>
-      )}
-
-      {steps.map((s, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', width: '100%' }}>
-          <Text style={{ fontSize: 9, color: C.dim, width: 14 }}>{`${i + 1}.`}</Text>
-          <Text style={{ fontSize: 10, color: s.color, flexGrow: 1 }}>{s.label}</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3 }}>
-            <Text style={{ fontSize: 9, color: C.sec }}>{s.value}</Text>
-          </Box>
-        </Box>
-      ))}
-
-      <Pressable onPress={runDemo}>
-        <Box style={{ backgroundColor: C.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.bg, fontWeight: 'normal' }}>Re-run cycle</Text>
-        </Box>
-      </Pressable>
-    </>
-  );
-}
-
-// ── Encrypted Store ──────────────────────────────────
-
-function EncryptedStoreDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, warn: c.warning, err: c.error, info: c.info, accent: c.accent };
-
-  const privacy = usePrivacy();
-  const [log, setLog] = useState<{ action: string; result: string; color: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const runDemo = useCallback(async () => {
-    setLog([]);
-    setError(null);
-    const entries: typeof log = [];
-    try {
-      const store = await privacy.store.create({ path: '/tmp/demo-store', password: 'demo-pass-123' });
-      entries.push({ action: 'create()', result: 'Store opened', color: C.ok });
-      setLog([...entries]);
-
-      await store.set('api-key', 'sk-live-abc123xyz');
-      entries.push({ action: 'set("api-key", ...)', result: 'Encrypted + stored', color: C.info });
-      setLog([...entries]);
-
-      await store.set('user-token', 'eyJhbGciOiJIUzI1NiJ9.payload');
-      entries.push({ action: 'set("user-token", ...)', result: 'Encrypted + stored', color: C.info });
-      setLog([...entries]);
-
-      const keys = await store.list();
-      entries.push({ action: 'list()', result: keys.join(', '), color: C.accent });
-      setLog([...entries]);
-
-      const val = await store.get('api-key');
-      entries.push({ action: 'get("api-key")', result: String(val), color: C.ok });
-      setLog([...entries]);
-
-      await store.delete('user-token');
-      entries.push({ action: 'delete("user-token")', result: 'Removed', color: C.warn });
-      setLog([...entries]);
-
-      const keysAfter = await store.list();
-      entries.push({ action: 'list() after delete', result: keysAfter.join(', ') || '(empty)', color: C.accent });
-      setLog([...entries]);
-
-      await store.close();
-      entries.push({ action: 'close()', result: 'Store closed + cleared', color: C.ok });
-      setLog([...entries]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [privacy]);
-
-  useEffect(() => { runDemo(); }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Encrypted key-value store -- encrypt via crypto RPC, in-memory map</Text>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: C.err }}>{`Store error: ${error}`}</Text>
-      )}
-
-      {log.map((entry, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', width: '100%' }}>
-          <Box style={{ width: 140 }}>
-            <Text style={{ fontSize: 9, color: C.dim }}>{entry.action}</Text>
-          </Box>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 9, color: entry.color }}>{entry.result}</Text>
-          </Box>
-        </Box>
-      ))}
-
-      <Pressable onPress={runDemo}>
-        <Box style={{ backgroundColor: C.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.bg, fontWeight: 'normal' }}>Re-run</Text>
-        </Box>
-      </Pressable>
-    </>
-  );
-}
-
-// ── Audit Log ────────────────────────────────────────
-
-function AuditDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, warn: c.warning, err: c.error, info: c.info, accent: c.accent };
-
-  const privacy = usePrivacy();
-  const [entries, setEntries] = useState<{ event: string; hash: string }[]>([]);
-  const [verified, setVerified] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const runDemo = useCallback(async () => {
-    setEntries([]);
-    setVerified(null);
-    setError(null);
-    try {
-      // createAuditLog is a sync init -- must import directly
-      const { createAuditLog, appendAudit, verifyAudit } = await import('../../../packages/privacy/src/audit');
-      createAuditLog('demo-chain-key-hex-0123456789abcdef');
-
-      const e1 = await appendAudit('user.login', { userId: 'alice', ip: '10.0.0.1' });
-      const e2 = await appendAudit('data.access', { table: 'users', action: 'read' });
-      const e3 = await appendAudit('config.change', { key: 'max_retries', from: 3, to: 5 });
-
-      setEntries([
-        { event: e1.event, hash: e1.hash.slice(0, 32) + '...' },
-        { event: e2.event, hash: e2.hash.slice(0, 32) + '...' },
-        { event: e3.event, hash: e3.hash.slice(0, 32) + '...' },
-      ]);
-
-      const result = await verifyAudit();
-      setVerified(result.valid);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [privacy]);
-
-  useEffect(() => { runDemo(); }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>HMAC-SHA256 hash chain -- each entry links to previous via prevHash</Text>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: C.err }}>{`Audit error: ${error}`}</Text>
-      )}
-
-      {entries.map((e, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', width: '100%' }}>
-          <Text style={{ fontSize: 10, color: C.accent, width: 100 }}>{e.event}</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 8, color: C.sec }}>{e.hash}</Text>
-          </Box>
-        </Box>
-      ))}
-
-      {verified !== null && (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <Box style={{
-            width: 8, height: 8, borderRadius: 4,
-            backgroundColor: verified ? C.ok : C.err,
-          }} />
-          <Text style={{ fontSize: 11, color: verified ? C.ok : C.err, fontWeight: 'normal' }}>
-            {verified ? 'Chain integrity verified -- no tampering detected' : 'Chain integrity BROKEN'}
-          </Text>
-        </Box>
-      )}
-
-      <Pressable onPress={runDemo}>
-        <Box style={{ backgroundColor: C.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.bg, fontWeight: 'normal' }}>Re-run</Text>
-        </Box>
-      </Pressable>
-    </>
-  );
-}
-
-// ── File Integrity ───────────────────────────────────
-
-function FileIntegrityDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, err: c.error, info: c.info };
-
-  const privacy = usePrivacy();
-  const filePath = '/etc/hostname';
-  const [hash, setHash] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const h = await privacy.integrity.hashFile(filePath, 'sha256');
-        setHash(h);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-  }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Lua FFI -- SHA-256 file hash for integrity verification</Text>
-
-      <Box style={{ gap: 2, width: '100%' }}>
-        <Text style={{ fontSize: 10, color: C.sec }}>File path:</Text>
-        <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: C.info }}>{filePath}</Text>
-        </Box>
-      </Box>
-
-      {error && (
-        <Text style={{ fontSize: 10, color: C.err }}>{`Hash error: ${error}`}</Text>
-      )}
-
-      {hash && (
-        <Box style={{ gap: 2, width: '100%' }}>
-          <Text style={{ fontSize: 10, color: C.ok, fontWeight: 'normal' }}>SHA-256 hash:</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 4, borderRadius: 4 }}>
-            <Text style={{ fontSize: 9, color: C.sec }}>{hash}</Text>
-          </Box>
-        </Box>
-      )}
-    </>
-  );
-}
-
-// ── Utility Demos (sanitizeFilename, normalizeTimestamp) ──
-
-function UtilityDemo() {
-  const c = useThemeColors();
-  const C = { bg: c.bg, dim: c.textDim, sec: c.textSecondary, ok: c.success, info: c.info, warn: c.warning };
-
-  const filenames = [
-    '../../../etc/passwd',
-    './sneaky\x00hidden.txt',
-    '  my document (final) [v2].pdf  ',
-  ];
-
-  const timestamps = [
-    '2026-03-03T14:30:00.123Z',
-    'March 3, 2026',
-    new Date(2026, 2, 3, 10, 0, 0).toISOString(),
-  ];
-
-  return (
-    <>
-      <Text style={{ fontSize: 9, color: C.dim }}>Pure TypeScript -- path traversal prevention + timestamp normalization</Text>
-
-      <Text style={{ fontSize: 10, color: C.info, fontWeight: 'normal' }}>sanitizeFilename()</Text>
-      {filenames.map((f, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 9, color: C.warn }}>{JSON.stringify(f)}</Text>
-          </Box>
-          <Text style={{ fontSize: 10, color: C.dim }}>{'->'}</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 9, color: C.ok }}>{JSON.stringify(sanitizeFilename(f))}</Text>
-          </Box>
-        </Box>
-      ))}
-
-      <Text style={{ fontSize: 10, color: C.info, fontWeight: 'normal' }}>normalizeTimestamp()</Text>
-      {timestamps.map((t, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', width: '100%' }}>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 9, color: C.sec }}>{String(t)}</Text>
-          </Box>
-          <Text style={{ fontSize: 10, color: C.dim }}>{'->'}</Text>
-          <Box style={{ backgroundColor: C.bg, padding: 3, borderRadius: 3, flexGrow: 1 }}>
-            <Text style={{ fontSize: 9, color: C.ok }}>{normalizeTimestamp(t)}</Text>
-          </Box>
-        </Box>
-      ))}
-    </>
-  );
-}
-
-// ── Code Examples ────────────────────────────────────
-
-function CodeBlock({ label, code, color }: { label: string; code: string[]; color?: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ backgroundColor: c.bg, borderRadius: 6, padding: 10, gap: 3, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{label}</Text>
-      {code.map((line, i) => (
-        <Text key={i} style={{ fontSize: 10, color: color || c.success }}>{line}</Text>
       ))}
     </Box>
   );
 }
 
-function UsageExamples() {
+function StegDemo() {
+  const c = useThemeColors();
+  const carrier = 'This looks normal.';
+  const secret = 'TOP SECRET';
+  // First N letters carry hidden bits (1 bit per letter)
+  const bitCount = secret.length * 8;
+
   return (
-    <>
-      <CodeBlock
-        label="// PII detection + redaction (pure TS, sync)"
-        code={[
-          "import { detectPII, redactPII, maskValue } from '@reactjit/privacy';",
-          "",
-          "const matches = detectPII('Email: user@test.com');",
-          "const safe = redactPII(text, { mask: true });",
-          "const masked = maskValue('4111111111111111');",
-        ]}
-      />
+    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0 }}>
+      {/* Carrier text — looks innocent */}
+      <Text style={{ fontSize: 9, color: c.muted }}>{'carrier text (visible):'}</Text>
+      <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10 }}>
+        <Text style={{ fontSize: 12, color: c.text }}>{carrier}</Text>
+      </Box>
 
-      <CodeBlock
-        label="// Shamir's Secret Sharing (Lua FFI)"
-        code={[
-          "const privacy = usePrivacy();",
-          "const shares = await privacy.shamir.split('deadbeef', 5, 3);",
-          "const secret = await privacy.shamir.combine(shares.slice(0, 3));",
-        ]}
-      />
+      {/* Reveal: show which letters carry bits */}
+      <Text style={{ fontSize: 9, color: c.muted }}>{'what is actually there:'}</Text>
+      <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10, gap: 6 }}>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {carrier.split('').map((ch, i) => (
+            <Text key={i} style={{
+              fontSize: 12,
+              color: i < bitCount ? C.mauve : c.text,
+              backgroundColor: i < bitCount ? 'rgba(203,166,247,0.12)' : 'transparent',
+            }}>{ch}</Text>
+          ))}
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <Box style={{ width: 8, height: 3, backgroundColor: C.mauve, borderRadius: 1 }} />
+          <Text style={{ fontSize: 8, color: C.mauve }}>
+            {'zero-width U+200B/U+200C injected between highlighted chars'}
+          </Text>
+        </Box>
+      </Box>
 
-      <CodeBlock
-        label="// Whitespace steganography (pure TS)"
-        code={[
-          "import { stegEmbedWhitespace, stegExtractWhitespace } from '@reactjit/privacy';",
-          "",
-          "const hidden = stegEmbedWhitespace('normal text', 'secret');",
-          "const recovered = stegExtractWhitespace(hidden);",
-        ]}
-      />
-
-      <CodeBlock
-        label="// Audit log with hash chain verification"
-        code={[
-          "const { audit } = usePrivacy();",
-          "await audit.append('user.login', { userId: 'alice' });",
-          "const { valid } = await audit.verify();",
-        ]}
-      />
-    </>
+      {/* Extracted */}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={{ fontSize: 9, color: c.muted }}>{'extract \u2192'}</Text>
+        <Box style={{
+          backgroundColor: 'rgba(203,166,247,0.15)',
+          borderRadius: 4,
+          paddingLeft: 10,
+          paddingRight: 10,
+          paddingTop: 4,
+          paddingBottom: 4,
+        }}>
+          <Text style={{ fontSize: 12, color: C.mauve }}>{secret}</Text>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
-// ── Main Story ───────────────────────────────────────
+function AuditDemo() {
+  const c = useThemeColors();
+
+  const entries = [
+    { event: 'user.login', data: 'alice', hash: 'a3f1..', color: C.blue },
+    { event: 'data.access', data: 'users', hash: '7b02..', color: C.green },
+    { event: 'data.export', data: 'csv', hash: 'c8d9..', color: C.peach },
+    { event: 'user.logout', data: 'alice', hash: '12ef..', color: C.mauve },
+  ];
+
+  return (
+    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0 }}>
+      {entries.map((e, i) => (
+        <Box key={i}>
+          <Box style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: `${e.color}10`,
+            borderRadius: 4,
+            padding: 6,
+            paddingLeft: 10,
+            paddingRight: 10,
+          }}>
+            <Text style={{ fontSize: 9, color: e.color, width: 80 }}>{e.event}</Text>
+            <Text style={{ fontSize: 9, color: c.muted, flexGrow: 1 }}>{e.data}</Text>
+            <Text style={{ fontSize: 8, color: c.border }}>{`hmac: ${e.hash}`}</Text>
+          </Box>
+          {i < entries.length - 1 && (
+            <Box style={{ paddingLeft: 20 }}>
+              <Text style={{ fontSize: 8, color: c.border }}>{'\u2502 chain'}</Text>
+            </Box>
+          )}
+        </Box>
+      ))}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.green }} />
+        <Text style={{ fontSize: 9, color: C.green }}>{'verifyAudit() \u2192 chain intact'}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+function AlgoSafetyDemo() {
+  const c = useThemeColors();
+
+  const algos = [
+    { name: 'xchacha20-poly1305', strength: 'strong', color: C.green },
+    { name: 'aes-256-gcm', strength: 'strong', color: C.green },
+    { name: 'aes-128-gcm', strength: 'acceptable', color: C.yellow },
+    { name: 'sha1', strength: 'weak', color: C.peach },
+    { name: 'md5', strength: 'broken', color: C.red },
+    { name: 'des', strength: 'broken', color: C.red },
+  ];
+
+  return (
+    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0 }}>
+      {algos.map(a => (
+        <Box key={a.name} style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <Box style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: a.color,
+          }} />
+          <Text style={{ fontSize: 10, color: c.text, width: 130 }}>{a.name}</Text>
+          <Box style={{
+            backgroundColor: `${a.color}22`,
+            borderRadius: 3,
+            paddingLeft: 6,
+            paddingRight: 6,
+            paddingTop: 1,
+            paddingBottom: 1,
+          }}>
+            <Text style={{ fontSize: 8, color: a.color }}>{a.strength}</Text>
+          </Box>
+        </Box>
+      ))}
+      <Text style={{ fontSize: 8, color: c.muted, paddingTop: 4 }}>
+        {'RECOMMENDED_DEFAULTS: xchacha20 / argon2id / blake3 / 32-byte keys'}
+      </Text>
+    </Box>
+  );
+}
+
+function EnvelopeDemo() {
+  const c = useThemeColors();
+
+  return (
+    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0 }}>
+      {/* Stacked layers — deepest = most nested */}
+      <Box style={{
+        backgroundColor: 'rgba(250,179,135,0.10)',
+        borderRadius: 8,
+        paddingLeft: 12,
+        paddingRight: 12,
+        paddingTop: 8,
+        paddingBottom: 10,
+        gap: 6,
+      }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Image src="key" style={{ width: 9, height: 9 }} tintColor={C.peach} />
+          <Text style={{ fontSize: 9, color: C.peach }}>{'KEK (your key)'}</Text>
+        </Box>
+
+        <Box style={{
+          backgroundColor: 'rgba(137,180,250,0.10)',
+          borderRadius: 6,
+          paddingLeft: 12,
+          paddingRight: 12,
+          paddingTop: 6,
+          paddingBottom: 8,
+          gap: 4,
+        }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Image src="key" style={{ width: 8, height: 8 }} tintColor={C.blue} />
+            <Text style={{ fontSize: 9, color: C.blue }}>{'DEK (random per-op)'}</Text>
+          </Box>
+
+          <Box style={{
+            backgroundColor: c.surface,
+            borderRadius: 4,
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 6,
+            paddingBottom: 6,
+          }}>
+            <Text style={{ fontSize: 9, color: c.muted }}>{'your data \u2014 XChaCha20-Poly1305'}</Text>
+          </Box>
+        </Box>
+      </Box>
+
+      <Text style={{ fontSize: 8, color: c.muted }}>
+        {'fresh DEK per encrypt \u2014 same plaintext never produces same ciphertext'}
+      </Text>
+    </Box>
+  );
+}
+
+// ── PrivacyStory ─────────────────────────────────────────
 
 export function PrivacyStory() {
   const c = useThemeColors();
 
   return (
-    <StoryPage>
-      <StorySection index={1} title="@reactjit/privacy">
-        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-          PII detection, data masking, steganography, Shamir SSS, HKDF, secure memory, encrypted storage, audit chains, file integrity -- privacy toolkit for ReactJIT.
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+
+      {/* ── Header ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 14,
+      }}>
+        <Image src="shield" style={{ width: 18, height: 18 }} tintColor={C.accent} />
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          {'usePrivacy'}
         </Text>
-      </StorySection>
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/privacy'}</Text>
+        </Box>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'Encryption, PII, keys, channels'}
+        </Text>
+      </Box>
 
-      <StorySection index={2} title="PII Detection & Redaction">
-        <PIIDemo />
-      </StorySection>
+      {/* ── Center ── */}
+      <ScrollView style={{ flexGrow: 1 }}>
 
-      <StorySection index={3} title="Data Masking">
-        <MaskDemo />
-      </StorySection>
+        {/* ── Hero band ── */}
+        <Box style={{
+          borderLeftWidth: 3,
+          borderColor: C.accent,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 24,
+          paddingBottom: 24,
+          gap: 8,
+        }}>
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+            {'Privacy toolkit: PII detection, Shamir secret sharing, Noise-NK channels, encrypted keyrings, steganography.'}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>
+            {'Three tiers: Lua FFI for C-speed crypto (libsodium, OpenSSL), shell-out for battle-tested tools (GPG, exiftool), and pure TypeScript for string operations (PII regex, policy, audit).'}
+          </Text>
+        </Box>
 
-      <StorySection index={4} title="Whitespace Steganography">
-        <StegDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={5} title="Algorithm Safety">
-        <AlgorithmSafetyDemo />
-      </StorySection>
+        {/* ── Install: text | code ── */}
+        <Box style={BAND_STYLE}>
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'usePrivacy() returns all operations namespaced by domain. Individual functions can also be imported directly.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+        </Box>
 
-      <StorySection index={6} title="Shamir's Secret Sharing">
-        <ShamirDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={7} title="HKDF Key Derivation">
-        <HKDFDemo />
-      </StorySection>
+        {/* ── PII: demo | text ── */}
+        <Box style={BAND_STYLE}>
+          <PIIDemo />
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="eye">{'PII DETECTION'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Pure TypeScript regex scanner. Finds emails, phone numbers, SSNs, IPv4/v6, and credit cards with match boundaries for surgical redaction.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={PII_CODE} />
+          </Box>
+        </Box>
 
-      <StorySection index={8} title="Secure Memory">
-        <SecureMemDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={9} title="Encrypted Store">
-        <EncryptedStoreDemo />
-      </StorySection>
+        {/* ── Shamir: text | demo ── */}
+        <Box style={BAND_STYLE}>
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="key">{'SHAMIR SECRET SHARING'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Split a secret into N shares where any K can reconstruct it. Fewer than K shares reveal zero information. Bordered shares are the 3 used for recovery.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={SHAMIR_CODE} />
+          </Box>
+          <ShamirDemo />
+        </Box>
 
-      <StorySection index={10} title="Audit Log">
-        <AuditDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={11} title="File Integrity">
-        <FileIntegrityDemo />
-      </StorySection>
+        {/* ── Callout: crypto tiers ── */}
+        <Box style={{
+          backgroundColor: C.callout,
+          borderLeftWidth: 3,
+          borderColor: C.calloutBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'All crypto runs in C via LuaJIT FFI. TypeScript never touches raw secret bytes \u2014 secure memory uses opaque integer handles.'}
+          </Text>
+        </Box>
 
-      <StorySection index={12} title="Sanitization Utilities">
-        <UtilityDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={13} title="Usage Examples">
-        <UsageExamples />
-      </StorySection>
-    </StoryPage>
+        {/* ── Envelope: demo | text ── */}
+        <Box style={BAND_STYLE}>
+          <EnvelopeDemo />
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="lock">{'ENVELOPE ENCRYPTION'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Two-layer encryption: a random DEK encrypts data, then the DEK itself is encrypted with your KEK. XChaCha20-Poly1305 AEAD throughout.'}
+            </Text>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Noise: text | demo ── */}
+        <Box style={BAND_STYLE}>
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="wifi">{'NOISE-NK CHANNELS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Noise-NK secure channel: ephemeral X25519 DH with HKDF-derived session keys. Bidirectional encrypted messaging with replay protection built in.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={NOISE_CODE} />
+          </Box>
+          <NoiseDemo />
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout: secure memory ── */}
+        <Box style={{
+          backgroundColor: C.warn,
+          borderLeftWidth: 3,
+          borderColor: C.warnBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.warnBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'Secure memory uses sodium_malloc with guard pages. Raw secret bytes never enter the JS heap or GC.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Keyring: demo | text ── */}
+        <Box style={BAND_STYLE}>
+          <KeyringDemo />
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="database">{'ENCRYPTED KEYRING'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Password-protected keyring files. Generate, store, rotate, and revoke Ed25519/X25519 keys. Persists across close/reopen.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={KEYRING_CODE} />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Secure Memory: text | demo ── */}
+        <Box style={BAND_STYLE}>
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="shield">{'SECURE MEMORY'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Allocate secrets in sodium_malloc pages with guard-page overflow protection. Handle lifecycle is strictly enforced \u2014 read after free throws.'}
+            </Text>
+          </Box>
+          <SecureMemoryDemo />
+        </Box>
+
+        <Divider />
+
+        {/* ── Steg: demo | text ── */}
+        <Box style={BAND_STYLE}>
+          <StegDemo />
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="eye">{'STEGANOGRAPHY'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Hide data in plain sight. Whitespace steganography encodes binary as zero-width Unicode between visible carrier text. Image steganography uses LSB encoding via Love2D ImageData.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={STEG_CODE} />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Audit: text | demo ── */}
+        <Box style={BAND_STYLE}>
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="terminal">{'AUDIT LOG'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Tamper-evident append-only log using HMAC-SHA256 hash chains. Each entry links to the previous. verifyAudit() walks the chain and detects any modification.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={AUDIT_CODE} />
+          </Box>
+          <AuditDemo />
+        </Box>
+
+        <Divider />
+
+        {/* ── Safety: demo | text ── */}
+        <Box style={BAND_STYLE}>
+          <AlgoSafetyDemo />
+          <Box style={TEXT_SIDE}>
+            <SectionLabel icon="settings">{'ALGORITHM SAFETY'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Pure TypeScript strength checker. Rates algorithms as strong/acceptable/weak/broken with deprecation flags. Ships with RECOMMENDED_DEFAULTS for safe starting values.'}
+            </Text>
+          </Box>
+        </Box>
+
+      </ScrollView>
+
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="shield" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Privacy'}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+      </Box>
+
+    </Box>
   );
 }

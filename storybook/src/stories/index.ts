@@ -12,7 +12,6 @@ export interface StoryDef {
 import { BoxStory } from './BoxStory';
 import { TextStory } from './TextStory';
 import { LayoutStory } from './LayoutStory';
-import { GridStory } from './GridStory';
 import { StyleStory } from './StyleStory';
 import { InputStory } from './InputStory';
 import { DemoStory } from './DemoStory';
@@ -71,7 +70,6 @@ export const stories: StoryDef[] = [
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
   { id: 'layout', title: 'Layout', section: 'Core', component: LayoutStory },
-  { id: 'grid', title: 'Grid', section: 'Core', component: GridStory },
   { id: 'style', title: 'Style', section: 'Core', component: StyleStory },
   { id: 'image', title: 'Image', section: 'Core', component: ImageBasicStory },
   { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },

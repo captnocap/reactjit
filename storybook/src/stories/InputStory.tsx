@@ -1,548 +1,603 @@
-import React, { useCallback, useState } from 'react';
+/**
+ * Input — Layout1 documentation page.
+ *
+ * Covers ALL user input primitives: Pressable, Slider, Switch,
+ * Checkbox, Radio, Select, TextInput, TextEditor, Modal,
+ * useHotkey, useClipboard.
+ *
+ * Each demo section is its own component so state changes
+ * (e.g. dragging a slider) only re-render that section.
+ */
+
+import React, { useState, useCallback, useEffect } from 'react';
 import {
-  Box,
-  Text,
-  Pressable,
-  Slider,
-  Switch,
-  Checkbox,
-  RadioGroup,
-  Radio,
-  Select,
-  ScrollView,
-  Modal,
-  TextEditor,
-  TextInput,
-  useHotkey,
-  useClipboard,
+  Box, Text, Image, TextEditor, TextInput, CodeBlock, Pressable, ScrollView,
+  Slider, Switch, Checkbox, RadioGroup, Radio, Select, Modal,
+  useHotkey, useClipboard,
 } from '../../../packages/core/src';
-import type { LoveEvent } from '../../../packages/core/src/types';
 import { useThemeColors } from '../../../packages/theme/src';
-import { StoryPage, StorySection } from './_shared/StoryScaffold';
+import { transformJSX } from '../playground/lib/jsx-transform';
+import { evalComponent } from '../playground/lib/eval-component';
+import { Preview } from '../playground/Preview';
 
-const SCROLL_COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
-  '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899',
-  '#f43f5e', '#a855f7', '#d946ef', '#84cc16', '#10b981',
+// ── Syntax colors ────────────────────────────────────────
+
+const SYN = {
+  tag: '#f38ba8',
+  component: '#89b4fa',
+  prop: '#cba6f7',
+  value: '#f9e2af',
+};
+
+// ── Helpers ──────────────────────────────────────────────
+
+function HorizontalDivider() {
+  const c = useThemeColors();
+  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+}
+
+function VerticalDivider() {
+  const c = useThemeColors();
+  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+}
+
+// ── Static data ──────────────────────────────────────────
+
+const USAGE_CODE = `import {
+  Pressable, Slider, Switch, Checkbox,
+  RadioGroup, Radio, Select, TextInput,
+  TextEditor, Modal, useHotkey, useClipboard,
+} from '@reactjit/core';
+
+// Button
+<Pressable onPress={() => alert('hi')}>
+  <Text fontSize={13}>Press me</Text>
+</Pressable>
+
+// Slider
+<Slider value={v} onValueChange={setV} />
+
+// Switch
+<Switch value={on} onValueChange={setOn} />
+
+// TextInput
+<TextInput value={t} onChangeText={setT}
+  placeholder="Type..." style={{ width: 200 }} />`;
+
+const STARTER_CODE = `<Box style={{
+  backgroundColor: '#1e293b',
+  borderRadius: 10,
+  padding: 20,
+  gap: 12,
+  width: 320,
+}}>
+  <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+    Settings Form
+  </Text>
+  <TextInput
+    placeholder="Display name"
+    style={{ width: '100%' }}
+    textStyle={{ fontSize: 13, color: '#e2e8f0' }}
+  />
+  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <Switch value={false} />
+    <Text style={{ color: '#e2e8f0', fontSize: 12 }}>
+      Dark mode
+    </Text>
+  </Box>
+  <Slider value={0.7} style={{ width: '100%' }} />
+  <Pressable style={{
+    backgroundColor: '#3b82f6',
+    borderRadius: 6,
+    paddingLeft: 16, paddingRight: 16,
+    paddingTop: 8, paddingBottom: 8,
+    alignItems: 'center',
+  }}>
+    <Text style={{ color: '#fff', fontSize: 13 }}>
+      Save
+    </Text>
+  </Pressable>
+</Box>`;
+
+// Components — [name, description, icon]
+const COMPONENTS: [string, string, string][] = [
+  ['Pressable', 'Touch/click target with press/hover/disabled states', 'mouse-pointer-click'],
+  ['Slider', 'Draggable track with value, min, max, step', 'sliders-horizontal'],
+  ['Switch', 'Boolean toggle with track + thumb', 'toggle-left'],
+  ['Checkbox', 'Labeled boolean with check/indeterminate', 'check-square'],
+  ['RadioGroup + Radio', 'Single-select from a set of options', 'circle-dot'],
+  ['Select', 'Dropdown picker with options array', 'chevrons-up-down'],
+  ['TextInput', 'Single/multiline text field, cursor, selection', 'text-cursor-input'],
+  ['TextEditor', 'Code editor with syntax highlighting', 'code'],
+  ['Modal', 'Overlay dialog with backdrop dismiss', 'panel-top'],
 ];
-const H_SCROLL_ITEM_HEIGHT = 46;
-const H_SCROLL_PADDING = 8;
-const H_SCROLL_GAP = 6;
-const H_SCROLL_HEIGHT = H_SCROLL_ITEM_HEIGHT + H_SCROLL_PADDING * 2;
 
-const SAMPLE_EDITOR = `function greet(name)
-  print("Hello, " .. name .. "!")
-end
+// Hooks — [name, signature, icon]
+const HOOKS: [string, string, string][] = [
+  ['useHotkey', "(combo: string, cb) => void", 'keyboard'],
+  ['useClipboard', '() => { copy, paste, copied }', 'clipboard'],
+];
 
-greet("world")`;
+const BEHAVIOR_NOTES = [
+  'Pressable style can be a function: ({pressed, hovered}) => Style.',
+  'Slider needs explicit width in style. Supports min/max/step.',
+  'TextInput needs explicit width. onChangeText fires on blur/submit only.',
+  'useHotkey combos: "ctrl+z", "ctrl+shift+s", "escape". Global scope.',
+  'Modal renders above all content. onRequestClose fires on backdrop tap or Escape.',
+];
 
-const SAMPLE_CLIPBOARD = 'Hello from useClipboard!';
-
+// Select options (hoisted)
 const SELECT_FRUIT_OPTIONS = [
   { label: 'Apple', value: 'apple' },
   { label: 'Banana', value: 'banana' },
   { label: 'Cherry', value: 'cherry' },
-  { label: 'Dragon Fruit', value: 'dragon' },
-  { label: 'Elderberry', value: 'elder' },
 ];
 
-const DIFFICULTY_OPTIONS = [
-  { label: 'Easy', value: 'easy' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Hard', value: 'hard' },
-  { label: 'Nightmare', value: 'nightmare' },
-];
+// ── Isolated demo sections ───────────────────────────────
 
-export function InputStory() {
+function PressableDemo() {
   const c = useThemeColors();
   const [pressCount, setPressCount] = useState(0);
-  const [lastPressAction, setLastPressAction] = useState('none');
 
-  const [sliderValueA, setSliderValueA] = useState(0.5);
-  const [sliderValueB, setSliderValueB] = useState(30);
-  const [switchA, setSwitchA] = useState(false);
-  const [switchB, setSwitchB] = useState(true);
-  const [checkboxA, setCheckboxA] = useState(false);
-  const [checkboxB, setCheckboxB] = useState(true);
-  const [checkboxC, setCheckboxC] = useState(false);
-  const [radioFruit, setRadioFruit] = useState('apple');
-  const [radioSize, setRadioSize] = useState('medium');
-  const [selectFruit, setSelectFruit] = useState<string | undefined>(undefined);
-  const [selectDifficulty, setSelectDifficulty] = useState('normal');
+  return (
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'PRESSABLE'}</Text>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable
+          onPress={() => setPressCount(v => v + 1)}
+          style={({ pressed, hovered }) => ({
+            backgroundColor: pressed ? '#2563eb' : hovered ? '#3b82f6' : c.primary,
+            paddingLeft: 14, paddingRight: 14,
+            paddingTop: 7, paddingBottom: 7,
+            borderRadius: 6,
+          })}
+        >
+          <Text style={{ color: '#fff', fontSize: 11 }}>{'Press me'}</Text>
+        </Pressable>
+        <Pressable
+          disabled
+          onPress={() => {}}
+          style={{
+            backgroundColor: c.surface,
+            paddingLeft: 14, paddingRight: 14,
+            paddingTop: 7, paddingBottom: 7,
+            borderRadius: 6,
+          }}
+        >
+          <Text style={{ color: c.muted, fontSize: 11 }}>{'Disabled'}</Text>
+        </Pressable>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{`count: ${pressCount}`}</Text>
+      </Box>
+    </>
+  );
+}
 
-  const [editorFocused, setEditorFocused] = useState(false);
-  const [editorBlurValue, setEditorBlurValue] = useState('');
-  const [editorSubmitValue, setEditorSubmitValue] = useState('');
+function SliderDemo() {
+  const c = useThemeColors();
+  const [sliderVal, setSliderVal] = useState(0.5);
 
+  return (
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'SLIDER'}</Text>
+      <Box style={{ alignItems: 'center', gap: 4 }}>
+        <Slider
+          style={{ width: 240 }}
+          value={sliderVal}
+          onValueChange={setSliderVal}
+          activeTrackColor={c.primary}
+        />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{`value: ${sliderVal.toFixed(2)}`}</Text>
+      </Box>
+    </>
+  );
+}
+
+function SwitchCheckboxDemo() {
+  const c = useThemeColors();
+  const [switchOn, setSwitchOn] = useState(false);
+  const [checkVal, setCheckVal] = useState(false);
+
+  return (
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'SWITCH + CHECKBOX'}</Text>
+      <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center', justifyContent: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Switch value={switchOn} onValueChange={setSwitchOn} />
+          <Text style={{ color: c.text, fontSize: 10 }}>{switchOn ? 'ON' : 'OFF'}</Text>
+        </Box>
+        <Checkbox
+          value={checkVal}
+          onValueChange={setCheckVal}
+          label="Check"
+        />
+      </Box>
+    </>
+  );
+}
+
+function RadioSelectDemo() {
+  const c = useThemeColors();
+  const [radioVal, setRadioVal] = useState('a');
+  const [selectVal, setSelectVal] = useState<string | undefined>(undefined);
+
+  return (
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'RADIO + SELECT'}</Text>
+      <Box style={{ flexDirection: 'row', gap: 20, alignItems: 'center', justifyContent: 'center' }}>
+        <RadioGroup value={radioVal} onValueChange={setRadioVal}>
+          <Radio value="a" label="Alpha" />
+          <Radio value="b" label="Beta" />
+          <Radio value="c" label="Gamma" />
+        </RadioGroup>
+        <Select
+          value={selectVal}
+          onValueChange={setSelectVal}
+          options={SELECT_FRUIT_OPTIONS}
+          placeholder="Pick..."
+        />
+      </Box>
+    </>
+  );
+}
+
+function TextInputDemo() {
+  const c = useThemeColors();
+  const [inputText, setInputText] = useState('');
+
+  return (
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'TEXT INPUT'}</Text>
+      <Box style={{ alignItems: 'center', gap: 4 }}>
+        <TextInput
+          value={inputText}
+          onChangeText={setInputText}
+          placeholder="Type something..."
+          style={{ width: 240 }}
+          textStyle={{ fontSize: 12, color: c.text }}
+        />
+        <Text style={{ color: c.muted, fontSize: 9 }}>
+          {inputText ? `"${inputText}"` : '(empty)'}
+        </Text>
+      </Box>
+    </>
+  );
+}
+
+function ModalDemo() {
+  const c = useThemeColors();
+  const [modalOpen, setModalOpen] = useState(false);
+
+  return (
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'MODAL'}</Text>
+      <Box style={{ alignItems: 'center' }}>
+        <Pressable
+          onPress={() => setModalOpen(true)}
+          style={({ hovered }) => ({
+            backgroundColor: hovered ? '#7c3aed' : '#6d28d9',
+            paddingLeft: 14, paddingRight: 14,
+            paddingTop: 7, paddingBottom: 7,
+            borderRadius: 6,
+          })}
+        >
+          <Text style={{ color: '#fff', fontSize: 11 }}>{'Open modal'}</Text>
+        </Pressable>
+      </Box>
+      <Modal visible={modalOpen} onRequestClose={() => setModalOpen(false)}>
+        <Box style={{
+          width: 280,
+          backgroundColor: c.surface,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 16,
+          gap: 10,
+        }}>
+          <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>{'Hello'}</Text>
+          <Text style={{ color: c.muted, fontSize: 11 }}>{'This is a modal overlay.'}</Text>
+          <Box style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <Pressable
+              onPress={() => setModalOpen(false)}
+              style={{ backgroundColor: c.primary, borderRadius: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 11 }}>{'Close'}</Text>
+            </Pressable>
+          </Box>
+        </Box>
+      </Modal>
+    </>
+  );
+}
+
+function HotkeyClipboardDemo() {
+  const c = useThemeColors();
   const [lastHotkey, setLastHotkey] = useState('(none)');
-  const [hotkeyCount, setHotkeyCount] = useState(0);
-  const [lastKeyEvent, setLastKeyEvent] = useState<{
-    key: string;
-    ctrl: boolean;
-    shift: boolean;
-    alt: boolean;
-    meta: boolean;
-  } | null>(null);
-
   const { copy, paste, copied } = useClipboard();
   const [pastedText, setPastedText] = useState('');
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalAction, setModalAction] = useState<string | null>(null);
-
-  useHotkey('ctrl+z', () => {
-    setLastHotkey('Ctrl+Z');
-    setHotkeyCount(v => v + 1);
-  });
-  useHotkey('ctrl+shift+s', () => {
-    setLastHotkey('Ctrl+Shift+S');
-    setHotkeyCount(v => v + 1);
-  });
-  useHotkey('escape', () => {
-    setLastHotkey('Escape');
-    setHotkeyCount(v => v + 1);
-  });
-
-  const handleKeyDown = useCallback((e: LoveEvent) => {
-    setLastKeyEvent({
-      key: e.key ?? '?',
-      ctrl: e.ctrl ?? false,
-      shift: e.shift ?? false,
-      alt: e.alt ?? false,
-      meta: e.meta ?? false,
-    });
-  }, []);
-
-  const closeModal = (action?: string) => {
-    setModalOpen(false);
-    if (action) setModalAction(action);
-  };
+  useHotkey('ctrl+z', () => setLastHotkey('Ctrl+Z'));
+  useHotkey('escape', () => setLastHotkey('Escape'));
 
   return (
-    <StoryPage>
-        <StorySection index={1} title="Pressable">
-          <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-            <Pressable
-              onPress={() => {
-                setPressCount(v => v + 1);
-                setLastPressAction('press');
-              }}
-              style={({ pressed, hovered }) => ({
-                backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
-                paddingLeft: 18,
-                paddingRight: 18,
-                paddingTop: 9,
-                paddingBottom: 9,
-                borderRadius: 6,
-              })}
-            >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Press me</Text>
-            </Pressable>
-            <Pressable
-              onLongPress={() => setLastPressAction('long press')}
-              onPress={() => setLastPressAction('short press')}
-              style={({ pressed, hovered }) => ({
-                backgroundColor: pressed ? c.accent : hovered ? c.accent : '#6d28d9',
-                paddingLeft: 18,
-                paddingRight: 18,
-                paddingTop: 9,
-                paddingBottom: 9,
-                borderRadius: 6,
-              })}
-            >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Long press</Text>
-            </Pressable>
-            <Pressable
-              disabled
-              onPress={() => {}}
-              style={{
-                backgroundColor: c.surface,
-                paddingLeft: 18,
-                paddingRight: 18,
-                paddingTop: 9,
-                paddingBottom: 9,
-                borderRadius: 6,
-              }}
-            >
-              <Text style={{ color: c.textDim, fontSize: 13 }}>Disabled</Text>
-            </Pressable>
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 16 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Press count: ${pressCount}`}</Text>
-            <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Last action: ${lastPressAction}`}</Text>
-          </Box>
-        </StorySection>
-
-        <StorySection index={2} title="Slider + Switch">
-          <Box style={{ width: '100%', maxWidth: 420, gap: 4, alignItems: 'center' }}>
-            <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Slider (0-1)</Text>
-            <Slider
-              style={{ width: 320 }}
-              value={sliderValueA}
-              onValueChange={setSliderValueA}
-              activeTrackColor={c.primary}
-            />
-            <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{`Value: ${sliderValueA.toFixed(2)}`}</Text>
-          </Box>
-          <Box style={{ width: '100%', maxWidth: 420, gap: 4, alignItems: 'center' }}>
-            <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Slider (0-100, step 10)</Text>
-            <Slider
-              style={{ width: 320 }}
-              value={sliderValueB}
-              minimumValue={0}
-              maximumValue={100}
-              step={10}
-              onValueChange={setSliderValueB}
-              activeTrackColor={c.success}
-              thumbColor={c.success}
-            />
-            <Text style={{ color: c.text, fontSize: 12, textAlign: 'center' }}>{`Value: ${sliderValueB}`}</Text>
-          </Box>
-          <Box style={{ width: '100%', justifyContent: 'center', flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
-            <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Switch value={switchA} onValueChange={setSwitchA} />
-              <Text style={{ color: c.text, fontSize: 12 }}>{`Default: ${switchA ? 'ON' : 'OFF'}`}</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Switch
-                value={switchB}
-                onValueChange={setSwitchB}
-                trackColor={{ true: c.success, false: '#374151' }}
-                thumbColor="#ffffff"
-              />
-              <Text style={{ color: c.text, fontSize: 12 }}>{`Custom: ${switchB ? 'ON' : 'OFF'}`}</Text>
-            </Box>
-          </Box>
-        </StorySection>
-
-        <StorySection index={3} title="ScrollView">
-          <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>Vertical (height: 120)</Text>
-            <ScrollView style={{ height: 120, backgroundColor: c.surface, borderRadius: 6, padding: 8 }}>
-              {SCROLL_COLORS.slice(0, 10).map((color, i) => (
-                <Box
-                  key={`v-${i}`}
-                  style={{
-                    height: 26,
-                    marginBottom: 4,
-                    backgroundColor: color,
-                    borderRadius: 4,
-                    justifyContent: 'center',
-                    paddingLeft: 8,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 10 }}>{`Item ${i + 1}`}</Text>
-                </Box>
-              ))}
-            </ScrollView>
-          </Box>
-          <Box style={{ gap: 4, width: '100%', alignItems: 'center' }}>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>Horizontal</Text>
-            <Box style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
-              <ScrollView
-                horizontal
-                style={{
-                  width: 620,
-                  height: H_SCROLL_HEIGHT,
-                  backgroundColor: c.surface,
-                  borderRadius: 6,
-                  padding: H_SCROLL_PADDING,
-                }}
-              >
-                {Array.from({ length: 30 }).map((_, i) => {
-                  const color = SCROLL_COLORS[i % SCROLL_COLORS.length];
-                  return (
-                    <Box
-                      key={`h-${i}`}
-                      style={{
-                        width: 56,
-                        height: H_SCROLL_ITEM_HEIGHT,
-                        marginRight: H_SCROLL_GAP,
-                        flexShrink: 0,
-                        backgroundColor: color,
-                        borderRadius: 4,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontSize: 9 }}>{`${i + 1}`}</Text>
-                    </Box>
-                  );
-                })}
-              </ScrollView>
-            </Box>
-          </Box>
-        </StorySection>
-
-        <StorySection index={4} title="TextEditor">
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
-            {`Click to focus. Esc blurs. Ctrl+Enter submits.`}
-          </Text>
-          <TextEditor
-            initialValue={SAMPLE_EDITOR}
-            onFocus={() => setEditorFocused(true)}
-            onBlur={(text) => {
-              setEditorFocused(false);
-              setEditorBlurValue(text);
-            }}
-            onSubmit={(text) => setEditorSubmitValue(text)}
-            style={{ width: '100%', height: 170, borderRadius: 6 }}
-            textStyle={{ fontSize: 13 }}
-          />
-          <Text style={{ color: editorFocused ? c.primary : c.textDim, fontSize: 11 }}>
-            {editorFocused ? 'Focused' : 'Unfocused'}
-          </Text>
-          {editorBlurValue !== '' && (
-            <Text style={{ color: c.textSecondary, fontSize: 11 }}>
-              {`Last blur: ${editorBlurValue.slice(0, 60)}...`}
-            </Text>
-          )}
-          {editorSubmitValue !== '' && (
-            <Text style={{ color: c.success, fontSize: 11 }}>
-              {`Last submit: ${editorSubmitValue.slice(0, 60)}...`}
-            </Text>
-          )}
-        </StorySection>
-
-        <StorySection index={5} title="Keyboard hooks + clipboard">
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
-            Press Ctrl+Z, Ctrl+Shift+S, or Escape anywhere.
-          </Text>
-          <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-            <Pressable
-              onPress={() => copy(SAMPLE_CLIPBOARD)}
-              style={({ pressed, hovered }) => ({
-                backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
-                borderRadius: 6,
-                paddingLeft: 14,
-                paddingRight: 14,
-                paddingTop: 8,
-                paddingBottom: 8,
-              })}
-            >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'normal' }}>{copied ? 'Copied!' : 'Copy'}</Text>
-            </Pressable>
-            <Pressable
-              onPress={async () => {
-                const text = await paste();
-                setPastedText(text);
-              }}
-              style={({ pressed, hovered }) => ({
-                backgroundColor: pressed ? c.success : hovered ? c.success : '#15803d',
-                borderRadius: 6,
-                paddingLeft: 14,
-                paddingRight: 14,
-                paddingTop: 8,
-                paddingBottom: 8,
-              })}
-            >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'normal' }}>Paste</Text>
-            </Pressable>
-          </Box>
-          <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Last hotkey: ${lastHotkey}`}</Text>
-          <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Hotkey count: ${hotkeyCount}`}</Text>
-          <Text style={{ color: c.textSecondary, fontSize: 12 }}>
-            {pastedText ? `Pasted: "${pastedText}"` : 'Pasted: (nothing yet)'}
-          </Text>
-        </StorySection>
-
-        <StorySection index={6} title="Raw key event modifiers">
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
-            Press any key while focusing the box below.
-          </Text>
-          <Box
-            onKeyDown={handleKeyDown}
-            style={{
-              width: '100%',
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: lastKeyEvent ? c.primary : c.border,
-              padding: 12,
-              gap: 6,
-            }}
+    <>
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'HOTKEY + CLIPBOARD'}</Text>
+      <Box style={{ alignItems: 'center', gap: 4 }}>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{`Last hotkey: ${lastHotkey} (try Ctrl+Z or Esc)`}</Text>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Pressable
+            onPress={() => copy('Hello from Input!')}
+            style={({ hovered }) => ({
+              backgroundColor: hovered ? c.primary : c.surface,
+              borderRadius: 4,
+              paddingLeft: 10, paddingRight: 10,
+              paddingTop: 4, paddingBottom: 4,
+            })}
           >
-            {lastKeyEvent ? (
-              <>
-                <Text style={{ color: c.text, fontSize: 12 }}>{`key: "${lastKeyEvent.key}"`}</Text>
-                <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  <Text style={{ color: lastKeyEvent.ctrl ? c.success : c.textDim, fontSize: 11 }}>{`ctrl: ${lastKeyEvent.ctrl}`}</Text>
-                  <Text style={{ color: lastKeyEvent.shift ? c.success : c.textDim, fontSize: 11 }}>{`shift: ${lastKeyEvent.shift}`}</Text>
-                  <Text style={{ color: lastKeyEvent.alt ? c.success : c.textDim, fontSize: 11 }}>{`alt: ${lastKeyEvent.alt}`}</Text>
-                  <Text style={{ color: lastKeyEvent.meta ? c.success : c.textDim, fontSize: 11 }}>{`meta: ${lastKeyEvent.meta}`}</Text>
+            <Text style={{ color: c.text, fontSize: 10 }}>{copied ? 'Copied!' : 'Copy'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => { const t = await paste(); setPastedText(t); }}
+            style={({ hovered }) => ({
+              backgroundColor: hovered ? c.primary : c.surface,
+              borderRadius: 4,
+              paddingLeft: 10, paddingRight: 10,
+              paddingTop: 4, paddingBottom: 4,
+            })}
+          >
+            <Text style={{ color: c.text, fontSize: 10 }}>{'Paste'}</Text>
+          </Pressable>
+          {pastedText ? <Text style={{ color: c.muted, fontSize: 9 }}>{`"${pastedText}"`}</Text> : null}
+        </Box>
+      </Box>
+    </>
+  );
+}
+
+// ── Main component ───────────────────────────────────────
+
+export function InputStory() {
+  const c = useThemeColors();
+  const [playground, setPlayground] = useState(false);
+  const [code, setCode] = useState(STARTER_CODE);
+  const [UserComponent, setUserComponent] = useState<React.ComponentType | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const processCode = useCallback((src: string) => {
+    const result = transformJSX(src);
+    if (result.errors.length > 0) {
+      setErrors(result.errors.map(e => `Line ${e.line}:${e.col}: ${e.message}`));
+      return;
+    }
+    const evalResult = evalComponent(result.code);
+    if (evalResult.error) { setErrors([evalResult.error]); return; }
+    setErrors([]);
+    setUserComponent(() => evalResult.component);
+  }, []);
+
+  useEffect(() => {
+    if (playground && code && !UserComponent) {
+      processCode(code);
+    }
+  }, [playground]);
+
+  const handleCodeChange = useCallback((src: string) => {
+    setCode(src);
+    processCode(src);
+  }, [processCode]);
+
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+
+      {/* ── Header ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 14,
+      }}>
+        <Image src="mouse-pointer-click" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          {'Input'}
+        </Text>
+
+        <Box style={{
+          flexDirection: 'row',
+          backgroundColor: c.surface,
+          borderWidth: 1,
+          borderColor: c.border,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
+          <Text style={{ color: SYN.component, fontSize: 10 }}>{'Pressable'}</Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <Text style={{ color: SYN.prop, fontSize: 10 }}>{'onPress'}</Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <Text style={{ color: SYN.value, fontSize: 10 }}>{'{fn}'}</Text>
+          <Text style={{ color: SYN.tag, fontSize: 10 }}>{'>'}</Text>
+        </Box>
+
+        <Box style={{ flexGrow: 1 }} />
+
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'Buttons, sliders, toggles, text fields, and more.'}
+        </Text>
+      </Box>
+
+      {/* ── Center ── */}
+      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+        {playground ? (
+          <>
+            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+              <TextEditor
+                initialValue={code}
+                onChange={handleCodeChange}
+                onBlur={handleCodeChange}
+                onSubmit={handleCodeChange}
+                changeDelay={3}
+                syntaxHighlight
+                placeholder="Write JSX here..."
+                style={{ flexGrow: 1, width: '100%' }}
+                textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
+              />
+            </Box>
+            <VerticalDivider />
+            <Preview UserComponent={UserComponent} errors={errors} />
+          </>
+        ) : (
+          <>
+            {/* ── Left: Preview (centered) ── */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+              <Box style={{ width: '100%', padding: 20, gap: 14 }}>
+                <PressableDemo />
+                <SliderDemo />
+                <SwitchCheckboxDemo />
+                <RadioSelectDemo />
+                <TextInputDemo />
+                <ModalDemo />
+                <HotkeyClipboardDemo />
+              </Box>
+            </ScrollView>
+
+            <VerticalDivider />
+
+            {/* ── Right: API Reference (centered) ── */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+
+                {/* ── Overview ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'OVERVIEW'}
+                </Text>
+                <Text style={{ color: c.text, fontSize: 10 }}>
+                  {'ReactJIT provides a full set of input primitives: Pressable for touch/click targets, Slider and Switch for continuous and boolean values, Checkbox and Radio for selection, Select for dropdown pickers, TextInput and TextEditor for text entry, and Modal for overlay dialogs. Global hotkeys and clipboard access are available via hooks.'}
+                </Text>
+
+                <HorizontalDivider />
+
+                {/* ── Usage ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'USAGE'}
+                </Text>
+                <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
+
+                <HorizontalDivider />
+
+                {/* ── Behavior ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'BEHAVIOR'}
+                </Text>
+                <Box style={{ gap: 4 }}>
+                  {BEHAVIOR_NOTES.map((note, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="chevron-right" style={{ width: 8, height: 8 }} tintColor={c.muted} />
+                      <Text style={{ color: c.text, fontSize: 10 }}>{note}</Text>
+                    </Box>
+                  ))}
                 </Box>
-              </>
-            ) : (
-              <Text style={{ color: c.textDim, fontSize: 12 }}>Waiting for keypress...</Text>
-            )}
-          </Box>
-        </StorySection>
 
-        <StorySection index={7} title="Modal">
-          <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-            <Pressable
-              onPress={() => setModalOpen(true)}
-              style={({ pressed, hovered }) => ({
-                backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
-                borderRadius: 6,
-                paddingLeft: 16,
-                paddingRight: 16,
-                paddingTop: 9,
-                paddingBottom: 9,
-              })}
-            >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>Open modal</Text>
-            </Pressable>
-            {modalAction && (
-              <Text style={{ color: c.textSecondary, fontSize: 12 }}>{modalAction}</Text>
-            )}
-          </Box>
+                <HorizontalDivider />
 
-          <Modal visible={modalOpen} onRequestClose={() => closeModal('Dismissed')}>
-            <Box style={{
-              width: 360,
-              backgroundColor: c.surface,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: c.border,
-              padding: 16,
-              gap: 10,
-            }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>Input Summary</Text>
-              <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Press count: ${pressCount}`}</Text>
-              <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Slider: ${sliderValueB}`}</Text>
-              <Text style={{ color: c.textSecondary, fontSize: 12 }}>{`Switch: ${switchA ? 'ON' : 'OFF'}`}</Text>
-              <Box style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
-                <Pressable
-                  onPress={() => closeModal('Cancelled')}
-                  style={{
-                    backgroundColor: c.bgElevated,
-                    borderRadius: 6,
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                    paddingTop: 7,
-                    paddingBottom: 7,
-                  }}
-                >
-                  <Text style={{ color: c.text, fontSize: 12 }}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => closeModal('Confirmed')}
-                  style={{
-                    backgroundColor: c.primary,
-                    borderRadius: 6,
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                    paddingTop: 7,
-                    paddingBottom: 7,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'normal' }}>Confirm</Text>
-                </Pressable>
+                {/* ── Components ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'COMPONENTS'}
+                </Text>
+                <Box style={{ gap: 3 }}>
+                  {COMPONENTS.map(([name, desc, icon]) => (
+                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                      <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
+                      <Text style={{ color: c.muted, fontSize: 9 }}>{desc}</Text>
+                    </Box>
+                  ))}
+                </Box>
+
+                <HorizontalDivider />
+
+                {/* ── Hooks ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'HOOKS'}
+                </Text>
+                <Box style={{ gap: 3 }}>
+                  {HOOKS.map(([name, sig, icon]) => (
+                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                      <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
+                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
+                    </Box>
+                  ))}
+                </Box>
+
               </Box>
-            </Box>
-          </Modal>
-        </StorySection>
+            </ScrollView>
+          </>
+        )}
+      </Box>
 
-        <StorySection index={8} title="Checkbox">
-          <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
-            <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Basic</Text>
-              <Checkbox
-                value={checkboxA}
-                onValueChange={setCheckboxA}
-                label="Accept terms"
-              />
-              <Checkbox
-                value={checkboxB}
-                onValueChange={setCheckboxB}
-                label="Subscribe to newsletter"
-              />
-            </Box>
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="mouse-pointer-click" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Input'}</Text>
 
-            <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Custom + disabled</Text>
-              <Checkbox
-                value={checkboxC}
-                onValueChange={setCheckboxC}
-                label="Green checkbox"
-                color={c.success}
-              />
-              <Box style={{ flexDirection: 'row', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Checkbox value={false} disabled label="Unchecked disabled" />
-                <Checkbox value={true} disabled label="Checked disabled" />
-              </Box>
-            </Box>
+        <Box style={{ flexGrow: 1 }} />
 
-            <Text style={{ color: c.textSecondary, fontSize: 12, textAlign: 'center' }}>
-              {`Values: ${checkboxA ? 'A:on' : 'A:off'} | ${checkboxB ? 'B:on' : 'B:off'} | ${checkboxC ? 'C:on' : 'C:off'}`}
-            </Text>
-          </Box>
-        </StorySection>
+        <Pressable
+          onPress={() => setPlayground(p => !p)}
+          style={(state) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: playground ? c.primary : (state.hovered ? c.surface : c.border),
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 3,
+            borderRadius: 4,
+          })}
+        >
+          <Image
+            src={playground ? 'book-open' : 'play'}
+            style={{ width: 10, height: 10 }}
+            tintColor={playground ? 'white' : c.text}
+          />
+          <Text style={{
+            color: playground ? 'white' : c.text,
+            fontSize: 9,
+            fontWeight: 'bold',
+          }}>
+            {playground ? 'Exit Playground' : 'Playground'}
+          </Text>
+        </Pressable>
 
-        <StorySection index={9} title="Radio">
-          <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
-            <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Favorite fruit</Text>
-              <RadioGroup value={radioFruit} onValueChange={setRadioFruit} style={{ alignItems: 'center' }}>
-                <Radio value="apple" label="Apple" />
-                <Radio value="banana" label="Banana" />
-                <Radio value="cherry" label="Cherry" />
-                <Radio value="grape" label="Grape" />
-              </RadioGroup>
-            </Box>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+      </Box>
 
-            <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Custom colors</Text>
-              <RadioGroup value={radioSize} onValueChange={setRadioSize} style={{ alignItems: 'center' }}>
-                <Radio value="small" label="Small" color={c.success} />
-                <Radio value="medium" label="Medium" color={c.warning} />
-                <Radio value="large" label="Large" color={c.error} />
-              </RadioGroup>
-            </Box>
-
-            <Text style={{ color: c.textSecondary, fontSize: 12, textAlign: 'center' }}>
-              {`Selected: fruit=${radioFruit}, size=${radioSize}`}
-            </Text>
-          </Box>
-        </StorySection>
-
-        <StorySection index={10} title="Select">
-          <Box style={{ width: '100%', maxWidth: 460, gap: 10, alignItems: 'center' }}>
-            <Box style={{ width: '100%', gap: 4, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>With placeholder</Text>
-              <Select
-                value={selectFruit}
-                onValueChange={setSelectFruit}
-                options={SELECT_FRUIT_OPTIONS}
-                placeholder="Pick a fruit..."
-              />
-            </Box>
-
-            <Box style={{ width: '100%', gap: 4, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Pre-selected + custom color</Text>
-              <Select
-                value={selectDifficulty}
-                onValueChange={setSelectDifficulty}
-                options={DIFFICULTY_OPTIONS}
-                color={c.warning}
-              />
-            </Box>
-
-            <Box style={{ width: '100%', gap: 4, alignItems: 'center' }}>
-              <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>Disabled</Text>
-              <Select
-                value="cherry"
-                options={SELECT_FRUIT_OPTIONS}
-                disabled
-              />
-            </Box>
-
-            <Text style={{ color: c.textSecondary, fontSize: 12, textAlign: 'center' }}>
-              {`Selected: fruit=${selectFruit ?? 'none'}, difficulty=${selectDifficulty}`}
-            </Text>
-          </Box>
-        </StorySection>
-    </StoryPage>
+    </Box>
   );
 }

@@ -112,7 +112,6 @@ const TAB_ITEMS: Tab[] = [
 const TOOLBAR_ITEMS: ToolbarEntry[] = [
   { type: 'item', id: 'refresh', label: 'Refresh' },
   { type: 'item', id: 'share', label: 'Share' },
-  { type: 'divider' },
   { type: 'item', id: 'search', label: 'Search' },
   { type: 'item', id: 'help', label: 'Help' },
 ];
@@ -246,31 +245,27 @@ const CALLBACKS: [string, string, string][] = [
 ];
 
 const BEHAVIOR_NOTES = [
-  'NavPanel, Tabs, Breadcrumbs, and Toolbar are all controlled — pass activeId + onSelect.',
-  'SearchBar debounces 300ms in Lua. onSearch fires the debounced value; onSubmit fires on Enter.',
-  'CommandPalette and AppSearch are full-screen modal overlays. Escape closes them.',
-  'useFuzzySearch scores results by relevance. useSearchHighlight marks matched characters inline.',
+  'All nav components are controlled (activeId + onSelect)',
+  'ReactJIT is not a DOM/browser runtime, but internal routing behaves like a traditional app router',
+  'SearchBar debounces 300ms; onSubmit fires on Enter',
+  'CommandPalette / AppSearch are modal overlays (Esc closes)',
+  'useFuzzySearch scores by relevance; useSearchHighlight marks matches',
 ];
 
 // ── Demo sub-components ───────────────────────────────────────────────────────
 
-function NavSystemDemo() {
+function NavPanelDemo() {
   const c = useThemeColors();
   const [activePage, setActivePage] = useState('home');
-  const [activeTab, setActiveTab] = useState('overview');
-  const breadcrumbs = useMemo(
-    () => BREADCRUMB_MAP[activePage] ?? BREADCRUMB_MAP.home,
-    [activePage],
-  );
   const containerStyle = { backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12 };
+
   return (
     <Box style={{ gap: 10 }}>
-      {/* rjit-ignore-next-line */}
       <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'stretch' }}>
         <NavPanel
           sections={NAV_SECTIONS}
           activeId={activePage}
-          onSelect={(id) => { setActivePage(id); setActiveTab('overview'); }}
+          onSelect={setActivePage}
           header={
             <Box style={{ width: '100%', gap: 2 }}>
               <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>Studio</Text>
@@ -280,27 +275,78 @@ function NavSystemDemo() {
           width={210}
           style={{ height: 200, borderRadius: 10 }}
         />
-        <Box style={{ flexGrow: 1, ...containerStyle, gap: 8, alignItems: 'center', justifyContent: 'center' }} tooltip={styleTooltip(containerStyle)}>
+        <Box style={{ flexGrow: 1, minHeight: 200, ...containerStyle, gap: 8, alignItems: 'center', justifyContent: 'center' }} tooltip={styleTooltip(containerStyle)}>
           <Text style={{ color: c.text, fontSize: 13 }}>{PAGE_LABELS[activePage] ?? 'Home'}</Text>
-          <Tabs
-            tabs={TAB_ITEMS}
-            activeId={activeTab}
-            onSelect={setActiveTab}
-            variant="pill"
-            style={{ justifyContent: 'center', flexWrap: 'wrap' }}
-          />
           <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
-            {TAB_DESCRIPTIONS[activeTab] ?? TAB_DESCRIPTIONS.overview}
+            Select a route from the sidebar.
           </Text>
         </Box>
       </Box>
-      <Box style={{ width: '100%', maxWidth: 400 }}>
+    </Box>
+  );
+}
+
+function TabsDemo() {
+  const c = useThemeColors();
+  const [activeTab, setActiveTab] = useState('overview');
+  const containerStyle = { backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12 };
+
+  return (
+    <Box style={{ width: '100%' }}>
+      <Box style={{ width: '100%', ...containerStyle, gap: 8 }} tooltip={styleTooltip(containerStyle)}>
+        <Tabs
+          tabs={TAB_ITEMS}
+          activeId={activeTab}
+          onSelect={setActiveTab}
+          variant="pill"
+          style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}
+        />
+        <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+          {TAB_DESCRIPTIONS[activeTab] ?? TAB_DESCRIPTIONS.overview}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+function BreadcrumbsDemo() {
+  const c = useThemeColors();
+  const [activePage, setActivePage] = useState('settings');
+  const breadcrumbs = useMemo(
+    () => BREADCRUMB_MAP[activePage] ?? BREADCRUMB_MAP.home,
+    [activePage],
+  );
+  const containerStyle = { backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12 };
+
+  return (
+    <Box style={{ width: '100%' }}>
+      <Box style={{ width: '100%', ...containerStyle, gap: 8 }} tooltip={styleTooltip(containerStyle)}>
         <Breadcrumbs
           items={breadcrumbs}
           separator=">"
           onSelect={(id) => { if (BREADCRUMB_MAP[id]) setActivePage(id); }}
           style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}
         />
+        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          {Object.entries(PAGE_LABELS).map(([id, label]) => (
+            <Pressable
+              key={id}
+              onPress={() => setActivePage(id)}
+              style={(state) => ({
+                borderRadius: 5,
+                borderWidth: 1,
+                borderColor: activePage === id ? c.primary : c.border,
+                backgroundColor: activePage === id ? c.primary : (state.hovered ? c.surfaceHover : c.bgElevated),
+                paddingLeft: 8,
+                paddingRight: 8,
+                paddingTop: 4,
+                paddingBottom: 4,
+              })}
+            >
+              <Text style={{ color: activePage === id ? c.text : c.textSecondary, fontSize: 9 }}>{label}</Text>
+            </Pressable>
+          ))}
+        </Box>
       </Box>
     </Box>
   );
@@ -311,7 +357,7 @@ function ToolbarDemo() {
   const [lastAction, setLastAction] = useState('(none)');
   return (
     <Box style={{ gap: 6 }}>
-      <Toolbar items={TOOLBAR_ITEMS} onSelect={setLastAction} style={{ justifyContent: 'flex-start' }} />
+      <Toolbar items={TOOLBAR_ITEMS} onSelect={setLastAction} style={{ justifyContent: 'space-between' }} />
       <Text style={{ color: c.textDim, fontSize: 10 }}>{`Last action: ${lastAction}`}</Text>
     </Box>
   );
@@ -763,9 +809,6 @@ export function NavigationStory() {
     processCode(src);
   }, [processCode]);
 
-  const mid = Math.ceil(PROPS.length / 2);
-  const col1 = PROPS.slice(0, mid);
-  const col2 = PROPS.slice(mid);
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
@@ -790,35 +833,10 @@ export function NavigationStory() {
           {'Navigation'}
         </Text>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
-          <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
-          <Text style={{ color: SYN.component, fontSize: 10 }}>{'NavPanel'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
-          <Text style={{ color: SYN.prop, fontSize: 10 }}>{'sections'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
-          <Text style={{ color: SYN.value, fontSize: 10 }}>{'{nav}'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
-          <Text style={{ color: SYN.prop, fontSize: 10 }}>{'activeId'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
-          <Text style={{ color: SYN.value, fontSize: 10 }}>{'{id}'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
-          <Text style={{ color: SYN.tag, fontSize: 10 }}>{'/>'}</Text>
-        </Box>
-
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Structural navigation (NavPanel, Tabs, Breadcrumbs, Toolbar) and text search.'}
+          {'Wayfinding & search components'}
         </Text>
       </Box>
 
@@ -845,58 +863,44 @@ export function NavigationStory() {
         ) : (
           <>
             {/* ── Left: Interactive preview ── */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-              <Box style={{ padding: 16, gap: 20 }}>
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+              <Box style={{ width: '100%', padding: 16, gap: 20 }}>
 
-                <SectionLabel label="NAVPANEL · TABS · BREADCRUMBS" />
-                <NavSystemDemo />
+                <SectionLabel label="NAVPANEL" />
+                <NavPanelDemo />
 
-                <HorizontalDivider />
+                <SectionLabel label="TABS" />
+                <TabsDemo />
+
+                <SectionLabel label="BREADCRUMBS" />
+                <BreadcrumbsDemo />
 
                 <SectionLabel label="TOOLBAR" />
                 <ToolbarDemo />
 
-                <HorizontalDivider />
-
                 <SectionLabel label="SEARCHBAR" />
                 <SearchBarDemo />
-
-                <HorizontalDivider />
 
                 <SectionLabel label="SEARCHRESULTS (FLAT)" />
                 <SearchResultsDemo />
 
-                <HorizontalDivider />
-
                 <SectionLabel label="SEARCHRESULTSSECTIONS" />
                 <SearchSectionsDemo />
-
-                <HorizontalDivider />
 
                 <SectionLabel label="SEARCHCOMBO" />
                 <SearchComboDemo />
 
-                <HorizontalDivider />
-
                 <SectionLabel label="COMMANDPALETTE" />
                 <CommandPaletteDemo />
-
-                <HorizontalDivider />
 
                 <SectionLabel label="FUZZY SEARCH + HIGHLIGHT" />
                 <FuzzySearchDemo />
 
-                <HorizontalDivider />
-
                 <SectionLabel label="SEARCH SCHEMA" />
                 <SearchSchemaDemo />
 
-                <HorizontalDivider />
-
                 <SectionLabel label="SEARCH HISTORY" />
                 <SearchHistoryDemo />
-
-                <HorizontalDivider />
 
                 <SectionLabel label="APP SEARCH" />
                 <AppSearchSection />
@@ -907,12 +911,12 @@ export function NavigationStory() {
             <VerticalDivider />
 
             {/* ── Right: API reference ── */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
               <Box style={{ width: '100%', padding: 14, gap: 10 }}>
 
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'OVERVIEW'}</Text>
                 <Text style={{ color: c.text, fontSize: 10 }}>
-                  {'Navigation & Search is two suites that answer the same question — where can I go, and what can I find. NavPanel, Tabs, Breadcrumbs, and Toolbar cover page-level wayfinding: where you are in a hierarchy, what views are available, and what actions are contextually relevant. SearchBar, SearchResults, SearchCombo, CommandPalette, and AppSearch cover item-level discovery: matching text against datasets, ranking results, persisting history, and launching commands by name. All navigation components are fully controlled: pass activeId and onSelect. All search components compose from the same base hooks (useSearch, useFuzzySearch) and can be assembled into custom UIs.'}
+                  {'Navigation & Search is two suites that answer the same question — where can I go, and what can I find. NavPanel, Tabs, Breadcrumbs, and Toolbar cover page-level wayfinding: where you are in a hierarchy, what views are available, and what actions are contextually relevant. SearchBar, SearchResults, SearchCombo, CommandPalette, and AppSearch cover item-level discovery: matching text against datasets, ranking results, persisting history, and launching commands by name. ReactJIT is not a traditional browser/DOM runtime, but it still has internal routing that behaves like a standard app router. All navigation components are fully controlled: pass activeId and onSelect. All search components compose from the same base hooks (useSearch, useFuzzySearch) and can be assembled into custom UIs.'}
                 </Text>
 
                 <HorizontalDivider />
@@ -935,25 +939,14 @@ export function NavigationStory() {
                 <HorizontalDivider />
 
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'PROPS'}</Text>
-                <Box style={{ flexDirection: 'row', gap: 8 }}>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
-                    {col1.map(([prop, type, icon]) => (
-                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                        <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                        <Text style={{ color: c.text, fontSize: 9 }}>{prop}</Text>
-                        <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                      </Box>
-                    ))}
-                  </Box>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
-                    {col2.map(([prop, type, icon]) => (
-                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                        <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                        <Text style={{ color: c.text, fontSize: 9 }}>{prop}</Text>
-                        <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                      </Box>
-                    ))}
-                  </Box>
+                <Box style={{ gap: 3 }}>
+                  {PROPS.map(([prop, type, icon]) => (
+                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                      <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
+                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+                    </Box>
+                  ))}
                 </Box>
 
                 <HorizontalDivider />
@@ -962,8 +955,8 @@ export function NavigationStory() {
                 <Box style={{ gap: 3 }}>
                   {CALLBACKS.map(([name, sig, icon]) => (
                     <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
+                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                      <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
                       <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
                     </Box>
                   ))}

@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView } from '../../../packages/core/src';
+import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView, Row, Col } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
@@ -69,7 +69,7 @@ function Bar({ label, width, color }: { label: string; width: number; color: str
 
 // ── Static data (hoisted — never recreated) ──────────────
 
-const USAGE_CODE = `import { Box, Text } from '@reactjit/core';
+const USAGE_CODE = `import { Box, Text, Row, Col } from '@reactjit/core';
 
 // Auto-size to children
 <Box style={{ gap: 8 }}>
@@ -84,14 +84,18 @@ const USAGE_CODE = `import { Box, Text } from '@reactjit/core';
   <Text>{'Right'}</Text>
 </Box>
 
-// Padding + alignment
-<Box style={{
-  padding: 16,
-  alignItems: 'center',
-  justifyContent: 'center'
-}}>
-  <Text>{'Centered'}</Text>
-</Box>`;
+// 12-column grid
+<Row gap={8} style={{ flexWrap: 'wrap' }}>
+  <Col span={4}><Text>{'1/3'}</Text></Col>
+  <Col span={4}><Text>{'1/3'}</Text></Col>
+  <Col span={4}><Text>{'1/3'}</Text></Col>
+</Row>
+
+// Semantic spans
+<Row gap={8}>
+  <Col span="third"><Text>{'Sidebar'}</Text></Col>
+  <Col span="two-thirds"><Text>{'Content'}</Text></Col>
+</Row>`;
 
 const STARTER_CODE = `<Box style={{
   gap: 12,
@@ -105,18 +109,21 @@ const STARTER_CODE = `<Box style={{
   </Text>
 </Box>`;
 
-// Props — [name, type]
-const PROPS: [string, string][] = [
-  ['padding / px / py', 'number'],
-  ['gap', 'number'],
-  ['flexDirection', "'row' | 'column'"],
-  ['justifyContent', "'start' | 'center' | 'end' | 'space-between' | 'space-around'"],
-  ['alignItems', "'start' | 'center' | 'end'"],
-  ['width / height', 'number | string'],
-  ['flexGrow', 'number'],
-  ['flexShrink', 'number'],
-  ['aspectRatio', 'number'],
-  ['flexWrap', "'wrap' | 'nowrap'"],
+// Props — [name, type, icon]
+const PROPS: [string, string, string][] = [
+  ['padding / px / py', 'number', 'move'],
+  ['gap', 'number', 'minimize-2'],
+  ['flexDirection', "'row' | 'column'", 'arrow-right'],
+  ['justifyContent', "'start' | 'center' | 'end' | 'space-between'", 'align-horizontal-justify-center'],
+  ['alignItems', "'start' | 'center' | 'end'", 'align-vertical-justify-center'],
+  ['width / height', 'number | string', 'ruler'],
+  ['flexGrow', 'number', 'maximize-2'],
+  ['flexShrink', 'number', 'minimize-2'],
+  ['aspectRatio', 'number', 'ratio'],
+  ['flexWrap', "'wrap' | 'nowrap'", 'wrap-text'],
+  ['span', "number | SemanticSpan", 'columns'],
+  ['sm / md / lg / xl', 'SpanValue', 'smartphone'],
+  ['responsive', 'boolean', 'monitor'],
 ];
 
 const BEHAVIOR_NOTES = [
@@ -126,6 +133,9 @@ const BEHAVIOR_NOTES = [
   'alignItems controls positioning along the cross axis.',
   'Empty surfaces (no children, no explicit size) get 1/4 of parent size as fallback.',
   'flexShrink: 0 prevents an element from shrinking when space is constrained.',
+  'Row + Col provide a 12-column grid. Col span={6} = half width. Gap is auto-subtracted from flex basis.',
+  "Semantic spans: 'half', 'third', 'quarter', 'two-thirds', 'three-quarters' map to 6, 4, 3, 8, 9 columns.",
+  'The responsive flag auto-sets sm=12, md=6, lg=4, xl=3. Override individual breakpoints as needed.',
 ];
 
 // Palette (hoisted)
@@ -371,62 +381,154 @@ export function LayoutStory() {
                   </Box>
                 </Box>
 
+                {/* 12-COLUMN GRID */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'12-COLUMN GRID'}</Text>
+                <Box style={{ gap: 4, width: '100%' }}>
+                  {/* 4+4+4 = thirds */}
+                  <Row gap={4} style={{ flexWrap: 'wrap', width: '100%' }}>
+                    {[4, 4, 4].map((s, i) => (
+                      <Col key={i} span={s} style={{ height: 28, backgroundColor: P.blue, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}
+                        tooltip={{ content: `span: ${s}\nflexBasis: ${((s / 12) * 100).toFixed(1)}%`, layout: 'table', type: 'cursor' }}>
+                        <Text style={{ color: '#fff', fontSize: 8 }}>{`${s}`}</Text>
+                      </Col>
+                    ))}
+                  </Row>
+                  {/* 6+6 = halves */}
+                  <Row gap={4} style={{ flexWrap: 'wrap', width: '100%' }}>
+                    {[6, 6].map((s, i) => (
+                      <Col key={i} span={s} style={{ height: 28, backgroundColor: P.indigo, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}
+                        tooltip={{ content: `span: ${s}\nflexBasis: 50%`, layout: 'table', type: 'cursor' }}>
+                        <Text style={{ color: '#fff', fontSize: 8 }}>{`${s}`}</Text>
+                      </Col>
+                    ))}
+                  </Row>
+                  {/* 3+9 = sidebar + content */}
+                  <Row gap={4} style={{ flexWrap: 'wrap', width: '100%' }}>
+                    <Col span={3} style={{ height: 28, backgroundColor: P.teal, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}
+                      tooltip={{ content: 'span: 3\nflexBasis: 25%', layout: 'table', type: 'cursor' }}>
+                      <Text style={{ color: '#fff', fontSize: 8 }}>{'3'}</Text>
+                    </Col>
+                    <Col span={9} style={{ height: 28, backgroundColor: P.cyan, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}
+                      tooltip={{ content: 'span: 9\nflexBasis: 75%', layout: 'table', type: 'cursor' }}>
+                      <Text style={{ color: '#fff', fontSize: 8 }}>{'9'}</Text>
+                    </Col>
+                  </Row>
+                </Box>
+
+                {/* SEMANTIC SPANS */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'SEMANTIC SPANS'}</Text>
+                <Box style={{ gap: 4, width: '100%' }}>
+                  {/* half + half */}
+                  <Row gap={4} style={{ width: '100%' }}>
+                    <Col span="half" style={{ height: 28, backgroundColor: P.violet, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 7 }}>{'half'}</Text>
+                    </Col>
+                    <Col span="half" style={{ height: 28, backgroundColor: P.violet, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 7 }}>{'half'}</Text>
+                    </Col>
+                  </Row>
+                  {/* third + two-thirds */}
+                  <Row gap={4} style={{ width: '100%' }}>
+                    <Col span="third" style={{ height: 28, backgroundColor: P.orange, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 7 }}>{'third'}</Text>
+                    </Col>
+                    <Col span="two-thirds" style={{ height: 28, backgroundColor: P.amber, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 7 }}>{'two-thirds'}</Text>
+                    </Col>
+                  </Row>
+                  {/* quarter + three-quarters */}
+                  <Row gap={4} style={{ width: '100%' }}>
+                    <Col span="quarter" style={{ height: 28, backgroundColor: P.red, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 7 }}>{'quarter'}</Text>
+                    </Col>
+                    <Col span="three-quarters" style={{ height: 28, backgroundColor: P.green, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 7 }}>{'three-quarters'}</Text>
+                    </Col>
+                  </Row>
+                </Box>
+
+                {/* RESPONSIVE BREAKPOINTS */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'RESPONSIVE BREAKPOINTS'}</Text>
+                <Box style={{ gap: 4, width: '100%' }}>
+                  {([
+                    ['sm', '\u22650px', 1, P.red],
+                    ['md', '\u2265640px', 2, P.orange],
+                    ['lg', '\u22651024px', 3, P.blue],
+                    ['xl', '\u22651440px', 4, P.green],
+                  ] as const).map(([bp, thresh, cols, color]) => (
+                    <Box key={bp} style={{ gap: 2 }}>
+                      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                        <Text style={{ color: c.muted, fontSize: 7, fontWeight: 'bold' }}>{bp}</Text>
+                        <Text style={{ color: c.muted, fontSize: 6 }}>{thresh}</Text>
+                      </Box>
+                      <Box style={{ flexDirection: 'row', gap: 2, width: '100%' }}>
+                        {Array.from({ length: cols }, (_, i) => (
+                          <Box key={i} style={{
+                            flexGrow: 1, height: 20, backgroundColor: color,
+                            borderRadius: 3, justifyContent: 'center', alignItems: 'center',
+                          }}>
+                            <Text style={{ color: '#fff', fontSize: 6 }}>{`${12 / cols}`}</Text>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+
               </Box>
             </ScrollView>
 
             <VerticalDivider />
 
-            {/* ── Right: Documentation ── */}
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-              <Box style={{ padding: 20, gap: 16 }}>
+            {/* ── Right: API Reference ── */}
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
+              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
 
-                {/* OVERVIEW */}
-                <Box>
-                  <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>{'OVERVIEW'}</Text>
-                  <Text style={{ color: c.muted, fontSize: 10 }}>
-                    {'Layout in ReactJIT uses Flex. Containers auto-size to their children by default. Use flexGrow to distribute space, gap for spacing between children, and justifyContent/alignItems to position them. The engine is pixel-perfect — if something looks wrong, check the component\'s explicit dimensions, not the layout math.'}
-                  </Text>
+                {/* Overview */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'OVERVIEW'}
+                </Text>
+                <Text style={{ color: c.text, fontSize: 10 }}>
+                  {'Layout in ReactJIT uses Flex. Containers auto-size to their children by default. Use flexGrow to distribute space, gap for spacing between children, and justifyContent/alignItems to position them. The engine is pixel-perfect — if something looks wrong, check the component\'s explicit dimensions, not the layout math.'}
+                </Text>
+
+                <HorizontalDivider />
+
+                {/* Usage */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'USAGE'}
+                </Text>
+                <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
+
+                <HorizontalDivider />
+
+                {/* Behavior */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'BEHAVIOR'}
+                </Text>
+                <Box style={{ gap: 4 }}>
+                  {BEHAVIOR_NOTES.map((note, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="chevron-right" style={{ width: 8, height: 8 }} tintColor={c.muted} />
+                      <Text style={{ color: c.text, fontSize: 10 }}>{note}</Text>
+                    </Box>
+                  ))}
                 </Box>
 
                 <HorizontalDivider />
 
-                {/* USAGE */}
-                <Box>
-                  <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>{'USAGE'}</Text>
-                  <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
-                </Box>
-
-                <HorizontalDivider />
-
-                {/* BEHAVIOR */}
-                <Box>
-                  <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>{'BEHAVIOR'}</Text>
-                  <Box style={{ gap: 6 }}>
-                    {BEHAVIOR_NOTES.map((note, i) => (
-                      <Text key={i} style={{ color: c.muted, fontSize: 10 }}>
-                        {`• ${note}`}
-                      </Text>
-                    ))}
-                  </Box>
-                </Box>
-
-                <HorizontalDivider />
-
-                {/* PROPS */}
-                <Box>
-                  <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold', marginBottom: 8 }}>{'LAYOUT PROPERTIES'}</Text>
-                  <Box style={{ gap: 6 }}>
-                    {PROPS.map(([name, type], i) => (
-                      <Box key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                        <Text style={{ color: c.primary, fontSize: 10, fontFamily: 'monospace', flexBasis: 180, flexShrink: 0 }}>
-                          {name}
-                        </Text>
-                        <Text style={{ color: c.muted, fontSize: 10, fontFamily: 'monospace' }}>
-                          {type}
-                        </Text>
-                      </Box>
-                    ))}
-                  </Box>
+                {/* Props */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'LAYOUT PROPERTIES'}
+                </Text>
+                <Box style={{ gap: 3 }}>
+                  {PROPS.map(([name, type, icon]) => (
+                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                      <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
+                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+                    </Box>
+                  ))}
                 </Box>
 
               </Box>
@@ -445,30 +547,47 @@ export function LayoutStory() {
         borderColor: c.border,
         paddingLeft: 20,
         paddingRight: 20,
-        paddingTop: 8,
-        paddingBottom: 8,
-        gap: 8,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
       }}>
-        <Text style={{ color: c.muted, fontSize: 9 }}>
-          {'Layout / Flex'}
-        </Text>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="layout" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Layout'}</Text>
+
         <Box style={{ flexGrow: 1 }} />
+
         <Pressable
-          style={{
-            paddingLeft: 12,
-            paddingRight: 12,
-            paddingTop: 4,
-            paddingBottom: 4,
-            backgroundColor: playground ? c.primary : c.surface,
+          onPress={() => setPlayground(p => !p)}
+          style={(state) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: playground ? c.primary : (state.hovered ? c.surface : c.border),
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 3,
+            paddingBottom: 3,
             borderRadius: 4,
-            justifyContent: 'center',
-          }}
-          onClick={() => setPlayground(!playground)}
+          })}
         >
-          <Text style={{ color: playground ? '#fff' : c.text, fontSize: 9 }}>
-            {playground ? 'Back' : 'Playground'}
+          <Image
+            src={playground ? 'book-open' : 'play'}
+            style={{ width: 10, height: 10 }}
+            tintColor={playground ? 'white' : c.text}
+          />
+          <Text style={{
+            color: playground ? 'white' : c.text,
+            fontSize: 9,
+            fontWeight: 'bold',
+          }}>
+            {playground ? 'Exit Playground' : 'Playground'}
           </Text>
         </Pressable>
+
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
     </Box>
