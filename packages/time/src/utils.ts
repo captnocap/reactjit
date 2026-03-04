@@ -7,6 +7,101 @@
 
 import type { FormatDurationOptions, FormatDateOptions } from './types';
 
+// ── Intl timezone feature detection ───────────────────────────────────────────
+//
+// QuickJS (and some embedded runtimes) silently ignore the timeZone option in
+// Intl.DateTimeFormat. Detect this at module load by comparing UTC vs Tokyo
+// (always +9, no DST). If they produce the same formatted hour, Intl TZ is
+// broken and we fall back to manual offset math.
+
+const INTL_TZ_WORKS = (() => {
+  try {
+    const d = new Date(Date.UTC(2000, 0, 1, 12, 0, 0)); // noon UTC
+    const utc   = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', hour: 'numeric', hour12: false }).format(d);
+    const tokyo = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }).format(d);
+    return utc !== tokyo; // UTC=12, Tokyo=21 — must differ
+  } catch {
+    return false;
+  }
+})();
+
+// Standard UTC offsets in minutes for common IANA zones.
+// Does NOT account for DST — but it's far better than showing local time for
+// every timezone. Covers the zones most likely to appear in Clock widgets.
+const FALLBACK_TZ_OFFSETS: Record<string, number> = {
+  'UTC': 0, 'GMT': 0, 'Etc/UTC': 0, 'Etc/GMT': 0,
+  'Pacific/Honolulu': -600,
+  'America/Anchorage': -540,
+  'America/Los_Angeles': -480, 'US/Pacific': -480,
+  'America/Denver': -420, 'US/Mountain': -420,
+  'America/Chicago': -360, 'US/Central': -360,
+  'America/New_York': -300, 'US/Eastern': -300,
+  'America/Halifax': -240,
+  'America/Sao_Paulo': -180,
+  'Atlantic/South_Georgia': -120,
+  'Atlantic/Azores': -60,
+  'Europe/London': 0, 'Europe/Dublin': 0,
+  'Europe/Paris': 60, 'Europe/Berlin': 60, 'Europe/Rome': 60,
+  'Europe/Madrid': 60, 'Europe/Amsterdam': 60, 'Europe/Brussels': 60,
+  'Europe/Zurich': 60, 'Europe/Vienna': 60, 'Europe/Warsaw': 60,
+  'Europe/Stockholm': 60, 'Europe/Oslo': 60, 'Europe/Copenhagen': 60,
+  'Europe/Helsinki': 120, 'Europe/Athens': 120, 'Europe/Bucharest': 120,
+  'Europe/Istanbul': 180, 'Europe/Moscow': 180, 'Europe/Minsk': 180,
+  'Asia/Dubai': 240,
+  'Asia/Karachi': 300,
+  'Asia/Kolkata': 330, 'Asia/Calcutta': 330,
+  'Asia/Kathmandu': 345,
+  'Asia/Dhaka': 360,
+  'Asia/Bangkok': 420, 'Asia/Jakarta': 420, 'Asia/Ho_Chi_Minh': 420,
+  'Asia/Singapore': 480, 'Asia/Shanghai': 480, 'Asia/Hong_Kong': 480,
+  'Asia/Taipei': 480, 'Asia/Kuala_Lumpur': 480,
+  'Asia/Tokyo': 540, 'Asia/Seoul': 540,
+  'Australia/Brisbane': 600,
+  'Australia/Sydney': 660, 'Australia/Melbourne': 660,
+  'Pacific/Auckland': 720, 'Pacific/Fiji': 720,
+  'Pacific/Tongatapu': 780,
+  'Pacific/Kiritimati': 840,
+};
+
+/** Get the UTC offset in minutes for a timezone, using the fallback table. */
+function fallbackTzOffset(timezone: string): number | null {
+  return FALLBACK_TZ_OFFSETS[timezone] ?? null;
+}
+
+/**
+ * Format a timestamp in a specific timezone using manual UTC offset math.
+ * Used when Intl timezone support is broken.
+ */
+function formatWithManualTz(
+  timestamp: number,
+  timezone: string,
+  intlOpts: Intl.DateTimeFormatOptions,
+  locale?: string,
+): string {
+  const offsetMin = fallbackTzOffset(timezone);
+  if (offsetMin === null) {
+    // Unknown timezone — best effort, just format local
+    return new Date(timestamp).toLocaleString();
+  }
+
+  // Shift the timestamp by the offset, then format as UTC so the shifted
+  // hours/minutes read correctly as the target zone's wall clock.
+  const shifted = timestamp + offsetMin * 60_000;
+  const d = new Date(shifted);
+
+  // Try Intl with timeZone:'UTC' to format the shifted time
+  try {
+    const opts: Intl.DateTimeFormatOptions = { ...intlOpts, timeZone: 'UTC' };
+    return new Intl.DateTimeFormat(locale, opts).format(d);
+  } catch {
+    // Absolute last resort: manual HH:MM:SS from UTC methods
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    const ss = String(d.getUTCSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+}
+
 // ── Unix timestamps ────────────────────────────────────────────────────────────
 
 /** Current Unix timestamp in milliseconds. */
@@ -173,11 +268,20 @@ export function formatDurationLong(ms: number): string {
  */
 export function formatDate(timestamp: number, opts: FormatDateOptions = {}): string {
   const { timezone, locale, intl: intlOpts } = opts;
+  const baseOpts: Intl.DateTimeFormatOptions = {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    ...intlOpts,
+  };
+
+  // If a timezone is requested but Intl doesn't support it, use manual offset
+  if (timezone && !INTL_TZ_WORKS) {
+    return formatWithManualTz(timestamp, timezone, baseOpts, locale);
+  }
+
   try {
     const options: Intl.DateTimeFormatOptions = {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      ...intlOpts,
+      ...baseOpts,
       ...(timezone ? { timeZone: timezone } : {}),
     };
     return new Intl.DateTimeFormat(locale, options).format(new Date(timestamp));
@@ -243,24 +347,28 @@ export function relativeTime(timestamp: number, from = Date.now()): string {
  * tzOffsetMinutes('America/New_York')  // -300 (EST) or -240 (EDT)
  */
 export function tzOffsetMinutes(timezone: string, timestamp = Date.now()): number {
-  try {
-    // Use Intl to get the local time in the target zone, then compare to UTC
-    const fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      hour12: false,
-    });
-    const parts = fmt.formatToParts(new Date(timestamp));
-    const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? '0', 10);
-    const localDate = new Date(
-      get('year'), get('month') - 1, get('day'),
-      get('hour'), get('minute'), get('second')
-    );
-    return Math.round((localDate.getTime() - timestamp) / 60_000);
-  } catch {
-    return 0;
+  // If Intl timezone support works, use the precise Intl path (handles DST)
+  if (INTL_TZ_WORKS) {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      });
+      const parts = fmt.formatToParts(new Date(timestamp));
+      const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? '0', 10);
+      const localDate = new Date(
+        get('year'), get('month') - 1, get('day'),
+        get('hour'), get('minute'), get('second')
+      );
+      return Math.round((localDate.getTime() - timestamp) / 60_000);
+    } catch {
+      return fallbackTzOffset(timezone) ?? 0;
+    }
   }
+  // Fallback: use static offset table (no DST, but correct for most zones)
+  return fallbackTzOffset(timezone) ?? 0;
 }
 
 /**

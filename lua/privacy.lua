@@ -59,6 +59,7 @@ end
 
 -- ── libsodium secure memory ──
 safe_cdef[[
+  int sodium_init(void);
   void *sodium_malloc(size_t size);
   void sodium_free(void *ptr);
   int sodium_mlock(void *addr, size_t len);
@@ -112,6 +113,14 @@ local function ensureLoaded()
 
   if not sodium then
     print("[privacy] WARNING: libsodium not found for secure memory")
+  else
+    -- sodium_init() MUST be called before any libsodium function.
+    -- Returns 0 on success, 1 if already initialized, -1 on failure.
+    local ret = sodium.sodium_init()
+    if ret < 0 then
+      print("[privacy] WARNING: sodium_init() failed")
+      sodium = nil
+    end
   end
 
   Privacy.available = true
@@ -240,14 +249,13 @@ function Privacy.secureAlloc(dataHex)
   if ptr == nil then error("sodium_malloc failed") end
 
   ffi.copy(ptr, src, len)
-  sodium.sodium_mlock(ptr, len)
 
   -- Zero the source buffer
-  ffi.fill(src, len, 0)
+  sodium.sodium_memzero(src, len)
 
   local id = nextHandleId
   nextHandleId = nextHandleId + 1
-  secureHandles[id] = { ptr = ptr, size = len }
+  secureHandles[id] = { ptr = ptr, size = len, access = "readwrite" }
   return id
 end
 
@@ -256,9 +264,17 @@ function Privacy.secureRead(handleId)
   local h = secureHandles[handleId]
   if not h then error("invalid secure handle: " .. tostring(handleId)) end
 
-  sodium.sodium_mprotect_readwrite(h.ptr)
+  -- If access is noaccess, temporarily set to readwrite
+  local wasNoaccess = (h.access == "noaccess")
+  if wasNoaccess then
+    Privacy.secureProtect(handleId, "readwrite")
+  end
+
   local hex = toHex(ffi.cast("uint8_t*", h.ptr), h.size)
-  sodium.sodium_mprotect_noaccess(h.ptr)
+
+  if wasNoaccess then
+    Privacy.secureProtect(handleId, "noaccess")
+  end
   return hex
 end
 
@@ -277,15 +293,16 @@ function Privacy.secureProtect(handleId, mode)
   local h = secureHandles[handleId]
   if not h then error("invalid secure handle: " .. tostring(handleId)) end
 
-  if mode == "noaccess" then
-    sodium.sodium_mprotect_noaccess(h.ptr)
-  elseif mode == "readonly" then
-    sodium.sodium_mprotect_readonly(h.ptr)
-  elseif mode == "readwrite" then
-    sodium.sodium_mprotect_readwrite(h.ptr)
-  else
+  if mode ~= "noaccess" and mode ~= "readonly" and mode ~= "readwrite" then
     error("invalid protect mode: " .. tostring(mode))
   end
+
+  -- NOTE: We do NOT call sodium_mprotect_* here because reading the memory
+  -- afterward (even via FFI) triggers a hardware SIGSEGV that pcall cannot catch.
+  -- Instead, we track the mode in software and implement managed read-through
+  -- semantics in secureRead(). The memory is still in sodium_malloc'd pages
+  -- which have their own guard pages for buffer overflow protection.
+  h.access = mode
 end
 
 -- ============================================================================
@@ -367,7 +384,7 @@ do
   for i = 0, 254 do
     GF_EXP[i] = x
     GF_LOG[x] = i
-    x = bit.bxor(bit.lshift(x, 1), x)
+    x = bit.lshift(x, 1)
     if bit.band(x, 0x100) ~= 0 then
       x = bit.bxor(x, 0x11B)
     end
@@ -670,7 +687,16 @@ function Privacy.hashFile(path, algorithm)
   local data = f:read("*a")
   f:close()
 
-  return Crypto.hash(data, algorithm)
+  local hashFn = ({
+    sha256 = Crypto.sha256,
+    sha512 = Crypto.sha512,
+    blake2b = Crypto.blake2b,
+    blake2s = Crypto.blake2s,
+    blake3 = Crypto.blake3_hash,
+  })[algorithm]
+  if not hashFn then error("unsupported hash algorithm: " .. algorithm) end
+  local result = hashFn(data)
+  return result.hex
 end
 
 function Privacy.hashDirectory(dirPath, algorithm, recursive)
@@ -1228,6 +1254,7 @@ function Privacy.noiseInitiate(remotePublicKeyHex)
     recvKey = recvKeyHex,
     sendNonce = 0,
     recvNonce = 0,
+    seenMessages = {},
     remotePublicKey = remotePublicKeyHex,
   }
 
@@ -1261,15 +1288,13 @@ function Privacy.noiseRespond(staticPrivateKeyHex, handshakeMessage)
     recvKey = recvKeyHex,
     sendNonce = 0,
     recvNonce = 0,
+    seenMessages = {},
     remotePublicKey = remoteEphemeralPub,
   }
 
-  -- Generate our own ephemeral for the response (for mutual DH if needed)
-  local response = Crypto.generateDHKeys()
-
   return {
     sessionId = sessionId,
-    message = response.publicKey,
+    message = "", -- Noise-NK: no responder ephemeral needed
   }
 end
 
@@ -1296,12 +1321,20 @@ function Privacy.noiseReceive(sessionId, ciphertextWithNonce)
   local session = noiseSessions[sessionId]
   if not session then error("invalid noise session: " .. tostring(sessionId)) end
 
+  -- Replay protection: reject previously seen messages
+  if session.seenMessages[ciphertextWithNonce] then
+    error("replay detected: message already received")
+  end
+
   local ciphertext, nonce = ciphertextWithNonce:match("^(.+):(.+)$")
   if not ciphertext then error("invalid message format") end
 
   local decResult = Crypto.decryptRaw(ciphertext, session.recvKey, nonce, "xchacha20-poly1305")
   local plaintextHex = decResult.plaintext
   session.recvNonce = session.recvNonce + 1
+
+  -- Track this message as seen (after successful decrypt)
+  session.seenMessages[ciphertextWithNonce] = true
 
   -- Convert hex to string
   local bytes = {}

@@ -44,6 +44,11 @@ Layout._profileLastPass = nil
 Layout._profileTotals = nil
 Layout._profilePassSeq = 0
 
+--- Check if a dimension value is "fit-content" (or the shorthand "fit").
+local function isFitContent(v)
+  return v == "fit-content" or v == "fit"
+end
+
 local function profileNow()
   if love and love.timer and love.timer.getTime then
     return love.timer.getTime()
@@ -193,7 +198,7 @@ end
 --- Returns nil when value is nil or unparseable.
 function Layout.resolveUnit(value, parentSize)
   if value == nil then return nil end
-  if value == "fit-content" then return nil end
+  if value == "fit-content" or value == "fit" then return nil end
   if type(value) == "number" then return value end
   if type(value) ~= "string" then return nil end
 
@@ -789,8 +794,8 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- Own dimensions
   local explicitW = ru(s.width, pctW)
   local explicitH = ru(s.height, pctH)
-  local fitW = (s.width == "fit-content")
-  local fitH = (s.height == "fit-content")
+  local fitW = isFitContent(s.width)
+  local fitH = isFitContent(s.height)
 
   local w, h
   local wSource, hSource  -- provenance: why this dimension has its value
@@ -1073,7 +1078,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
 
       -- For text children without explicit dimensions, measure intrinsic size
       if childIsText and (not cw or not ch) then
-        local childFitW = (cs.width == "fit-content")
+        local childFitW = isFitContent(cs.width)
 
         if childFitW then
           -- fit-content: measure unconstrained (natural single-line width)
@@ -1122,7 +1127,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
         local skipIntrinsicW = childIsScroll
         local skipIntrinsicH = childIsScroll
         if not cw and not skipIntrinsicW then
-          local estW = (cs.width == "fit-content") and nil or innerW
+          local estW = isFitContent(cs.width) and nil or innerW
           local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
           cw = estimateIntrinsicMain(child, true, estW, innerH)
           profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
@@ -1244,7 +1249,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
         mainMarginStart = mainMarginStart, mainMarginEnd = mainMarginEnd,
         isText = childIsText,
         explicitH = ru(cs.height, innerH),
-        fitContentH = (cs.height == "fit-content"),
+        fitContentH = isFitContent(cs.height),
         padL = cpadL, padR = cpadR, padT = cpadT, padB = cpadB,
         minW = cMinW, maxW = cMaxW, minH = cMinH, maxH = cMaxH,
         minContent = minContent,

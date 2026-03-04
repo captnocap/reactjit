@@ -57,14 +57,14 @@ function resolveBoxStyle(props: BoxProps): Style | undefined {
   const {
     className,
     direction, gap, padding, px, py, margin,
-    align, justify, fill, grow, bg, radius,
+    align, justify, fill, fit, grow, bg, radius,
     w, h, wrap, scroll, hidden, z, style,
   } = props;
 
   const hasShorthands = (
     direction !== undefined || gap !== undefined || padding !== undefined ||
     px !== undefined || py !== undefined || margin !== undefined ||
-    align !== undefined || justify !== undefined || fill || grow ||
+    align !== undefined || justify !== undefined || fill || fit || grow ||
     bg !== undefined || radius !== undefined || w !== undefined ||
     h !== undefined || wrap || scroll || hidden || z !== undefined
   );
@@ -84,6 +84,7 @@ function resolveBoxStyle(props: BoxProps): Style | undefined {
     if (align) base.alignItems = align;
     if (justify) base.justifyContent = justify;
     if (fill) { base.width = '100%'; base.height = '100%'; }
+    if (fit) { base.width = 'fit-content'; base.height = 'fit-content'; }
     if (grow) base.flexGrow = 1;
     if (bg !== undefined) base.backgroundColor = bg;
     if (radius !== undefined) base.borderRadius = radius;

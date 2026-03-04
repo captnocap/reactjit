@@ -8,8 +8,8 @@ export async function createEncryptedStore<T = any>(opts: EncryptedStoreOptions)
     async get(key: string): Promise<T | null> {
       const envelope = store.get(key);
       if (envelope === undefined) return null;
-      const plaintext = await rpc<string>('crypto:decrypt', { data: envelope, password: opts.password });
-      return JSON.parse(plaintext) as T;
+      const r = await rpc<{ plaintext: string }>('crypto:decrypt', { data: envelope, password: opts.password });
+      return JSON.parse(r.plaintext) as T;
     },
 
     async set(key: string, value: T): Promise<void> {
