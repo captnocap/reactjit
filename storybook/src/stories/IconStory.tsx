@@ -179,7 +179,7 @@ export function IconStory() {
 
           {/* Button-like usage */}
           <Box style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable style={{
+            <Pressable onPress={() => {}} style={{
               flexDirection: 'row',
               gap: 6,
               alignItems: 'center',
@@ -193,7 +193,7 @@ export function IconStory() {
               <Icon icon={iconMap.Plus} size={14} color="#fff" />
               <Text style={{ color: '#fff', fontSize: 12 }}>{`New Item`}</Text>
             </Pressable>
-            <Pressable style={{
+            <Pressable onPress={() => {}} style={{
               flexDirection: 'row',
               gap: 6,
               alignItems: 'center',
@@ -209,7 +209,7 @@ export function IconStory() {
               <Icon icon={iconMap.Download} size={14} color={c.text} />
               <Text style={{ color: c.text, fontSize: 12 }}>{`Download`}</Text>
             </Pressable>
-            <Pressable style={{
+            <Pressable onPress={() => {}} style={{
               flexDirection: 'row',
               gap: 6,
               alignItems: 'center',
