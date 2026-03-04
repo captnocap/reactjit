@@ -168,7 +168,7 @@ local measureCache = {}
 local CACHE_MAX = 512
 
 --- Build a cache key from measurement parameters.
-local function cacheKey(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight)
+local function cacheKey(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
   -- Use -1 as sentinel for nil values
   local mw = maxWidth or -1
   local ff = fontFamily or ""
@@ -176,7 +176,8 @@ local function cacheKey(text, fontSize, maxWidth, fontFamily, lineHeight, letter
   local ls = letterSpacing or 0
   local nl = numberOfLines or -1
   local fw = fontWeight or ""
-  return text .. "\0" .. fontSize .. "\0" .. mw .. "\0" .. ff .. "\0" .. lh .. "\0" .. ls .. "\0" .. nl .. "\0" .. fw
+  local nw = noWrap and 1 or 0
+  return text .. "\0" .. fontSize .. "\0" .. mw .. "\0" .. ff .. "\0" .. lh .. "\0" .. ls .. "\0" .. nl .. "\0" .. fw .. "\0" .. nw
 end
 
 --- Evict the entire measurement cache.
@@ -225,8 +226,9 @@ end
 --- @param lineHeight    number|nil  Custom line height in pixels, or nil to use font height.
 --- @param letterSpacing number|nil  Extra space between characters in pixels.
 --- @param numberOfLines number|nil  Maximum number of lines; height is clamped if set.
+--- @param noWrap        boolean|nil True to force a single visual line (no wrapping).
 --- @return table  { width = number, height = number }
-function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight)
+function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
   fontSize = fontSize or 14
   text = tostring(text or "")
   text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
@@ -236,7 +238,7 @@ function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, l
   end
 
   -- Check cache
-  local key = cacheKey(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight)
+  local key = cacheKey(text, fontSize, maxWidth, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
   local cached = measureCache[key]
   if cached then
     return cached
@@ -247,6 +249,14 @@ function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, l
   local result
 
   if maxWidth and maxWidth > 0 then
+    if noWrap then
+      local oneLineText = text:gsub("\n", " ")
+      local naturalW = Measure.getWidthWithSpacing(font, oneLineText, letterSpacing)
+      result = {
+        width = math.min(naturalW, maxWidth),
+        height = effectiveLineH,
+      }
+    else
     -- Width-constrained: use getWrap to determine wrapped lines.
     -- When letterSpacing is set, the effective available width per line
     -- is narrower because characters are wider, but Love2D's getWrap
@@ -283,10 +293,11 @@ function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, l
       end
     end
 
-    result = {
-      width  = math.min(actualWidth, maxWidth),
-      height = numLines * effectiveLineH,
-    }
+      result = {
+        width  = math.min(actualWidth, maxWidth),
+        height = numLines * effectiveLineH,
+      }
+    end
   else
     -- Unconstrained: single logical line
     local w = Measure.getWidthWithSpacing(font, text, letterSpacing)

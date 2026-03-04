@@ -272,6 +272,18 @@ drawLineNormal = function(font, text, x, y, align, maxWidth)
   love.graphics.printf(text, x, y, maxWidth, align)
 end
 
+--- Render a single line without wrapping. maxWidth is used only for alignment.
+local function drawLineNoWrap(font, text, x, y, align, maxWidth)
+  local textW = font:getWidth(text)
+  local drawX = x
+  if align == "center" then
+    drawX = x + (maxWidth - textW) / 2
+  elseif align == "right" then
+    drawX = x + maxWidth - textW
+  end
+  love.graphics.print(text, drawX, y)
+end
+
 -- ============================================================================
 -- Resolve text style properties (inheriting from parent Text for __TEXT__)
 -- ============================================================================
@@ -318,6 +330,21 @@ local function resolveTextOverflow(node)
     if ps.textOverflow then return ps.textOverflow end
   end
   return nil
+end
+
+--- Resolve text wrapping mode. Supports whiteSpace/textWrap aliases.
+local function resolveTextNoWrap(node)
+  local s = node.style or {}
+  if s.textWrap == "nowrap" or s.whiteSpace == "nowrap" then return true end
+  if s.textWrap == "wrap" or s.whiteSpace == "normal" then return false end
+
+  if node.type == "__TEXT__" and node.parent then
+    local ps = node.parent.style or {}
+    if ps.textWrap == "nowrap" or ps.whiteSpace == "nowrap" then return true end
+    if ps.textWrap == "wrap" or ps.whiteSpace == "normal" then return false end
+  end
+
+  return false
 end
 
 --- Resolve numberOfLines, inheriting from parent Text node for __TEXT__ children.
@@ -1039,6 +1066,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local lineHeight = resolveLineHeight(node)
     local letterSpacing = resolveLetterSpacing(node)
     local textOverflow = resolveTextOverflow(node)
+    local noWrap = resolveTextNoWrap(node)
     local numberOfLines = resolveNumberOfLines(node)
     local textDecorationLine = s.textDecorationLine
 
@@ -1062,6 +1090,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local text = node.text or (node.props and node.props.children) or ""
     if type(text) == "table" then text = table.concat(text) end
     text = tostring(text)
+    if noWrap then
+      text = text:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\n", " ")
+    end
 
     -- Resolve textAlign (inherit from parent Text for __TEXT__ children)
     local align = s.textAlign
@@ -1073,11 +1104,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local hasLetterSpacing = letterSpacing and letterSpacing ~= 0
 
     -- Determine rendering strategy:
-    -- 1. If numberOfLines is set or textOverflow is "ellipsis", we need line control
+    -- 1. If numberOfLines is set, textOverflow is "ellipsis", or noWrap is set, we need line control
     -- 2. If lineHeight is custom, we must render line-by-line
     -- 3. If letterSpacing is set, we must render character-by-character
     -- 4. Otherwise, use love.graphics.printf (fastest path)
-    local needsLineControl = numberOfLines or textOverflow == "ellipsis"
+    local needsLineControl = numberOfLines or textOverflow == "ellipsis" or noWrap
     local needsManualRendering = hasCustomLineHeight or hasLetterSpacing or needsLineControl
 
     -- Text shadow: draw text first with offset and shadow color
@@ -1105,7 +1136,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         end
       else
         local effectiveLineH = lineHeight or font:getHeight()
-        if textOverflow == "ellipsis" and not numberOfLines then
+        if noWrap then
+          local oneLine = text
+          if textOverflow == "ellipsis" then
+            oneLine = Painter.truncateWithEllipsis(font, oneLine, c.w, letterSpacing)
+          end
+          if hasLetterSpacing then
+            drawLineWithSpacing(font, oneLine, c.x + sox, c.y + soy, letterSpacing, align, c.w)
+          else
+            drawLineNoWrap(font, oneLine, c.x + sox, c.y + soy, align, c.w)
+          end
+        elseif textOverflow == "ellipsis" and not numberOfLines then
           local truncated = Painter.truncateWithEllipsis(font, text, c.w, letterSpacing)
           if hasLetterSpacing then
             drawLineWithSpacing(font, truncated, c.x + sox, c.y + soy, letterSpacing, align, c.w)
@@ -1146,8 +1187,20 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       -- Manual rendering path: get wrapped/truncated lines, draw each
       local effectiveLineH = lineHeight or font:getHeight()
 
+      if noWrap then
+        local oneLine = text
+        if textOverflow == "ellipsis" then
+          oneLine = Painter.truncateWithEllipsis(font, oneLine, c.w, letterSpacing)
+        end
+        if hasLetterSpacing then
+          drawLineWithSpacing(font, oneLine, c.x, c.y, letterSpacing, align, c.w)
+          if isBold then drawLineWithSpacing(font, oneLine, c.x + 0.8, c.y, letterSpacing, align, c.w) end
+        else
+          drawLineNoWrap(font, oneLine, c.x, c.y, align, c.w)
+          if isBold then drawLineNoWrap(font, oneLine, c.x + 0.8, c.y, align, c.w) end
+        end
       -- Single-line ellipsis (textOverflow = "ellipsis", no numberOfLines)
-      if textOverflow == "ellipsis" and not numberOfLines then
+      elseif textOverflow == "ellipsis" and not numberOfLines then
         local truncated = Painter.truncateWithEllipsis(font, text, c.w, letterSpacing)
         if hasLetterSpacing then
           drawLineWithSpacing(font, truncated, c.x, c.y, letterSpacing, align, c.w)
