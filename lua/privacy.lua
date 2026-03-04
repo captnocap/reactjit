@@ -375,16 +375,19 @@ end
 -- ============================================================================
 
 -- GF(256) with irreducible polynomial x^8 + x^4 + x^3 + x + 1 (0x11B)
-local GF_EXP = ffi.new("uint8_t[512]")
-local GF_LOG = ffi.new("uint8_t[256]")
+-- Using plain Lua tables (not FFI uint8_t arrays) to avoid cdata
+-- conversion issues with bit operations and comparisons.
+local GF_EXP = {}
+local GF_LOG = {}
 
--- Build lookup tables
+-- Build lookup tables (generator 3 — standard AES GF(256) primitive element)
 do
   local x = 1
   for i = 0, 254 do
     GF_EXP[i] = x
     GF_LOG[x] = i
-    x = bit.lshift(x, 1)
+    -- Multiply by generator 3: x*3 = (x<<1) XOR x, then reduce mod 0x11B
+    x = bit.bxor(bit.lshift(x, 1), x)
     if bit.band(x, 0x100) ~= 0 then
       x = bit.bxor(x, 0x11B)
     end
