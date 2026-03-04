@@ -809,6 +809,16 @@ function DevTools.mousepressed(x, y, button)
       tabX = tabX + tabW + 2
     end
 
+    -- Pick mode toggle button
+    local pickX = screenW - 124
+    if x >= pickX and x < pickX + 20 then
+      if inspector then
+        inspector.setPickMode(not inspector.isPickMode())
+        eventTrail.recordSemantic(inspector.isPickMode() and "Inspector pick mode ON" or "Inspector pick mode OFF")
+      end
+      return true
+    end
+
     -- Layout colors toggle button
     local colorsX = screenW - 100
     if x >= colorsX and x < colorsX + 20 then
@@ -1080,8 +1090,14 @@ local function drawTabBar(panelY, screenW)
     tabX = tabX + tabW + 2
   end
 
-  -- Right-side buttons: layout colors, refresh, pop-out, close
+  -- Right-side buttons: pick mode, layout colors, refresh, pop-out, close
   local btnY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
+
+  -- Pick mode toggle button (cursor icon — active = element picking on)
+  local pickX = screenW - 124
+  local pickActive = inspector and inspector.isPickMode()
+  love.graphics.setColor(pickActive and TAB_ACCENT or TAB_TEXT)
+  love.graphics.print("+", pickX + 4, btnY)
 
   -- Layout colors toggle button
   local colorsX = screenW - 100
@@ -1158,6 +1174,13 @@ local function drawStatusBar(statusY, screenW)
   x = x + font:getWidth("Nodes ")
   love.graphics.setColor(TAB_TEXT_ACT)
   love.graphics.print(tostring(perf.nodeCount), x, textY)
+
+  -- Window size (right-aligned)
+  local winW, winH = love.graphics.getDimensions()
+  local sizeStr = string.format("%d × %d", winW, winH)
+  local sizeW = font:getWidth(sizeStr)
+  love.graphics.setColor(STATUS_TEXT)
+  love.graphics.print(sizeStr, screenW - sizeW - pad, textY)
 end
 
 --- Draw the panel content (tab bar, content area, status bar) into the current GL context.

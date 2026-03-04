@@ -21,9 +21,9 @@ export function registerIcons(icons: Record<string, number[][]>) {
   }
 }
 
-/** kebab-case or snake_case → PascalCase: "arrow-down" → "ArrowDown" */
+/** kebab-case or snake_case → PascalCase: "arrow-down" → "ArrowDown", "maximize-2" → "Maximize2" */
 function toPascalCase(s: string): string {
-  return s.replace(/(^|[-_])([a-z])/g, (_, __, c) => c.toUpperCase());
+  return s.replace(/(^|[-_])([a-z0-9])/g, (_, __, c) => c.toUpperCase()).replace(/[-_]/g, '');
 }
 
 export function lookupIcon(name: string): number[][] | undefined {

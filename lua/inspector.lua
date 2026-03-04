@@ -48,6 +48,7 @@ local Inspector = {}
 
 local state = {
   enabled    = false,
+  pickMode   = true,       -- hover highlight + canvas click-to-select active?
   treePanel  = false,     -- sidebar visible?
   hoveredNode = nil,       -- node under cursor (deep hit test)
   selectedNode = nil,      -- clicked/locked node for detail panel
@@ -485,6 +486,19 @@ function Inspector.disable()
   state.detailRegion = nil
 end
 
+--- Toggle hover-highlight + canvas click-to-select mode.
+--- When false, the devtools panel stays open but mouse events flow through to the app.
+function Inspector.setPickMode(on)
+  state.pickMode = on
+  if not on then
+    state.hoveredNode = nil
+  end
+end
+
+function Inspector.isPickMode()
+  return state.pickMode
+end
+
 --- Set cross-link highlight data from playground TextEditor hover.
 --- link: nil | { line: number, token?: string, level?: string }
 function Inspector.setPlaygroundLink(link)
@@ -749,8 +763,8 @@ function Inspector.mousepressed(x, y, button)
     end
   end
 
-  -- Clicking in viewport: select hovered node
-  if state.hoveredNode then
+  -- Clicking in viewport: select hovered node (only in pick mode)
+  if state.pickMode and state.hoveredNode then
     -- Resolve to a node that actually appears in the tree panel:
     -- - Empty __TEXT__ nodes are skipped by drawTreeNode
     -- - Single-text-child __TEXT__ nodes are inlined into their parent row
@@ -850,11 +864,13 @@ function Inspector.drawOverlays(root)
   if not root then return end
 
   local ok, drawErr = pcall(function()
-    -- Update hovered node via deep hit test (skip if mouse hasn't moved)
-    if state.mouseX ~= state.lastHitX or state.mouseY ~= state.lastHitY then
-      state.hoveredNode = deepHitTest(root, state.mouseX, state.mouseY)
-      state.lastHitX = state.mouseX
-      state.lastHitY = state.mouseY
+    -- Update hovered node via deep hit test (only in pick mode, skip if mouse hasn't moved)
+    if state.pickMode then
+      if state.mouseX ~= state.lastHitX or state.mouseY ~= state.lastHitY then
+        state.hoveredNode = deepHitTest(root, state.mouseX, state.mouseY)
+        state.lastHitX = state.mouseX
+        state.lastHitY = state.mouseY
+      end
     end
 
     -- Recount nodes only when tree has changed
@@ -868,9 +884,9 @@ function Inspector.drawOverlays(root)
     love.graphics.origin()
     love.graphics.setScissor()
 
-    drawHoverOverlay()
+    if state.pickMode then drawHoverOverlay() end
     drawSelectedOverlay()
-    drawTooltip()
+    if state.pickMode then drawTooltip() end
     -- Note: perf bar is now drawn by devtools.lua as a bottom status bar
 
     -- Restore graphics state
