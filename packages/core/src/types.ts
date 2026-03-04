@@ -96,6 +96,8 @@ export interface Style {
   fontFamily?: string;
   fontWeight?: 'normal' | 'bold' | number;
   textAlign?: 'left' | 'center' | 'right';
+  whiteSpace?: 'normal' | 'nowrap';
+  textWrap?: 'wrap' | 'nowrap';
   textOverflow?: 'clip' | 'ellipsis';
   textDecorationLine?: 'none' | 'underline' | 'line-through';
   lineHeight?: number;

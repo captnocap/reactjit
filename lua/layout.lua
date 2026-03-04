@@ -364,6 +364,26 @@ local function resolveLetterSpacing(node)
   return nil
 end
 
+--- Resolve text wrapping mode for a text node.
+--- Supports CSS-like whiteSpace:'nowrap' and textWrap:'nowrap' aliases.
+local function resolveTextNoWrap(node)
+  local s = node.style or {}
+  local wrap = s.textWrap
+  local ws = s.whiteSpace
+  if wrap == "nowrap" or ws == "nowrap" then return true end
+  if wrap == "wrap" or ws == "normal" then return false end
+
+  if node.type == "__TEXT__" and node.parent then
+    local ps = node.parent.style or {}
+    local pWrap = ps.textWrap
+    local pWs = ps.whiteSpace
+    if pWrap == "nowrap" or pWs == "nowrap" then return true end
+    if pWrap == "wrap" or pWs == "normal" then return false end
+  end
+
+  return false
+end
+
 --- Get the numberOfLines for a text node, checking node props
 --- and walking up to parent Text node if this is a __TEXT__ child.
 --- Returns nil when not set.
@@ -398,8 +418,9 @@ local function measureTextNode(node, availW)
   if lineHeight then lineHeight = math.floor(lineHeight * ts) end
   local letterSpacing = resolveLetterSpacing(node)
   local numberOfLines = resolveNumberOfLines(node)
+  local noWrap = resolveTextNoWrap(node)
 
-  local result = Measure.measureText(text, fontSize, availW, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight)
+  local result = Measure.measureText(text, fontSize, availW, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
   return result.width, result.height
 end
 
@@ -554,6 +575,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
       if lineHeight then lineHeight = math.floor(lineHeight * ts) end
       local letterSpacing = resolveLetterSpacing(node)
       local numberOfLines = resolveNumberOfLines(node)
+      local noWrap = resolveTextNoWrap(node)
 
       -- When measuring height (not isRow), use pw as wrap constraint so
       -- multi-line text produces the correct wrapped height instead of
@@ -567,7 +589,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
         if wrapWidth < 0 then wrapWidth = nil end
       end
       local result = Measure.measureText(text, fontSize, wrapWidth, fontFamily,
-                                        lineHeight, letterSpacing, numberOfLines, fontWeight)
+                                        lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
       return (isRow and result.width or result.height) + padMain
     end
     return padMain  -- Empty text
