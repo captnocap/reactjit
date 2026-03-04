@@ -222,11 +222,18 @@ end
 --- Set a window's position.
 function WindowManager.setPosition(entry, x, y)
   x, y = math.floor(x), math.floor(y)
+  if entry.isMain then
+    love.window.setPosition(x, y)
+  end
   -- Love2D secondary windows: no position API yet
 end
 
 --- Get a window's current position. Returns x, y.
 function WindowManager.getPosition(entry)
+  if entry.isMain then
+    local x, y = love.window.getPosition()
+    return x, y
+  end
   return 0, 0
 end
 
@@ -354,6 +361,90 @@ function WindowManager.tick(dt)
     end
   end
   return still
+end
+
+-- ============================================================================
+-- Window geometry persistence (save/restore across restarts)
+-- ============================================================================
+
+local GEOMETRY_FILE = "save/window_geometry.json"
+
+--- Save the main window's current geometry to disk.
+--- Called on quit so the next launch can restore position+size.
+function WindowManager.saveGeometry()
+  if not mainWin then return end
+
+  local x, y = WindowManager.getPosition(mainWin)
+  local w, h = mainWin.width, mainWin.height
+
+  local data = string.format(
+    '{"x":%d,"y":%d,"width":%d,"height":%d}',
+    x, y, w, h
+  )
+
+  -- Ensure save directory exists
+  local info = love.filesystem.getInfo("save")
+  if not info then
+    love.filesystem.createDirectory("save")
+  end
+
+  local ok, err = love.filesystem.write(GEOMETRY_FILE, data)
+  if ok then
+    io.write("[window_manager] saved geometry: " .. data .. "\n"); io.flush()
+  else
+    io.write("[window_manager] failed to save geometry: " .. tostring(err) .. "\n"); io.flush()
+  end
+end
+
+--- Restore the main window's geometry from a previous session.
+--- Call after registerMain() and after the window is fully initialized.
+--- Returns true if geometry was restored, false otherwise.
+function WindowManager.restoreGeometry()
+  if not mainWin then return false end
+
+  local info = love.filesystem.getInfo(GEOMETRY_FILE)
+  if not info then return false end
+
+  local contents, err = love.filesystem.read(GEOMETRY_FILE)
+  if not contents then
+    io.write("[window_manager] failed to read geometry: " .. tostring(err) .. "\n"); io.flush()
+    return false
+  end
+
+  -- Minimal JSON parse for our known format
+  local x = tonumber(contents:match('"x":([%-]?%d+)'))
+  local y = tonumber(contents:match('"y":([%-]?%d+)'))
+  local w = tonumber(contents:match('"width":(%d+)'))
+  local h = tonumber(contents:match('"height":(%d+)'))
+
+  if not (x and y and w and h) then
+    io.write("[window_manager] invalid geometry file, ignoring\n"); io.flush()
+    return false
+  end
+
+  -- Validate against current display bounds to avoid off-screen windows
+  local displayCount = love.window.getDisplayCount()
+  local onScreen = false
+  for i = 1, displayCount do
+    local dx, dy, dw, dh = love.window.getSafeArea(i)
+    -- Consider "on screen" if the window's top-left quadrant overlaps any display
+    if x + w > dx and x < dx + dw and y + h > dy and y < dy + dh then
+      onScreen = true
+      break
+    end
+  end
+
+  if not onScreen then
+    io.write("[window_manager] saved geometry is off-screen, ignoring\n"); io.flush()
+    return false
+  end
+
+  -- Apply size first, then position
+  WindowManager.setSize(mainWin, w, h)
+  WindowManager.setPosition(mainWin, x, y)
+
+  io.write(string.format("[window_manager] restored geometry: %dx%d at (%d,%d)\n", w, h, x, y)); io.flush()
+  return true
 end
 
 return WindowManager
