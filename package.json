@@ -17,7 +17,8 @@
     "packages/layouts",
     "packages/terminal",
     "packages/icons",
-    "packages/math"
+    "packages/math",
+    "packages/time"
   ],
   "scripts": {
     "build:native": "esbuild --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js examples/native-hud/src/main.tsx",
