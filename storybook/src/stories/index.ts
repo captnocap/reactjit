@@ -56,6 +56,10 @@ import { HtmlCompatStory } from './HtmlCompatStory';
 import { MergePrecedenceStory } from './MergePrecedenceStory';
 import { LintTestStory } from './LintTestStory';
 import { SyntaxStressStory } from './SyntaxStressStory';
+import { IFTTTStory } from './IFTTTStory';
+import { TimeStory } from './TimeStory';
+import { ScrapeStory } from './ScrapeStory';
+import { EventsStory } from './EventsStory';
 import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
@@ -88,6 +92,10 @@ export const stories: StoryDef[] = [
   { id: 'masks', title: 'Masks', section: 'Packages', component: MasksStory },
   { id: 'local-store', title: 'Local Store', section: 'Packages', component: LocalStoreStory },
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
+  { id: 'ifttt', title: 'IFTTT', section: 'Packages', component: IFTTTStory },
+  { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
+  { id: 'scrape', title: 'Scrape', section: 'Packages', component: ScrapeStory },
+  { id: 'events', title: 'Events', section: 'Packages', component: EventsStory },
   { id: 'apis', title: 'APIs', section: 'Packages', component: APIsStory },
   { id: 'layouts', title: 'Layouts', section: 'Packages', component: LayoutsStory },
   { id: 'terminal', title: 'Terminal (PTY)', section: 'Packages', component: TerminalStory },

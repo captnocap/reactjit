@@ -382,6 +382,17 @@ export {
   type FleetResult,
 } from './useFleet';
 
+// IFTTT (declarative trigger → action wiring)
+export { useIFTTT } from './useIFTTT';
+
+// Event bus (in-memory pub/sub between React components)
+export { useEventBus, useEvent, useEventState, useEmit, useEventChannel } from './useEvents';
+export type { EventBus } from './useEvents';
+
+// Web scraping (CSS selector extraction from fetched HTML)
+export { useScrape } from './useScrape';
+export type { ScrapeElement, PickTarget, PickMap } from './useScrape';
+
 // Utilities (Lua-backed: IDs, strings, time, deep equality, safe JSON)
 export {
   useId,
