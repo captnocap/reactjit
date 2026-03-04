@@ -5337,6 +5337,12 @@ end
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
 function ReactJIT.quit()
+  -- Write clean-exit marker so the watchdog knows this wasn't a crash.
+  -- If the process segfaults, this file won't exist → watchdog spawns crash reporter.
+  local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+  local f = io.open(tmpDir .. "/reactjit_clean_exit", "w")
+  if f then f:write(tostring(os.time())); f:close() end
+
   -- Clean up devtools pop-out window
   if M.inspectorEnabled and devtools.isPoppedOut() then
     devtools.dockBack()
