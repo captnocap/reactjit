@@ -414,6 +414,12 @@ endif
 		&& cp zig-out/lib/libblake3$(LIB_EXT) cli/runtime/lib/libblake3$(LIB_EXT) \
 		&& echo "  Bundled libblake3$(LIB_EXT) (via zig)" \
 		|| echo "  Warning: libblake3 build failed — BLAKE3 hashing unavailable"
+ifeq ($(UNAME_S),Linux)
+	@zig build overlay-hook \
+		&& cp zig-out/lib/liboverlay_hook.so cli/runtime/lib/liboverlay_hook.so \
+		&& echo "  Bundled liboverlay_hook.so (game overlay LD_PRELOAD hook)" \
+		|| echo "  Warning: overlay-hook build failed — fullscreen overlay unavailable"
+endif
 	@TOR=$$(which tor 2>/dev/null); \
 	if [ -n "$$TOR" ]; then \
 		cp "$$($(READLINK_F) "$$TOR")" cli/runtime/bin/tor; \

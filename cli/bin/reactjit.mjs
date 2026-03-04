@@ -24,6 +24,7 @@ import { migrateBlessedCommand } from '../commands/migrate-blessed.mjs';
 import { migratePyQt6Command } from '../commands/migrate-pyqt6.mjs';
 import { migrateFlutterCommand } from '../commands/migrate-flutter.mjs';
 import { testCommand } from '../commands/test.mjs';
+import { overlayCommand } from '../commands/overlay.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -46,6 +47,11 @@ const HELP = `
   Development:
     rjit dev                      Watch + HMR (Love2D)
     rjit build                    Dev build (Love2D)
+    rjit overlay                  Overlay mode (transparent, always-on-top)
+    rjit overlay --hotkey f9      Custom toggle hotkey (default: F6)
+    rjit overlay --opacity 0.8    Window opacity (default: 0.9)
+    rjit overlay --mode interactive  Start in interactive mode
+    rjit overlay --attach ./game  Fullscreen overlay (LD_PRELOAD + shm)
 
   Production builds:
     rjit build linux              Self-extracting Linux binary (x64)
@@ -118,6 +124,9 @@ switch (command) {
     break;
   case 'test':
     await testCommand(args);
+    break;
+  case 'overlay':
+    await overlayCommand(args);
     break;
   case 'manifest':
     await manifestCommand(args);

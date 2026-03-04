@@ -63,6 +63,9 @@ export {
   type Overlay,
 } from './hooks';
 
+// Overlay mode (game overlay — transparent, always-on-top, input passthrough)
+export { useOverlay, type OverlayState, type OverlayMode } from './overlay';
+
 // Breakpoint / responsive grid
 export {
   useBreakpoint,

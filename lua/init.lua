@@ -1757,6 +1757,38 @@ function ReactJIT.init(config)
     })
   end
 
+  -- Overlay mode (env var trigger) — rjit overlay --------------------------------
+  if os.getenv("REACTJIT_OVERLAY") == "1" then
+    local overlayOk, overlayMod = pcall(require, "lua.overlay")
+    if overlayOk then
+      M.overlay = overlayMod
+      M.overlay.init({
+        hotkey  = os.getenv("REACTJIT_OVERLAY_HOTKEY") or "f6",
+        opacity = tonumber(os.getenv("REACTJIT_OVERLAY_OPACITY")) or 0.9,
+        mode    = os.getenv("REACTJIT_OVERLAY_MODE") or "passthrough",
+        shm     = os.getenv("REACTJIT_OVERLAY_SHM") == "1",
+      })
+      rpcHandlers["overlay:state"] = function()
+        return M.overlay.getState()
+      end
+      rpcHandlers["overlay:setMode"] = function(args)
+        return { ok = M.overlay.setMode(args.mode) }
+      end
+      rpcHandlers["overlay:setOpacity"] = function(args)
+        M.overlay.setOpacity(args.opacity)
+        return { opacity = M.overlay.opacity }
+      end
+      rpcHandlers["overlay:toggle"] = function()
+        return { mode = M.overlay.toggle() }
+      end
+      local label = M.overlay.shmMode and "shm" or "window"
+      startupLog("[reactjit] Overlay mode enabled (" .. label .. ", hotkey=" .. (M.overlay.hotkey) .. ")")
+    else
+      io.write("[reactjit] WARNING: overlay module failed to load: " .. tostring(overlayMod) .. "\n")
+      io.flush()
+    end
+  end
+
   -- Test mode (RJIT_TEST=1) — rjit test ----------------------------------------
   if os.getenv("RJIT_TEST") == "1" and M.bridge then
     local shimPath = os.getenv("RJIT_TEST_SHIM")
@@ -3310,6 +3342,10 @@ function ReactJIT.draw()
     return
   end
 
+  -- SHM overlay mode: redirect all rendering to the overlay FBO
+  local overlayShmActive = M.overlay and M.overlay.shmMode
+  if overlayShmActive then M.overlay.beginFrame() end
+
   -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
   -- mpv can dirty this during mpv_render_context_create or render calls.
   -- Love2D needs alignment=1 for single-byte glyph atlas uploads.
@@ -3437,6 +3473,9 @@ function ReactJIT.draw()
 
   -- Error overlay renders on top of everything, using raw Love2D calls
   errors.draw()
+
+  -- SHM overlay mode: flush FBO to shared memory, back to default target
+  if overlayShmActive then M.overlay.endFrame() end
 
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
   if M.screenshot then M.screenshot.captureIfReady() end
@@ -4229,6 +4268,7 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
+  if M.overlay and M.overlay.keypressed(key) then return end
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
@@ -5301,6 +5341,7 @@ function ReactJIT.quit()
   if M.inspectorEnabled and devtools.isPoppedOut() then
     devtools.dockBack()
   end
+  if M.overlay and M.overlay.shmMode then M.overlay.shutdown() end
   if M.dragdrop then M.dragdrop.cleanup() end
   if M.videos then M.videos.shutdown() end
   if M.tor then M.tor.stop() end

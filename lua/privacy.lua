@@ -292,15 +292,29 @@ end
 -- HKDF-SHA256 (RFC 5869)
 -- ============================================================================
 
--- We need HMAC-SHA256 from crypto.lua. If it's not available, we implement
--- a minimal version using libsodium's crypto_auth_hmacsha256.
-local function hmac_sha256(key, message)
+-- We need HMAC-SHA256 from crypto.lua. Crypto.hmac_sha256(key, message)
+-- takes RAW Lua strings (bytes) and returns {hex=..., base64=...}.
+-- Our HKDF works with hex strings, so we convert at boundaries.
+local function hmac_sha256_raw(keyBytes, messageBytes)
   ensureLoaded()
   if Crypto and Crypto.available then
-    -- Use crypto.lua's HMAC (returns hex)
-    return Crypto.hmac_sha256(key, message)
+    local result = Crypto.hmac_sha256(keyBytes, messageBytes)
+    return result.hex  -- return just the hex string
   end
   error("crypto module required for HKDF")
+end
+
+-- Convert hex string to raw Lua string (bytes)
+local function hexToRaw(hex)
+  if not hex or hex == "" then return "" end
+  return (hex:gsub("..", function(cc)
+    return string.char(tonumber(cc, 16))
+  end))
+end
+
+-- HMAC-SHA256 wrapper that takes hex strings and returns hex string
+local function hmac_sha256_hex(keyHex, messageHex)
+  return hmac_sha256_raw(hexToRaw(keyHex), hexToRaw(messageHex))
 end
 
 function Privacy.hkdfExtract(salt, ikm)
@@ -310,7 +324,7 @@ function Privacy.hkdfExtract(salt, ikm)
     -- Default salt: string of HashLen zeros
     salt = string.rep("00", 32)
   end
-  return hmac_sha256(salt, ikm)
+  return hmac_sha256_hex(salt, ikm)
 end
 
 function Privacy.hkdfExpand(prk, info, length)
@@ -323,11 +337,11 @@ function Privacy.hkdfExpand(prk, info, length)
   if n > 255 then error("HKDF: output too long") end
 
   local okm = ""
-  local t = ""
+  local t = ""  -- hex string, starts empty
   for i = 1, n do
     -- T(i) = HMAC-Hash(PRK, T(i-1) || info || i)
     local counterHex = string.format("%02x", i)
-    t = hmac_sha256(prk, t .. info .. counterHex)
+    t = hmac_sha256_hex(prk, t .. info .. counterHex)
     okm = okm .. t
   end
 
@@ -557,13 +571,14 @@ function Privacy.envelopeDecrypt(envelope, kekHex)
     Crypto.loadLibraries()
   end
 
-  -- Decrypt DEK with KEK
-  local dekHex = Crypto.decryptRaw(envelope.encryptedDEK, kekHex, envelope.dekNonce, "xchacha20-poly1305")
+  -- Decrypt DEK with KEK (decryptRaw returns {plaintext=hex})
+  local dekResult = Crypto.decryptRaw(envelope.encryptedDEK, kekHex, envelope.dekNonce, "xchacha20-poly1305")
+  local dekHex = dekResult.plaintext
 
   -- Decrypt data with DEK
-  local dataHex = Crypto.decryptRaw(envelope.ciphertext, dekHex, envelope.dataNonce, "xchacha20-poly1305")
+  local dataResult = Crypto.decryptRaw(envelope.ciphertext, dekHex, envelope.dataNonce, "xchacha20-poly1305")
 
-  return dataHex
+  return dataResult.plaintext
 end
 
 -- ============================================================================
@@ -1151,7 +1166,8 @@ function Privacy.anonymousId(domain, seed)
   end
 
   -- HMAC-SHA256(domain, seed) — deterministic within domain, unlinkable across
-  return Crypto.hmac_sha256(domain, seed)
+  local result = Crypto.hmac_sha256(domain, seed)
+  return result.hex
 end
 
 function Privacy.pseudonym(masterSecretHex, context)
@@ -1283,7 +1299,8 @@ function Privacy.noiseReceive(sessionId, ciphertextWithNonce)
   local ciphertext, nonce = ciphertextWithNonce:match("^(.+):(.+)$")
   if not ciphertext then error("invalid message format") end
 
-  local plaintextHex = Crypto.decryptRaw(ciphertext, session.recvKey, nonce, "xchacha20-poly1305")
+  local decResult = Crypto.decryptRaw(ciphertext, session.recvKey, nonce, "xchacha20-poly1305")
+  local plaintextHex = decResult.plaintext
   session.recvNonce = session.recvNonce + 1
 
   -- Convert hex to string

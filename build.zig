@@ -9,6 +9,7 @@
 //!   zig build libquickjs               → QuickJS shared library only
 //!   zig build blake3                   → BLAKE3 hash library
 //!   zig build cartridge                → CartridgeOS PID 1 (x86_64-linux-musl, static)
+//!   zig build overlay-hook             → LD_PRELOAD game overlay hook (Linux .so)
 //!   zig build all                      → all of the above
 //!
 //! Cross-compilation (all steps respect -Dtarget):
@@ -198,6 +199,42 @@ pub fn build(b: *std.Build) void {
         const step = b.step("cartridge", "Build CartridgeOS PID 1 (x86_64-linux-musl static)");
         step.dependOn(&install.step);
         all_step.dependOn(&install.step);
+    }
+
+    // ── overlay-hook (LD_PRELOAD .so for fullscreen game overlay) ───────────
+    // Intercepts glXSwapBuffers to composite ReactJIT overlay onto any OpenGL
+    // game. Reads overlay pixels from POSIX shared memory. Linux-only (X11/GL).
+    // Output: zig-out/lib/liboverlay_hook.so
+    {
+        const hook_os = target.result.os.tag;
+        if (hook_os == .linux) {
+            const mod = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            });
+
+            const lib = b.addLibrary(.{
+                .name = "overlay_hook",
+                .linkage = .dynamic,
+                .root_module = mod,
+            });
+
+            lib.addCSourceFile(.{
+                .file = b.path("native/overlay-hook/overlay_hook.c"),
+                .flags = &.{ "-O2", "-D_GNU_SOURCE" },
+            });
+
+            lib.linkLibC();
+            lib.linkSystemLibrary("dl");  // dlsym(RTLD_NEXT)
+            lib.linkSystemLibrary("rt");  // shm_open
+            lib.linkSystemLibrary("GL");  // OpenGL
+
+            const install = b.addInstallArtifact(lib, .{});
+
+            const step = b.step("overlay-hook", "Build LD_PRELOAD overlay hook (.so, Linux only)");
+            step.dependOn(&install.step);
+            all_step.dependOn(&install.step);
+        }
     }
 
     // ── win-launcher ──────────────────────────────────────────────────────────

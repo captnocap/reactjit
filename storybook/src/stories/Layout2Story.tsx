@@ -148,7 +148,7 @@ export function Layout2Story() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'flex-start',
+          alignItems: 'start',
         }}>
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
@@ -169,7 +169,7 @@ export function Layout2Story() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'flex-start',
+          alignItems: 'start',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={PROVIDER_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
@@ -211,7 +211,7 @@ export function Layout2Story() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'flex-start',
+          alignItems: 'start',
         }}>
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
             <SectionLabel icon="code">{'BASIC USAGE'}</SectionLabel>
@@ -232,7 +232,7 @@ export function Layout2Story() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'flex-start',
+          alignItems: 'start',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={ACTIONS_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
@@ -253,7 +253,7 @@ export function Layout2Story() {
           paddingTop: 20,
           paddingBottom: 24,
           gap: 24,
-          alignItems: 'flex-start',
+          alignItems: 'start',
         }}>
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
             <SectionLabel icon="settings">{'OPTIONS'}</SectionLabel>
