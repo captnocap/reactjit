@@ -691,11 +691,33 @@ end
 
 --- Get scroll state from the appropriate tab module.
 local function getTabScrollState(tabName)
-  if tabName == "perf" then return PerfTab.getScrollState()
-  elseif tabName == "network" then return NetworkTab.getScrollState()
-  elseif tabName == "logs" then return LogsTab.getScrollState()
+  local s = nil
+  if tabName == "perf" then
+    s = PerfTab.getScrollState()
+  elseif tabName == "network" then
+    s = NetworkTab.getScrollState()
+  elseif tabName == "logs" then
+    s = LogsTab.getScrollState()
   end
-  return nil
+
+  if type(s) == "table" then
+    return s
+  end
+
+  -- Back-compat for modules that still return multiple values:
+  --   scrollY, region, contentH
+  local scrollY, region, contentH = s, nil, nil
+  if tabName == "perf" then
+    scrollY, region, contentH = PerfTab.getScrollState()
+  elseif tabName == "network" then
+    scrollY, region, contentH = NetworkTab.getScrollState()
+  end
+  if scrollY == nil then return nil end
+  return {
+    scrollY = scrollY,
+    region = region,
+    contentH = contentH,
+  }
 end
 
 --- Set scroll position on the appropriate tab module.

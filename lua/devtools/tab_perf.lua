@@ -462,7 +462,11 @@ end
 --- Returns the current scroll position and stored region/content height
 --- so main.lua can wire scrollbar drag without reaching into module locals.
 function M.getScrollState()
-  return perfScrollY, perfRegion, perfContentHStored
+  return {
+    scrollY = perfScrollY,
+    region = perfRegion,
+    contentH = perfContentHStored,
+  }
 end
 
 --- Set scroll position (used by scrollbar drag in main.lua).
