@@ -32,10 +32,18 @@ export function Card({ title, subtitle, children, style, headerStyle, bodyStyle 
           ...headerStyle,
         }}>
           {title && (
-            <Text style={{ color: '#f1f5f9', fontSize: 14, fontWeight: 'bold' }}>{title}</Text>
+            <Text
+              style={{ color: '#f1f5f9', fontSize: 14, fontWeight: 'bold', whiteSpace: 'nowrap' }}
+            >
+              {title}
+            </Text>
           )}
           {subtitle && (
-            <Text style={{ color: '#94a3b8', fontSize: 11 }}>{subtitle}</Text>
+            <Text
+              style={{ color: '#94a3b8', fontSize: 11, whiteSpace: 'nowrap' }}
+            >
+              {subtitle}
+            </Text>
           )}
         </Box>
       )}
