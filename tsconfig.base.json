@@ -31,7 +31,9 @@
       "@reactjit/terminal": ["./packages/terminal/src"],
       "@reactjit/icons": ["./packages/icons/src"],
       "@reactjit/math": ["./packages/math/src"],
-      "@reactjit/time": ["./packages/time/src"]
+      "@reactjit/time": ["./packages/time/src"],
+      "@reactjit/convert": ["./packages/convert/src"],
+      "@reactjit/privacy": ["./packages/privacy/src"]
     }
   }
 }
