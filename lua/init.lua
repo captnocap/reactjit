@@ -3686,7 +3686,7 @@ end
 -- ============================================================================
 
 --- Safely dispatch a Love2D callback through ReactJIT.
---- Records the event in the trail, then pcall-wraps the dispatch.
+--- Records the event in the trail, then xpcall-wraps the dispatch.
 --- On error, enters crashRecoveryMode (same as update() errors).
 --- @param method string  The ReactJIT method name (e.g. "mousepressed")
 --- @param ...    any     Arguments to pass through
@@ -3728,15 +3728,21 @@ function ReactJIT.safeCall(method, ...)
   local fn = ReactJIT[method]
   if not fn then return end
 
-  local ok, err = pcall(fn, ...)
+  local ok, trace = xpcall(function()
+    return fn(unpack(args))
+  end, function(err)
+    return debug.traceback(tostring(err), 2)
+  end)
   if not ok then
     crashRecoveryMode = true
-    local trace = debug.traceback(tostring(err), 2)
+    trace = tostring(trace or "")
+    local message = trace:match("^[^\n]+") or trace
+    if message == "" then message = "unknown error" end
     eventTrail.freeze()
     io.write("[reactjit] CRASH in " .. method .. ": entering recovery mode.\n"); io.flush()
     errors.push({
       source = "lua",
-      message = tostring(err),
+      message = message,
       stack = trace,
       context = "love." .. method .. " (safeCall)",
       trail = eventTrail.getTrail(),
