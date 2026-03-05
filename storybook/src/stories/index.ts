@@ -21,9 +21,7 @@ import { NavigationStory } from './NavigationStory';
 import { NetworkingStory } from './NetworkingStory';
 import { CryptoStory } from './CryptoStory';
 import { MediaStory } from './MediaStory';
-import { ImageBasicStory } from './ImageBasic';
 import { ImageGalleryStory } from './ImageGalleryStory';
-import { VideoStory } from './VideoStory';
 import { ImageVideoStory } from './ImageVideoStory';
 import EmulatorStory from './EmulatorStory';
 import { Scene3DShowcaseStory } from './Scene3DShowcaseStory';
@@ -46,9 +44,6 @@ import { FleetStory } from './FleetStory';
 import { OriginStory } from './OriginStory';
 import { IconStory } from './IconStory';
 import { MathStory } from './MathStory';
-import { TailwindStory } from './TailwindStory';
-import { HtmlCompatStory } from './HtmlCompatStory';
-import { MergePrecedenceStory } from './MergePrecedenceStory';
 import { LintTestStory } from './LintTestStory';
 import { SyntaxStressStory } from './SyntaxStressStory';
 import { TimeStory } from './TimeStory';
@@ -65,7 +60,7 @@ import { AudioStory } from './AudioStory';
 import { DevToolsStory } from './DevToolsStory';
 import { RenderStory } from './RenderStory';
 import { CompatibilityStory } from './CompatibilityStory';
-import { MigrationStory } from './MigrationStory';
+import { PhysicsStory } from './PhysicsStory';
 
 
 export const stories: StoryDef[] = [
@@ -75,9 +70,7 @@ export const stories: StoryDef[] = [
   { id: 'layout', title: 'Layout', section: 'Core', component: LayoutStory },
   { id: 'style', title: 'Style', section: 'Core', component: StyleStory },
   { id: 'image-video', title: 'Image & Video', section: 'Core', component: ImageVideoStory },
-  { id: 'image', title: 'Image (old)', section: 'Dev', component: ImageBasicStory },
   { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },
-  { id: 'video', title: 'Video (old)', section: 'Dev', component: VideoStory },
   { id: 'input', title: 'Input', section: 'Core', component: InputStory },
   { id: 'icons', title: 'Icons', section: 'Core', component: IconStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
@@ -110,11 +103,10 @@ export const stories: StoryDef[] = [
   { id: 'poly-pizza', title: 'Poly Pizza', section: 'Demos', component: PolyPizzaStory },
   { id: 'noclip-maze', title: 'Noclip Maze', section: 'Demos', component: NoclipMazeStory },
   { id: 'origin', title: 'Origin', section: 'Demos', component: OriginStory },
+  { id: 'physics', title: 'Physics', section: 'Demos', component: PhysicsStory },
 
-  // Bad Habits — Tailwind, HTML elements, merge precedence
-  { id: 'tailwind', title: 'Tailwind', section: 'Bad Habits', component: TailwindStory },
-  { id: 'html-compat', title: 'HTML Elements', section: 'Bad Habits', component: HtmlCompatStory },
-  { id: 'merge-precedence', title: 'Merge Precedence', section: 'Bad Habits', component: MergePrecedenceStory },
+  // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
+  { id: 'compatibility', title: 'Compatibility', section: 'Bad Habits', component: CompatibilityStory },
 
   // Stress Test
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },
@@ -137,6 +129,4 @@ export const stories: StoryDef[] = [
   { id: 'render', title: 'Render', section: 'Packages', component: RenderStory },
   { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
   { id: 'devtools', title: 'DevTools', section: 'Dev', component: DevToolsStory },
-  { id: 'compatibility', title: 'Compatibility', section: 'Dev', component: CompatibilityStory },
-  { id: 'migration', title: 'Migration', section: 'Dev', component: MigrationStory },
 ];
