@@ -224,13 +224,20 @@ function WindowManager.setPosition(entry, x, y)
   x, y = math.floor(x), math.floor(y)
   if entry.isMain then
     love.window.setPosition(x, y)
+    entry._lastX = x
+    entry._lastY = y
   end
   -- Love2D secondary windows: no position API yet
 end
 
 --- Get a window's current position. Returns x, y.
+--- Prefers the last SDL-reported position (accurate on Wayland/XWayland)
+--- over love.window.getPosition() which can return stale values.
 function WindowManager.getPosition(entry)
   if entry.isMain then
+    if entry._lastX then
+      return entry._lastX, entry._lastY
+    end
     local x, y = love.window.getPosition()
     return x, y
   end
@@ -368,18 +375,24 @@ end
 -- ============================================================================
 
 local GEOMETRY_FILE = "save/window_geometry.json"
+local geometrySaveBlockedUntil = 0
 
 --- Save the main window's current geometry to disk.
 --- Called on quit so the next launch can restore position+size.
 function WindowManager.saveGeometry()
   if not mainWin then return end
+  -- Block saves during/after restore to prevent async resize callbacks
+  -- from overwriting the restored geometry with clamped values
+  local now = love.timer and love.timer.getTime() or 0
+  if now < geometrySaveBlockedUntil then return end
 
-  local x, y = WindowManager.getPosition(mainWin)
+  -- love.window.getPosition returns display-relative coords + display index
+  local x, y, display = love.window.getPosition()
   local w, h = mainWin.width, mainWin.height
 
   local data = string.format(
-    '{"x":%d,"y":%d,"width":%d,"height":%d}',
-    x, y, w, h
+    '{"x":%d,"y":%d,"width":%d,"height":%d,"display":%d}',
+    x, y, w, h, display
   )
 
   -- Ensure save directory exists
@@ -416,35 +429,44 @@ function WindowManager.restoreGeometry()
   local y = tonumber(contents:match('"y":([%-]?%d+)'))
   local w = tonumber(contents:match('"width":(%d+)'))
   local h = tonumber(contents:match('"height":(%d+)'))
+  local display = tonumber(contents:match('"display":(%d+)'))
 
   if not (x and y and w and h) then
     io.write("[window_manager] invalid geometry file, ignoring\n"); io.flush()
     return false
   end
 
-  -- Validate against current display bounds to avoid off-screen windows
+  -- Validate saved display index still exists
   local displayCount = love.window.getDisplayCount()
-  local onScreen = false
-  for i = 1, displayCount do
-    local dw, dh = love.window.getDesktopDimensions(i)
-    -- Simple check: window origin must be within reasonable bounds
-    -- (getDesktopDimensions doesn't give offset, so just check size plausibility)
-    if x >= -w and x < dw and y >= -h and y < dh then
-      onScreen = true
-      break
-    end
+  if display and display > displayCount then
+    display = nil  -- display was unplugged, fall back to current
   end
 
-  if not onScreen then
-    io.write("[window_manager] saved geometry is off-screen, ignoring\n"); io.flush()
+  -- Validate position against the target display bounds
+  local targetDisplay = display or 1
+  local dw, dh = love.window.getDesktopDimensions(targetDisplay)
+  if x < -w or x >= dw or y < -h or y >= dh then
+    io.write("[window_manager] saved geometry is off-screen for display " .. targetDisplay .. ", ignoring\n"); io.flush()
     return false
   end
 
-  -- Apply size first, then position
-  WindowManager.setSize(mainWin, w, h)
-  WindowManager.setPosition(mainWin, x, y)
+  -- Block geometry saves for 2 seconds to prevent async resize/move callbacks
+  -- from overwriting the restored geometry with clamped intermediate values
+  geometrySaveBlockedUntil = (love.timer and love.timer.getTime() or 0) + 2.0
 
-  io.write(string.format("[window_manager] restored geometry: %dx%d at (%d,%d)\n", w, h, x, y)); io.flush()
+  -- Move to correct display FIRST so the window manager doesn't clamp
+  -- the size to the wrong monitor's dimensions
+  love.window.setPosition(x, y, display or nil)
+  WindowManager.setSize(mainWin, w, h)
+  -- Re-apply position after resize (some WMs shift the window on resize)
+  love.window.setPosition(x, y, display or nil)
+  if mainWin.isMain then
+    mainWin._lastX = nil
+    mainWin._lastY = nil
+  end
+
+  io.write(string.format("[window_manager] restored geometry: %dx%d at (%d,%d) display=%s\n",
+    w, h, x, y, tostring(display or "current"))); io.flush()
   return true
 end
 
@@ -453,7 +475,7 @@ end
 -- ============================================================================
 
 --- Called when the window is moved (SDL_WINDOWEVENT_MOVED).
---- Saves geometry immediately so crashes don't lose the position.
+--- Persists geometry so crashes don't lose position.
 function WindowManager.handleMoved(x, y)
   if not mainWin then return end
   WindowManager.saveGeometry()
