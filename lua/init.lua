@@ -48,6 +48,7 @@ local M = {
   videos   = nil,
   scene3d  = nil,
   mapmod   = nil,
+  geoscene3d = nil,
   gamemod  = nil,
   emumod   = nil,
   effectsmod = nil,
@@ -755,6 +756,8 @@ function ReactJIT.init(config)
     M.scene3d.init()
     M.mapmod = require("lua.map")
     M.mapmod.init()
+    M.geoscene3d = require("lua.geoscene3d")
+    M.geoscene3d.init()
     M.emumod = require("lua.emulator")
     M.emumod.init()
     M.effectsmod = require("lua.effects")
@@ -772,7 +775,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -838,6 +841,8 @@ function ReactJIT.init(config)
     -- map/browse/docstore/websocket/wsserver: stripped from WASM builds (use goto / PUC 5.1 incompatible)
     local ok_map, map_ = pcall(require, "lua.map")
     if ok_map then M.mapmod = map_; M.mapmod.init() end
+    local ok_geo3d, geo3d_ = pcall(require, "lua.geoscene3d")
+    if ok_geo3d then M.geoscene3d = geo3d_; M.geoscene3d.init() end
     -- emulator: SKIPPED (FFI)
     M.effectsmod = require("lua.effects")
     M.effectsmod.loadAll()
@@ -854,7 +859,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod, render_source = nil })
+    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod, render_source = nil })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -921,6 +926,8 @@ function ReactJIT.init(config)
     M.scene3d.init()
     M.mapmod = require("lua.map")
     M.mapmod.init()
+    M.geoscene3d = require("lua.geoscene3d")
+    M.geoscene3d.init()
     M.emumod = require("lua.emulator")
     M.emumod.init()
     M.effectsmod = require("lua.effects")
@@ -938,7 +945,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -1702,6 +1709,13 @@ function ReactJIT.init(config)
     end
     -- Wire capabilities into events.lua for visual capability hit testing
     if M.events then M.events.setCapabilitiesModule(capMod) end
+    -- Register physics RPC handlers (force/impulse/torque from React hooks)
+    local physMod = package.loaded["lua.capabilities.physics"]
+    if physMod and type(physMod) == "table" and physMod.getHandlers then
+      for method, handler in pairs(physMod.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
     startupLog("[reactjit] Capabilities registry loaded")
   end
 
@@ -3108,6 +3122,12 @@ function ReactJIT.update(dt)
   if M.mapmod then
     M.mapmod.syncWithTree(M.tree.getNodes())
     M.mapmod.renderAll()
+  end
+
+  -- 8c3. Sync 3D geo scenes with tree, then render to off-screen Canvases
+  if M.geoscene3d then
+    M.geoscene3d.syncWithTree(M.tree.getNodes())
+    M.geoscene3d.renderAll(dt)
   end
 
   -- 8d. Sync game modules with tree, update game logic, render to off-screen Canvases
@@ -5295,7 +5315,7 @@ function ReactJIT.reload()
       M.layout     = require("lua.layout")
       M.layout.init({ measure = M.measure })
       M.painter    = require("lua.painter")
-      M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+      M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
       M.events     = require("lua.events")
       M.events.setTreeModule(M.tree)
       M.texteditor = require("lua.texteditor")

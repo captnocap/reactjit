@@ -50,6 +50,7 @@ import { DevToolsStory } from './DevToolsStory';
 import { RenderStory } from './RenderStory';
 import { CompatibilityStory } from './CompatibilityStory';
 import { PhysicsStory } from './PhysicsStory';
+import { GeoScene3DStory } from './GeoScene3DStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -78,15 +79,16 @@ export const stories: StoryDef[] = [
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
   { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
-  { id: 'render', title: 'Render', section: 'Packages', component: RenderStory },
+  { id: 'render', title: 'Render', section: 'Core', component: RenderStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
   { id: 'emulator', title: 'NES Emulator', section: 'Demos', component: EmulatorStory },
   { id: 'scene-3d-showcase', title: '3D Showcase', section: 'Demos', component: Scene3DShowcaseStory },
   { id: 'map-basic', title: 'Map', section: 'Demos', component: MapBasicStory },
+  { id: 'geoscene-3d', title: 'GeoScene3D', section: 'Demos', component: GeoScene3DStory },
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
-  { id: 'physics', title: 'Physics', section: 'Demos', component: PhysicsStory },
+  { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
 
   // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
   { id: 'compatibility', title: 'Compatibility', section: 'Bad Habits', component: CompatibilityStory },

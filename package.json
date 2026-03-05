@@ -14,13 +14,15 @@
     "packages/theme",
     "packages/controls",
     "packages/geo",
+    "packages/geo3d",
     "packages/layouts",
     "packages/terminal",
     "packages/icons",
     "packages/math",
     "packages/time",
     "packages/convert",
-    "packages/privacy"
+    "packages/privacy",
+    "packages/physics"
   ],
   "scripts": {
     "build:native": "esbuild --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js examples/native-hud/src/main.tsx",

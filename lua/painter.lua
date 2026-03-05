@@ -28,6 +28,7 @@ local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
 local MapModule = nil     -- Injected at init time via Painter.init()
+local GeoScene3DModule = nil -- Injected at init time via Painter.init()
 local ChartModule = nil   -- Lazy-loaded to avoid circular deps
 local GameModule = nil    -- Injected at init time via Painter.init()
 local EmulatorModule = nil -- Injected at init time via Painter.init()
@@ -92,6 +93,7 @@ function Painter.init(config)
   Videos = config.videos
   Scene3DModule = config.scene3d
   MapModule = config.map
+  GeoScene3DModule = config.geoscene3d
   GameModule = config.game
   EmulatorModule = config.emulator
   RenderSourceModule = config.render_source
@@ -813,6 +815,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- not by the 2D painter. Skip them entirely.
   if MapModule and MapModule.isMapChildType(node.type) then return end
 
+  -- GeoScene3D child nodes are rendered by geoscene3d.lua.
+  if GeoScene3DModule and GeoScene3DModule.isGeoChildType(node.type) then return end
+
   inheritedOpacity = inheritedOpacity or 1
   stencilDepth = stencilDepth or 0
 
@@ -1483,6 +1488,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     -- Map viewport: draw the pre-rendered Canvas from map.lua
     if MapModule then
       local canvas = MapModule.get(node.id)
+      if canvas then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(canvas, c.x, c.y)
+      end
+    end
+
+  elseif not isHidden and node.type == "GeoScene3D" then
+    -- 3D geo viewport: draw the pre-rendered Canvas from geoscene3d.lua
+    if GeoScene3DModule then
+      local canvas = GeoScene3DModule.get(node.id)
       if canvas then
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
         love.graphics.draw(canvas, c.x, c.y)

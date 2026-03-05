@@ -365,4 +365,36 @@ function Geo.registerLinearProjection(name, worldWidth, worldHeight)
   )
 end
 
+-- ============================================================================
+-- Local 3D coordinate conversion (lat/lng → meters from center)
+-- ============================================================================
+
+--- Convert a lat/lng to local XY coordinates in meters relative to a center point.
+--- Uses equirectangular approximation (accurate within ~50km of center).
+--- X = east, Y = north. Suitable for 3D scene coordinates.
+--- @param lat number  Point latitude
+--- @param lng number  Point longitude
+--- @param centerLat number  Center latitude (origin)
+--- @param centerLng number  Center longitude (origin)
+--- @return number x, number y  Meters east and north from center
+function Geo.latlngToLocal(lat, lng, centerLat, centerLng)
+  local cosLat = math.cos(centerLat * RAD)
+  local x = (lng - centerLng) * RAD * EARTH_RADIUS * cosLat
+  local y = (lat - centerLat) * RAD * EARTH_RADIUS
+  return x, y
+end
+
+--- Convert local XY meters back to lat/lng.
+--- @param x number  Meters east from center
+--- @param y number  Meters north from center
+--- @param centerLat number  Center latitude (origin)
+--- @param centerLng number  Center longitude (origin)
+--- @return number lat, number lng
+function Geo.localToLatlng(x, y, centerLat, centerLng)
+  local cosLat = math.cos(centerLat * RAD)
+  local lng = centerLng + (x / (EARTH_RADIUS * cosLat)) * DEG
+  local lat = centerLat + (y / EARTH_RADIUS) * DEG
+  return lat, lng
+end
+
 return Geo

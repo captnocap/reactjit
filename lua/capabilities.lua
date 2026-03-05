@@ -263,6 +263,8 @@ function Capabilities.loadAll()
     "semantic_terminal",
     "notification",
     "render",
+    "physics",
+    "devtools_embed",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

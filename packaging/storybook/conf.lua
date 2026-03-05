@@ -7,5 +7,5 @@ function love.conf(t)
   t.window.msaa = 4
   t.window.resizable = true
   t.modules.joystick = false
-  t.modules.physics = false
+  t.modules.physics = true
 end
