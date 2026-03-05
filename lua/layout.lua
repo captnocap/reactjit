@@ -28,6 +28,8 @@ local Log = require("lua.debug_log")
 
 local Measure = nil  -- Injected at init time via Layout.init()
 local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
+local LatexModule = nil      -- Lazy-loaded for Math (LaTeX) measurement
+local LatexModule = nil      -- Lazy-loaded for Math (LaTeX) measurement
 
 -- Frame budget: max layoutNode calls per layout pass.
 -- Empirical: 5,000-node tree ≈ 5,000 calls. 10,000 is generous headroom.
@@ -621,6 +623,21 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     return padMain
   end
 
+  -- 2d. Math (LaTeX) nodes: intrinsic size from parsed expression
+  if node.type == "Math" then
+    if not LatexModule then
+      LatexModule = require("lua.latex")
+    end
+    local measured = LatexModule.measure(node, isRow)
+    if measured then
+      if isRow then
+        return measured.width + padMain
+      end
+      return measured.height + padMain
+    end
+    return padMain
+  end
+
   -- 3. Container nodes: recursively estimate from children
   local children = node.children or {}
   if #children == 0 then
@@ -905,6 +922,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- wraps correctly inside the padding box.
   local isTextNode = (node.type == "Text" or node.type == "__TEXT__")
   local isCodeBlock = (node.type == "CodeBlock")
+  local isMath = (node.type == "Math")
   local isTextInput = (node.type == "TextInput")
 
   if isTextNode then
@@ -954,6 +972,29 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
           local contentW = math.max(50, measured.width + padL + padR)
           if parentAssignedW and w then
             -- Shrink-wrap to content but never exceed parent bounds
+            w = math.min(contentW, w)
+          elseif not w then
+            w = contentW
+          end
+          wSource = "text"
+        end
+        if not explicitH and h == nil then
+          h = measured.height + padT + padB
+          hSource = "text"
+        end
+      end
+    end
+  elseif isMath then
+    -- Math (LaTeX) node: measure via latex.lua
+    if not explicitW or not explicitH then
+      if not LatexModule then
+        LatexModule = require("lua.latex")
+      end
+      local measured = LatexModule.measure(node, true)
+      if measured then
+        if not explicitW then
+          local contentW = math.max(20, measured.width + padL + padR)
+          if parentAssignedW and w then
             w = math.min(contentW, w)
           elseif not w then
             w = contentW

@@ -8,7 +8,7 @@
  * Navigation: click story names, or use Up/Down + Enter keys.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, type ErrorInfo } from 'react';
 import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
@@ -55,6 +55,127 @@ function groupBySection(list: StoryDef[]): Map<StorySection, StoryDef[]> {
     map.get(section)!.push(s);
   }
   return map;
+}
+
+// ── Error boundary for story content ──────────────────────
+
+interface EBProps {
+  children: React.ReactNode;
+  resetKey: any;
+}
+interface EBState {
+  hasError: boolean;
+  errorMessage: string;
+  errorStack: string;
+}
+
+class StoryErrorBoundary extends React.Component<EBProps, EBState> {
+  constructor(props: EBProps) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '', errorStack: '' };
+  }
+  static getDerivedStateFromError(error: any) {
+    return {
+      hasError: true,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack || '',
+    };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.log('[ErrorBoundary] ' + error.message);
+    if (info.componentStack) console.log('[ErrorBoundary] Component stack:' + info.componentStack);
+  }
+  componentDidUpdate(prev: EBProps) {
+    if (prev.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false, errorMessage: '', errorStack: '' });
+    }
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return <StoryErrorScreen message={this.state.errorMessage} stack={this.state.errorStack} />;
+  }
+}
+
+function StoryErrorScreen({ message, stack }: { message: string; stack: string }) {
+  const c = useThemeColors();
+  // Extract just the useful part of the stack (first 8 lines)
+  const shortStack = stack
+    .split('\n')
+    .slice(0, 8)
+    .join('\n');
+
+  return (
+    <Box style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: c.bg,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 40,
+    }}>
+      <Box style={{
+        backgroundColor: c.bgElevated,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#ef4444',
+        padding: 24,
+        gap: 12,
+        maxWidth: 600,
+        width: '80%',
+      }}>
+        {/* Header */}
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Box style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: '#ef444422',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}>
+            <Text style={{ color: '#ef4444', fontSize: 16, fontWeight: 'bold' }}>{'!'}</Text>
+          </Box>
+          <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: 'bold' }}>
+            {'Story Crashed'}
+          </Text>
+        </Box>
+
+        {/* Error message */}
+        <Box style={{
+          backgroundColor: '#ef444411',
+          borderRadius: 6,
+          padding: 12,
+          borderLeftWidth: 3,
+          borderColor: '#ef4444',
+        }}>
+          <Text style={{ color: c.text, fontSize: 11, fontFamily: 'monospace' }}>
+            {message}
+          </Text>
+        </Box>
+
+        {/* Stack trace */}
+        {shortStack.length > 0 && (
+          <Box style={{ gap: 4 }}>
+            <Text style={{ color: c.textDim, fontSize: 9 }}>{'Stack trace'}</Text>
+            <Box style={{
+              backgroundColor: c.bg,
+              borderRadius: 6,
+              padding: 10,
+            }}>
+              <Text style={{ color: c.textDim, fontSize: 8, fontFamily: 'monospace' }}>
+                {shortStack}
+              </Text>
+            </Box>
+          </Box>
+        )}
+
+        {/* Hint */}
+        <Text style={{ color: c.textDim, fontSize: 9 }}>
+          {'Select a different story from the sidebar to recover.'}
+        </Text>
+      </Box>
+    </Box>
+  );
 }
 
 function StorybookPanel() {

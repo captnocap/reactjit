@@ -57,14 +57,15 @@ function resolveBoxStyle(props: BoxProps): Style | undefined {
   const {
     className,
     direction, gap, padding, px, py, margin,
-    align, justify, fill, fit, grow, bg, radius,
+    align, justify, xAlign, yAlign, fill, fit, grow, bg, radius,
     w, h, wrap, scroll, hidden, z, style,
   } = props;
 
   const hasShorthands = (
     direction !== undefined || gap !== undefined || padding !== undefined ||
     px !== undefined || py !== undefined || margin !== undefined ||
-    align !== undefined || justify !== undefined || fill || fit || grow ||
+    align !== undefined || justify !== undefined ||
+    xAlign !== undefined || yAlign !== undefined || fill || fit || grow ||
     bg !== undefined || radius !== undefined || w !== undefined ||
     h !== undefined || wrap || scroll || hidden || z !== undefined
   );
@@ -83,6 +84,16 @@ function resolveBoxStyle(props: BoxProps): Style | undefined {
     if (margin !== undefined) base.margin = margin;
     if (align) base.alignItems = align;
     if (justify) base.justifyContent = justify;
+    // xAlign/yAlign: direction-aware — x always means horizontal, y always means vertical
+    if (xAlign !== undefined || yAlign !== undefined) {
+      const isRow = base.flexDirection === 'row' || direction === 'row';
+      if (xAlign !== undefined) {
+        if (isRow) base.justifyContent = xAlign; else base.alignItems = xAlign;
+      }
+      if (yAlign !== undefined) {
+        if (isRow) base.alignItems = yAlign; else base.justifyContent = yAlign;
+      }
+    }
     if (fill) { base.width = '100%'; base.height = '100%'; }
     if (fit) { base.width = 'fit-content'; base.height = 'fit-content'; }
     if (grow) base.flexGrow = 1;

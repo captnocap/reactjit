@@ -305,6 +305,10 @@ export interface BoxProps {
   margin?: number | string;
   align?: 'start' | 'center' | 'end' | 'stretch';
   justify?: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly';
+  /** Horizontal alignment — maps to the correct flex property based on direction. */
+  xAlign?: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly' | 'stretch';
+  /** Vertical alignment — maps to the correct flex property based on direction. */
+  yAlign?: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly' | 'stretch';
   fill?: boolean;
   fit?: boolean;
   grow?: boolean;

@@ -38,6 +38,7 @@ const HTML_TYPE_MAP: Record<string, string> = {
   'img': 'Image', 'video': 'Video',
   'input': 'TextInput', 'textarea': 'TextEditor',
   'pre': 'CodeBlock',
+  'math': 'Math',
   // Ignored structural (map to View so they don't break)
   'html': 'View', 'body': 'View', 'head': 'View',
   'br': 'View', 'hr': 'View', 'wbr': 'View',

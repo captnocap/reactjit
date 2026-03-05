@@ -1,10 +1,134 @@
+/**
+ * Crypto — libsodium + OpenSSL + BLAKE3 via Lua FFI.
+ *
+ * Hashing, encryption, signing, key exchange, tokens — all crypto runs in C.
+ * Zero JS overhead. React declares intent, Lua executes native crypto.
+ *
+ * Static hoist ALL code strings and style objects outside the component.
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable } from '../../../packages/core/src';
 import { useCrypto } from '../../../packages/crypto/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
-// ── Hash Demo ──────────────────────────────────────────
+// ── Palette ──────────────────────────────────────────────
+
+const C = {
+  accent: '#8b5cf6',
+  accentDim: 'rgba(139, 92, 246, 0.12)',
+  callout: 'rgba(59, 130, 246, 0.08)',
+  calloutBorder: 'rgba(59, 130, 246, 0.25)',
+  green: '#a6e3a1',
+  red: '#f38ba8',
+  blue: '#89b4fa',
+  yellow: '#f9e2af',
+  mauve: '#cba6f7',
+  peach: '#fab387',
+  teal: '#94e2d5',
+  pink: '#ec4899',
+};
+
+// ── Static code blocks (hoisted — never recreated) ──────
+
+const INSTALL_CODE = `import { useCrypto } from '@reactjit/crypto'
+import { toHex, fromHex, toBase64, fromBase64 }
+  from '@reactjit/crypto'`;
+
+const HASH_CODE = `const crypto = useCrypto()
+const h = await crypto.sha256('hello world')
+// h.hex, h.base64
+
+const b3 = await crypto.hash_blake3('hello')
+const mac = await crypto.hmacSHA256('key', 'msg')`;
+
+const ENCRYPT_CODE = `const sealed = await crypto.encrypt(
+  'secret message', 'password'
+)
+// sealed.algorithm = 'xchacha20-poly1305'
+// sealed.kdf = 'argon2id'
+
+const plain = await crypto.decrypt(sealed, 'password')`;
+
+const SIGN_CODE = `const keys = await crypto.generateSigningKeys()
+const signed = await crypto.sign(
+  keys.privateKey, 'message'
+)
+const valid = await crypto.verify(signed) // true`;
+
+const DH_CODE = `const alice = await crypto.generateDHKeys()
+const bob = await crypto.generateDHKeys()
+
+const sharedA = await crypto.diffieHellman(
+  alice.privateKey, bob.publicKey
+)
+const sharedB = await crypto.diffieHellman(
+  bob.privateKey, alice.publicKey
+)
+// sharedA === sharedB`;
+
+const TOKEN_CODE = `const hex = await crypto.randomToken(32)
+const id = await crypto.randomId(16)
+const b64 = await crypto.randomBase64(24)`;
+
+const ENCODING_CODE = `import { toHex, fromHex, toBase64, fromBase64 }
+  from '@reactjit/crypto'
+
+const hex = toHex(bytes)       // Uint8Array → hex
+const bytes = fromHex(hex)     // hex → Uint8Array
+const b64 = toBase64(bytes)    // Uint8Array → base64
+const raw = fromBase64(b64)    // base64 → Uint8Array`;
+
+// ── Hoisted data arrays ─────────────────────────────────
+
+const ALGORITHMS = [
+  { label: 'SHA-256/512', desc: 'NIST standard hashes (libsodium)', color: C.blue },
+  { label: 'BLAKE2b/2s', desc: 'Modern hash (libsodium + OpenSSL)', color: C.teal },
+  { label: 'BLAKE3', desc: 'Fastest modern hash (libblake3)', color: C.yellow },
+  { label: 'HMAC-SHA256/512', desc: 'Message authentication (libsodium)', color: C.mauve },
+  { label: 'XChaCha20-Poly1305', desc: 'Default AEAD cipher (libsodium)', color: C.pink },
+  { label: 'AES-256-GCM', desc: 'AEAD cipher, requires AES-NI (libsodium)', color: C.peach },
+  { label: 'Argon2id', desc: 'Default password KDF (libsodium)', color: C.red },
+  { label: 'scrypt', desc: 'Password KDF, compat mode (libsodium)', color: C.green },
+  { label: 'Ed25519', desc: 'Digital signatures (libsodium)', color: C.blue },
+  { label: 'X25519', desc: 'Diffie-Hellman key exchange (libsodium)', color: C.teal },
+  { label: 'randomToken/Id', desc: 'CSPRNG tokens (libsodium)', color: C.yellow },
+  { label: 'toHex/toBase64', desc: 'Pure JS encoding — no bridge needed', color: C.mauve },
+];
+
+// ── Helpers ──────────────────────────────────────────────
+
+function Divider() {
+  const c = useThemeColors();
+  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+}
+
+function SectionLabel({ icon, children }: { icon: string; children: string }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
+      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        {children}
+      </Text>
+    </Box>
+  );
+}
+
+// ── Band wrapper (zigzag helper) ─────────────────────────
+
+const bandStyle = {
+  paddingLeft: 28,
+  paddingRight: 28,
+  paddingTop: 20,
+  paddingBottom: 20,
+  gap: 24,
+  alignItems: 'center' as const,
+};
+
+const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+
+// ── Live Demo: Hash Functions ────────────────────────────
 
 function HashDemo() {
   const c = useThemeColors();
@@ -23,11 +147,11 @@ function HashDemo() {
       crypto.hmacSHA256('secret-key', input),
     ]).then(([s256, s512, b2b, b3, mac]) => {
       setHashes([
-        { label: 'SHA-256', hex: s256.hex, color: c.info },
-        { label: 'SHA-512', hex: s512.hex, color: c.success },
-        { label: 'BLAKE2b', hex: b2b.hex, color: c.accent },
-        { label: 'BLAKE3', hex: b3.hex, color: c.warning },
-        { label: 'HMAC-SHA256', hex: mac.hex, color: '#ec4899' },
+        { label: 'SHA-256', hex: s256.hex, color: C.blue },
+        { label: 'SHA-512', hex: s512.hex, color: C.teal },
+        { label: 'BLAKE2b', hex: b2b.hex, color: C.mauve },
+        { label: 'BLAKE3', hex: b3.hex, color: C.yellow },
+        { label: 'HMAC-SHA256', hex: mac.hex, color: C.pink },
       ]);
       setError(null);
     }).catch(err => {
@@ -36,89 +160,106 @@ function HashDemo() {
   }, []);
 
   return (
-    <>
-      <Text style={{ fontSize: 9, color: c.textDim }}>libsodium + libcrypto + libblake3 via Lua FFI</Text>
-
-      <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 10, color: c.textSecondary }}>Input:</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 6, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.info }}>{`"${input}"`}</Text>
+    <Box style={{ gap: 6, width: '100%' }}>
+      <Box style={{ gap: 2 }}>
+        <Text style={{ fontSize: 9, color: c.muted }}>Input:</Text>
+        <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+          <Text style={{ fontSize: 10, color: C.blue }}>{`"${input}"`}</Text>
         </Box>
       </Box>
 
       {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>{`Hash error: ${error}`}</Text>
+        <Text style={{ fontSize: 10, color: C.red }}>{`Error: ${error}`}</Text>
       )}
 
       {hashes.map(h => (
-        <Box key={h.label} style={{ gap: 2 }}>
-          <Text style={{ fontSize: 10, color: h.color, fontWeight: 'normal' }}>{`${h.label}:`}</Text>
-          <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-            <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${h.hex.slice(0, 64)}${h.hex.length > 64 ? '...' : ''}`}</Text>
+        <Box key={h.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: h.color, marginTop: 3, flexShrink: 0 }} />
+          <Box style={{ gap: 1, flexShrink: 1 }}>
+            <Text style={{ fontSize: 9, color: h.color }}>{h.label}</Text>
+            <Text style={{ fontSize: 8, color: c.muted }}>{`${h.hex.slice(0, 48)}${h.hex.length > 48 ? '...' : ''}`}</Text>
           </Box>
         </Box>
       ))}
-    </>
+    </Box>
   );
 }
 
-// ── Token Demo ─────────────────────────────────────────
+// ── Live Demo: Password Encryption ───────────────────────
 
-function TokenDemo() {
+function EncryptDemo() {
   const c = useThemeColors();
   const crypto = useCrypto();
-  const [tokens, setTokens] = useState<{ hex: string; id: string }>({ hex: '', id: '' });
+  const plaintext = 'Top secret message!';
+  const password = 'strong-password-123';
+
+  const [encrypted, setEncrypted] = useState('');
+  const [decrypted, setDecrypted] = useState('');
+  const [algo, setAlgo] = useState('');
+  const [kdf, setKdf] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const regenerate = useCallback(() => {
-    Promise.all([
-      crypto.randomToken(16),
-      crypto.randomId(24),
-    ]).then(([hex, id]) => {
-      setTokens({ hex, id });
-      setError(null);
-    }).catch(err => {
-      setError(err instanceof Error ? err.message : String(err));
-    });
-  }, [crypto]);
-
   useEffect(() => {
-    regenerate();
+    (async () => {
+      try {
+        const enc = await crypto.encrypt(plaintext, password);
+        const dec = await crypto.decrypt(enc, password);
+        setEncrypted(enc.ciphertext.slice(0, 40) + '...');
+        setDecrypted(dec);
+        setAlgo(enc.algorithm);
+        setKdf(enc.kdf);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
   }, []);
 
   return (
-    <>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 9, color: c.textDim }}>libsodium randombytes_buf via Lua FFI</Text>
-        <Pressable onPress={regenerate}>
-          <Box style={{ backgroundColor: c.info, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'normal' }}>Regenerate</Text>
-          </Box>
-        </Pressable>
-      </Box>
+    <Box style={{ gap: 6, width: '100%' }}>
+      <Text style={{ fontSize: 9, color: c.muted }}>
+        {`${algo || 'XChaCha20-Poly1305'} + ${kdf || 'Argon2id'} KDF`}
+      </Text>
 
       {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>{`Token generation failed: ${error}`}</Text>
+        <Text style={{ fontSize: 10, color: C.red }}>{`Error: ${error}`}</Text>
       )}
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.warning, fontWeight: 'normal' }}>randomToken(16) -- hex:</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{tokens.hex}</Text>
+        <Text style={{ fontSize: 9, color: C.green }}>Plaintext:</Text>
+        <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+          <Text style={{ fontSize: 10, color: C.blue }}>{plaintext}</Text>
         </Box>
       </Box>
 
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>randomId(24) -- alphanumeric:</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{tokens.id}</Text>
+        <Text style={{ fontSize: 9, color: C.yellow }}>Ciphertext:</Text>
+        <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+          <Text style={{ fontSize: 8, color: c.muted }}>{encrypted}</Text>
         </Box>
       </Box>
-    </>
+
+      <Box style={{ gap: 2 }}>
+        <Text style={{ fontSize: 9, color: C.green }}>Decrypted:</Text>
+        <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+          <Text style={{ fontSize: 10, color: C.green }}>{decrypted}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Box style={{
+          width: 8, height: 8, borderRadius: 4,
+          backgroundColor: decrypted === plaintext ? C.green : C.red,
+        }} />
+        <Text style={{ fontSize: 10, color: decrypted === plaintext ? C.green : C.red }}>
+          {decrypted === plaintext ? 'Round-trip OK' : decrypted ? 'Mismatch' : 'Computing...'}
+        </Text>
+      </Box>
+    </Box>
   );
 }
 
-// ── Signing Demo ───────────────────────────────────────
+// ── Live Demo: Ed25519 Signing ───────────────────────────
 
 function SignDemo() {
   const c = useThemeColors();
@@ -136,277 +277,495 @@ function SignDemo() {
         const keys = await crypto.generateSigningKeys();
         const signed = await crypto.sign(keys.privateKey, 'ReactJIT is awesome');
         const valid = await crypto.verify(signed);
-        setResult({
-          pubKey: keys.publicKey,
-          signature: signed.signature,
-          valid,
-        });
+        setResult({ pubKey: keys.publicKey, signature: signed.signature, valid });
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
-        setResult(null);
       }
     })();
   }, []);
 
   return (
-    <>
-      <Text style={{ fontSize: 9, color: c.textDim }}>libsodium crypto_sign via Lua FFI</Text>
-
+    <Box style={{ gap: 6, width: '100%' }}>
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.textSecondary }}>Message:</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.info }}>{'"ReactJIT is awesome"'}</Text>
+        <Text style={{ fontSize: 9, color: c.muted }}>Message:</Text>
+        <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+          <Text style={{ fontSize: 10, color: C.blue }}>{'"ReactJIT is awesome"'}</Text>
         </Box>
       </Box>
 
       {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>{`Signing failed: ${error}`}</Text>
+        <Text style={{ fontSize: 10, color: C.red }}>{`Error: ${error}`}</Text>
       )}
 
       {result && (
         <>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: c.accent, fontWeight: 'normal' }}>Public Key:</Text>
-            <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-              <Text style={{ fontSize: 8, color: c.textSecondary }}>{result.pubKey}</Text>
+            <Text style={{ fontSize: 9, color: C.mauve }}>Public Key:</Text>
+            <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+              <Text style={{ fontSize: 8, color: c.muted }}>{result.pubKey}</Text>
             </Box>
           </Box>
 
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: c.warning, fontWeight: 'normal' }}>Signature:</Text>
-            <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-              <Text style={{ fontSize: 8, color: c.textSecondary }}>{`${result.signature.slice(0, 64)}...`}</Text>
+            <Text style={{ fontSize: 9, color: C.yellow }}>Signature:</Text>
+            <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+              <Text style={{ fontSize: 8, color: c.muted }}>{`${result.signature.slice(0, 48)}...`}</Text>
             </Box>
           </Box>
 
           <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <Box style={{
               width: 8, height: 8, borderRadius: 4,
-              backgroundColor: result.valid ? c.success : c.error,
+              backgroundColor: result.valid ? C.green : C.red,
             }} />
-            <Text style={{ fontSize: 11, color: result.valid ? c.success : c.error, fontWeight: 'normal' }}>
+            <Text style={{ fontSize: 10, color: result.valid ? C.green : C.red }}>
               {result.valid ? 'Signature valid' : 'Signature INVALID'}
             </Text>
           </Box>
         </>
       )}
-    </>
+    </Box>
   );
 }
 
-// ── Encryption Demo ────────────────────────────────────
+// ── Live Demo: Diffie-Hellman Key Exchange ───────────────
 
-function EncryptDemo() {
+function DHDemo() {
   const c = useThemeColors();
   const crypto = useCrypto();
-  const plaintext = 'Top secret message!';
-  const password = 'strong-password-123';
-
-  const [encrypted, setEncrypted] = useState<string>('');
-  const [decrypted, setDecrypted] = useState<string>('');
-  const [algo, setAlgo] = useState<string>('');
-  const [kdf, setKdf] = useState<string>('');
+  const [result, setResult] = useState<{
+    alicePub: string;
+    bobPub: string;
+    sharedA: string;
+    sharedB: string;
+    match: boolean;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const regenerate = useCallback(() => {
     (async () => {
       try {
-        const enc = await crypto.encrypt(plaintext, password);
-        const dec = await crypto.decrypt(enc, password);
-        setEncrypted(enc.ciphertext.slice(0, 44) + '...');
-        setDecrypted(dec);
-        setAlgo(enc.algorithm);
-        setKdf(enc.kdf);
+        const alice = await crypto.generateDHKeys();
+        const bob = await crypto.generateDHKeys();
+        const sharedA = await crypto.diffieHellman(alice.privateKey, bob.publicKey);
+        const sharedB = await crypto.diffieHellman(bob.privateKey, alice.publicKey);
+        setResult({
+          alicePub: alice.publicKey,
+          bobPub: bob.publicKey,
+          sharedA,
+          sharedB,
+          match: sharedA === sharedB,
+        });
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
-        setEncrypted('');
-        setDecrypted('');
-        setAlgo('');
-        setKdf('');
       }
     })();
-  }, []);
+  }, [crypto]);
+
+  useEffect(() => { regenerate(); }, []);
 
   return (
-    <>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{`${algo || 'XChaCha20-Poly1305'} + ${kdf || 'Argon2id'} KDF via libsodium FFI`}</Text>
+    <Box style={{ gap: 6, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Text style={{ fontSize: 9, color: c.muted }}>X25519 key exchange</Text>
+        <Pressable onPress={regenerate}>
+          <Box style={{ backgroundColor: C.teal, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
+            <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Regenerate</Text>
+          </Box>
+        </Pressable>
+      </Box>
 
       {error && (
-        <Text style={{ fontSize: 10, color: c.error }}>{`Encryption failed: ${error}`}</Text>
+        <Text style={{ fontSize: 10, color: C.red }}>{`Error: ${error}`}</Text>
       )}
 
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>Plaintext:</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.info }}>{plaintext}</Text>
-        </Box>
-      </Box>
+      {result && (
+        <>
+          <Box style={{ flexDirection: 'row', gap: 12 }}>
+            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
+              <Text style={{ fontSize: 9, color: C.blue }}>Alice pubkey:</Text>
+              <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
+                <Text style={{ fontSize: 7, color: c.muted }}>{`${result.alicePub.slice(0, 24)}...`}</Text>
+              </Box>
+            </Box>
+            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 2 }}>
+              <Text style={{ fontSize: 9, color: C.peach }}>Bob pubkey:</Text>
+              <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
+                <Text style={{ fontSize: 7, color: c.muted }}>{`${result.bobPub.slice(0, 24)}...`}</Text>
+              </Box>
+            </Box>
+          </Box>
 
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.warning, fontWeight: 'normal' }}>{`Encrypted (${algo || '...'} + ${kdf || '...'}):`}</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 9, color: c.textSecondary }}>{encrypted}</Text>
-        </Box>
-      </Box>
+          <Box style={{ gap: 2 }}>
+            <Text style={{ fontSize: 9, color: C.green }}>Shared secret:</Text>
+            <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
+              <Text style={{ fontSize: 8, color: c.muted }}>{result.sharedA}</Text>
+            </Box>
+          </Box>
 
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.success, fontWeight: 'normal' }}>Decrypted:</Text>
-        <Box style={{ backgroundColor: c.bg, padding: 4, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: c.success }}>{decrypted}</Text>
-        </Box>
-      </Box>
-
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-        <Box style={{
-          width: 8, height: 8, borderRadius: 4,
-          backgroundColor: decrypted === plaintext ? c.success : c.error,
-        }} />
-        <Text style={{ fontSize: 11, color: decrypted === plaintext ? c.success : c.error, fontWeight: 'normal' }}>
-          {decrypted === plaintext ? 'Round-trip OK' : decrypted ? 'Decryption failed' : 'Computing...'}
-        </Text>
-      </Box>
-    </>
+          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Box style={{
+              width: 8, height: 8, borderRadius: 4,
+              backgroundColor: result.match ? C.green : C.red,
+            }} />
+            <Text style={{ fontSize: 10, color: result.match ? C.green : C.red }}>
+              {result.match ? 'Shared secrets match' : 'Shared secrets MISMATCH'}
+            </Text>
+          </Box>
+        </>
+      )}
+    </Box>
   );
 }
 
-// ── Feature Catalog ────────────────────────────────────
+// ── Live Demo: Token Generation ──────────────────────────
 
-function FeatureList() {
+function TokenDemo() {
   const c = useThemeColors();
-  const features = [
-    { label: 'SHA-256/512', desc: 'libsodium -- NIST standard hash functions', color: c.info },
-    { label: 'BLAKE2b/2s', desc: 'libsodium + OpenSSL -- modern hash functions', color: c.success },
-    { label: 'BLAKE3', desc: 'libblake3 -- fastest modern hash', color: c.warning },
-    { label: 'HMAC', desc: 'libsodium -- SHA-256 and SHA-512 HMAC', color: c.accent },
-    { label: 'XChaCha20', desc: 'libsodium -- Poly1305 AEAD (default)', color: '#ec4899' },
-    { label: 'AES-256-GCM', desc: 'libsodium -- AEAD (requires AES-NI)', color: '#14b8a6' },
-    { label: 'Argon2id', desc: 'libsodium -- password KDF (default)', color: c.error },
-    { label: 'scrypt', desc: 'libsodium -- password KDF (compat)', color: '#a78bfa' },
-    { label: 'PBKDF2', desc: 'OpenSSL -- password KDF (legacy)', color: c.textDim },
-    { label: 'Ed25519', desc: 'libsodium -- digital signatures', color: c.info },
-    { label: 'X25519', desc: 'libsodium -- Diffie-Hellman key exchange', color: c.success },
-    { label: 'Tokens', desc: 'libsodium -- randomToken, randomId, randomBase64', color: c.textSecondary },
-  ];
+  const crypto = useCrypto();
+  const [tokens, setTokens] = useState<{ hex: string; id: string; b64: string }>({ hex: '', id: '', b64: '' });
+  const [error, setError] = useState<string | null>(null);
+
+  const regenerate = useCallback(() => {
+    Promise.all([
+      crypto.randomToken(16),
+      crypto.randomId(24),
+      crypto.randomBase64(18),
+    ]).then(([hex, id, b64]) => {
+      setTokens({ hex, id, b64 });
+      setError(null);
+    }).catch(err => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  }, [crypto]);
+
+  useEffect(() => { regenerate(); }, []);
 
   return (
-    <>
-      {features.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 100 }}>{f.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
+    <Box style={{ gap: 6, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Text style={{ fontSize: 9, color: c.muted }}>libsodium randombytes_buf</Text>
+        <Pressable onPress={regenerate}>
+          <Box style={{ backgroundColor: C.yellow, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
+            <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Regenerate</Text>
+          </Box>
+        </Pressable>
+      </Box>
+
+      {error && (
+        <Text style={{ fontSize: 10, color: C.red }}>{`Error: ${error}`}</Text>
+      )}
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+        <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.yellow, marginTop: 3, flexShrink: 0 }} />
+        <Box style={{ gap: 1, flexShrink: 1 }}>
+          <Text style={{ fontSize: 9, color: C.yellow }}>randomToken(16) — hex</Text>
+          <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
+            <Text style={{ fontSize: 9, color: c.muted }}>{tokens.hex}</Text>
+          </Box>
         </Box>
-      ))}
-    </>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+        <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.green, marginTop: 3, flexShrink: 0 }} />
+        <Box style={{ gap: 1, flexShrink: 1 }}>
+          <Text style={{ fontSize: 9, color: C.green }}>randomId(24) — alphanumeric</Text>
+          <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
+            <Text style={{ fontSize: 9, color: c.muted }}>{tokens.id}</Text>
+          </Box>
+        </Box>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+        <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.mauve, marginTop: 3, flexShrink: 0 }} />
+        <Box style={{ gap: 1, flexShrink: 1 }}>
+          <Text style={{ fontSize: 9, color: C.mauve }}>randomBase64(18) — base64</Text>
+          <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
+            <Text style={{ fontSize: 9, color: c.muted }}>{tokens.b64}</Text>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
-// ── Code Examples ──────────────────────────────────────
+// ── Algorithm Catalog ────────────────────────────────────
 
-function CodeBlock({ label, code, color }: { label: string; code: string[]; color?: string }) {
+function AlgorithmCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ backgroundColor: c.bg, borderRadius: 6, padding: 10, gap: 3 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{label}</Text>
-      {code.map((line, i) => (
-        <Text key={i} style={{ fontSize: 10, color: color || c.success }}>{line}</Text>
+    <Box style={{ gap: 3, width: '100%' }}>
+      {ALGORITHMS.map(a => (
+        <Box key={a.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color, flexShrink: 0 }} />
+          <Text style={{ fontSize: 9, color: c.text, width: 130, flexShrink: 0 }}>{a.label}</Text>
+          <Text style={{ fontSize: 9, color: c.muted }}>{a.desc}</Text>
+        </Box>
       ))}
     </Box>
   );
 }
 
-function UsageExamples() {
-  return (
-    <>
-      <CodeBlock
-        label="// Hashing -- async, runs in C via Lua FFI"
-        code={[
-          "import { useCrypto } from '@reactjit/crypto';",
-          "",
-          "const crypto = useCrypto();",
-          "const h = await crypto.sha256('hello');",
-          "const b = await crypto.hash_blake3('hello');",
-          "const m = await crypto.hmacSHA256('key', 'msg');",
-        ]}
-      />
-
-      <CodeBlock
-        label="// Password encryption (Argon2id + XChaCha20)"
-        code={[
-          "const sealed = await crypto.encrypt('secret', 'password');",
-          "const plain = await crypto.decrypt(sealed, 'password');",
-        ]}
-      />
-
-      <CodeBlock
-        label="// Digital signatures (Ed25519)"
-        code={[
-          "const keys = await crypto.generateSigningKeys();",
-          "const signed = await crypto.sign(keys.privateKey, 'msg');",
-          "const valid = await crypto.verify(signed); // true",
-        ]}
-      />
-
-      <CodeBlock
-        label="// Diffie-Hellman key exchange (X25519)"
-        code={[
-          "const alice = await crypto.generateDHKeys();",
-          "const bob = await crypto.generateDHKeys();",
-          "const sharedA = await crypto.diffieHellman(",
-          "  alice.privateKey, bob.publicKey);",
-          "// sharedA === sharedB",
-        ]}
-      />
-
-      <CodeBlock
-        label="// Tokens"
-        code={[
-          "const token = await crypto.randomToken(32);",
-          "const id = await crypto.randomId(16);",
-        ]}
-      />
-    </>
-  );
-}
-
-// ── Main Story ─────────────────────────────────────────
+// ── CryptoStory ──────────────────────────────────────────
 
 export function CryptoStory() {
   const c = useThemeColors();
 
   return (
-    <StoryPage>
-      <StorySection index={1} title="@reactjit/crypto">
-        <Text style={{ color: c.textDim, fontSize: 10, textAlign: 'center' }}>
-          libsodium + OpenSSL + BLAKE3 -- all crypto runs in C via Lua FFI. Zero JS overhead.
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+
+      {/* ── Header ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 14,
+      }}>
+        <Image src="shield" style={{ width: 18, height: 18 }} tintColor={C.accent} />
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          {'Crypto'}
         </Text>
-      </StorySection>
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/crypto'}</Text>
+        </Box>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'Hashing + encryption + signing + key exchange'}
+        </Text>
+      </Box>
 
-      <StorySection index={2} title="Hash Functions">
-        <HashDemo />
-      </StorySection>
+      {/* ── Content ── */}
+      <ScrollView style={{ flexGrow: 1 }}>
 
-      <StorySection index={3} title="Password Encryption">
-        <EncryptDemo />
-      </StorySection>
+        {/* ── Hero band ── */}
+        <Box style={{
+          borderLeftWidth: 3,
+          borderColor: C.accent,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 24,
+          paddingBottom: 24,
+          gap: 8,
+        }}>
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+            {'Production cryptography in one hook call.'}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>
+            {'useCrypto() wraps libsodium, OpenSSL, and BLAKE3 into a single React hook. Every operation runs in C via Lua FFI — SHA-256, XChaCha20-Poly1305, Ed25519, X25519, Argon2id, BLAKE3. React declares what to hash, encrypt, or sign. Lua executes it at native speed.'}
+          </Text>
+        </Box>
 
-      <StorySection index={4} title="Ed25519 Signing">
-        <SignDemo />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={5} title="Token Generation">
-        <TokenDemo />
-      </StorySection>
+        {/* ── Band 1: text | code — INSTALL ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'One hook, all crypto. useCrypto() returns every function — hashing, encryption, signing, key exchange, tokens. Encoding helpers are separate pure-JS imports with no bridge dependency.'}
+            </Text>
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          </Box>
+        </Box>
 
-      <StorySection index={6} title="Algorithm Catalog">
-        <FeatureList />
-      </StorySection>
+        <Divider />
 
-      <StorySection index={7} title="Usage Examples">
-        <UsageExamples />
-      </StorySection>
-    </StoryPage>
+        {/* ── Band 2: demo | text + code — HASH FUNCTIONS ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <HashDemo />
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="hash">{'HASH FUNCTIONS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Five hash algorithms, one interface. SHA-256/512 via libsodium, BLAKE2b via libsodium, BLAKE3 via libblake3, HMAC via libsodium. Every result returns { hex, base64 }.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'All hashing is async — the call crosses the bridge to Lua, which calls into C, then returns the digest. No JS crypto at all.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={HASH_CODE} />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 3: text + code | demo — ENCRYPTION ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="lock">{'PASSWORD ENCRYPTION'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Password-based encryption with XChaCha20-Poly1305 (AEAD) and Argon2id key derivation. One line to encrypt, one line to decrypt. Salt, nonce, and KDF params are generated automatically.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Supports AES-256-GCM (if hardware AES-NI is available), scrypt, and PBKDF2 via options. Defaults are chosen for security, not compatibility.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={ENCRYPT_CODE} />
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <EncryptDemo />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout: zero JS ── */}
+        <Box style={{
+          backgroundColor: C.callout,
+          borderLeftWidth: 3,
+          borderColor: C.calloutBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'All crypto runs in C via Lua FFI. React never touches a byte of plaintext, ciphertext, or key material — it only sees the results. Zero JS crypto overhead.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 4: demo | text + code — SIGNING ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <SignDemo />
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="key">{'ED25519 SIGNING'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Generate a keypair, sign a message, verify the signature. Ed25519 via libsodium — 64-byte signatures, 32-byte keys. Fast, deterministic, and safe.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'verifyDetached() is also available for cases where the signature is separate from the message.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={SIGN_CODE} />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 5: text + code | demo — DIFFIE-HELLMAN ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="git-merge">{'X25519 KEY EXCHANGE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Elliptic-curve Diffie-Hellman key agreement. Alice and Bob each generate an X25519 keypair, exchange public keys, and derive the same shared secret independently.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Use the shared secret as input to a symmetric cipher (XChaCha20) or KDF. The shared secret never travels over the wire.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={DH_CODE} />
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <DHDemo />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 6: demo | text + code — TOKENS ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <TokenDemo />
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="fingerprint">{'TOKEN GENERATION'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Cryptographically secure random tokens in three formats. Hex for database IDs, alphanumeric for URL-safe slugs, base64 for compact binary encoding.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'All backed by libsodium\'s randombytes_buf — the same CSPRNG that powers the encryption and signing primitives.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={TOKEN_CODE} />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 7: text + code | catalog — ENCODING ── */}
+        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="code">{'ENCODING HELPERS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Pure JavaScript format conversions — no bridge, no Lua, no latency. Convert between Uint8Array, hex strings, and base64. Available as standalone imports.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={ENCODING_CODE} />
+          </Box>
+          <Box style={{ ...halfStyle }}>
+            <SectionLabel icon="list">{'ALGORITHM CATALOG'}</SectionLabel>
+            <Text style={{ color: c.muted, fontSize: 9, marginBottom: 4 }}>{'Everything useCrypto() exposes:'}</Text>
+            <AlgorithmCatalog />
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout: one-liner philosophy ── */}
+        <Box style={{
+          backgroundColor: C.callout,
+          borderLeftWidth: 3,
+          borderColor: C.calloutBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'One hook. One await. No key management ceremony, no algorithm negotiation, no IV bookkeeping. The defaults are secure (Argon2id + XChaCha20-Poly1305). Override only when you know why.'}
+          </Text>
+        </Box>
+
+      </ScrollView>
+
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="shield" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Crypto'}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+      </Box>
+
+    </Box>
   );
 }

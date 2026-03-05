@@ -211,6 +211,10 @@ export { TextEditor } from './TextEditor';
 export { CodeBlock } from './CodeBlock';
 export type { CodeBlockProps } from './CodeBlock';
 
+// Math (Lua-owned LaTeX typesetting)
+export { Math } from './Math';
+export type { MathProps } from './Math';
+
 // ContextMenu (Lua-owned right-click menu)
 export { ContextMenu } from './ContextMenu';
 export type { ContextMenuProps, ContextMenuItem, ContextMenuEvent, FocusGroupProps } from './types';

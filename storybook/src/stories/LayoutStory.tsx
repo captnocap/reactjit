@@ -1,8 +1,8 @@
 /**
  * LayoutStory — Flex layout, spacing, and sizing documentation.
  *
- * How things sit next to each other. Containment, alignment, proportional
- * sizing, and the flex algorithm in action.
+ * Everything about how space is divided: flex primitives, grid, responsive
+ * breakpoints, and composed layout patterns from @reactjit/layouts.
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -11,6 +11,13 @@ import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
 import { Preview } from '../playground/Preview';
+
+// layouts package
+import {
+  AppShell, HolyGrail, Centered, Stage, Mosaic, Pinboard, Curtain,
+  Stack, Cluster, Sidebar, Shelf, Keystone, Frame, Ladder, Reel,
+  TopNav, SideNav, BottomNav, CommandShell, Drawer, Bookshelf, Crumb,
+} from '../../../packages/layouts/src';
 
 // ── Syntax colors ────────────────────────────────────────
 
@@ -126,6 +133,76 @@ const PROPS: [string, string, string][] = [
   ['responsive', 'boolean', 'monitor'],
 ];
 
+const LAYOUTS_USAGE_CODE = `import {
+  AppShell, HolyGrail, Centered, Stage,
+  Stack, Cluster, Sidebar, Shelf, Frame,
+  TopNav, SideNav, Drawer,
+} from '@reactjit/layouts';
+
+// Classic app skeleton
+<AppShell
+  header={<Header />}
+  footer={<Footer />}
+>
+  <MainContent />
+</AppShell>
+
+// Sidebar + content inside a panel
+<Sidebar sideWidth={200} gap={8}>
+  <NavList />
+  <Content />
+</Sidebar>
+
+// Wrapping tag group
+<Cluster gap={6}>
+  <Badge>{'React'}</Badge>
+  <Badge>{'Lua'}</Badge>
+  <Badge>{'OpenGL'}</Badge>
+</Cluster>
+
+// Sliding drawer overlay
+<Drawer open={isOpen} drawerWidth={240}
+  drawer={<Menu />}>
+  <Page />
+</Drawer>`;
+
+// Layouts package — [component, category, description, key props]
+const LAYOUT_COMPONENTS: [string, string, string, string][] = [
+  ['AppShell', 'Page', 'header / body / footer', 'header, footer'],
+  ['HolyGrail', 'Page', 'header / [left | main | right] / footer', 'header, footer, left, right, leftWidth, rightWidth'],
+  ['Centered', 'Page', 'content pinned to center', 'maxWidth'],
+  ['Stage', 'Page', 'dominant area + docked tray', 'tray, trayHeight'],
+  ['Mosaic', 'Page', 'N equal columns', 'columns, gap'],
+  ['Pinboard', 'Page', 'header + sidebar, no footer (VS Code)', 'header, sidebar, sidebarWidth, sidebarSide'],
+  ['Curtain', 'Page', 'two full-height panels, weighted split', 'left, right, split, gap'],
+  ['Stack', 'Container', 'vertical list with gap', 'gap'],
+  ['Cluster', 'Container', 'wrapping horizontal group', 'gap, justify, align'],
+  ['Sidebar', 'Container', 'fixed side + flexible content', 'side, sideWidth, gap'],
+  ['Shelf', 'Container', 'single non-wrapping row', 'gap, align, justify'],
+  ['Keystone', 'Container', 'hero child + supporting items below', 'heroRatio, gap'],
+  ['Frame', 'Container', 'uniform inset, content centered', 'padding'],
+  ['Ladder', 'Container', 'items alternate left / right', 'gap'],
+  ['Reel', 'Container', 'horizontal scroll strip', 'itemWidth, gap'],
+  ['TopNav', 'Nav', 'horizontal bar at top', 'nav'],
+  ['SideNav', 'Nav', 'vertical rail beside content', 'nav, navWidth, side'],
+  ['BottomNav', 'Nav', 'tab bar at floor', 'nav'],
+  ['CommandShell', 'Nav', 'persistent command slot at top', 'command'],
+  ['Drawer', 'Nav', 'side panel overlays content', 'drawer, drawerWidth, side, open'],
+  ['Bookshelf', 'Nav', 'vertical tabs + content beside', 'tabs, tabsWidth, side'],
+  ['Crumb', 'Nav', 'breadcrumb trail above content', 'trail'],
+];
+
+const LAYOUTS_BEHAVIOR_NOTES = [
+  'All layout components are pure space allocation — no color, no style applied.',
+  'Every layout accepts a style prop to override or extend the root container.',
+  'Page layouts fill their parent (width: 100%, height: 100%) by default.',
+  'Container layouts fill width but auto-size height from content.',
+  'Drawer uses position: absolute — content behind is always full size.',
+  'Keystone\'s heroRatio (0-1) controls how much vertical space the first child gets.',
+  'Curtain\'s split (0-1) controls the left/right width ratio. Default 0.5.',
+  'Reel wraps children in a horizontal ScrollView with fixed item widths.',
+];
+
 const BEHAVIOR_NOTES = [
   'Containers auto-size to fit their children by default.',
   'Use flexGrow: 1 to make an element absorb remaining space in its flex container.',
@@ -145,11 +222,60 @@ const P = {
   blue: '#3b82f6', indigo: '#6366f1', violet: '#8b5cf6',
 };
 
+// ── Patterns tab palette & helpers ───────────────────────
+const LP = {
+  nav: '#4f46e5', header: '#0891b2', footer: '#be185d',
+  sidebar: '#7c3aed', main: '#1d4ed8', left: '#7c3aed',
+  right: '#059669', tray: '#dc2626', a: '#f97316',
+  b: '#16a34a', c2: '#2563eb', d: '#9333ea',
+  e: '#db2777', command: '#0f766e',
+};
+
+function Slab({ label, color, h, grow = false }: { label: string; color: string; h?: number; grow?: boolean }) {
+  return (
+    <Box style={{
+      width: '100%', height: h, flexGrow: grow ? 1 : 0,
+      backgroundColor: color, justifyContent: 'center', alignItems: 'center',
+      minHeight: h ?? 24,
+    }}>
+      <Text style={{ color: '#fff', fontSize: 9 }}>{label}</Text>
+    </Box>
+  );
+}
+
+function Block({ label, color, w, h, grow = false }: { label: string; color: string; w?: number | string; h?: number | string; grow?: boolean }) {
+  return (
+    <Box style={{
+      width: w, height: h, flexGrow: grow ? 1 : 0,
+      backgroundColor: color, justifyContent: 'center', alignItems: 'center',
+      minWidth: 20, minHeight: 20,
+    }}>
+      <Text style={{ color: '#fff', fontSize: 9 }}>{label}</Text>
+    </Box>
+  );
+}
+
+function PatternPreview({ children, title }: { children: React.ReactNode; title: string }) {
+  const c = useThemeColors();
+  return (
+    <Box style={{ gap: 6 }}>
+      <Text style={{ color: c.textSecondary, fontSize: 10 }}>{title}</Text>
+      <Box style={{
+        width: 300, height: 200, backgroundColor: c.surface,
+        borderRadius: 6, overflow: 'hidden',
+      }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Component ────────────────────────────────────────────
 
 export function LayoutStory() {
   const c = useThemeColors();
   const [playground, setPlayground] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [code, setCode] = useState(STARTER_CODE);
   const [UserComponent, setUserComponent] = useState<React.ComponentType | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -221,7 +347,7 @@ export function LayoutStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Flex layout, spacing, sizing. How things sit next to each other.'}
+          {'Flex layout, spacing, sizing, and composed patterns.'}
         </Text>
       </Box>
 
@@ -475,6 +601,211 @@ export function LayoutStory() {
                   ))}
                 </Box>
 
+                {/* ── LAYOUT PATTERNS (@reactjit/layouts) ── */}
+
+                <Box style={{ height: 1, backgroundColor: c.border, marginTop: 8 }} />
+
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'PAGE LAYOUTS'}</Text>
+                <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  <PatternPreview title="AppShell — header / body / footer">
+                    <AppShell
+                      header={<Slab label="Header" color={LP.header} h={28} />}
+                      footer={<Slab label="Footer" color={LP.footer} h={24} />}
+                    >
+                      <Slab label="Content" color={LP.main} grow />
+                    </AppShell>
+                  </PatternPreview>
+
+                  <PatternPreview title="HolyGrail — header / [left | main | right] / footer">
+                    <HolyGrail
+                      header={<Slab label="Header" color={LP.header} h={24} />}
+                      footer={<Slab label="Footer" color={LP.footer} h={20} />}
+                      left={<Block label="Left" color={LP.left} w={54} h="100%" />}
+                      right={<Block label="Right" color={LP.right} w={48} h="100%" />}
+                    >
+                      <Block label="Main" color={LP.main} w="100%" h="100%" grow />
+                    </HolyGrail>
+                  </PatternPreview>
+
+                  <PatternPreview title="Centered — content pinned to center">
+                    <Centered maxWidth={200}>
+                      <Slab label="Centered Content" color={LP.main} h={80} />
+                    </Centered>
+                  </PatternPreview>
+
+                  <PatternPreview title="Stage — dominant area + docked tray">
+                    <Stage tray={<Slab label="Tray" color={LP.tray} h={36} />}>
+                      <Slab label="Stage" color={LP.main} grow />
+                    </Stage>
+                  </PatternPreview>
+
+                  <PatternPreview title="Mosaic — N equal columns">
+                    <Mosaic columns={3} gap={4}>
+                      <Block label="A" color={LP.a} w="100%" h="100%" />
+                      <Block label="B" color={LP.b} w="100%" h="100%" />
+                      <Block label="C" color={LP.c2} w="100%" h="100%" />
+                    </Mosaic>
+                  </PatternPreview>
+
+                  <PatternPreview title="Pinboard — header + sidebar, no footer">
+                    <Pinboard
+                      header={<Slab label="Header" color={LP.header} h={26} />}
+                      sidebar={<Block label="Sidebar" color={LP.sidebar} w={52} h="100%" />}
+                      sidebarWidth={52}
+                    >
+                      <Block label="Canvas" color={LP.main} w="100%" h="100%" />
+                    </Pinboard>
+                  </PatternPreview>
+
+                  <PatternPreview title="Curtain — two full-height panels, weighted">
+                    <Curtain
+                      split={0.4}
+                      left={<Block label="Left 40%" color={LP.left} w="100%" h="100%" />}
+                      right={<Block label="Right 60%" color={LP.right} w="100%" h="100%" />}
+                    />
+                  </PatternPreview>
+                </Box>
+
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'CONTAINER LAYOUTS'}</Text>
+                <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  <PatternPreview title="Stack — vertical list with gap">
+                    <Frame padding={12}>
+                      <Stack gap={6}>
+                        <Slab label="Item 1" color={LP.a} h={36} />
+                        <Slab label="Item 2" color={LP.b} h={36} />
+                        <Slab label="Item 3" color={LP.c2} h={36} />
+                      </Stack>
+                    </Frame>
+                  </PatternPreview>
+
+                  <PatternPreview title="Cluster — wrapping horizontal group">
+                    <Frame padding={12}>
+                      <Cluster gap={6}>
+                        {['React', 'TypeScript', 'Lua', 'SDL2', 'OpenGL', 'LuaJIT', 'QuickJS', 'esbuild'].map((tag, i) => (
+                          <Block key={tag} label={tag} color={[LP.a, LP.b, LP.c2, LP.d, LP.e, LP.nav, LP.sidebar, LP.main][i % 8]} h={22} w={tag.length * 7 + 16} />
+                        ))}
+                      </Cluster>
+                    </Frame>
+                  </PatternPreview>
+
+                  <PatternPreview title="Sidebar — fixed side + flexible content">
+                    <Frame padding={12}>
+                      <Sidebar sideWidth={70} gap={8}>
+                        <Block label="Side" color={LP.sidebar} w={70} h={120} />
+                        <Block label="Content" color={LP.main} w="100%" h={120} />
+                      </Sidebar>
+                    </Frame>
+                  </PatternPreview>
+
+                  <PatternPreview title="Shelf — single non-wrapping row">
+                    <Frame padding={12}>
+                      <Shelf gap={8} justify="space-between">
+                        <Block label="File" color={LP.a} w={48} h={28} />
+                        <Block label="Edit" color={LP.b} w={48} h={28} />
+                        <Block label="View" color={LP.c2} w={48} h={28} />
+                        <Block label="Help" color={LP.d} w={48} h={28} />
+                      </Shelf>
+                    </Frame>
+                  </PatternPreview>
+
+                  <PatternPreview title="Keystone — hero child + shared bottom">
+                    <Keystone heroRatio={0.6} gap={6} style={{ padding: 10, height: 180 }}>
+                      <Block label="Hero" color={LP.main} w="100%" h="100%" />
+                      <Block label="A" color={LP.a} w="100%" h="100%" />
+                      <Block label="B" color={LP.b} w="100%" h="100%" />
+                      <Block label="C" color={LP.c2} w="100%" h="100%" />
+                    </Keystone>
+                  </PatternPreview>
+
+                  <PatternPreview title="Frame — uniform inset, content centered">
+                    <Frame padding={32}>
+                      <Slab label="Content" color={LP.main} h={80} />
+                    </Frame>
+                  </PatternPreview>
+
+                  <PatternPreview title="Ladder — items alternate left / right">
+                    <Frame padding={12}>
+                      <Ladder gap={6}>
+                        <Block label="Step 1" color={LP.a} w={100} h={28} />
+                        <Block label="Step 2" color={LP.b} w={100} h={28} />
+                        <Block label="Step 3" color={LP.c2} w={100} h={28} />
+                        <Block label="Step 4" color={LP.d} w={100} h={28} />
+                      </Ladder>
+                    </Frame>
+                  </PatternPreview>
+
+                  <PatternPreview title="Reel — horizontal scroll strip">
+                    <Frame padding={12}>
+                      <Reel itemWidth={80} gap={8} style={{ height: 60 }}>
+                        {[LP.a, LP.b, LP.c2, LP.d, LP.e, LP.nav, LP.sidebar].map((color, i) => (
+                          <Block key={i} label={`Card ${i + 1}`} color={color} w={80} h={60} />
+                        ))}
+                      </Reel>
+                    </Frame>
+                  </PatternPreview>
+                </Box>
+
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'NAV LAYOUTS'}</Text>
+                <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  <PatternPreview title="TopNav — horizontal bar at top">
+                    <TopNav nav={<Slab label="Nav Bar" color={LP.nav} h={32} />}>
+                      <Slab label="Content" color={LP.main} grow />
+                    </TopNav>
+                  </PatternPreview>
+
+                  <PatternPreview title="SideNav — vertical rail beside content">
+                    <SideNav nav={<Block label="Nav" color={LP.nav} w={52} h="100%" />} navWidth={52}>
+                      <Slab label="Content" color={LP.main} grow />
+                    </SideNav>
+                  </PatternPreview>
+
+                  <PatternPreview title="BottomNav — tab bar at floor">
+                    <BottomNav nav={<Slab label="Tab Bar" color={LP.nav} h={36} />}>
+                      <Slab label="Content" color={LP.main} grow />
+                    </BottomNav>
+                  </PatternPreview>
+
+                  <PatternPreview title="CommandShell — persistent command slot at top">
+                    <CommandShell command={<Slab label="Command" color={LP.command} h={36} />}>
+                      <Slab label="Content" color={LP.main} grow />
+                    </CommandShell>
+                  </PatternPreview>
+
+                  <PatternPreview title="Drawer — side panel overlays content">
+                    <Box style={{ width: '100%', height: '100%' }}>
+                      <Drawer
+                        open={drawerOpen}
+                        drawerWidth={110}
+                        drawer={<Block label="Drawer" color={LP.nav} w={110} h="100%" />}
+                      >
+                        <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+                          <Slab label="Content behind drawer" color={LP.main} h={60} />
+                          <Pressable
+                            style={{ backgroundColor: LP.nav, padding: 8, borderRadius: 4 }}
+                            onPress={() => setDrawerOpen((v: boolean) => !v)}
+                          >
+                            <Text style={{ color: '#fff', fontSize: 10 }}>
+                              {drawerOpen ? 'Close Drawer' : 'Open Drawer'}
+                            </Text>
+                          </Pressable>
+                        </Box>
+                      </Drawer>
+                    </Box>
+                  </PatternPreview>
+
+                  <PatternPreview title="Bookshelf — vertical tabs + content">
+                    <Bookshelf tabs={<Block label="Tabs" color={LP.nav} w={48} h="100%" />} tabsWidth={48}>
+                      <Slab label="Content" color={LP.main} grow />
+                    </Bookshelf>
+                  </PatternPreview>
+
+                  <PatternPreview title="Crumb — breadcrumb trail above content">
+                    <Crumb trail={<Slab label="Home / Section / Page" color={LP.command} h={26} />}>
+                      <Slab label="Content" color={LP.main} grow />
+                    </Crumb>
+                  </PatternPreview>
+                </Box>
+
               </Box>
             </ScrollView>
 
@@ -531,6 +862,62 @@ export function LayoutStory() {
                   ))}
                 </Box>
 
+                <HorizontalDivider />
+
+                {/* ── @reactjit/layouts ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'@REACTJIT/LAYOUTS'}
+                </Text>
+                <Text style={{ color: c.text, fontSize: 10 }}>
+                  {'22 composed layout components in three categories: page skeletons (full-viewport), container patterns (inner regions), and nav layouts (built-in navigation slots). All are pure space allocation — no color, no theming. Import from @reactjit/layouts.'}
+                </Text>
+
+                <HorizontalDivider />
+
+                {/* Layouts Usage */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'LAYOUTS USAGE'}
+                </Text>
+                <CodeBlock language="tsx" fontSize={9} code={LAYOUTS_USAGE_CODE} />
+
+                <HorizontalDivider />
+
+                {/* Layouts Behavior */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'LAYOUTS BEHAVIOR'}
+                </Text>
+                <Box style={{ gap: 4 }}>
+                  {LAYOUTS_BEHAVIOR_NOTES.map((note, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="chevron-right" style={{ width: 8, height: 8 }} tintColor={c.muted} />
+                      <Text style={{ color: c.text, fontSize: 10 }}>{note}</Text>
+                    </Box>
+                  ))}
+                </Box>
+
+                <HorizontalDivider />
+
+                {/* Component Reference */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                  {'COMPONENT REFERENCE'}
+                </Text>
+                {(['Page', 'Container', 'Nav'] as const).map(category => (
+                  <Box key={category} style={{ gap: 4, marginBottom: 6 }}>
+                    <Text style={{ color: SYN.component, fontSize: 9, fontWeight: 'bold' }}>{category}</Text>
+                    {LAYOUT_COMPONENTS.filter(([, cat]) => cat === category).map(([name, , desc, props]) => (
+                      <Box key={name} style={{ gap: 1, paddingLeft: 8 }}>
+                        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                          <Text style={{ color: SYN.tag, fontSize: 9 }}>{'<'}</Text>
+                          <Text style={{ color: SYN.component, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
+                          <Text style={{ color: SYN.tag, fontSize: 9 }}>{' />'}</Text>
+                          <Text style={{ color: c.muted, fontSize: 8 }}>{desc}</Text>
+                        </Box>
+                        <Text style={{ color: c.muted, fontSize: 8, paddingLeft: 12 }}>{props}</Text>
+                      </Box>
+                    ))}
+                  </Box>
+                ))}
+
               </Box>
             </ScrollView>
           </>
@@ -560,32 +947,32 @@ export function LayoutStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Pressable
-          onPress={() => setPlayground(p => !p)}
-          style={(state) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: playground ? c.primary : (state.hovered ? c.surface : c.border),
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 3,
-            paddingBottom: 3,
-            borderRadius: 4,
-          })}
-        >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
-          <Text style={{
-            color: playground ? 'white' : c.text,
-            fontSize: 9,
-            fontWeight: 'bold',
-          }}>
-            {playground ? 'Exit Playground' : 'Playground'}
-          </Text>
-        </Pressable>
+            onPress={() => setPlayground(p => !p)}
+            style={(state) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: playground ? c.primary : (state.hovered ? c.surface : c.border),
+              paddingLeft: 10,
+              paddingRight: 10,
+              paddingTop: 3,
+              paddingBottom: 3,
+              borderRadius: 4,
+            })}
+          >
+            <Image
+              src={playground ? 'book-open' : 'play'}
+              style={{ width: 10, height: 10 }}
+              tintColor={playground ? 'white' : c.text}
+            />
+            <Text style={{
+              color: playground ? 'white' : c.text,
+              fontSize: 9,
+              fontWeight: 'bold',
+            }}>
+              {playground ? 'Exit Playground' : 'Playground'}
+            </Text>
+          </Pressable>
 
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>

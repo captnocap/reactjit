@@ -1576,6 +1576,7 @@ function ReactJIT.init(config)
   if wmOk and wmMod then
     wmMod.init()  -- auto-detects Love2D backend
     wmMod.registerMain()
+    wmMod.restoreGeometry()
     startupLog("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")")
 
     -- Helper: resolve window entry from optional windowId (defaults to main)
@@ -4193,6 +4194,16 @@ function ReactJIT.resize(w, h)
   if M.bridge then
     pushEvent({ type = "viewport", payload = { width = w, height = h } })
   end
+  -- Persist geometry on resize so crashes don't lose size
+  local wmOk, wmMod = pcall(require, "lua.window_manager")
+  if wmOk and wmMod then wmMod.saveGeometry() end
+end
+
+--- Call from love.handlers.windowmoved(x, y, sdlWindowId).
+--- Persists window geometry so crashes don't lose position.
+function ReactJIT.windowmoved(x, y)
+  local wmOk, wmMod = pcall(require, "lua.window_manager")
+  if wmOk and wmMod then wmMod.handleMoved(x, y) end
 end
 
 --- Call from love.focus(hasFocus).
@@ -5343,6 +5354,10 @@ end
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
 function ReactJIT.quit()
+  -- Save window geometry before shutdown so next launch restores position+size
+  local wmOk2, wmMod2 = pcall(require, "lua.window_manager")
+  if wmOk2 and wmMod2 then wmMod2.saveGeometry() end
+
   -- Write clean-exit marker so the watchdog knows this wasn't a crash.
   -- If the process segfaults, this file won't exist → watchdog spawns crash reporter.
   local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"

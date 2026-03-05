@@ -477,6 +477,79 @@ export function StyleStory() {
                   </Box>
                 </Box>
 
+                {/* ── Recipes — style properties combined into common UI patterns ── */}
+                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'RECIPES'}</Text>
+
+                {/* Card — border + radius + elevation + padding */}
+                <Box style={{
+                  width: '100%',
+                  backgroundColor: c.bgElevated,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  padding: 14,
+                  gap: 6,
+                }} tooltip={{ content: 'Card recipe\nbgElevated + borderRadius + borderWidth + padding', layout: 'table', type: 'cursor' }}>
+                  <Text style={{ fontSize: 14, color: c.text }}>{'Card'}</Text>
+                  <Text style={{ fontSize: 11, color: c.muted }}>{'borderRadius + borderWidth + bgElevated + padding'}</Text>
+                </Box>
+
+                {/* Badge — small pill via borderRadius + tight padding */}
+                <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {([
+                    ['default', c.primary],
+                    ['success', P.green],
+                    ['warning', P.orange],
+                    ['danger', P.red],
+                    ['info', P.blue],
+                  ] as const).map(([label, bg]) => (
+                    <Box key={label} style={{
+                      paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
+                      borderRadius: 10, backgroundColor: bg,
+                    }} tooltip={{ content: `Badge: borderRadius:10 + backgroundColor`, layout: 'table', type: 'cursor' }}>
+                      <Text style={{ fontSize: 10, color: '#fff' }}>{label}</Text>
+                    </Box>
+                  ))}
+                </Box>
+
+                {/* Divider — 1px line via height + backgroundColor */}
+                <Box style={{ gap: 6 }}>
+                  <Text style={{ fontSize: 11, color: c.muted }}>{'Divider: height:1 + backgroundColor'}</Text>
+                  <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
+                  <Text style={{ fontSize: 11, color: c.muted }}>{'Just a styled Box — no special component needed.'}</Text>
+                </Box>
+
+                {/* Composed — all three recipes combined */}
+                <Box style={{
+                  width: '100%',
+                  backgroundColor: c.bgElevated,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  padding: 14,
+                  gap: 6,
+                }}>
+                  <Text style={{ fontSize: 14, color: c.text }}>{'Notification'}</Text>
+                  <Text style={{ fontSize: 11, color: c.muted }}>{'Card + Badge + Divider combined'}</Text>
+                  <Box style={{ flexDirection: 'row', gap: 6 }}>
+                    <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 10, backgroundColor: P.green }}>
+                      <Text style={{ fontSize: 10, color: '#fff' }}>{'new'}</Text>
+                    </Box>
+                    <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 10, backgroundColor: P.red }}>
+                      <Text style={{ fontSize: 10, color: '#fff' }}>{'urgent'}</Text>
+                    </Box>
+                  </Box>
+                  <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
+                  <Box style={{ gap: 6 }}>
+                    {(['Alert: system ready', 'Update available', 'Build passed'] as const).map((msg, i) => (
+                      <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
+                        <Text style={{ fontSize: 11, color: c.text }}>{msg}</Text>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+
               </Box>
             </ScrollView>
 

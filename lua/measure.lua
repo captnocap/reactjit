@@ -119,6 +119,11 @@ function Measure.getFont(size, fontFamily, fontWeight)
   size = math.floor(size or 14)
   local isBold = fontWeight == "bold" or (type(fontWeight) == "number" and fontWeight >= 700)
   local key
+  -- Shortcut: 'math' resolves to bundled Latin Modern Math
+  if fontFamily == "math" then
+    fontFamily = "fonts/math/latinmodern-math.otf"
+  end
+
   if fontFamily then
     key = fontFamily .. (isBold and "\1bold\0" or "\0") .. size
   else

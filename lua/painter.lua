@@ -44,6 +44,7 @@ local _paintCount = 0
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
+local LatexModule = nil       -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local SliderModule = nil     -- Lazy-loaded to avoid circular deps
 local FaderModule = nil      -- Lazy-loaded to avoid circular deps
@@ -1454,6 +1455,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local c = node.computed
     if c and c.w > 0 and c.h > 0 then
       CodeBlockModule.render(node, c, effectiveOpacity)
+    end
+
+  elseif not isHidden and node.type == "Math" then
+    -- Lua-owned LaTeX math: delegate rendering entirely to latex.lua
+    if not LatexModule then
+      LatexModule = require("lua.latex")
+    end
+    local c = node.computed
+    if c and c.w > 0 and c.h > 0 then
+      LatexModule.render(node, c, effectiveOpacity)
     end
 
   elseif not isHidden and node.type == "Scene3D" then

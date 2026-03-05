@@ -426,9 +426,10 @@ function WindowManager.restoreGeometry()
   local displayCount = love.window.getDisplayCount()
   local onScreen = false
   for i = 1, displayCount do
-    local dx, dy, dw, dh = love.window.getSafeArea(i)
-    -- Consider "on screen" if the window's top-left quadrant overlaps any display
-    if x + w > dx and x < dx + dw and y + h > dy and y < dy + dh then
+    local dw, dh = love.window.getDesktopDimensions(i)
+    -- Simple check: window origin must be within reasonable bounds
+    -- (getDesktopDimensions doesn't give offset, so just check size plausibility)
+    if x >= -w and x < dw and y >= -h and y < dh then
       onScreen = true
       break
     end
@@ -445,6 +446,17 @@ function WindowManager.restoreGeometry()
 
   io.write(string.format("[window_manager] restored geometry: %dx%d at (%d,%d)\n", w, h, x, y)); io.flush()
   return true
+end
+
+-- ============================================================================
+-- Event-driven geometry persistence
+-- ============================================================================
+
+--- Called when the window is moved (SDL_WINDOWEVENT_MOVED).
+--- Saves geometry immediately so crashes don't lose the position.
+function WindowManager.handleMoved(x, y)
+  if not mainWin then return end
+  WindowManager.saveGeometry()
 end
 
 return WindowManager

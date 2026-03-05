@@ -104,3 +104,8 @@ end
 love.handlers.windowclose = function(sdlWindowId)
   ReactJIT.windowclose(sdlWindowId)
 end
+
+-- ReactJIT: persist window position on move (event-driven, no polling).
+love.handlers.windowmoved = function(x, y, sdlWindowId)
+  ReactJIT.windowmoved(x, y)
+end

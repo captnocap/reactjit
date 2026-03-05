@@ -132,6 +132,63 @@ await sendWebhook('https://hooks.slack.com/xxx', {
 import { hmacSHA256, timingSafeEqual } from '@reactjit/webhooks'
 const sig = hmacSHA256(secret, payload)`;
 
+const SPOTIFY_CODE = `// Now playing — wires to Spotify Web API
+const { track, playing, progress } = useSpotifyNowPlaying(token)
+// => { title: 'Midnight City', artist: 'M83', album: "Hurry Up..." }
+
+// Top artists / tracks (Last.fm or Spotify)
+const { artists } = useLastFMTopArtists(user, { period: '7day' })
+// Pre-built components:
+<NowPlayingCard title={track.title} artist={track.artist} playing />
+<TrackRow rank={1} title="Midnight City" artist="M83" nowPlaying />
+<ArtistRow rank={1} name="M83" playcount={4210} />`;
+
+const MEDIA_CODE = `// TMDB movie / show lookup
+const { results } = useTMDBSearch('Dune', { type: 'movie' })
+const { details } = useTMDBDetails(movieId)
+
+// Pre-built card with poster, score badge, and year
+<MediaPosterCard title="Dune: Part Two" score={8.3} year="2024"
+  posterUrl={tmdbImage(details.poster_path)} />`;
+
+const CRYPTO_CODE = `// Live coin market data from CoinGecko
+const { coins } = useCoinMarkets({ vs: 'usd', limit: 20 })
+// coins = [{ symbol, name, price, change24h, sparkline }]
+
+// Compact ticker row with optional sparkline chart
+<CoinTickerRow symbol="BTC" name="Bitcoin"
+  price={68420} change24h={2.41} sparkline={prices} />`;
+
+const GITHUB_CODE = `// GitHub user profile + repos + activity
+const { user } = useGitHubUser('siah')
+const { repos } = useGitHubRepos('siah', { sort: 'stars' })
+const { events } = useGitHubEvents('siah')
+
+// Pre-built components
+<GitHubUserCard login="siah" name="Siah" repos={42} followers={380} />
+<RepoCard name="reactjit" description="..." language="TypeScript" stars={1842} />
+<StatCard label="Stars" value="12.4k" trend={5.2} accent="#f59e0b" />
+<ActivityRow dot="#6366f1" label="Pushed 3 commits" time="2m ago" />`;
+
+const NASA_CODE = `// NASA Astronomy Picture of the Day
+const { apod } = useNASAAPOD()  // DEMO_KEY built-in
+// => { title, date, imageUrl, explanation, copyright }
+
+// Zero-config one-liner
+<APOD />
+
+// Or manual with APODCard
+<APODCard title={apod.title} imageUrl={apod.imageUrl}
+  explanation={apod.explanation} />`;
+
+const HUE_CODE = `// Philips Hue bridge discovery + light control
+const { lights, toggle, setBrightness } = useHueLights(bridgeIp)
+// lights = [{ id, name, on, color, brightness }]
+
+// Live color badge
+<HueLightBadge name="Desk Lamp" on={true}
+  color={hueXYToHex(light.xy)} brightness={0.85} />`;
+
 const PROXY_CODE = `// HTTP requests through proxies (Lua-side, zero JS overhead)
 // Supports HTTP, HTTPS, SOCKS5 proxies
 // Set via environment variables:
