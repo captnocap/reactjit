@@ -435,7 +435,8 @@ Commit early and often. This project has no test suite, so git history IS the sa
 - **Before risky operations.** About to refactor a core file, change the build pipeline, or touch Lua runtime code? Commit your current working state first so there's a clean rollback point.
 - **When you've touched 3+ files.** That's already a commit-sized change. Stop and commit before continuing.
 - **At natural breakpoints in multi-step work.** If a task has phases (e.g., add types → add Lua shader → add React component → update story), commit after each phase, not all at the end.
-- **CRITICAL: Only after explicit human approval.** When debugging or fixing, do NOT commit between iterations. Wait for the human to say "yes, that's fixed" or "good job, this works" — that approval IS your commit signal. This prevents git history pollution from incremental fixes to the same bug. The human's confirmation = completion. You do not decide when something is done.
+- **When debugging: commit on confirmation, not between attempts.** Do NOT commit after every debug iteration — that pollutes history. But when the human says something positive ("nice", "thanks", "cool", "ok", "that works", "good", thumbs up, or moves on to a new topic), that IS the approval signal. Commit immediately. Do not wait for a more explicit signal — casual acknowledgment IS confirmation.
+- **When in doubt, commit.** Uncommitted work is lost work. It is always safer to commit too often than too rarely. If you finished something and it works, commit it. Don't wait to be told.
 
 ### How to commit
 

@@ -60,6 +60,12 @@ import { Layout3Story } from './Layout3Story';
 import { ConversionsStory } from './ConversionsStory';
 import { CapabilitiesStory } from './CapabilitiesStory';
 import { StorageStory } from './StorageStory';
+import { WindowsStory } from './WindowsStory';
+import { AudioStory } from './AudioStory';
+import { DevToolsStory } from './DevToolsStory';
+import { RenderStory } from './RenderStory';
+import { CompatibilityStory } from './CompatibilityStory';
+import { MigrationStory } from './MigrationStory';
 
 
 export const stories: StoryDef[] = [
@@ -127,4 +133,10 @@ export const stories: StoryDef[] = [
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
+  { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
+  { id: 'render', title: 'Render', section: 'Packages', component: RenderStory },
+  { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
+  { id: 'devtools', title: 'DevTools', section: 'Dev', component: DevToolsStory },
+  { id: 'compatibility', title: 'Compatibility', section: 'Dev', component: CompatibilityStory },
+  { id: 'migration', title: 'Migration', section: 'Dev', component: MigrationStory },
 ];
