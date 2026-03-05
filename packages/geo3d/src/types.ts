@@ -16,8 +16,10 @@ export interface GeoSceneProps {
 
 /** Props for <TerrainLayer> — elevation + imagery */
 export interface TerrainLayerProps {
-  /** URL template for Terrain-RGB elevation tiles (Mapbox format) */
+  /** URL template for elevation tiles */
   elevation: string;
+  /** Elevation format: "terrarium" (default, free) or "mapbox" (requires API key) */
+  format?: 'terrarium' | 'mapbox';
   /** URL template for satellite/map imagery tiles (draped over terrain) */
   imagery?: string;
   /** Vertical exaggeration factor (default: 1.0 = real meters) */

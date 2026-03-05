@@ -358,6 +358,7 @@ local function syncScene(node)
         scene.imagerySource = cp.imagery or ""
         scene.heightScale = cp.heightScale or 1
         scene.terrainResolution = cp.resolution or 32
+        scene.elevationFormat = cp.format or (scene.terrainSource:find("terrarium") and "terrarium" or "terrarium")
       elseif child.type == "GeoBuildingLayer" then
         scene._buildingData = cp.data
         scene._buildingDefaultHeight = cp.defaultHeight or 12
@@ -444,7 +445,7 @@ local function ensureTerrainTiles(scene)
           local originY = math.min(y1, y2)
 
           -- Generate height grid and mesh
-          local heightGrid = Terrain.extractHeightGrid(elevData, scene.terrainResolution, scene.heightScale)
+          local heightGrid = Terrain.extractHeightGrid(elevData, scene.terrainResolution, scene.heightScale, scene.elevationFormat)
           local verts = Terrain.generateMesh(heightGrid, {
             originX = originX,
             originY = originY,

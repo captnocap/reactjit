@@ -1,13 +1,11 @@
 --[[
   terrain3d.lua -- Heightmap terrain mesh generation for GeoScene3D
 
-  Converts elevation tile ImageData (Mapbox Terrain-RGB encoding) into
-  g3d mesh vertex data. Each tile becomes a grid mesh with vertices at
-  decoded elevations, UV-mapped for satellite/map imagery overlay.
-
-  Terrain-RGB decoding:
-    height = -10000 + ((R*256*256 + G*256 + B) * 0.1)
-  where R, G, B are 0-255 integer channel values.
+  Converts elevation tile ImageData into g3d mesh vertex data.
+  Supports two tile formats:
+    Terrarium: height = (R*256 + G + B/256) - 32768
+    Mapbox:    height = -10000 + ((R*256*256 + G*256 + B) * 0.1)
+  Default: Terrarium (free, no API key required).
 
   Usage:
     local Terrain = require("lua.terrain3d")
@@ -23,19 +21,41 @@
 local Terrain = {}
 
 -- ============================================================================
--- Terrain-RGB height decoding
+-- Height decoding (Terrarium + Mapbox)
 -- ============================================================================
 
---- Decode a Mapbox Terrain-RGB pixel to height in meters.
+--- Decode a Terrarium elevation pixel to height in meters.
+--- Terrarium: height = (R * 256 + G + B / 256) - 32768
 --- @param r number  Red channel (0-1 float from Love2D)
 --- @param g number  Green channel (0-1 float from Love2D)
 --- @param b number  Blue channel (0-1 float from Love2D)
 --- @return number  Height in meters
-function Terrain.decodeHeight(r, g, b)
+function Terrain.decodeTerrarium(r, g, b)
+  local R = math.floor(r * 255 + 0.5)
+  local G = math.floor(g * 255 + 0.5)
+  local B = math.floor(b * 255 + 0.5)
+  return (R * 256 + G + B / 256) - 32768
+end
+
+--- Decode a Mapbox Terrain-RGB pixel to height in meters.
+--- Mapbox: height = -10000 + ((R*256*256 + G*256 + B) * 0.1)
+--- @param r number  Red channel (0-1 float from Love2D)
+--- @param g number  Green channel (0-1 float from Love2D)
+--- @param b number  Blue channel (0-1 float from Love2D)
+--- @return number  Height in meters
+function Terrain.decodeMapbox(r, g, b)
   local R = math.floor(r * 255 + 0.5)
   local G = math.floor(g * 255 + 0.5)
   local B = math.floor(b * 255 + 0.5)
   return -10000 + (R * 256 * 256 + G * 256 + B) * 0.1
+end
+
+--- Select decoder by format name.
+--- @param format string|nil  "terrarium" (default) or "mapbox"
+--- @return function  Decoder function(r,g,b) -> height
+function Terrain.getDecoder(format)
+  if format == "mapbox" then return Terrain.decodeMapbox end
+  return Terrain.decodeTerrarium
 end
 
 -- ============================================================================
@@ -43,13 +63,15 @@ end
 -- ============================================================================
 
 --- Extract a 2D height grid from elevation ImageData.
---- @param imageData love.ImageData  Terrain-RGB encoded tile
+--- @param imageData love.ImageData  Elevation tile
 --- @param resolution number  Grid size (e.g. 32 means 33x33 samples)
 --- @param heightScale number  Vertical exaggeration (1.0 = real meters)
+--- @param format string|nil  "terrarium" (default) or "mapbox"
 --- @return table  2D array [row][col] of height values in meters
-function Terrain.extractHeightGrid(imageData, resolution, heightScale)
+function Terrain.extractHeightGrid(imageData, resolution, heightScale, format)
   heightScale = heightScale or 1
   resolution = resolution or 32
+  local decode = Terrain.getDecoder(format)
   local w = imageData:getWidth()
   local h = imageData:getHeight()
   local grid = {}
@@ -60,7 +82,7 @@ function Terrain.extractHeightGrid(imageData, resolution, heightScale)
     for col = 0, resolution do
       local px = math.min(math.floor(col / resolution * (w - 1)), w - 1)
       local r, g, b = imageData:getPixel(px, py)
-      grid[row][col] = Terrain.decodeHeight(r, g, b) * heightScale
+      grid[row][col] = decode(r, g, b) * heightScale
     end
   end
 
