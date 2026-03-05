@@ -3,21 +3,19 @@
  *
  * Structure:
  *   Header   — package title + badge + description
- *   Preview  — open canvas area for the active tab (flexGrow: 1)
+ *   Preview  — LIVE DEMO of the active tab's component (flexGrow: 1)
  *   Info row — horizontal strip: description | code example | props
  *   Tab bar  — clickable tabs (one per component)
  *   Footer   — breadcrumbs with "N of M" counter
  *
- * The TABS array drives everything. Each entry is one tab in the bar.
- * Clicking a tab swaps the center panel to show that component's
- * preview, description, usage snippet, props, and callbacks.
+ * The TABS array drives the info row, tab bar, and footer.
+ * The renderPreview function drives the preview area — one case per tab.
+ * Clicking a tab swaps everything: preview, description, usage, and props.
  *
  * To scaffold a new story from this layout: copy the file, replace
- * TABS with your own entries, update the header/footer strings. Done.
+ * TABS and renderPreview with your own entries. Done.
  *
  * TEMPLATE: Content below uses a fictional "Effects" package as placeholder.
- * When scaffolding from this file, search for REPLACE_* markers in comments
- * to find every value that must be updated for your package.
  */
 
 import React, { useState } from 'react';
@@ -46,7 +44,6 @@ interface TabDef {
   usage: string;
   props: [string, string, string][]; // [name, type, icon]
   callbacks: [string, string, string][];
-  panels: string[]; // preview panel labels — 1 = single, 3 = triple split
 }
 
 const TABS: TabDef[] = [
@@ -64,7 +61,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Before', 'Effect', 'Controls'],
   },
   {
     id: 'glow',
@@ -83,7 +79,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Before', 'Effect', 'Controls'],
   },
   {
     id: 'shadow',
@@ -104,7 +99,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Before', 'Effect', 'Controls'],
   },
   {
     id: 'gradient',
@@ -123,7 +117,6 @@ const TABS: TabDef[] = [
       ['style', 'ViewStyle', 'layout'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'mask',
@@ -139,7 +132,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Mask', 'Result'],
   },
   {
     id: 'noise',
@@ -158,7 +150,6 @@ const TABS: TabDef[] = [
       ['animated', 'boolean', 'play'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'pixelate',
@@ -173,7 +164,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Before', 'After'],
   },
   {
     id: 'vignette',
@@ -191,7 +181,6 @@ const TABS: TabDef[] = [
       ['color', 'string', 'palette'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'distort',
@@ -209,7 +198,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Before', 'Effect', 'Controls'],
   },
   {
     id: 'chromatic',
@@ -225,7 +213,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Before', 'After'],
   },
   {
     id: 'threshold',
@@ -240,7 +227,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'bloom',
@@ -258,7 +244,6 @@ const TABS: TabDef[] = [
       ['radius', 'number', 'circle'],
     ],
     callbacks: [],
-    panels: ['Before', 'Effect', 'Controls'],
   },
   {
     id: 'tint',
@@ -276,7 +261,6 @@ const TABS: TabDef[] = [
       ['opacity', 'number', 'eye'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'ripple',
@@ -297,7 +281,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'scanlines',
@@ -315,7 +298,6 @@ const TABS: TabDef[] = [
       ['opacity', 'number', 'eye'],
     ],
     callbacks: [],
-    panels: ['Before', 'After'],
   },
   {
     id: 'invert',
@@ -330,7 +312,6 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'freeze',
@@ -347,7 +328,6 @@ const TABS: TabDef[] = [
     callbacks: [
       ['onCapture', '(frame: number) => void', 'camera'],
     ],
-    panels: ['Preview'],
   },
   {
     id: 'tile',
@@ -364,9 +344,86 @@ const TABS: TabDef[] = [
       ['children', 'ReactNode', 'layers'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
 ];
+
+// ── Preview renderer ─────────────────────────────────────
+// Renders a LIVE DEMO for each tab. This fills the entire preview area.
+// Every case MUST produce content that visually fills the space.
+// NEVER return a tiny icon centered in a void.
+//
+// NOTE: This is a TEMPLATE using fictional components. In a real story,
+// each case renders the actual component being documented.
+
+function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
+  // Shared style for the full-area preview container
+  const fill = { flexGrow: 1, justifyContent: 'center' as const, alignItems: 'center' as const };
+
+  switch (tab.id) {
+    case 'blur':
+      return (
+        <Box style={{ ...fill, backgroundColor: 'rgba(139, 92, 246, 0.05)' }}>
+          <Box style={{ width: 280, height: 180, backgroundColor: c.surface, borderRadius: 16, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: c.muted, fontSize: 24, fontWeight: 'bold' }}>{'radius: 8'}</Text>
+            <Text style={{ color: c.muted, fontSize: 10 }}>{'Gaussian blur on children'}</Text>
+          </Box>
+        </Box>
+      );
+    case 'glow':
+      return (
+        <Box style={{ ...fill, backgroundColor: 'rgba(139, 92, 246, 0.08)' }}>
+          <Box style={{ width: 200, height: 200, backgroundColor: C.accent, borderRadius: 100, opacity: 0.3 }} />
+        </Box>
+      );
+    case 'shadow':
+      return (
+        <Box style={{ ...fill }}>
+          <Box style={{ width: 240, height: 160, backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: c.text, fontSize: 14 }}>{'Card with shadow'}</Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>{'offset: 4,4  blur: 8'}</Text>
+          </Box>
+        </Box>
+      );
+    case 'gradient':
+      return (
+        <Box style={{ flexGrow: 1, backgroundColor: C.accent, opacity: 0.15 }} />
+      );
+    case 'mask':
+      return (
+        <Box style={{ ...fill }}>
+          <Box style={{ width: 200, height: 200, backgroundColor: c.surface, borderRadius: 100, borderWidth: 2, borderColor: C.accent, justifyContent: 'center', alignItems: 'center' }}>
+            <Image src="crop" style={{ width: 48, height: 48 }} tintColor={C.accent} />
+            <Text style={{ color: c.muted, fontSize: 9 }}>{'Circle mask'}</Text>
+          </Box>
+        </Box>
+      );
+    case 'noise':
+      return (
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: c.muted, fontSize: 48, fontWeight: 'bold', opacity: 0.2 }}>{'NOISE'}</Text>
+          <Text style={{ color: c.muted, fontSize: 10 }}>{'intensity: 0.15  scale: 2'}</Text>
+        </Box>
+      );
+    case 'pixelate':
+      return (
+        <Box style={{ flexGrow: 1, backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center' }}>
+          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 160, gap: 2 }}>
+            {Array.from({ length: 64 }).map((_, i) => (
+              <Box key={i} style={{ width: 18, height: 18, backgroundColor: i % 3 === 0 ? C.accent : i % 2 === 0 ? c.border : c.surface, opacity: 0.6 + (i % 5) * 0.08 }} />
+            ))}
+          </Box>
+        </Box>
+      );
+    default:
+      return (
+        <Box style={{ ...fill }}>
+          <Image src={tab.icon} style={{ width: 48, height: 48 }} tintColor={C.accent} />
+          <Text style={{ color: c.muted, fontSize: 12, fontWeight: 'bold' }}>{tab.label}</Text>
+          <Text style={{ color: c.muted, fontSize: 9 }}>{tab.desc}</Text>
+        </Box>
+      );
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -404,9 +461,7 @@ export function Layout3Story() {
         paddingBottom: 12,
         gap: 14,
       }}>
-        {/* REPLACE_ICON: change "sparkles" to an icon for your package */}
         <Image src="sparkles" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        {/* REPLACE_TITLE: change to your package display name */}
         <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
           {'Effects'}
         </Text>
@@ -418,44 +473,17 @@ export function Layout3Story() {
           paddingTop: 3,
           paddingBottom: 3,
         }}>
-          {/* REPLACE_BADGE: change to your @reactjit/<pkg> import path */}
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/effects'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        {/* REPLACE_DESCRIPTION: change to your package one-liner */}
         <Text style={{ color: c.muted, fontSize: 10 }}>
           {'Visual effects — blur, glow, shadow, gradient, mask, noise'}
         </Text>
       </Box>
 
-      {/* ── Preview area — splits into N panels based on tab.panels ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
-        {tab.panels.map((label, i) => (
-          <React.Fragment key={label}>
-            {i > 0 && <VerticalDivider />}
-            <Box style={{
-              flexGrow: 1,
-              flexBasis: 0,
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <Box style={{
-                width: 64,
-                height: 64,
-                backgroundColor: c.surface,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: c.border,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <Image src={tab.icon} style={{ width: 28, height: 28 }} tintColor={C.accent} />
-              </Box>
-              <Text style={{ color: c.muted, fontSize: 8 }}>{label}</Text>
-            </Box>
-          </React.Fragment>
-        ))}
+      {/* ── Preview area — LIVE DEMO of the active tab ── */}
+      <Box style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
+        {renderPreview(tab, c)}
       </Box>
 
       {/* ── Info row — description | code | props ── */}
@@ -587,9 +615,7 @@ export function Layout3Story() {
         <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
         <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
         <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        {/* REPLACE_FOOTER_ICON: match the header icon */}
         <Image src="sparkles" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        {/* REPLACE_FOOTER_NAME: match the header title */}
         <Text style={{ color: c.muted, fontSize: 9 }}>{'Effects'}</Text>
         <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
         <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={c.text} />
