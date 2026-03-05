@@ -222,7 +222,7 @@ export function TextStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Renders text content with font styling and optional truncation'}
+          {'Literally just words'}
         </Text>
       </Box>
 

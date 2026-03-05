@@ -836,7 +836,7 @@ export function NavigationStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Wayfinding & search components'}
+          {'Getting from here to not here'}
         </Text>
       </Box>
 

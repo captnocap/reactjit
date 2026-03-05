@@ -169,37 +169,7 @@ const CART_ITEMS = [
   { name: 'Cookie', price: 2.25 },
 ];
 
-// ── Helpers ──────────────────────────────────────────────
-
-function Divider() {
-  const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
-}
-
-function SectionLabel({ icon, children }: { icon: string; children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-        {children}
-      </Text>
-    </Box>
-  );
-}
-
-// ── Band wrapper (zigzag helper) ─────────────────────────
-
-const bandStyle = {
-  paddingLeft: 28,
-  paddingRight: 28,
-  paddingTop: 20,
-  paddingBottom: 20,
-  gap: 24,
-  alignItems: 'center' as const,
-};
-
-const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Live Demo: Timer ─────────────────────────────────────
 
@@ -217,12 +187,12 @@ function TimerDemo() {
 
       <Timer interval={interval} running={running} onTick={() => setCount(prev => prev + 1)} />
 
-      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontSize: 24, color: c.text, fontWeight: 'normal' }}>{String(count)}</Text>
         <Text style={{ fontSize: 10, color: c.muted }}>{'ticks'}</Text>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
         <Pressable onPress={() => setRunning(!running)}>
           <Box style={{ backgroundColor: running ? C.red : C.green, borderRadius: 6, padding: 6, paddingLeft: 12, paddingRight: 12 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{running ? 'Pause' : 'Resume'}</Text>
@@ -313,12 +283,12 @@ function BasicBusDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
         <BusSender bus={bus} channel="greet" label="Say Hello" payload="Hello!" color={C.blue} />
         <BusSender bus={bus} channel="greet" label="Say Bye" payload="Goodbye!" color={C.peach} />
         <BusSender bus={bus} channel="reset" label="Reset" payload={null} color={C.red} />
       </Box>
-      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 3, minHeight: 36 }}>
+      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 3, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {log.length === 0 ? (
           <Text style={{ fontSize: 9, color: c.muted }}>{'(click a button above)'}</Text>
         ) : log.map((line, i) => (
@@ -339,7 +309,7 @@ function StatefulBusDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{"useEventState(bus, 'cart:add') — re-renders with latest payload"}</Text>
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
         {CART_ITEMS.map(item => (
           <Pressable key={item.name} onPress={() => bus.emit('cart:add', item)}>
             <Box style={{ backgroundColor: C.green, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -348,7 +318,7 @@ function StatefulBusDemo() {
           </Pressable>
         ))}
       </Box>
-      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8 }}>
+      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontSize: 10, color: c.text }}>
           {lastItem ? `Last: ${lastItem.name} — $${lastItem.price.toFixed(2)}` : 'No items yet'}
         </Text>
@@ -369,7 +339,7 @@ function WildcardDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{"useEvent(bus, '*', ...) — wildcard catches all channels"}</Text>
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
         <Pressable onPress={() => bus.emit('user:login', { name: 'Alice' })}>
           <Box style={{ backgroundColor: C.blue, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'Login'}</Text>
@@ -381,7 +351,7 @@ function WildcardDemo() {
           </Box>
         </Pressable>
       </Box>
-      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36 }}>
+      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {log.length === 0 ? (
           <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting...'}</Text>
         ) : log.map((line, i) => (
@@ -404,7 +374,7 @@ function MultiChannelDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{"useEvent(bus, ['deposit', 'withdrawal'], ...)"}</Text>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Pressable onPress={() => bus.emit('deposit', 10)}>
           <Box style={{ backgroundColor: C.green, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'+$10'}</Text>
@@ -432,7 +402,7 @@ function KeyToggleDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{"useIFTTT('key:space', () => setPaused(!paused))"}</Text>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: paused ? C.red : C.green }} />
         <Text style={{ fontSize: 12, color: c.text }}>{paused ? 'Paused' : 'Running'}</Text>
       </Box>
@@ -455,7 +425,7 @@ function ToolSwitcherDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{"4 rules, 4 one-liners"}</Text>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
         {TOOLS.map(t => (
           <Box key={t.key} style={{
             backgroundColor: tool === t.name ? t.color : c.surface2,
@@ -484,7 +454,7 @@ function ThresholdDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{"useIFTTT(() => count >= 10, ...) — fires on false→true edge"}</Text>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontSize: 20, color: c.text }}>{String(count)}</Text>
         <Pressable onPress={() => setCount(n => n + 1)}>
           <Box style={{ backgroundColor: C.blue, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -498,7 +468,7 @@ function ThresholdDemo() {
         </Pressable>
       </Box>
       {alert ? (
-        <Box style={{ backgroundColor: C.peach, borderRadius: 4, padding: 6 }}>
+        <Box style={{ backgroundColor: C.peach, borderRadius: 4, padding: 6, alignItems: 'center' }}>
           <Text style={{ fontSize: 11, color: '#1e1e2e' }}>{alert}</Text>
         </Box>
       ) : null}
@@ -519,7 +489,7 @@ function FireCountDemo() {
     <Box style={{ gap: 8, width: '100%' }}>
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: c.muted }}>{"const { fired, fire } = useIFTTT('key:f', 'log:F key pressed!')"}</Text>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 12, color: c.text }}>{`Fired: ${fired}×`}</Text>
           <Pressable onPress={() => fire()}>
             <Box style={{ backgroundColor: C.mauve, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -531,7 +501,7 @@ function FireCountDemo() {
       </Box>
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: c.muted }}>{"useIFTTT('timer:every:2000', () => setTicks(t => t + 1))"}</Text>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 16, color: C.teal }}>{String(ticks)}</Text>
           <Text style={{ fontSize: 9, color: c.muted }}>{'ticks (every 2s)'}</Text>
         </Box>
@@ -558,11 +528,11 @@ function IFTTTEventsCombo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{'Press J (jump), D (dash), R (reset)'}</Text>
-      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36 }}>
+      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {actions.length === 0 ? (
           <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for input...'}</Text>
         ) : (
-          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
             {actions.map((a, i) => (
               <Box key={i} style={{
                 backgroundColor: a === 'JUMP!' ? C.green : C.blue,
@@ -656,45 +626,37 @@ export function CapabilitiesStory() {
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
-        <Box style={{
-          borderLeftWidth: 3,
-          borderColor: C.accent,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 24,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <HeroBand accentColor={C.accent}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
             {'Declare intent in React. Let Lua execute.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
             {'Three systems, one philosophy. Capabilities register native features as one-liner components. An event bus wires React-to-React pub/sub. IFTTT maps any trigger to any action in a single line. All three compose together.'}
           </Text>
-        </Box>
+        </HeroBand>
 
         <Divider />
 
         {/* ── Band 1: text | code — INSTALL ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+        <Band>
+          <Half>
+            <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Everything lives in @reactjit/core. Capabilities, events, and IFTTT are all part of the core package — no extra dependencies.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
-        </Box>
+        </Band>
 
         <Divider />
 
         {/* ── Band 2: demo | text — TIMER CAPABILITY ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <TimerDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="timer">{'TIMER CAPABILITY'}</SectionLabel>
+          </Half>
+          <Half>
+            <SectionLabel icon="timer" accentColor={C.accent}>{'TIMER CAPABILITY'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'A capability is a native feature registered in Lua and consumed as a React component. Timer is the simplest — React sets interval and running; Lua owns the clock and pushes onTick events back.'}
             </Text>
@@ -702,15 +664,15 @@ export function CapabilitiesStory() {
               {'The pattern: React declares props → Lua capability module executes → events flow back as callbacks. No bridge-specific code needed.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={TIMER_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 3: text + code | demo table — AI DISCOVERY ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="search">{'AI DISCOVERY'}</SectionLabel>
+        <Band>
+          <Half>
+            <SectionLabel icon="search" accentColor={C.accent}>{'AI DISCOVERY'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'An AI calls useCapabilities() once to discover every registered capability. Each returns its prop schema, event list, and whether it renders visually.'}
             </Text>
@@ -721,226 +683,204 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Visual capabilities render into the layout tree. Effect capabilities (audio, timers, agents) are invisible — they skip paint and layout entirely.'}
             </Text>
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <Text style={{ color: c.muted, fontSize: 9, marginBottom: 4 }}>{'Live — all registered capabilities:'}</Text>
             <DiscoveryDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Callout: capabilities philosophy ── */}
-        <Box style={{
-          backgroundColor: C.callout,
-          borderLeftWidth: 3,
-          borderColor: C.calloutBorder,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 14,
-          paddingBottom: 14,
-          flexDirection: 'row',
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
             {'React is a layout declaration engine. Capabilities are how Lua-side features (audio, timers, GPIO, 3D, agents) surface as one-liner components. Schema is the contract — the rest is Lua.'}
           </Text>
-        </Box>
+        </CalloutBand>
 
         <Divider />
 
         {/* ── Band 4: text | demo — EVENT BUS ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="radio">{'EVENT BUS'}</SectionLabel>
+        <Band>
+          <Half>
+            <SectionLabel icon="radio" accentColor={C.accent}>{'EVENT BUS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useEventBus creates an in-memory pub/sub channel. useEvent subscribes. useEmit creates a typed emitter. No prop drilling, no shared state.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={BUS_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <BasicBusDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 5: demo | text + code — STATEFUL LISTENER ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <StatefulBusDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="layers">{'STATEFUL LISTENER'}</SectionLabel>
+          </Half>
+          <Half>
+            <SectionLabel icon="layers" accentColor={C.accent}>{'STATEFUL LISTENER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useEventState re-renders your component with the latest payload every time that channel fires. No manual state management — it tracks the most recent event for you.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={STATEFUL_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 6: text + code | demo — WILDCARD ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="search">{'WILDCARD & MULTI-CHANNEL'}</SectionLabel>
+        <Band>
+          <Half>
+            <SectionLabel icon="search" accentColor={C.accent}>{'WILDCARD & MULTI-CHANNEL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Listen to all channels with \'*\' for logging or debugging. Or pass an array of channel names to handle multiple events with one handler.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={WILDCARD_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle, gap: 12 }}>
+          </Half>
+          <Half>
             <WildcardDemo />
             <MultiChannelDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Callout: IFTTT intro ── */}
-        <Box style={{
-          backgroundColor: C.callout,
-          borderLeftWidth: 3,
-          borderColor: C.calloutBorder,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 14,
-          paddingBottom: 14,
-          flexDirection: 'row',
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
             {'useIFTTT: If This Then That. Wire any trigger (key, timer, state, gamepad, MIDI) to any action (state change, notification, RPC, callback) in a single line. String DSL for simple cases, functions for complex logic.'}
           </Text>
-        </Box>
+        </CalloutBand>
 
         <Divider />
 
         {/* ── Band 7: demo | text — KEY TOGGLE ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <KeyToggleDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="zap">{'IFTTT — KEY TOGGLE'}</SectionLabel>
+          </Half>
+          <Half>
+            <SectionLabel icon="zap" accentColor={C.accent}>{'IFTTT — KEY TOGGLE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The simplest IFTTT rule: one key, one state change. Space bar toggles a boolean. No event listeners, no cleanup — useIFTTT handles the full lifecycle.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={IFTTT_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 8: text + code | demo — TOOL SWITCHER ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="sliders">{'IFTTT — MULTI-RULE'}</SectionLabel>
+        <Band>
+          <Half>
+            <SectionLabel icon="sliders" accentColor={C.accent}>{'IFTTT — MULTI-RULE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Stack rules to build keybinding systems. Four rules, four one-liners — number keys switch the active tool. Each useIFTTT is independent and composable.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={TOOL_SWITCH_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <ToolSwitcherDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 9: demo | text + code — THRESHOLD ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <ThresholdDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="gauge">{'IFTTT — REACTIVE EDGE'}</SectionLabel>
+          </Half>
+          <Half>
+            <SectionLabel icon="gauge" accentColor={C.accent}>{'IFTTT — REACTIVE EDGE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Pass a function instead of a string. It fires on the false→true transition — edge detection, not polling. Tap +1 past 10 to see it fire. Reset drops below and re-arms.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={THRESHOLD_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 10: text + code | demo — FIRE COUNT + TIMER ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="hash">{'IFTTT — COUNTERS & TIMERS'}</SectionLabel>
+        <Band>
+          <Half>
+            <SectionLabel icon="hash" accentColor={C.accent}>{'IFTTT — COUNTERS & TIMERS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useIFTTT returns { fired, fire }. fired tracks how many times the rule has triggered. fire() lets you invoke the action manually. Timer triggers tick on Lua-managed intervals — no setInterval needed.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={FIRE_COUNT_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <FireCountDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 8: demo | text — IFTTT + EVENTS COMBO ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        {/* ── Band 11: demo | text — IFTTT + EVENTS COMBO ── */}
+        <Band>
+          <Half>
             <IFTTTEventsCombo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="git-merge">{'IFTTT + EVENTS — COMPOSED'}</SectionLabel>
+          </Half>
+          <Half>
+            <SectionLabel icon="git-merge" accentColor={C.accent}>{'IFTTT + EVENTS — COMPOSED'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'All three systems compose. IFTTT wires keyboard triggers to bus events. The event bus distributes them. Components react. This is the full pipeline: input → intent → distribution → UI.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={COMBO_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 9: text | table — TRIGGER DSL ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="list">{'TRIGGER DSL'}</SectionLabel>
+        {/* ── Band 12: text | table — TRIGGER DSL ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="list" accentColor={C.accent}>{'TRIGGER DSL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'String triggers are parsed into DSL tokens. Keys support modifiers (ctrl, shift, alt, meta). Timers are Lua-managed. State triggers match with type coercion. Function triggers edge-detect.'}
             </Text>
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <TriggerTable />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 10: table | text — ACTION DSL ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        {/* ── Band 13: table | text — ACTION DSL ── */}
+        <Band>
+          <Half>
             <ActionTable />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="terminal">{'ACTION DSL'}</SectionLabel>
+          </Half>
+          <Half>
+            <SectionLabel icon="terminal" accentColor={C.accent}>{'ACTION DSL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'String actions execute without callbacks. Set state, toggle booleans, push notifications, copy to clipboard, fire bridge events, call RPCs. Or pass a function for full control.'}
             </Text>
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 11: text | code — ONE-LINERS ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row', paddingBottom: 24 }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="code">{'ONE-LINERS'}</SectionLabel>
+        {/* ── Band 14: text | code — ONE-LINERS ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="code" accentColor={C.accent}>{'ONE-LINERS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The target user is someone who knows their domain but not bridges or RPCs. Everything is a one-liner. Audio, timers, notifications, custom capabilities — if it takes more than one line, wrap it until it doesn\'t.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={ONELINER_CODE} />
-        </Box>
+        </Band>
 
       </ScrollView>
 

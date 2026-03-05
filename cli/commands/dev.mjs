@@ -169,6 +169,12 @@ export async function devCommand(args) {
 
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
+  process.on('exit', () => {
+    // Last-resort cleanup: if we exit without SIGINT/SIGTERM (e.g. parent killed),
+    // make sure esbuild and runtime don't linger.
+    if (runtimeProcess) { try { runtimeProcess.kill(); } catch {} }
+    try { esbuild.kill(); } catch {}
+  });
 
   // Wait for esbuild to exit
   await new Promise((resolve) => {

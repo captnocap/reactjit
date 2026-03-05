@@ -291,7 +291,7 @@ function DataPreview() {
       </PreviewSection>
 
       <PreviewSection label="HORIZONTAL BAR">
-        <HorizontalBarChart data={DEMO_HBAR_DATA} width={380} showValues interactive />
+        <HorizontalBarChart data={DEMO_HBAR_DATA} width={360} showValues interactive />
       </PreviewSection>
 
       <PreviewSection label="STACKED BAR">
@@ -398,7 +398,7 @@ export function DataStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Charts, tables, and visualization.'}
+          {'Numbers pretending to be shapes'}
         </Text>
       </Box>
 

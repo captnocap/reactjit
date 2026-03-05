@@ -270,7 +270,7 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
   if (cls === 'flex-wrap') return { flexWrap: 'wrap' };
   if (cls === 'flex-wrap-reverse') return { flexWrap: 'wrap' };
   if (cls === 'flex-nowrap') return { flexWrap: 'nowrap' };
-  if (cls === 'flex-1') return { flexGrow: 1, flexShrink: 1, flexBasis: '0%' };
+  if (cls === 'flex-1') return { flexGrow: 1, flexShrink: 1, flexBasis: 0 };
   if (cls === 'flex-auto') return { flexGrow: 1, flexShrink: 1, flexBasis: 'auto' };
   if (cls === 'flex-initial') return { flexGrow: 0, flexShrink: 1, flexBasis: 'auto' };
   if (cls === 'flex-none') return { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' };

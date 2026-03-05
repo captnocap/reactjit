@@ -14,7 +14,7 @@
 import React from 'react';
 import { Box, Text, Pressable } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
-import { useTime, useStopwatch, useCountdown, useInterval } from './hooks';
+import { useTime, useStopwatch, useCountdown, useInterval, useFrameInterval } from './hooks';
 import {
   formatDuration,
   formatDate,
@@ -203,6 +203,28 @@ export interface TickerProps {
  */
 export function Ticker({ interval, onTick }: TickerProps) {
   useInterval(onTick, interval);
+  return null;
+}
+
+// ── FrameTicker ────────────────────────────────────────────────────────
+
+export interface FrameTickerProps {
+  /** Fire every N frames. Default: 1 (every frame). */
+  frames: number;
+  /** Fires every N frames — use this for frame-synced side effects. */
+  onTick: () => void;
+}
+
+/**
+ * Invisible frame-driven tick machine. Like Ticker but counts frames
+ * instead of wall-clock time. Renders nothing.
+ *
+ * @example
+ * <FrameTicker frames={100} onTick={stepSimulation} />
+ * <FrameTicker frames={1} onTick={updateParticles} />
+ */
+export function FrameTicker({ frames, onTick }: FrameTickerProps) {
+  useFrameInterval(onTick, frames);
   return null;
 }
 

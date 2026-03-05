@@ -31,6 +31,7 @@ local MapModule = nil     -- Injected at init time via Painter.init()
 local ChartModule = nil   -- Lazy-loaded to avoid circular deps
 local GameModule = nil    -- Injected at init time via Painter.init()
 local EmulatorModule = nil -- Injected at init time via Painter.init()
+local RenderSourceModule = nil -- Injected at init time via Painter.init()
 local EffectsModule = nil  -- Injected at init time via Painter.init()
 local MasksModule = nil    -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
@@ -93,6 +94,7 @@ function Painter.init(config)
   MapModule = config.map
   GameModule = config.game
   EmulatorModule = config.emulator
+  RenderSourceModule = config.render_source
   EffectsModule = config.effects
   MasksModule = config.masks
   getFont = Measure.getFont
@@ -1516,6 +1518,76 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         local scaleY = (c.h or 240) / 240
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
         love.graphics.draw(canvas, c.x, c.y, 0, scaleX, scaleY)
+      end
+    end
+
+  elseif not isHidden and node.type == "Render" then
+    -- External capture source: draw the live Image from render_source.lua
+    if RenderSourceModule then
+      local img = RenderSourceModule.get(node.id)
+      if img then
+        local objectFit = s.objectFit or (node.props and node.props.objectFit) or "contain"
+        local srcW, srcH = img:getWidth(), img:getHeight()
+        local scaleX, scaleY, drawX, drawY
+
+        if objectFit == "contain" then
+          local scale = math.min(c.w / srcW, c.h / srcH)
+          scaleX = scale
+          scaleY = scale
+          local drawW = srcW * scale
+          local drawH = srcH * scale
+          drawX = c.x + (c.w - drawW) / 2
+          drawY = c.y + (c.h - drawH) / 2
+        elseif objectFit == "cover" then
+          local scale = math.max(c.w / srcW, c.h / srcH)
+          scaleX = scale
+          scaleY = scale
+          local drawW = srcW * scale
+          local drawH = srcH * scale
+          drawX = c.x + (c.w - drawW) / 2
+          drawY = c.y + (c.h - drawH) / 2
+        else
+          -- "fill" (default)
+          scaleX = c.w / srcW
+          scaleY = c.h / srcH
+          drawX = c.x
+          drawY = c.y
+        end
+
+        -- Apply borderRadius clipping if needed
+        local renderStencil = borderRadius > 0
+        if renderStencil then
+          local stencilValue = stencilDepth + 1
+          love.graphics.stencil(function()
+            love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+          end, "replace", stencilValue, stencilDepth > 0)
+          love.graphics.setStencilTest("greater", stencilDepth)
+        end
+
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(img, drawX, drawY, 0, scaleX, scaleY)
+
+        if renderStencil then
+          if stencilDepth > 0 then
+            love.graphics.setStencilTest("greater", stencilDepth - 1)
+          else
+            love.graphics.setStencilTest()
+          end
+        end
+      else
+        -- No frame yet: draw placeholder
+        love.graphics.setColor(0.1, 0.1, 0.15, effectiveOpacity)
+        love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
+        if getFont then
+          local font = getFont(14)
+          if font then
+            love.graphics.setFont(font)
+            love.graphics.setColor(0.5, 0.5, 0.6, effectiveOpacity)
+            local status = RenderSourceModule.getStatus(node.id) or "connecting"
+            local label = "Capture: " .. status
+            love.graphics.printf(label, c.x, c.y + c.h / 2 - 7, c.w, "center")
+          end
+        end
       end
     end
 

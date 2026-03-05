@@ -88,14 +88,41 @@ export function Window(props: WindowProps) {
 }
 
 /**
- * Native OS notification via a borderless subprocess window.
- * Mounts → shows notification → auto-dismisses after duration.
+ * Native OS notification window.
+ *
+ * Two modes, automatic:
+ * - No children → lightweight text-only subprocess (title + body, ~200 lines of Lua, instant)
+ * - Has children → full ReactJIT window with notification semantics (borderless, always-on-top,
+ *   auto-dismiss, no-focus, stacking — renders your full React tree)
  *
  * @example
- * {showNotif && <Notification title="Done" body="Build complete" onDismiss={() => setShowNotif(false)} />}
+ * // Text-only (fast path)
+ * <Notification title="Saved" body="All changes persisted" accent="#a6e3a1" />
+ *
+ * // Rich content (full React tree)
+ * <Notification position="top-right" duration={8}>
+ *   <Box style={{ flexDirection: 'row', gap: 8, padding: 12 }}>
+ *     <Image src="avatar.png" style={{ width: 32, height: 32, borderRadius: 16 }} />
+ *     <Text style={{ fontWeight: 'bold' }}>New message from Alice</Text>
+ *   </Box>
+ * </Notification>
  */
 export function Notification(props: NotificationProps) {
-  return <Native type="Notification" {...props} />;
+  const { children, ...rest } = props;
+
+  // No children → lightweight text-only subprocess (no React, no bridge, no layout engine)
+  if (!children) {
+    return <Native type="Notification" {...rest} />;
+  }
+
+  // Has children → full ReactJIT Window with notification defaults
+  // The Lua-side Notification capability handles positioning, stacking, display detection.
+  // We ask it to compute placement, then render a Window at that position.
+  return (
+    <Native type="Notification" {...rest} _richMode>
+      {children}
+    </Native>
+  );
 }
 
 /**

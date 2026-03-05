@@ -8,7 +8,7 @@
 import React, { createContext, useContext } from 'react';
 import { useThemeColorsOptional } from './context';
 import { useScaledStyle } from './ScaleContext';
-import type { BoxProps, ColProps, TextProps, ImageProps, FocusGroupProps, Style, Color } from './types';
+import type { BoxProps, ColProps, TextProps, ImageProps, RenderProps, FocusGroupProps, Style, Color } from './types';
 import { lookupIcon } from './iconRegistry';
 import { useBreakpoint, resolveSpan, spanToFlexBasis, RESPONSIVE_DEFAULTS } from './useBreakpoint';
 import type { Breakpoint } from './useBreakpoint';
@@ -327,6 +327,27 @@ export function Image(props: ImageProps) {
   if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
   if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
   return React.createElement('Image', hostProps);
+}
+
+// ── Render (external capture) ─────────────────────────
+
+export function Render(props: RenderProps) {
+  const { source, fps, resolution, interactive, muted, objectFit, vmMemory, vmCpus, onClick, onReady, onError, onFrame, w, h, radius, style } = props;
+  const base: Style = {};
+  if (w !== undefined) base.width = w;
+  if (h !== undefined) base.height = h;
+  if (radius !== undefined) base.borderRadius = radius;
+  const resolvedStyle = (w !== undefined || h !== undefined || radius !== undefined)
+    ? (style ? { ...base, ...style } : base)
+    : style;
+  const scaledStyle = useScaledStyle(resolvedStyle);
+
+  return React.createElement('Render', {
+    source, fps, resolution, interactive, muted, objectFit,
+    vmMemory, vmCpus,
+    style: scaledStyle,
+    onClick, onReady, onError, onFrame,
+  });
 }
 
 // ── FocusGroup ────────────────────────────────────────

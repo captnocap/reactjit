@@ -5,6 +5,10 @@ function love.conf(t)
   t.window.resizable = true
   t.window.vsync    = 1
   t.window.borderless = os.getenv("REACTJIT_WINDOW_BORDERLESS") == "1"
+  local display = tonumber(os.getenv("REACTJIT_WINDOW_DISPLAY"))
+  if display and display > 0 then
+    t.window.display = display
+  end
   t.modules.audio   = false
   t.modules.joystick = false
   t.modules.physics = false

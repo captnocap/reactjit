@@ -239,7 +239,7 @@ export function ImageVideoStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Surface primitives for media.'}
+          {'Pics or it didn\'t happen'}
         </Text>
       </Box>
 

@@ -42,6 +42,11 @@
  *
  * Lua checks (runs on .lua files in lua/):
  *   lua-no-forward-ref           (error)   Call to local function before its declaration — causes nil crash at runtime
+ *   lua-no-accidental-global     (error)   Assignment without `local` keyword — pollutes _G in LuaJIT
+ *   lua-no-node-cache            (warning) Caching a node table reference across frames — nodes are recreated each commit
+ *   lua-no-ffi-without-pcall     (error)   ffi.load() or ffi.C.* call outside pcall/xpcall wrapper
+ *   lua-no-ffi-load-shared-lib   (warning) ffi.load("LibName") when Love2D already loaded it — use ffi.C.* instead
+ *   lua-no-unguarded-division    (warning) Division where denominator could be zero or nil
  */
 
 import { readFileSync, readdirSync, existsSync, writeFileSync, statSync } from 'node:fs';
@@ -487,6 +492,533 @@ function lintLuaForwardRefs(filePath, rawLines) {
   return diagnostics;
 }
 
+// ── Lua accidental global detection ──────────────────────────
+
+// Lua keywords and built-in globals that are valid assignment targets
+const LUA_GLOBALS_WHITELIST = new Set([
+  // Standard globals
+  '_G', '_VERSION', '_ENV',
+  // Love2D callbacks
+  'love',
+  // Common patterns in module files
+  'M', 'module',
+]);
+
+// Patterns that look like globals but aren't
+const LUA_KEYWORDS_SET = new Set([
+  'if', 'else', 'elseif', 'for', 'while', 'repeat', 'return',
+  'local', 'function', 'end', 'then', 'do', 'in', 'not', 'and', 'or',
+  'nil', 'true', 'false', 'break', 'goto', 'until',
+]);
+
+/**
+ * Detect assignments without `local` keyword that pollute _G.
+ *
+ * Catches: `foo = 42`, `bar = function()`, `baz = {}`
+ * Skips: `local foo = 42`, `self.foo = 42`, `M.foo = 42`, `t[k] = v`,
+ *        `foo.bar = 42`, `foo:bar()`, table field assignments inside constructors,
+ *        loop variables (for k, v in ...), function params.
+ */
+function lintLuaAccidentalGlobals(filePath, rawLines) {
+  const diagnostics = [];
+  const cleanLines = stripLuaCommentsAndStrings(rawLines);
+
+  // Track names declared with `local` (including function params and for-loop vars)
+  const declaredLocals = new Set();
+
+  // Track module-return pattern: `local M = {}` ... `return M`
+  const moduleVars = new Set();
+
+  // First pass: collect all local declarations and module tables
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+
+    // `local NAME` or `local NAME = ...` or `local NAME, NAME2 = ...`
+    const localMatch = line.match(/\blocal\s+([\w][\w\s,]*)/);
+    if (localMatch) {
+      const rest = localMatch[1];
+      if (/^function\b/.test(rest)) {
+        // `local function NAME`
+        const fname = rest.match(/^function\s+(\w+)/);
+        if (fname) declaredLocals.add(fname[1]);
+      } else {
+        for (const part of rest.split(',')) {
+          const nm = part.trim().match(/^(\w+)/);
+          if (nm) {
+            declaredLocals.add(nm[1]);
+            // Detect module table pattern: `local M = {}`
+            if (/=\s*\{\s*\}/.test(part)) moduleVars.add(nm[1]);
+          }
+        }
+      }
+    }
+
+    // `for NAME =` or `for NAME, NAME in`
+    const forMatch = line.match(/\bfor\s+([\w,\s]+)\s+(?:=|in)\b/);
+    if (forMatch) {
+      for (const part of forMatch[1].split(',')) {
+        const nm = part.trim().match(/^(\w+)/);
+        if (nm) declaredLocals.add(nm[1]);
+      }
+    }
+
+    // `function M.foo()` or `function M:foo()` params
+    const funcParamMatch = line.match(/\bfunction\s*[\w.:]*\s*\(([^)]*)\)/);
+    if (funcParamMatch && funcParamMatch[1].trim()) {
+      for (const part of funcParamMatch[1].split(',')) {
+        const nm = part.trim().match(/^(\w+)/);
+        if (nm) declaredLocals.add(nm[1]);
+      }
+    }
+  }
+
+  // Second pass: compute brace depth at each line (forward scan)
+  // braceDepth > 0 means we're inside a table constructor
+  const braceDepthAtLine = new Array(cleanLines.length);
+  let runningBraceDepth = 0;
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    for (let ci = 0; ci < line.length; ci++) {
+      if (line[ci] === '{') runningBraceDepth++;
+      if (line[ci] === '}') runningBraceDepth--;
+    }
+    braceDepthAtLine[i] = runningBraceDepth;
+  }
+
+  // Third pass: find bare assignments
+  // Match `IDENT = ` at start of line or after semicolons, but not `IDENT.x =`, `IDENT[x] =`, `IDENT:x(`
+  const BARE_ASSIGN_RE = /^(\s*)(\w+)\s*=[^=]/;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    const m = BARE_ASSIGN_RE.exec(line);
+    if (!m) continue;
+
+    const name = m[2];
+
+    // Skip keywords, whitelisted globals, declared locals
+    if (LUA_KEYWORDS_SET.has(name)) continue;
+    if (LUA_GLOBALS_WHITELIST.has(name)) continue;
+    if (declaredLocals.has(name)) continue;
+    if (moduleVars.has(name)) continue;
+
+    // Skip if this line has `local` before the name (handles multiline local declarations)
+    if (/\blocal\b/.test(line.slice(0, m.index + m[1].length))) continue;
+
+    // Skip if the name is a field of something (check the raw line for preceding `.` or `:`)
+    const rawLine = rawLines[i];
+    const nameIdx = rawLine.indexOf(name);
+    if (nameIdx > 0) {
+      const prevChar = rawLine[nameIdx - 1];
+      if (prevChar === '.' || prevChar === ':') continue;
+    }
+
+    // Skip if we're inside a table constructor (brace depth > 0).
+    // Check the brace depth BEFORE this line starts (use previous line's depth),
+    // or check if the current line itself is inside braces.
+    // We check the depth at the previous line end — if > 0, we're inside { }.
+    const depthBefore = i > 0 ? braceDepthAtLine[i - 1] : 0;
+    // Also count opening braces on this line before the assignment
+    let lineDepthBefore = depthBefore;
+    for (let ci = 0; ci < m.index + m[1].length; ci++) {
+      if (line[ci] === '{') lineDepthBefore++;
+      if (line[ci] === '}') lineDepthBefore--;
+    }
+    if (lineDepthBefore > 0) continue; // inside a table constructor
+
+    // rjit-ignore-next-line
+    if (i > 0 && /rjit-ignore-next-line/.test(rawLines[i - 1])) continue;
+
+    diagnostics.push({
+      rule: 'lua-no-accidental-global',
+      severity: 'error',
+      message: `Assignment to undeclared variable '${name}' — missing \`local\` keyword? This pollutes _G.`,
+      file: filePath,
+      line: i + 1,
+      col: m[1].length + 1,
+    });
+  }
+
+  return diagnostics;
+}
+
+// ── Lua node cache detection ─────────────────────────────────
+
+/**
+ * Detect patterns that cache node table references across frames.
+ *
+ * Node tables are value types recreated each reconciler commit. Holding a
+ * reference to a node from a previous frame causes stale data reads and
+ * crashes when the node is garbage collected.
+ *
+ * Catches:
+ *   self.hoveredNode = node
+ *   self.selectedNode = someNode
+ *   cache[node] = ...
+ *   nodeCache[node] = ...
+ *   someTable[node] = ...  (when `node` is a known node variable)
+ *
+ * The heuristic: flag `self.<name>Node = <expr>` and `<table>[node] = <expr>`
+ * patterns. These are the two recurring crash patterns from the inspector saga.
+ */
+function lintLuaNodeCache(filePath, rawLines) {
+  const diagnostics = [];
+  const cleanLines = stripLuaCommentsAndStrings(rawLines);
+
+  // Pattern 1: self.whateverNode = expr (not nil)
+  // Only match self.xyzNode, not self.xyzNodeId or self.xyzNodeKey etc.
+  const SELF_NODE_RE = /\bself\.(\w*[Nn]ode)\s*=\s*(?!nil\b)(\S)/;
+
+  // Pattern 2: table[node] = expr (caching with node TABLE as key)
+  // Only match bare `node` or `selectedNode` etc., NOT `nodeId`, `nodeKey`, `nodeIndex`, `nodeCount`
+  const NODE_ID_SUFFIXES = /(?:Id|Key|Index|Count|Name|Type|Path|Idx|Num|Hash|Str)$/;
+  const TABLE_NODE_KEY_RE = /\b(\w+)\[(\w*[Nn]ode\w*)\]\s*=\s*(?!nil\b)/;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+
+    // rjit-ignore-next-line
+    if (i > 0 && /rjit-ignore-next-line/.test(rawLines[i - 1])) continue;
+
+    let m = SELF_NODE_RE.exec(line);
+    if (m && !NODE_ID_SUFFIXES.test(m[1])) {
+      diagnostics.push({
+        rule: 'lua-no-node-cache',
+        severity: 'warning',
+        message: `Caching node reference in 'self.${m[1]}' — node tables are recreated each commit and go stale. Query the tree each frame instead.`,
+        file: filePath,
+        line: i + 1,
+        col: m.index + 1,
+      });
+      continue;
+    }
+
+    m = TABLE_NODE_KEY_RE.exec(line);
+    if (m && !NODE_ID_SUFFIXES.test(m[2])) {
+      diagnostics.push({
+        rule: 'lua-no-node-cache',
+        severity: 'warning',
+        message: `Caching with node as table key '${m[1]}[${m[2]}]' — node tables are recreated each commit. Use node.id as key instead.`,
+        file: filePath,
+        line: i + 1,
+        col: m.index + 1,
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+// ── Lua FFI without pcall detection ──────────────────────────
+
+// Files that ARE the safe FFI wrapper — they're supposed to have bare ffi.load
+const FFI_WRAPPER_FILES = new Set(['lib_loader.lua']);
+
+// Standard POSIX/libc symbols — always available via ffi.C, no pcall needed
+const LIBC_SYMBOLS = new Set([
+  // File I/O
+  'open', 'close', 'read', 'write', 'creat', 'lseek', 'fstat', 'stat',
+  'fopen', 'fclose', 'fread', 'fwrite', 'fseek', 'ftell', 'fflush',
+  'rename', 'remove', 'unlink', 'mkdir', 'rmdir', 'access', 'chmod',
+  'dup', 'dup2', 'pipe', 'fcntl', 'ftruncate', 'truncate', 'fsync',
+  // Process
+  'fork', 'exec', 'execvp', 'execve', 'wait', 'waitpid', 'exit', '_exit',
+  'getpid', 'getppid', 'getuid', 'getgid', 'setsid', 'setpgid',
+  'kill', 'signal', 'sigaction', 'raise',
+  // Memory
+  'malloc', 'calloc', 'realloc', 'free', 'memcpy', 'memset', 'memmove', 'memcmp',
+  'mmap', 'munmap', 'mprotect', 'msync', 'mlock', 'munlock',
+  // String
+  'strlen', 'strcpy', 'strncpy', 'strcmp', 'strncmp', 'strcat', 'strncat',
+  'strstr', 'strchr', 'strrchr', 'strerror', 'strtol', 'strtoul', 'strtod',
+  // I/O control
+  'ioctl', 'poll', 'select', 'epoll_create', 'epoll_ctl', 'epoll_wait',
+  // Network
+  'socket', 'bind', 'listen', 'accept', 'connect', 'send', 'recv',
+  'sendto', 'recvfrom', 'setsockopt', 'getsockopt', 'getaddrinfo', 'freeaddrinfo',
+  'inet_pton', 'inet_ntop', 'htons', 'ntohs', 'htonl', 'ntohl',
+  // SHM/IPC
+  'shmget', 'shmat', 'shmdt', 'shmctl', 'shm_open', 'shm_unlink',
+  'sem_open', 'sem_close', 'sem_post', 'sem_wait', 'sem_unlink',
+  // Time
+  'time', 'clock', 'gettimeofday', 'clock_gettime', 'sleep', 'usleep', 'nanosleep',
+  // Misc
+  'printf', 'sprintf', 'snprintf', 'fprintf', 'sscanf',
+  'getenv', 'setenv', 'unsetenv', 'system', 'popen', 'pclose',
+  'dlopen', 'dlsym', 'dlclose', 'dlerror',
+  'errno',
+]);
+
+/**
+ * Detect ffi.load() and ffi.C.* calls not wrapped in pcall/xpcall.
+ *
+ * Every FFI integration (SDL2, mpv, gbm, EGL, X11) had a crash phase from
+ * missing libraries. The pcall wrapper pattern from dragdrop.lua should be
+ * the standard.
+ *
+ * Catches:
+ *   local lib = ffi.load("SDL2")
+ *   ffi.C.shmget(...)
+ *
+ * Allows:
+ *   local ok, lib = pcall(ffi.load, "SDL2")
+ *   pcall(function() ffi.C.shmget(...) end)
+ *   xpcall(function() ... ffi.load("x") ... end, handler)
+ */
+function lintLuaFfiWithoutPcall(filePath, rawLines) {
+  const diagnostics = [];
+  const cleanLines = stripLuaCommentsAndStrings(rawLines);
+
+  // Skip lib_loader.lua — it IS the pcall wrapper
+  const basename = filePath.split('/').pop();
+  if (FFI_WRAPPER_FILES.has(basename)) return diagnostics;
+
+  // Pattern: ffi.load( on a line
+  const FFI_LOAD_RE = /\bffi\.load\s*\(/;
+  // Pattern: ffi.C.identifier( on a line
+  const FFI_C_RE = /\bffi\.C\.(\w+)/;
+
+  // Pcall wrappers on the same line
+  const PCALL_SAME_LINE = /\bx?pcall\s*\(\s*ffi\.load/;
+  const PCALL_FUNC_WRAP = /\bx?pcall\s*\(\s*function/;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+
+    // rjit-ignore-next-line
+    if (i > 0 && /rjit-ignore-next-line/.test(rawLines[i - 1])) continue;
+
+    // Check ffi.load
+    if (FFI_LOAD_RE.test(line)) {
+      // OK if pcall(ffi.load, ...) on same line
+      if (PCALL_SAME_LINE.test(line)) continue;
+      // OK if inside pcall(function() ... end) — check if we're inside a pcall block
+      if (isInsidePcallBlock(cleanLines, i)) continue;
+
+      const col = line.indexOf('ffi.load');
+      diagnostics.push({
+        rule: 'lua-no-ffi-without-pcall',
+        severity: 'error',
+        message: `ffi.load() without pcall wrapper — will crash if library is missing. Use \`local ok, lib = pcall(ffi.load, name)\`.`,
+        file: filePath,
+        line: i + 1,
+        col: col + 1,
+      });
+    }
+
+    // Check ffi.C.* — only flag non-standard-libc symbols
+    // Standard libc symbols (open, close, read, write, ioctl, etc.) are always
+    // available in the C namespace. Only flag symbols from optional libraries
+    // (SDL, mpv, X11, EGL, etc.).
+    const ffiCMatch = FFI_C_RE.exec(line);
+    if (ffiCMatch) {
+      const sym = ffiCMatch[1];
+      // Skip standard POSIX/libc symbols — these are always available
+      if (LIBC_SYMBOLS.has(sym)) continue;
+      // OK if inside pcall(function() ... end) block
+      if (PCALL_FUNC_WRAP.test(line)) continue;
+      if (isInsidePcallBlock(cleanLines, i)) continue;
+
+      diagnostics.push({
+        rule: 'lua-no-ffi-without-pcall',
+        severity: 'error',
+        message: `ffi.C.${sym} without pcall wrapper — will crash if symbol is unavailable. Wrap in pcall/xpcall.`,
+        file: filePath,
+        line: i + 1,
+        col: ffiCMatch.index + 1,
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+/**
+ * Heuristic: check if line `idx` is inside a pcall(function() ... end) block.
+ * Scans upward for a pcall/xpcall opening and checks brace/end balancing.
+ */
+function isInsidePcallBlock(cleanLines, idx) {
+  // Look back up to 30 lines for a pcall(function
+  let funcDepth = 0;
+  for (let j = idx; j >= Math.max(0, idx - 30); j--) {
+    const line = cleanLines[j];
+    // Count `end` tokens going backward (they close inner blocks)
+    const ends = (line.match(/\bend\b/g) || []).length;
+    // Count function/do/if/for/while openers
+    const openers = (line.match(/\b(?:function|do|if|for|while|repeat)\b/g) || []).length;
+    funcDepth += ends - openers;
+
+    if (funcDepth < 0) {
+      // We've found an unmatched opener — check if it's a pcall(function
+      if (/\bx?pcall\s*\(\s*function\b/.test(line)) return true;
+      break;
+    }
+  }
+  return false;
+}
+
+// ── Lua ffi.load shared lib detection ────────────────────────
+
+// Libraries that Love2D already has loaded — using ffi.load opens a SECOND instance
+const LOVE2D_LOADED_LIBS = new Set([
+  'SDL2', 'SDL2-2.0', 'libSDL2', 'libSDL2-2.0',
+  'openal', 'OpenAL', 'openal32',
+  'GL', 'opengl32', 'GLESv2',
+  'lua51', 'luajit-5.1',
+]);
+
+/**
+ * Detect ffi.load("LibName") for libraries Love2D already loaded.
+ * Using ffi.load opens a second instance instead of using the one Love2D
+ * already initialized. Use ffi.C.* to access symbols from the host process.
+ */
+function lintLuaFfiLoadSharedLib(filePath, rawLines) {
+  const diagnostics = [];
+  const cleanLines = stripLuaCommentsAndStrings(rawLines);
+
+  // Skip lib_loader.lua
+  const basename = filePath.split('/').pop();
+  if (FFI_WRAPPER_FILES.has(basename)) return diagnostics;
+
+  const FFI_LOAD_STR_RE = /\bffi\.load\s*\(\s*["'](\w[\w.-]*)["']\s*\)/g;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    FFI_LOAD_STR_RE.lastIndex = 0;
+
+    // rjit-ignore-next-line
+    if (i > 0 && /rjit-ignore-next-line/.test(rawLines[i - 1])) continue;
+
+    let m;
+    while ((m = FFI_LOAD_STR_RE.exec(line)) !== null) {
+      const libName = m[1];
+      if (LOVE2D_LOADED_LIBS.has(libName)) {
+        diagnostics.push({
+          rule: 'lua-no-ffi-load-shared-lib',
+          severity: 'warning',
+          message: `ffi.load("${libName}") opens a second instance — Love2D already loaded this. Use ffi.C.* to access its symbols.`,
+          file: filePath,
+          line: i + 1,
+          col: m.index + 1,
+        });
+      }
+    }
+  }
+
+  return diagnostics;
+}
+
+// ── Lua unguarded division detection ─────────────────────────
+
+/**
+ * Detect divisions where the denominator could be zero or nil.
+ *
+ * Catches:
+ *   x / y          where y is a variable (not a literal number)
+ *   x / (a + b)    where the result could be zero
+ *
+ * Allows:
+ *   x / 2, x / 255, x / math.pi   (literal constants)
+ *   x / #t                         (length — only 0 for empty, usually intentional)
+ *   math.max(1, y)                 (already guarded)
+ *
+ * The heuristic is conservative: only flag `/ variable` where variable is a
+ * bare identifier, not a function call result or literal.
+ */
+function lintLuaUnguardedDivision(filePath, rawLines) {
+  const diagnostics = [];
+  const cleanLines = stripLuaCommentsAndStrings(rawLines);
+
+  // Match / followed by a bare identifier (not a number, not a function call, not a method)
+  // Negative lookbehind for `=` to skip `/=` patterns (not valid Lua but defensive)
+  const DIV_RE = /\/\s*(\w+)\b/g;
+
+  // Identifiers that are safe denominators (known non-zero)
+  const SAFE_DENOMINATORS = new Set([
+    'math', 'pi', 'huge', 'maxinteger',
+  ]);
+
+  // Check if denominator is guarded by math.max on the same line
+  const MATH_MAX_GUARD = /math\.max\s*\(\s*[1-9]/;
+
+  // First pass: collect all local assignments of constants and guard patterns
+  // `local FOO = 44100` → FOO is a known non-zero constant
+  // `if x == 0 then return end` on the line before → x is guarded
+  const knownNonZero = new Set();
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    // Local assignment to a positive literal number
+    const constAssign = line.match(/\blocal\s+(\w+)\s*=\s*(\d+(?:\.\d+)?)\b/);
+    if (constAssign && parseFloat(constAssign[2]) > 0) {
+      knownNonZero.add(constAssign[1]);
+    }
+  }
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    DIV_RE.lastIndex = 0;
+
+    // rjit-ignore-next-line
+    if (i > 0 && /rjit-ignore-next-line/.test(rawLines[i - 1])) continue;
+
+    // Skip lines with math.max guard
+    if (MATH_MAX_GUARD.test(line)) continue;
+
+    let m;
+    while ((m = DIV_RE.exec(line)) !== null) {
+      const denom = m[1];
+
+      // Skip numeric literals
+      if (/^\d+$/.test(denom)) continue;
+
+      // Skip known safe identifiers
+      if (SAFE_DENOMINATORS.has(denom)) continue;
+
+      // Skip UPPER_CASE identifiers (conventionally constants)
+      if (/^[A-Z][A-Z_0-9]+$/.test(denom)) continue;
+
+      // Skip variables assigned as positive constants
+      if (knownNonZero.has(denom)) continue;
+
+      // Skip if the denominator is immediately followed by `.` or `(` or `:` (method/function call or table access)
+      const afterPos = m.index + m[0].length;
+      if (afterPos < line.length && (line[afterPos] === '.' || line[afterPos] === '(' || line[afterPos] === ':')) continue;
+
+      // Check for `or 1` / `or 0.001` guard on same line
+      const rest = line.slice(m.index);
+      if (/\bor\s+[1-9]/.test(rest) || /\bor\s+0\.\d*[1-9]/.test(rest)) continue;
+
+      // Check if denominator is guarded on a nearby preceding line:
+      // `if denom == 0` or `if denom <= 0` or `if not denom` → return/break/continue
+      let guarded = false;
+      for (let j = Math.max(0, i - 5); j < i; j++) {
+        const prevLine = cleanLines[j];
+        if (prevLine.includes(denom) && (
+          new RegExp(`\\b${denom}\\s*[=~><]+\\s*0`).test(prevLine) ||
+          new RegExp(`\\b${denom}\\s*==\\s*nil`).test(prevLine) ||
+          new RegExp(`not\\s+${denom}\\b`).test(prevLine) ||
+          new RegExp(`${denom}\\s*>\\s*0`).test(prevLine)
+        )) {
+          guarded = true;
+          break;
+        }
+      }
+      if (guarded) continue;
+
+      diagnostics.push({
+        rule: 'lua-no-unguarded-division',
+        severity: 'warning',
+        message: `Division by '${denom}' — could be zero or nil. Guard with \`math.max(1, ${denom})\` or check before dividing.`,
+        file: filePath,
+        line: i + 1,
+        col: m.index + 1,
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
 /**
  * Run Lua lint on all .lua files under a directory (with incremental cache).
  */
@@ -508,7 +1040,14 @@ function runLuaLint(luaDir, cwd, cache, newCache) {
 
     const source = readFileSync(filePath, 'utf-8');
     const lines = source.split('\n');
-    const fileDiags = lintLuaForwardRefs(filePath, lines);
+    const fileDiags = [
+      ...lintLuaForwardRefs(filePath, lines),
+      ...lintLuaAccidentalGlobals(filePath, lines),
+      ...lintLuaNodeCache(filePath, lines),
+      ...lintLuaFfiWithoutPcall(filePath, lines),
+      ...lintLuaFfiLoadSharedLib(filePath, lines),
+      ...lintLuaUnguardedDivision(filePath, lines),
+    ];
     diagnostics.push(...fileDiags);
     if (newCache) newCache[relPath] = { mtimeMs, diagnostics: fileDiags };
   }
@@ -1468,7 +2007,7 @@ const rules = [
         // Transform
         'transform',
         // Text
-        'color', 'fontSize', 'fontFamily', 'fontWeight', 'textAlign',
+        'color', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textAlign',
         'textOverflow', 'textDecorationLine', 'lineHeight', 'letterSpacing',
         'userSelect',
         // Text shadow
@@ -1763,12 +2302,8 @@ export async function runLint(cwd, options = {}) {
   }
 
   const srcDir = join(cwd, 'src');
-  if (!existsSync(srcDir)) {
-    if (!options.silent) console.error('  No src/ directory found.');
-    return { errors: 0, warnings: 0, diagnostics: [] };
-  }
-
-  const files = findTsxFiles(srcDir);
+  const hasSrc = existsSync(srcDir);
+  const files = hasSrc ? findTsxFiles(srcDir) : [];
   const diagnostics = [];
   const allMCPCalls = [];
   const apiUsage = { imports: [], hasSettingsRegistry: false };
@@ -1890,7 +2425,7 @@ export async function runLint(cwd, options = {}) {
 
   // TSL lint pass — scan .tsl files in src/ (with cache)
   const { diagnostics: tslDiagnostics, fileCount: tslFileCount, cached: tslCached } =
-    runTslLint(srcDir, ts, cwd, cache, newCache);
+    hasSrc ? runTslLint(srcDir, ts, cwd, cache, newCache) : { diagnostics: [], fileCount: 0, cached: 0 };
   diagnostics.push(...tslDiagnostics);
 
   // Lua lint pass — scan .lua files in lua/ (with cache)

@@ -18,6 +18,8 @@ import {
   useStopwatch,
   useCountdown,
   useInterval,
+  useFrameInterval,
+  FrameTicker,
   formatDuration,
   formatDurationLong,
   formatDate,
@@ -49,9 +51,9 @@ const C = {
 // ── Static code blocks (hoisted — never recreated) ──────
 
 const INSTALL_CODE = `import {
-  Clock, Stopwatch, Countdown, Ticker,
+  Clock, Stopwatch, Countdown, Ticker, FrameTicker,
   useTime, useStopwatch, useCountdown,
-  useOnTime, useInterval,
+  useOnTime, useInterval, useFrameInterval,
   formatDuration, relativeTime, parseDuration,
 } from '@reactjit/time'`;
 
@@ -86,6 +88,14 @@ useOnTime(() => {
 useInterval(() => {
   setTicks(n => n + 1)
 }, 500)`;
+
+const FRAME_INTERVAL_CODE = `// Fire every 100 frames (≈1.7s at 60fps)
+useFrameInterval(() => {
+  stepSimulation()
+}, 100)
+
+// Or as a component — invisible, just fires
+<FrameTicker frames={60} onTick={updateParticles} />`;
 
 const UTILS_CODE = `formatDuration(3_723_456)           // "1:02:03"
 formatDuration(3_723_456, {ms:true}) // "1:02:03.456"
@@ -251,6 +261,35 @@ function IntervalDemo() {
   );
 }
 
+function FrameIntervalDemo() {
+  const c = useThemeColors();
+  const [frameCount, setFrameCount] = useState(0);
+  const [every, setEvery] = useState(60);
+
+  useFrameInterval(() => setFrameCount(n => n + 1), every);
+
+  return (
+    <Box style={{ gap: 8 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.teal }}>{String(frameCount)}</Text>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'fires'}</Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        {[1, 10, 60, 120].map(n => (
+          <Pressable
+            key={n}
+            onPress={() => { setEvery(n); setFrameCount(0); }}
+            style={{ backgroundColor: every === n ? C.teal : C.dim, borderRadius: 5, paddingTop: 4, paddingBottom: 4, paddingLeft: 8, paddingRight: 8 }}
+          >
+            <Text style={{ fontSize: 9, color: every === n ? '#000' : c.text }}>{`${n}f`}</Text>
+          </Pressable>
+        ))}
+      </Box>
+      <Text style={{ fontSize: 8, color: c.muted }}>{`every ${every} frame${every > 1 ? 's' : ''} \u2248 ${(every / 60).toFixed(1)}s at 60fps`}</Text>
+    </Box>
+  );
+}
+
 function UtilsDemo() {
   const c = useThemeColors();
   const now = nowMs();
@@ -351,9 +390,9 @@ export function TimeStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Everything in one import \u2014 widgets, hooks, and pure utilities. Pick what you need.'}
@@ -372,16 +411,16 @@ export function TimeStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 10 }}>
               <WorldClockDemo />
               <Box style={{ height: 1, backgroundColor: c.border }} />
               <TickerDemo />
             </Box>
           </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="clock">{'WIDGETS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'One-liner components \u2014 no hooks, no wiring. Clock shows local or any IANA timezone. Stopwatch and Countdown have built-in controls. Ticker is invisible \u2014 just fires callbacks.'}
@@ -402,9 +441,9 @@ export function TimeStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="timer">{'STOPWATCH'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Lua-driven elapsed timer with start, stop, reset, and restart. Accumulates dt in the Love2D update loop \u2014 immune to JS garbage collection pauses.'}
@@ -413,7 +452,7 @@ export function TimeStory() {
               <CodeBlock language="tsx" fontSize={8} code={STOPWATCH_CODE} />
             </Box>
           </Box>
-          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14 }}>
               <StopwatchDemo />
             </Box>
@@ -437,7 +476,7 @@ export function TimeStory() {
         }}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'All timing hooks (useStopwatch, useCountdown, useOnTime, useInterval) run in Lua\u2019s update(dt) loop. They fire in the exact Love2D frame that crosses the threshold \u2014 no JS event-loop jitter.'}
+            {'All timing hooks (useStopwatch, useCountdown, useOnTime, useInterval, useFrameInterval) run in Lua\u2019s update loop. Time-based hooks fire in the exact frame that crosses the threshold. useFrameInterval counts frames directly \u2014 no JS event-loop jitter either way.'}
           </Text>
         </Box>
 
@@ -451,14 +490,14 @@ export function TimeStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14 }}>
               <CountdownDemo />
             </Box>
           </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="hourglass">{'COUNTDOWN'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Count down from a duration in milliseconds. Tracks remaining time, progress (0\u20131), and fires onComplete when it hits zero. Progress bar turns red below 3 seconds.'}
@@ -479,9 +518,9 @@ export function TimeStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="zap">{'SCHEDULING'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useOnTime fires once after a delay. useInterval repeats. Both run frame-perfect in Lua \u2014 not the JS event loop. Use for audio cues, game events, or data polling.'}
@@ -490,10 +529,39 @@ export function TimeStory() {
               <CodeBlock language="tsx" fontSize={8} code={SCHEDULING_CODE} />
             </Box>
           </Box>
-          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 12 }}>
               <Text style={{ color: c.muted, fontSize: 9 }}>{'useInterval \u2014 pick a rate:'}</Text>
               <IntervalDemo />
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band: demo | text — Frame Interval (zigzag) ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
+            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 12 }}>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'useFrameInterval \u2014 pick a cadence:'}</Text>
+              <FrameIntervalDemo />
+            </Box>
+          </Box>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="film">{'FRAME INTERVAL'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Count rendered frames instead of wall-clock time. useFrameInterval fires every N Love2D frames \u2014 stays locked to the render loop even when the framerate drops. Use for animation steps, physics ticks, or any logic that should be frame-synced.'}
+            </Text>
+            <Box style={{ paddingTop: 4 }}>
+              <CodeBlock language="tsx" fontSize={8} code={FRAME_INTERVAL_CODE} />
             </Box>
           </Box>
         </Box>
@@ -508,14 +576,14 @@ export function TimeStory() {
           paddingTop: 20,
           paddingBottom: 24,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1 }}>
+          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12 }}>
               <UtilsDemo />
             </Box>
           </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="code">{'UTILITIES'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Pure functions \u2014 no hooks, no bridge. Format durations, parse time strings, do date arithmetic, check day boundaries. Works anywhere.'}

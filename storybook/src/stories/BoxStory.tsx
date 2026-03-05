@@ -201,7 +201,7 @@ export function BoxStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Root layout primitive. Flex container, event target, and visual surface.'}
+          {'Something to put something else inside of'}
         </Text>
       </Box>
 

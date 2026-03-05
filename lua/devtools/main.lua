@@ -355,12 +355,21 @@ function DevTools.popOut()
   local devtoolsWindowPath = luaDir and (luaDir .. "devtools_window") or "lua/devtools_window"
 
   -- Spawn child Love2D process
-  local cmd = string.format(
-    'REACTJIT_WINDOW_TITLE=%q REACTJIT_WINDOW_WIDTH=%d REACTJIT_WINDOW_HEIGHT=%d REACTJIT_IPC_PORT=%d love %s &',
+  local baseCmd = string.format(
+    'REACTJIT_WINDOW_TITLE=%q REACTJIT_WINDOW_WIDTH=%d REACTJIT_WINDOW_HEIGHT=%d REACTJIT_IPC_PORT=%d love %s',
     "DevTools", 800, 500, port, devtoolsWindowPath
   )
-  io.write("[devtools] spawning: " .. cmd .. "\n"); io.flush()
-  os.execute(cmd)
+  io.write("[devtools] spawning: " .. baseCmd .. "\n"); io.flush()
+  local pidHandle = io.popen(baseCmd .. " & echo $!")
+  if pidHandle then
+    local pid = pidHandle:read("*l")
+    pidHandle:close()
+    if pid and pid:match("%d+") then
+      local reg = require("lua.process_registry")
+      reg.register(pid)
+      state.childPid = pid
+    end
+  end
 
   state.poppedOut = true
   -- Main app gets full viewport back
@@ -385,6 +394,12 @@ function DevTools.dockBack()
   if state.server then
     pcall(function() state.server:close() end)
     state.server = nil
+  end
+
+  if state.childPid then
+    local reg = require("lua.process_registry")
+    reg.unregister(state.childPid)
+    state.childPid = nil
   end
 
   state.poppedOut = false

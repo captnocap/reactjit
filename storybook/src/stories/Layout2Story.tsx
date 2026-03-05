@@ -2,15 +2,10 @@
  * Layout 2 — Package/hook documentation page template.
  *
  * Zigzag narrative: bands alternate sides so the eye sweeps back and forth
- * down the page. Code blocks sit next to their explanations, multi-line
- * is fine now that CodeBlock does fit-content sizing.
+ * down the page. Code blocks sit next to their explanations.
  *
- * Band rhythm:
- *   hero        — full bleed title card with accent stripe
- *   text | code — explanation left, snippet right
- *   code | text — snippet left, explanation right (zigzag)
- *   callout     — full-width highlighted insight
- *   repeat...
+ * Uses Band/Half/HeroBand/CalloutBand/Divider/SectionLabel from StoryScaffold.
+ * Those components enforce alignment — both columns always start at (0,0).
  *
  * TEMPLATE: All content below is placeholder.
  */
@@ -18,6 +13,7 @@
 import React from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -55,25 +51,6 @@ const OPTIONS_CODE = `const [state] = usePackage('analytics', {
   staleWhileRevalidate: true,
   onError: (e) => log(e),
 })`;
-
-// ── Helpers ──────────────────────────────────────────────
-
-function Divider() {
-  const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
-}
-
-function SectionLabel({ icon, children }: { icon: string; children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-        {children}
-      </Text>
-    </Box>
-  );
-}
 
 // ── Layout2Story ─────────────────────────────────────────
 
@@ -120,149 +97,90 @@ export function Layout2Story() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
-        {/* ── Hero band: accent stripe + overview ── */}
-        <Box style={{
-          borderLeftWidth: 3,
-          borderColor: C.accent,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 24,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        {/* ── Hero band ── */}
+        <HeroBand accentColor={C.accent}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
             {'Manage package state without the ceremony.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
             {'usePackage gives you a reactive [state, actions] tuple — loading, error, and data tracking built in. Wrap once with a provider, subscribe from anywhere.'}
           </Text>
-        </Box>
+        </HeroBand>
 
         <Divider />
 
-        {/* ── Band: text left | code right ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+        {/* ── text | code — INSTALL ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Import the hook and the provider. The provider enables caching and manages the package registry.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
-        </Box>
+        </Band>
 
         <Divider />
 
-        {/* ── Band: code left | text right (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
+        {/* ── code | text — PROVIDER (zigzag) ── */}
+        <Band>
           <CodeBlock language="tsx" fontSize={9} code={PROVIDER_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="layers">{'PROVIDER'}</SectionLabel>
+          <Half>
+            <SectionLabel icon="layers" accentColor={C.accent}>{'PROVIDER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Wrap your app once at the root. Config options control caching, TTL, and error boundaries.'}
             </Text>
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Callout band ── */}
-        <Box style={{
-          backgroundColor: C.callout,
-          borderLeftWidth: 3,
-          borderColor: C.calloutBorder,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 14,
-          paddingBottom: 14,
-          flexDirection: 'row',
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        {/* ── Callout ── */}
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
             {'The hook is reactive — your component re-renders automatically when the package state changes. No manual subscriptions.'}
           </Text>
-        </Box>
+        </CalloutBand>
 
         <Divider />
 
-        {/* ── Band: text left | code right ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="code">{'BASIC USAGE'}</SectionLabel>
+        {/* ── text | code — BASIC USAGE ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="code" accentColor={C.accent}>{'BASIC USAGE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Destructure state for loading, error, and data. The hook handles the lifecycle — you just read.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={BASIC_CODE} />
-        </Box>
+        </Band>
 
         <Divider />
 
-        {/* ── Band: code left | text right (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
+        {/* ── code | text — ACTIONS (zigzag) ── */}
+        <Band>
           <CodeBlock language="tsx" fontSize={9} code={ACTIONS_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="zap">{'ACTIONS'}</SectionLabel>
+          <Half>
+            <SectionLabel icon="zap" accentColor={C.accent}>{'ACTIONS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The second element in the tuple. Set, merge, reset, or subscribe to changes imperatively.'}
             </Text>
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band: text left | code right ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 24,
-          alignItems: 'start',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="settings">{'OPTIONS'}</SectionLabel>
+        {/* ── text | code — OPTIONS ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="settings" accentColor={C.accent}>{'OPTIONS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Second argument configures caching, TTL, stale-while-revalidate, and error callbacks.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={OPTIONS_CODE} />
-        </Box>
+        </Band>
 
       </ScrollView>
 

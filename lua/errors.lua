@@ -43,12 +43,18 @@ local copiedFlashUntil = 0
 -- BSOD state
 local bsodCopied = false
 local bsodCopiedTimer = 0
-local bsodRebootStatus = nil   -- nil | "rebooting" | "failed"
-local bsodRebootTimer = 0
 local bsodSpinnerIdx = 1
 local bsodSpinnerTimer = 0
 local spinnerChars = { "|", "/", "-", "\\" }
 local scrollOffset = 0  -- scroll position for BSOD content
+
+-- BSOD clickable button hit rects (updated each frame by drawBSOD)
+local bsodButtons = {
+  reboot = { x = 0, y = 0, w = 0, h = 0 },
+  copy   = { x = 0, y = 0, w = 0, h = 0 },
+  quit   = { x = 0, y = 0, w = 0, h = 0 },
+}
+local bsodHoveredBtn = nil  -- which button the mouse is over
 
 -- Callback to trigger reload (set by init.lua)
 local reloadCallback = nil
@@ -76,16 +82,39 @@ local BSOD_GREEN     = { 0.30, 0.80, 0.40, 1 }
 local BSOD_COPIED    = { 0.40, 0.85, 0.50, 1 }
 local BSOD_BAR       = { 0.08, 0.06, 0.10, 1 }
 
---- Safely create a monospace-ish font for the editor.
---- Some Love2D builds throw if "monospace" isn't a real font file.
-local function getEditorFont(size)
-  local okMono, mono = pcall(love.graphics.newFont, "monospace", size)
-  if okMono and mono then return mono end
+-- ============================================================================
+-- Font cache — created ONCE on first use. NEVER allocate fonts per frame.
+-- Creating love.graphics.newFont() every frame leaks GPU memory and eventually
+-- freezes the crash screen, which is the one thing that must never freeze.
+-- ============================================================================
+local _fonts = nil
+local function getFonts()
+  if _fonts then return _fonts end
+  local fallback = love.graphics.getFont()
 
-  local okFallback, fallback = pcall(love.graphics.newFont, size)
-  if okFallback and fallback then return fallback end
+  -- Create each font individually so a single failure doesn't lose all of them
+  local ok11, f11 = pcall(love.graphics.newFont, 11)
+  local ok12, f12 = pcall(love.graphics.newFont, 12)
+  local ok14, f14 = pcall(love.graphics.newFont, 14)
+  local ok18, f18 = pcall(love.graphics.newFont, 18)
 
-  return love.graphics.getFont()
+  -- Editor font: try monospace, fall back to default size
+  local editorFont = fallback
+  local okMono, mono = pcall(love.graphics.newFont, "monospace", 12)
+  if okMono and mono then
+    editorFont = mono
+  elseif ok12 then
+    editorFont = f12
+  end
+
+  _fonts = {
+    small   = ok11 and f11 or fallback,
+    body    = ok12 and f12 or fallback,
+    title14 = ok14 and f14 or fallback,
+    title18 = ok18 and f18 or fallback,
+    editor  = editorFont,
+  }
+  return _fonts
 end
 
 --- Set the reload callback (called by init.lua on setup).
@@ -204,11 +233,11 @@ function Errors.drawBSOD()
   local entry = buffer[currentIndex]
   if not entry then return end
 
+  local fonts = getFonts()
   local W = love.graphics.getWidth()
   local H = love.graphics.getHeight()
   local pad = 24
   local barH = 44
-  local smallFont = love.graphics.newFont(11)
 
   -- Background + accent bar (always safe)
   love.graphics.clear(BSOD_BG[1], BSOD_BG[2], BSOD_BG[3])
@@ -220,14 +249,13 @@ function Errors.drawBSOD()
     local y = pad + 4
 
     -- Title
-    local titleFont = love.graphics.newFont(18)
-    love.graphics.setFont(titleFont)
+    love.graphics.setFont(fonts.title18)
     love.graphics.setColor(BSOD_ACCENT)
     love.graphics.print("ReactJIT crashed", pad, y)
     y = y + 28
 
     -- Timestamp + context
-    love.graphics.setFont(smallFont)
+    love.graphics.setFont(fonts.small)
     love.graphics.setColor(BSOD_DIM)
     local contextStr = entry.timestamp
     if entry.context ~= "" then
@@ -243,8 +271,7 @@ function Errors.drawBSOD()
     end
 
     -- Error message (compact — 2 lines max)
-    local bodyFont = love.graphics.newFont(12)
-    love.graphics.setFont(bodyFont)
+    love.graphics.setFont(fonts.body)
     love.graphics.setColor(BSOD_TEXT)
 
     local msgPrefix = entry.source ~= "unknown" and (entry.source .. ": ") or ""
@@ -260,16 +287,15 @@ function Errors.drawBSOD()
     local editorActive = bsodEditor and bsodEditor.isActive()
 
     if editorActive then
-      local editorFont = getEditorFont(12)
       local editorH = math.floor((H - y - barH - 8) * 0.55)
       editorH = math.max(editorH, 120)
 
-      bsodEditor.draw(pad, y, W - pad * 2, editorH, editorFont)
+      bsodEditor.draw(pad, y, W - pad * 2, editorH, fonts.editor)
       y = y + editorH + 8
     else
       -- No file found — show hint
       love.graphics.setColor(BSOD_DIM)
-      love.graphics.setFont(smallFont)
+      love.graphics.setFont(fonts.small)
       if entry.source == "js" then
         love.graphics.print("  Source is a compiled bundle — edit your .tsx source and save to trigger HMR reload", pad, y)
       else
@@ -297,7 +323,7 @@ function Errors.drawBSOD()
     -- Stack trace
     if entry.stack and entry.stack ~= "" then
       love.graphics.setColor(BSOD_DIM)
-      love.graphics.setFont(smallFont)
+      love.graphics.setFont(fonts.small)
       love.graphics.print("TRACEBACK", pad, sy)
       sy = sy + 14
 
@@ -317,11 +343,11 @@ function Errors.drawBSOD()
       sy = sy + 8
 
       love.graphics.setColor(BSOD_DIM)
-      love.graphics.setFont(smallFont)
+      love.graphics.setFont(fonts.small)
       love.graphics.print("EVENT TRAIL (" .. #trail .. " events, most recent first)", pad, sy)
       sy = sy + 16
 
-      love.graphics.setFont(bodyFont)
+      love.graphics.setFont(fonts.body)
       local maxTrailShow = math.min(#trail, 25)
       for i = #trail, math.max(1, #trail - maxTrailShow + 1), -1 do
         local e = trail[i]
@@ -348,7 +374,7 @@ function Errors.drawBSOD()
   love.graphics.setColor(BSOD_ACCENT[1], BSOD_ACCENT[2], BSOD_ACCENT[3], 0.3)
   love.graphics.rectangle("fill", 0, barY, W, 1)
 
-  love.graphics.setFont(smallFont)
+  love.graphics.setFont(fonts.small)
 
   -- Spinner + watcher status
   bsodSpinnerTimer = bsodSpinnerTimer + (love.timer.getDelta() or 0.016)
@@ -356,41 +382,65 @@ function Errors.drawBSOD()
     bsodSpinnerTimer = 0
     bsodSpinnerIdx = (bsodSpinnerIdx % #spinnerChars) + 1
   end
-  -- Tick reboot status timer
-  if bsodRebootStatus then
-    bsodRebootTimer = bsodRebootTimer - (love.timer.getDelta() or 0.016)
-    if bsodRebootTimer <= 0 then bsodRebootStatus = nil end
-  end
-
-  -- Left side: watcher status or reboot feedback
-  if bsodRebootStatus == "failed" then
-    love.graphics.setColor(BSOD_ACCENT)
-    love.graphics.print("Reboot failed — fix your code and save to reload", pad, barY + 14)
-  else
-    love.graphics.setColor(BSOD_GREEN)
-    love.graphics.print(spinnerChars[bsodSpinnerIdx] .. " Watching for code changes...", pad, barY + 14)
-  end
-
-  -- Right side: flash messages + key hints
+  -- Tick copy flash timer
   if bsodCopied then
     bsodCopiedTimer = bsodCopiedTimer - (love.timer.getDelta() or 0.016)
     if bsodCopiedTimer <= 0 then bsodCopied = false end
   end
 
-  local editorActive = bsodEditor and bsodEditor.isActive()
-  local hints
-  if bsodCopied then
-    hints = "Copied to clipboard!"
-    love.graphics.setColor(BSOD_COPIED)
-  elseif editorActive then
-    hints = "Ctrl+S  save+reload   |   R  reboot   |   Ctrl+C  copy   |   Esc  quit"
-    love.graphics.setColor(BSOD_DIM)
-  else
-    hints = "R  reboot   |   Ctrl+C  copy   |   Esc  quit"
-    love.graphics.setColor(BSOD_DIM)
+  -- Left side: watcher status
+  love.graphics.setColor(BSOD_GREEN)
+  love.graphics.print(spinnerChars[bsodSpinnerIdx] .. " Watching for code changes — press R or click Reboot to restart", pad, barY + 14)
+
+  -- Right side: clickable buttons
+  local btnH = 28
+  local btnY = barY + math.floor((barH - btnH) / 2)
+  local btnPadX = 10  -- horizontal padding inside button
+  local btnGap = 8
+  local btnX = W - pad
+
+  -- Track mouse position for hover state
+  local mx, my = love.mouse.getPosition()
+
+  -- Helper to draw a button and record its hit rect
+  local function drawButton(name, label, bgColor, textColor)
+    local tw = fonts.small:getWidth(label)
+    local bw = tw + btnPadX * 2
+    btnX = btnX - bw
+    local rect = bsodButtons[name]
+    rect.x, rect.y, rect.w, rect.h = btnX, btnY, bw, btnH
+
+    -- Hover detection
+    local hovered = mx >= rect.x and mx <= rect.x + rect.w
+                and my >= rect.y and my <= rect.y + rect.h
+
+    -- Background
+    if hovered then
+      love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.9)
+    else
+      love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.6)
+    end
+    love.graphics.rectangle("fill", btnX, btnY, bw, btnH, 4, 4)
+
+    -- Text
+    love.graphics.setColor(textColor)
+    love.graphics.print(label, btnX + btnPadX, btnY + math.floor((btnH - fonts.small:getHeight()) / 2))
+
+    btnX = btnX - btnGap
   end
-  local hintsW = smallFont:getWidth(hints)
-  love.graphics.print(hints, W - pad - hintsW, barY + 14)
+
+  -- Flash message overrides the buttons
+  if bsodCopied then
+    love.graphics.setColor(BSOD_COPIED)
+    local flashText = "Copied to clipboard!"
+    local fw = fonts.small:getWidth(flashText)
+    love.graphics.print(flashText, W - pad - fw, barY + 14)
+  else
+    -- Draw buttons right-to-left: Quit, Copy, Reboot (so Reboot is leftmost = most prominent)
+    drawButton("quit",   "Quit",   { 0.30, 0.28, 0.35 }, BSOD_DIM)
+    drawButton("copy",   "Copy",   { 0.25, 0.30, 0.40 }, BSOD_TRAIL)
+    drawButton("reboot", "Reboot", BSOD_ACCENT,           BSOD_TEXT)
+  end
 end
 
 --- Handle keypresses in BSOD/crash recovery mode.
@@ -428,21 +478,16 @@ function Errors.keypressed(key)
     return
   end
 
-  -- R: trigger reload/reboot (only when not editing)
+  -- R: hard reboot (only when not editing)
   if key == "r" then
     if bsodEditor and bsodEditor.isActive() then return end  -- 'r' is a letter, don't reboot while typing
-    if reloadCallback then
-      bsodRebootStatus = "rebooting"
-      bsodRebootTimer = 3.0
-      local rok, rerr = pcall(reloadCallback)
-      -- If we're still here, either it failed or the callback handled the error.
-      -- Success = crashRecoveryMode is cleared and we won't draw BSOD next frame.
-      -- Failure = show feedback so the user knows it didn't silently do nothing.
-      if not rok or bsodRebootStatus == "rebooting" then
-        bsodRebootStatus = "failed"
-        bsodRebootTimer = 3.0
-      end
-    end
+    -- Snapshot hot state then restart the Love2D process entirely.
+    -- HMR reload is too fragile from crash recovery — just restart.
+    pcall(function()
+      local hs = require("lua.hotstate")
+      if hs and hs.snapshot then hs.snapshot("state_preset.json") end
+    end)
+    love.event.quit("restart")
     return
   end
 
@@ -476,8 +521,40 @@ function Errors.textinput(text)
   end
 end
 
---- Handle mouse press in BSOD mode (click to place cursor in editor).
+--- Handle mouse press in BSOD mode (click buttons or place cursor in editor).
 function Errors.bsodMousepressed(x, y, button)
+  if button ~= 1 then return false end
+
+  -- Check clickable buttons first
+  local function hitRect(r)
+    return x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h and r.w > 0
+  end
+
+  if hitRect(bsodButtons.reboot) then
+    pcall(function()
+      local hs = require("lua.hotstate")
+      if hs and hs.snapshot then hs.snapshot("state_preset.json") end
+    end)
+    love.event.quit("restart")
+    return true
+  end
+
+  if hitRect(bsodButtons.copy) then
+    local entry = buffer[currentIndex]
+    if entry then
+      pcall(love.system.setClipboardText, formatForClipboard(entry))
+      bsodCopied = true
+      bsodCopiedTimer = 2.0
+    end
+    return true
+  end
+
+  if hitRect(bsodButtons.quit) then
+    love.event.quit()
+    return true
+  end
+
+  -- Editor gets remaining clicks
   if bsodEditor and bsodEditor.isActive() then
     if bsodEditor.mousepressed(x, y, button) then
       return true
@@ -516,6 +593,7 @@ function Errors.draw()
     local entry = buffer[currentIndex]
     if not entry then return end
 
+    local fonts = getFonts()
     local screenW = love.graphics.getWidth()
     local screenH = love.graphics.getHeight()
     local overlayH = math.max(MIN_OVERLAY_HEIGHT, math.floor(screenH * OVERLAY_HEIGHT_FRAC))
@@ -531,8 +609,7 @@ function Errors.draw()
     love.graphics.rectangle("fill", 0, overlayY, screenW, overlayH)
 
     -- Header: "ERROR  --  context"
-    local titleFont = love.graphics.newFont(14)
-    love.graphics.setFont(titleFont)
+    love.graphics.setFont(fonts.title14)
     love.graphics.setColor(TEXT_COLOR)
 
     local header = "ERROR"
@@ -542,8 +619,7 @@ function Errors.draw()
     love.graphics.print(header, pad, overlayY + pad)
 
     -- Error message
-    local bodyFont = love.graphics.newFont(12)
-    love.graphics.setFont(bodyFont)
+    love.graphics.setFont(fonts.body)
     love.graphics.setColor(TEXT_COLOR)
 
     local msgPrefix = entry.source ~= "unknown" and (entry.source .. ": ") or ""
@@ -551,8 +627,7 @@ function Errors.draw()
 
     -- Stack trace
     if entry.stack and entry.stack ~= "" then
-      local stackFont = love.graphics.newFont(11)
-      love.graphics.setFont(stackFont)
+      love.graphics.setFont(fonts.small)
       love.graphics.setColor(SECONDARY)
 
       local sy = overlayY + pad + 50

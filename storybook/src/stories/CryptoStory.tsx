@@ -96,37 +96,7 @@ const ALGORITHMS = [
   { label: 'toHex/toBase64', desc: 'Pure JS encoding — no bridge needed', color: C.mauve },
 ];
 
-// ── Helpers ──────────────────────────────────────────────
-
-function Divider() {
-  const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
-}
-
-function SectionLabel({ icon, children }: { icon: string; children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-        {children}
-      </Text>
-    </Box>
-  );
-}
-
-// ── Band wrapper (zigzag helper) ─────────────────────────
-
-const bandStyle = {
-  paddingLeft: 28,
-  paddingRight: 28,
-  paddingTop: 20,
-  paddingBottom: 20,
-  gap: 24,
-  alignItems: 'center' as const,
-};
-
-const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Live Demo: Hash Functions ────────────────────────────
 
@@ -546,7 +516,7 @@ export function CryptoStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Hashing + encryption + signing + key exchange'}
+          {'No rug pulls here'}
         </Text>
       </Box>
 
@@ -574,26 +544,26 @@ export function CryptoStory() {
         <Divider />
 
         {/* ── Band 1: text | code — INSTALL ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'One hook, all crypto. useCrypto() returns every function — hashing, encryption, signing, key exchange, tokens. Encoding helpers are separate pure-JS imports with no bridge dependency.'}
             </Text>
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 2: demo | text + code — HASH FUNCTIONS ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <HashDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <SectionLabel icon="hash">{'HASH FUNCTIONS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Five hash algorithms, one interface. SHA-256/512 via libsodium, BLAKE2b via libsodium, BLAKE3 via libblake3, HMAC via libsodium. Every result returns { hex, base64 }.'}
@@ -602,14 +572,14 @@ export function CryptoStory() {
               {'All hashing is async — the call crosses the bridge to Lua, which calls into C, then returns the digest. No JS crypto at all.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={HASH_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 3: text + code | demo — ENCRYPTION ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <SectionLabel icon="lock">{'PASSWORD ENCRYPTION'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Password-based encryption with XChaCha20-Poly1305 (AEAD) and Argon2id key derivation. One line to encrypt, one line to decrypt. Salt, nonce, and KDF params are generated automatically.'}
@@ -618,11 +588,11 @@ export function CryptoStory() {
               {'Supports AES-256-GCM (if hardware AES-NI is available), scrypt, and PBKDF2 via options. Defaults are chosen for security, not compatibility.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={ENCRYPT_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <EncryptDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
@@ -648,11 +618,11 @@ export function CryptoStory() {
         <Divider />
 
         {/* ── Band 4: demo | text + code — SIGNING ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <SignDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <SectionLabel icon="key">{'ED25519 SIGNING'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Generate a keypair, sign a message, verify the signature. Ed25519 via libsodium — 64-byte signatures, 32-byte keys. Fast, deterministic, and safe.'}
@@ -661,14 +631,14 @@ export function CryptoStory() {
               {'verifyDetached() is also available for cases where the signature is separate from the message.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={SIGN_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 5: text + code | demo — DIFFIE-HELLMAN ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <SectionLabel icon="git-merge">{'X25519 KEY EXCHANGE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Elliptic-curve Diffie-Hellman key agreement. Alice and Bob each generate an X25519 keypair, exchange public keys, and derive the same shared secret independently.'}
@@ -677,20 +647,20 @@ export function CryptoStory() {
               {'Use the shared secret as input to a symmetric cipher (XChaCha20) or KDF. The shared secret never travels over the wire.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={DH_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <DHDemo />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
         {/* ── Band 6: demo | text + code — TOKENS ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        <Band>
+          <Half>
             <TokenDemo />
-          </Box>
-          <Box style={{ ...halfStyle }}>
+          </Half>
+          <Half>
             <SectionLabel icon="fingerprint">{'TOKEN GENERATION'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Cryptographically secure random tokens in three formats. Hex for database IDs, alphanumeric for URL-safe slugs, base64 for compact binary encoding.'}
@@ -699,25 +669,37 @@ export function CryptoStory() {
               {'All backed by libsodium\'s randombytes_buf — the same CSPRNG that powers the encryption and signing primitives.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={TOKEN_CODE} />
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 7: text + code | catalog — ENCODING ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
+        {/* ── Band 7: text | code — ENCODING ── */}
+        <Band>
+          <Half>
             <SectionLabel icon="code">{'ENCODING HELPERS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Pure JavaScript format conversions — no bridge, no Lua, no latency. Convert between Uint8Array, hex strings, and base64. Available as standalone imports.'}
             </Text>
+          </Half>
+          <Half>
             <CodeBlock language="tsx" fontSize={9} code={ENCODING_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="list">{'ALGORITHM CATALOG'}</SectionLabel>
-            <Text style={{ color: c.muted, fontSize: 9, marginBottom: 4 }}>{'Everything useCrypto() exposes:'}</Text>
-            <AlgorithmCatalog />
-          </Box>
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Band 8: algorithm catalog (full width) ── */}
+        <Box style={{
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 24,
+          gap: 8,
+        }}>
+          <SectionLabel icon="list">{'ALGORITHM CATALOG'}</SectionLabel>
+          <Text style={{ color: c.muted, fontSize: 9 }}>{'Everything useCrypto() exposes:'}</Text>
+          <AlgorithmCatalog />
         </Box>
 
         <Divider />

@@ -262,6 +262,7 @@ function Capabilities.loadAll()
     "terminal",
     "semantic_terminal",
     "notification",
+    "render",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

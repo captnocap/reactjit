@@ -375,6 +375,16 @@ function Masks.loadAll()
     "vhs",
     "dither",
     "ascii",
+    "luma_mesh",
+    "optical_flow",
+    "data_mosh",
+    "feedback",
+    "hard_glitch",
+    "soft_glitch",
+    "stretch",
+    "fish_eye",
+    "tile",
+    "watercolor",
   }
   for _, name in ipairs(maskFiles) do
     local ok, err = pcall(require, "lua.masks." .. name)

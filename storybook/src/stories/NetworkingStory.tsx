@@ -6,8 +6,9 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Input } from '../../../packages/core/src';
+import { useScrape } from '../../../packages/core/src/useScrape';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -222,6 +223,115 @@ function SectionLabel({ icon, children }: { icon: string; children: string }) {
   );
 }
 
+// ── Scrape live demo ────────────────────────────────────
+
+const SCRAPE_PRESETS: { label: string; url: string; selectors: Record<string, string> }[] = [
+  { label: 'Example.com', url: 'https://example.com', selectors: { title: 'h1', description: 'p:first', link: 'a@href' } },
+  { label: 'HN', url: 'https://news.ycombinator.com', selectors: { title: '.titleline a', score: '.score', site: '.sitestr' } },
+  { label: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Lua_(programming_language)', selectors: { title: 'h1', summary: '.mw-parser-output > p:first', infobox: '.infobox th' } },
+];
+
+function ScrapeDemo() {
+  const c = useThemeColors();
+  const [url, setUrl] = useState(SCRAPE_PRESETS[0].url);
+  const [selectors, setSelectors] = useState(SCRAPE_PRESETS[0].selectors);
+  const [activeUrl, setActiveUrl] = useState<string | null>(SCRAPE_PRESETS[0].url);
+  const { data, loading, error, refetch } = useScrape(activeUrl, selectors);
+
+  const handlePreset = (p: typeof SCRAPE_PRESETS[number]) => {
+    setUrl(p.url);
+    setSelectors(p.selectors);
+    setActiveUrl(p.url);
+  };
+
+  const handleGo = () => setActiveUrl(url);
+
+  return (
+    <Box style={{ gap: 10 }}>
+      {/* Preset buttons */}
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {SCRAPE_PRESETS.map(p => (
+          <Pressable key={p.label} onPress={() => handlePreset(p)}>
+            <Box style={{
+              backgroundColor: activeUrl === p.url ? C.accent : C.accentDim,
+              paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4,
+              borderRadius: 4,
+            }}>
+              <Text style={{ fontSize: 9, color: activeUrl === p.url ? '#1e1e2e' : C.accent }}>{p.label}</Text>
+            </Box>
+          </Pressable>
+        ))}
+      </Box>
+
+      {/* URL bar */}
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Box style={{ flexGrow: 1 }}>
+          <Input
+            value={url}
+            onChangeText={setUrl}
+            onSubmit={handleGo}
+            placeholder="https://..."
+            style={{ fontSize: 10, fontFamily: 'monospace' }}
+          />
+        </Box>
+        <Pressable onPress={handleGo}>
+          <Box style={{ backgroundColor: C.accent, paddingLeft: 12, paddingRight: 12, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+            <Text style={{ fontSize: 9, color: '#1e1e2e', fontWeight: 'bold' }}>{'Go'}</Text>
+          </Box>
+        </Pressable>
+      </Box>
+
+      {/* Selectors being used */}
+      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+        {Object.entries(selectors).map(([k, v]) => (
+          <Box key={k} style={{ backgroundColor: C.accentDim, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 3 }}>
+            <Text style={{ fontSize: 8, color: C.accent, fontFamily: 'monospace' }}>{`${k}: '${v}'`}</Text>
+          </Box>
+        ))}
+      </Box>
+
+      {/* Results */}
+      {loading ? (
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.rss }} />
+          <Text style={{ fontSize: 10, color: C.rss }}>{'Scraping...'}</Text>
+        </Box>
+      ) : error ? (
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.tor }} />
+          <Text style={{ fontSize: 10, color: C.tor }}>{error}</Text>
+        </Box>
+      ) : data ? (
+        <Box style={{ gap: 3 }}>
+          {Object.entries(data).map(([key, value]) => {
+            const display = value == null ? 'null'
+              : Array.isArray(value) ? `[${value.length}] ${value.slice(0, 3).join(' \u2022 ')}${value.length > 3 ? ' ...' : ''}`
+              : String(value).length > 120 ? String(value).slice(0, 120) + '\u2026'
+              : String(value);
+            return (
+              <Box key={key} style={{ flexDirection: 'row', gap: 8 }}>
+                <Box style={{ width: 70 }}>
+                  <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{key}</Text>
+                </Box>
+                <Text style={{ color: c.text, fontSize: 9, flexShrink: 1 }}>{display}</Text>
+              </Box>
+            );
+          })}
+        </Box>
+      ) : null}
+
+      {/* Refetch */}
+      {data ? (
+        <Pressable onPress={refetch}>
+          <Box style={{ backgroundColor: C.accentDim, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, borderRadius: 4, alignSelf: 'start' }}>
+            <Text style={{ color: C.accent, fontSize: 9 }}>{'Refetch'}</Text>
+          </Box>
+        </Pressable>
+      ) : null}
+    </Box>
+  );
+}
+
 // ── NetworkingStory ─────────────────────────────────────
 
 export function NetworkingStory() {
@@ -260,7 +370,7 @@ export function NetworkingStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'HTTP, WebSockets, scraping, servers, RSS, Tor, webhooks'}
+          {'Fetch & send cat pics'}
         </Text>
       </Box>
 
@@ -281,7 +391,7 @@ export function NetworkingStory() {
             {'Every network primitive as a one-liner React hook.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Fetch JSON, open WebSockets, host servers, scrape pages, subscribe to RSS feeds, route through Tor, and verify webhooks — all from declarative hooks backed by non-blocking Lua I/O. Zero socket code. Zero callback wiring.'}
+            {'Fetch JSON, open WebSockets, host servers, scrape pages, subscribe to RSS feeds, route through Tor, verify webhooks, and plug into Spotify, GitHub, TMDB, CoinGecko, NASA, and Philips Hue — all from declarative hooks backed by non-blocking Lua I/O. Zero socket code. Zero callback wiring.'}
           </Text>
         </Box>
 
@@ -295,9 +405,9 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Networking spans multiple packages. Core hooks (useFetch, useWebSocket, useScrape) live in @reactjit/core. Server, RSS, and webhooks are separate packages.'}
@@ -316,10 +426,10 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={FETCH_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="cloud">{'FETCH'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Universal HTTP client. Pass a URL, get typed data back with loading and error states. Pass null to conditionally skip the request. Backed by Lua async HTTP with thread pool workers — never blocks the render loop.'}
@@ -337,9 +447,9 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="wifi">{'WEBSOCKET CLIENT'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Persistent WebSocket connection with automatic reconnect. The Lua side handles the RFC 6455 handshake, frame parsing, and keepalive. React just sees status, send, and lastMessage. Supports .onion URLs via SOCKS5 tunneling.'}
@@ -358,10 +468,10 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={PEER_SERVER_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="wifi">{'PEER SERVER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Host a WebSocket server directly from your React app. Peers connect, you broadcast or send targeted messages. Perfect for local multiplayer, device sync, or P2P tooling. The Lua wsserver handles handshakes and frame masking.'}
@@ -392,7 +502,7 @@ export function NetworkingStory() {
 
         <Divider />
 
-        {/* ── Band 5: SCRAPE — text | code ── */}
+        {/* ── Band 5: SCRAPE — demo | text ── */}
         <Box style={{
           flexDirection: 'row',
           paddingLeft: 28,
@@ -400,15 +510,18 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <ScrapeDemo />
+          </Box>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="globe">{'WEB SCRAPING'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Two modes: expert (provide CSS selectors) or guided (browse an element catalog and pick by ID). Inline HTML parser runs in QuickJS — no DOM needed. Supports auto-refetch intervals, attribute extraction, and descendant combinators.'}
+              {'Two modes: expert (provide CSS selectors) or guided (browse an element catalog and pick by ID). Inline HTML parser runs in QuickJS — no DOM needed. Supports attribute extraction, descendant combinators, and auto-refetch intervals.'}
             </Text>
+            <CodeBlock language="tsx" fontSize={9} code={SCRAPE_CODE} />
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={SCRAPE_CODE} />
         </Box>
 
         <Divider />
@@ -421,10 +534,10 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={SERVER_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="hard-drive">{'HTTP SERVER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Three hooks, three levels of abstraction. useServer for full control with dynamic routes and static files. useStaticServer for one-liner directory serving. useLibrary for auto-indexed media serving with search, type filtering, and directory stats.'}
@@ -445,9 +558,9 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="shield">{'TOR NETWORK'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Hidden service networking built into the runtime. The Lua side manages the Tor subprocess, generates torrc, polls for the .onion hostname, and provides a SOCKS5 proxy. WebSocket connections to .onion addresses auto-route through the proxy. HTTP requests honor ALL_PROXY for transparent onion routing.'}
@@ -490,10 +603,10 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={RSS_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="globe">{'RSS FEEDS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Subscribe to RSS/Atom feeds with automatic polling, deduplication, and item limiting. useRSSAggregate merges multiple feeds sorted by date. Built-in XML parser works in QuickJS — no DOM or external dependencies.'}
@@ -511,9 +624,9 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 20,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="lock">{'WEBHOOKS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Receive and send webhooks with HMAC-SHA256 signing and timing-safe verification. useWebhook spins up a listener on a port. sendWebhook fires outbound hooks with automatic signature headers.'}
@@ -532,13 +645,158 @@ export function NetworkingStory() {
           paddingTop: 20,
           paddingBottom: 24,
           gap: 24,
-          alignItems: 'start',
+          alignItems: 'center',
         }}>
           <CodeBlock language="tsx" fontSize={9} code={PROXY_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="shield">{'PROXY SUPPORT'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'All HTTP requests honor standard proxy environment variables. HTTP, HTTPS, and SOCKS5 proxies are supported with optional authentication. The Lua HTTP worker handles proxy negotiation in its thread pool — transparent to React.'}
+            </Text>
+          </Box>
+        </Box>
+
+        {/* ── Callout: API Integrations ── */}
+        <Box style={{
+          backgroundColor: C.callout,
+          borderLeftWidth: 3,
+          borderColor: C.calloutBorder,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'API integrations are networking hooks with pre-built UI components. Each hook fetches from a public API via useFetch, returns typed data, and has a matching component for one-liner rendering.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 11: SPOTIFY / MUSIC — text | code ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="music">{'MUSIC — SPOTIFY / LAST.FM'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Now-playing, top tracks, and top artists from Spotify or Last.fm. NowPlayingCard shows live progress. TrackRow and ArtistRow for ranked lists with playcount badges. All data comes from one hook call.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={SPOTIFY_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 12: MEDIA — code | text ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={MEDIA_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="film">{'MEDIA — TMDB / TRAKT'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Movie and TV lookups via TMDB. MediaPosterCard renders poster art with a score badge and year overlay. Pass posterUrl from tmdbImage() for real artwork, or leave blank for a placeholder.'}
+            </Text>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 13: CRYPTO — text | code ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="bar-chart-2">{'CRYPTO — COINGECKO'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Live coin market data with price, 24h change, and optional sparkline chart. CoinTickerRow renders a compact row with green/red change indicator. Sparkline data comes from CoinGecko\'s 7-day price history.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={CRYPTO_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 14: GITHUB — code | text ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={GITHUB_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="github">{'GITHUB'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Profile, repos, stats, and activity feed. GitHubUserCard for the profile header. RepoCard for pinned repos with language dot and star count. StatCard for KPI tiles with trend arrows. ActivityRow for timeline events with colored dots.'}
+            </Text>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 15: NASA — text | code ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="star">{'NASA — APOD'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Astronomy Picture of the Day. The zero-config <APOD /> component uses a built-in demo key. APODCard renders full-width image with title, date, explanation, and copyright.'}
+            </Text>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={NASA_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 16: HUE — code | text ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 24,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={HUE_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="sun">{'SMART HOME — PHILIPS HUE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Bridge discovery and light control. useHueLights returns live state for all lights with toggle and brightness controls. HueLightBadge shows color, on/off state, and brightness level. Uses hueXYToHex() for CIE color conversion.'}
             </Text>
           </Box>
         </Box>

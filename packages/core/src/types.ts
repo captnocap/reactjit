@@ -458,6 +458,52 @@ export interface VideoPlayerProps extends VideoProps {
   controls?: boolean;
 }
 
+export interface RenderProps {
+  /**
+   * Source identifier:
+   * - "screen:N"       — screen capture (XShm fast path)
+   * - "cam:N"          — webcam via v4l2
+   * - "hdmi:N"         — HDMI capture card
+   * - "window:Title"   — capture a window by title
+   * - "/dev/videoN"    — direct v4l2 device
+   * - "display"        — virtual display (Xephyr/Xvfb, apps render to it)
+   * - "file.iso"       — boot a VM from ISO
+   * - "vm:path.qcow2"  — boot a VM from disk image
+   */
+  source: string;
+  /** Capture framerate (default: 30) */
+  fps?: number;
+  /** Capture resolution e.g. "1920x1080" (default: "1280x720") */
+  resolution?: string;
+  /** Enable mouse/keyboard input forwarding to source (default: false for capture, true for display/vm) */
+  interactive?: boolean;
+  /** Suppress audio from source (default: true) */
+  muted?: boolean;
+  /** Scaling mode (default: "contain") */
+  objectFit?: 'fill' | 'contain' | 'cover';
+
+  // VM configuration (only used when source is an ISO/disk image)
+  /** VM RAM in MB (default: 2048) */
+  vmMemory?: number;
+  /** VM CPU count (default: 2) */
+  vmCpus?: number;
+
+  // Shorthand props
+  w?: number | string;
+  h?: number | string;
+  radius?: number;
+
+  style?: Style;
+
+  // Events
+  onReady?: (event?: { displayNumber?: number; vmInfo?: { pid: number; vncPort: number } }) => void;
+  onError?: (event: { message: string }) => void;
+  onFrame?: (event: { frameNumber: number }) => void;
+  onClick?: (event: LoveEvent) => void;
+
+  key?: string | number;
+}
+
 export interface EmulatorProps {
   /** ROM file path (relative to Love2D filesystem, e.g. "game.nes"). Optional — can load via file drop instead. */
   src?: string;
@@ -762,6 +808,8 @@ export interface WindowProps {
   height?: number;
   x?: number;
   y?: number;
+  /** Monitor/display index (1-based). Default: same monitor as the parent window. */
+  display?: number;
   borderless?: boolean;
   alwaysOnTop?: boolean;
   onClose?: (event: LoveEvent) => void;
@@ -789,7 +837,19 @@ export interface NotificationProps {
   position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   /** Hex color for accent stripe (default "4C9EFF") */
   accent?: string;
+  /** Notification width (default 380) */
+  width?: number;
+  /** Notification height (default 100) */
+  height?: number;
+  /** Monitor/display index (1-based). Default: same monitor as the parent window. */
+  display?: number;
+  /** Exact X position (overrides position-based placement) */
+  x?: number;
+  /** Exact Y position (overrides position-based placement) */
+  y?: number;
   onDismiss?: () => void;
+  /** Custom content — when provided, renders a full React tree in the notification window */
+  children?: React.ReactNode;
 }
 
 /**

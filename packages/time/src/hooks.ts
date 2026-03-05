@@ -328,3 +328,63 @@ export function useInterval(fn: () => void, intervalMs: number): void {
     );
   }, [bridge, intervalMs]);
 }
+
+// ── useFrameInterval — fire every N frames ─────────────────────────────────────
+
+/**
+ * Call `fn` every `frames` Love2D frames. Unlike `useInterval` which uses
+ * wall-clock time, this counts actual rendered frames — perfect for
+ * animation steps, physics ticks, or any logic that should be tied to
+ * the render loop rather than real time.
+ *
+ * At 60fps, `useFrameInterval(fn, 60)` fires roughly once per second,
+ * but stays in sync with the frame cadence even when the framerate drops.
+ *
+ * @example
+ * // Fire every frame (every 1 frame)
+ * useFrameInterval(() => stepPhysics(), 1);
+ *
+ * // Fire every 100 frames
+ * useFrameInterval(() => setCount(c => c + 1), 100);
+ *
+ * // Animate at half framerate
+ * useFrameInterval(() => nextSprite(), 2);
+ */
+export function useFrameInterval(fn: () => void, frames: number): void {
+  const bridge = useBridge();
+  const fnRef  = useRef(fn);
+  fnRef.current = fn;
+
+  useEffect(() => {
+    if (frames <= 0) return;
+
+    const every = Math.max(1, Math.floor(frames));
+    const eventName = `time:frame:${++_scheduleCounter}`;
+
+    let timerId: number | null = null;
+    let disposed = false;
+
+    bridge.rpc<{ id: number }>('timer:frame:create', {
+      every,
+      event: eventName,
+    }).then(res => {
+      if (disposed) {
+        bridge.rpc('timer:frame:cancel', { id: res.id });
+      } else {
+        timerId = res.id;
+      }
+    });
+
+    const unsub = bridge.subscribe(eventName, () => {
+      if (!disposed) fnRef.current();
+    });
+
+    return () => {
+      disposed = true;
+      unsub();
+      if (timerId != null) {
+        bridge.rpc('timer:frame:cancel', { id: timerId });
+      }
+    };
+  }, [bridge, frames]);
+}

@@ -174,7 +174,7 @@ const BAND_STYLE = {
   alignItems: 'center' as const,
 };
 
-const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const, justifyContent: 'center' as const };
 
 // ── Vec2 Demo ───────────────────────────────────────────
 
@@ -414,20 +414,20 @@ function FFTDemo() {
       </Text>
       <Box style={{ gap: 2 }}>
         <Text style={{ color: c.textDim, fontSize: 8 }}>Waveform</Text>
-        <Box style={{ flexDirection: 'row', gap: 1, height: 32, alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 0, height: 32, alignItems: 'center' }}>
           {samples.map((v, i) => (
-            <Box key={i} style={{ width: 6, height: Math.max(1, Math.abs(v) * 14), backgroundColor: C.fft + '88', borderRadius: 1 }} />
+            <Box key={i} style={{ width: 4, height: Math.max(1, Math.abs(v) * 14), backgroundColor: C.fft + '88', borderRadius: 1 }} />
           ))}
         </Box>
       </Box>
       {spectrum ? (
         <Box style={{ gap: 2 }}>
           <Text style={{ color: c.textDim, fontSize: 8 }}>Magnitude spectrum</Text>
-          <Box style={{ flexDirection: 'row', gap: 1, height: 40, alignItems: 'end' }}>
+          <Box style={{ flexDirection: 'row', gap: 0, height: 40, alignItems: 'end' }}>
             {spectrum.slice(0, halfN).map((v, i) => {
               const maxV = Math.max(...spectrum.slice(0, halfN));
               const h = maxV > 0 ? Math.max(1, (v / maxV) * 38) : 1;
-              return <Box key={i} style={{ width: 8, height: h, backgroundColor: C.fft + '66', borderRadius: 1 }} />;
+              return <Box key={i} style={{ width: 6, height: h, backgroundColor: C.fft + '66', borderRadius: 1 }} />;
             })}
           </Box>
         </Box>
@@ -548,7 +548,7 @@ export function MathStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Vector, matrix, quaternion, interpolation, geometry, noise, FFT, bezier'}
+          {"Dubs, check 'em"}
         </Text>
       </Box>
 

@@ -431,7 +431,7 @@ export function InputStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Buttons, sliders, toggles, text fields, and more.'}
+          {'I like to be handled'}
         </Text>
       </Box>
 

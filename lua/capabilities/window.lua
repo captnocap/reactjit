@@ -27,6 +27,7 @@
 local Capabilities = require("lua.capabilities")
 local IPC = require("lua.window_ipc")
 local json = require("lua.json")
+local processRegistry = require("lua.process_registry")
 
 -- Active child windows: windowId → { server, conn, port, nodeId, width, height }
 local children = {}
@@ -46,6 +47,13 @@ do
     -- Fallback: try relative to working directory
     childWindowPath = "lua/child_window"
   end
+end
+
+--- Get the display index the parent window is currently on.
+local function getParentDisplay()
+  local ok, x, y, d = pcall(love.window.getPosition)
+  if ok and d and d > 0 then return d end
+  return 1
 end
 
 --- Spawn a child Love2D process with the given config.
@@ -69,9 +77,20 @@ local function spawnChild(title, width, height, ipcPort, opts)
   if opts.y then
     envParts[#envParts + 1] = string.format('REACTJIT_WINDOW_Y=%d', opts.y)
   end
-  local cmd = table.concat(envParts, ' ') .. ' love ' .. childWindowPath .. ' &'
-  io.write("[window] spawning child: " .. cmd .. "\n"); io.flush()
-  os.execute(cmd)
+  if opts.display then
+    envParts[#envParts + 1] = string.format('REACTJIT_WINDOW_DISPLAY=%d', opts.display)
+  end
+  local baseCmd = table.concat(envParts, ' ') .. ' love ' .. childWindowPath
+  io.write("[window] spawning child: " .. baseCmd .. "\n"); io.flush()
+  local pidHandle = io.popen(baseCmd .. " & echo $!")
+  if pidHandle then
+    local pid = pidHandle:read("*l")
+    pidHandle:close()
+    if pid and pid:match("%d+") then
+      processRegistry.register(pid)
+      return pid
+    end
+  end
 end
 
 Capabilities.register("Window", {
@@ -84,6 +103,7 @@ Capabilities.register("Window", {
     height      = { type = "number",  default = 480, desc = "Window height in pixels" },
     x           = { type = "number",  desc = "Window x position (centered if omitted)" },
     y           = { type = "number",  desc = "Window y position (centered if omitted)" },
+    display     = { type = "number",  default = 0, desc = "Monitor index (1-based). 0 = same as parent window." },
     borderless  = { type = "boolean", default = false, desc = "Remove window decorations" },
     alwaysOnTop = { type = "boolean", default = false, desc = "Keep window above all others" },
   },
@@ -115,13 +135,23 @@ Capabilities.register("Window", {
       initSent   = false,    -- set after initial subtree is sent
     }
 
+    -- Resolve display: explicit prop > parent window's display
+    local displayIndex = props.display
+    if not displayIndex or displayIndex <= 0 then
+      displayIndex = getParentDisplay()
+    end
+    local displayCount = love.window.getDisplayCount()
+    if displayIndex > displayCount then displayIndex = 1 end
+
     -- Spawn the child Love2D process
-    spawnChild(title, width, height, port, {
+    local childPid = spawnChild(title, width, height, port, {
       borderless  = props.borderless,
       alwaysOnTop = props.alwaysOnTop,
       x           = props.x,
       y           = props.y,
+      display     = displayIndex,
     })
+    children[windowId].pid = childPid
 
     io.write("[window] created child window #" .. windowId .. " for node " .. tostring(nodeId) .. " (port " .. port .. ")\n"); io.flush()
     return { windowId = windowId }
@@ -163,6 +193,9 @@ Capabilities.register("Window", {
     end
     if child.server then
       pcall(function() child.server:close() end)
+    end
+    if child.pid then
+      processRegistry.unregister(child.pid)
     end
 
     children[state.windowId] = nil

@@ -214,7 +214,7 @@ const bandStyle = {
   alignItems: 'center' as const,
 };
 
-const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const, justifyContent: 'center' as const };
 
 // ── Live Demo: useLocalStore Counter ─────────────────────
 
@@ -410,7 +410,7 @@ export function StorageStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Persistent state, documents, SQL, CRUD, search'}
+          {'Forget me knots'}
         </Text>
       </Box>
 

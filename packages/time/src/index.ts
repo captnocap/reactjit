@@ -15,8 +15,8 @@ export type {
   FormatDateOptions,
 } from './types';
 
-export type { ClockProps, StopwatchProps, CountdownProps, TickerProps } from './widgets';
-export { Clock, Stopwatch, Countdown, Ticker } from './widgets';
+export type { ClockProps, StopwatchProps, CountdownProps, TickerProps, FrameTickerProps } from './widgets';
+export { Clock, Stopwatch, Countdown, Ticker, FrameTicker } from './widgets';
 
 export {
   // Wall clock
@@ -28,6 +28,7 @@ export {
   // Precision scheduling
   useOnTime,
   useInterval,
+  useFrameInterval,
 } from './hooks';
 
 export {

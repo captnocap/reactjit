@@ -305,6 +305,33 @@ The layout engine has three sizing tiers. They resolve in order — the first on
 3. **ScrollView needs explicit height** — scroll containers are excluded from the proportional fallback. They need `height` or `flexGrow` to define their viewport
 4. **Don't mix text and expressions in `<Text>`** — `<Text>Hello {name}!</Text>` creates 3 separate `__TEXT__` nodes that stack vertically instead of rendering inline. Use a template literal: `{`Hello ${name}!`}`. The linter enforces this via `no-mixed-text-children` (pending reconciler-level fix to make this just work)
 
+### The Scissor Rule (NON-NEGOTIABLE)
+
+**Never use raw `love.graphics.setScissor(x, y, w, h)` with content-space coordinates inside a Lua renderer.** `setScissor` operates in screen/window coordinates and ignores the current transform stack. When a node is inside a ScrollView, the painter applies `love.graphics.translate(-scrollX, -scrollY)` — drawing coordinates shift correctly, but a raw scissor stays in the wrong position. The chart elements lived with this bug for weeks.
+
+**The correct pattern** (used by `codeblock.lua`, `painter.lua`, and `chart.lua`):
+
+```lua
+-- Save previous scissor and convert content coords → screen coords
+local psx, psy, psw, psh = love.graphics.getScissor()
+local sx, sy = love.graphics.transformPoint(x, y)
+local sx2, sy2 = love.graphics.transformPoint(x + w, y + h)
+love.graphics.intersectScissor(sx, sy, math.max(0, sx2 - sx), math.max(0, sy2 - sy))
+
+-- ... draw content ...
+
+-- Restore previous scissor
+if psx then
+  love.graphics.setScissor(psx, psy, psw, psh)
+else
+  love.graphics.setScissor()
+end
+```
+
+**Why `intersectScissor` not `setScissor`:** Parent nodes (ScrollView, overflow:hidden containers) may already have an active scissor region. `intersectScissor` respects that; `setScissor` clobbers it.
+
+**When this applies:** Any Lua module that renders content inside a node's bounds (chart.lua, codeblock.lua, texteditor.lua, latex.lua, any future canvas-like renderer). If you're drawing in overlay/inspector/devtools code that uses absolute screen coordinates, raw `setScissor` is fine.
+
 ### Layout anti-patterns (DO NOT DO)
 
 - **Hardcoding pixel heights to fit a known window size.** `<Scene style={{ height: 260 }}/>` in a 600px-tall parent leaves 340px of dead air. Use `flexGrow: 1` instead and let the element fill available space.

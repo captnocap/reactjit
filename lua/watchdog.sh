@@ -263,8 +263,13 @@ CRASHEOF
   BOOT_ELAPSED=$(( NOW_EPOCH - (START_NS / 1000000000) ))
   if [ "$BOOT_ELAPSED" -gt "$HEARTBEAT_GRACE" ] && [ -f "$HEARTBEAT_FILE" ]; then
     HEARTBEAT_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || echo 0)
+    # Validate: must be a recent epoch timestamp (not empty/zero/garbage)
+    if [ -z "$HEARTBEAT_TS" ] || ! [ "$HEARTBEAT_TS" -gt 0 ] 2>/dev/null; then
+      HEARTBEAT_TS=0
+    fi
+    # Skip if timestamp is clearly bogus (age > 1 hour = bad read, retry next cycle)
     HEARTBEAT_AGE=$(( NOW_EPOCH - HEARTBEAT_TS ))
-    if [ "$HEARTBEAT_AGE" -gt "$HEARTBEAT_TIMEOUT" ]; then
+    if [ "$HEARTBEAT_TS" -gt 0 ] && [ "$HEARTBEAT_AGE" -gt "$HEARTBEAT_TIMEOUT" ] && [ "$HEARTBEAT_AGE" -lt 3600 ]; then
       RSS_MB=$((RSS_KB / 1024))
       echo "" >&2
       echo "[WATCHDOG] FROZEN — heartbeat stale for ${HEARTBEAT_AGE}s (threshold: ${HEARTBEAT_TIMEOUT}s, RSS: ${RSS_MB}MB)" >&2

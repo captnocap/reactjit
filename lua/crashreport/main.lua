@@ -18,8 +18,29 @@ local fontSmall = nil
 local fontMono = nil
 local fontLabel = nil
 local copyFeedback = 0
-local rebootBtn = { x = 0, y = 0, w = 0, h = 0 }
+local btns = {
+  reboot = { x = 0, y = 0, w = 0, h = 0 },
+  copy   = { x = 0, y = 0, w = 0, h = 0 },
+  quit   = { x = 0, y = 0, w = 0, h = 0 },
+}
+local rebootBtn = { x = 0, y = 0, w = 0, h = 0 }  -- legacy alias
 local hoveringReboot = false
+
+-- Auto-close: if the parent process is dead, this window is orphaned.
+-- Check /proc/<parentPID> periodically and quit after a grace period.
+local parentPid = nil           -- set from crash data or PPID
+local orphanCheckTimer = 0      -- seconds since last check
+local ORPHAN_CHECK_INTERVAL = 3 -- check every 3 seconds
+local orphanGraceTimer = nil    -- countdown once parent is confirmed dead
+local ORPHAN_GRACE_SECS = 30    -- auto-close 30s after parent dies
+
+--- Check if a PID is alive via /proc (Linux only).
+local function pidAlive(pid)
+    if not pid then return true end  -- can't check = assume alive
+    local f = io.open("/proc/" .. tostring(pid) .. "/status", "r")
+    if f then f:close(); return true end
+    return false
+end
 
 -- Cross-platform temp dir
 local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
@@ -55,6 +76,21 @@ function love.load()
             trail = "",
             timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         }
+    end
+
+    -- Determine parent PID for orphan detection
+    parentPid = crashData.parentPid
+    if not parentPid then
+        -- Fallback: read our own PPID from /proc
+        local ppf = io.open("/proc/self/status", "r")
+        if ppf then
+            local status = ppf:read("*a")
+            ppf:close()
+            local ppid = status:match("PPid:%s*(%d+)")
+            if ppid and tonumber(ppid) > 1 then
+                parentPid = tonumber(ppid)
+            end
+        end
     end
 
     -- Read Lua-side subsystem snapshot if available
@@ -398,42 +434,69 @@ function love.draw()
     love.graphics.pop()
 
     -- Bottom bar (fixed)
+    local barH2 = 48
     love.graphics.setColor(0.12, 0.12, 0.15)
-    love.graphics.rectangle("fill", 0, H - 48, W, 48)
+    love.graphics.rectangle("fill", 0, H - barH2, W, barH2)
+    love.graphics.setColor(0.85, 0.20, 0.25, 0.3)
+    love.graphics.rectangle("fill", 0, H - barH2, W, 1)
 
-    -- Reboot button
-    local canReboot = crashData.rebootCmd and crashData.rebootCmd ~= ""
-    if canReboot then
-        local btnW, btnH = 90, 30
-        local btnX = W - pad - btnW
-        local btnY = H - 39
-        rebootBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
+    love.graphics.setFont(fontSmall)
 
-        if hoveringReboot then
-            love.graphics.setColor(0.25, 0.55, 1.0)
-        else
-            love.graphics.setColor(0.2, 0.45, 0.9)
-        end
-        love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 4, 4)
-        love.graphics.setFont(fontSmall)
-        love.graphics.setColor(1, 1, 1)
-        local textW = fontSmall:getWidth("Reboot")
-        love.graphics.print("Reboot", btnX + (btnW - textW) / 2, btnY + 8)
+    -- Watcher status (left side)
+    if orphanGraceTimer then
+        love.graphics.setColor(0.85, 0.20, 0.25)
+        love.graphics.print(string.format("Parent process gone — closing in %ds", math.ceil(orphanGraceTimer)), pad, H - 30)
+    else
+        love.graphics.setColor(0.5, 0.5, 0.6)
+        love.graphics.print("Process crashed — external report", pad, H - 30)
     end
 
-    -- Help text
-    love.graphics.setFont(fontSmall)
-    love.graphics.setColor(0.5, 0.5, 0.6)
-    local help = "Esc close    Ctrl+C copy"
-    if canReboot then help = help .. "    R reboot" end
-    love.graphics.print(help, pad, H - 34)
+    -- Clickable buttons (right side, right-to-left)
+    local btnH3 = 28
+    local btnY3 = H - barH2 + math.floor((barH2 - btnH3) / 2)
+    local btnPadX = 10
+    local btnGap = 8
+    local btnX3 = W - pad
 
-    -- Copy feedback
+    local mx, my = love.mouse.getPosition()
+
+    local function drawBtn(name, label, bgColor, textColor)
+        local tw = fontSmall:getWidth(label)
+        local bw = tw + btnPadX * 2
+        btnX3 = btnX3 - bw
+        btns[name].x, btns[name].y, btns[name].w, btns[name].h = btnX3, btnY3, bw, btnH3
+
+        local hovered = mx >= btnX3 and mx <= btnX3 + bw
+                    and my >= btnY3 and my <= btnY3 + btnH3
+
+        if hovered then
+            love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.9)
+        else
+            love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.6)
+        end
+        love.graphics.rectangle("fill", btnX3, btnY3, bw, btnH3, 4, 4)
+
+        love.graphics.setColor(textColor[1], textColor[2], textColor[3])
+        love.graphics.print(label, btnX3 + btnPadX, btnY3 + math.floor((btnH3 - fontSmall:getHeight()) / 2))
+
+        btnX3 = btnX3 - btnGap
+    end
+
     if copyFeedback > 0 then
         love.graphics.setColor(0.3, 1, 0.3)
-        local feedX = canReboot and (W - pad - 90 - 80) or (W - pad - 60)
-        love.graphics.print("Copied!", feedX, H - 34)
+        local fw = fontSmall:getWidth("Copied!")
+        love.graphics.print("Copied!", W - pad - fw, H - 30)
+    else
+        drawBtn("quit",   "Quit",   { 0.30, 0.28, 0.35 }, { 0.55, 0.52, 0.50 })
+        drawBtn("copy",   "Copy",   { 0.25, 0.30, 0.40 }, { 0.50, 0.60, 0.75 })
+        local canReboot = crashData.rebootCmd and crashData.rebootCmd ~= ""
+        if canReboot then
+            drawBtn("reboot", "Reboot", { 0.85, 0.20, 0.25 }, { 0.92, 0.90, 0.88 })
+        end
     end
+
+    -- Keep legacy alias in sync for update() hover check
+    rebootBtn = btns.reboot
 
     -- Scroll indicator
     if maxScrollY > 0 then
@@ -450,15 +513,117 @@ function love.update(dt)
     local mx, my = love.mouse.getPosition()
     hoveringReboot = mx >= rebootBtn.x and mx <= rebootBtn.x + rebootBtn.w
         and my >= rebootBtn.y and my <= rebootBtn.y + rebootBtn.h
+
+    -- Orphan detection: auto-close if parent process is dead.
+    -- The crash report window should never sit around forever as a zombie.
+    orphanCheckTimer = orphanCheckTimer + dt
+    if orphanCheckTimer >= ORPHAN_CHECK_INTERVAL then
+        orphanCheckTimer = 0
+        if not pidAlive(parentPid) then
+            if not orphanGraceTimer then
+                orphanGraceTimer = ORPHAN_GRACE_SECS
+            end
+        else
+            orphanGraceTimer = nil  -- parent came back (restart)
+        end
+    end
+    if orphanGraceTimer then
+        orphanGraceTimer = orphanGraceTimer - dt
+        if orphanGraceTimer <= 0 then
+            love.event.quit()
+        end
+    end
 end
 
 function love.wheelmoved(x, y)
     scrollY = math.max(0, math.min(maxScrollY, scrollY - y * 40))
 end
 
+local function doCopy()
+    local parts = {
+        "ReactJIT Crash Report",
+        crashData.timestamp or "",
+        "",
+        "Context: " .. (crashData.context or ""),
+        "",
+        "Error:",
+        crashData.error or "",
+    }
+    if crashData.faultLib and crashData.faultLib ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- Crash Location ---"
+        parts[#parts + 1] = "Faulting library: " .. crashData.faultLib
+        if crashData.faultOffset then parts[#parts + 1] = "Offset: " .. crashData.faultOffset end
+        if crashData.faultSymbol and crashData.faultSymbol ~= "" then parts[#parts + 1] = "Symbol: " .. crashData.faultSymbol end
+        if crashData.faultAddr then parts[#parts + 1] = "Fault address: " .. crashData.faultAddr end
+    end
+    if crashData.dmesg and crashData.dmesg ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- Kernel log (dmesg) ---"
+        parts[#parts + 1] = crashData.dmesg
+    end
+    if crashData.coredump and crashData.coredump ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- Coredump ---"
+        parts[#parts + 1] = crashData.coredump
+    end
+    if crashData.crisisAnalysis and crashData.crisisAnalysis ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "=== CRISIS ANALYSIS ==="
+        parts[#parts + 1] = crashData.crisisAnalysis
+    end
+    if snapshot then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- Subsystem Snapshot ---"
+        local fields = {
+            { "Lua heap KB", "luaMemKB" }, { "RSS KB", "rssKB" },
+            { "Tree nodes", "nodes" }, { "Event handlers", "handlers" },
+            { "Images", "images" }, { "Videos", "videos" },
+            { "3D scenes", "scenes3d" }, { "Animations", "animations" },
+            { "Draw calls", "drawCalls" }, { "Canvases", "canvases" },
+            { "Threads", "threads" }, { "File descriptors", "fds" },
+        }
+        for _, kv in ipairs(fields) do
+            if snapshot[kv[2]] then
+                parts[#parts + 1] = string.format("  %-22s %s", kv[1] .. ":", tostring(snapshot[kv[2]]))
+            end
+        end
+    end
+    if crashData.panicDeltas and crashData.panicDeltas ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- Memory Growth ---"
+        parts[#parts + 1] = crashData.panicDeltas
+    end
+    if crashData.procSnapshot and crashData.procSnapshot ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- /proc at spike #2 ---"
+        parts[#parts + 1] = crashData.procSnapshot
+    end
+    if crashData.procFinal and crashData.procFinal ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- /proc at kill ---"
+        parts[#parts + 1] = crashData.procFinal
+    end
+    if crashData.trail and crashData.trail ~= "" then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = "--- Event Trail ---"
+        parts[#parts + 1] = crashData.trail
+    end
+    love.system.setClipboardText(table.concat(parts, "\n"))
+    copyFeedback = 2
+end
+
 function love.mousepressed(x, y, button)
-    if button == 1 and hoveringReboot then
+    if button ~= 1 then return end
+    local function hitRect(r)
+        return x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h and r.w > 0
+    end
+    if hitRect(btns.reboot) then
         reboot()
+    elseif hitRect(btns.copy) then
+        doCopy()
+    elseif hitRect(btns.quit) then
+        love.event.quit()
     end
 end
 
@@ -468,103 +633,6 @@ function love.keypressed(key)
     elseif key == "r" then
         reboot()
     elseif key == "c" and love.keyboard.isDown("lctrl", "rctrl") then
-        -- Build comprehensive copy text
-        local parts = {
-            "ReactJIT Crash Report",
-            crashData.timestamp or "",
-            "",
-            "Context: " .. (crashData.context or ""),
-            "",
-            "Error:",
-            crashData.error or "",
-        }
-
-        -- Signal crash details
-        if crashData.faultLib and crashData.faultLib ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- Crash Location ---"
-            parts[#parts + 1] = "Faulting library: " .. crashData.faultLib
-            if crashData.faultOffset then parts[#parts + 1] = "Offset: " .. crashData.faultOffset end
-            if crashData.faultSymbol and crashData.faultSymbol ~= "" then parts[#parts + 1] = "Symbol: " .. crashData.faultSymbol end
-            if crashData.faultAddr then parts[#parts + 1] = "Fault address: " .. crashData.faultAddr end
-        end
-        if crashData.dmesg and crashData.dmesg ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- Kernel log (dmesg) ---"
-            parts[#parts + 1] = crashData.dmesg
-        end
-        if crashData.coredump and crashData.coredump ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- Coredump ---"
-            parts[#parts + 1] = crashData.coredump
-        end
-
-        -- Crisis analysis
-        if crashData.crisisAnalysis and crashData.crisisAnalysis ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "=== CRISIS ANALYSIS ==="
-            parts[#parts + 1] = crashData.crisisAnalysis
-        end
-
-        -- Snapshot data
-        if snapshot then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- Subsystem Snapshot ---"
-            local fields = {
-                { "Lua heap KB", "luaMemKB" },
-                { "RSS KB", "rssKB" },
-                { "Tree nodes", "nodes" },
-                { "Event handlers", "handlers" },
-                { "Images", "images" },
-                { "Videos", "videos" },
-                { "3D scenes", "scenes3d" },
-                { "Animations", "animations" },
-                { "Capability types", "capabilityTypes" },
-                { "Capability instances", "capabilityInstances" },
-                { "Windows", "windows" },
-                { "HotState atoms", "hotstateAtoms" },
-                { "Errors", "errors" },
-                { "Draw calls", "drawCalls" },
-                { "Canvases", "canvases" },
-                { "Texture mem KB", "textureMem" },
-                { "Fonts", "fonts" },
-                { "Threads", "threads" },
-                { "File descriptors", "fds" },
-            }
-            for _, kv in ipairs(fields) do
-                if snapshot[kv[2]] then
-                    parts[#parts + 1] = string.format("  %-22s %s", kv[1] .. ":", tostring(snapshot[kv[2]]))
-                end
-            end
-        end
-
-        -- Panic deltas
-        if crashData.panicDeltas and crashData.panicDeltas ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- Memory Growth ---"
-            parts[#parts + 1] = crashData.panicDeltas
-        end
-
-        -- /proc data
-        if crashData.procSnapshot and crashData.procSnapshot ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- /proc at spike #2 ---"
-            parts[#parts + 1] = crashData.procSnapshot
-        end
-        if crashData.procFinal and crashData.procFinal ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- /proc at kill ---"
-            parts[#parts + 1] = crashData.procFinal
-        end
-
-        -- Trail
-        if crashData.trail and crashData.trail ~= "" then
-            parts[#parts + 1] = ""
-            parts[#parts + 1] = "--- Event Trail ---"
-            parts[#parts + 1] = crashData.trail
-        end
-
-        love.system.setClipboardText(table.concat(parts, "\n"))
-        copyFeedback = 2
+        doCopy()
     end
 end

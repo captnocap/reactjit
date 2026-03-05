@@ -16,6 +16,16 @@ import {
   VHS,
   Dither,
   Ascii,
+  LumaMesh,
+  OpticalFlow,
+  DataMosh,
+  FeedbackLoop,
+  HardGlitch,
+  SoftGlitch,
+  Stretch,
+  FishEye,
+  Tile,
+  Watercolor,
   Spirograph,
   Constellation,
   Voronoi,
@@ -49,6 +59,16 @@ const maskLibrary = [
   { id: 'vhs', name: 'VHS', Component: VHS },
   { id: 'dither', name: 'Dither', Component: Dither },
   { id: 'ascii', name: 'Ascii', Component: Ascii },
+  { id: 'lumamesh', name: 'LumaMesh', Component: LumaMesh },
+  { id: 'opticalflow', name: 'OpticalFlow', Component: OpticalFlow },
+  { id: 'datamosh', name: 'DataMosh', Component: DataMosh },
+  { id: 'feedback', name: 'FeedbackLoop', Component: FeedbackLoop },
+  { id: 'hardglitch', name: 'HardGlitch', Component: HardGlitch },
+  { id: 'softglitch', name: 'SoftGlitch', Component: SoftGlitch },
+  { id: 'stretch', name: 'Stretch', Component: Stretch },
+  { id: 'fisheye', name: 'FishEye', Component: FishEye },
+  { id: 'tile', name: 'Tile', Component: Tile },
+  { id: 'watercolor', name: 'Watercolor', Component: Watercolor },
 ] as const;
 type MaskId = (typeof maskLibrary)[number]['id'];
 
@@ -111,7 +131,7 @@ const organizedMappings: Record<Exclude<ProfileId, 'random'>, SurfaceMap> = {
 };
 
 const randomEffectChoices: EffectId[] = ['spirograph', 'constellation', 'voronoi', 'mycelium', 'rings', 'flow', 'none'];
-const randomMaskChoices: MaskId[] = ['scanlines', 'crt', 'vhs', 'dither', 'ascii', 'none'];
+const randomMaskChoices: MaskId[] = ['scanlines', 'crt', 'vhs', 'dither', 'ascii', 'lumamesh', 'opticalflow', 'datamosh', 'feedback', 'hardglitch', 'softglitch', 'stretch', 'fisheye', 'tile', 'watercolor', 'none'];
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -653,6 +673,16 @@ const legacyMasks = [
   { name: 'VHS', Component: VHS },
   { name: 'Dither', Component: Dither },
   { name: 'Ascii', Component: Ascii },
+  { name: 'LumaMesh', Component: LumaMesh },
+  { name: 'OpticalFlow', Component: OpticalFlow },
+  { name: 'DataMosh', Component: DataMosh },
+  { name: 'FeedbackLoop', Component: FeedbackLoop },
+  { name: 'HardGlitch', Component: HardGlitch },
+  { name: 'SoftGlitch', Component: SoftGlitch },
+  { name: 'Stretch', Component: Stretch },
+  { name: 'FishEye', Component: FishEye },
+  { name: 'Tile', Component: Tile },
+  { name: 'Watercolor', Component: Watercolor },
 ] as const;
 
 const legacyBackgrounds = [

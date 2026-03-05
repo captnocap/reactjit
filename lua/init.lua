@@ -52,6 +52,7 @@ local M = {
   emumod   = nil,
   effectsmod = nil,
   masksmod   = nil,
+  rendersource = nil,
   videoplayer = nil,
   focus    = require("lua.focus"),
   texteditor = nil,
@@ -760,6 +761,7 @@ function ReactJIT.init(config)
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.rendersource = require("lua.render_source")
 
     M.tree    = require("lua.tree")
     M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
@@ -770,7 +772,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -841,6 +843,7 @@ function ReactJIT.init(config)
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    -- render_source: SKIPPED in WASM (requires FFmpeg + v4l2)
 
     M.tree    = require("lua.tree")
     M.tree.init({ images = M.images, videos = nil, animate = M.animate, scene3d = M.scene3d })
@@ -851,7 +854,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod, render_source = nil })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -924,6 +927,7 @@ function ReactJIT.init(config)
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.rendersource = require("lua.render_source")
 
     M.tree    = require("lua.tree")
     M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
@@ -934,7 +938,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -1172,6 +1176,30 @@ function ReactJIT.init(config)
     if args and args.id then luaTimers[args.id] = nil end
   end
 
+  -- ── Lua-side frame interval timer service ───────────────────────────
+  -- Like timer:create but counts frames instead of elapsed time.
+  -- JS calls timer:frame:create with { every = N, event = "..." }
+  -- and gets an event pushed every N frames.
+
+  local luaFrameTimers = {}     -- id -> { every, count, event, payload }
+  local luaFrameTimerNextId = 0
+
+  rpcHandlers["timer:frame:create"] = function(args)
+    luaFrameTimerNextId = luaFrameTimerNextId + 1
+    local id = luaFrameTimerNextId
+    luaFrameTimers[id] = {
+      every   = math.max(1, math.floor(args.every or 1)),
+      count   = 0,
+      event   = args.event or ("timer:frame:" .. id),
+      payload = args.payload,
+    }
+    return { id = id }
+  end
+
+  rpcHandlers["timer:frame:cancel"] = function(args)
+    if args and args.id then luaFrameTimers[args.id] = nil end
+  end
+
   -- Tick all lua timers. Called from ReactJIT.update(dt).
   M._tickLuaTimers = function(dt)
     for id, t in pairs(luaTimers) do
@@ -1179,6 +1207,14 @@ function ReactJIT.init(config)
       if t.elapsed >= t.interval then
         t.elapsed = t.elapsed - t.interval
         pushEvent({ type = t.event, payload = t.payload or { timerId = id } })
+      end
+    end
+    -- Frame-based timers: increment count each frame, fire every N
+    for id, ft in pairs(luaFrameTimers) do
+      ft.count = ft.count + 1
+      if ft.count >= ft.every then
+        ft.count = 0
+        pushEvent({ type = ft.event, payload = ft.payload or { timerId = id } })
       end
     end
   end
@@ -1996,8 +2032,10 @@ function ReactJIT.update(dt)
     heartbeatCounter = heartbeatCounter + 1
     if heartbeatCounter >= 60 then
       heartbeatCounter = 0
-      local hf = io.open(heartbeatPath, "w")
-      if hf then hf:write(tostring(os.time())); hf:close() end
+      -- Atomic write: temp file + rename avoids watchdog reading a truncated file
+      local tmp = heartbeatPath .. ".tmp"
+      local hf = io.open(tmp, "w")
+      if hf then hf:write(tostring(os.time())); hf:close(); os.rename(tmp, heartbeatPath) end
     end
   end
 
@@ -3086,6 +3124,13 @@ function ReactJIT.update(dt)
     M.emumod.renderAll()
   end
 
+  -- 8d2b. Sync external capture feeds with tree, read frames, render to off-screen Canvases
+  if M.rendersource then
+    M.rendersource.syncWithTree(M.tree.getNodes())
+    M.rendersource.updateAll()
+    M.rendersource.renderAll()
+  end
+
   -- 8d3. Sync generative effects with tree, update animations, render to off-screen Canvases
   if M.effectsmod then
     M.effectsmod.syncWithTree(M.tree.getNodes())
@@ -3360,14 +3405,16 @@ end
 --- Call once per frame from love.draw().
 --- Paints the retained UI tree (native and canvas modes).
 function ReactJIT.draw()
-  if not isRendering() then return end
-
-  -- Crash recovery mode: full-screen BSOD
+  -- Crash recovery mode: full-screen BSOD — BEFORE isRendering() check.
+  -- If init() crashed, mode is nil and isRendering() is false, but we still
+  -- need to show the BSOD with reboot controls instead of a black screen.
   if crashRecoveryMode then
     errors.drawBSOD()
     if M.gif then M.gif.captureIfReady() end
     return
   end
+
+  if not isRendering() then return end
 
   -- SHM overlay mode: redirect all rendering to the overlay FBO
   local overlayShmActive = M.overlay and M.overlay.shmMode
@@ -3402,6 +3449,7 @@ function ReactJIT.draw()
         devtools.recordFrame(perfSnap.layoutMs, perfSnap.paintMs)
       end
     end
+
     if not ok then
       -- Paint failure corrupts the graphics state (transform stack, stencil depth,
       -- active canvases). Reset EVERYTHING so Love2D can present safely and so the
@@ -5223,6 +5271,7 @@ function ReactJIT.reload()
 
   -- 2. Teardown
   M.bridge:destroy()
+  M.bridge = nil  -- nil immediately so failed reload can't use dead context
   if M.network then M.network.destroy() end
   if M.http then M.http.destroy() end
   if M.browse then M.browse.destroy() end
@@ -5230,48 +5279,57 @@ function ReactJIT.reload()
   M.torHostnameEmitted = false  -- Re-emit tor:ready to new JS context
   if M.images then M.images.clearCache() end
   if M.videos then M.videos.clearCache() end
+  if M.rendersource then M.rendersource.clearAll() end
   if M.animate then M.animate.clear() end
 
-  -- 2b. Re-require Lua modules if any .lua files changed on disk
+  -- 2b. Re-require Lua modules if any .lua files changed on disk.
+  -- Wrapped in pcall so a bad module doesn't prevent bridge recreation (step 3).
+  -- If this fails, we still get a new bridge + fresh bundle; the bad module
+  -- will error again on the NEXT reload after the developer fixes it.
   if luaHmrDirty then
     io.write("[reactjit] Lua HMR: re-requiring core modules...\n"); io.flush()
-    M.measure    = require("lua.measure")
-    M.measure.init()
-    M.tree       = require("lua.tree")
-    M.layout     = require("lua.layout")
-    M.layout.init({ measure = M.measure })
-    M.painter    = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
-    M.events     = require("lua.events")
-    M.events.setTreeModule(M.tree)
-    M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
-    M.textinput  = require("lua.textinput")
-    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
-    M.codeblock  = require("lua.codeblock")
-    M.codeblock.init({ measure = M.measure })
-    M.widgets    = require("lua.widgets")
-    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
-    M.textselection = require("lua.textselection")
-    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
-    focus = require("lua.focus")
-    focus.init(M.tree, pushEvent)
-    M.focus = focus
-    -- Re-require devtools stack
-    errors    = require("lua.errors")
-    M.errors  = errors
-    inspector = require("lua.inspector")
-    M.inspector = inspector
-    console   = require("lua.console")
-    M.console = console
-    devtools  = require("lua.devtools")
-    M.devtools = devtools
-    if M.videoplayer then
-      M.videoplayer = require("lua.videoplayer")
-      M.videoplayer.init({ measure = M.measure, videos = M.videos })
+    local reqOk, reqErr = pcall(function()
+      M.measure    = require("lua.measure")
+      M.measure.init()
+      M.tree       = require("lua.tree")
+      M.layout     = require("lua.layout")
+      M.layout.init({ measure = M.measure })
+      M.painter    = require("lua.painter")
+      M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+      M.events     = require("lua.events")
+      M.events.setTreeModule(M.tree)
+      M.texteditor = require("lua.texteditor")
+      M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
+      M.textinput  = require("lua.textinput")
+      M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+      M.codeblock  = require("lua.codeblock")
+      M.codeblock.init({ measure = M.measure })
+      M.widgets    = require("lua.widgets")
+      M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
+      M.textselection = require("lua.textselection")
+      M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
+      focus = require("lua.focus")
+      focus.init(M.tree, pushEvent)
+      M.focus = focus
+      -- Re-require devtools stack
+      errors    = require("lua.errors")
+      M.errors  = errors
+      inspector = require("lua.inspector")
+      M.inspector = inspector
+      console   = require("lua.console")
+      M.console = console
+      devtools  = require("lua.devtools")
+      M.devtools = devtools
+      if M.videoplayer then
+        M.videoplayer = require("lua.videoplayer")
+        M.videoplayer.init({ measure = M.measure, videos = M.videos })
+      end
+      M.events.setWidgetsModule(M.widgets)
+      io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
+    end)
+    if not reqOk then
+      io.write("[reactjit] Lua HMR: re-require failed (continuing with old modules): " .. tostring(reqErr) .. "\n"); io.flush()
     end
-    M.events.setWidgetsModule(M.widgets)
-    io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
   end
 
   M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
@@ -5417,6 +5475,10 @@ function ReactJIT.quit()
   end
   -- canvas mode uses bridge_fs which has no destroy method
   M.bridge = nil
+
+  -- Kill any remaining child processes (belt-and-suspenders with individual stop() calls above)
+  local regOk, reg = pcall(require, "lua.process_registry")
+  if regOk then reg.killAll() end
 end
 
 --- Return the active bridge instance.
@@ -5495,6 +5557,23 @@ end
 --- Check if we are in crash recovery mode.
 function ReactJIT.isCrashRecovery()
   return crashRecoveryMode
+end
+
+--- Enter crash recovery mode from outside init.lua (e.g. love.load failure).
+--- Shows the BSOD with reboot/HMR controls instead of a black screen.
+--- @param errMsg string  The error message
+--- @param context string  Where it happened (e.g. "love.load (init failed)")
+function ReactJIT.enterCrashRecovery(errMsg, context)
+  crashRecoveryMode = true
+  io.write("[reactjit] CRASH: entering recovery mode. Error: " .. tostring(errMsg) .. "\n"); io.flush()
+  io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
+  pcall(eventTrail.freeze)
+  errors.push({
+    source = "lua",
+    message = tostring(errMsg),
+    context = context or "unknown",
+    trail = pcall(eventTrail.getTrail) and eventTrail.getTrail() or nil,
+  })
 end
 
 --- Get the event trail module reference (for errors.lua BSOD rendering).

@@ -164,6 +164,8 @@ local SURFACE_TYPES = {
   VideoPlayer = true,
   Scene3D  = true,
   Emulator = true,
+  Render   = true,
+  Chart2D  = true,
 }
 
 --- Check if a node is a visual surface (eligible for proportional fallback).
@@ -688,32 +690,97 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     local totalGaps = math.max(0, visibleCount - 1) * gap
     return padMain + sum + totalGaps
   else
-    -- Cross axis: take max of children
-    local max = 0
+    -- Cross axis: take max of children (or sum of wrapped lines)
+    local wrapEnabled = s.flexWrap == "wrap"
+
+    -- Collect visible children with their main-axis and cross-axis sizes
+    local items = {}
     for _, child in ipairs(children) do
       local cs = child.style or {}
       if cs.display ~= "none" and cs.position ~= "absolute" then
-        -- Account for child margins along measurement axis
         local cmar = ru(cs.margin, isRow and pw or ph) or 0
         local marStart = isRow and (ru(cs.marginLeft, pw) or cmar)
                                 or (ru(cs.marginTop, ph) or cmar)
         local marEnd = isRow and (ru(cs.marginRight, pw) or cmar)
                               or (ru(cs.marginBottom, ph) or cmar)
 
-        -- Check explicit dimension first (mirrors main-axis branch).
-        -- Without this, percentage widths like "100%" are ignored and we
-        -- recurse into grandchildren, collapsing the cross-axis estimate.
         local explicitCross = isRow and ru(cs.width, pw) or ru(cs.height, ph)
-        local size
+        local crossSize
         if explicitCross then
-          size = explicitCross + marStart + marEnd
+          crossSize = explicitCross + marStart + marEnd
         else
-          size = estimateIntrinsicMain(child, isRow, childPw, ph) + marStart + marEnd
+          crossSize = estimateIntrinsicMain(child, isRow, childPw, ph) + marStart + marEnd
         end
-        if size > max then max = size end
+
+        if wrapEnabled then
+          -- Also need the main-axis size for line-breaking simulation
+          local explicitMainChild = isRow and ru(cs.height, ph) or ru(cs.width, pw)
+          local mainSize
+          if explicitMainChild then
+            mainSize = explicitMainChild
+          else
+            mainSize = estimateIntrinsicMain(child, not isRow, childPw, ph)
+          end
+          -- Add main-axis margins
+          local mainMarStart = isRow and (ru(cs.marginTop, ph) or (ru(cs.margin, ph) or 0))
+                                      or (ru(cs.marginLeft, pw) or (ru(cs.margin, pw) or 0))
+          local mainMarEnd = isRow and (ru(cs.marginBottom, ph) or (ru(cs.margin, ph) or 0))
+                                    or (ru(cs.marginRight, pw) or (ru(cs.margin, pw) or 0))
+          items[#items + 1] = { crossSize = crossSize, mainSize = mainSize + mainMarStart + mainMarEnd }
+        else
+          items[#items + 1] = { crossSize = crossSize }
+        end
       end
     end
-    return padMain + max
+
+    if wrapEnabled and #items > 0 then
+      -- Simulate line-breaking: split items into lines, sum line heights + gaps
+      local availMain = (isRow and (ph or 9999) or (pw or 9999)) - padMain
+      -- For a row measured for height: main axis of container is horizontal,
+      -- so available main = container inner width (pw - horizontal padding)
+      if containerIsRow and not isRow and pw then
+        availMain = childPw or pw
+      elseif not containerIsRow and isRow and ph then
+        availMain = ph - padStart - padEnd
+      end
+
+      local lineMax = 0   -- max cross-size on current line
+      local lineMain = 0  -- accumulated main-axis on current line
+      local totalCross = 0
+      local lineCount = 0
+      local itemsOnLine = 0
+
+      for _, item in ipairs(items) do
+        local gapBefore = (itemsOnLine > 0) and gap or 0
+        if itemsOnLine > 0 and (lineMain + gapBefore + item.mainSize) > availMain then
+          -- Wrap to new line
+          totalCross = totalCross + lineMax
+          lineCount = lineCount + 1
+          lineMax = item.crossSize
+          lineMain = item.mainSize
+          itemsOnLine = 1
+        else
+          lineMain = lineMain + gapBefore + item.mainSize
+          if item.crossSize > lineMax then lineMax = item.crossSize end
+          itemsOnLine = itemsOnLine + 1
+        end
+      end
+      -- Last line
+      if itemsOnLine > 0 then
+        totalCross = totalCross + lineMax
+        lineCount = lineCount + 1
+      end
+
+      local interLineGaps = math.max(0, lineCount - 1) * gap
+      return padMain + totalCross + interLineGaps
+    else
+      -- No wrap: just take the max cross-axis child
+      local max = 0
+      for _, item in ipairs(items) do
+        if item.crossSize > max then max = item.crossSize end
+      end
+      return padMain + max
+    end
   end
 end
 
@@ -1811,6 +1878,30 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
         if mainEnd > contentMainEnd then contentMainEnd = mainEnd end
         if crossEnd > contentCrossEnd then contentCrossEnd = crossEnd end
       end
+    end
+
+    -- Recompute line cross size from actual post-layout heights.
+    -- Pre-layout ci.h can be 0 for auto-sized children (e.g. wrapped
+    -- components whose height comes from their own children). After
+    -- layoutNode runs recursively, child.computed.h has the real value.
+    -- Also needed for non-wrap auto-height rows: flex-grown children may
+    -- be narrower than their estimated intrinsic width, causing descendant
+    -- wrap rows to produce taller content than the estimate predicted.
+    if wrap or h == nil then
+      local actualLineCross = 0
+      for _, idx in ipairs(line) do
+        local ci = childInfos[idx]
+        local child = allChildren[idx]
+        local cc = child.computed
+        local childCross
+        if isRow then
+          childCross = (cc and cc.h or ci.h or 0) + ci.marT + ci.marB
+        else
+          childCross = (cc and cc.w or ci.w or 0) + ci.marL + ci.marR
+        end
+        if childCross > actualLineCross then actualLineCross = childCross end
+      end
+      lineCrossSize = actualLineCross
     end
 
     -- Advance cross cursor past this line + inter-line gap

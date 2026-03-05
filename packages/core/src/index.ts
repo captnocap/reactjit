@@ -11,6 +11,7 @@ export type {
   VideoProps,
   VideoPlayerProps,
   VideoTimeEvent,
+  RenderProps,
   ScrollEvent,
   ScrollViewProps,
   ScrollViewRef,
@@ -102,7 +103,7 @@ export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from 
 export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
 
 // Primitives
-export { Box, Row, Col, Text, Image, FocusGroup } from './primitives';
+export { Box, Row, Col, Text, Image, Render, FocusGroup } from './primitives';
 
 // Typography
 export { Typography } from './Typography';
@@ -371,7 +372,11 @@ export {
 // Post-processing masks (foreground overlays)
 export {
   Scanlines, CRT, VHS, Dither, Ascii,
+  LumaMesh, OpticalFlow, DataMosh, FeedbackLoop,
+  HardGlitch, SoftGlitch, Stretch, FishEye, Tile, Watercolor,
   type MaskProps, type ScanlinesProps, type CRTProps, type VHSProps, type DitherProps, type AsciiProps,
+  type LumaMeshProps, type OpticalFlowProps, type DataMoshProps, type FeedbackLoopProps,
+  type HardGlitchProps, type SoftGlitchProps, type StretchProps, type FishEyeProps, type TileProps, type WatercolorProps,
 } from './masks';
 
 // Cartridge Inspector

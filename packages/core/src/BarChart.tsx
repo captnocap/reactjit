@@ -21,10 +21,12 @@ export interface BarChartProps {
   onBarPress?: (index: number, bar: BarChartBar) => void;
 }
 
-export function BarChart(props: BarChartProps) {
-  // Use a native 'Chart2D' element to securely offload all looping/box layout to Lua
+export function BarChart({ style, width, height, ...rest }: BarChartProps) {
   return React.createElement('Chart2D', {
     chartType: 'bar',
-    ...props
+    ...rest,
+    width,
+    height,
+    style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
   });
 }

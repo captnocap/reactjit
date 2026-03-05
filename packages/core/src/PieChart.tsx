@@ -15,9 +15,11 @@ export interface PieChartProps {
   style?: Style;
 }
 
-export function PieChart(props: PieChartProps) {
+export function PieChart({ style, size, ...rest }: PieChartProps) {
   return React.createElement('Chart2D', {
     chartType: 'pie',
-    ...props
+    ...rest,
+    size,
+    style: { ...style, ...(size != null ? { width: size, height: size } : {}) },
   });
 }

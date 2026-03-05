@@ -47,6 +47,9 @@ cat > "$FILE" << 'ENDOFTEMPLATE'
 /**
  * __NAME__ — Package documentation page (Layout2 zigzag narrative).
  *
+ * Uses Band/Half/HeroBand/CalloutBand/Divider/SectionLabel from StoryScaffold.
+ * Those components enforce alignment — both columns always start at (0,0).
+ *
  * TEMPLATE: Replace all placeholder content with real package docs.
  * Static hoist ALL code strings and style objects outside the component.
  */
@@ -54,6 +57,7 @@ cat > "$FILE" << 'ENDOFTEMPLATE'
 import React from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -83,25 +87,6 @@ use__NAME__({
   cache: true,
   ttl: 5000,
 })`;
-
-// ── Helpers ──────────────────────────────────────────────
-
-function Divider() {
-  const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
-}
-
-function SectionLabel({ icon, children }: { icon: string; children: string }) {
-  const c = useThemeColors();
-  return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-        {children}
-      </Text>
-    </Box>
-  );
-}
 
 // ── __NAME__Story ─────────────────────────────────────────
 
@@ -148,128 +133,77 @@ export function __NAME__Story() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
-        {/* ── Hero band: accent stripe + overview ── */}
-        <Box style={{
-          borderLeftWidth: 3,
-          borderColor: C.accent,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 24,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        {/* ── Hero band ── */}
+        <HeroBand accentColor={C.accent}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
             {'TODO: One-liner pitch for the package.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
             {'TODO: 1-2 sentence overview of what the package provides.'}
           </Text>
-        </Box>
+        </HeroBand>
 
         <Divider />
 
-        {/* ── Band: text left | code right ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+        {/* ── text | code — INSTALL ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'TODO: Describe import and setup.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
-        </Box>
+        </Band>
 
         <Divider />
 
-        {/* ── Band: code left | text right (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
+        {/* ── code | text — BASIC USAGE (zigzag) ── */}
+        <Band>
           <CodeBlock language="tsx" fontSize={9} code={BASIC_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="code">{'BASIC USAGE'}</SectionLabel>
+          <Half>
+            <SectionLabel icon="code" accentColor={C.accent}>{'BASIC USAGE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'TODO: Explain the basic usage pattern.'}
             </Text>
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Callout band ── */}
-        <Box style={{
-          backgroundColor: C.callout,
-          borderLeftWidth: 3,
-          borderColor: C.calloutBorder,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 14,
-          paddingBottom: 14,
-          flexDirection: 'row',
-          gap: 8,
-          alignItems: 'center',
-        }}>
+        {/* ── Callout ── */}
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
             {'TODO: Key insight or gotcha about this package.'}
           </Text>
-        </Box>
+        </CalloutBand>
 
         <Divider />
 
-        {/* ── Band: text left | code right ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'start',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="zap">{'ADVANCED'}</SectionLabel>
+        {/* ── text | code — ADVANCED ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="zap" accentColor={C.accent}>{'ADVANCED'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'TODO: Describe advanced features or patterns.'}
             </Text>
-          </Box>
+          </Half>
           <CodeBlock language="tsx" fontSize={9} code={ADVANCED_CODE} />
-        </Box>
+        </Band>
 
         <Divider />
 
-        {/* ── Band: code left | text right (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 24,
-          alignItems: 'start',
-        }}>
+        {/* ── code | text — OPTIONS (zigzag) ── */}
+        <Band>
           <CodeBlock language="tsx" fontSize={9} code={OPTIONS_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 }}>
-            <SectionLabel icon="settings">{'OPTIONS'}</SectionLabel>
+          <Half>
+            <SectionLabel icon="settings" accentColor={C.accent}>{'OPTIONS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'TODO: Describe configuration options.'}
             </Text>
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
       </ScrollView>
 

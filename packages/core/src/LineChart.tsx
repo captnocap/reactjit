@@ -20,9 +20,12 @@ export interface LineChartProps {
   style?: Style;
 }
 
-export function LineChart(props: LineChartProps) {
+export function LineChart({ style, width, height, ...rest }: LineChartProps) {
   return React.createElement('Chart2D', {
     chartType: 'line',
-    ...props
+    ...rest,
+    width,
+    height,
+    style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
   });
 }

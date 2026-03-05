@@ -347,7 +347,7 @@ export function LayoutStory() {
         <Box style={{ flexGrow: 1 }} />
 
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Flex layout, spacing, sizing, and composed patterns.'}
+          {'Put that there, I mean there'}
         </Text>
       </Box>
 

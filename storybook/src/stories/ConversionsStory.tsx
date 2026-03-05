@@ -93,7 +93,7 @@ const BAND = {
   alignItems: 'center' as const,
 };
 
-const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const, justifyContent: 'center' as const };
 
 // ── Helpers ──────────────────────────────────────────────
 

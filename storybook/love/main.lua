@@ -36,6 +36,10 @@ function love.load()
     print("[main.lua] love.load END - init completed")
   else
     print("[main.lua] love.load FAILED: " .. tostring(err))
+    -- Enter crash recovery so the BSOD renders instead of a black screen.
+    -- ReactJIT.draw() checks crashRecoveryMode before isRendering(), so
+    -- even if mode was never set, the BSOD will show with reboot/HMR.
+    ReactJIT.enterCrashRecovery(tostring(err), "love.load (init failed)")
   end
 end
 

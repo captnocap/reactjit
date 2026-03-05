@@ -91,10 +91,10 @@ const BAND_STYLE = {
   paddingTop: 20,
   paddingBottom: 20,
   gap: 24,
-  alignItems: 'start' as const,
+  alignItems: 'center' as const,
 };
 
-const TEXT_SIDE = { flexGrow: 1, flexBasis: 0, gap: 8, paddingTop: 4 };
+const TEXT_SIDE = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const, justifyContent: 'center' as const };
 
 // ── Visual Demos ────────────────────────────────────────
 
@@ -110,7 +110,7 @@ function PIIDemo() {
   ];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{'detectPII() \u2192 finds + classifies:'}</Text>
 
       {detections.map(d => (
@@ -155,7 +155,7 @@ function ShamirDemo() {
   const shareColors = [C.blue, C.green, C.peach, C.mauve, C.teal];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       {/* Secret in */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Box style={{
@@ -233,7 +233,7 @@ function NoiseDemo() {
   ];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       {/* Endpoints header */}
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 4, paddingRight: 4 }}>
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
@@ -295,7 +295,7 @@ function KeyringDemo() {
   ];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       <Box style={{
         backgroundColor: c.surface,
         borderRadius: 6,
@@ -355,7 +355,7 @@ function SecureMemoryDemo() {
   ];
 
   return (
-    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       <Box style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -403,7 +403,7 @@ function StegDemo() {
   const bitCount = secret.length * 8;
 
   return (
-    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       {/* Carrier text — looks innocent */}
       <Text style={{ fontSize: 9, color: c.muted }}>{'carrier text (visible):'}</Text>
       <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10 }}>
@@ -459,7 +459,7 @@ function AuditDemo() {
   ];
 
   return (
-    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       {entries.map((e, i) => (
         <Box key={i}>
           <Box style={{
@@ -504,7 +504,7 @@ function AlgoSafetyDemo() {
   ];
 
   return (
-    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       {algos.map(a => (
         <Box key={a.name} style={{
           flexDirection: 'row',
@@ -541,7 +541,7 @@ function EnvelopeDemo() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0 }}>
+    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
       {/* Stacked layers — deepest = most nested */}
       <Box style={{
         backgroundColor: 'rgba(250,179,135,0.10)',

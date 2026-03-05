@@ -106,6 +106,13 @@ return function(msg)
   local spinnerIdx = 1
   local spinnerTimer = 0
 
+  -- Clickable button hit rects (updated each draw frame)
+  local buttons = {
+    reboot = { x = 0, y = 0, w = 0, h = 0 },
+    copy   = { x = 0, y = 0, w = 0, h = 0 },
+    quit   = { x = 0, y = 0, w = 0, h = 0 },
+  }
+
   -- Try to detect bundle path for HMR polling
   local bundlePath = nil
   local bundleMtime = nil
@@ -154,6 +161,24 @@ return function(msg)
   local COPIED_COL = { 0.40, 0.85, 0.50 }
   local BAR_BG     = { 0.08, 0.06, 0.10 }
 
+  -- Pre-create fonts ONCE (not per frame — creating fonts every frame leaks GPU memory
+  -- and eventually freezes the crash screen, which is the one thing that must never freeze)
+  local titleFont, smallFont, bodyFont
+  pcall(function()
+    titleFont = love.graphics.newFont(18)
+    smallFont = love.graphics.newFont(11)
+    bodyFont  = love.graphics.newFont(12)
+  end)
+  if not titleFont then titleFont = love.graphics.getFont() end
+  if not smallFont then smallFont = love.graphics.getFont() end
+  if not bodyFont  then bodyFont  = love.graphics.getFont() end
+
+  -- Pre-create editor font once
+  local editorFont
+  if editorActive then
+    editorFont = getEditorFont(12)
+  end
+
   -- Reboot helper
   local function doReboot()
     if hotstateOk and hotstate and hotstate.snapshot then
@@ -180,8 +205,20 @@ return function(msg)
         return 1
 
       elseif name == "mousepressed" then
-        -- Route to editor
-        if editorActive then
+        -- Check clickable buttons first
+        local function hitRect(r)
+          return a >= r.x and a <= r.x + r.w and b >= r.y and b <= r.y + r.h and r.w > 0
+        end
+        if hitRect(buttons.reboot) then
+          doReboot()
+          return
+        elseif hitRect(buttons.copy) then
+          pcall(love.system.setClipboardText, crashReport)
+          copied = true
+          copiedTimer = 2.0
+        elseif hitRect(buttons.quit) then
+          return 1
+        elseif editorActive then
           pcall(bsodEditor.mousepressed, a, b, c)
         end
 
@@ -272,22 +309,19 @@ return function(msg)
     love.graphics.rectangle("fill", 0, 0, W, 4)
     y = y + 4
 
-    -- Title
-    local titleFont = love.graphics.newFont(18)
+    -- Title (fonts cached above — never allocate per frame)
     love.graphics.setFont(titleFont)
     love.graphics.setColor(ACCENT)
     love.graphics.print("ReactJIT crashed", pad, y)
     y = y + 28
 
     -- Timestamp
-    local smallFont = love.graphics.newFont(11)
     love.graphics.setFont(smallFont)
     love.graphics.setColor(DIM)
     love.graphics.print(os.date("%Y-%m-%d %H:%M:%S"), pad, y)
     y = y + 16
 
     -- Error message (compact — first line only)
-    local bodyFont = love.graphics.newFont(12)
     love.graphics.setFont(bodyFont)
     love.graphics.setColor(TEXT)
     local errorLine = traceLines[1] or msg
@@ -299,7 +333,6 @@ return function(msg)
     -- CODE EDITOR SECTION
     -- ================================================================
     if editorActive then
-      local editorFont = getEditorFont(12)
       local editorH = math.floor((H - y - barH - 8) * 0.55)
       editorH = math.max(editorH, 120)
 
@@ -354,7 +387,7 @@ return function(msg)
 
     love.graphics.setFont(smallFont)
 
-    -- HMR watcher status
+    -- HMR watcher status (left side)
     local watcherText
     if bundlePath then
       watcherText = spinnerChars[spinnerIdx] .. " Watching for code changes..."
@@ -365,20 +398,48 @@ return function(msg)
     end
     love.graphics.print(watcherText, pad, barY + 14)
 
-    -- Key hints (right side)
-    local hints
-    if copied then
-      hints = "Copied to clipboard!"
-      love.graphics.setColor(COPIED_COL)
-    elseif editorActive then
-      hints = "Ctrl+S  save+reload   |   R  reboot   |   Ctrl+C  copy   |   Esc  quit"
-      love.graphics.setColor(DIM)
-    else
-      hints = "R  reboot   |   Ctrl+C  copy   |   Esc  quit"
-      love.graphics.setColor(DIM)
+    -- Right side: clickable buttons
+    local btnH = 28
+    local btnY2 = barY + math.floor((barH - btnH) / 2)
+    local btnPadX = 10
+    local btnGap = 8
+    local btnX2 = W - pad
+
+    local mx, my = love.mouse.getPosition()
+
+    local function drawButton(name, label, bgColor, textColor)
+      local tw = smallFont:getWidth(label)
+      local bw = tw + btnPadX * 2
+      btnX2 = btnX2 - bw
+      local rect = buttons[name]
+      rect.x, rect.y, rect.w, rect.h = btnX2, btnY2, bw, btnH
+
+      local hovered = mx >= rect.x and mx <= rect.x + rect.w
+                  and my >= rect.y and my <= rect.y + rect.h
+
+      if hovered then
+        love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.9)
+      else
+        love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.6)
+      end
+      love.graphics.rectangle("fill", btnX2, btnY2, bw, btnH, 4, 4)
+
+      love.graphics.setColor(textColor)
+      love.graphics.print(label, btnX2 + btnPadX, btnY2 + math.floor((btnH - smallFont:getHeight()) / 2))
+
+      btnX2 = btnX2 - btnGap
     end
-    local hintsW = smallFont:getWidth(hints)
-    love.graphics.print(hints, W - pad - hintsW, barY + 14)
+
+    if copied then
+      love.graphics.setColor(COPIED_COL)
+      local flashText = "Copied to clipboard!"
+      local fw = smallFont:getWidth(flashText)
+      love.graphics.print(flashText, W - pad - fw, barY + 14)
+    else
+      drawButton("quit",   "Quit",   { 0.30, 0.28, 0.35 }, DIM)
+      drawButton("copy",   "Copy",   { 0.25, 0.30, 0.40 }, TRAIL_COL)
+      drawButton("reboot", "Reboot", ACCENT,                TEXT)
+    end
 
     love.graphics.present()
     love.timer.sleep(0.016) -- ~60fps cap
