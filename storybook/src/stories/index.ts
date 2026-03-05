@@ -20,7 +20,7 @@ import { DataStory } from './DataStory';
 import { NavigationStory } from './NavigationStory';
 import { NetworkingStory } from './NetworkingStory';
 import { CryptoStory } from './CryptoStory';
-import { MediaStory } from './MediaStory';
+import { FilesStory } from './FilesStory';
 import { ImageGalleryStory } from './ImageGalleryStory';
 import { ImageVideoStory } from './ImageVideoStory';
 import EmulatorStory from './EmulatorStory';
@@ -52,6 +52,7 @@ import { CompatibilityStory } from './CompatibilityStory';
 import { PhysicsStory } from './PhysicsStory';
 import { GeoScene3DStory } from './GeoScene3DStory';
 import { ThreeDStory } from './ThreeDStory';
+import { OverlayStory } from './OverlayStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -70,7 +71,7 @@ export const stories: StoryDef[] = [
   // Packages
   { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
   { id: 'crypto', title: 'Crypto', section: 'Packages', component: CryptoStory },
-  { id: 'media', title: 'Media Library', section: 'Packages', component: MediaStory },
+  { id: 'files', title: 'Files', section: 'Packages', component: FilesStory },
   { id: 'effects', title: 'Effects', section: 'Packages', component: EffectsStory },
   { id: 'masks', title: 'Masks', section: 'Packages', component: MasksStory },
   { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
@@ -110,4 +111,5 @@ export const stories: StoryDef[] = [
   { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
+  { id: 'overlay', title: 'Overlay', section: 'Core', component: OverlayStory },
 ];
