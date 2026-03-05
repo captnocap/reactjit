@@ -49,13 +49,14 @@ cat > "$FILE" << 'ENDOFTEMPLATE'
  *
  * Structure:
  *   Header   — package title + badge + description
- *   Preview  — open canvas area for the active tab (flexGrow: 1)
+ *   Preview  — LIVE DEMO of the active tab's component (flexGrow: 1)
  *   Info row — horizontal strip: description | code example | props
  *   Tab bar  — clickable tabs (one per component)
  *   Footer   — breadcrumbs with "N of M" counter
  *
- * The TABS array drives everything. Each entry is one tab in the bar.
- * Clicking a tab swaps the preview, description, usage, and props.
+ * The TABS array drives the info row, tab bar, and footer.
+ * The renderPreview function drives the preview area — one case per tab.
+ * Clicking a tab swaps everything: preview, description, usage, and props.
  *
  * Fill in every TODO: marker below with real content from the package.
  */
@@ -63,6 +64,8 @@ cat > "$FILE" << 'ENDOFTEMPLATE'
 import React, { useState } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, CodeBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+// TODO: Import the component(s) being documented. Example:
+// import { MyComponent } from '../../../packages/__PKG__/src';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -88,7 +91,6 @@ interface TabDef {
   usage: string;
   props: [string, string, string][]; // [name, type, icon]
   callbacks: [string, string, string][];
-  panels: string[]; // preview panel labels — 1 = single, 3 = triple split
 }
 
 const TABS: TabDef[] = [
@@ -103,7 +105,6 @@ const TABS: TabDef[] = [
       ['TODO: propName', 'type', 'circle'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'todo-component-b',
@@ -116,7 +117,6 @@ const TABS: TabDef[] = [
       ['TODO: propName', 'type', 'circle'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
   {
     id: 'todo-component-c',
@@ -129,9 +129,49 @@ const TABS: TabDef[] = [
       ['TODO: propName', 'type', 'circle'],
     ],
     callbacks: [],
-    panels: ['Preview'],
   },
 ];
+
+// ── Preview renderer ─────────────────────────────────────
+// Renders a LIVE DEMO for each tab. This fills the entire preview area.
+// Every case MUST produce content that visually fills the space.
+//
+// IMPORTANT: The preview area is the LARGEST part of the story.
+// It has flexGrow: 1 and takes all vertical space between the header
+// and info row. Do NOT render a tiny icon centered in empty space.
+// Render the ACTUAL COMPONENT being documented, filling the area.
+//
+// TODO: Replace every case with a live component demo.
+// Use flexGrow: 1 or explicit sizing to fill the preview area.
+
+function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
+  switch (tab.id) {
+    case 'todo-component-a':
+      // TODO: Render live ComponentA here, filling the preview area
+      // Example: return <ComponentA style={{ flexGrow: 1 }} />;
+      return (
+        <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: c.muted, fontSize: 14 }}>{'TODO: Live preview of ComponentA'}</Text>
+        </Box>
+      );
+    case 'todo-component-b':
+      // TODO: Render live ComponentB here, filling the preview area
+      return (
+        <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: c.muted, fontSize: 14 }}>{'TODO: Live preview of ComponentB'}</Text>
+        </Box>
+      );
+    case 'todo-component-c':
+      // TODO: Render live ComponentC here, filling the preview area
+      return (
+        <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: c.muted, fontSize: 14 }}>{'TODO: Live preview of ComponentC'}</Text>
+        </Box>
+      );
+    default:
+      return null;
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -191,34 +231,9 @@ export function __NAME__Story() {
         </Text>
       </Box>
 
-      {/* ── Preview area — splits into N panels based on tab.panels ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
-        {tab.panels.map((label, i) => (
-          <React.Fragment key={label}>
-            {i > 0 && <VerticalDivider />}
-            <Box style={{
-              flexGrow: 1,
-              flexBasis: 0,
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <Box style={{
-                width: 64,
-                height: 64,
-                backgroundColor: c.surface,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: c.border,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <Image src={tab.icon} style={{ width: 28, height: 28 }} tintColor={C.accent} />
-              </Box>
-              <Text style={{ color: c.muted, fontSize: 8 }}>{label}</Text>
-            </Box>
-          </React.Fragment>
-        ))}
+      {/* ── Preview area — LIVE DEMO of the active tab ── */}
+      <Box style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
+        {renderPreview(tab, c)}
       </Box>
 
       {/* ── Info row — description | code | props ── */}
@@ -389,6 +404,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Read packages/${PKG}/src/ to find real components"
 echo "  2. Replace all TODO: markers in the TABS array with real data"
-echo "  3. Replace the TODO: markers in the header (icon, description)"
-echo "  4. Replace the TODO: marker in the footer (icon)"
-echo "  5. Run: make build-storybook-love"
+echo "  3. Replace all TODO: cases in renderPreview with LIVE component demos"
+echo "  4. Replace the TODO: markers in the header (icon, description)"
+echo "  5. Replace the TODO: marker in the footer (icon)"
+echo "  6. Run: make build-storybook-love"

@@ -500,6 +500,11 @@ const LUA_GLOBALS_WHITELIST = new Set([
   '_G', '_VERSION', '_ENV',
   // Love2D callbacks
   'love',
+  // Standard Lua globals (intentionally overridable, e.g. print capture)
+  'print', 'error', 'assert', 'require', 'type', 'tostring', 'tonumber',
+  'pairs', 'ipairs', 'next', 'select', 'rawget', 'rawset', 'rawequal',
+  'pcall', 'xpcall', 'setmetatable', 'getmetatable', 'setfenv', 'getfenv',
+  'collectgarbage', 'dofile', 'loadfile', 'loadstring', 'unpack',
   // Common patterns in module files
   'M', 'module',
 ]);
@@ -747,6 +752,29 @@ const LIBC_SYMBOLS = new Set([
   'getenv', 'setenv', 'unsetenv', 'system', 'popen', 'pclose',
   'dlopen', 'dlsym', 'dlclose', 'dlerror',
   'errno',
+  // Terminal / PTY control
+  'tcgetattr', 'tcsetattr', 'tcflush', 'cfsetispeed', 'cfsetospeed', 'cfmakeraw',
+  'posix_openpt', 'grantpt', 'unlockpt', 'ptsname_r',
+  // Filesystem / process (additional)
+  'chdir', 'getcwd', 'readlink',
+  // glibc internals (always present on Linux)
+  '__errno_location',
+]);
+
+// Symbols provided by the Love2D runtime — SDL2 and OpenGL are linked by the
+// host process, so ffi.C.* access is safe without pcall.  These would only be
+// missing if Love2D itself failed to start, at which point nothing works anyway.
+const LOVE2D_RUNTIME_SYMBOLS = new Set([
+  // SDL2
+  'SDL_GL_GetProcAddress', 'SDL_SetWindowAlwaysOnTop', 'SDL_SYSWM_X11',
+  // OpenGL core (used by vterm, videos, overlay_shm)
+  'glActiveTexture', 'glBindBuffer', 'glBindFramebuffer', 'glBindTexture',
+  'glBindVertexArray', 'glBlendFunc', 'glBlitFramebuffer',
+  'glCheckFramebufferStatus', 'glDeleteFramebuffers', 'glDeleteTextures',
+  'glDisable', 'glEnable', 'glFramebufferTexture2D', 'glGenFramebuffers',
+  'glGenTextures', 'glGetIntegerv', 'glPixelStorei', 'glReadPixels',
+  'glScissor', 'glTexImage2D', 'glTexParameteri', 'glUseProgram',
+  'glViewport',
 ]);
 
 /**
@@ -815,6 +843,8 @@ function lintLuaFfiWithoutPcall(filePath, rawLines) {
       const sym = ffiCMatch[1];
       // Skip standard POSIX/libc symbols — these are always available
       if (LIBC_SYMBOLS.has(sym)) continue;
+      // Skip Love2D runtime symbols (SDL2/OpenGL) — guaranteed by host process
+      if (LOVE2D_RUNTIME_SYMBOLS.has(sym)) continue;
       // OK if inside pcall(function() ... end) block
       if (PCALL_FUNC_WRAP.test(line)) continue;
       if (isInsidePcallBlock(cleanLines, i)) continue;

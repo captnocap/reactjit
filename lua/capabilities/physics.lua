@@ -239,6 +239,8 @@ Capabilities.register("PhysicsWorld", {
       bodies = {},       -- bodyNodeId -> true
       contacts = {},     -- for collision events
       pushEvent = nil,   -- set each tick
+      screenX = 0,       -- actual screen position (set during render)
+      screenY = 0,
     }
 
     local function pushCollisionEvent(handler, targetId, bodyAId, bodyBId, nx, ny)
@@ -444,8 +446,15 @@ Capabilities.register("PhysicsWorld", {
         plog("  node.style: w=%s h=%s pos=%s", tostring(node.style.width), tostring(node.style.height), tostring(node.style.position))
       end
     end
-    if not node or not node.props or not node.props.debug then return end
+    -- Always update screen position (needed for MouseJoint coord conversion)
     local state = worlds[node.id]
+    if state then
+      local sx, sy = love.graphics.transformPoint(c.x, c.y)
+      state.screenX = sx
+      state.screenY = sy
+    end
+
+    if not node or not node.props or not node.props.debug then return end
     if not state or not state.world then return end
 
     local gx, gy = c.x, c.y
@@ -1264,10 +1273,9 @@ Capabilities.register("MouseJoint", {
     local smx, smy = love.mouse.getPosition()
     local pressed = love.mouse.isDown(1)
 
-    -- Convert screen coords → Box2D world-local coords
-    local wc = worldNode.computed
-    local mx = wc and (smx - wc.x) or smx
-    local my = wc and (smy - wc.y) or smy
+    -- Convert screen coords → Box2D world-local coords using render-captured screen position
+    local mx = smx - worldState.screenX
+    local my = smy - worldState.screenY
 
     if pressed and not state.joint then
       -- Find body under mouse
