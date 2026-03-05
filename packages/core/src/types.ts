@@ -458,6 +458,13 @@ export interface VideoPlayerProps extends VideoProps {
   controls?: boolean;
 }
 
+export interface DevToolsEmbedProps {
+  style?: Style;
+  w?: number | string;
+  h?: number | string;
+  key?: string | number;
+}
+
 export interface RenderProps {
   /**
    * Source identifier:

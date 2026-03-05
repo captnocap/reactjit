@@ -413,7 +413,7 @@ end
 -- Templates
 -- ============================================================================
 
-TEMPLATES = {
+local TEMPLATES = {
   box = {
     desc = "Basic Box component",
     code = [[<Box style={{ width: '100%', height: '100%', backgroundColor: '#1e1e2e' }}>

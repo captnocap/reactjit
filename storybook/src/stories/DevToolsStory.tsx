@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, useHotState, DevToolsEmbed } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -174,127 +174,44 @@ const EVENT_TRAIL_CODE = `-- Ring buffer of semantic events for crash reports
 -- On crash: trail.freeze() locks the buffer
 -- BSOD and crash reporter display the trail`;
 
-// -- DevTools Panel Preview (mini mockup) ------------------------------
+// -- HotState Demo (live comparison) -----------------------------------
 
-function DevToolsPanelPreview() {
+function HotStateDemo() {
   const c = useThemeColors();
-  const tabs = ['Elements', 'Wireframe', 'Perf', 'Network', 'Console', 'Logs'];
+  const [hotCount, setHotCount] = useHotState('devtools-demo-counter', 0);
+  const [plainCount, setPlainCount] = React.useState(0);
 
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: C.dtBg,
-      borderRadius: 6,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: C.dtBorder,
-    }}>
-      {/* Tab bar */}
-      <Box style={{
-        flexDirection: 'row',
-        backgroundColor: C.dtTabBg,
-        borderBottomWidth: 1,
-        borderColor: C.dtBorder,
-        paddingLeft: 4,
-        gap: 0,
-      }}>
-        {tabs.map((tab, i) => (
-          <Box key={tab} style={{
-            backgroundColor: i === 2 ? C.dtTabActive : 'transparent',
-            borderBottomWidth: i === 2 ? 2 : 0,
-            borderColor: C.dtTabAccent,
-            paddingLeft: 8,
-            paddingRight: 8,
-            paddingTop: 5,
-            paddingBottom: 5,
-          }}>
-            <Text style={{
-              fontSize: 7,
-              color: i === 2 ? C.dtTabTextActive : C.dtTabText,
-            }}>{tab}</Text>
-          </Box>
-        ))}
-        <Box style={{ flexGrow: 1 }} />
-        <Box style={{ paddingRight: 8, paddingTop: 5 }}>
-          <Text style={{ fontSize: 7, color: C.dtTabText }}>{'x'}</Text>
+    <Box style={{ width: '100%', gap: 8 }}>
+      <Box style={{ flexDirection: 'row', gap: 12 }}>
+        {/* useHotState counter */}
+        <Box style={{ flexGrow: 1, backgroundColor: 'rgba(166, 227, 161, 0.08)', borderRadius: 6, padding: 10, gap: 6, borderWidth: 1, borderColor: 'rgba(166, 227, 161, 0.2)' }}>
+          <Text style={{ fontSize: 8, color: C.green }}>{'useHotState'}</Text>
+          <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>{`${hotCount}`}</Text>
+          <Pressable onPress={() => setHotCount(hotCount + 1)}>
+            <Box style={{ backgroundColor: C.green, borderRadius: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, alignItems: 'center' }}>
+              <Text style={{ fontSize: 9, color: '#000', fontWeight: 'bold' }}>{'+ Increment'}</Text>
+            </Box>
+          </Pressable>
+          <Text style={{ fontSize: 7, color: C.green }}>{'Survives hot reload'}</Text>
+        </Box>
+
+        {/* useState counter */}
+        <Box style={{ flexGrow: 1, backgroundColor: 'rgba(243, 139, 168, 0.08)', borderRadius: 6, padding: 10, gap: 6, borderWidth: 1, borderColor: 'rgba(243, 139, 168, 0.2)' }}>
+          <Text style={{ fontSize: 8, color: C.red }}>{'useState'}</Text>
+          <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>{`${plainCount}`}</Text>
+          <Pressable onPress={() => setPlainCount(plainCount + 1)}>
+            <Box style={{ backgroundColor: C.red, borderRadius: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, alignItems: 'center' }}>
+              <Text style={{ fontSize: 9, color: '#000', fontWeight: 'bold' }}>{'+ Increment'}</Text>
+            </Box>
+          </Pressable>
+          <Text style={{ fontSize: 7, color: C.red }}>{'Resets on reload'}</Text>
         </Box>
       </Box>
 
-      {/* Perf tab content (mini) */}
-      <Box style={{ padding: 8, gap: 6 }}>
-        <Text style={{ fontSize: 7, color: C.dtTabTextActive }}>{'Frame Budget'}</Text>
-
-        {/* Budget bar */}
-        <Box style={{ height: 10, backgroundColor: C.perfBudgetBg, borderRadius: 3 }}>
-          <Box style={{ height: 10, width: '35%', backgroundColor: C.perfGreen, borderRadius: 3 }} />
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 12 }}>
-          <Text style={{ fontSize: 6, color: C.dtTabText }}>{'Layout 0.42ms'}</Text>
-          <Text style={{ fontSize: 6, color: C.dtTabText }}>{'Paint 1.23ms'}</Text>
-          <Text style={{ fontSize: 6, color: C.perfGreen }}>{'FPS 60'}</Text>
-          <Text style={{ fontSize: 6, color: C.dtTabText }}>{'Nodes 847'}</Text>
-        </Box>
-
-        <Text style={{ fontSize: 7, color: C.dtTabTextActive, marginTop: 2 }}>{'Frame Time'}</Text>
-
-        {/* Sparkline mockup */}
-        <Box style={{ height: 30, backgroundColor: C.perfBudgetBg, borderRadius: 3, overflow: 'hidden' }}>
-          <Box style={{
-            position: 'absolute',
-            width: '100%',
-            height: 30,
-            backgroundColor: C.perfSparkFill,
-          }} />
-          {/* 16.6ms threshold line */}
-          <Box style={{
-            position: 'absolute',
-            width: '100%',
-            height: 1,
-            backgroundColor: 'rgba(255, 255, 255, 0.15)',
-            top: 5,
-          }} />
-          <Box style={{ position: 'absolute', top: 0, left: 4 }}>
-            <Text style={{ fontSize: 5, color: C.dtTabText }}>{'16.6ms'}</Text>
-          </Box>
-        </Box>
-
-        <Text style={{ fontSize: 7, color: C.dtTabTextActive, marginTop: 2 }}>{'Costliest Nodes'}</Text>
-        <Box style={{ gap: 2 }}>
-          <Box style={{ flexDirection: 'row', gap: 4 }}>
-            <Text style={{ fontSize: 6, color: C.dtTabText }}>{'1.'}</Text>
-            <Text style={{ fontSize: 6, color: C.blue }}>{'ScrollView'}</Text>
-            <Text style={{ fontSize: 6, color: C.dtTabText }}>{'[View]'}</Text>
-            <Box style={{ flexGrow: 1 }} />
-            <Text style={{ fontSize: 6, color: C.perfGreen }}>{'0.31ms'}</Text>
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 4 }}>
-            <Text style={{ fontSize: 6, color: C.dtTabText }}>{'2.'}</Text>
-            <Text style={{ fontSize: 6, color: C.blue }}>{'CodeBlock'}</Text>
-            <Text style={{ fontSize: 6, color: C.dtTabText }}>{'[View]'}</Text>
-            <Box style={{ flexGrow: 1 }} />
-            <Text style={{ fontSize: 6, color: C.perfGreen }}>{'0.18ms'}</Text>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Status bar */}
-      <Box style={{
-        backgroundColor: C.dtStatusBg,
-        borderTopWidth: 1,
-        borderColor: C.dtBorder,
-        flexDirection: 'row',
-        paddingLeft: 8,
-        paddingRight: 8,
-        paddingTop: 3,
-        paddingBottom: 3,
-        gap: 8,
-      }}>
-        <Text style={{ fontSize: 6, color: C.perfGreen }}>{'60 FPS'}</Text>
-        <Text style={{ fontSize: 6, color: C.dtTabText }}>{'847 nodes'}</Text>
-        <Text style={{ fontSize: 6, color: C.dtTabText }}>{'24.1 MB'}</Text>
-        <Box style={{ flexGrow: 1 }} />
-        <Text style={{ fontSize: 6, color: C.dtTabText }}>{'Ctrl+Shift+D pop-out'}</Text>
-      </Box>
+      <Text style={{ fontSize: 8, color: c.muted }}>
+        {'Increment both, then press F5 to hot reload. The left counter survives. The right resets to 0.'}
+      </Text>
     </Box>
   );
 }
@@ -438,51 +355,53 @@ function ContextMenuPreview() {
   ];
 
   return (
-    <Box style={{
-      width: 170,
-      backgroundColor: 'rgba(31, 31, 41, 0.95)',
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: 'rgba(64, 64, 82, 0.8)',
-      paddingTop: 4,
-      paddingBottom: 4,
-    }}>
-      {items.map((item, i) => {
-        if (item.label === '---') {
+    <Box style={{ alignItems: 'center', width: '100%' }}>
+      <Box style={{
+        width: 170,
+        backgroundColor: 'rgba(31, 31, 41, 0.95)',
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(64, 64, 82, 0.8)',
+        paddingTop: 4,
+        paddingBottom: 4,
+      }}>
+        {items.map((item, i) => {
+          if (item.label === '---') {
+            return (
+              <Box key={i} style={{
+                height: 1,
+                backgroundColor: 'rgba(64, 64, 82, 0.5)',
+                marginLeft: 10,
+                marginRight: 10,
+                marginTop: 4,
+                marginBottom: 4,
+              }} />
+            );
+          }
           return (
             <Box key={i} style={{
-              height: 1,
-              backgroundColor: 'rgba(64, 64, 82, 0.5)',
-              marginLeft: 10,
-              marginRight: 10,
-              marginTop: 4,
-              marginBottom: 4,
-            }} />
+              flexDirection: 'row',
+              paddingLeft: 10,
+              paddingRight: 10,
+              paddingTop: 4,
+              paddingBottom: 4,
+              backgroundColor: i === 0 ? 'rgba(56, 89, 140, 0.55)' : 'transparent',
+              marginLeft: 6,
+              marginRight: 6,
+              borderRadius: 4,
+            }}>
+              <Text style={{
+                fontSize: 8,
+                color: item.dim ? 'rgba(115, 120, 128, 1)' : 'rgba(217, 222, 232, 1)',
+              }}>{item.label}</Text>
+              <Box style={{ flexGrow: 1 }} />
+              {item.shortcut && (
+                <Text style={{ fontSize: 8, color: 'rgba(146, 153, 168, 1)' }}>{item.shortcut}</Text>
+              )}
+            </Box>
           );
-        }
-        return (
-          <Box key={i} style={{
-            flexDirection: 'row',
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 4,
-            paddingBottom: 4,
-            backgroundColor: i === 0 ? 'rgba(56, 89, 140, 0.55)' : 'transparent',
-            marginLeft: 6,
-            marginRight: 6,
-            borderRadius: 4,
-          }}>
-            <Text style={{
-              fontSize: 8,
-              color: item.dim ? 'rgba(115, 120, 128, 1)' : 'rgba(217, 222, 232, 1)',
-            }}>{item.label}</Text>
-            <Box style={{ flexGrow: 1 }} />
-            {item.shortcut && (
-              <Text style={{ fontSize: 8, color: 'rgba(146, 153, 168, 1)' }}>{item.shortcut}</Text>
-            )}
-          </Box>
-        );
-      })}
+        })}
+      </Box>
     </Box>
   );
 }
@@ -497,15 +416,6 @@ const DEV_FEATURES = [
   { label: 'F5 / Ctrl+R', desc: 'Refresh (hot reload)', color: C.green },
   { label: 'Right-click', desc: 'Context menu (Inspect, Copy, Screenshot, Theme...)', color: C.mauve },
   { label: 'Backtick (`)', desc: 'Open Console tab directly', color: C.teal },
-];
-
-const DEVTOOLS_TABS = [
-  { label: 'Elements', desc: 'Instance tree inspector with computed styles, props, source location. Click any node to highlight it on canvas.', color: C.blue },
-  { label: 'Wireframe', desc: 'Scaled minimap of the entire tree. Depth-based coloring, render-count heatmap, flex pressure overlay on selected containers.', color: C.green },
-  { label: 'Perf', desc: 'Frame budget bar, frame-time sparkline (120 entries), memory stats, mutation counters, costliest-node rankings.', color: C.yellow },
-  { label: 'Network', desc: 'HTTP/WS/Peer timeline with trace grouping, detail pane, timing waterfall, curl export, JSON export, privacy-aware header redaction.', color: C.peach },
-  { label: 'Console', desc: 'Lua REPL with command history. :log for debug channels, :eval for expressions, :clear, :help.', color: C.mauve },
-  { label: 'Logs', desc: 'Debug channel toggle grid (10 channels: layout, tree, events, paint, bridge, recon, dispatch, focus, animate, capsync). HMR settings.', color: C.teal },
 ];
 
 function FeatureCatalog({ items }: { items: typeof DEV_FEATURES }) {
@@ -564,7 +474,7 @@ export function DevToolsStory() {
         {/* Band 1: DEVTOOLS PANEL — preview | text */}
         <Band>
           <Half>
-            <DevToolsPanelPreview />
+            <DevToolsEmbed style={{ width: '100%', height: 280, borderRadius: 6 }} />
           </Half>
           <Half>
             <SectionLabel icon="terminal" accentColor={C.blue}>{'DEVTOOLS PANEL'}</SectionLabel>
@@ -574,21 +484,6 @@ export function DevToolsStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'All rendering is Lua-native \u2014 the devtools draw themselves using Love2D primitives, not React components. This means they work even when the React tree is broken.'}
             </Text>
-          </Half>
-        </Band>
-
-        <Divider />
-
-        {/* Band 2: TABS — text | catalog */}
-        <Band>
-          <Half>
-            <SectionLabel icon="layers" accentColor={C.blue}>{'SIX TABS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Each tab is a self-contained Lua module with its own draw, input, and scroll state. Tabs share a context object for tree access, font caching, and scrollbar rendering.'}
-            </Text>
-          </Half>
-          <Half>
-            <FeatureCatalog items={DEVTOOLS_TABS} />
           </Half>
         </Band>
 
@@ -640,8 +535,11 @@ export function DevToolsStory() {
 
         <Divider />
 
-        {/* Band 5: useHotState — text | code */}
+        {/* Band 5: useHotState — demo | text+code */}
         <Band>
+          <Half>
+            <HotStateDemo />
+          </Half>
           <Half>
             <SectionLabel icon="database" accentColor={C.yellow}>{'useHotState'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -650,8 +548,6 @@ export function DevToolsStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Unlike useLocalStore (SQLite-backed, survives app restarts), useHotState lives purely in memory. It survives HMR but NOT app restarts. Use it for ephemeral UI state: sidebar open, scroll position, selected tab.'}
             </Text>
-          </Half>
-          <Half>
             <CodeBlock language="tsx" fontSize={8} code={HOT_STATE_CODE} />
           </Half>
         </Band>

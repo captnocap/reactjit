@@ -8,7 +8,7 @@
 import React, { createContext, useContext } from 'react';
 import { useThemeColorsOptional } from './context';
 import { useScaledStyle } from './ScaleContext';
-import type { BoxProps, ColProps, TextProps, ImageProps, RenderProps, FocusGroupProps, Style, Color } from './types';
+import type { BoxProps, ColProps, TextProps, ImageProps, RenderProps, DevToolsEmbedProps, FocusGroupProps, Style, Color } from './types';
 import { lookupIcon } from './iconRegistry';
 import { useBreakpoint, resolveSpan, spanToFlexBasis, RESPONSIVE_DEFAULTS } from './useBreakpoint';
 import type { Breakpoint } from './useBreakpoint';
@@ -348,6 +348,21 @@ export function Render(props: RenderProps) {
     style: scaledStyle,
     onClick, onReady, onError, onFrame,
   });
+}
+
+// ── DevToolsEmbed (live F12 panel in the React tree) ──
+
+export function DevToolsEmbed(props: DevToolsEmbedProps) {
+  const { w, h, style } = props;
+  const base: Style = {};
+  if (w !== undefined) base.width = w;
+  if (h !== undefined) base.height = h;
+  const resolvedStyle = (w !== undefined || h !== undefined)
+    ? (style ? { ...base, ...style } : base)
+    : style;
+  const scaledStyle = useScaledStyle(resolvedStyle);
+
+  return React.createElement('DevToolsEmbed', { style: scaledStyle });
 }
 
 // ── FocusGroup ────────────────────────────────────────

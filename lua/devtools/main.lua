@@ -86,6 +86,8 @@ local state = {
   netEventsPerSec = 0,
   netDroppedPerSec = 0,
   netLastErrorTs = nil,
+  -- Embed region: set by drawInRegion, cleared each frame after use
+  embedRegion = nil,   -- {x, y, w, h} or nil when no embed is active
 }
 
 -- ============================================================================
@@ -800,6 +802,13 @@ end
 
 --- Handle mouse press. Returns true if consumed.
 function DevTools.mousepressed(x, y, button)
+  -- Check embed region first (works regardless of panel open state)
+  if state.embedRegion then
+    if DevTools.mousepressedInRegion(x, y, button) then
+      return true
+    end
+  end
+
   if not state.open then
     return false
   end
@@ -954,6 +963,16 @@ end
 --- (callers should skip React tree hover tracking).
 function DevTools.mousemoved(x, y)
   if not inspector then return false end
+
+  -- Track hover in embed region
+  if state.embedRegion then
+    local r = state.embedRegion
+    if x >= r.x and x < r.x + r.w and y >= r.y and y < r.y + r.h then
+      inspector.mousemoved(x, y)
+      return true
+    end
+  end
+
   if not state.open then return false end
 
   -- When popped out and main has focus: only track hover overlays on canvas
@@ -1040,6 +1059,26 @@ end
 
 --- Handle mouse wheel. Returns true if consumed.
 function DevTools.wheelmoved(x, y)
+  -- Check embed region first
+  if state.embedRegion then
+    local mx, my = love.mouse.getPosition()
+    local r = state.embedRegion
+    if mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h then
+      if state.activeTab == "elements" and inspector then
+        return inspector.wheelmoved(x, y)
+      elseif state.activeTab == "perf" then
+        return PerfTab.wheelmoved(buildCtx(), x, y)
+      elseif state.activeTab == "network" then
+        return NetworkTab.wheelmoved(buildCtx(), x, y)
+      elseif state.activeTab == "console" and console then
+        return console.wheelmoved(x, y)
+      elseif state.activeTab == "logs" then
+        return LogsTab.wheelmoved(buildCtx(), x, y)
+      end
+      return true
+    end
+  end
+
   if not state.open then return false end
 
   -- When popped out: main window wheel goes to app, devtools window wheel goes to panel
@@ -1171,6 +1210,7 @@ local function drawStatusBar(statusY, screenW)
   love.graphics.rectangle("fill", 0, statusY, screenW, 1)
 
   -- Get perf data from inspector
+  if not inspector then return end
   local perf = inspector.getPerfData()
   if not perf then return end
 
@@ -1314,6 +1354,209 @@ function DevTools.drawInWindow(root)
   drawPanelContent(root)
 end
 
+--- Draw the devtools panel into an arbitrary region.
+--- Used by the DevToolsEmbed capability to render a live preview inside the React tree.
+--- The panel renders tab bar, active tab content, and status bar into the given bounds.
+--- @param region table  {x, y, w, h} in screen coordinates
+function DevTools.drawInRegion(region)
+  local root = tree and tree.getTree and tree.getTree() or nil
+
+  -- Convert content-space region to screen-space (respects scroll transform)
+  local sx1, sy1 = love.graphics.transformPoint(region.x, region.y)
+  local sx2, sy2 = love.graphics.transformPoint(region.x + region.w, region.y + region.h)
+  local rw, rh = math.max(0, sx2 - sx1), math.max(0, sy2 - sy1)
+  local rx, ry = sx1, sy1
+
+  -- Save embed region in screen coords for mouse event routing
+  state.embedRegion = { x = rx, y = ry, w = rw, h = rh }
+
+  -- Capture parent scissor (e.g. ScrollView clip) BEFORE push so we can intersect.
+  -- Tab draw functions call setScissor() internally — we need those calls to respect
+  -- the parent's clip region so the embed doesn't draw over the header on scroll.
+  local psx, psy, psw, psh = love.graphics.getScissor()
+
+  -- Reset transform so all coordinates are screen-space.
+  -- This makes every tab's setScissor calls correct without patching them.
+  love.graphics.push("all")
+  love.graphics.origin()
+
+  -- Monkey-patch setScissor to auto-intersect with parent clip bounds.
+  -- Tab draw functions call setScissor(x,y,w,h) directly — this makes them
+  -- respect the ScrollView's clip region without modifying every tab file.
+  local realSetScissor = love.graphics.setScissor
+  if psx then
+    love.graphics.setScissor = function(sx, sy, ssw, ssh)
+      if sx == nil then
+        -- setScissor() with no args = clear — restore to parent clip
+        realSetScissor(psx, psy, psw, psh)
+      else
+        -- Intersect requested region with parent clip
+        local ix = math.max(sx, psx)
+        local iy = math.max(sy, psy)
+        local ix2 = math.min(sx + ssw, psx + psw)
+        local iy2 = math.min(sy + ssh, psy + psh)
+        realSetScissor(ix, iy, math.max(0, ix2 - ix), math.max(0, iy2 - iy))
+      end
+    end
+  end
+
+  love.graphics.setScissor(rx, ry, rw, rh)
+
+  -- Panel geometry (now in screen coords)
+  local panelY = ry
+  local panelH = rh
+  local contentY = ry + TAB_BAR_H
+  local contentH = panelH - TAB_BAR_H - STATUS_BAR_H
+
+  -- Panel background
+  love.graphics.setColor(BG_COLOR)
+  love.graphics.rectangle("fill", rx, panelY, rw, panelH)
+
+  -- Tab bar
+  local font = getFont()
+  love.graphics.setColor(TAB_BG)
+  love.graphics.rectangle("fill", rx, panelY, rw, TAB_BAR_H)
+  love.graphics.setColor(BORDER_COLOR)
+  love.graphics.rectangle("fill", rx, panelY + TAB_BAR_H - 1, rw, 1)
+  love.graphics.rectangle("fill", rx, panelY, rw, 1)
+
+  love.graphics.setFont(font)
+  local tabX = rx + 8
+  local tabPadX = 12
+  local tabH = TAB_BAR_H - 2
+
+  for _, tab in ipairs(TABS) do
+    local tabW = font:getWidth(tab.label) + tabPadX * 2
+    local isActive = state.activeTab == tab.id
+
+    if isActive then
+      love.graphics.setColor(TAB_ACTIVE)
+      love.graphics.rectangle("fill", tabX, panelY + 1, tabW, tabH)
+      love.graphics.setColor(TAB_ACCENT)
+      love.graphics.rectangle("fill", tabX, panelY + TAB_BAR_H - 2, tabW, 2)
+      love.graphics.setColor(TAB_TEXT_ACT)
+    else
+      love.graphics.setColor(TAB_TEXT)
+    end
+
+    local textY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
+    love.graphics.print(tab.label, tabX + tabPadX, textY)
+    tabX = tabX + tabW + 2
+  end
+
+  -- Right-side close button
+  local btnY = panelY + math.floor((TAB_BAR_H - font:getHeight()) / 2)
+  love.graphics.setColor(CLOSE_COLOR)
+  love.graphics.print("x", rx + rw - 28 + 4, btnY)
+
+  -- Content area
+  love.graphics.setScissor(rx, contentY, rw, math.max(0, contentH))
+
+  local ctx = buildCtx()
+
+  if state.activeTab == "elements" then
+    if root then
+      if inspector and inspector.getSelectedNode() then
+        local treeW = math.floor(rw * state.dividerRatio)
+        inspector.drawTreeInRegion(root, { x = rx, y = contentY, w = treeW, h = contentH })
+        inspector.drawDetailInRegion({ x = rx + treeW, y = contentY, w = rw - treeW, h = contentH })
+      else
+        inspector.drawTreeInRegion(root, { x = rx, y = contentY, w = rw, h = contentH })
+      end
+    end
+  elseif state.activeTab == "wireframe" then
+    if root then
+      WireframeTab.draw(ctx, root, { x = rx, y = contentY, w = rw, h = contentH })
+    end
+  elseif state.activeTab == "perf" then
+    PerfTab.draw(ctx, { x = rx, y = contentY, w = rw, h = contentH })
+  elseif state.activeTab == "network" then
+    NetworkTab.draw(ctx, { x = rx, y = contentY, w = rw, h = contentH })
+  elseif state.activeTab == "console" then
+    if console then
+      console.drawInRegion({ x = rx, y = contentY, w = rw, h = contentH })
+    end
+  elseif state.activeTab == "logs" then
+    LogsTab.draw(ctx, { x = rx, y = contentY, w = rw, h = contentH })
+  end
+
+  -- Status bar
+  love.graphics.setScissor(rx, ry, rw, rh)
+  local statusY = panelY + panelH - STATUS_BAR_H
+  love.graphics.push()
+  love.graphics.translate(rx, 0)
+  drawStatusBar(statusY, rw)
+  love.graphics.pop()
+
+  -- Restore real setScissor and graphics state
+  love.graphics.setScissor = realSetScissor
+  love.graphics.pop()
+  if psx then
+    realSetScissor(psx, psy, psw, psh)
+  else
+    realSetScissor()
+  end
+end
+
+--- Handle a mouse press in the embed region.
+--- Returns true if consumed (click was inside the embed).
+--- Called from DevTools.mousepressed before the state.open gate.
+function DevTools.mousepressedInRegion(x, y, button)
+  local r = state.embedRegion
+  if not r then return false end
+  if x < r.x or x >= r.x + r.w or y < r.y or y >= r.y + r.h then
+    return false
+  end
+
+  local panelY = r.y
+  local contentY = r.y + TAB_BAR_H
+  local contentH = r.h - TAB_BAR_H - STATUS_BAR_H
+
+  -- Tab bar click
+  if y < r.y + TAB_BAR_H then
+    local font = getFont()
+    local tabX = r.x + 8
+    for _, tab in ipairs(TABS) do
+      local tabW = font:getWidth(tab.label) + 24
+      if x >= tabX and x < tabX + tabW then
+        state.activeTab = tab.id
+        if tab.id == "console" and console then
+          console.show()
+        end
+        return true
+      end
+      tabX = tabX + tabW + 2
+    end
+    return true  -- consumed by tab bar
+  end
+
+  -- Content area: route to active tab for click handling
+  if state.activeTab == "elements" then
+    if inspector then
+      -- Inspector uses stored treeRegion/detailRegion from drawTreeInRegion
+      inspector.mousepressed(x, y, button)
+    end
+    return true
+  elseif state.activeTab == "wireframe" then
+    return true
+  elseif state.activeTab == "perf" then
+    PerfTab.mousepressed(buildCtx(), x, y, button)
+    return true
+  elseif state.activeTab == "network" then
+    local region = { x = r.x, y = contentY, w = r.w, h = contentH }
+    NetworkTab.mousepressed(buildCtx(), x, y, button, region)
+    return true
+  elseif state.activeTab == "console" then
+    return true
+  elseif state.activeTab == "logs" then
+    local region = { x = r.x, y = contentY, w = r.w, h = contentH }
+    LogsTab.mousepressed(buildCtx(), x, y, button, region)
+    return true
+  end
+
+  return true
+end
+
 -- ============================================================================
 -- Devtools-aware context menu integration
 -- ============================================================================
@@ -1334,6 +1577,11 @@ function DevTools.inspectNode(node)
     if tree then tree.markDirty() end
     pushViewportEvent()
   end
+end
+
+--- Clear the stored embed region (called when DevToolsEmbed is destroyed).
+function DevTools.clearEmbedRegion()
+  state.embedRegion = nil
 end
 
 return DevTools

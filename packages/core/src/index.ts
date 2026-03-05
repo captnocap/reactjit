@@ -12,6 +12,7 @@ export type {
   VideoPlayerProps,
   VideoTimeEvent,
   RenderProps,
+  DevToolsEmbedProps,
   ScrollEvent,
   ScrollViewProps,
   ScrollViewRef,
@@ -103,7 +104,7 @@ export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from 
 export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
 
 // Primitives
-export { Box, Row, Col, Text, Image, Render, FocusGroup } from './primitives';
+export { Box, Row, Col, Text, Image, Render, DevToolsEmbed, FocusGroup } from './primitives';
 
 // Typography
 export { Typography } from './Typography';

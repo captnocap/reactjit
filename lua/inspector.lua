@@ -645,7 +645,8 @@ end
 --- Handle mouse press. Returns true if consumed.
 --- Uses stored region bounds (set by drawTreeInRegion/drawDetailInRegion) for hit detection.
 function Inspector.mousepressed(x, y, button)
-  if not state.enabled then return false end
+  -- Tree/detail region clicks work whenever the regions are set (including embed).
+  -- Canvas pick mode clicks require state.enabled (full inspector active).
 
   -- Detail panel click (uses stored region from drawDetailInRegion)
   if state.selectedNode and state.detailRegion then
@@ -763,7 +764,8 @@ function Inspector.mousepressed(x, y, button)
     end
   end
 
-  -- Clicking in viewport: select hovered node (only in pick mode)
+  -- Clicking in viewport: select hovered node (only when inspector is fully enabled)
+  if not state.enabled then return false end
   if state.pickMode and state.hoveredNode then
     -- Resolve to a node that actually appears in the tree panel:
     -- - Empty __TEXT__ nodes are skipped by drawTreeNode
@@ -803,7 +805,7 @@ end
 --- Handle mouse wheel (scroll tree panel or detail panel).
 --- Uses stored region bounds for hit detection.
 function Inspector.wheelmoved(x, y)
-  if not state.enabled then return false end
+  -- Region-based scrolling works whenever regions are set (including embed)
 
   -- Map horizontal tilt to vertical scroll when no vertical input
   local dy = y
@@ -904,7 +906,7 @@ end
 --- Draw the tree panel inside a region {x, y, w, h}.
 --- Called by devtools when Elements tab is active.
 function Inspector.drawTreeInRegion(root, region)
-  if not state.enabled or not root then return end
+  if not root then return end
   state.treeRegion = region
 
   -- Resolve hoveredNode from tree positions BEFORE drawing so the highlight
@@ -944,7 +946,7 @@ end
 --- Draw the detail panel inside a region {x, y, w, h}.
 --- Called by devtools when Elements tab is active and a node is selected.
 function Inspector.drawDetailInRegion(region)
-  if not state.enabled or not state.selectedNode then return end
+  if not state.selectedNode then return end
   state.detailRegion = region
   drawDetailPanel(region.x, region.y, region.w, region.h)
 end
