@@ -1,50 +1,37 @@
 /**
- * Render — Tabbed multi-component showcase (Layout3).
+ * Render — Package documentation page (Layout2 zigzag narrative).
  *
- * Structure:
- *   Header   — package title + badge + description
- *   Preview  — LIVE DEMO of the active tab's component (flexGrow: 1)
- *   Info row — horizontal strip: description | code example | props
- *   Tab bar  — clickable tabs (one per source type)
- *   Footer   — breadcrumbs with "N of M" counter
- *
- * The TABS array drives the info row, tab bar, and footer.
- * The renderPreview function drives the preview area — one case per tab.
- * Clicking a tab swaps everything: preview, description, usage, and props.
+ * Live demos for screen capture, webcam, HDMI, window capture, VMs,
+ * virtual displays, and interactive mode. FFmpeg + XShm + QEMU via Lua.
+ * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState } from 'react';
-import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Render } from '../../../packages/core/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
 const C = {
   accent: '#8b5cf6',
   accentDim: 'rgba(139, 92, 246, 0.12)',
-  selected: 'rgba(139, 92, 246, 0.2)',
+  callout: 'rgba(139, 92, 246, 0.06)',
+  calloutBorder: 'rgba(139, 92, 246, 0.30)',
+  screen: '#4fc3f7',
+  webcam: '#66bb6a',
+  hdmi: '#ffa726',
+  window: '#ab47bc',
+  vm: '#ef5350',
+  display: '#26c6da',
+  interactive: '#ec4899',
 };
 
-// ── Tabs ─────────────────────────────────────────────────
-// Each tab represents one source type / usage mode of <Render>.
+// ── Static code blocks (hoisted — never recreated) ──────
 
-interface TabDef {
-  id: string;
-  label: string;
-  icon: string;
-  desc: string;
-  usage: string;
-  props: [string, string, string][]; // [name, type, icon]
-  callbacks: [string, string, string][];
-}
+const INSTALL_CODE = `import { Render } from '@reactjit/core'`;
 
-const TABS: TabDef[] = [
-  {
-    id: 'screen',
-    label: 'Screen',
-    icon: 'monitor',
-    desc: 'Full screen capture via XShm (<1ms) or x11grab. Pass "screen:N" where N is the display index. Sub-millisecond latency on Linux with shared memory fast path.',
-    usage: `<Render source="screen:0" />
+const SCREEN_CODE = `<Render source="screen:0" />
 
 // Custom FPS and resolution
 <Render
@@ -52,98 +39,32 @@ const TABS: TabDef[] = [
   fps={60}
   resolution="1920x1080"
   style={{ flexGrow: 1 }}
-/>`,
-    props: [
-      ['source', '"screen:N"', 'monitor'],
-      ['fps', 'number', 'clock'],
-      ['resolution', 'string', 'maximize'],
-      ['objectFit', 'enum', 'maximize'],
-      ['muted', 'boolean', 'volume-x'],
-      ['style', 'Style', 'layout'],
-    ],
-    callbacks: [
-      ['onReady', '() => void', 'check-circle'],
-      ['onError', '(e) => void', 'alert-circle'],
-      ['onFrame', '(e) => void', 'film'],
-    ],
-  },
-  {
-    id: 'webcam',
-    label: 'Webcam',
-    icon: 'camera',
-    desc: 'Webcam feed via v4l2. Pass "cam:N" for device index or a direct path like "/dev/video2". Defaults to 30fps at 1280x720.',
-    usage: `<Render source="cam:0" fps={30} />
+/>`;
+
+const WEBCAM_CODE = `<Render source="cam:0" fps={30} />
 
 // Direct v4l2 device path
-<Render source="/dev/video2" />`,
-    props: [
-      ['source', '"cam:N" | path', 'camera'],
-      ['fps', 'number', 'clock'],
-      ['resolution', 'string', 'maximize'],
-      ['objectFit', 'enum', 'maximize'],
-      ['muted', 'boolean', 'volume-x'],
-    ],
-    callbacks: [
-      ['onReady', '() => void', 'check-circle'],
-      ['onError', '(e) => void', 'alert-circle'],
-    ],
-  },
-  {
-    id: 'hdmi',
-    label: 'HDMI',
-    icon: 'tv',
-    desc: 'HDMI capture card input. Uses the same v4l2 pipeline as webcam but targets capture card devices. Pass "hdmi:N" for device index.',
-    usage: `<Render source="hdmi:0" />
+<Render source="/dev/video2" />`;
+
+const HDMI_CODE = `<Render source="hdmi:0" />
 
 // With custom resolution
 <Render
   source="hdmi:0"
   resolution="1920x1080"
   fps={60}
-/>`,
-    props: [
-      ['source', '"hdmi:N"', 'tv'],
-      ['fps', 'number', 'clock'],
-      ['resolution', 'string', 'maximize'],
-      ['objectFit', 'enum', 'maximize'],
-      ['muted', 'boolean', 'volume-x'],
-    ],
-    callbacks: [
-      ['onReady', '() => void', 'check-circle'],
-      ['onError', '(e) => void', 'alert-circle'],
-    ],
-  },
-  {
-    id: 'window',
-    label: 'Window',
-    icon: 'layout',
-    desc: 'Capture a specific window by its title. Uses X11 window matching. Pass "window:Title" where Title is a substring of the target window name.',
-    usage: `<Render source="window:Firefox" />
+/>`;
+
+const WINDOW_CODE = `<Render source="window:Firefox" />
 
 // Capture by partial title match
 <Render
   source="window:Visual Studio"
   fps={15}
   style={{ flexGrow: 1 }}
-/>`,
-    props: [
-      ['source', '"window:Title"', 'layout'],
-      ['fps', 'number', 'clock'],
-      ['resolution', 'string', 'maximize'],
-      ['objectFit', 'enum', 'maximize'],
-    ],
-    callbacks: [
-      ['onReady', '() => void', 'check-circle'],
-      ['onError', '(e) => void', 'alert-circle'],
-      ['onFrame', '(e) => void', 'film'],
-    ],
-  },
-  {
-    id: 'vm',
-    label: 'VM',
-    icon: 'server',
-    desc: 'Boot a QEMU VM from an ISO or disk image. Framebuffer streamed over VNC, input forwarded automatically. KVM auto-detected for near-native speed. Supports .iso, .img, .qcow2, .vmdk, .vdi, .vhd.',
-    usage: `// Boot from ISO — one line
+/>`;
+
+const VM_CODE = `// Boot from ISO — one line
 <Render source="debian.iso" interactive />
 
 // Disk image with custom resources
@@ -153,51 +74,18 @@ const TABS: TabDef[] = [
   vmCpus={4}
   interactive
   style={{ flexGrow: 1 }}
-/>`,
-    props: [
-      ['source', 'path | "vm:path"', 'hard-drive'],
-      ['vmMemory', 'number (MB)', 'cpu'],
-      ['vmCpus', 'number', 'cpu'],
-      ['interactive', 'boolean', 'mouse-pointer'],
-      ['fps', 'number', 'clock'],
-      ['resolution', 'string', 'maximize'],
-      ['muted', 'boolean', 'volume-x'],
-    ],
-    callbacks: [
-      ['onReady', '(e: {vmInfo}) => void', 'check-circle'],
-      ['onError', '(e) => void', 'alert-circle'],
-    ],
-  },
-  {
-    id: 'display',
-    label: 'Display',
-    icon: 'airplay',
-    desc: 'Create a virtual monitor that other apps can render to. Your ReactJIT window becomes Display :N. When the app closes, the virtual monitor disconnects cleanly. Requires Xephyr or Xvfb.',
-    usage: `<Render
+/>`;
+
+const DISPLAY_CODE = `<Render
   source="display"
   resolution="1920x1080"
   interactive
   onReady={({ displayNumber }) => {
     // DISPLAY=:N firefox
   }}
-/>`,
-    props: [
-      ['source', '"display"', 'airplay'],
-      ['resolution', 'string', 'maximize'],
-      ['interactive', 'boolean', 'mouse-pointer'],
-      ['fps', 'number', 'clock'],
-    ],
-    callbacks: [
-      ['onReady', '(e: {displayNumber}) => void', 'check-circle'],
-      ['onError', '(e) => void', 'alert-circle'],
-    ],
-  },
-  {
-    id: 'interactive',
-    label: 'Interactive',
-    icon: 'mouse-pointer',
-    desc: 'When interactive is true, mouse clicks and keyboard input are forwarded to the source. VMs use VNC protocol (zero-latency). Screen/window uses xdotool. VMs and displays default to interactive=true.',
-    usage: `// Interactive screen control
+/>`;
+
+const INTERACTIVE_CODE = `// Interactive screen control
 <Render
   source="screen:0"
   interactive
@@ -206,61 +94,184 @@ const TABS: TabDef[] = [
 />
 
 // VMs default to interactive={true}
-<Render source="debian.iso" />`,
-    props: [
-      ['interactive', 'boolean', 'mouse-pointer'],
-      ['objectFit', 'enum', 'maximize'],
-      ['source', 'string', 'monitor'],
-      ['style', 'Style', 'layout'],
-    ],
-    callbacks: [
-      ['onClick', '(e: LoveEvent) => void', 'mouse-pointer'],
-      ['onReady', '() => void', 'check-circle'],
-    ],
-  },
+<Render source="debian.iso" />`;
+
+const EVENTS_CODE = `<Render
+  source="screen:0"
+  onReady={() => console.log('Capture started')}
+  onError={(e) => console.log('Error:', e.message)}
+  onFrame={(e) => console.log('Frame', e.frameNumber)}
+/>`;
+
+// ── Hoisted data arrays ─────────────────────────────────
+
+const SOURCES = [
+  { label: 'screen:N', desc: 'Full screen capture via XShm (<1ms) or x11grab', color: C.screen },
+  { label: 'cam:N', desc: 'Webcam feed via v4l2 (default 30fps @ 1280x720)', color: C.webcam },
+  { label: 'hdmi:N', desc: 'HDMI capture card input via v4l2 pipeline', color: C.hdmi },
+  { label: 'window:Title', desc: 'Capture specific window by title substring (X11)', color: C.window },
+  { label: '/dev/videoN', desc: 'Direct v4l2 device path (webcam or capture card)', color: C.webcam },
+  { label: 'display', desc: 'Virtual monitor — other apps render to your ReactJIT window', color: C.display },
+  { label: 'file.iso', desc: 'Boot a QEMU VM from ISO (KVM auto-detected)', color: C.vm },
+  { label: 'vm:path.qcow2', desc: 'Boot a VM from disk image (.qcow2, .vmdk, .vdi, .vhd)', color: C.vm },
 ];
 
-// ── Preview renderer ─────────────────────────────────────
+const PROPS = [
+  { label: 'source', desc: 'Source identifier (see catalog above)', color: C.accent },
+  { label: 'fps', desc: 'Capture framerate (default: 30)', color: C.screen },
+  { label: 'resolution', desc: 'Capture resolution e.g. "1920x1080" (default: "1280x720")', color: C.screen },
+  { label: 'interactive', desc: 'Enable mouse/keyboard input forwarding (default: false for capture, true for VM/display)', color: C.interactive },
+  { label: 'muted', desc: 'Suppress audio from source (default: true)', color: C.hdmi },
+  { label: 'objectFit', desc: '"fill" | "contain" | "cover" (default: "contain")', color: C.window },
+  { label: 'vmMemory', desc: 'VM RAM in MB (default: 2048) — VM sources only', color: C.vm },
+  { label: 'vmCpus', desc: 'VM CPU count (default: 2) — VM sources only', color: C.vm },
+  { label: 'onReady', desc: 'Fires when capture starts producing frames', color: C.webcam },
+  { label: 'onError', desc: 'Fires if capture fails ({ message: string })', color: C.vm },
+  { label: 'onFrame', desc: 'Fires on each new frame ({ frameNumber })', color: C.display },
+];
 
-function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
-  switch (tab.id) {
-    case 'screen':
-      return <Render source="screen:0" style={{ flexGrow: 1 }} objectFit="contain" />;
-    case 'webcam':
-      return <Render source="cam:0" fps={30} style={{ flexGrow: 1 }} objectFit="contain" />;
-    case 'hdmi':
-      return <Render source="hdmi:0" style={{ flexGrow: 1 }} objectFit="contain" />;
-    case 'window':
-      return <Render source="window:Firefox" fps={15} style={{ flexGrow: 1 }} objectFit="contain" />;
-    case 'vm':
-      return <Render source="debian.iso" interactive style={{ flexGrow: 1 }} objectFit="contain" />;
-    case 'display':
-      return <Render source="display" resolution="1920x1080" interactive style={{ flexGrow: 1 }} objectFit="contain" />;
-    case 'interactive':
-      return <Render source="screen:0" interactive objectFit="contain" style={{ flexGrow: 1 }} />;
-    default:
-      return null;
-  }
+// ── Live Demo: Screen Capture ────────────────────────────
+
+function ScreenCaptureDemo() {
+  const c = useThemeColors();
+  const [active, setActive] = useState(false);
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="screen:0" color={C.screen} />
+        <Tag text="XShm" color={C.accent} />
+      </Box>
+
+      {active ? (
+        <Box style={{ width: 280, height: 180, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: C.screen + '44' }}>
+          <Render source="screen:0" fps={15} objectFit="contain" style={{ flexGrow: 1 }} />
+        </Box>
+      ) : (
+        <Pressable onPress={() => setActive(true)}>
+          <Box style={{
+            width: 280, height: 180, borderRadius: 6, overflow: 'hidden',
+            borderWidth: 1, borderColor: C.screen + '44',
+            backgroundColor: c.surface,
+            justifyContent: 'center', alignItems: 'center', gap: 8,
+          }}>
+            <Image src="monitor" style={{ width: 24, height: 24 }} tintColor={C.screen} />
+            <Text style={{ fontSize: 11, color: C.screen }}>{'Start Screen Capture'}</Text>
+            <Text style={{ fontSize: 8, color: c.muted }}>{'Captures this display via XShm'}</Text>
+          </Box>
+        </Pressable>
+      )}
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? C.webcam : c.textDim }} />
+        <Text style={{ fontSize: 9, color: active ? C.webcam : c.textDim }}>
+          {active ? 'Capturing at 15 fps' : 'Tap to start capture'}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Live Demo: Window Capture ────────────────────────────
+
+function WindowCaptureDemo() {
+  const c = useThemeColors();
+  const [target, setTarget] = useState('');
+  const [active, setActive] = useState(false);
+
+  const titles = ['Firefox', 'Code', 'Terminal', 'Chromium'];
+
+  const startCapture = useCallback((title: string) => {
+    setTarget(title);
+    setActive(true);
+  }, []);
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
+      <Tag text="window:Title" color={C.window} />
+
+      {active ? (
+        <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
+          <Box style={{ width: 280, height: 160, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: C.window + '44' }}>
+            <Render source={`window:${target}`} fps={10} objectFit="contain" style={{ flexGrow: 1 }} />
+          </Box>
+          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.window }} />
+            <Text style={{ fontSize: 9, color: C.window }}>{`Capturing window: ${target}`}</Text>
+          </Box>
+          <Pressable onPress={() => setActive(false)}>
+            <Box style={{ backgroundColor: C.vm + '33', paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
+              <Text style={{ fontSize: 9, color: C.vm }}>{'Stop'}</Text>
+            </Box>
+          </Pressable>
+        </Box>
+      ) : (
+        <Box style={{ gap: 6, width: '100%' }}>
+          <Text style={{ fontSize: 9, color: c.muted }}>{'Pick a window to capture:'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {titles.map(t => (
+              <Pressable key={t} onPress={() => startCapture(t)}>
+                <Box style={{ backgroundColor: C.window + '22', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 10, color: C.window }}>{t}</Text>
+                </Box>
+              </Pressable>
+            ))}
+          </Box>
+          <Text style={{ fontSize: 8, color: c.textDim }}>{'Matches by partial window title via X11'}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── Source Catalog ───────────────────────────────────────
+
+function SourceCatalog() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ gap: 3, width: '100%' }}>
+      {SOURCES.map(s => (
+        <Box key={s.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: s.color, flexShrink: 0 }} />
+          <Text style={{ fontSize: 10, color: c.text, width: 110, flexShrink: 0 }}>{s.label}</Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>{s.desc}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// ── Props Catalog ───────────────────────────────────────
+
+function PropsCatalog() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ gap: 3, width: '100%' }}>
+      {PROPS.map(p => (
+        <Box key={p.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: p.color, flexShrink: 0 }} />
+          <Text style={{ fontSize: 10, color: c.text, width: 100, flexShrink: 0 }}>{p.label}</Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>{p.desc}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
 }
 
 // ── Helpers ──────────────────────────────────────────────
 
-function HorizontalDivider() {
-  const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
-}
-
-function VerticalDivider() {
-  const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+function Tag({ text, color }: { text: string; color: string }) {
+  return (
+    <Box style={{ backgroundColor: color + '22', paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+      <Text style={{ color, fontSize: 8, fontFamily: 'monospace' }}>{text}</Text>
+    </Box>
+  );
 }
 
 // ── RenderStory ─────────────────────────────────────────
 
 export function RenderStory() {
   const c = useThemeColors();
-  const [activeId, setActiveId] = useState(TABS[0].id);
-  const tab = TABS.find(it => it.id === activeId) || TABS[0];
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
@@ -295,125 +306,305 @@ export function RenderStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Capture screens, run VMs, and create virtual displays — like OBS + QEMU as a React component'}
+          {'OBS + QEMU as a React component'}
         </Text>
       </Box>
 
-      {/* ── Preview area — LIVE DEMO of the active tab ── */}
-      <Box style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
-        {renderPreview(tab, c)}
-      </Box>
+      {/* ── Content ── */}
+      <ScrollView style={{ flexGrow: 1 }}>
 
-      {/* ── Info row — description | code | props ── */}
-      <Box style={{
-        height: 120,
-        flexShrink: 0,
-        flexDirection: 'row',
-        borderTopWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bgElevated,
-        overflow: 'hidden',
-      }}>
-
-        {/* ── Description ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>
-            {tab.label}
+        {/* ── Hero band ── */}
+        <HeroBand accentColor={C.accent}>
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+            {'Capture screens, webcams, windows, and HDMI. Boot VMs from ISO. Create virtual displays. One component.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {tab.desc}
+            {'<Render> wraps FFmpeg, XShm, v4l2, QEMU, and Xephyr into a single declarative component. Pass a source string and get live video. Interactive mode forwards mouse and keyboard to the source. VMs use VNC protocol for zero-latency input. Screen capture uses XShm shared memory for sub-millisecond frame delivery.'}
           </Text>
-        </Box>
+        </HeroBand>
 
-        <VerticalDivider />
+        <Divider />
 
-        {/* ── Usage code ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-            {'USAGE'}
-          </Text>
-          <CodeBlock language="tsx" fontSize={9} code={tab.usage} />
-        </Box>
+        {/* ── Install: text | code ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'One import. The source prop determines the capture backend. Everything runs in Lua — React just declares the layout.'}
+            </Text>
+          </Half>
+          <Half>
+            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          </Half>
+        </Band>
 
-        <VerticalDivider />
+        <Divider />
 
-        {/* ── Props + callbacks ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-            {'PROPS'}
-          </Text>
-          <Box style={{ gap: 3 }}>
-            {tab.props.map(([name, type, icon]) => (
-              <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+        {/* ── Screen Capture: demo | text + code ── */}
+        <Band>
+          <Half>
+            <ScreenCaptureDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="monitor">{'SCREEN CAPTURE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Full screen capture via XShm shared memory — sub-millisecond latency on Linux. Falls back to x11grab (FFmpeg) on systems without XShm. Pass "screen:N" where N is the display index.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'The XShm fast path maps the X11 framebuffer directly into Love2D texture memory. No pixel copies, no format conversion.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={SCREEN_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Webcam: text + code | demo placeholder ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="camera">{'WEBCAM'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Webcam feed via v4l2. Pass "cam:N" for device index or a direct path like "/dev/video2". Defaults to 30fps at 1280x720. Multiple cameras supported simultaneously.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Uses the same FFmpeg pipeline as HDMI but auto-negotiates resolution with the camera driver.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={WEBCAM_CODE} />
+          </Half>
+          <Half>
+            <Box style={{ gap: 6, alignItems: 'center' }}>
+              <Tag text="cam:0" color={C.webcam} />
+              <Box style={{
+                width: 200, height: 130, borderRadius: 6,
+                backgroundColor: c.surface,
+                borderWidth: 1, borderColor: C.webcam + '33',
+                justifyContent: 'center', alignItems: 'center', gap: 6,
+              }}>
+                <Image src="camera" style={{ width: 20, height: 20 }} tintColor={C.webcam} />
+                <Text style={{ fontSize: 9, color: C.webcam }}>{'v4l2 device feed'}</Text>
               </Box>
-            ))}
-          </Box>
-          {tab.callbacks.length > 0 && (
-            <>
-              <HorizontalDivider />
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-                {'CALLBACKS'}
-              </Text>
+              <Text style={{ fontSize: 8, color: c.textDim }}>{'Default: 30fps @ 1280x720'}</Text>
+            </Box>
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── HDMI: code | text ── */}
+        <Band>
+          <Half>
+            <Box style={{ gap: 6, alignItems: 'center' }}>
+              <Tag text="hdmi:0" color={C.hdmi} />
+              <Box style={{
+                width: 200, height: 130, borderRadius: 6,
+                backgroundColor: c.surface,
+                borderWidth: 1, borderColor: C.hdmi + '33',
+                justifyContent: 'center', alignItems: 'center', gap: 6,
+              }}>
+                <Image src="tv" style={{ width: 20, height: 20 }} tintColor={C.hdmi} />
+                <Text style={{ fontSize: 9, color: C.hdmi }}>{'Capture card input'}</Text>
+              </Box>
+              <Text style={{ fontSize: 8, color: c.textDim }}>{'Same v4l2 pipeline as webcam'}</Text>
+            </Box>
+          </Half>
+          <Half>
+            <SectionLabel icon="tv">{'HDMI CAPTURE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'HDMI capture card input. Uses the same v4l2 pipeline as webcam but targets capture card devices. Pass "hdmi:N" for device index. Supports 1080p60 and 4K30 depending on hardware.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={HDMI_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Window Capture: demo | text + code ── */}
+        <Band>
+          <Half>
+            <WindowCaptureDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="layout">{'WINDOW CAPTURE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Capture a specific window by its title. Uses X11 window matching — pass "window:Title" where Title is a substring of the target window name. Great for embedding other apps inside your ReactJIT layout.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={WINDOW_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Callout: everything runs in Lua ── */}
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'All capture, VM management, and input forwarding runs in Lua. React never touches frame data or event queues — the capability tick function blits frames directly to Love2D textures. Zero bridge overhead per frame.'}
+          </Text>
+        </CalloutBand>
+
+        <Divider />
+
+        {/* ── VM: text + code | visual ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="server">{'VIRTUAL MACHINES'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Boot a QEMU VM from an ISO or disk image. Framebuffer streamed over VNC, input forwarded automatically. KVM auto-detected for near-native speed. Supports .iso, .img, .qcow2, .vmdk, .vdi, .vhd.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'VMs default to interactive=true. Mouse clicks and keyboard input are forwarded via VNC protocol with zero additional latency.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={VM_CODE} />
+          </Half>
+          <Half>
+            <Box style={{ gap: 6, alignItems: 'center' }}>
+              <Box style={{ flexDirection: 'row', gap: 6 }}>
+                <Tag text="QEMU" color={C.vm} />
+                <Tag text="KVM" color={C.vm} />
+                <Tag text="VNC" color={C.vm} />
+              </Box>
+              <Box style={{
+                width: 200, height: 140, borderRadius: 6,
+                backgroundColor: '#1a0a0a',
+                borderWidth: 1, borderColor: C.vm + '44',
+                justifyContent: 'center', alignItems: 'center', gap: 8,
+              }}>
+                <Image src="server" style={{ width: 24, height: 24 }} tintColor={C.vm} />
+                <Text style={{ fontSize: 10, color: C.vm }}>{'debian.iso'}</Text>
+                <Text style={{ fontSize: 8, color: c.muted }}>{'2048 MB / 2 vCPUs'}</Text>
+              </Box>
+              <Box style={{ flexDirection: 'row', gap: 8 }}>
+                <Box style={{ gap: 1, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 8, color: c.textDim }}>{'vmMemory'}</Text>
+                  <Text style={{ fontSize: 9, color: C.vm }}>{'2048'}</Text>
+                </Box>
+                <Box style={{ gap: 1, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 8, color: c.textDim }}>{'vmCpus'}</Text>
+                  <Text style={{ fontSize: 9, color: C.vm }}>{'2'}</Text>
+                </Box>
+                <Box style={{ gap: 1, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 8, color: c.textDim }}>{'interactive'}</Text>
+                  <Text style={{ fontSize: 9, color: C.webcam }}>{'true'}</Text>
+                </Box>
+              </Box>
+            </Box>
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Virtual Display: code | text ── */}
+        <Band>
+          <Half>
+            <CodeBlock language="tsx" fontSize={9} code={DISPLAY_CODE} />
+          </Half>
+          <Half>
+            <SectionLabel icon="airplay">{'VIRTUAL DISPLAY'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Create a virtual monitor that other apps can render to. Your ReactJIT window becomes Display :N. Launch apps targeting that display and see their output live. Requires Xephyr or Xvfb.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'The onReady callback receives the display number so you can launch apps targeting it. When your Render component unmounts, the virtual monitor disconnects cleanly.'}
+            </Text>
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Interactive Mode: text + code | visual ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="mouse-pointer">{'INTERACTIVE MODE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'When interactive is true, mouse clicks and keyboard input are forwarded to the source. VMs use VNC protocol (zero-latency). Screen and window capture use xdotool. VMs and displays default to interactive=true.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Input forwarding coordinates are transformed from the Render element bounds to the source resolution — clicks land exactly where you expect regardless of objectFit scaling.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={INTERACTIVE_CODE} />
+          </Half>
+          <Half>
+            <Box style={{ gap: 6, alignItems: 'center' }}>
+              <Tag text="interactive" color={C.interactive} />
+              <Box style={{
+                width: 200, height: 120, borderRadius: 6,
+                backgroundColor: c.surface,
+                borderWidth: 1, borderColor: C.interactive + '33',
+                justifyContent: 'center', alignItems: 'center', gap: 8,
+              }}>
+                <Image src="mouse-pointer" style={{ width: 20, height: 20 }} tintColor={C.interactive} />
+                <Text style={{ fontSize: 9, color: C.interactive }}>{'Mouse + keyboard forwarding'}</Text>
+              </Box>
               <Box style={{ gap: 3 }}>
-                {tab.callbacks.map(([name, sig, icon]) => (
-                  <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                    <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                    <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                    <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                  </Box>
-                ))}
+                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.vm }} />
+                  <Text style={{ fontSize: 9, color: c.text }}>{'VM/Display'}</Text>
+                  <Text style={{ fontSize: 9, color: c.muted }}>{'interactive=true by default'}</Text>
+                </Box>
+                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.screen }} />
+                  <Text style={{ fontSize: 9, color: c.text }}>{'Screen/Window'}</Text>
+                  <Text style={{ fontSize: 9, color: c.muted }}>{'interactive=false by default'}</Text>
+                </Box>
               </Box>
-            </>
-          )}
+            </Box>
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Events: text | code ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="zap">{'EVENTS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Three lifecycle events. onReady fires when the first frame arrives — for VMs this includes vmInfo with PID and VNC port, for displays it includes displayNumber. onError fires on capture failure. onFrame fires per frame (throttled).'}
+            </Text>
+          </Half>
+          <Half>
+            <CodeBlock language="tsx" fontSize={9} code={EVENTS_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Source catalog ── */}
+        <Box style={{
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 16,
+          gap: 8,
+        }}>
+          <SectionLabel icon="list">{'SOURCE TYPES'}</SectionLabel>
+          <Text style={{ color: c.muted, fontSize: 9 }}>{'Every source string <Render> accepts:'}</Text>
+          <SourceCatalog />
         </Box>
 
-      </Box>
+        <Divider />
 
-      {/* ── Tab bar — switches the active component shown above ── */}
-      <ScrollView style={{
-        height: 86,
-        flexShrink: 0,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bgElevated,
-      }}>
-          <Box style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            paddingLeft: 8,
-            paddingRight: 8,
-            paddingTop: 8,
-            paddingBottom: 8,
-            gap: 8,
-          }}>
-            {TABS.map(comp => {
-              const active = comp.id === activeId;
-              return (
-                <Pressable key={comp.id} onPress={() => setActiveId(comp.id)}>
-                  <Box style={{
-                    width: 50,
-                    height: 50,
-                    backgroundColor: active ? C.selected : c.surface,
-                    borderRadius: 6,
-                    borderWidth: active ? 2 : 1,
-                    borderColor: active ? C.accent : c.border,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}>
-                    <Image src={comp.icon} style={{ width: 16, height: 16 }} tintColor={active ? C.accent : c.muted} />
-                    <Text style={{ color: active ? c.text : c.muted, fontSize: 7 }}>
-                      {comp.label}
-                    </Text>
-                  </Box>
-                </Pressable>
-              );
-            })}
-          </Box>
+        {/* ── Props catalog ── */}
+        <Box style={{
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 24,
+          gap: 8,
+        }}>
+          <SectionLabel icon="settings">{'PROPS & EVENTS'}</SectionLabel>
+          <PropsCatalog />
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout: one-liner philosophy ── */}
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'Screen capture, webcam feed, HDMI input, window grab, VM boot, virtual display — all the same component, all one prop. The source string is the only thing that changes.'}
+          </Text>
+        </CalloutBand>
+
       </ScrollView>
 
       {/* ── Footer ── */}
@@ -433,13 +624,10 @@ export function RenderStory() {
         <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
         <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
         <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="monitor" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Render'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{tab.label}</Text>
+        <Image src="monitor" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Render'}</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
     </Box>
