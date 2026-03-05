@@ -38,6 +38,11 @@ TMPDIR="${TMPDIR:-/tmp}"
 PANIC_MODE=0
 PANIC_DELTAS=""
 
+# Heartbeat freeze detection
+HEARTBEAT_FILE="$TMPDIR/reactjit_heartbeat_${PID}"
+HEARTBEAT_TIMEOUT=5   # seconds without heartbeat update = frozen
+HEARTBEAT_GRACE=10    # seconds after startup before checking (Lua needs time to start writing)
+
 # Collect /proc diagnostics for the target PID.
 # Writes to $1 (output variable name is avoided; prints to stdout).
 collect_proc_snapshot() {
@@ -172,6 +177,20 @@ while kill -0 "$PID" 2>/dev/null; do
 
       kill -9 "$PID" 2>/dev/null
 
+      # Kill registered child processes
+      if [ -f "$TMPDIR/reactjit_children_${PID}" ]; then
+        while IFS= read -r cpid; do
+          cpid=$(echo "$cpid" | tr -d '[:space:]')
+          [ -n "$cpid" ] && kill "$cpid" 2>/dev/null
+        done < "$TMPDIR/reactjit_children_${PID}"
+        sleep 0.2
+        while IFS= read -r cpid; do
+          cpid=$(echo "$cpid" | tr -d '[:space:]')
+          [ -n "$cpid" ] && kill -9 "$cpid" 2>/dev/null
+        done < "$TMPDIR/reactjit_children_${PID}"
+        rm -f "$TMPDIR/reactjit_children_${PID}"
+      fi
+
       # Clean up signal file
       rm -f "$TMPDIR/reactjit_panic.signal"
 
@@ -234,6 +253,76 @@ CRASHEOF
     fi
   fi
 
+  # ================================================================
+  # HEARTBEAT: Detect frozen processes (alive but not rendering)
+  # ================================================================
+  # After the grace period, check if the heartbeat file exists and is recent.
+  # The Lua side writes os.time() to this file every ~60 frames (~1/sec).
+  # If it's stale for >HEARTBEAT_TIMEOUT seconds, the process is frozen.
+  NOW_EPOCH=$(date +%s)
+  BOOT_ELAPSED=$(( NOW_EPOCH - (START_NS / 1000000000) ))
+  if [ "$BOOT_ELAPSED" -gt "$HEARTBEAT_GRACE" ] && [ -f "$HEARTBEAT_FILE" ]; then
+    HEARTBEAT_TS=$(cat "$HEARTBEAT_FILE" 2>/dev/null || echo 0)
+    HEARTBEAT_AGE=$(( NOW_EPOCH - HEARTBEAT_TS ))
+    if [ "$HEARTBEAT_AGE" -gt "$HEARTBEAT_TIMEOUT" ]; then
+      RSS_MB=$((RSS_KB / 1024))
+      echo "" >&2
+      echo "[WATCHDOG] FROZEN — heartbeat stale for ${HEARTBEAT_AGE}s (threshold: ${HEARTBEAT_TIMEOUT}s, RSS: ${RSS_MB}MB)" >&2
+      echo "[WATCHDOG] Killing PID $PID" >&2
+
+      CMDLINE=""
+      if [ -f "/proc/$PID/cmdline" ]; then
+        CMDLINE=$(tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null | sed 's/ $//')
+      fi
+      CWD=$(readlink "/proc/$PID/cwd" 2>/dev/null || echo "")
+
+      kill -9 "$PID" 2>/dev/null
+
+      # Kill registered child processes
+      if [ -f "$TMPDIR/reactjit_children_${PID}" ]; then
+        while IFS= read -r cpid; do
+          cpid=$(echo "$cpid" | tr -d '[:space:]')
+          [ -n "$cpid" ] && kill "$cpid" 2>/dev/null
+        done < "$TMPDIR/reactjit_children_${PID}"
+        sleep 0.2
+        while IFS= read -r cpid; do
+          cpid=$(echo "$cpid" | tr -d '[:space:]')
+          [ -n "$cpid" ] && kill -9 "$cpid" 2>/dev/null
+        done < "$TMPDIR/reactjit_children_${PID}"
+        rm -f "$TMPDIR/reactjit_children_${PID}"
+      fi
+
+      rm -f "$HEARTBEAT_FILE"
+
+      # Build crash report
+      CRASH_FILE="$TMPDIR/reactjit_crash.lua"
+      CMDLINE_ESC=$(echo "$CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+      CWD_ESC=$(echo "$CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+      cat > "$CRASH_FILE" << CRASHEOF
+return {
+  error = "[WATCHDOG] Process frozen — no heartbeat for ${HEARTBEAT_AGE}s (RSS: ${RSS_MB}MB)",
+  context = "watchdog kill (heartbeat timeout)",
+  crashType = "freeze",
+  timestamp = "$(date '+%Y-%m-%d %H:%M:%S')",
+  rebootCmd = "${CMDLINE_ESC}",
+  rebootCwd = "${CWD_ESC}",
+  rssMB = ${RSS_MB},
+  heartbeatAge = ${HEARTBEAT_AGE},
+}
+CRASHEOF
+
+      echo "[WATCHDOG] Crash report written to $CRASH_FILE" >&2
+
+      # Spawn crash report window
+      SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+      if [ -f "$SCRIPT_DIR/crashreport/main.lua" ]; then
+        love "$SCRIPT_DIR/crashreport" &
+      fi
+      exit 0
+    fi
+  fi
+
   LAST_RSS=$RSS_KB
   sleep "$SLEEP_S"
 done
@@ -251,6 +340,33 @@ done
 # If the marker is missing → crash (segfault, SIGABRT, SIGBUS, etc.).
 
 CLEAN_EXIT_MARKER="$TMPDIR/reactjit_clean_exit"
+CHILDREN_FILE="$TMPDIR/reactjit_children_${PID}"
+
+# Kill any registered child processes (Tor, child windows, devtools pop-outs, etc.)
+# This runs on BOTH clean exit and crash — the Lua-side killAll() handles clean exit,
+# but if the process crashed, love.quit() never ran and children are orphaned.
+if [ -f "$CHILDREN_FILE" ]; then
+  echo "[WATCHDOG] Cleaning up child processes from $CHILDREN_FILE" >&2
+  while IFS= read -r child_pid; do
+    child_pid=$(echo "$child_pid" | tr -d '[:space:]')
+    if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+      echo "[WATCHDOG] Killing child PID $child_pid" >&2
+      kill "$child_pid" 2>/dev/null
+    fi
+  done < "$CHILDREN_FILE"
+  # Brief pause then SIGKILL stragglers
+  sleep 0.2
+  while IFS= read -r child_pid; do
+    child_pid=$(echo "$child_pid" | tr -d '[:space:]')
+    if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+      kill -9 "$child_pid" 2>/dev/null
+    fi
+  done < "$CHILDREN_FILE"
+  rm -f "$CHILDREN_FILE"
+fi
+
+# Clean up heartbeat file
+rm -f "$HEARTBEAT_FILE"
 
 if [ -f "$CLEAN_EXIT_MARKER" ]; then
   # Normal exit — clean up marker and go

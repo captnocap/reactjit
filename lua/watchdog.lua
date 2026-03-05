@@ -49,6 +49,9 @@ function Watchdog.launch(opts)
   -- Get our own PID via C call (not shell — shell gives the subprocess PID)
   local pid = tostring(ffi.C.getpid())
 
+  -- Clean stale heartbeat from previous run
+  os.remove(tmpDir .. "/reactjit_heartbeat_" .. pid)
+
   -- Find watchdog.sh relative to this module
   local scriptPath
   local info = debug.getinfo(1, "S")
