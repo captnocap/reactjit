@@ -26,28 +26,17 @@ import { ImageVideoStory } from './ImageVideoStory';
 import EmulatorStory from './EmulatorStory';
 import { Scene3DShowcaseStory } from './Scene3DShowcaseStory';
 import { AudioRackStory } from './AudioRackStory';
-import { ControlsStory } from './ControlsStory';
-import { ThemeStory } from './ThemeStory';
 import { MapBasicStory } from './MapBasicStory';
 import { CartridgeInspectorStory } from './CartridgeInspectorStory';
 import { EffectsStory } from './EffectsStory';
-import { PolyPizzaStory } from './PolyPizzaStory';
 import { StressTestStory } from './StressTestStory';
-import { MultiWindowStory } from './MultiWindowStory';
 import { TslBoidsStory } from './TslBoidsStory';
 import { MasksStory } from './MasksStory';
-import { APIsStory } from './APIsStory';
-import { TerminalStory } from './TerminalStory';
-import { SemanticTerminalStory } from './SemanticTerminalStory';
-import { NoclipMazeStory } from './NoclipMazeStory';
-import { FleetStory } from './FleetStory';
-import { OriginStory } from './OriginStory';
 import { IconStory } from './IconStory';
 import { MathStory } from './MathStory';
 import { LintTestStory } from './LintTestStory';
 import { SyntaxStressStory } from './SyntaxStressStory';
 import { TimeStory } from './TimeStory';
-import { ScrapeStory } from './ScrapeStory';
 import { PrivacyStory } from './PrivacyStory';
 import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
@@ -62,7 +51,6 @@ import { RenderStory } from './RenderStory';
 import { CompatibilityStory } from './CompatibilityStory';
 import { PhysicsStory } from './PhysicsStory';
 
-
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
@@ -75,24 +63,22 @@ export const stories: StoryDef[] = [
   { id: 'icons', title: 'Icons', section: 'Core', component: IconStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
+  { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
 
   // Packages
   { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
   { id: 'crypto', title: 'Crypto', section: 'Packages', component: CryptoStory },
   { id: 'media', title: 'Media Library', section: 'Packages', component: MediaStory },
-  { id: 'controls', title: 'Controls', section: 'Packages', component: ControlsStory },
-  { id: 'theme', title: 'Theme System', section: 'Packages', component: ThemeStory },
   { id: 'effects', title: 'Effects', section: 'Packages', component: EffectsStory },
   { id: 'masks', title: 'Masks', section: 'Packages', component: MasksStory },
   { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
-  { id: 'scrape', title: 'Scrape', section: 'Packages', component: ScrapeStory },
-  { id: 'apis', title: 'APIs', section: 'Packages', component: APIsStory },
-  { id: 'terminal', title: 'Terminal (PTY)', section: 'Packages', component: TerminalStory },
-  { id: 'semantic-terminal', title: 'Semantic Terminal', section: 'Packages', component: SemanticTerminalStory },
-  { id: 'fleet', title: 'Fleet', section: 'Packages', component: FleetStory },
   { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
   { id: 'conversions', title: 'Conversions', section: 'Packages', component: ConversionsStory },
   { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
+  { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
+  { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
+  { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
+  { id: 'render', title: 'Render', section: 'Packages', component: RenderStory },
 
   // Demos
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
@@ -100,9 +86,6 @@ export const stories: StoryDef[] = [
   { id: 'scene-3d-showcase', title: '3D Showcase', section: 'Demos', component: Scene3DShowcaseStory },
   { id: 'map-basic', title: 'Map', section: 'Demos', component: MapBasicStory },
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
-  { id: 'poly-pizza', title: 'Poly Pizza', section: 'Demos', component: PolyPizzaStory },
-  { id: 'noclip-maze', title: 'Noclip Maze', section: 'Demos', component: NoclipMazeStory },
-  { id: 'origin', title: 'Origin', section: 'Demos', component: OriginStory },
   { id: 'physics', title: 'Physics', section: 'Demos', component: PhysicsStory },
 
   // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
@@ -114,19 +97,13 @@ export const stories: StoryDef[] = [
 
   // Dev
   { id: 'tsl-boids', title: 'TSL Boids', section: 'Dev', component: TslBoidsStory },
-  { id: 'multi-window', title: 'Multi-Window', section: 'Dev', component: MultiWindowStory },
   { id: 'cartridge-inspector', title: 'Cartridge Inspector', section: 'Dev', component: CartridgeInspectorStory },
   { id: 'error-test', title: 'Error Test', section: 'Dev', component: ErrorTestStory },
   { id: 'lint-test', title: 'Lint Test', section: 'Dev', component: LintTestStory },
+  { id: 'devtools', title: 'DevTools', section: 'Dev', component: DevToolsStory },
 
   // Layouts — story layout templates
   { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
-  { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
-  { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
-  { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
-  { id: 'render', title: 'Render', section: 'Packages', component: RenderStory },
-  { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
-  { id: 'devtools', title: 'DevTools', section: 'Dev', component: DevToolsStory },
 ];
