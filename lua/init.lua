@@ -4194,9 +4194,13 @@ function ReactJIT.resize(w, h)
   if M.bridge then
     pushEvent({ type = "viewport", payload = { width = w, height = h } })
   end
-  -- Persist geometry on resize so crashes don't lose size
+  -- Update mainWin dimensions + persist geometry on resize
   local wmOk, wmMod = pcall(require, "lua.window_manager")
-  if wmOk and wmMod then wmMod.saveGeometry() end
+  if wmOk and wmMod then
+    local mainWin = wmMod.getMain()
+    if mainWin then wmMod.handleResize(mainWin) end
+    wmMod.saveGeometry()
+  end
 end
 
 --- Call from love.handlers.windowmoved(x, y, sdlWindowId).
@@ -5356,7 +5360,11 @@ end
 function ReactJIT.quit()
   -- Save window geometry before shutdown so next launch restores position+size
   local wmOk2, wmMod2 = pcall(require, "lua.window_manager")
-  if wmOk2 and wmMod2 then wmMod2.saveGeometry() end
+  if wmOk2 and wmMod2 then
+    local mainWin = wmMod2.getMain()
+    if mainWin then wmMod2.handleResize(mainWin) end
+    wmMod2.saveGeometry()
+  end
 
   -- Write clean-exit marker so the watchdog knows this wasn't a crash.
   -- If the process segfaults, this file won't exist → watchdog spawns crash reporter.
