@@ -112,6 +112,11 @@ local cartReader  = M.cartReader
 -- Mouse position tracking (for tooltip timer advancement in update loop)
 local lastMouseX, lastMouseY = 0, 0
 
+-- Heartbeat: write a timestamp file every ~60 frames so the watchdog can
+-- detect frozen processes (alive but unresponsive — flat memory, no frames).
+local heartbeatCounter = 0
+local heartbeatPath    = nil  -- set in init() after PID is known
+
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
 if not ok_json then ok_json, json = pcall(require, "lua.json") end
@@ -624,6 +629,17 @@ function ReactJIT.init(config)
       io.write("[WATCHDOG] " .. (launched and "Active" or "Failed to launch") .. "\n"); io.flush()
     else
       io.write("[WATCHDOG] Module load failed: " .. tostring(watchdog) .. "\n"); io.flush()
+    end
+  end
+
+  -- Set up heartbeat file path for freeze detection
+  do
+    local ffi_ok, ffi = pcall(require, "ffi")
+    if ffi_ok and ffi.os == "Linux" then
+      pcall(ffi.cdef, "int getpid(void);")
+      local pid = tostring(ffi.C.getpid())
+      local tmp = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+      heartbeatPath = tmp .. "/reactjit_heartbeat_" .. pid
     end
   end
 
@@ -1975,6 +1991,16 @@ end
 --- Call once per frame from love.update(dt).
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
+  -- Heartbeat: touch file every ~60 frames so watchdog can detect freezes
+  if heartbeatPath then
+    heartbeatCounter = heartbeatCounter + 1
+    if heartbeatCounter >= 60 then
+      heartbeatCounter = 0
+      local hf = io.open(heartbeatPath, "w")
+      if hf then hf:write(tostring(os.time())); hf:close() end
+    end
+  end
+
   -- Crash recovery mode: skip everything except HMR polling.
   -- The app is dead but we keep watching for a fixed bundle.
   if crashRecoveryMode then
@@ -5371,6 +5397,9 @@ function ReactJIT.quit()
   local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
   local f = io.open(tmpDir .. "/reactjit_clean_exit", "w")
   if f then f:write(tostring(os.time())); f:close() end
+
+  -- Clean up heartbeat file
+  if heartbeatPath then os.remove(heartbeatPath) end
 
   -- Clean up devtools pop-out window
   if M.inspectorEnabled and devtools.isPoppedOut() then
