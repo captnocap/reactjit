@@ -376,9 +376,17 @@ Capabilities.register("PhysicsWorld", {
         local nw = node.computed.w
         local nh = node.computed.h
 
-        -- Target: body center (bx,by) in world-local coords → screen top-left
-        local targetX = worldX + bx - nw * 0.5
-        local targetY = worldY + by - nh * 0.5
+        -- Set style.left/top so the layout engine positions bodies correctly
+        -- (avoids flicker from layout resetting computed positions each frame)
+        local leftVal = bx - nw * 0.5
+        local topVal = by - nh * 0.5
+        if not node.style then node.style = {} end
+        node.style.left = leftVal
+        node.style.top = topVal
+
+        -- Also update computed directly for immediate rendering this frame
+        local targetX = worldX + leftVal
+        local targetY = worldY + topVal
         local curDx = targetX - node.computed.x
         local curDy = targetY - node.computed.y
         if math.abs(curDx) > 0.01 or math.abs(curDy) > 0.01 then
@@ -1277,8 +1285,14 @@ Capabilities.register("MouseJoint", {
     local mx = smx - worldState.screenX
     local my = smy - worldState.screenY
 
-    if pressed and not state.joint then
-      -- Find body under mouse
+    -- Check if mouse is within world bounds
+    local wc = worldNode.computed
+    local worldW = wc and wc.w or 0
+    local worldH = wc and wc.h or 0
+    local inBounds = mx >= 0 and mx <= worldW and my >= 0 and my <= worldH
+
+    if pressed and not state.joint and inBounds then
+      -- Find body under mouse (only start drag inside world)
       worldState.world:queryBoundingBox(mx - 4, my - 4, mx + 4, my + 4, function(fixture)
         if fixture:getBody():getType() == "dynamic" then
           local body = fixture:getBody()
@@ -1294,8 +1308,15 @@ Capabilities.register("MouseJoint", {
         return true  -- continue query
       end)
     elseif pressed and state.joint and not state.joint:isDestroyed() then
-      -- Update target position
-      state.joint:setTarget(mx, my)
+      if inBounds then
+        -- Update target position while inside bounds
+        state.joint:setTarget(mx, my)
+      else
+        -- Mouse left bounds — release the joint
+        if not state.joint:isDestroyed() then state.joint:destroy() end
+        state.joint = nil
+        state.targetBody = nil
+      end
     elseif not pressed and state.joint then
       -- Release
       if not state.joint:isDestroyed() then state.joint:destroy() end

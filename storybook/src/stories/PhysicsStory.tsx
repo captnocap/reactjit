@@ -204,7 +204,7 @@ function FallingBodiesDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Tag text="PhysicsWorld" color={C.world} />
         <Tag text="RigidBody" color={C.body} />
@@ -309,7 +309,7 @@ function ChainDemo() {
   const linkIds = Array.from({ length: LINKS }, (_, i) => `chain-link-${i}`);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Tag text="DistanceJoint" color={C.joint} />
         <Tag text="chain" color={C.joint} />
@@ -367,14 +367,34 @@ function SensorDemo() {
   const [hitCount, setHitCount] = useState(0);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, alignItems: 'center' }}>
       <Tag text="Sensor" color={C.sensor} />
 
       <PhysicsWorld gravity={[0, 300]} debug style={{ width: 260, height: 160, backgroundColor: '#330000', borderRadius: 6, overflow: 'hidden' }}>
+        <MouseJoint stiffness={8} damping={0.7} />
+
         {/* Ground */}
-        <RigidBody type="static" x={130} y={148}>
-          <Collider shape="rectangle" width={240} height={12} />
-          <Box style={{ width: 240, height: 12, backgroundColor: '#4a7c59', borderRadius: 2 }} />
+        <RigidBody type="static" x={130} y={154}>
+          <Collider shape="rectangle" width={240} height={8} />
+          <Box style={{ width: 240, height: 8, backgroundColor: '#7f8c8d' }} />
+        </RigidBody>
+
+        {/* Ceiling */}
+        <RigidBody type="static" x={130} y={6}>
+          <Collider shape="rectangle" width={240} height={8} />
+          <Box style={{ width: 240, height: 8, backgroundColor: '#7f8c8d' }} />
+        </RigidBody>
+
+        {/* Left wall */}
+        <RigidBody type="static" x={6} y={80}>
+          <Collider shape="rectangle" width={8} height={160} />
+          <Box style={{ width: 8, height: 160, backgroundColor: '#7f8c8d' }} />
+        </RigidBody>
+
+        {/* Right wall */}
+        <RigidBody type="static" x={254} y={80}>
+          <Collider shape="rectangle" width={8} height={160} />
+          <Box style={{ width: 8, height: 160, backgroundColor: '#7f8c8d' }} />
         </RigidBody>
 
         {/* Sensor zone (no collision response) */}

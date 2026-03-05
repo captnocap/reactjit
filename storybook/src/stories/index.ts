@@ -51,6 +51,7 @@ import { RenderStory } from './RenderStory';
 import { CompatibilityStory } from './CompatibilityStory';
 import { PhysicsStory } from './PhysicsStory';
 import { GeoScene3DStory } from './GeoScene3DStory';
+import { ThreeDStory } from './ThreeDStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -79,6 +80,7 @@ export const stories: StoryDef[] = [
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
   { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
+  { id: '3d', title: '3D', section: 'Packages', component: ThreeDStory },
   { id: 'render', title: 'Render', section: 'Core', component: RenderStory },
 
   // Demos
