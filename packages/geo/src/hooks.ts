@@ -1,50 +1,50 @@
-import { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
+import { useState, useEffect, useCallback, useContext, createContext } from 'react';
 import { useBridge } from '@reactjit/core';
 import type {
-  LatLng,
+  LatLngExpression,
+  LatLngTuple,
+  LatLngBoundsExpression,
   MapViewState,
   MapHandle,
-  MapBounds,
   FlyToOptions,
   TileCacheHandle,
   DownloadProgress,
   DownloadRegionOptions,
   CacheStats,
+  MapEventHandlerFnMap,
 } from './types';
 
 // ============================================================================
-// Map context (set by <Map>, consumed by useMap)
+// Context (set by MapContainer, consumed by hooks)
 // ============================================================================
 
 export const MapContext = createContext<{ nodeId: number | null }>({ nodeId: null });
 
 // ============================================================================
-// useMap — imperative map control
+// Helpers
 // ============================================================================
 
-/**
- * Returns a handle to control the nearest parent <Map> imperatively.
- *
- * ```tsx
- * const map = useMap();
- * map.panTo([51.5, -0.09], { animate: true });
- * map.flyTo({ center: [51.5, -0.09], zoom: 15, pitch: 45 });
- * ```
- */
+const toTuple = (ll: LatLngExpression): LatLngTuple =>
+  Array.isArray(ll) ? ll : [ll.lat, ll.lng];
+
+const boundsToArgs = (b: LatLngBoundsExpression) => {
+  if (Array.isArray(b)) return [toTuple(b[0]), toTuple(b[1])];
+  return [toTuple(b.southWest), toTuple(b.northEast)];
+};
+
+// ============================================================================
+// useMap — returns imperative handle to the nearest MapContainer
+// ============================================================================
+
 export function useMap(): MapHandle {
   const bridge = useBridge();
   const { nodeId } = useContext(MapContext);
 
   const panTo = useCallback(
-    (latlng: LatLng, opts?: { animate?: boolean; duration?: number }) => {
+    (latlng: LatLngExpression, opts?: { animate?: boolean; duration?: number }) => {
       if (!bridge || nodeId == null) return;
-      bridge.rpc('map:panTo', {
-        nodeId,
-        lat: latlng[0],
-        lng: latlng[1],
-        animate: opts?.animate,
-        duration: opts?.duration,
-      });
+      const [lat, lng] = toTuple(latlng);
+      bridge.rpc('map:panTo', { nodeId, lat, lng, animate: opts?.animate, duration: opts?.duration });
     },
     [bridge, nodeId],
   );
@@ -52,24 +52,15 @@ export function useMap(): MapHandle {
   const zoomTo = useCallback(
     (zoom: number, opts?: { animate?: boolean; duration?: number }) => {
       if (!bridge || nodeId == null) return;
-      bridge.rpc('map:zoomTo', {
-        nodeId,
-        zoom,
-        animate: opts?.animate ?? true,
-        duration: opts?.duration,
-      });
+      bridge.rpc('map:zoomTo', { nodeId, zoom, animate: opts?.animate ?? true, duration: opts?.duration });
     },
     [bridge, nodeId],
   );
 
   const fitBounds = useCallback(
-    (bounds: [LatLng, LatLng], opts?: { animate?: boolean }) => {
+    (bounds: LatLngBoundsExpression, opts?: { animate?: boolean }) => {
       if (!bridge || nodeId == null) return;
-      bridge.rpc('map:fitBounds', {
-        nodeId,
-        bounds: [bounds[0], bounds[1]],
-        animate: opts?.animate,
-      });
+      bridge.rpc('map:fitBounds', { nodeId, bounds: boundsToArgs(bounds), animate: opts?.animate });
     },
     [bridge, nodeId],
   );
@@ -95,7 +86,7 @@ export function useMap(): MapHandle {
       if (!bridge || nodeId == null) return;
       bridge.rpc('map:flyTo', {
         nodeId,
-        center: opts.center,
+        center: opts.center ? toTuple(opts.center) : undefined,
         zoom: opts.zoom,
         bearing: opts.bearing,
         pitch: opts.pitch,
@@ -105,21 +96,59 @@ export function useMap(): MapHandle {
     [bridge, nodeId],
   );
 
-  return { panTo, zoomTo, fitBounds, setPitch, setBearing, flyTo };
+  const getCenter = useCallback((): LatLngTuple => [0, 0], []);
+  const getZoom = useCallback((): number => 0, []);
+  const getBounds = useCallback((): LatLngBoundsExpression => [[0, 0], [0, 0]], []);
+
+  return { panTo, zoomTo, fitBounds, setPitch, setBearing, flyTo, getCenter, getZoom, getBounds };
+}
+
+// ============================================================================
+// useMapEvent — subscribe to a single map event (react-leaflet compatible)
+// ============================================================================
+
+export function useMapEvent<K extends keyof MapEventHandlerFnMap>(
+  type: K,
+  handler: NonNullable<MapEventHandlerFnMap[K]>,
+): MapHandle {
+  const map = useMap();
+  const bridge = useBridge();
+
+  useEffect(() => {
+    if (!bridge) return;
+    const unsub = bridge.subscribe(`map:${type}`, handler as any);
+    return unsub;
+  }, [bridge, type, handler]);
+
+  return map;
+}
+
+// ============================================================================
+// useMapEvents — subscribe to multiple map events (react-leaflet compatible)
+// ============================================================================
+
+export function useMapEvents(handlers: MapEventHandlerFnMap): MapHandle {
+  const map = useMap();
+  const bridge = useBridge();
+
+  useEffect(() => {
+    if (!bridge) return;
+    const unsubs: (() => void)[] = [];
+    for (const [event, handler] of Object.entries(handlers)) {
+      if (handler) {
+        unsubs.push(bridge.subscribe(`map:${event}`, handler as any));
+      }
+    }
+    return () => unsubs.forEach(u => u());
+  }, [bridge, handlers]);
+
+  return map;
 }
 
 // ============================================================================
 // useMapView — reactive view state
 // ============================================================================
 
-/**
- * Returns the current view state of the nearest parent <Map>.
- * Updates reactively when the user pans, zooms, or tilts.
- *
- * ```tsx
- * const { center, zoom, bearing, pitch } = useMapView();
- * ```
- */
 export function useMapView(): MapViewState {
   const bridge = useBridge();
   const [view, setView] = useState<MapViewState>({
@@ -149,64 +178,45 @@ export function useMapView(): MapViewState {
 // useTileCache — offline tile management
 // ============================================================================
 
-/**
- * Returns a handle to manage the tile cache (download regions, check stats).
- *
- * ```tsx
- * const cache = useTileCache();
- * const regionId = await cache.downloadRegion(bounds, { minZoom: 10, maxZoom: 16 });
- * const stats = await cache.stats();
- * ```
- */
 export function useTileCache(): TileCacheHandle {
   const bridge = useBridge();
-  const { nodeId } = useContext(MapContext);
 
   const downloadRegion = useCallback(
-    async (bounds: MapBounds, opts?: DownloadRegionOptions): Promise<string> => {
+    async (bounds: LatLngBoundsExpression, opts?: DownloadRegionOptions): Promise<string> => {
       if (!bridge) return '';
+      const [sw, ne] = boundsToArgs(bounds);
       const result = await bridge.rpc('map:downloadRegion', {
-        nodeId,
-        source: opts?.source || 'osm',
-        swLat: bounds.sw[0],
-        swLng: bounds.sw[1],
-        neLat: bounds.ne[0],
-        neLng: bounds.ne[1],
+        source: opts?.source || '',
+        swLat: sw[0], swLng: sw[1],
+        neLat: ne[0], neLng: ne[1],
         minZoom: opts?.minZoom ?? 0,
         maxZoom: opts?.maxZoom ?? 15,
       });
       return (result as any)?.regionId || '';
     },
-    [bridge, nodeId],
+    [bridge],
   );
 
   const getProgress = useCallback(
     async (regionId: string): Promise<DownloadProgress | null> => {
       if (!bridge) return null;
-      const result = await bridge.rpc('map:downloadProgress', { regionId });
-      return result as DownloadProgress | null;
+      return (await bridge.rpc('map:downloadProgress', { regionId })) as DownloadProgress | null;
     },
     [bridge],
   );
 
   const stats = useCallback(async (): Promise<CacheStats> => {
-    if (!bridge)
-      return { memoryTiles: 0, dbTiles: 0, dbBytes: 0, sources: {} };
-    const result = await bridge.rpc('map:cacheStats', {});
-    return result as CacheStats;
+    if (!bridge) return { memoryTiles: 0, dbTiles: 0, dbBytes: 0, sources: {} };
+    return (await bridge.rpc('map:cacheStats', {})) as CacheStats;
   }, [bridge]);
 
   return { downloadRegion, getProgress, stats };
 }
 
 // ============================================================================
-// useProjection — coordinate utilities
+// useProjection — pure math coordinate utilities
 // ============================================================================
 
-/**
- * Pure math projection utilities — no bridge dependency.
- * Web Mercator (EPSG:3857) projection for lat/lng ↔ pixel conversion.
- */
 export function useProjection() {
   const TILE_SIZE = 256;
   const MAX_LAT = 85.0511287798;

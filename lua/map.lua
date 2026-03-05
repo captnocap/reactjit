@@ -1,63 +1,73 @@
 --[[
-  map.lua — Lua-owned 2D/3D map rendering engine
+  map.lua — Slippy map engine for Love2D
 
-  Manages interactive map viewports that participate in the 2D layout tree.
-  Each Map2D node renders to an off-screen Love2D Canvas. The 2D painter
-  composites the Canvas at the node's computed position.
+  A from-scratch port of Leaflet's rendering model into Lua/Love2D.
+  React declares <MapContainer>, <TileLayer>, <Marker>, etc. as tree nodes.
+  This module reads those nodes, owns all state, renders to off-screen canvases,
+  and handles interaction (pan, zoom, click) at zero latency.
 
-  Follows the scene3d.lua pattern:
-    1. syncWithTree() scans the tree for Map2D nodes each frame
-    2. renderAll() renders each map to its Canvas
-    3. get(nodeId) returns the Canvas for the painter to draw
+  Public API (called by init.lua and painter.lua):
+    Map.init()                          -- one-time setup
+    Map.syncWithTree(treeNodes)         -- scan tree for Map2D nodes each frame
+    Map.renderAll()                     -- render all maps to off-screen canvases
+    Map.get(nodeId)                     -- return canvas for painter to composite
+    Map.isMapChildType(nodeType)        -- painter skips map children
+    Map.handleMousePressed(node, mx, my, button)
+    Map.handleMouseMoved(node, mx, my)
+    Map.handleMouseReleased(node, mx, my, button)
+    Map.handleWheel(node, dx, dy)
+    Map.handleRPC(method, args)
+    Map.drainEvents()
+    Map.hasMaps()
+    Map.cleanup(nodeId)
 
-  Lua owns ALL interaction (pan, zoom, tilt, bearing) for zero-latency response.
-  React declares what's on the map; Lua decides how it renders.
-
-  Child node types:
-    - MapTileLayer: tile source configuration
-    - MapMarker: positioned overlay at lat/lng
-    - MapPolyline: line path through lat/lng points
-    - MapPolygon: filled area from lat/lng points
-    - MapGeoJSON: rendered GeoJSON features
-
-  Requires: lua/geo.lua, lua/tilecache.lua
+  Dependencies: lua/geo.lua, lua/tilecache.lua
 ]]
 
 local Map = {}
 
 -- ============================================================================
--- Dependencies (lazy-loaded)
+-- Dependencies (lazy-loaded in init)
 -- ============================================================================
 
-local Geo = nil
-local TileCache = nil
-local g3d = nil           -- lazy-loaded for 3D rendering (pitch > 0)
-local mapShader = nil     -- MVP + Canvas Y-flip shader for 3D tiles
-local sharedQuad = nil    -- reusable unit quad model for tile rendering
-local missingTileTexture = nil
+local Geo       -- lua/geo.lua   (projection math)
+local TileCache -- lua/tilecache.lua (tile fetching + cache)
+local Color = require("lua.color")
+
+local initialized = false
+local globalCache = nil  -- shared TileCache handle
 
 -- ============================================================================
 -- State
 -- ============================================================================
 
-local maps = {}          -- nodeId → map state
-local initialized = false
-local globalCache = nil  -- shared TileCache handle for all maps
+local maps = {}          -- nodeId -> map state table
+local pendingEvents = {} -- queued for bridge
 
--- Map child types that should not be painted by the 2D painter
+-- All node types that live inside a Map2D and should be skipped by the painter
 Map.CHILD_TYPES = {
-  MapTileLayer = true,
-  MapMarker = true,
-  MapPolyline = true,
-  MapPolygon = true,
-  MapGeoJSON = true,
+  MapTileLayer      = true,
+  MapMarker         = true,
+  MapPopup          = true,
+  MapTooltip        = true,
+  MapPolyline       = true,
+  MapPolygon        = true,
+  MapCircle         = true,
+  MapCircleMarker   = true,
+  MapRectangle      = true,
+  MapGeoJSON        = true,
+  MapImageOverlay   = true,
+  MapLayerGroup     = true,
+  MapFeatureGroup   = true,
+  MapPane           = true,
+  MapZoomControl    = true,
+  MapScaleControl   = true,
+  MapAttributionControl = true,
 }
 
 -- ============================================================================
--- Pending events (queued for bridge → React)
+-- Helpers
 -- ============================================================================
-
-local pendingEvents = {}
 
 local function queueEvent(nodeId, eventType, payload)
   pendingEvents[#pendingEvents + 1] = {
@@ -65,6 +75,23 @@ local function queueEvent(nodeId, eventType, payload)
     type = eventType,
     payload = payload,
   }
+end
+
+local function parseColor(hex, alpha)
+  if not hex or type(hex) ~= "string" then return 1, 1, 1, alpha or 1 end
+  local r, g, b, a = Color.parse(hex)
+  if r then return r, g, b, alpha or a or 1 end
+  return 1, 1, 1, alpha or 1
+end
+
+--- Normalize a LatLng from various formats to (lat, lng).
+local function toLatLng(v)
+  if not v then return 0, 0 end
+  if type(v) == "table" then
+    if v.lat then return v.lat, v.lng end
+    return v[1] or 0, v[2] or 0
+  end
+  return 0, 0
 end
 
 -- ============================================================================
@@ -77,92 +104,21 @@ function Map.init()
 
   Geo = require("lua.geo")
   TileCache = require("lua.tilecache")
-
-  -- Open a shared tile cache database
   globalCache = TileCache.open("tilecache.db")
-
-  -- Add built-in tile sources
-  TileCache.addSource(globalCache, "osm", {})
-
-  -- Initialize g3d for 3D map rendering (pitch > 0)
-  local ok, g3dMod = pcall(require, "lua.g3d")
-  if ok then
-    g3d = g3dMod
-
-    -- Shader: MVP transform + Canvas Y-flip (no lighting — tiles are pre-rendered)
-    mapShader = love.graphics.newShader([[
-      uniform mat4 projectionMatrix;
-      uniform mat4 viewMatrix;
-      uniform mat4 modelMatrix;
-      uniform bool isCanvasEnabled;
-      attribute vec3 VertexNormal;
-
-      vec4 position(mat4 transformProjection, vec4 vertexPosition) {
-        vec4 pos = projectionMatrix * viewMatrix * modelMatrix * vertexPosition;
-        if (isCanvasEnabled) {
-          pos.y *= -1.0;
-        }
-        return pos;
-      }
-    ]])
-
-    -- Shared unit quad on XY plane (Y goes negative = south, UV matches tile image)
-    -- Winding: CCW from +Z (front face points up)
-    local verts = {
-      -- Triangle 1: NW → SE → NE
-      {0,  0, 0,   0, 0,   0, 0, 1},
-      {1, -1, 0,   1, 1,   0, 0, 1},
-      {1,  0, 0,   1, 0,   0, 0, 1},
-      -- Triangle 2: NW → SW → SE
-      {0,  0, 0,   0, 0,   0, 0, 1},
-      {0, -1, 0,   0, 1,   0, 0, 1},
-      {1, -1, 0,   1, 1,   0, 0, 1},
-    }
-    local dummyData = love.image.newImageData(1, 1)
-    dummyData:setPixel(0, 0, 1, 1, 1, 1)
-    local dummyTex = love.graphics.newImage(dummyData)
-    missingTileTexture = dummyTex
-    sharedQuad = g3d.newModel(verts, dummyTex, {0,0,0}, {0,0,0}, {1,1,1})
-  end
 end
 
 -- ============================================================================
--- Hex color parsing
+-- Map state constructor
 -- ============================================================================
 
-local function parseHexColor(hex, alpha)
-  if not hex or type(hex) ~= "string" then return 1, 1, 1, alpha or 1 end
-  hex = hex:gsub("#", "")
-  -- Handle 8-char hex (with alpha)
-  if #hex == 8 then
-    return tonumber(hex:sub(1, 2), 16) / 255,
-           tonumber(hex:sub(3, 4), 16) / 255,
-           tonumber(hex:sub(5, 6), 16) / 255,
-           tonumber(hex:sub(7, 8), 16) / 255
-  elseif #hex == 6 then
-    return tonumber(hex:sub(1, 2), 16) / 255,
-           tonumber(hex:sub(3, 4), 16) / 255,
-           tonumber(hex:sub(5, 6), 16) / 255,
-           alpha or 1
-  end
-  return 1, 1, 1, alpha or 1
-end
-
--- ============================================================================
--- Map state management
--- ============================================================================
-
-local function getOrCreateMap(nodeId)
-  if maps[nodeId] then return maps[nodeId] end
-
-  local m = {
-    -- View state
+local function createMapState()
+  return {
+    -- View
     centerLat = 0,
     centerLng = 0,
     zoom = 2,
-    bearing = 0,         -- degrees, 0 = north up
-    pitch = 0,           -- degrees, 0 = top-down
-    projection = "mercator",
+    bearing = 0,
+    pitch = 0,
     minZoom = 0,
     maxZoom = 19,
 
@@ -171,12 +127,14 @@ local function getOrCreateMap(nodeId)
     width = 0,
     height = 0,
 
-    -- Interaction state (Lua-owned, zero-latency)
+    -- Interaction
     isDragging = false,
-    dragStartX = nil,
-    dragStartY = nil,
-    dragStartCenterLat = nil,
-    dragStartCenterLng = nil,
+    dragStartX = 0,
+    dragStartY = 0,
+    dragStartLat = 0,
+    dragStartLng = 0,
+    scrollWheelZoom = true,
+    draggingEnabled = true,
 
     -- Zoom animation
     zoomAnimating = false,
@@ -185,28 +143,277 @@ local function getOrCreateMap(nodeId)
     zoomT = 0,
     zoomDuration = 0.3,
 
-    -- Children (synced from tree each frame)
-    tileLayers = {},     -- ordered list of tile layer configs
-    markers = {},        -- nodeId → { lat, lng, anchor, children, ... }
-    polylines = {},      -- nodeId → { positions, color, width, ... }
-    polygons = {},       -- nodeId → { positions, fillColor, strokeColor, ... }
-    geojsonLayers = {},  -- nodeId → { data, style }
+    -- Pan animation (for flyTo)
+    panAnimating = false,
+    panFromLat = 0, panFromLng = 0,
+    panToLat = 0, panToLng = 0,
+    panT = 0,
+    panDuration = 0.5,
 
-    -- Screen position (for bounds checking pointer events)
+    -- Screen position (absolute, for hit testing)
     screenX = 0,
     screenY = 0,
 
-    -- Track whether view changed (to emit events)
-    viewDirty = false,
-  }
+    -- Collected children (rebuilt each frame from tree)
+    tileLayers = {},
+    markers = {},
+    popups = {},
+    tooltips = {},
+    polylines = {},
+    polygons = {},
+    circles = {},
+    circleMarkers = {},
+    rectangles = {},
+    geojsonLayers = {},
+    imageOverlays = {},
+    controls = { zoom = nil, scale = nil, attribution = nil },
 
-  maps[nodeId] = m
-  return m
+    -- Popup state
+    openPopupId = nil,   -- which popup is currently open
+    hoveredMarkerId = nil,
+
+    -- Dirty flag for emitting viewchange events
+    viewDirty = false,
+
+    -- Last React-provided prop values (for change detection)
+    _lastPropsCenter = nil,  -- {lat, lng} or nil
+    _lastPropsZoom = nil,
+    _lastPropsBearing = nil,
+    _lastPropsPitch = nil,
+  }
+end
+
+local function getOrCreate(nodeId)
+  if maps[nodeId] then return maps[nodeId] end
+  maps[nodeId] = createMapState()
+  return maps[nodeId]
 end
 
 -- ============================================================================
--- Sync with tree
+-- Projection: lat/lng -> canvas pixel
 -- ============================================================================
+
+--- Project lat/lng to pixel coordinates on the map canvas.
+--- Returns x, y relative to the canvas (0,0 = top-left of canvas).
+local function project(m, lat, lng)
+  local intZoom = math.floor(m.zoom)
+  local fracScale = math.pow(2, m.zoom - intZoom)
+
+  local cx, cy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
+  local px, py = Geo.latlngToPixel(lat, lng, intZoom)
+
+  local dx = (px - cx) * fracScale
+  local dy = (py - cy) * fracScale
+
+  return m.width / 2 + dx, m.height / 2 + dy
+end
+
+--- Convert canvas pixel back to lat/lng.
+local function unproject(m, canvasX, canvasY)
+  local intZoom = math.floor(m.zoom)
+  local fracScale = math.pow(2, m.zoom - intZoom)
+
+  local cx, cy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
+  local px = cx + (canvasX - m.width / 2) / fracScale
+  local py = cy + (canvasY - m.height / 2) / fracScale
+
+  return Geo.pixelToLatlng(px, py, intZoom)
+end
+
+--- Convert a radius in meters to pixels at a given lat/lng.
+local function metersToPixels(m, lat, meters)
+  local mpp = Geo.metersPerPixel(lat, m.zoom)
+  if mpp <= 0 then return 0 end
+  return meters / mpp
+end
+
+-- ============================================================================
+-- Tree sync — read Map2D nodes and their children each frame
+-- ============================================================================
+
+local function collectChildren(parent, m)
+  for _, child in ipairs(parent.children or {}) do
+    local cp = child.props or {}
+    local t = child.type
+
+    if t == "MapTileLayer" then
+      -- Register tile source if needed
+      local url = cp.url or ""
+      local sourceName = url  -- use URL as source key
+      if url ~= "" and globalCache and not globalCache.sources[sourceName] then
+        TileCache.addSource(globalCache, sourceName, {
+          urlTemplate = url,
+          minZoom = cp.minZoom or 0,
+          maxZoom = cp.maxZoom or 19,
+          tileSize = cp.tileSize or 256,
+          attribution = cp.attribution or "",
+          headers = cp.headers or {},
+        })
+      end
+      m.tileLayers[#m.tileLayers + 1] = {
+        source = sourceName,
+        opacity = cp.opacity or 1,
+        minZoom = cp.minZoom or 0,
+        maxZoom = cp.maxZoom or 19,
+        attribution = cp.attribution,
+        zIndex = cp.zIndex or 0,
+      }
+
+    elseif t == "MapMarker" then
+      local lat, lng = toLatLng(cp.position)
+      m.markers[child.id] = {
+        lat = lat, lng = lng,
+        icon = cp.icon,
+        draggable = cp.draggable or false,
+        opacity = cp.opacity or 1,
+        hasHandlers = child.hasHandlers,
+        children = child.children,
+      }
+
+    elseif t == "MapPopup" then
+      local lat, lng
+      if cp.position then
+        lat, lng = toLatLng(cp.position)
+      end
+      m.popups[child.id] = {
+        lat = lat, lng = lng,
+        text = cp.text or "",
+        maxWidth = cp.maxWidth or 300,
+        closeButton = cp.closeButton ~= false,
+        parentId = parent.type == "MapMarker" and parent.id or nil,
+      }
+
+    elseif t == "MapTooltip" then
+      local lat, lng
+      if cp.position then
+        lat, lng = toLatLng(cp.position)
+      end
+      m.tooltips[child.id] = {
+        lat = lat, lng = lng,
+        text = cp.text or "",
+        direction = cp.direction or "auto",
+        permanent = cp.permanent or false,
+        opacity = cp.opacity or 0.9,
+        parentId = parent.type == "MapMarker" and parent.id or nil,
+      }
+
+    elseif t == "MapPolyline" then
+      m.polylines[child.id] = {
+        positions = cp.positions or {},
+        color = cp.color or "#3388ff",
+        weight = cp.weight or 3,
+        opacity = cp.opacity or 1,
+        dashArray = cp.dashArray,
+        stroke = cp.stroke ~= false,
+      }
+
+    elseif t == "MapPolygon" then
+      m.polygons[child.id] = {
+        positions = cp.positions or {},
+        color = cp.color or "#3388ff",
+        weight = cp.weight or 3,
+        opacity = cp.opacity or 1,
+        fillColor = cp.fillColor or cp.color or "#3388ff",
+        fillOpacity = cp.fillOpacity or 0.2,
+        fill = cp.fill ~= false,
+        stroke = cp.stroke ~= false,
+      }
+
+    elseif t == "MapCircle" then
+      local lat, lng = toLatLng(cp.center)
+      m.circles[child.id] = {
+        lat = lat, lng = lng,
+        radius = cp.radius or 100,  -- meters
+        color = cp.color or "#3388ff",
+        weight = cp.weight or 3,
+        opacity = cp.opacity or 1,
+        fillColor = cp.fillColor or cp.color or "#3388ff",
+        fillOpacity = cp.fillOpacity or 0.2,
+        fill = cp.fill ~= false,
+        stroke = cp.stroke ~= false,
+      }
+
+    elseif t == "MapCircleMarker" then
+      local lat, lng = toLatLng(cp.center)
+      m.circleMarkers[child.id] = {
+        lat = lat, lng = lng,
+        radius = cp.radius or 10,  -- pixels (fixed)
+        color = cp.color or "#3388ff",
+        weight = cp.weight or 3,
+        opacity = cp.opacity or 1,
+        fillColor = cp.fillColor or cp.color or "#3388ff",
+        fillOpacity = cp.fillOpacity or 0.2,
+        fill = cp.fill ~= false,
+        stroke = cp.stroke ~= false,
+      }
+
+    elseif t == "MapRectangle" then
+      local bounds = cp.bounds or {{0,0},{0,0}}
+      local swLat, swLng = toLatLng(bounds[1])
+      local neLat, neLng = toLatLng(bounds[2])
+      m.rectangles[child.id] = {
+        swLat = swLat, swLng = swLng,
+        neLat = neLat, neLng = neLng,
+        color = cp.color or "#3388ff",
+        weight = cp.weight or 3,
+        opacity = cp.opacity or 1,
+        fillColor = cp.fillColor or cp.color or "#3388ff",
+        fillOpacity = cp.fillOpacity or 0.2,
+        fill = cp.fill ~= false,
+        stroke = cp.stroke ~= false,
+      }
+
+    elseif t == "MapGeoJSON" then
+      m.geojsonLayers[child.id] = {
+        data = cp.data,
+        style = cp.style,
+        filter = cp.filter,
+      }
+
+    elseif t == "MapImageOverlay" then
+      local bounds = cp.bounds or {{0,0},{0,0}}
+      local swLat, swLng = toLatLng(bounds[1])
+      local neLat, neLng = toLatLng(bounds[2])
+      m.imageOverlays[child.id] = {
+        url = cp.url or "",
+        swLat = swLat, swLng = swLng,
+        neLat = neLat, neLng = neLng,
+        opacity = cp.opacity or 1,
+        image = nil,  -- loaded lazily
+      }
+
+    elseif t == "MapZoomControl" then
+      m.controls.zoom = {
+        position = cp.position or "topleft",
+        zoomInText = cp.zoomInText or "+",
+        zoomOutText = cp.zoomOutText or "-",
+      }
+
+    elseif t == "MapScaleControl" then
+      m.controls.scale = {
+        position = cp.position or "bottomleft",
+        maxWidth = cp.maxWidth or 100,
+        metric = cp.metric ~= false,
+        imperial = cp.imperial or false,
+      }
+
+    elseif t == "MapAttributionControl" then
+      m.controls.attribution = {
+        position = cp.position or "bottomright",
+        prefix = cp.prefix,
+      }
+
+    elseif t == "MapLayerGroup" or t == "MapFeatureGroup" or t == "MapPane" then
+      -- Container nodes: recurse into children
+      collectChildren(child, m)
+    end
+
+    -- Recurse into marker children (for Popup/Tooltip attached to markers)
+    if t == "MapMarker" then
+      collectChildren(child, m)
+    end
+  end
+end
 
 local function syncMap(node)
   if not Geo then return end
@@ -218,35 +425,54 @@ local function syncMap(node)
   local h = math.floor(c.h or 0)
   if w <= 0 or h <= 0 then return end
 
-  local m = getOrCreateMap(node.id)
+  local m = getOrCreate(node.id)
   local props = node.props or {}
 
-  -- Update view from React props (only if not being dragged)
-  if not m.isDragging then
-    if props.center then
-      local lat = props.center[1] or props.center.lat or 0
-      local lng = props.center[2] or props.center.lng or 0
-      if lat ~= m.centerLat or lng ~= m.centerLng then
+  -- Update view from React props — only apply when React actually changes the value.
+  -- Without this check, unchanged React props overwrite Lua-owned state every frame,
+  -- causing scroll-wheel zoom to rubber-band and drag-panning to snap back.
+  if props.center then
+    local lat, lng = toLatLng(props.center)
+    local prev = m._lastPropsCenter
+    if not prev or prev[1] ~= lat or prev[2] ~= lng then
+      m._lastPropsCenter = { lat, lng }
+      if not m.isDragging and not m.panAnimating then
         m.centerLat = lat
         m.centerLng = lng
       end
     end
-    if props.zoom ~= nil and not m.zoomAnimating then
-      m.zoom = props.zoom
+  end
+  if props.zoom ~= nil then
+    if m._lastPropsZoom ~= props.zoom then
+      m._lastPropsZoom = props.zoom
+      if not m.isDragging and not m.zoomAnimating then
+        m.zoom = props.zoom
+      end
     end
-    if props.bearing ~= nil then m.bearing = props.bearing end
-    if props.pitch ~= nil then m.pitch = props.pitch end
+  end
+  if props.bearing ~= nil then
+    if m._lastPropsBearing ~= props.bearing then
+      m._lastPropsBearing = props.bearing
+      m.bearing = props.bearing
+    end
+  end
+  if props.pitch ~= nil then
+    if m._lastPropsPitch ~= props.pitch then
+      m._lastPropsPitch = props.pitch
+      m.pitch = props.pitch
+    end
   end
 
-  if props.projection ~= nil then m.projection = props.projection end
   if props.minZoom ~= nil then m.minZoom = props.minZoom end
   if props.maxZoom ~= nil then m.maxZoom = props.maxZoom end
+  if props.scrollWheelZoom ~= nil then m.scrollWheelZoom = props.scrollWheelZoom end
+  if props.dragging ~= nil then m.draggingEnabled = props.dragging end
 
-  -- Update screen position
+  -- Screen position for hit testing
   m.screenX = c.x or 0
   m.screenY = c.y or 0
 
-  -- Recreate canvas if dimensions changed
+  -- Recreate canvas if size changed
   if m.width ~= w or m.height ~= h then
     if m.canvas then m.canvas:release() end
     m.canvas = love.graphics.newCanvas(w, h)
@@ -254,166 +480,65 @@ local function syncMap(node)
     m.height = h
   end
 
-  -- Walk children to collect tile layers, markers, polylines, polygons
+  -- Rebuild children from tree
   m.tileLayers = {}
   m.markers = {}
+  m.popups = {}
+  m.tooltips = {}
   m.polylines = {}
   m.polygons = {}
+  m.circles = {}
+  m.circleMarkers = {}
+  m.rectangles = {}
   m.geojsonLayers = {}
+  m.imageOverlays = {}
+  m.controls = { zoom = nil, scale = nil, attribution = nil }
 
-  if props.markers then
-    for i, marker in ipairs(props.markers) do
-      m.markers["prop_" .. i] = {
-        lat = marker.lat or marker[1] or 0,
-        lng = marker.lng or marker[2] or 0,
-        anchor = marker.anchor or "bottom-center",
-        draggable = marker.draggable or false,
-      }
-    end
+  collectChildren(node, m)
+
+  -- Default: if no explicit attribution control but we have tile layers, render one
+  if not m.controls.attribution and #m.tileLayers > 0 then
+    m.controls.attribution = { position = "bottomright" }
   end
-
-  if props.polylines then
-    for i, poly in ipairs(props.polylines) do
-      m.polylines["prop_" .. i] = {
-        positions = poly.positions or {},
-        color = poly.color or "#3498db",
-        width = poly.width or 2,
-        dashArray = poly.dashArray,
-        animated = poly.animated or false,
-        arrowheads = poly.arrowheads or false,
-      }
-    end
-  end
-
-  local function walkChildren(parent)
-    for _, child in ipairs(parent.children or {}) do
-      local cp = child.props or {}
-
-      if child.type == "MapTileLayer" then
-        -- Ensure the source is registered
-        local sourceName = cp.source or "osm"
-        if cp.urlTemplate and not globalCache.sources[sourceName] then
-          TileCache.addSource(globalCache, sourceName, {
-            urlTemplate = cp.urlTemplate,
-            type = cp.type or "raster",
-            minZoom = cp.minZoom or 0,
-            maxZoom = cp.maxZoom or 19,
-            tileSize = cp.tileSize or 256,
-            attribution = cp.attribution or "",
-            headers = cp.headers or {},
-          })
-        elseif not globalCache.sources[sourceName] then
-          -- Built-in source alias
-          TileCache.addSource(globalCache, sourceName, {})
-        end
-
-        m.tileLayers[#m.tileLayers + 1] = {
-          source = sourceName,
-          opacity = cp.opacity or 1,
-          minZoom = cp.minZoom or 0,
-          maxZoom = cp.maxZoom or 19,
-        }
-
-      elseif child.type == "MapMarker" then
-        local pos = cp.position or { 0, 0 }
-        m.markers[child.id] = {
-          lat = pos[1] or 0,
-          lng = pos[2] or 0,
-          anchor = cp.anchor or "bottom-center",
-          draggable = cp.draggable or false,
-          children = child.children,
-          hasHandlers = child.hasHandlers,
-        }
-
-      elseif child.type == "MapPolyline" then
-        m.polylines[child.id] = {
-          positions = cp.positions or {},
-          color = cp.color or "#3498db",
-          width = cp.width or 2,
-          dashArray = cp.dashArray,
-          animated = cp.animated or false,
-          arrowheads = cp.arrowheads or false,
-        }
-
-      elseif child.type == "MapPolygon" then
-        m.polygons[child.id] = {
-          positions = cp.positions or {},
-          fillColor = cp.fillColor or "#3498db40",
-          strokeColor = cp.strokeColor or "#3498db",
-          strokeWidth = cp.strokeWidth or 2,
-          extrude = cp.extrude or 0,
-        }
-
-      elseif child.type == "MapGeoJSON" then
-        m.geojsonLayers[child.id] = {
-          data = cp.data,
-          style = cp.style,
-        }
-      end
-    end
-  end
-
-  walkChildren(node)
 end
 
 -- ============================================================================
--- Rendering
+-- Rendering: Tiles
 -- ============================================================================
 
---- Project a lat/lng to pixel position relative to the map canvas.
---- @return number x, number y  Pixel coordinates on the canvas
-local function projectToCanvas(m, lat, lng)
-  local intZoom = math.floor(m.zoom)
-  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
-  local pointPx, pointPy = Geo.latlngToPixel(lat, lng, intZoom)
-
-  -- Fractional zoom: scale from integer tile coordinates
-  local fracScale = math.pow(2, m.zoom - intZoom)
-
-  local dx = (pointPx - centerPx) * fracScale
-  local dy = (pointPy - centerPy) * fracScale
-
-  return m.width / 2 + dx, m.height / 2 + dy
-end
-
---- Render tile layers onto the map canvas.
-local function renderTileLayers(m)
+local function renderTiles(m)
   local intZoom = math.floor(m.zoom)
   local fracScale = math.pow(2, m.zoom - intZoom)
   local tileSize = Geo.tileSize()
-  local scaledTileSize = tileSize * fracScale
+  local scaledTile = tileSize * fracScale
 
-  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
+  local cx, cy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
 
-  -- Compute visible tile range
   local minTx, minTy, maxTx, maxTy = Geo.visibleTiles(
     m.centerLat, m.centerLng, m.zoom, m.width, m.height
   )
 
   for _, layer in ipairs(m.tileLayers) do
-    if layer.source and intZoom >= layer.minZoom and intZoom <= layer.maxZoom then
+    if layer.source ~= "" and intZoom >= layer.minZoom and intZoom <= layer.maxZoom then
       love.graphics.setColor(1, 1, 1, layer.opacity)
 
       for ty = minTy, maxTy do
         for tx = minTx, maxTx do
-          local wrappedTx = Geo.wrapTileX(tx, intZoom)
-          local img = TileCache.getTile(globalCache, layer.source, intZoom, wrappedTx, ty)
+          local wtx = Geo.wrapTileX(tx, intZoom)
+          local img = TileCache.getTile(globalCache, layer.source, intZoom, wtx, ty)
 
-          -- Tile pixel position relative to canvas
-          local tilePxX = tx * tileSize
-          local tilePxY = ty * tileSize
-          local drawX = (tilePxX - centerPx) * fracScale + m.width / 2
-          local drawY = (tilePxY - centerPy) * fracScale + m.height / 2
+          local drawX = (tx * tileSize - cx) * fracScale + m.width / 2
+          local drawY = (ty * tileSize - cy) * fracScale + m.height / 2
 
           if img then
             love.graphics.draw(img, drawX, drawY, 0,
-              scaledTileSize / tileSize, scaledTileSize / tileSize)
+              scaledTile / tileSize, scaledTile / tileSize)
           else
-            -- Placeholder: light gray tile with border
-            love.graphics.setColor(0.85, 0.85, 0.85, layer.opacity * 0.3)
-            love.graphics.rectangle("fill", drawX, drawY, scaledTileSize, scaledTileSize)
-            love.graphics.setColor(0.7, 0.7, 0.7, layer.opacity * 0.2)
-            love.graphics.rectangle("line", drawX, drawY, scaledTileSize, scaledTileSize)
+            -- Placeholder tile
+            love.graphics.setColor(0.90, 0.90, 0.88, layer.opacity * 0.4)
+            love.graphics.rectangle("fill", drawX, drawY, scaledTile, scaledTile)
+            love.graphics.setColor(0.80, 0.80, 0.78, layer.opacity * 0.3)
+            love.graphics.rectangle("line", drawX, drawY, scaledTile, scaledTile)
             love.graphics.setColor(1, 1, 1, layer.opacity)
           end
         end
@@ -422,184 +547,242 @@ local function renderTileLayers(m)
   end
 end
 
---- Render polylines on the map.
-local function renderPolylines(m, effectiveOpacity)
+-- ============================================================================
+-- Rendering: Polylines
+-- ============================================================================
+
+local function renderPolylines(m)
   for _, poly in pairs(m.polylines) do
+    if not poly.stroke then goto continue end
     local positions = poly.positions
-    if positions and #positions >= 2 then
-      local r, g, b, a = parseHexColor(poly.color)
-      love.graphics.setColor(r, g, b, a * effectiveOpacity)
-      love.graphics.setLineWidth(poly.width or 2)
+    if not positions or #positions < 2 then goto continue end
 
-      -- Build flat point list
-      local points = {}
-      for i, pos in ipairs(positions) do
-        local lat = pos[1] or 0
-        local lng = pos[2] or 0
-        local px, py = projectToCanvas(m, lat, lng)
-        points[#points + 1] = px
-        points[#points + 1] = py
-      end
+    local r, g, b = parseColor(poly.color)
+    love.graphics.setColor(r, g, b, poly.opacity)
+    love.graphics.setLineWidth(poly.weight)
 
-      if #points >= 4 then
-        love.graphics.line(points)
-      end
+    local pts = {}
+    for _, pos in ipairs(positions) do
+      local lat, lng = toLatLng(pos)
+      local px, py = project(m, lat, lng)
+      pts[#pts + 1] = px
+      pts[#pts + 1] = py
+    end
 
-      -- Arrowheads along path
-      if poly.arrowheads and #points >= 4 then
-        local arrowSize = (poly.width or 2) * 3
-        love.graphics.setColor(r, g, b, a * effectiveOpacity)
-        -- Place an arrow every ~100 pixels
-        local accumDist = 0
-        for i = 3, #points, 2 do
-          local x1, y1 = points[i - 2], points[i - 1]
-          local x2, y2 = points[i], points[i + 1]
-          local dx = x2 - x1
-          local dy = y2 - y1
-          local segLen = math.sqrt(dx * dx + dy * dy)
-          accumDist = accumDist + segLen
-          if accumDist >= 100 then
-            accumDist = 0
-            local angle = math.atan2(dy, dx)
-            local mx = (x1 + x2) / 2
-            local my = (y1 + y2) / 2
-            -- Draw arrow triangle
-            love.graphics.polygon("fill",
-              mx + math.cos(angle) * arrowSize, my + math.sin(angle) * arrowSize,
-              mx + math.cos(angle + 2.5) * arrowSize * 0.6, my + math.sin(angle + 2.5) * arrowSize * 0.6,
-              mx + math.cos(angle - 2.5) * arrowSize * 0.6, my + math.sin(angle - 2.5) * arrowSize * 0.6
-            )
-          end
+    if #pts >= 4 then
+      love.graphics.line(pts)
+    end
+
+    love.graphics.setLineWidth(1)
+    ::continue::
+  end
+end
+
+-- ============================================================================
+-- Rendering: Polygons
+-- ============================================================================
+
+local function renderPolygons(m)
+  for _, poly in pairs(m.polygons) do
+    local positions = poly.positions
+    if not positions or #positions < 3 then goto continue end
+
+    local verts = {}
+    for _, pos in ipairs(positions) do
+      local lat, lng = toLatLng(pos)
+      local px, py = project(m, lat, lng)
+      verts[#verts + 1] = px
+      verts[#verts + 1] = py
+    end
+
+    if #verts < 6 then goto continue end
+
+    -- Fill
+    if poly.fill then
+      local r, g, b = parseColor(poly.fillColor)
+      love.graphics.setColor(r, g, b, poly.fillOpacity)
+      local ok, triangles = pcall(love.math.triangulate, verts)
+      if ok and triangles then
+        for _, tri in ipairs(triangles) do
+          love.graphics.polygon("fill", tri)
         end
       end
+    end
 
+    -- Stroke
+    if poly.stroke then
+      local r, g, b = parseColor(poly.color)
+      love.graphics.setColor(r, g, b, poly.opacity)
+      love.graphics.setLineWidth(poly.weight)
+      -- Close the polygon
+      local closed = {}
+      for i = 1, #verts do closed[i] = verts[i] end
+      closed[#closed + 1] = verts[1]
+      closed[#closed + 1] = verts[2]
+      love.graphics.line(closed)
+      love.graphics.setLineWidth(1)
+    end
+
+    ::continue::
+  end
+end
+
+-- ============================================================================
+-- Rendering: Circles
+-- ============================================================================
+
+local function renderCircles(m)
+  for _, c in pairs(m.circles) do
+    local px, py = project(m, c.lat, c.lng)
+    local radiusPx = metersToPixels(m, c.lat, c.radius)
+    if radiusPx < 0.5 then goto continue end
+
+    -- Fill
+    if c.fill then
+      local r, g, b = parseColor(c.fillColor)
+      love.graphics.setColor(r, g, b, c.fillOpacity)
+      love.graphics.circle("fill", px, py, radiusPx)
+    end
+
+    -- Stroke
+    if c.stroke then
+      local r, g, b = parseColor(c.color)
+      love.graphics.setColor(r, g, b, c.opacity)
+      love.graphics.setLineWidth(c.weight)
+      love.graphics.circle("line", px, py, radiusPx)
+      love.graphics.setLineWidth(1)
+    end
+
+    ::continue::
+  end
+end
+
+-- ============================================================================
+-- Rendering: CircleMarkers (fixed pixel radius)
+-- ============================================================================
+
+local function renderCircleMarkers(m)
+  for _, c in pairs(m.circleMarkers) do
+    local px, py = project(m, c.lat, c.lng)
+
+    -- Fill
+    if c.fill then
+      local r, g, b = parseColor(c.fillColor)
+      love.graphics.setColor(r, g, b, c.fillOpacity)
+      love.graphics.circle("fill", px, py, c.radius)
+    end
+
+    -- Stroke
+    if c.stroke then
+      local r, g, b = parseColor(c.color)
+      love.graphics.setColor(r, g, b, c.opacity)
+      love.graphics.setLineWidth(c.weight)
+      love.graphics.circle("line", px, py, c.radius)
       love.graphics.setLineWidth(1)
     end
   end
 end
 
---- Render polygons on the map.
-local function renderPolygons(m, effectiveOpacity)
-  for _, poly in pairs(m.polygons) do
-    local positions = poly.positions
-    if positions and #positions >= 3 then
-      -- Build flat vertex list
-      local verts = {}
-      for _, pos in ipairs(positions) do
-        local lat = pos[1] or 0
-        local lng = pos[2] or 0
-        local px, py = projectToCanvas(m, lat, lng)
-        verts[#verts + 1] = px
-        verts[#verts + 1] = py
-      end
+-- ============================================================================
+-- Rendering: Rectangles
+-- ============================================================================
 
-      if #verts >= 6 then
-        -- Fill
-        local fr, fg, fb, fa = parseHexColor(poly.fillColor)
-        love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
-        -- Use triangulate for concave polygons
-        local triangles = love.math.triangulate(verts)
-        for _, tri in ipairs(triangles) do
-          love.graphics.polygon("fill", tri)
-        end
+local function renderRectangles(m)
+  for _, rect in pairs(m.rectangles) do
+    local x1, y1 = project(m, rect.neLat, rect.swLng)  -- top-left (NW)
+    local x2, y2 = project(m, rect.swLat, rect.neLng)  -- bottom-right (SE)
+    local rx = math.min(x1, x2)
+    local ry = math.min(y1, y2)
+    local rw = math.abs(x2 - x1)
+    local rh = math.abs(y2 - y1)
 
-        -- Stroke
-        local sr, sg, sb, sa = parseHexColor(poly.strokeColor)
-        love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-        love.graphics.setLineWidth(poly.strokeWidth or 2)
-        -- Close the polygon
-        local closedVerts = {}
-        for i = 1, #verts do closedVerts[i] = verts[i] end
-        closedVerts[#closedVerts + 1] = verts[1]
-        closedVerts[#closedVerts + 1] = verts[2]
-        love.graphics.line(closedVerts)
-        love.graphics.setLineWidth(1)
-      end
+    -- Fill
+    if rect.fill then
+      local r, g, b = parseColor(rect.fillColor)
+      love.graphics.setColor(r, g, b, rect.fillOpacity)
+      love.graphics.rectangle("fill", rx, ry, rw, rh)
+    end
+
+    -- Stroke
+    if rect.stroke then
+      local r, g, b = parseColor(rect.color)
+      love.graphics.setColor(r, g, b, rect.opacity)
+      love.graphics.setLineWidth(rect.weight)
+      love.graphics.rectangle("line", rx, ry, rw, rh)
+      love.graphics.setLineWidth(1)
     end
   end
 end
 
---- Render markers on the map.
-local function renderMarkers(m, effectiveOpacity)
-  for nodeId, marker in pairs(m.markers) do
-    local px, py = projectToCanvas(m, marker.lat, marker.lng)
-
-    -- Default marker: red circle with white border
-    local markerW = 20
-    local markerH = 20
-
-    -- Anchor offset
-    local ox, oy = 0, 0
-    if marker.anchor == "bottom-center" then
-      ox = -markerW / 2
-      oy = -markerH
-    elseif marker.anchor == "center" then
-      ox = -markerW / 2
-      oy = -markerH / 2
-    elseif marker.anchor == "top-center" then
-      ox = -markerW / 2
-      oy = 0
-    end
-
-    -- Draw default marker (custom children are rendered by the tree/painter)
-    love.graphics.setColor(0.91, 0.30, 0.24, effectiveOpacity) -- #e74c3c
-    love.graphics.circle("fill", px + ox + markerW / 2, py + oy + markerH / 2, markerW / 2)
-    love.graphics.setColor(1, 1, 1, effectiveOpacity)
-    love.graphics.circle("line", px + ox + markerW / 2, py + oy + markerH / 2, markerW / 2)
-  end
-end
-
 -- ============================================================================
--- GeoJSON rendering
+-- Rendering: GeoJSON
 -- ============================================================================
 
---- Extract features from a GeoJSON data table.
---- Handles FeatureCollection, single Feature, and raw Geometry objects.
---- GeoJSON coordinates are [longitude, latitude] (reversed from our convention).
-local function extractGeoJSONFeatures(data)
+local function extractFeatures(data)
   if not data then return {} end
-
   if data.type == "FeatureCollection" and data.features then
     return data.features
   elseif data.type == "Feature" then
     return { data }
   elseif data.type == "Point" or data.type == "LineString" or data.type == "Polygon"
       or data.type == "MultiPoint" or data.type == "MultiLineString" or data.type == "MultiPolygon" then
-    -- Raw geometry → wrap as feature
     return {{ type = "Feature", geometry = data, properties = {} }}
   end
-
   return {}
 end
 
---- Get style for a GeoJSON feature from its properties.
-local function getFeatureStyle(feature)
+local function featureStyle(feature, layerStyle)
   local props = feature.properties or {}
   return {
-    fillColor   = props.fillColor   or props.fill        or "#3498db40",
-    strokeColor = props.strokeColor or props.stroke      or "#333333",
-    strokeWidth = props.strokeWidth or props["stroke-width"] or 1,
-    extrude     = props.extrude     or props.height      or 0,
+    color       = props.stroke      or "#333333",
+    weight      = props["stroke-width"] or 2,
+    opacity     = props["stroke-opacity"] or 1,
+    fillColor   = props.fill        or "#3388ff",
+    fillOpacity = props["fill-opacity"] or 0.2,
   }
 end
 
---- Render a GeoJSON polygon ring in 2D.
-local function renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
+local function renderGeoJSONPoint(m, coord, style)
+  local px, py = project(m, coord[2], coord[1])  -- GeoJSON: [lng, lat]
+  local r, g, b = parseColor(style.fillColor)
+  love.graphics.setColor(r, g, b, style.fillOpacity)
+  love.graphics.circle("fill", px, py, 6)
+  local sr, sg, sb = parseColor(style.color)
+  love.graphics.setColor(sr, sg, sb, style.opacity)
+  love.graphics.circle("line", px, py, 6)
+end
+
+local function renderGeoJSONLine(m, coords, style)
+  if not coords or #coords < 2 then return end
+  local pts = {}
+  for _, coord in ipairs(coords) do
+    local px, py = project(m, coord[2], coord[1])
+    pts[#pts + 1] = px
+    pts[#pts + 1] = py
+  end
+  if #pts >= 4 then
+    local r, g, b = parseColor(style.color)
+    love.graphics.setColor(r, g, b, style.opacity)
+    love.graphics.setLineWidth(style.weight)
+    love.graphics.line(pts)
+    love.graphics.setLineWidth(1)
+  end
+end
+
+local function renderGeoJSONRing(m, ring, style)
   if not ring or #ring < 3 then return end
 
   local verts = {}
   for _, coord in ipairs(ring) do
-    -- GeoJSON: [lng, lat]
-    local px, py = projectToCanvas(m, coord[2], coord[1])
+    local px, py = project(m, coord[2], coord[1])
     verts[#verts + 1] = px
     verts[#verts + 1] = py
   end
-
   if #verts < 6 then return end
 
   -- Fill
-  local fr, fg, fb, fa = parseHexColor(style.fillColor)
-  love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
+  local r, g, b = parseColor(style.fillColor)
+  love.graphics.setColor(r, g, b, style.fillOpacity)
   local ok, triangles = pcall(love.math.triangulate, verts)
   if ok and triangles then
     for _, tri in ipairs(triangles) do
@@ -608,9 +791,9 @@ local function renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
   end
 
   -- Stroke
-  local sr, sg, sb, sa = parseHexColor(style.strokeColor)
-  love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-  love.graphics.setLineWidth(style.strokeWidth)
+  local sr, sg, sb = parseColor(style.color)
+  love.graphics.setColor(sr, sg, sb, style.opacity)
+  love.graphics.setLineWidth(style.weight)
   local closed = {}
   for i = 1, #verts do closed[i] = verts[i] end
   closed[#closed + 1] = verts[1]
@@ -619,756 +802,448 @@ local function renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
   love.graphics.setLineWidth(1)
 end
 
---- Render GeoJSON features in 2D mode.
-local function renderGeoJSON(m, effectiveOpacity)
+local function renderGeoJSON(m)
   for _, layer in pairs(m.geojsonLayers) do
-    local features = extractGeoJSONFeatures(layer.data)
-
+    local features = extractFeatures(layer.data)
     for _, feature in ipairs(features) do
       local geom = feature.geometry
-      if not geom then goto nextFeature end
-      local style = getFeatureStyle(feature)
+      if not geom then goto next end
+      local style = featureStyle(feature, layer.style)
 
       if geom.type == "Point" then
-        local coord = geom.coordinates
-        if coord then
-          local px, py = projectToCanvas(m, coord[2], coord[1])
-          local fr, fg, fb, fa = parseHexColor(style.fillColor)
-          love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
-          love.graphics.circle("fill", px, py, 5)
-          local sr, sg, sb, sa = parseHexColor(style.strokeColor)
-          love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-          love.graphics.circle("line", px, py, 5)
-        end
-
+        renderGeoJSONPoint(m, geom.coordinates, style)
       elseif geom.type == "MultiPoint" then
         for _, coord in ipairs(geom.coordinates or {}) do
-          local px, py = projectToCanvas(m, coord[2], coord[1])
-          local fr, fg, fb, fa = parseHexColor(style.fillColor)
-          love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
-          love.graphics.circle("fill", px, py, 5)
+          renderGeoJSONPoint(m, coord, style)
         end
-
       elseif geom.type == "LineString" then
-        local points = {}
-        for _, coord in ipairs(geom.coordinates or {}) do
-          local px, py = projectToCanvas(m, coord[2], coord[1])
-          points[#points + 1] = px
-          points[#points + 1] = py
-        end
-        if #points >= 4 then
-          local sr, sg, sb, sa = parseHexColor(style.strokeColor)
-          love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-          love.graphics.setLineWidth(style.strokeWidth)
-          love.graphics.line(points)
-          love.graphics.setLineWidth(1)
-        end
-
+        renderGeoJSONLine(m, geom.coordinates, style)
       elseif geom.type == "MultiLineString" then
         for _, line in ipairs(geom.coordinates or {}) do
-          local points = {}
-          for _, coord in ipairs(line) do
-            local px, py = projectToCanvas(m, coord[2], coord[1])
-            points[#points + 1] = px
-            points[#points + 1] = py
-          end
-          if #points >= 4 then
-            local sr, sg, sb, sa = parseHexColor(style.strokeColor)
-            love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-            love.graphics.setLineWidth(style.strokeWidth)
-            love.graphics.line(points)
-            love.graphics.setLineWidth(1)
-          end
+          renderGeoJSONLine(m, line, style)
         end
-
       elseif geom.type == "Polygon" then
-        local ring = geom.coordinates and geom.coordinates[1]
-        renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
-
+        renderGeoJSONRing(m, geom.coordinates and geom.coordinates[1], style)
       elseif geom.type == "MultiPolygon" then
         for _, polygon in ipairs(geom.coordinates or {}) do
-          local ring = polygon[1]
-          renderGeoJSONRing2D(m, ring, style, effectiveOpacity)
+          renderGeoJSONRing(m, polygon[1], style)
         end
       end
 
-      ::nextFeature::
+      ::next::
     end
   end
 end
 
 -- ============================================================================
--- 3D Building Extrusion
+-- Rendering: Image Overlays
 -- ============================================================================
 
--- Shader for extruded buildings: MVP + Canvas flip + simple directional lighting
-local buildingShader = nil
+local imageOverlayCache = {}  -- url -> Love2D Image
 
-local function getBuildingShader()
-  if buildingShader then return buildingShader end
-  if not g3d then return mapShader end
+local function renderImageOverlays(m)
+  for _, ov in pairs(m.imageOverlays) do
+    if ov.url == "" then goto continue end
 
-  buildingShader = love.graphics.newShader([[
-    // Vertex shader for extruded buildings with simple lighting
-    uniform mat4 projectionMatrix;
-    uniform mat4 viewMatrix;
-    uniform mat4 modelMatrix;
-    uniform bool isCanvasEnabled;
-
-    attribute vec3 VertexNormal;
-
-    varying vec3 fragNormal;
-    varying vec3 fragPosition;
-
-    vec4 position(mat4 transformProjection, vec4 vertexPosition) {
-      vec4 worldPos = modelMatrix * vertexPosition;
-      fragPosition = worldPos.xyz;
-
-      // Transform normal to world space (simplified, no non-uniform scale)
-      fragNormal = mat3(modelMatrix) * VertexNormal;
-
-      vec4 pos = projectionMatrix * viewMatrix * worldPos;
-      if (isCanvasEnabled) {
-        pos.y *= -1.0;
-      }
-      return pos;
-    }
-  ]], [[
-    // Fragment shader: ambient + directional diffuse lighting
-    uniform vec3 lightDirection;
-    uniform vec3 ambientColor;
-    uniform vec3 lightColor;
-
-    varying vec3 fragNormal;
-    varying vec3 fragPosition;
-
-    vec4 effect(vec4 vertColor, Image tex, vec2 texCoord, vec2 screenCoord) {
-      vec3 normal = normalize(fragNormal);
-      vec3 lightDir = normalize(lightDirection);
-
-      // Diffuse lighting
-      float diff = max(dot(normal, lightDir), 0.0);
-      vec3 diffuse = lightColor * diff;
-
-      vec3 finalColor = (ambientColor + diffuse) * vertColor.rgb;
-      return vec4(finalColor, vertColor.a);
-    }
-  ]])
-
-  return buildingShader
-end
-
---- Cache for extruded building meshes: mapNodeId → { layers: { layerNodeId → { model, zoom, dataRef } } }
-local buildingMeshCache = {}
-
---- Build a 3D extruded mesh for a set of polygon features.
---- Returns a g3d model positioned at the map center.
-local function buildExtrusionModel(features, m)
-  if not g3d then return nil end
-
-  local intZoom = math.floor(m.zoom)
-  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
-  local allVerts = {}
-
-  for _, feature in ipairs(features) do
-    local geom = feature.geometry
-    if not geom then goto skip end
-    local style = getFeatureStyle(feature)
-    if style.extrude <= 0 then goto skip end
-
-    local rings = {}
-    if geom.type == "Polygon" then
-      rings = { geom.coordinates and geom.coordinates[1] }
-    elseif geom.type == "MultiPolygon" then
-      for _, polygon in ipairs(geom.coordinates or {}) do
-        rings[#rings + 1] = polygon[1]
+    -- Load image (lazy)
+    local img = imageOverlayCache[ov.url]
+    if not img then
+      local ok, loaded = pcall(love.graphics.newImage, ov.url)
+      if ok then
+        imageOverlayCache[ov.url] = loaded
+        img = loaded
       end
     end
+    if not img then goto continue end
 
-    for _, ring in ipairs(rings) do
-      if not ring or #ring < 3 then goto skipRing end
+    local x1, y1 = project(m, ov.neLat, ov.swLng)  -- NW
+    local x2, y2 = project(m, ov.swLat, ov.neLng)  -- SE
+    local rx = math.min(x1, x2)
+    local ry = math.min(y1, y2)
+    local rw = math.abs(x2 - x1)
+    local rh = math.abs(y2 - y1)
 
-      -- Compute world-space ring positions
-      local worldRing = {}
-      local flatVerts2D = {}
-      for _, coord in ipairs(ring) do
-        local lat, lng = coord[2], coord[1]  -- GeoJSON: [lng, lat]
-        local px, py = Geo.latlngToPixel(lat, lng, intZoom)
-        local wx = px - centerPx
-        local wy = -(py - centerPy)  -- Y-north
-        worldRing[#worldRing + 1] = { wx, wy }
-        flatVerts2D[#flatVerts2D + 1] = wx
-        flatVerts2D[#flatVerts2D + 1] = wy
-      end
-
-      -- Extrusion height in pixels (rough: 1 meter ≈ metersPerPixel at this zoom)
-      local mpp = Geo.metersPerPixel(m.centerLat, intZoom)
-      local height = style.extrude / math.max(mpp, 0.001)
-
-      -- Parse building color
-      local cr, cg, cb, ca = parseHexColor(style.fillColor)
-      local r8 = math.floor(cr * 255)
-      local g8 = math.floor(cg * 255)
-      local b8 = math.floor(cb * 255)
-      local a8 = math.floor(ca * 255)
-
-      -- Top face: triangulate the polygon at Z=height
-      local okTri, triangles = pcall(love.math.triangulate, flatVerts2D)
-      if okTri and triangles then
-        for _, tri in ipairs(triangles) do
-          -- tri is {x1,y1, x2,y2, x3,y3}
-          allVerts[#allVerts + 1] = {tri[1], tri[2], height,  0, 0,  0, 0, 1,  r8, g8, b8, a8}
-          allVerts[#allVerts + 1] = {tri[3], tri[4], height,  0, 0,  0, 0, 1,  r8, g8, b8, a8}
-          allVerts[#allVerts + 1] = {tri[5], tri[6], height,  0, 0,  0, 0, 1,  r8, g8, b8, a8}
-        end
-      end
-
-      -- Side walls: quads connecting top ring to ground
-      -- Slightly darken sides for visual depth
-      local sr8 = math.floor(cr * 200)
-      local sg8 = math.floor(cg * 200)
-      local sb8 = math.floor(cb * 200)
-
-      for i = 1, #worldRing do
-        local j = (i % #worldRing) + 1
-        local x1, y1 = worldRing[i][1], worldRing[i][2]
-        local x2, y2 = worldRing[j][1], worldRing[j][2]
-
-        -- Wall normal (perpendicular to edge, horizontal)
-        local edgeX = x2 - x1
-        local edgeY = y2 - y1
-        local edgeLen = math.sqrt(edgeX * edgeX + edgeY * edgeY)
-        local nx, ny = 0, 0
-        if edgeLen > 0 then
-          nx = -edgeY / edgeLen
-          ny = edgeX / edgeLen
-        end
-
-        -- Two triangles for the wall quad (CCW from outside)
-        -- Bottom-left, top-left, top-right
-        allVerts[#allVerts + 1] = {x1, y1, 0,       0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
-        allVerts[#allVerts + 1] = {x1, y1, height,   0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
-        allVerts[#allVerts + 1] = {x2, y2, height,   0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
-        -- Bottom-left, top-right, bottom-right
-        allVerts[#allVerts + 1] = {x1, y1, 0,       0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
-        allVerts[#allVerts + 1] = {x2, y2, height,   0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
-        allVerts[#allVerts + 1] = {x2, y2, 0,       0, 0,  nx, ny, 0,  sr8, sg8, sb8, a8}
-      end
-
-      ::skipRing::
-    end
-    ::skip::
-  end
-
-  if #allVerts == 0 then return nil end
-
-  -- Create the dummy white texture for vertex-colored rendering
-  local dummyData = love.image.newImageData(1, 1)
-  dummyData:setPixel(0, 0, 1, 1, 1, 1)
-  local dummyTex = love.graphics.newImage(dummyData)
-
-  return g3d.newModel(allVerts, dummyTex, {0, 0, 0}, {0, 0, 0}, {1, 1, 1})
-end
-
-local renderExtrudedBuildings3D  -- forward declaration (defined below)
-local projectToWorld3D
-local worldToScreen3D
-
---- Render GeoJSON features in 3D mode with building extrusion.
-local function renderGeoJSON3D(m, effectiveOpacity)
-  local hasExtruded = false
-
-  -- First pass: render non-extruded features as screen-projected 2D overlays
-  for _, layer in pairs(m.geojsonLayers) do
-    local features = extractGeoJSONFeatures(layer.data)
-
-    for _, feature in ipairs(features) do
-      local geom = feature.geometry
-      if not geom then goto nextFlat end
-      local style = getFeatureStyle(feature)
-
-      -- Skip extruded features (handled in second pass)
-      if style.extrude > 0 then
-        hasExtruded = true
-        goto nextFlat
-      end
-
-      if geom.type == "Point" then
-        local coord = geom.coordinates
-        if coord then
-          local wx, wy = projectToWorld3D(m, coord[2], coord[1])
-          local sx, sy = worldToScreen3D(m, wx, wy, 0)
-          if sx and sy then
-            local fr, fg, fb, fa = parseHexColor(style.fillColor)
-            love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
-            love.graphics.circle("fill", sx, sy, 5)
-          end
-        end
-
-      elseif geom.type == "LineString" then
-        local points = {}
-        for _, coord in ipairs(geom.coordinates or {}) do
-          local wx, wy = projectToWorld3D(m, coord[2], coord[1])
-          local sx, sy = worldToScreen3D(m, wx, wy, 0)
-          if sx and sy then
-            points[#points + 1] = sx
-            points[#points + 1] = sy
-          end
-        end
-        if #points >= 4 then
-          local sr, sg, sb, sa = parseHexColor(style.strokeColor)
-          love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-          love.graphics.setLineWidth(style.strokeWidth)
-          love.graphics.line(points)
-          love.graphics.setLineWidth(1)
-        end
-
-      elseif geom.type == "Polygon" then
-        local ring = geom.coordinates and geom.coordinates[1]
-        if ring and #ring >= 3 then
-          local verts = {}
-          for _, coord in ipairs(ring) do
-            local wx, wy = projectToWorld3D(m, coord[2], coord[1])
-            local sx, sy = worldToScreen3D(m, wx, wy, 0)
-            if sx and sy then
-              verts[#verts + 1] = sx
-              verts[#verts + 1] = sy
-            end
-          end
-          if #verts >= 6 then
-            local fr, fg, fb, fa = parseHexColor(style.fillColor)
-            love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
-            local ok2, triangles = pcall(love.math.triangulate, verts)
-            if ok2 and triangles then
-              for _, tri in ipairs(triangles) do
-                love.graphics.polygon("fill", tri)
-              end
-            end
-          end
-        end
-      end
-
-      ::nextFlat::
-    end
-  end
-
-  -- Second pass: render extruded buildings as 3D meshes (requires depth + shader)
-  if hasExtruded and g3d then
-    renderExtrudedBuildings3D(m, effectiveOpacity)
-  end
-end
-
---- Render extruded buildings using g3d meshes with lighting.
---- Called from renderGeoJSON3D when extruded features exist.
-renderExtrudedBuildings3D = function(m, effectiveOpacity)
-  local intZoom = math.floor(m.zoom)
-  local fracScale = math.pow(2, m.zoom - intZoom)
-
-  -- Get or create cached meshes
-  local cache = buildingMeshCache[m] or {}
-  buildingMeshCache[m] = cache
-
-  for layerId, layer in pairs(m.geojsonLayers) do
-    local features = extractGeoJSONFeatures(layer.data)
-
-    -- Check if we need to rebuild (data changed or zoom changed)
-    local cached = cache[layerId]
-    if cached and cached.zoom == intZoom and cached.dataRef == layer.data then
-      -- Use cached mesh
-    else
-      -- Rebuild mesh
-      local model = buildExtrusionModel(features, m)
-      if cached and cached.model then
-        -- Release old mesh
-        if cached.model.mesh then cached.model.mesh:release() end
-      end
-      cached = { model = model, zoom = intZoom, dataRef = layer.data }
-      cache[layerId] = cached
-    end
-
-    if cached.model then
-      -- Set transform: scale by fractional zoom, no rotation
-      cached.model:setTransform(
-        {0, 0, 0},
-        {0, 0, 0},
-        {fracScale, fracScale, fracScale}
-      )
-
-      -- Draw with building shader (lighting)
-      local shader = getBuildingShader()
-      if shader then
-        love.graphics.setColor(1, 1, 1, effectiveOpacity)
-        love.graphics.setDepthMode("lequal", true)
-
-        -- Set lighting uniforms
-        if shader ~= mapShader then
-          shader:send("lightDirection", {0.5, 0.3, 0.8})
-          shader:send("ambientColor", {0.35, 0.35, 0.40})
-          shader:send("lightColor", {0.8, 0.75, 0.65})
-        end
-
-        cached.model:draw(shader)
-        love.graphics.setDepthMode()
-      end
-    end
-  end
-end
-
--- ============================================================================
--- 3D Rendering (pitch > 0)
--- ============================================================================
-
---- Project lat/lng to 3D world coordinates.
---- Uses Y-north convention: +X=east, +Y=north, Z=up.
-projectToWorld3D = function(m, lat, lng)
-  local intZoom = math.floor(m.zoom)
-  local fracScale = math.pow(2, m.zoom - intZoom)
-  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
-  local pointPx, pointPy = Geo.latlngToPixel(lat, lng, intZoom)
-  local worldX = (pointPx - centerPx) * fracScale
-  local worldY = -((pointPy - centerPy) * fracScale)  -- flip Y: north = +Y
-  return worldX, worldY
-end
-
---- Project a 3D world point to canvas pixel coordinates using the current camera.
---- Returns nil, nil if the point is behind the camera.
-worldToScreen3D = function(m, wx, wy, wz)
-  wz = wz or 0
-
-  -- Apply view matrix
-  local vm = g3d.camera.viewMatrix
-  local vx = vm[1]*wx  + vm[2]*wy  + vm[3]*wz  + vm[4]
-  local vy = vm[5]*wx  + vm[6]*wy  + vm[7]*wz  + vm[8]
-  local vz = vm[9]*wx  + vm[10]*wy + vm[11]*wz + vm[12]
-  local vw = vm[13]*wx + vm[14]*wy + vm[15]*wz + vm[16]
-
-  -- Apply projection matrix
-  local pm = g3d.camera.projectionMatrix
-  local cx = pm[1]*vx  + pm[2]*vy  + pm[3]*vz  + pm[4]*vw
-  local cy = pm[5]*vx  + pm[6]*vy  + pm[7]*vz  + pm[8]*vw
-  local cw = pm[13]*vx + pm[14]*vy + pm[15]*vz + pm[16]*vw
-
-  -- Behind camera check
-  if cw <= 0.001 then return nil, nil end
-
-  -- Perspective divide + Canvas Y-flip (matches shader)
-  local ndcX = cx / cw
-  local ndcY = -cy / cw
-
-  -- NDC to Love2D Canvas coordinates
-  local screenX = (ndcX + 1) * 0.5 * m.width
-  local screenY = (1 - ndcY) * 0.5 * m.height
-
-  return screenX, screenY
-end
-
---- Render tile layers in 3D using g3d textured quads.
-local function renderTileLayers3D(m)
-  local intZoom = math.floor(m.zoom)
-  local fracScale = math.pow(2, m.zoom - intZoom)
-  local tileSize = Geo.tileSize()
-  local scaledTileSize = tileSize * fracScale
-  local centerPx, centerPy = Geo.latlngToPixel(m.centerLat, m.centerLng, intZoom)
-
-  -- Expand visible area for perspective (tiles near horizon must be loaded)
-  local pitchRad = m.pitch * math.pi / 180
-  local expandFactor = 1 + math.tan(pitchRad) * 2.5
-  local minTx, minTy, maxTx, maxTy = Geo.visibleTiles(
-    m.centerLat, m.centerLng, m.zoom,
-    m.width * expandFactor, m.height * expandFactor
-  )
-
-  for _, layer in ipairs(m.tileLayers) do
-    if layer.source and intZoom >= layer.minZoom and intZoom <= layer.maxZoom then
-      for ty = minTy, maxTy do
-        for tx = minTx, maxTx do
-          local wrappedTx = Geo.wrapTileX(tx, intZoom)
-          local img = TileCache.getTile(globalCache, layer.source, intZoom, wrappedTx, ty)
-
-          if img then
-            -- Tile world position (Y-north convention: flip pixel Y)
-            local tilePxX = tx * tileSize
-            local tilePxY = ty * tileSize
-            local worldX = (tilePxX - centerPx) * fracScale
-            local worldY = -((tilePxY - centerPy) * fracScale)
-
-            -- Reuse shared quad: set texture and transform
-            -- Quad spans (0,0) to (1,-1) in local space, scaled to tile size
-            -- Translation places NW corner; scale stretches to full tile
-            sharedQuad.mesh:setTexture(img)
-            sharedQuad:setTransform(
-              {worldX, worldY, 0},
-              {0, 0, 0},
-              {scaledTileSize, scaledTileSize, 1}
-            )
-            sharedQuad:draw(mapShader)
-          elseif missingTileTexture then
-            -- Keep 3D mode readable offline: render a faint ground tile when
-            -- imagery is unavailable instead of leaving the canvas empty.
-            local tilePxX = tx * tileSize
-            local tilePxY = ty * tileSize
-            local worldX = (tilePxX - centerPx) * fracScale
-            local worldY = -((tilePxY - centerPy) * fracScale)
-
-            sharedQuad.mesh:setTexture(missingTileTexture)
-            sharedQuad:setTransform(
-              {worldX, worldY, 0},
-              {0, 0, 0},
-              {scaledTileSize, scaledTileSize, 1}
-            )
-            love.graphics.setColor(0.80, 0.82, 0.86, 0.12 * layer.opacity)
-            sharedQuad:draw(mapShader)
-            love.graphics.setColor(1, 1, 1, 1)
-          end
-        end
-      end
-    end
-  end
-end
-
---- Render polylines projected to screen in 3D mode.
-local function renderPolylines3D(m, effectiveOpacity)
-  for _, poly in pairs(m.polylines) do
-    local positions = poly.positions
-    if positions and #positions >= 2 then
-      local r, g, b, a = parseHexColor(poly.color)
-      love.graphics.setColor(r, g, b, a * effectiveOpacity)
-      love.graphics.setLineWidth(poly.width or 2)
-
-      local points = {}
-      for _, pos in ipairs(positions) do
-        local wx, wy = projectToWorld3D(m, pos[1] or 0, pos[2] or 0)
-        local sx, sy = worldToScreen3D(m, wx, wy, 0)
-        if sx and sy then
-          points[#points + 1] = sx
-          points[#points + 1] = sy
-        end
-      end
-
-      if #points >= 4 then
-        love.graphics.line(points)
-      end
-
-      -- Arrowheads
-      if poly.arrowheads and #points >= 4 then
-        local arrowSize = (poly.width or 2) * 3
-        love.graphics.setColor(r, g, b, a * effectiveOpacity)
-        local accumDist = 0
-        for i = 3, #points, 2 do
-          local x1, y1 = points[i - 2], points[i - 1]
-          local x2, y2 = points[i], points[i + 1]
-          local dx = x2 - x1
-          local dy = y2 - y1
-          local segLen = math.sqrt(dx * dx + dy * dy)
-          accumDist = accumDist + segLen
-          if accumDist >= 100 then
-            accumDist = 0
-            local angle = math.atan2(dy, dx)
-            local mx = (x1 + x2) / 2
-            local my = (y1 + y2) / 2
-            love.graphics.polygon("fill",
-              mx + math.cos(angle) * arrowSize, my + math.sin(angle) * arrowSize,
-              mx + math.cos(angle + 2.5) * arrowSize * 0.6, my + math.sin(angle + 2.5) * arrowSize * 0.6,
-              mx + math.cos(angle - 2.5) * arrowSize * 0.6, my + math.sin(angle - 2.5) * arrowSize * 0.6
-            )
-          end
-        end
-      end
-
-      love.graphics.setLineWidth(1)
-    end
-  end
-end
-
---- Render polygons projected to screen in 3D mode.
-local function renderPolygons3D(m, effectiveOpacity)
-  for _, poly in pairs(m.polygons) do
-    local positions = poly.positions
-    if positions and #positions >= 3 then
-      local verts = {}
-      for _, pos in ipairs(positions) do
-        local wx, wy = projectToWorld3D(m, pos[1] or 0, pos[2] or 0)
-        local sx, sy = worldToScreen3D(m, wx, wy, 0)
-        if sx and sy then
-          verts[#verts + 1] = sx
-          verts[#verts + 1] = sy
-        end
-      end
-
-      if #verts >= 6 then
-        -- Fill
-        local fr, fg, fb, fa = parseHexColor(poly.fillColor)
-        love.graphics.setColor(fr, fg, fb, fa * effectiveOpacity)
-        local ok, triangles = pcall(love.math.triangulate, verts)
-        if ok and triangles then
-          for _, tri in ipairs(triangles) do
-            love.graphics.polygon("fill", tri)
-          end
-        end
-
-        -- Stroke
-        local sr, sg, sb, sa = parseHexColor(poly.strokeColor)
-        love.graphics.setColor(sr, sg, sb, sa * effectiveOpacity)
-        love.graphics.setLineWidth(poly.strokeWidth or 2)
-        local closedVerts = {}
-        for i = 1, #verts do closedVerts[i] = verts[i] end
-        closedVerts[#closedVerts + 1] = verts[1]
-        closedVerts[#closedVerts + 1] = verts[2]
-        love.graphics.line(closedVerts)
-        love.graphics.setLineWidth(1)
-      end
-    end
-  end
-end
-
---- Render markers projected to screen in 3D mode.
-local function renderMarkers3D(m, effectiveOpacity)
-  for _, marker in pairs(m.markers) do
-    local wx, wy = projectToWorld3D(m, marker.lat, marker.lng)
-    local px, py = worldToScreen3D(m, wx, wy, 0)
-    if not px or not py then goto continue end
-
-    local markerW = 20
-    local markerH = 20
-
-    local ox, oy = 0, 0
-    if marker.anchor == "bottom-center" then
-      ox = -markerW / 2
-      oy = -markerH
-    elseif marker.anchor == "center" then
-      ox = -markerW / 2
-      oy = -markerH / 2
-    elseif marker.anchor == "top-center" then
-      ox = -markerW / 2
-      oy = 0
-    end
-
-    love.graphics.setColor(0.91, 0.30, 0.24, effectiveOpacity)
-    love.graphics.circle("fill", px + ox + markerW / 2, py + oy + markerH / 2, markerW / 2)
-    love.graphics.setColor(1, 1, 1, effectiveOpacity)
-    love.graphics.circle("line", px + ox + markerW / 2, py + oy + markerH / 2, markerW / 2)
+    love.graphics.setColor(1, 1, 1, ov.opacity)
+    love.graphics.draw(img, rx, ry, 0, rw / img:getWidth(), rh / img:getHeight())
 
     ::continue::
   end
 end
 
---- Render a single map in 3D mode (pitch > 0).
-local function renderMap3D(nodeId)
-  local m = maps[nodeId]
-  if not m or not m.canvas then return end
+-- ============================================================================
+-- Rendering: Markers
+-- ============================================================================
 
-  -- Poll tile cache
-  TileCache.poll(globalCache)
-  TileCache.advanceDownloads(globalCache)
+local MARKER_RADIUS = 12
+local MARKER_STEM = 8
 
-  -- Advance zoom animation
-  if m.zoomAnimating then
-    m.zoomT = m.zoomT + love.timer.getDelta() / m.zoomDuration
-    if m.zoomT >= 1 then
-      m.zoom = m.zoomTo
-      m.zoomAnimating = false
-    else
-      local t = 1 - math.pow(1 - m.zoomT, 3)
-      m.zoom = m.zoomFrom + (m.zoomTo - m.zoomFrom) * t
-    end
-  end
+local function renderMarkers(m)
+  for nodeId, marker in pairs(m.markers) do
+    local px, py = project(m, marker.lat, marker.lng)
 
-  -- Camera geometry from pitch/bearing/zoom
-  local pitchRad = m.pitch * math.pi / 180
-  local bearingRad = m.bearing * math.pi / 180
-  local fov = math.pi / 3  -- 60 degrees
+    love.graphics.setColor(1, 1, 1, marker.opacity)
 
-  -- Altitude: camera distance from ground that matches 2D viewport coverage
-  local altitude = m.height / (2 * math.tan(fov / 2))
-
-  -- Split altitude into horizontal + vertical distance based on pitch
-  local hDist = altitude * math.sin(pitchRad)
-  local vDist = altitude * math.cos(pitchRad)
-
-  -- Camera orbits map center based on bearing (clockwise from north)
-  -- bearing=0: camera south of center (-Y), looking north
-  -- bearing=90: camera west of center (-X), looking east
-  local camX = -hDist * math.sin(bearingRad)
-  local camY = -hDist * math.cos(bearingRad)
-  local camZ = vDist
-
-  g3d.camera.position = {camX, camY, camZ}
-  g3d.camera.target = {0, 0, 0}
-  g3d.camera.up = {0, 0, 1}
-  g3d.camera.fov = fov
-  g3d.camera.nearClip = 1
-  g3d.camera.farClip = altitude * 10
-  g3d.camera.aspectRatio = m.width / m.height
-  g3d.camera.updateProjectionMatrix()
-  g3d.camera.updateViewMatrix()
-
-  -- Begin 3D rendering to Canvas with depth buffer
-  love.graphics.push("all")
-  love.graphics.setCanvas({m.canvas, depth = true})
-  love.graphics.setDepthMode("lequal", true)
-  love.graphics.clear(0.93, 0.93, 0.90, 1)
-  love.graphics.setColor(1, 1, 1, 1)
-
-  -- Render tile layers as 3D textured quads on the ground plane
-  renderTileLayers3D(m)
-
-  -- Render GeoJSON (handles both flat overlays and extruded 3D buildings)
-  -- Extruded buildings are rendered here with depth testing enabled
-  love.graphics.setShader()
-  love.graphics.setColor(1, 1, 1, 1)
-  renderGeoJSON3D(m, 1)
-
-  -- Switch to 2D for overlays (disable depth, clear shader)
-  love.graphics.setDepthMode()
-  love.graphics.setShader()
-  love.graphics.setColor(1, 1, 1, 1)
-
-  -- Render overlays projected to screen coordinates
-  renderPolygons3D(m, 1)
-  renderPolylines3D(m, 1)
-  renderMarkers3D(m, 1)
-
-  -- Attribution text (same as 2D)
-  if #m.tileLayers > 0 then
-    local attrText = ""
-    for _, layer in ipairs(m.tileLayers) do
-      local src = globalCache.sources[layer.source]
-      if src and src.attribution and src.attribution ~= "" then
-        if #attrText > 0 then attrText = attrText .. " | " end
-        attrText = attrText .. src.attribution
+    if marker.icon then
+      -- Custom icon image
+      local img = imageOverlayCache[marker.icon]
+      if not img then
+        local ok, loaded = pcall(love.graphics.newImage, marker.icon)
+        if ok then imageOverlayCache[marker.icon] = loaded; img = loaded end
       end
-    end
-    if #attrText > 0 then
-      local font = love.graphics.getFont()
-      local tw = font:getWidth(attrText)
-      local th = font:getHeight()
-      local padding = 4
-      love.graphics.setColor(1, 1, 1, 0.8)
-      love.graphics.rectangle("fill",
-        m.width - tw - padding * 2, m.height - th - padding * 2,
-        tw + padding * 2, th + padding * 2)
-      love.graphics.setColor(0.2, 0.2, 0.2, 0.9)
-      love.graphics.print(attrText, m.width - tw - padding, m.height - th - padding)
+      if img then
+        local iw, ih = img:getWidth(), img:getHeight()
+        love.graphics.draw(img, px - iw / 2, py - ih, 0, 1, 1)
+      end
+    else
+      -- Default marker: teardrop shape
+      -- Stem (triangle pointing down)
+      love.graphics.setColor(0.85, 0.22, 0.20, marker.opacity)  -- #d93832
+      love.graphics.polygon("fill",
+        px, py,  -- tip
+        px - MARKER_RADIUS * 0.6, py - MARKER_STEM,
+        px + MARKER_RADIUS * 0.6, py - MARKER_STEM
+      )
+      -- Circle head
+      love.graphics.circle("fill", px, py - MARKER_STEM - MARKER_RADIUS + 2, MARKER_RADIUS)
+      -- White dot in center
+      love.graphics.setColor(1, 1, 1, marker.opacity)
+      love.graphics.circle("fill", px, py - MARKER_STEM - MARKER_RADIUS + 2, MARKER_RADIUS * 0.35)
+      -- Border
+      love.graphics.setColor(0.6, 0.12, 0.10, marker.opacity)
+      love.graphics.setLineWidth(1.5)
+      love.graphics.circle("line", px, py - MARKER_STEM - MARKER_RADIUS + 2, MARKER_RADIUS)
+      love.graphics.setLineWidth(1)
     end
   end
-
-  love.graphics.pop()
 end
 
---- Render a single map to its Canvas.
+-- ============================================================================
+-- Rendering: Popups
+-- ============================================================================
+
+local function renderPopups(m)
+  for popupId, popup in pairs(m.popups) do
+    -- Only render if this popup is the open one, or it has an explicit position
+    local isOpen = (m.openPopupId == popupId)
+    local hasPosition = popup.lat ~= nil
+
+    if not isOpen and not hasPosition then goto continue end
+
+    local lat, lng = popup.lat, popup.lng
+    -- If attached to a marker, use marker position
+    if popup.parentId and m.markers[popup.parentId] then
+      local marker = m.markers[popup.parentId]
+      lat = marker.lat
+      lng = marker.lng
+    end
+    if not lat then goto continue end
+
+    local px, py = project(m, lat, lng)
+    local text = popup.text
+    if text == "" then goto continue end
+
+    -- Measure text
+    local font = love.graphics.getFont()
+    local maxW = math.min(popup.maxWidth, m.width * 0.8)
+    local _, wrappedLines = font:getWrap(text, maxW)
+    local lineH = font:getHeight()
+    local textH = #wrappedLines * lineH
+    local textW = 0
+    for _, line in ipairs(wrappedLines) do
+      textW = math.max(textW, font:getWidth(line))
+    end
+
+    local pad = 8
+    local boxW = textW + pad * 2
+    local boxH = textH + pad * 2
+    local tailH = 8
+
+    -- Position above the point
+    local bx = px - boxW / 2
+    local by = py - MARKER_STEM - MARKER_RADIUS * 2 - tailH - boxH - 4
+
+    -- Clamp to canvas bounds
+    bx = math.max(2, math.min(m.width - boxW - 2, bx))
+    by = math.max(2, by)
+
+    -- Shadow
+    love.graphics.setColor(0, 0, 0, 0.15)
+    love.graphics.rectangle("fill", bx + 2, by + 2, boxW, boxH, 4, 4)
+
+    -- Background
+    love.graphics.setColor(1, 1, 1, 0.95)
+    love.graphics.rectangle("fill", bx, by, boxW, boxH, 4, 4)
+
+    -- Tail triangle
+    local tailX = px
+    local tailY = by + boxH
+    love.graphics.setColor(1, 1, 1, 0.95)
+    love.graphics.polygon("fill",
+      tailX - 6, tailY,
+      tailX + 6, tailY,
+      tailX, tailY + tailH
+    )
+
+    -- Border
+    love.graphics.setColor(0.75, 0.75, 0.75, 1)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", bx, by, boxW, boxH, 4, 4)
+
+    -- Close button
+    if popup.closeButton then
+      local cbx = bx + boxW - 16
+      local cby = by + 2
+      love.graphics.setColor(0.5, 0.5, 0.5, 0.7)
+      love.graphics.print("x", cbx, cby)
+    end
+
+    -- Text
+    love.graphics.setColor(0.15, 0.15, 0.15, 1)
+    love.graphics.printf(text, bx + pad, by + pad, maxW, "left")
+
+    ::continue::
+  end
+end
+
+-- ============================================================================
+-- Rendering: Tooltips
+-- ============================================================================
+
+local function renderTooltips(m)
+  for _, tooltip in pairs(m.tooltips) do
+    -- Show if permanent, or if parent marker is hovered
+    local show = tooltip.permanent
+    if not show and tooltip.parentId and m.hoveredMarkerId == tooltip.parentId then
+      show = true
+    end
+    if not show and tooltip.lat then
+      show = true  -- has explicit position
+    end
+    if not show then goto continue end
+
+    local lat, lng = tooltip.lat, tooltip.lng
+    if tooltip.parentId and m.markers[tooltip.parentId] then
+      local marker = m.markers[tooltip.parentId]
+      lat = marker.lat
+      lng = marker.lng
+    end
+    if not lat then goto continue end
+
+    local px, py = project(m, lat, lng)
+    local text = tooltip.text
+    if text == "" then goto continue end
+
+    local font = love.graphics.getFont()
+    local tw = font:getWidth(text)
+    local th = font:getHeight()
+    local pad = 4
+
+    -- Position based on direction
+    local dir = tooltip.direction
+    local bx, by
+    if dir == "right" or dir == "auto" then
+      bx = px + 14
+      by = py - th / 2 - pad
+    elseif dir == "left" then
+      bx = px - tw - pad * 2 - 14
+      by = py - th / 2 - pad
+    elseif dir == "top" then
+      bx = px - tw / 2 - pad
+      by = py - th - pad * 2 - 14
+    elseif dir == "bottom" then
+      bx = px - tw / 2 - pad
+      by = py + 14
+    else
+      bx = px + 14
+      by = py - th / 2 - pad
+    end
+
+    -- Background
+    love.graphics.setColor(1, 1, 1, tooltip.opacity)
+    love.graphics.rectangle("fill", bx, by, tw + pad * 2, th + pad * 2, 3, 3)
+
+    -- Border
+    love.graphics.setColor(0.7, 0.7, 0.7, tooltip.opacity)
+    love.graphics.rectangle("line", bx, by, tw + pad * 2, th + pad * 2, 3, 3)
+
+    -- Text
+    love.graphics.setColor(0.15, 0.15, 0.15, tooltip.opacity)
+    love.graphics.print(text, bx + pad, by + pad)
+
+    ::continue::
+  end
+end
+
+-- ============================================================================
+-- Rendering: Controls
+-- ============================================================================
+
+local function renderZoomControl(m)
+  local ctrl = m.controls.zoom
+  if not ctrl then return end
+
+  local btnSize = 30
+  local margin = 10
+  local x, y
+
+  if ctrl.position == "topleft" then
+    x, y = margin, margin
+  elseif ctrl.position == "topright" then
+    x, y = m.width - btnSize - margin, margin
+  elseif ctrl.position == "bottomleft" then
+    x, y = margin, m.height - btnSize * 2 - margin
+  else
+    x, y = m.width - btnSize - margin, m.height - btnSize * 2 - margin
+  end
+
+  -- Store button rects for hit testing
+  m._zoomInRect = { x = x + m.screenX, y = y + m.screenY, w = btnSize, h = btnSize }
+  m._zoomOutRect = { x = x + m.screenX, y = y + btnSize + m.screenY, w = btnSize, h = btnSize }
+
+  -- Zoom in button
+  love.graphics.setColor(1, 1, 1, 0.9)
+  love.graphics.rectangle("fill", x, y, btnSize, btnSize, 4, 4)
+  love.graphics.setColor(0.3, 0.3, 0.3, 1)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", x, y, btnSize, btnSize, 4, 4)
+  local font = love.graphics.getFont()
+  local tw = font:getWidth(ctrl.zoomInText)
+  local th = font:getHeight()
+  love.graphics.print(ctrl.zoomInText, x + (btnSize - tw) / 2, y + (btnSize - th) / 2)
+
+  -- Zoom out button
+  love.graphics.setColor(1, 1, 1, 0.9)
+  love.graphics.rectangle("fill", x, y + btnSize, btnSize, btnSize, 4, 4)
+  love.graphics.setColor(0.3, 0.3, 0.3, 1)
+  love.graphics.rectangle("line", x, y + btnSize, btnSize, btnSize, 4, 4)
+  tw = font:getWidth(ctrl.zoomOutText)
+  love.graphics.print(ctrl.zoomOutText, x + (btnSize - tw) / 2, y + btnSize + (btnSize - th) / 2)
+end
+
+local function renderScaleControl(m)
+  local ctrl = m.controls.scale
+  if not ctrl then return end
+
+  local margin = 10
+  local x, y
+  local barMaxW = ctrl.maxWidth
+
+  if ctrl.position == "bottomleft" then
+    x = margin
+    y = m.height - 30
+  elseif ctrl.position == "bottomright" then
+    x = m.width - barMaxW - margin
+    y = m.height - 30
+  elseif ctrl.position == "topleft" then
+    x = margin
+    y = margin
+  else
+    x = m.width - barMaxW - margin
+    y = margin
+  end
+
+  -- Calculate scale: how many meters does maxWidth pixels represent?
+  local mpp = Geo.metersPerPixel(m.centerLat, m.zoom)
+  local maxMeters = barMaxW * mpp
+
+  -- Round to a nice number
+  local niceValues = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000}
+  local niceMeters = niceValues[1]
+  for _, v in ipairs(niceValues) do
+    if v <= maxMeters then niceMeters = v end
+  end
+
+  local barW = niceMeters / mpp
+  local label
+  if ctrl.metric ~= false then
+    if niceMeters >= 1000 then
+      label = string.format("%d km", niceMeters / 1000)
+    else
+      label = string.format("%d m", niceMeters)
+    end
+  end
+  if ctrl.imperial then
+    local feet = niceMeters * 3.28084
+    if feet >= 5280 then
+      label = string.format("%.1f mi", feet / 5280)
+    else
+      label = string.format("%d ft", math.floor(feet))
+    end
+  end
+
+  if label then
+    local font = love.graphics.getFont()
+    -- Bar
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("fill", x - 2, y, barW + 4, 18)
+    love.graphics.setColor(0.2, 0.2, 0.2, 0.9)
+    love.graphics.setLineWidth(2)
+    love.graphics.line(x, y + 16, x, y + 10, x + barW, y + 10, x + barW, y + 16)
+    love.graphics.setLineWidth(1)
+    -- Label
+    love.graphics.setColor(0.15, 0.15, 0.15, 1)
+    love.graphics.print(label, x + 2, y)
+  end
+end
+
+local function renderAttribution(m)
+  local ctrl = m.controls.attribution
+  if not ctrl then return end
+
+  -- Collect attribution strings from tile layers
+  local parts = {}
+  if ctrl.prefix ~= false then
+    parts[#parts + 1] = ctrl.prefix or "ReactJIT"
+  end
+  for _, layer in ipairs(m.tileLayers) do
+    if layer.attribution and layer.attribution ~= "" then
+      parts[#parts + 1] = layer.attribution
+    elseif globalCache and globalCache.sources[layer.source] then
+      local src = globalCache.sources[layer.source]
+      if src.attribution and src.attribution ~= "" then
+        parts[#parts + 1] = src.attribution
+      end
+    end
+  end
+
+  local text = table.concat(parts, " | ")
+  if text == "" then return end
+
+  local font = love.graphics.getFont()
+  local tw = font:getWidth(text)
+  local th = font:getHeight()
+  local pad = 4
+
+  local x, y
+  if ctrl.position == "bottomleft" then
+    x, y = pad, m.height - th - pad * 2
+  elseif ctrl.position == "topleft" then
+    x, y = pad, pad
+  elseif ctrl.position == "topright" then
+    x, y = m.width - tw - pad * 2, pad
+  else -- bottomright
+    x, y = m.width - tw - pad * 2, m.height - th - pad * 2
+  end
+
+  love.graphics.setColor(1, 1, 1, 0.75)
+  love.graphics.rectangle("fill", x, y, tw + pad * 2, th + pad * 2)
+  love.graphics.setColor(0.25, 0.25, 0.25, 0.85)
+  love.graphics.print(text, x + pad, y + pad)
+end
+
+-- ============================================================================
+-- Main render function
+-- ============================================================================
+
 local function renderMap(nodeId)
   local m = maps[nodeId]
   if not m or not m.canvas then return end
 
-  -- Use 3D rendering when pitch > 0 and g3d is available
-  if m.pitch > 0 and g3d and sharedQuad and mapShader then
-    renderMap3D(nodeId)
-    return
+  -- Poll tile cache
+  if globalCache then
+    TileCache.poll(globalCache)
+    TileCache.advanceDownloads(globalCache)
   end
-
-  -- Poll tile cache for completed fetches
-  TileCache.poll(globalCache)
-  TileCache.advanceDownloads(globalCache)
 
   -- Advance zoom animation
   if m.zoomAnimating then
@@ -1377,66 +1252,74 @@ local function renderMap(nodeId)
       m.zoom = m.zoomTo
       m.zoomAnimating = false
     else
-      -- Ease out
-      local t = 1 - math.pow(1 - m.zoomT, 3)
+      local t = 1 - math.pow(1 - m.zoomT, 3)  -- ease-out cubic
       m.zoom = m.zoomFrom + (m.zoomTo - m.zoomFrom) * t
     end
+    m.viewDirty = true
   end
 
-  -- Save Love2D graphics state
+  -- Advance pan animation (flyTo)
+  if m.panAnimating then
+    m.panT = m.panT + love.timer.getDelta() / m.panDuration
+    if m.panT >= 1 then
+      m.centerLat = m.panToLat
+      m.centerLng = m.panToLng
+      m.panAnimating = false
+    else
+      local t = 1 - math.pow(1 - m.panT, 3)
+      m.centerLat = m.panFromLat + (m.panToLat - m.panFromLat) * t
+      m.centerLng = m.panFromLng + (m.panToLng - m.panFromLng) * t
+    end
+    m.viewDirty = true
+  end
+
+  -- Render to off-screen canvas
   love.graphics.push("all")
   love.graphics.setCanvas(m.canvas)
-
-  -- Clear with a map background color
-  love.graphics.clear(0.93, 0.93, 0.90, 1)  -- light beige (land placeholder)
+  love.graphics.clear(0.93, 0.93, 0.90, 1)  -- light warm gray background
   love.graphics.setColor(1, 1, 1, 1)
 
-  -- Apply bearing rotation around center
+  -- Apply bearing rotation
   if m.bearing ~= 0 then
     love.graphics.translate(m.width / 2, m.height / 2)
     love.graphics.rotate(-m.bearing * math.pi / 180)
     love.graphics.translate(-m.width / 2, -m.height / 2)
   end
 
-  -- Render tile layers
-  renderTileLayers(m)
+  -- Layer order (matches Leaflet's pane z-ordering):
+  -- 1. Tiles
+  -- 2. Image overlays
+  -- 3. Vector layers (polygons, rectangles, circles, polylines, GeoJSON)
+  -- 4. Markers
+  -- 5. Popups & tooltips
+  -- 6. Controls
 
-  -- Render overlays
-  renderPolygons(m, 1)
-  renderPolylines(m, 1)
-  renderGeoJSON(m, 1)
-  renderMarkers(m, 1)
+  renderTiles(m)
+  renderImageOverlays(m)
+  renderPolygons(m)
+  renderRectangles(m)
+  renderCircles(m)
+  renderCircleMarkers(m)
+  renderPolylines(m)
+  renderGeoJSON(m)
+  renderMarkers(m)
+  renderTooltips(m)
+  renderPopups(m)
 
-  -- Attribution text (bottom-right)
-  if #m.tileLayers > 0 then
-    local attrText = ""
-    for _, layer in ipairs(m.tileLayers) do
-      local src = globalCache.sources[layer.source]
-      if src and src.attribution and src.attribution ~= "" then
-        if #attrText > 0 then attrText = attrText .. " | " end
-        attrText = attrText .. src.attribution
-      end
-    end
-    if #attrText > 0 then
-      local font = love.graphics.getFont()
-      local tw = font:getWidth(attrText)
-      local th = font:getHeight()
-      local padding = 4
-      love.graphics.setColor(1, 1, 1, 0.8)
-      love.graphics.rectangle("fill",
-        m.width - tw - padding * 2, m.height - th - padding * 2,
-        tw + padding * 2, th + padding * 2)
-      love.graphics.setColor(0.2, 0.2, 0.2, 0.9)
-      love.graphics.print(attrText, m.width - tw - padding, m.height - th - padding)
-    end
+  -- Reset rotation for controls (they render in screen space)
+  if m.bearing ~= 0 then
+    love.graphics.origin()
   end
 
-  -- Restore Love2D graphics state
+  renderZoomControl(m)
+  renderScaleControl(m)
+  renderAttribution(m)
+
   love.graphics.pop()
 end
 
 -- ============================================================================
--- Mouse/Pointer Interaction (Lua-owned, zero-latency)
+-- Mouse interaction
 -- ============================================================================
 
 function Map.handleMousePressed(node, mx, my, button)
@@ -1446,12 +1329,91 @@ function Map.handleMousePressed(node, mx, my, button)
   local m = maps[node.id]
   if not m then return false end
 
+  -- Convert to canvas-local coordinates
+  local lx = mx - m.screenX
+  local ly = my - m.screenY
+
+  -- Check zoom control buttons
+  if m._zoomInRect then
+    local r = m._zoomInRect
+    if mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h then
+      local newZoom = math.min(m.maxZoom, math.floor(m.zoom) + 1)
+      if newZoom ~= m.zoom then
+        m.zoomFrom = m.zoom
+        m.zoomTo = newZoom
+        m.zoomT = 0
+        m.zoomAnimating = true
+        m.viewDirty = true
+      end
+      return true
+    end
+  end
+  if m._zoomOutRect then
+    local r = m._zoomOutRect
+    if mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h then
+      local newZoom = math.max(m.minZoom, math.floor(m.zoom) - 1)
+      if newZoom ~= m.zoom then
+        m.zoomFrom = m.zoom
+        m.zoomTo = newZoom
+        m.zoomT = 0
+        m.zoomAnimating = true
+        m.viewDirty = true
+      end
+      return true
+    end
+  end
+
+  -- Check marker clicks
+  for markerId, marker in pairs(m.markers) do
+    local mpx, mpy = project(m, marker.lat, marker.lng)
+    local dx = lx - mpx
+    local dy = ly - (mpy - MARKER_STEM - MARKER_RADIUS + 2)
+    if dx * dx + dy * dy <= MARKER_RADIUS * MARKER_RADIUS then
+      -- Toggle popup for this marker
+      local popupId = nil
+      for pid, popup in pairs(m.popups) do
+        if popup.parentId == markerId then popupId = pid; break end
+      end
+      if popupId then
+        if m.openPopupId == popupId then
+          m.openPopupId = nil
+        else
+          m.openPopupId = popupId
+        end
+      end
+
+      -- Emit click event
+      queueEvent(node.id, "marker:click", {
+        markerId = markerId,
+        latlng = { marker.lat, marker.lng },
+      })
+      return true
+    end
+  end
+
+  -- Close open popup on map click
+  if m.openPopupId then
+    local popup = m.popups[m.openPopupId]
+    if popup and popup.parentId then
+      m.openPopupId = nil
+    end
+  end
+
+  -- Emit map click event
+  local clickLat, clickLng = unproject(m, lx, ly)
+  queueEvent(node.id, "map:click", {
+    latlng = { clickLat, clickLng },
+    pixel = { lx, ly },
+  })
+
   -- Start panning
-  m.isDragging = true
-  m.dragStartX = mx
-  m.dragStartY = my
-  m.dragStartCenterLat = m.centerLat
-  m.dragStartCenterLng = m.centerLng
+  if m.draggingEnabled then
+    m.isDragging = true
+    m.dragStartX = mx
+    m.dragStartY = my
+    m.dragStartLat = m.centerLat
+    m.dragStartLng = m.centerLng
+  end
 
   return true
 end
@@ -1460,29 +1422,38 @@ function Map.handleMouseMoved(node, mx, my)
   if not Geo then return false end
 
   local m = maps[node.id]
-  if not m or not m.isDragging then return false end
+  if not m then return false end
 
-  -- Compute pixel delta and convert to lat/lng delta
+  -- Update hovered marker for tooltip display
+  local lx = mx - m.screenX
+  local ly = my - m.screenY
+  m.hoveredMarkerId = nil
+  for markerId, marker in pairs(m.markers) do
+    local mpx, mpy = project(m, marker.lat, marker.lng)
+    local dx = lx - mpx
+    local dy = ly - (mpy - MARKER_STEM - MARKER_RADIUS + 2)
+    if dx * dx + dy * dy <= (MARKER_RADIUS + 4) * (MARKER_RADIUS + 4) then
+      m.hoveredMarkerId = markerId
+      break
+    end
+  end
+
+  if not m.isDragging then return false end
+
+  -- Pan: convert pixel delta to lat/lng
   local dx = mx - m.dragStartX
   local dy = my - m.dragStartY
 
-  -- Apply bearing rotation to the drag vector
+  -- Apply bearing rotation to drag vector
   if m.bearing ~= 0 then
     local angle = m.bearing * math.pi / 180
     local cosA = math.cos(angle)
     local sinA = math.sin(angle)
-    local rdx = dx * cosA + dy * sinA
-    local rdy = -dx * sinA + dy * cosA
-    dx = rdx
-    dy = rdy
+    dx, dy = dx * cosA + dy * sinA, -dx * sinA + dy * cosA
   end
 
-  -- Convert pixel offset to lat/lng offset at current zoom
-  local startPx, startPy = Geo.latlngToPixel(m.dragStartCenterLat, m.dragStartCenterLng, m.zoom)
-  local newLat, newLng = Geo.pixelToLatlng(startPx - dx, startPy - dy, m.zoom)
-
-  m.centerLat = newLat
-  m.centerLng = newLng
+  local startPx, startPy = Geo.latlngToPixel(m.dragStartLat, m.dragStartLng, m.zoom)
+  m.centerLat, m.centerLng = Geo.pixelToLatlng(startPx - dx, startPy - dy, m.zoom)
   m.viewDirty = true
 
   return true
@@ -1494,7 +1465,6 @@ function Map.handleMouseReleased(node, mx, my, button)
 
   m.isDragging = false
 
-  -- Emit final view change
   if m.viewDirty then
     m.viewDirty = false
     queueEvent(node.id, "map:viewchange", {
@@ -1513,13 +1483,12 @@ function Map.handleWheel(node, dx, dy)
 
   local m = maps[node.id]
   if not m then return false end
+  if not m.scrollWheelZoom then return false end
 
-  -- Zoom in/out (dy > 0 = zoom in)
   local newZoom = m.zoom + dy * 0.5
   newZoom = math.max(m.minZoom, math.min(m.maxZoom, newZoom))
 
   if newZoom ~= m.zoom then
-    -- Smooth zoom animation
     m.zoomFrom = m.zoom
     m.zoomTo = newZoom
     m.zoomT = 0
@@ -1531,87 +1500,98 @@ function Map.handleWheel(node, dx, dy)
 end
 
 -- ============================================================================
--- RPC handlers (called via bridge from React hooks)
+-- RPC handlers (imperative control from React hooks)
 -- ============================================================================
 
 function Map.handleRPC(method, args)
   if method == "map:panTo" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m then
-      m.centerLat = args.lat or m.centerLat
-      m.centerLng = args.lng or m.centerLng
+      local lat, lng = toLatLng(args.latlng or {args.lat, args.lng})
+      if args.animate then
+        m.panFromLat = m.centerLat
+        m.panFromLng = m.centerLng
+        m.panToLat = lat
+        m.panToLng = lng
+        m.panT = 0
+        m.panDuration = (args.duration or 500) / 1000
+        m.panAnimating = true
+      else
+        m.centerLat = lat
+        m.centerLng = lng
+      end
       m.viewDirty = true
     end
     return { ok = true }
 
   elseif method == "map:zoomTo" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m then
-      local newZoom = math.max(m.minZoom, math.min(m.maxZoom, args.zoom or m.zoom))
-      if args.animate then
+      local z = math.max(m.minZoom, math.min(m.maxZoom, args.zoom or m.zoom))
+      if args.animate ~= false then
         m.zoomFrom = m.zoom
-        m.zoomTo = newZoom
+        m.zoomTo = z
         m.zoomT = 0
         m.zoomDuration = (args.duration or 300) / 1000
         m.zoomAnimating = true
       else
-        m.zoom = newZoom
+        m.zoom = z
       end
       m.viewDirty = true
     end
     return { ok = true }
 
   elseif method == "map:flyTo" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m then
-      m.centerLat = args.center and args.center[1] or m.centerLat
-      m.centerLng = args.center and args.center[2] or m.centerLng
+      local duration = (args.duration or 2000) / 1000
+      if args.center then
+        local lat, lng = toLatLng(args.center)
+        m.panFromLat = m.centerLat
+        m.panFromLng = m.centerLng
+        m.panToLat = lat
+        m.panToLng = lng
+        m.panT = 0
+        m.panDuration = duration
+        m.panAnimating = true
+      end
       if args.zoom then
         m.zoomFrom = m.zoom
         m.zoomTo = math.max(m.minZoom, math.min(m.maxZoom, args.zoom))
         m.zoomT = 0
-        m.zoomDuration = (args.duration or 2000) / 1000
+        m.zoomDuration = duration
         m.zoomAnimating = true
       end
       if args.bearing ~= nil then m.bearing = args.bearing end
-      if args.pitch ~= nil then m.pitch = args.pitch end
+      if args.pitch ~= nil then m.pitch = math.max(0, math.min(60, args.pitch)) end
       m.viewDirty = true
     end
     return { ok = true }
 
   elseif method == "map:fitBounds" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m and args.bounds then
-      local sw = args.bounds[1] or args.bounds.sw or { 0, 0 }
-      local ne = args.bounds[2] or args.bounds.ne or { 0, 0 }
+      local sw, ne = args.bounds[1] or {0,0}, args.bounds[2] or {0,0}
+      local swLat, swLng = toLatLng(sw)
+      local neLat, neLng = toLatLng(ne)
 
-      -- Center on bounds midpoint
-      m.centerLat = (sw[1] + ne[1]) / 2
-      m.centerLng = (sw[2] + ne[2]) / 2
+      m.centerLat = (swLat + neLat) / 2
+      m.centerLng = (swLng + neLng) / 2
 
-      -- Calculate zoom to fit bounds
       for z = m.maxZoom, m.minZoom, -1 do
-        local swPx, swPy = Geo.latlngToPixel(sw[1], sw[2], z)
-        local nePx, nePy = Geo.latlngToPixel(ne[1], ne[2], z)
-        local boundsW = math.abs(nePx - swPx)
-        local boundsH = math.abs(nePy - swPy)
-        if boundsW <= m.width and boundsH <= m.height then
+        local swPx, swPy = Geo.latlngToPixel(swLat, swLng, z)
+        local nePx, nePy = Geo.latlngToPixel(neLat, neLng, z)
+        if math.abs(nePx - swPx) <= m.width and math.abs(nePy - swPy) <= m.height then
           m.zoom = z
           break
         end
       end
-
       m.viewDirty = true
     end
     return { ok = true }
 
   elseif method == "map:setBearing" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m then
       m.bearing = args.bearing or 0
       m.viewDirty = true
@@ -1619,8 +1599,7 @@ function Map.handleRPC(method, args)
     return { ok = true }
 
   elseif method == "map:setPitch" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m then
       m.pitch = math.max(0, math.min(60, args.pitch or 0))
       m.viewDirty = true
@@ -1628,8 +1607,7 @@ function Map.handleRPC(method, args)
     return { ok = true }
 
   elseif method == "map:getView" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
+    local m = maps[args.nodeId]
     if m then
       return {
         center = { m.centerLat, m.centerLng },
@@ -1641,24 +1619,22 @@ function Map.handleRPC(method, args)
     return nil
 
   elseif method == "map:downloadRegion" then
-    local nodeId = args.nodeId
-    local m = maps[nodeId]
-    if m and globalCache then
+    if globalCache then
+      local bounds = Geo.Bounds(
+        args.swLat or 0, args.swLng or 0,
+        args.neLat or 0, args.neLng or 0
+      )
       local regionId = TileCache.downloadRegion(
-        globalCache,
-        args.source or "osm",
-        Geo.Bounds(args.swLat, args.swLng, args.neLat, args.neLng),
-        args.minZoom or 0,
-        args.maxZoom or 15
+        globalCache, args.source or "", bounds,
+        args.minZoom or 0, args.maxZoom or 15
       )
       return { regionId = regionId }
     end
-    return { error = "map not found" }
+    return { error = "cache not available" }
 
   elseif method == "map:downloadProgress" then
     if globalCache then
-      local progress = TileCache.getDownloadProgress(globalCache, args.regionId)
-      return progress or { error = "region not found" }
+      return TileCache.getDownloadProgress(globalCache, args.regionId) or { error = "not found" }
     end
     return { error = "cache not available" }
 
@@ -1676,40 +1652,36 @@ end
 -- Public API
 -- ============================================================================
 
---- Scan the tree for Map2D nodes and sync their state.
 function Map.syncWithTree(treeNodes)
   if not initialized then return end
 
-  local activeMapIds = {}
-
+  local active = {}
   for id, node in pairs(treeNodes) do
     if node.type == "Map2D" then
       syncMap(node)
-      activeMapIds[id] = true
+      active[id] = true
     end
   end
 
-  -- Clean up maps no longer in the tree
+  -- Cleanup removed maps
   for id in pairs(maps) do
-    if not activeMapIds[id] then
+    if not active[id] then
       Map.cleanup(id)
     end
   end
 end
 
---- Render all active maps to their Canvases.
 function Map.renderAll()
   if not initialized then return end
-
   for nodeId in pairs(maps) do
     renderMap(nodeId)
   end
 
-  -- Emit pending view change events for maps that changed
+  -- Emit viewchange for dirty maps that aren't being dragged
   for nodeId, m in pairs(maps) do
     if m.viewDirty and not m.isDragging then
       m.viewDirty = false
-      queueEvent(nodeId, "map:viewchange", {
+      queueEvent(nodeId, "viewchange", {
         center = { m.centerLat, m.centerLng },
         zoom = m.zoom,
         bearing = m.bearing,
@@ -1719,43 +1691,26 @@ function Map.renderAll()
   end
 end
 
---- Return the Canvas for a Map2D node. Painter draws this.
 function Map.get(nodeId)
   local m = maps[nodeId]
   return m and m.canvas or nil
 end
 
---- Free resources for a Map2D node.
-function Map.cleanup(nodeId)
-  local m = maps[nodeId]
-  if not m then return end
-
-  -- Release building mesh cache
-  local cache = buildingMeshCache[m]
-  if cache then
-    for _, cached in pairs(cache) do
-      if cached.model and cached.model.mesh then
-        cached.model.mesh:release()
-      end
-    end
-    buildingMeshCache[m] = nil
-  end
-
-  if m.canvas then m.canvas:release() end
-  maps[nodeId] = nil
-end
-
---- Check if any Map2D nodes exist.
-function Map.hasMaps()
-  return next(maps) ~= nil
-end
-
---- Check if a node type is a map child type.
 function Map.isMapChildType(nodeType)
   return Map.CHILD_TYPES[nodeType] or false
 end
 
---- Drain events queued by interaction handlers.
+function Map.cleanup(nodeId)
+  local m = maps[nodeId]
+  if not m then return end
+  if m.canvas then m.canvas:release() end
+  maps[nodeId] = nil
+end
+
+function Map.hasMaps()
+  return next(maps) ~= nil
+end
+
 function Map.drainEvents()
   if #pendingEvents == 0 then return nil end
   local events = pendingEvents
@@ -1763,7 +1718,6 @@ function Map.drainEvents()
   return events
 end
 
---- Get the shared tile cache handle.
 function Map.getCache()
   return globalCache
 end

@@ -1,14 +1,20 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
-import { Map, TileLayer, Marker, Polyline, Polygon, GeoJSON, useProjection, type LatLng } from '@reactjit/geo';
+import {
+  MapContainer, TileLayer, Marker, Popup, Tooltip,
+  Polyline, Polygon, Circle, CircleMarker, Rectangle,
+  GeoJSON, ZoomControl, ScaleControl,
+  useProjection,
+  type LatLngTuple,
+} from '@reactjit/geo';
 
 type MapPreset = {
   id: string;
   label: string;
-  center: LatLng;
+  center: LatLngTuple;
   zoom: number;
-  route: LatLng[];
-  zone: LatLng[];
+  route: LatLngTuple[];
+  zone: LatLngTuple[];
 };
 
 const PRESETS: MapPreset[] = [
@@ -71,6 +77,11 @@ const PRESETS: MapPreset[] = [
   },
 ];
 
+const TILE_URLS: Record<string, string> = {
+  osm: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  'osm-cycle': 'https://tile.thunderforest.com/cycle/{z}/{x}/{y}.png',
+};
+
 const C = {
   bg: '#040d22',
   panel: '#091430',
@@ -90,8 +101,8 @@ const C = {
   hudBorder: '#ffffff26',
 };
 
-function makeFleet(center: LatLng, count: number) {
-  const out: { id: string; position: LatLng }[] = [];
+function makeFleet(center: LatLngTuple, count: number) {
+  const out: { id: string; position: LatLngTuple }[] = [];
   for (let i = 0; i < count; i += 1) {
     const angle = (i / count) * Math.PI * 2;
     const wave = 0.005 + (i % 4) * 0.002;
@@ -106,7 +117,7 @@ function makeFleet(center: LatLng, count: number) {
   return out;
 }
 
-function makeBuildings(center: LatLng) {
+function makeBuildings(center: LatLngTuple) {
   const [lat, lng] = center;
   const pads = [
     { dx: -0.018, dy: 0.013, w: 0.006, h: 0.004, fill: '#22c55ecc', stroke: '#15803d' },
@@ -131,23 +142,15 @@ function makeBuildings(center: LatLng) {
       },
       properties: {
         name: `Asset-${i + 1}`,
-        fillColor: p.fill,
-        strokeColor: p.stroke,
-        strokeWidth: 2,
+        fill: p.fill,
+        stroke: p.stroke,
+        'stroke-width': 2,
       },
     })),
   };
 }
 
-function Btn({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
+function Btn({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
@@ -179,7 +182,7 @@ function SectionBox({ title, children }: { title: string; children: React.ReactN
         gap: 8,
       }}
     >
-      <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: 'normal' }}>{title}</Text>
+      <Text style={{ fontSize: 11, color: C.textSecondary }}>{title}</Text>
       {children}
     </Box>
   );
@@ -202,10 +205,9 @@ export function MapBasicStory() {
   const [showBuildings, setShowBuildings] = useState(true);
   const [showFleet, setShowFleet] = useState(true);
   const [showStops, setShowStops] = useState(true);
-  const [center, setCenter] = useState<LatLng>([...first.center]);
+  const [showCircle, setShowCircle] = useState(true);
+  const [center, setCenter] = useState<LatLngTuple>([...first.center]);
   const [zoom, setZoom] = useState(first.zoom);
-  const [pitch, setPitch] = useState(0);
-  const [bearing, setBearing] = useState(0);
 
   const { distance } = useProjection();
 
@@ -234,8 +236,6 @@ export function MapBasicStory() {
       if (Number.isFinite(lat) && Number.isFinite(lng)) setCenter([lat, lng]);
     }
     if (typeof event?.zoom === 'number' && Number.isFinite(event.zoom)) setZoom(event.zoom);
-    if (typeof event?.bearing === 'number' && Number.isFinite(event.bearing)) setBearing(event.bearing);
-    if (typeof event?.pitch === 'number' && Number.isFinite(event.pitch)) setPitch(event.pitch);
   }, []);
 
   const jumpTo = useCallback((id: string) => {
@@ -244,8 +244,6 @@ export function MapBasicStory() {
     setPresetId(p.id);
     setCenter([...p.center]);
     setZoom(p.zoom);
-    setPitch(0);
-    setBearing(0);
   }, []);
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -267,9 +265,9 @@ export function MapBasicStory() {
         }}
       >
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 15, color: C.textPrimary, fontWeight: 'normal' }}>Map</Text>
+          <Text style={{ fontSize: 15, color: C.textPrimary }}>Map</Text>
           <Text style={{ fontSize: 10, color: C.textSecondary }}>
-            Tiles · Markers · Polylines · Polygons · GeoJSON
+            react-leaflet API on Love2D
           </Text>
         </Box>
 
@@ -297,18 +295,14 @@ export function MapBasicStory() {
                 <Btn label="Zone" active={showZone} onPress={() => setShowZone((v) => !v)} />
                 <Btn label="Fleet" active={showFleet} onPress={() => setShowFleet((v) => !v)} />
                 <Btn label="Assets" active={showBuildings} onPress={() => setShowBuildings((v) => !v)} />
+                <Btn label="Radius" active={showCircle} onPress={() => setShowCircle((v) => !v)} />
               </Row>
             </SectionBox>
 
             <SectionBox title="CAMERA">
               <Row>
                 <Btn label="Z+" active={false} onPress={() => setZoom((z) => clamp(z + 0.8, 2, 18.8))} />
-                <Btn label="Z−" active={false} onPress={() => setZoom((z) => clamp(z - 0.8, 2, 18.8))} />
-                <Btn label="P+" active={false} onPress={() => setPitch((p) => clamp(p + 8, 0, 60))} />
-                <Btn label="P−" active={false} onPress={() => setPitch((p) => clamp(p - 8, 0, 60))} />
-                <Btn label="◀" active={false} onPress={() => setBearing((b) => (b - 15 + 360) % 360)} />
-                <Btn label="▶" active={false} onPress={() => setBearing((b) => (b + 15) % 360)} />
-                <Btn label="N↑" active={false} onPress={() => setBearing(0)} />
+                <Btn label="Z-" active={false} onPress={() => setZoom((z) => clamp(z - 0.8, 2, 18.8))} />
               </Row>
             </SectionBox>
 
@@ -318,16 +312,10 @@ export function MapBasicStory() {
                   {`Route  ${routeDistanceKm.toFixed(1)} km`}
                 </Text>
                 <Text style={{ fontSize: 11, color: C.textMuted }}>
-                  {`ETA  ~${Math.max(1, Math.round((routeDistanceKm / 33) * 60))} min`}
-                </Text>
-                <Text style={{ fontSize: 11, color: C.textMuted }}>
                   {`Stops  ${preset.route.length}`}
                 </Text>
                 <Text style={{ fontSize: 11, color: C.textMuted }}>
                   {`Fleet  ${showFleet ? fleetMarkers.length : 0}`}
-                </Text>
-                <Text style={{ fontSize: 11, color: C.textMuted }}>
-                  {`Mode  ${pitch > 2 ? '3D' : '2D'}`}
                 </Text>
               </Box>
             </SectionBox>
@@ -348,53 +336,101 @@ export function MapBasicStory() {
           backgroundColor: '#0a1531',
         }}
       >
-        <Map
+        <MapContainer
           center={center}
           zoom={zoom}
-          pitch={pitch}
-          bearing={bearing}
           minZoom={2}
-          maxZoom={18.8}
+          maxZoom={18}
           style={{ width: '100%', height: '100%' }}
-          onViewChange={handleViewChange}
         >
-          <TileLayer source={tileSource} />
+          <TileLayer
+            url={TILE_URLS[tileSource]}
+            attribution={tileSource === 'osm'
+              ? '\u00a9 OpenStreetMap contributors'
+              : '\u00a9 Thunderforest, \u00a9 OpenStreetMap'}
+          />
+
+          <ZoomControl position="topleft" />
+          <ScaleControl position="bottomleft" />
 
           {showZone && (
             <Polygon
               positions={preset.zone}
-              fillColor="#3b82f640"
-              strokeColor="#60a5fa"
-              strokeWidth={2}
+              pathOptions={{
+                color: '#60a5fa',
+                weight: 2,
+                fillColor: '#3b82f6',
+                fillOpacity: 0.15,
+              }}
+            />
+          )}
+
+          {showCircle && (
+            <Circle
+              center={preset.center}
+              radius={2000}
+              pathOptions={{
+                color: '#f97316',
+                weight: 2,
+                fillColor: '#f97316',
+                fillOpacity: 0.08,
+              }}
             />
           )}
 
           {showRoute && (
             <Polyline
               positions={preset.route}
-              color={C.accent}
-              width={4}
-              arrowheads
+              pathOptions={{
+                color: C.accent,
+                weight: 4,
+              }}
             />
           )}
 
           {showStops && preset.route.map((stop, i) => (
-            <Marker key={`stop-${i}`} position={stop} anchor="bottom-center" />
+            <Marker key={`stop-${i}`} position={stop}>
+              <Popup>{`Stop ${i + 1}`}</Popup>
+              <Tooltip permanent>{`${i + 1}`}</Tooltip>
+            </Marker>
           ))}
 
           {showFleet && fleetMarkers.map((m) => (
-            <Marker key={m.id} position={m.position} anchor="center" />
+            <CircleMarker
+              key={m.id}
+              center={m.position}
+              radius={5}
+              pathOptions={{
+                color: '#22d3ee',
+                weight: 1,
+                fillColor: '#06b6d4',
+                fillOpacity: 0.8,
+              }}
+            />
           ))}
 
           {showBuildings && <GeoJSON data={buildingData} />}
-        </Map>
+
+          <Rectangle
+            bounds={[
+              [preset.center[0] - 0.002, preset.center[1] - 0.003],
+              [preset.center[0] + 0.002, preset.center[1] + 0.003],
+            ]}
+            pathOptions={{
+              color: '#a855f7',
+              weight: 2,
+              fillColor: '#a855f7',
+              fillOpacity: 0.1,
+            }}
+          />
+        </MapContainer>
 
         {/* HUD */}
         <Box
           style={{
             position: 'absolute',
             top: 10,
-            left: 10,
+            right: 10,
             backgroundColor: C.hudBg,
             borderWidth: 1,
             borderColor: C.hudBorder,
@@ -406,11 +442,11 @@ export function MapBasicStory() {
             gap: 2,
           }}
         >
-          <Text style={{ fontSize: 13, color: C.textPrimary, fontWeight: 'normal' }}>
-            {`${preset.label} · ${tileSource === 'osm' ? 'Streets' : 'Cycle'}`}
+          <Text style={{ fontSize: 13, color: C.textPrimary }}>
+            {`${preset.label}`}
           </Text>
           <Text style={{ fontSize: 10, color: C.textSecondary }}>
-            {`${center[0].toFixed(4)}, ${center[1].toFixed(4)}  ·  z${zoom.toFixed(1)}  ·  ${Math.round(bearing)}°  ·  ${Math.round(pitch)}°p`}
+            {`${center[0].toFixed(4)}, ${center[1].toFixed(4)}  z${zoom.toFixed(1)}`}
           </Text>
         </Box>
       </Box>
