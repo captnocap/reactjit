@@ -13,6 +13,7 @@ const INSTALL_CODE = `import { Spreadsheet } from '@reactjit/data'
   columnWidths={widths}
   onColumnWidthsChange={setWidths}
   viewportHeight={440}
+  showStatusBar
 />`;
 
 const EXAMPLE_FORMULAS = `=SUM(B2:B5)
@@ -35,6 +36,7 @@ const SCALE_PRESETS: ScalePreset[] = [
   { id: 'ops', label: 'Ops Grid', rows: 48, cols: 16, viewportHeight: 430 },
   { id: 'massive', label: 'Massive', rows: 140, cols: 28, viewportHeight: 500 },
 ];
+const FOCUS_CELLS = ['B2', 'C2', 'F2', 'B7', 'C10', 'D10'];
 
 const LOGISTICS_PRESET: SpreadsheetCellMap = {
   A1: 'Route',
@@ -168,6 +170,7 @@ export function DataSpreadsheetStory() {
   const c = useThemeColors();
   const [scalePreset, setScalePreset] = useState<ScalePreset>(SCALE_PRESETS[0]);
   const [columnWidths, setColumnWidths] = useState<number[]>(() => createColumnWidths(SCALE_PRESETS[0].cols));
+  const [selectedAddress, setSelectedAddress] = useState('B2');
   const [cells, setCells] = useState<SpreadsheetCellMap>(() =>
     ensureScaleCells(LOGISTICS_PRESET, SCALE_PRESETS[0].rows, SCALE_PRESETS[0].cols),
   );
@@ -199,10 +202,14 @@ export function DataSpreadsheetStory() {
           <StatCard label="Math Calls" value={String(summary.mathCount)} tone={c.warning} />
           <StatCard label="Evaluation Errors" value={String(summary.errorCount)} tone={summary.errorCount > 0 ? c.error : c.success} />
           <StatCard label="Grid Size" value={`${scalePreset.rows} x ${scalePreset.cols}`} tone={c.accent} />
+          <StatCard label="Selected Cell" value={selectedAddress} tone={c.primary} />
         </Box>
 
         <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-          <Pressable onPress={() => setCells(ensureScaleCells(LOGISTICS_PRESET, scalePreset.rows, scalePreset.cols))}>
+          <Pressable onPress={() => {
+            setCells(ensureScaleCells(LOGISTICS_PRESET, scalePreset.rows, scalePreset.cols));
+            setSelectedAddress('B2');
+          }}>
             <Box style={{
               borderRadius: 6,
               borderWidth: 1,
@@ -217,7 +224,10 @@ export function DataSpreadsheetStory() {
             </Box>
           </Pressable>
 
-          <Pressable onPress={() => setCells(ensureScaleCells(LAB_PRESET, scalePreset.rows, scalePreset.cols))}>
+          <Pressable onPress={() => {
+            setCells(ensureScaleCells(LAB_PRESET, scalePreset.rows, scalePreset.cols));
+            setSelectedAddress('B2');
+          }}>
             <Box style={{
               borderRadius: 6,
               borderWidth: 1,
@@ -232,7 +242,10 @@ export function DataSpreadsheetStory() {
             </Box>
           </Pressable>
 
-          <Pressable onPress={() => setColumnWidths(createColumnWidths(scalePreset.cols))}>
+          <Pressable onPress={() => {
+            setColumnWidths(createColumnWidths(scalePreset.cols));
+            setSelectedAddress('B2');
+          }}>
             <Box style={{
               borderRadius: 6,
               borderWidth: 1,
@@ -249,6 +262,31 @@ export function DataSpreadsheetStory() {
         </Box>
 
         <Box style={{ gap: 8 }}>
+          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Workflow Focus'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {FOCUS_CELLS.map((cell) => (
+              <Pressable key={cell} onPress={() => setSelectedAddress(cell)}>
+                <Box style={{
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: selectedAddress === cell ? c.primary : c.border,
+                  backgroundColor: selectedAddress === cell ? c.bgAlt : c.surface,
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  paddingTop: 6,
+                  paddingBottom: 6,
+                }}>
+                  <Text style={{ fontSize: 10, color: c.text }}>{`Jump ${cell}`}</Text>
+                </Box>
+              </Pressable>
+            ))}
+          </Box>
+          <Text style={{ fontSize: 9, color: c.textDim }}>
+            {'Status bar shows live input/value/error context for the active cell. This keeps edits auditable in app workflows.'}
+          </Text>
+        </Box>
+
+        <Box style={{ gap: 8 }}>
           <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Scale Presets'}</Text>
           <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             {SCALE_PRESETS.map((preset) => (
@@ -258,6 +296,7 @@ export function DataSpreadsheetStory() {
                   setScalePreset(preset);
                   setColumnWidths(createColumnWidths(preset.cols));
                   setCells((prev) => ensureScaleCells(prev, preset.rows, preset.cols));
+                  setSelectedAddress('B2');
                 }}
               >
                 <Box style={{
@@ -289,11 +328,14 @@ export function DataSpreadsheetStory() {
             cols={scalePreset.cols}
             cells={cells}
             onCellsChange={setCells}
+            selectedAddress={selectedAddress}
+            onSelectedAddressChange={setSelectedAddress}
             columnWidths={columnWidths}
             onColumnWidthsChange={setColumnWidths}
             minColumnWidth={72}
             maxColumnWidth={420}
             viewportHeight={scalePreset.viewportHeight}
+            showStatusBar
           />
         </Box>
 
@@ -311,12 +353,15 @@ export function DataSpreadsheetStory() {
             paddingTop: 10,
             paddingBottom: 10,
           }}>
-            <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Why this replaces Excel for app workflows'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'1. Spreadsheet formulas evaluate directly inside the ReactJIT runtime.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'2. Unit conversion is native through CONVERT(value, from, to).'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'3. Math pack functions (REMAP, CLAMP, DIST2D, LERP) are sheet-callable.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'4. No external SaaS dependency: deterministic local/offline evaluation.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'5. UI is themeable and composable with the rest of your app components.'}</Text>
+            <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Why teams would choose this over Excel in-app'}</Text>
+            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: file handoffs, hidden macros, and no runtime guarantees.'}</Text>
+            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: formulas execute in the same app runtime as the UI and business logic.'}</Text>
+            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: conversion logic scattered across tabs and helper sheets.'}</Text>
+            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: CONVERT + math pack are first-class functions in every cell.'}</Text>
+            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: hard to productize collaborative workflows.'}</Text>
+            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: spreadsheet UI is a composable component with controlled state and events.'}</Text>
+            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: context is lost during edits.'}</Text>
+            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: selection-aware headers + status bar keep input/value/error visible at all times.'}</Text>
           </Box>
 
           <Box style={{ flexGrow: 1, minWidth: 260, gap: 8 }}>
