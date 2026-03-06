@@ -3,7 +3,6 @@ import {
   Box,
   Input,
   Pressable,
-  ScrollView,
   Text,
   useThemeColorsOptional,
 } from '@reactjit/core';
@@ -174,7 +173,7 @@ export function Spreadsheet({
         </Box>
       )}
 
-      <ScrollView style={{ width: '100%', height: gridViewportHeight }}>
+      <Box style={{ width: '100%', height: gridViewportHeight, overflow: 'scroll' }}>
         <Box style={{ width: totalWidth }}>
           <Box style={{
             flexDirection: 'row',
@@ -282,7 +281,7 @@ export function Spreadsheet({
             </Box>
           ))}
         </Box>
-      </ScrollView>
+      </Box>
     </Box>
   );
 }
