@@ -6,9 +6,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocalStore } from '@reactjit/core';
+import { useLocalStore, useLoveRPC } from '@reactjit/core';
 import type { Holding, PortfolioSnapshot } from './types';
-import { portfolioSnapshot } from './portfolio';
 
 // ── Encryption helpers (inline to avoid hard dep on crypto bridge) ────
 
@@ -31,6 +30,61 @@ function simpleDecrypt(data: string, password: string): string {
     const k = ((key >>> (i % 4) * 8) & 0xff) ^ (i * 7 + 13);
     return String.fromCharCode(c.charCodeAt(0) ^ (k & 0xff));
   }).join('');
+}
+
+function asNumberOrZero(value: unknown): number {
+  return typeof value === 'number' ? value : 0;
+}
+
+function normalizeHolding(value: unknown): Holding {
+  const h = value as Partial<Holding> | null | undefined;
+  return {
+    symbol: typeof h?.symbol === 'string' ? h.symbol : '',
+    quantity: asNumberOrZero(h?.quantity),
+    avgCost: asNumberOrZero(h?.avgCost),
+    currentPrice: asNumberOrZero(h?.currentPrice),
+  };
+}
+
+function normalizeHoldings(values: unknown): Holding[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizeHolding);
+}
+
+function emptyPortfolioSnapshot(holdings: Holding[]): PortfolioSnapshot {
+  return {
+    holdings,
+    totalValue: 0,
+    totalCost: 0,
+    pnl: 0,
+    pnlPercent: 0,
+    allocation: [],
+  };
+}
+
+function normalizePortfolioSnapshot(snapshot: unknown, fallbackHoldings: Holding[]): PortfolioSnapshot {
+  const s = snapshot as {
+    holdings?: unknown;
+    totalValue?: unknown;
+    totalCost?: unknown;
+    pnl?: unknown;
+    pnlPercent?: unknown;
+    allocation?: Array<{ symbol?: unknown; weight?: unknown }>;
+  } | null;
+  const holdings = normalizeHoldings(s?.holdings ?? fallbackHoldings);
+  return {
+    holdings,
+    totalValue: asNumberOrZero(s?.totalValue),
+    totalCost: asNumberOrZero(s?.totalCost),
+    pnl: asNumberOrZero(s?.pnl),
+    pnlPercent: asNumberOrZero(s?.pnlPercent),
+    allocation: Array.isArray(s?.allocation)
+      ? s.allocation.map(a => ({
+          symbol: typeof a?.symbol === 'string' ? a.symbol : '',
+          weight: asNumberOrZero(a?.weight),
+        }))
+      : [],
+  };
 }
 
 // ── Types ────────────────────────────────────────────────
@@ -83,11 +137,19 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
 
   const [stored, setStored] = useLocalStore<EncryptedPortfolioStore | null>(storeKey, null);
   const [holdings, setHoldingsState] = useState<Holding[]>([]);
+  const holdingsRef = useRef(holdings);
+  holdingsRef.current = holdings;
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(!!opts?.password);
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshot>(() => emptyPortfolioSnapshot([]));
+  const updateSeqRef = useRef(0);
   const passwordRef = useRef(opts?.password ?? '');
   const encryptFn = opts?.encrypt ?? simpleEncrypt;
   const decryptFn = opts?.decrypt ?? simpleDecrypt;
+  const snapshotRpc = useLoveRPC<PortfolioSnapshot>('finance:portfolio_snapshot');
+  const addHoldingRpc = useLoveRPC<Holding[]>('finance:portfolio_add_holding');
+  const removeHoldingRpc = useLoveRPC<Holding[]>('finance:portfolio_remove_holding');
+  const updatePriceRpc = useLoveRPC<Holding[]>('finance:portfolio_update_price');
 
   // Load and decrypt on mount or when stored changes
   useEffect(() => {
@@ -103,7 +165,7 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
       // No password — stored as plaintext JSON
       try {
         const parsed = JSON.parse(stored.data);
-        setHoldingsState(Array.isArray(parsed) ? parsed : []);
+        setHoldingsState(normalizeHoldings(parsed));
       } catch {
         setHoldingsState([]);
       }
@@ -118,13 +180,13 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
       const resolved = result instanceof Promise ? undefined : result;
       if (resolved !== undefined) {
         const parsed = JSON.parse(resolved);
-        setHoldingsState(Array.isArray(parsed) ? parsed : []);
+        setHoldingsState(normalizeHoldings(parsed));
         setLocked(false);
       } else {
         // Handle async
         (result as Promise<string>).then(decrypted => {
           const parsed = JSON.parse(decrypted);
-          setHoldingsState(Array.isArray(parsed) ? parsed : []);
+          setHoldingsState(normalizeHoldings(parsed));
           setLocked(false);
         }).catch(() => {
           setLocked(true);
@@ -135,6 +197,20 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
     }
     setLoading(false);
   }, [stored]);
+
+  useEffect(() => {
+    let cancelled = false;
+    snapshotRpc({ holdings })
+      .then(next => {
+        if (cancelled) return;
+        setSnapshot(normalizePortfolioSnapshot(next, holdings));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSnapshot(emptyPortfolioSnapshot(holdings));
+      });
+    return () => { cancelled = true; };
+  }, [snapshotRpc, holdings]);
 
   // Persist helper
   const persist = useCallback((newHoldings: Holding[]) => {
@@ -151,48 +227,45 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
   }, [portfolioId, encryptFn, setStored]);
 
   const setHoldings = useCallback((h: Holding[]) => {
-    setHoldingsState(h);
-    persist(h);
+    const normalized = normalizeHoldings(h);
+    setHoldingsState(normalized);
+    persist(normalized);
   }, [persist]);
 
   const upsertHolding = useCallback((h: Holding) => {
-    setHoldingsState(prev => {
-      const existing = prev.find(x => x.symbol === h.symbol);
-      let next: Holding[];
-      if (existing) {
-        const totalQty = existing.quantity + h.quantity;
-        const totalCost = existing.quantity * existing.avgCost + h.quantity * h.avgCost;
-        next = prev.map(x => x.symbol === h.symbol ? {
-          ...x,
-          quantity: totalQty,
-          avgCost: totalQty === 0 ? 0 : totalCost / totalQty,
-          currentPrice: h.currentPrice,
-        } : x);
-      } else {
-        next = [...prev, h];
-      }
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+    const requestId = ++updateSeqRef.current;
+    addHoldingRpc({ holdings: holdingsRef.current, holding: h })
+      .then(next => {
+        if (updateSeqRef.current !== requestId) return;
+        const normalized = normalizeHoldings(next);
+        setHoldingsState(normalized);
+        persist(normalized);
+      })
+      .catch(() => {});
+  }, [addHoldingRpc, persist]);
 
   const removeHolding = useCallback((symbol: string) => {
-    setHoldingsState(prev => {
-      const next = prev.filter(h => h.symbol !== symbol);
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+    const requestId = ++updateSeqRef.current;
+    removeHoldingRpc({ holdings: holdingsRef.current, symbol })
+      .then(next => {
+        if (updateSeqRef.current !== requestId) return;
+        const normalized = normalizeHoldings(next);
+        setHoldingsState(normalized);
+        persist(normalized);
+      })
+      .catch(() => {});
+  }, [removeHoldingRpc, persist]);
 
   const updatePrice = useCallback((symbol: string, price: number) => {
-    setHoldingsState(prev => {
-      const next = prev.map(h =>
-        h.symbol === symbol ? { ...h, currentPrice: price } : h
-      );
-      // Don't persist on every price tick — only on structural changes
-      return next;
-    });
-  }, []);
+    const requestId = ++updateSeqRef.current;
+    updatePriceRpc({ holdings: holdingsRef.current, symbol, price })
+      .then(next => {
+        if (updateSeqRef.current !== requestId) return;
+        // Don't persist on every price tick — only on structural changes.
+        setHoldingsState(normalizeHoldings(next));
+      })
+      .catch(() => {});
+  }, [updatePriceRpc]);
 
   const lock = useCallback(() => {
     setHoldingsState([]);
@@ -207,21 +280,19 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
       if (result instanceof Promise) {
         result.then(decrypted => {
           const parsed = JSON.parse(decrypted);
-          setHoldingsState(Array.isArray(parsed) ? parsed : []);
+          setHoldingsState(normalizeHoldings(parsed));
           setLocked(false);
         }).catch(() => {});
         return true; // optimistic
       }
       const parsed = JSON.parse(result as string);
-      setHoldingsState(Array.isArray(parsed) ? parsed : []);
+      setHoldingsState(normalizeHoldings(parsed));
       setLocked(false);
       return true;
     } catch {
       return false;
     }
   }, [stored, decryptFn]);
-
-  const snapshot = portfolioSnapshot(holdings);
 
   return {
     holdings,
