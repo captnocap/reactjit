@@ -14,7 +14,27 @@ import { Box, Text, useLoveRPC, useLocalStore, useLuaInterval } from '@reactjit/
 import { C } from '../theme';
 
 // ── Completed work — never nag about these ─────────────────────────
-const DONE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 35, 39]);
+const DONE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 34, 35, 37, 39, 40, 41, 42]);
+// 34: CPU sparkline          — DONE (CpuSparkline in status bar)
+// 37: Sound on permission    — DONE (alert.ogg + complete.ogg in AmbientSound)
+// 41: Daily summary          — DONE (useDailySummary + DailySummaryPanel, F10 toggle)
+// 42: Teach Ralph a joke     — DONE (JOKES array, 10% chance on nag)
+
+// ── Programming jokes — 10% chance Ralph tells one instead of nagging ──
+const JOKES = [
+  'Why do programmers prefer dark mode? Because light attracts bugs.',
+  'A SQL query walks into a bar, sees two tables and asks: "Can I JOIN you?"',
+  'There are 10 types of people: those who understand binary and those who don\'t.',
+  '!false — it\'s funny because it\'s true.',
+  'A programmer\'s wife tells him: "Go to the store and get a gallon of milk. If they have eggs, get a dozen." He comes home with 12 gallons of milk.',
+  'Why do Java developers wear glasses? Because they can\'t C#.',
+  'What\'s a programmer\'s favorite hangout place? Foo Bar.',
+  'How many programmers does it take to change a light bulb? None, that\'s a hardware problem.',
+  'I\'d tell you a UDP joke, but you might not get it.',
+  'Two bytes meet. The first byte asks: "Are you ill?" The second byte replies: "No, just feeling a bit off."',
+  'Why was the JavaScript developer sad? Because he didn\'t Node how to Express himself.',
+  'Algorithm: word used by programmers when they don\'t want to explain what they did.',
+];
 // 1:  Chat log persistence    — DONE (ChatHistoryPanel + useChatHistory)
 // 2:  Memory system           — DONE (MemoryPanel + useMemory)
 // 3:  Diff accumulator        — DONE (DiffPanel + useDiffAccumulator)
@@ -130,8 +150,9 @@ export function Ralph({ status, sessionId = 'default', idleThresholdMs = 60000 }
     } catch {}
   });
 
-  // 1s tick: update countdown display + fire nag when threshold crossed
-  useLuaInterval(1000, async () => {
+  // 1.1s tick: update countdown display + fire nag when threshold crossed
+  // (staggered from other 1s intervals: uptime=1000, idle=1200, fortune=1300)
+  useLuaInterval(1100, async () => {
     const elapsed = Date.now() - lastActivityRef.current;
     const remaining = Math.max(0, Math.ceil((idleThresholdMs - elapsed) / 1000));
     setSecondsLeft(remaining);
@@ -139,12 +160,20 @@ export function Ralph({ status, sessionId = 'default', idleThresholdMs = 60000 }
     if (elapsed >= idleThresholdMs && !nagFiredRef.current) {
       nagFiredRef.current = true;
 
+      // 10% chance Ralph tells a joke instead of nagging
+      if (Math.random() < 0.1) {
+        const joke = JOKES[Math.floor(Math.random() * JOKES.length)];
+        try {
+          await rpcSendRef.current({ message: `[Ralph] ${joke}` });
+        } catch {}
+        return;
+      }
+
       const sentIds = storeRef.current?.sentIds ?? [];
       const sentSet = new Set(sentIds);
       const next = TODOS.find(t => !sentSet.has(t.id) && !DONE_IDS.has(t.id));
       if (!next) return;
 
-      // Persist before sending — prevents double-fire on slow RPC
       setStore(prev => ({ sentIds: [...(prev?.sentIds ?? []), next.id] }));
 
       try {
@@ -152,7 +181,6 @@ export function Ralph({ status, sessionId = 'default', idleThresholdMs = 60000 }
           message: `[Ralph] Idle timeout. Next TODO: "${next.title}" — ${next.note} Start now.`,
         });
       } catch {
-        // Roll back on failure so it can retry next idle window
         setStore(prev => ({ sentIds: (prev?.sentIds ?? []).filter(id => id !== next.id) }));
         nagFiredRef.current = false;
       }

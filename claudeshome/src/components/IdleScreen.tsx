@@ -60,7 +60,8 @@ export function IdleScreen({ status }: Props) {
   }, [isIdle]);
 
   // Idle duration ticker (only while idle)
-  useLuaInterval(isIdle ? 1000 : null, () => {
+  // Staggered: uptime=1000, ralph=1100, idle=1200, fortune=1300
+  useLuaInterval(isIdle ? 1200 : null, () => {
     if (idleStartRef.current) {
       setIdleMs(Date.now() - idleStartRef.current);
     }
@@ -71,14 +72,14 @@ export function IdleScreen({ status }: Props) {
     setEffectIdx(i => (i + 1) % EFFECTS.length);
   });
 
+  const rearmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const dismiss = useCallback(() => {
-    // Hide but allow re-arm — reset the idle timer by re-triggering the effect
     setVisible(false);
-    // Re-arm: idleStartRef stays, so after THRESHOLD_MS it'll come back
+    if (rearmRef.current) clearTimeout(rearmRef.current);
     if (idleStartRef.current !== null) {
-      idleStartRef.current = Date.now(); // reset so it needs another 30s
-      const timer = setTimeout(() => setVisible(true), THRESHOLD_MS);
-      // can't easily clean this up here — acceptable for a screensaver
+      idleStartRef.current = Date.now();
+      rearmRef.current = setTimeout(() => setVisible(true), THRESHOLD_MS);
     }
   }, []);
 

@@ -38,7 +38,8 @@ export function useHearts(status: string) {
     }
   }, [status]);
 
-  useLuaInterval(status === 'running' || status === 'thinking' ? 5000 : null, () => {
+  // Staggered: hearts=4700, statsStrip=5000
+  useLuaInterval(status === 'running' || status === 'thinking' ? 4700 : null, () => {
     const now = Date.now();
     const delta = now - lastTickRef.current;
     lastTickRef.current = now;

@@ -6,7 +6,7 @@
  *
  * Shows: turns | tok/turn avg | longest turn | session mode
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Box, Text, useLoveRPC, useLuaInterval } from '@reactjit/core';
 import { C } from '../theme';
 
@@ -34,7 +34,7 @@ const EMPTY_STATS: Stats = { turnCount: 0, longestLines: 0 };
 
 function Divider() {
   return (
-    <Text style={{ fontSize: 9, color: C.border, paddingLeft: 6, paddingRight: 6 }}>{'│'}</Text>
+    <Text style={{ fontSize: 9, color: C.border, paddingLeft: 6, paddingRight: 6 }}>{'|'}</Text>
   );
 }
 
@@ -59,48 +59,13 @@ export function StatsStrip({ tokens }: Props) {
 
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
 
-  useEffect(() => {
-    let alive = true;
-
-    const poll = async () => {
-      if (!alive) return;
-      try {
-        const res = await rpcRef.current({ session: 'default' }) as TurnsResult;
-        if (!res?.turns) return;
-
-        const turns = res.turns;
-        let longestLines = 0;
-
-        for (const turn of turns) {
-          const lines = (turn.children ?? []).reduce(
-            (sum, c) => sum + (c.lineCount ?? 0), 0,
-          );
-          if (lines > longestLines) longestLines = lines;
-        }
-
-        setStats({
-          turnCount:    res.turnCount ?? turns.length,
-          longestLines,
-        });
-      } catch {
-        // RPC not ready — silent
-      }
-    };
-
-    poll();
-    return () => { alive = false; };
-  }, []);
-
-  useLuaInterval(5000, async () => {
-    let alive = true;
+  const poll = useCallback(async () => {
     try {
       const res = await rpcRef.current({ session: 'default' }) as TurnsResult;
       if (!res?.turns) return;
 
-      const turns = res.turns;
       let longestLines = 0;
-
-      for (const turn of turns) {
+      for (const turn of res.turns) {
         const lines = (turn.children ?? []).reduce(
           (sum, c) => sum + (c.lineCount ?? 0), 0,
         );
@@ -108,13 +73,13 @@ export function StatsStrip({ tokens }: Props) {
       }
 
       setStats({
-        turnCount:    res.turnCount ?? turns.length,
+        turnCount:    res.turnCount ?? res.turns.length,
         longestLines,
       });
-    } catch {
-      // RPC not ready — silent
-    }
-  });
+    } catch {}
+  }, []);
+
+  useLuaInterval(5000, poll);
 
   const avgTok = stats.turnCount > 0
     ? Math.round(tokens / stats.turnCount)

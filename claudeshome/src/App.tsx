@@ -34,6 +34,10 @@ import { StatsStrip } from './components/StatsStrip';
 import { AmbientSound } from './components/AmbientSound';
 import { IdleScreen } from './components/IdleScreen';
 import { CurlReceiver } from './components/CurlReceiver';
+import { CpuSparkline } from './components/CpuSparkline';
+import { KonamiEgg } from './components/KonamiEgg';
+import { DailySummaryPanel } from './panels/DailySummaryPanel';
+import { useDailySummary } from './hooks/useDailySummary';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -128,7 +132,6 @@ interface ShellProps {
 
 function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen, currentTheme, onThemeChange, showToast, toastHistory, clearToastHistory, permLog }: ShellProps) {
   const [layout, setLayout] = useState<LayoutMode>('ABCD');
-  const [panels, _setPanels] = useState<Partial<Record<SectionId, string>>>({});
   const [activeWorkers, setActiveWorkers] = useState(0);
   const onActiveCountChange = useCallback((count: number) => setActiveWorkers(count), []);
 
@@ -138,6 +141,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [toastHistOpen,   setToastHistOpen]   = useState(false);
   const [permLogOpen,     setPermLogOpen]     = useState(false);
   const [notepadOpen,     setNotepadOpen]     = useState(false);
+  const [dailyLogOpen,    setDailyLogOpen]    = useState(false);
 
   // ── Uptime counter ─────────────────────────────────────────────────
   const bootTimeRef = useRef(Date.now());
@@ -150,15 +154,6 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
     setUptime(`${h}:${m}:${s}`);
   });
 
-  const panelNodes = useMemo<PanelContent>(() => ({
-    B: notepadOpen ? <NotepadPanel /> : <FortuneCookiePanel />,
-    C: <SystemPanel />,
-    D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
-    E: <GitPanel />,
-    F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
-    G: searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
-    ...panels,
-  }), [panels, onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen]);
   const [debugCanvas, setDebugCanvas] = useState(true);
   const [editorKey, setEditorKey] = useState(0);
   const [editorHeight, setEditorHeight] = useState(29);
@@ -172,7 +167,32 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
 
   const tokenUsage = useTokenUsage();
   const weather    = useWeather();
+  const dailySummary = useDailySummary();
   useNotifications(claude.status, showToast);
+
+  const panelNodes = useMemo<PanelContent>(() => ({
+    B: dailyLogOpen
+      ? <DailySummaryPanel today={dailySummary.today} history={dailySummary.history} todayKey={dailySummary.todayKey} />
+      : notepadOpen ? <NotepadPanel /> : <FortuneCookiePanel />,
+    C: <SystemPanel />,
+    D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
+    E: <GitPanel />,
+    F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
+    G: searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
+  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, dailySummary.today, dailySummary.history, dailySummary.todayKey]);
+
+  // Auto-accumulate daily stats every 30s
+  useLuaInterval(30000, () => {
+    dailySummary.update({
+      turns:   0, // StatsStrip handles turns separately
+      tokens:  tokenUsage.tokens,
+      files:   0,
+      added:   0,
+      removed: 0,
+      errors:  graveyard.totalCrashes,
+      deaths:  heartsInfo.totalDeaths,
+    });
+  });
 
   const STATUS_COLORS: Record<string, string> = {
     idle: C.textMuted,
@@ -252,6 +272,13 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
 
   useHotkey('f9', () => {
     setNotepadOpen(prev => !prev);
+    setDailyLogOpen(false);
+    setFocusedPanel('B');
+  });
+
+  useHotkey('f10', () => {
+    setDailyLogOpen(prev => !prev);
+    setNotepadOpen(false);
     setFocusedPanel('B');
   });
 
@@ -311,6 +338,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
               </Text>
             </Box>
           )}
+          <CpuSparkline />
           {tokenUsage.tokens > 0 && (
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Text style={{ fontSize: 9, color: C.textDim }}>
@@ -420,7 +448,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         focusedPanel={focusedPanel}
         onPanelPress={setFocusedPanel}
         panelLabels={{
-          B: notepadOpen  ? 'NOTEPAD' : 'FORTUNE',
+          B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'FORTUNE',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
           G: searchOpen   ? 'SEARCH' : 'HISTORY',
         }}
@@ -563,6 +591,7 @@ export function App() {
         onQuestionPrompt={claude.onQuestion}
       />
       <AmbientSound status={claude.status} />
+      <KonamiEgg />
       <CurlReceiver />
 
       {/* Shell — everything Claude edits, sandboxed */}

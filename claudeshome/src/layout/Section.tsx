@@ -4,15 +4,18 @@ import { evalComponent } from '../lib/eval-component';
 import { C } from '../theme';
 import type { SectionId } from './BentoLayout';
 
-const PANEL_COLORS: Record<SectionId, string> = {
-  A: C.panelA,
-  B: C.panelB,
-  C: C.panelC,
-  D: C.panelD,
-  E: C.panelE,
-  F: C.panelF,
-  G: C.panelG,
-};
+// Read from C at render time (not module level) so theme switches take effect
+function panelColor(id: SectionId): string {
+  switch (id) {
+    case 'A': return C.panelA;
+    case 'B': return C.panelB;
+    case 'C': return C.panelC;
+    case 'D': return C.panelD;
+    case 'E': return C.panelE;
+    case 'F': return C.panelF;
+    case 'G': return C.panelG;
+  }
+}
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode; resetKey: any },
@@ -53,7 +56,7 @@ export function Section({ id, code, children, focused, onPress, label }: Props) 
     <Pressable onPress={onPress} style={{ flexGrow: 1 }}>
     <Box style={{
       flexGrow: 1,
-      backgroundColor: PANEL_COLORS[id],
+      backgroundColor: panelColor(id),
       borderRadius: 6,
       borderWidth: focused ? 2 : 1,
       borderColor: focused ? C.accent : C.border,

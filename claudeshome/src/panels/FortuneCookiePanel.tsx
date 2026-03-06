@@ -54,7 +54,8 @@ export function FortuneCookiePanel() {
   const [secondsLeft, setSecondsLeft] = useState(DISPLAY_SECS);
   const [done, setDone] = useState(false);
 
-  useLuaInterval(1000, () => {
+  // Staggered: uptime=1000, ralph=1100, idle=1200, fortune=1300
+  useLuaInterval(1300, () => {
     setSecondsLeft(prev => {
       if (prev <= 1) {
         setDone(true);

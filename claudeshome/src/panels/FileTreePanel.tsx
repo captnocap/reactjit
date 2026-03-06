@@ -13,7 +13,7 @@ import { C } from '../theme';
 const CWD      = '/home/siah/creative/reactjit/workspace';
 const HOT_MS   = 5  * 60 * 1000;   // < 5m  → hot (amber)
 const WARM_MS  = 30 * 60 * 1000;   // < 30m → warm (dim highlight)
-const POLL_MS  = 30 * 1000;
+const POLL_MS  = 31 * 1000;  // staggered from daily summary (30s)
 
 // ── Tree types ───────────────────────────────────────────────────────
 
@@ -269,7 +269,8 @@ export function FileTreePanel() {
   useLuaInterval(POLL_MS, fetch);
 
   // Keep nowSec fresh for recency colours
-  useLuaInterval(10000, () => setNowSec(Math.floor(Date.now() / 1000)));
+  // Staggered from FileTree fetch (30s) — offset by 3s
+  useLuaInterval(10300, () => setNowSec(Math.floor(Date.now() / 1000)));
 
   const toggleDir = useCallback((path: string) => {
     setOpenPaths(prev => {

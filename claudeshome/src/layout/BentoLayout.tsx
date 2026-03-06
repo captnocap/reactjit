@@ -102,11 +102,16 @@ export function BentoLayout({ layout, code, panelA, focusedPanel, onPanelPress, 
       case 'ABCDEFG':
         return (
           <>
-            <Box style={{ flexGrow: 2, flexDirection: 'row', gap: 4 }}>
-              {col(2, s('A'))}
-              {col(3, row(<>{s('B')}{s('C')}{s('D')}</>))}
+            <Box style={{ flexGrow: 3, flexDirection: 'row', gap: 4 }}>
+              {col(3, s('A'))}
+              {col(1, <>{s('B')}{s('C')}</>)}
             </Box>
-            {row(<>{s('E')}{s('F')}{s('G')}</>)}
+            <Box style={{ flexGrow: 1, flexDirection: 'row', gap: 4 }}>
+              <Box style={{ flexGrow: 1 }}>{s('D')}</Box>
+              <Box style={{ flexGrow: 1 }}>{s('E')}</Box>
+              <Box style={{ flexGrow: 1 }}>{s('F')}</Box>
+              <Box style={{ flexGrow: 1 }}>{s('G')}</Box>
+            </Box>
           </>
         );
     }

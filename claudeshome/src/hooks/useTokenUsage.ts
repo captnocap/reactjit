@@ -5,7 +5,7 @@
  *   "↑ 12,345 tokens  $0.04"  or  "1,234 tokens (~$0.02)"
  * We poll claude:classified, scan for status_bar rows, and parse them.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useLoveRPC, useLuaInterval } from '@reactjit/core';
 
 export interface TokenUsage {
@@ -36,12 +36,8 @@ export function useTokenUsage() {
 
   const [usage, setUsage] = useState<TokenUsage>(EMPTY);
 
-  useEffect(() => {
-    let alive = true;
-    return () => { alive = false; };
-  }, []);
-
-  useLuaInterval(3000, async () => {
+  // Staggered: cpu=2700, ralph_graph=3000, tokenUsage=3500
+  useLuaInterval(3500, async () => {
     try {
       const res = await rpcRef.current({ session: 'default' }) as any;
       if (!res?.rows) return;

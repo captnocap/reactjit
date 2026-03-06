@@ -6,7 +6,7 @@
  *
  * No Lua changes needed — builds entirely on claude:classified RPC.
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useLoveRPC, useLocalStore, useLuaInterval } from '@reactjit/core';
 
 export interface ChatRow {
@@ -84,48 +84,7 @@ export function useChatHistory() {
   const [query, setQuery] = useState('');
   const mountTimeRef = useRef(Date.now());
 
-  useEffect(() => {
-    let alive = true;
-
-    const poll = async () => {
-      if (!alive) return;
-      try {
-        const res = await rpcRef.current({ session: 'default' }) as any;
-        if (!res?.rows) return;
-
-        const rows: ChatRow[] = (res.rows as any[]).map(r => ({
-          kind: String(r.kind ?? 'unknown'),
-          text: String(r.text ?? ''),
-        }));
-
-        const fp = fingerprint(rows);
-
-        setStore(prev => {
-          const cur = prev ?? DEFAULT_STORE;
-          if (cur.lastSeenFingerprint === fp) return cur;
-
-          const newTurns = splitIntoTurns(rows, mountTimeRef.current);
-          if (newTurns.length === 0) return { ...cur, lastSeenFingerprint: fp };
-
-          // Merge: replace turns from this session (same mountTime prefix)
-          const mountPrefix = String(mountTimeRef.current);
-          const kept = (cur.turns ?? []).filter(t => !t.id.startsWith(mountPrefix));
-          const merged = [...kept, ...newTurns].slice(-MAX_TURNS);
-
-          return { turns: merged, lastSeenFingerprint: fp, bookmarks: cur.bookmarks ?? {} };
-        });
-      } catch {
-        // RPC not ready yet — silent
-      }
-    };
-
-    poll(); // immediate first poll
-    return () => {
-      alive = false;
-    };
-  }, [setStore]);
-
-  useLuaInterval(2000, async () => {
+  const poll = useCallback(async () => {
     try {
       const res = await rpcRef.current({ session: 'default' }) as any;
       if (!res?.rows) return;
@@ -144,17 +103,16 @@ export function useChatHistory() {
         const newTurns = splitIntoTurns(rows, mountTimeRef.current);
         if (newTurns.length === 0) return { ...cur, lastSeenFingerprint: fp };
 
-        // Merge: replace turns from this session (same mountTime prefix)
         const mountPrefix = String(mountTimeRef.current);
         const kept = (cur.turns ?? []).filter(t => !t.id.startsWith(mountPrefix));
         const merged = [...kept, ...newTurns].slice(-MAX_TURNS);
 
         return { turns: merged, lastSeenFingerprint: fp, bookmarks: cur.bookmarks ?? {} };
       });
-    } catch {
-      // RPC not ready yet — silent
-    }
-  });
+    } catch {}
+  }, [setStore]);
+
+  useLuaInterval(2000, poll);
 
   const turns = store?.turns ?? [];
   const bookmarks = store?.bookmarks ?? {};

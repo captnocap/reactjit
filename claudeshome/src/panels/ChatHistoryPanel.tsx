@@ -5,7 +5,7 @@
  * Search filters by user prompt text or any row content.
  */
 import React, { useState } from 'react';
-import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
+import { Box, Text, Pressable, ScrollView, TextInput } from '@reactjit/core';
 import { C } from '../theme';
 import { useChatHistory } from '../hooks/useChatHistory';
 import type { ChatTurn } from '../hooks/useChatHistory';
@@ -145,9 +145,19 @@ export function ChatHistoryPanel() {
         flexDirection: 'row', alignItems: 'center', gap: 6,
       }}>
         <Text style={{ fontSize: 10, color: C.textDim }}>{'/'}</Text>
-        <Text style={{ fontSize: 10, color: query ? C.text : C.textDim, flexGrow: 1 }}>
-          {query || 'search turns\u2026'}
-        </Text>
+        <TextInput
+          placeholder="search turns\u2026"
+          placeholderColor={C.textMuted}
+          onLiveChange={setQuery}
+          liveChangeDebounce={200}
+          style={{
+            flexGrow: 1,
+            fontSize: 10,
+            color: C.text,
+            backgroundColor: 'transparent',
+            height: 22,
+          }}
+        />
         {query.length > 0 && (
           <Pressable onPress={() => setQuery('')}>
             <Text style={{ fontSize: 9, color: C.textMuted }}>{'x'}</Text>

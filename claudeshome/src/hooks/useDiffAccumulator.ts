@@ -6,7 +6,7 @@
  * headers from tool tokens (Read/Edit/Write patterns), group +/- lines.
  * Pure React — no Lua changes needed.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useLoveRPC, useLuaInterval } from '@reactjit/core';
 
 export interface FileDiff {
@@ -52,80 +52,7 @@ export function useDiffAccumulator() {
   const [state, setState] = useState<DiffState>(EMPTY);
   const prevRowsRef = useRef<Array<{ kind: string; text: string }>>([]);
 
-  useEffect(() => {
-    let alive = true;
-
-    const poll = async () => {
-      if (!alive) return;
-      try {
-        const res = await rpcRef.current({ session: 'default' }) as any;
-        if (!res?.rows) return;
-
-        const rows: Array<{ kind: string; text: string }> = (res.rows as any[]).map(r => ({
-          kind: String(r.kind ?? ''),
-          text: String(r.text ?? ''),
-        }));
-
-        // Only process if rows changed (detect new diff content)
-        const prev = prevRowsRef.current;
-        const newRows = rows.slice(prev.length);
-        if (newRows.length === 0) return;
-        prevRowsRef.current = rows;
-
-        // Scan new rows for tool + diff pairs
-        let currentFile: string | null = null;
-        const fileUpdates: Record<string, string[]> = {};
-
-        for (const row of newRows) {
-          if (row.kind === 'tool') {
-            const path = extractFilePath(row.text);
-            if (path) currentFile = path;
-          } else if (row.kind === 'diff' && currentFile) {
-            if (!fileUpdates[currentFile]) fileUpdates[currentFile] = [];
-            fileUpdates[currentFile].push(row.text);
-          } else if (row.kind === 'result') {
-            // result ends a tool call — reset current file after diffing
-            // (keep currentFile for the result row, reset after)
-            currentFile = null;
-          }
-        }
-
-        if (Object.keys(fileUpdates).length === 0) return;
-
-        setState(prev => {
-          const next = { ...prev, files: { ...prev.files } };
-          let totalAdded = prev.totalAdded;
-          let totalRemoved = prev.totalRemoved;
-
-          for (const [path, chunks] of Object.entries(fileUpdates)) {
-            const counts = countDiff(chunks);
-            const existing = next.files[path];
-            const prevChunks = existing?.chunks ?? [];
-            const merged = [...prevChunks, ...chunks].slice(-MAX_CHUNKS);
-            next.files[path] = {
-              path,
-              added: (existing?.added ?? 0) + counts.added,
-              removed: (existing?.removed ?? 0) + counts.removed,
-              lastSeen: Date.now(),
-              chunks: merged,
-            };
-            totalAdded += counts.added;
-            totalRemoved += counts.removed;
-          }
-
-          return { ...next, totalAdded, totalRemoved, lastUpdated: Date.now() };
-        });
-      } catch {
-        // silent
-      }
-    };
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useLuaInterval(1500, async () => {
+  const poll = useCallback(async () => {
     try {
       const res = await rpcRef.current({ session: 'default' }) as any;
       if (!res?.rows) return;
@@ -135,13 +62,11 @@ export function useDiffAccumulator() {
         text: String(r.text ?? ''),
       }));
 
-      // Only process if rows changed (detect new diff content)
       const prev = prevRowsRef.current;
       const newRows = rows.slice(prev.length);
       if (newRows.length === 0) return;
       prevRowsRef.current = rows;
 
-      // Scan new rows for tool + diff pairs
       let currentFile: string | null = null;
       const fileUpdates: Record<string, string[]> = {};
 
@@ -153,8 +78,6 @@ export function useDiffAccumulator() {
           if (!fileUpdates[currentFile]) fileUpdates[currentFile] = [];
           fileUpdates[currentFile].push(row.text);
         } else if (row.kind === 'result') {
-          // result ends a tool call — reset current file after diffing
-          // (keep currentFile for the result row, reset after)
           currentFile = null;
         }
       }
@@ -184,10 +107,10 @@ export function useDiffAccumulator() {
 
         return { ...next, totalAdded, totalRemoved, lastUpdated: Date.now() };
       });
-    } catch {
-      // silent
-    }
-  });
+    } catch {}
+  }, []);
+
+  useLuaInterval(1500, poll);
 
   return {
     state,

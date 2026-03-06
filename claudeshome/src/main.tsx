@@ -1,5 +1,5 @@
 import React from 'react';
-import { createLove2DApp } from '@reactjit/native';
+import { createLove2DApp } from '@reactjit/renderer';
 import { App } from './App';
 
 const app = createLove2DApp();

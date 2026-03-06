@@ -5,7 +5,7 @@
  * Format: `%c %t %C` → emoji + temp + condition description.
  * Falls back gracefully if curl fails or network is unavailable.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useLoveRPC, useLuaInterval } from '@reactjit/core';
 
 const POLL_MS = 10 * 60 * 1000;   // 10 minutes
@@ -64,33 +64,7 @@ export function useWeather(): WeatherData {
 
   const [data, setData] = useState<WeatherData>(LOADING);
 
-  useEffect(() => {
-    let alive = true;
-
-    const fetch = async () => {
-      try {
-        const res = await rpcRef.current({
-          command:   `curl -s --max-time ${TIMEOUT} "${URL}" 2>/dev/null`,
-          maxOutput: 256,
-        }) as any;
-
-        if (!alive) return;
-
-        if (res?.ok && res?.output?.trim()) {
-          setData(parse(res.output));
-        } else {
-          setData(prev => ({ ...EMPTY, lastFetch: Date.now(), icon: prev.icon || '?' }));
-        }
-      } catch {
-        if (alive) setData(EMPTY);
-      }
-    };
-
-    fetch();
-    return () => { alive = false; };
-  }, []);
-
-  useLuaInterval(POLL_MS, async () => {
+  const fetchWeather = useCallback(async () => {
     try {
       const res = await rpcRef.current({
         command:   `curl -s --max-time ${TIMEOUT} "${URL}" 2>/dev/null`,
@@ -105,7 +79,9 @@ export function useWeather(): WeatherData {
     } catch {
       setData(EMPTY);
     }
-  });
+  }, []);
+
+  useLuaInterval(POLL_MS, fetchWeather);
 
   return data;
 }
