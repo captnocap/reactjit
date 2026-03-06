@@ -22,14 +22,15 @@ interface SearchResponse {
   query:   string;
 }
 
-const KIND_COLOR: Record<string, string> = {
-  user_prompt:    C.accent,
-  assistant_text: C.approve,
-  tool:           C.warning,
-  result:         C.textDim,
-  error:          C.deny,
-  diff:           C.textDim,
-};
+function kindColor(kind: string): string {
+  switch (kind) {
+    case 'user_prompt':    return C.accent;
+    case 'assistant_text': return C.approve;
+    case 'tool':           return C.warning;
+    case 'error':          return C.deny;
+    default:               return C.textDim;
+  }
+}
 
 const KIND_LABEL: Record<string, string> = {
   user_prompt:    'you',
@@ -41,7 +42,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 function KindBadge({ kind }: { kind: string }) {
-  const color = KIND_COLOR[kind] ?? C.textMuted;
+  const color = kindColor(kind);
   const label = KIND_LABEL[kind] ?? kind;
   return (
     <Box style={{

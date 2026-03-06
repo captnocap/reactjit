@@ -7,12 +7,14 @@ import type { LogEntry } from '../lib/log-buffer';
 // Force log-buffer to load (patches console on import)
 import '../lib/log-buffer';
 
-const LEVEL_COLOR: Record<string, string> = {
-  log:   C.text,
-  info:  C.accent,
-  warn:  C.warning,
-  error: C.deny,
-};
+function levelColor(level: string): string {
+  switch (level) {
+    case 'info':  return C.accent;
+    case 'warn':  return C.warning;
+    case 'error': return C.deny;
+    default:      return C.text;
+  }
+}
 
 const LEVEL_PREFIX: Record<string, string> = {
   log:   '·',
@@ -78,7 +80,7 @@ export function DebugPanel() {
 
   const FilterBtn = ({ level }: { level: string | null }) => {
     const active = filter === level;
-    const color = level ? LEVEL_COLOR[level] : C.textDim;
+    const color = level ? levelColor(level) : C.textDim;
     return (
       <Pressable onPress={() => setFilter(active ? null : level)} style={{
         paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
@@ -140,10 +142,10 @@ export function DebugPanel() {
                   borderRadius: 2,
                 }}>
                   <Text style={{ fontSize: 9, color: C.textMuted, flexShrink: 0 }}>{fmt(e.ts)}</Text>
-                  <Text style={{ fontSize: 10, color: LEVEL_COLOR[e.level], flexShrink: 0, fontWeight: 'bold' }}>
+                  <Text style={{ fontSize: 10, color: levelColor(e.level), flexShrink: 0, fontWeight: 'bold' }}>
                     {LEVEL_PREFIX[e.level]}
                   </Text>
-                  <Text style={{ fontSize: 10, color: LEVEL_COLOR[e.level], flexGrow: 1 }}>
+                  <Text style={{ fontSize: 10, color: levelColor(e.level), flexGrow: 1 }}>
                     {e.text}
                   </Text>
                 </Box>

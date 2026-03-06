@@ -15,23 +15,26 @@ import { useClaude } from '../hooks/useClaude';
 import { PermissionModal } from '../components/PermissionModal';
 import { C } from '../theme';
 
-const STATUS_COLOR: Record<string, string> = {
-  idle:               C.textMuted,
-  running:            C.approve,
-  thinking:           C.warning,
-  waiting_permission: C.deny,
-  stopped:            C.textMuted,
-};
+function statusColor(s: string): string {
+  switch (s) {
+    case 'running':            return C.approve;
+    case 'thinking':           return C.warning;
+    case 'waiting_permission': return C.deny;
+    default:                   return C.textMuted;
+  }
+}
 
 const WORKER_NAMES   = ['alpha', 'beta', 'gamma', 'delta'] as const;
 type WorkerName = typeof WORKER_NAMES[number];
 
-const WORKER_COLOR: Record<WorkerName, string> = {
-  alpha: C.accent,
-  beta:  C.approve,
-  gamma: C.warning,
-  delta: '#c87dff',
-};
+function workerColor(name: WorkerName): string {
+  switch (name) {
+    case 'alpha': return C.accent;
+    case 'beta':  return C.approve;
+    case 'gamma': return C.warning;
+    case 'delta': return '#c87dff';
+  }
+}
 
 // ── Individual worker slot ───────────────────────────────────────────
 
@@ -78,8 +81,8 @@ function WorkerSlot({ name, focused, onFocus, onStatusChange }: SlotProps) {
     setEditorHeight(29);
   }, []);
 
-  const dotColor    = WORKER_COLOR[name];
-  const statusColor = STATUS_COLOR[worker.status] ?? C.textMuted;
+  const dotColor    = workerColor(name);
+  const statusColor = statusColor(worker.status);
   const isActive    = spawned && worker.status !== 'idle' && worker.status !== 'stopped';
 
   return (
@@ -285,7 +288,7 @@ export function FleetPanel({ onActiveCountChange }: FleetPanelProps) {
           {WORKER_NAMES.map(name => (
             <Pressable key={name} onPress={() => setFocused(name)} style={{
               width: 10, height: 10, borderRadius: 5,
-              backgroundColor: focused === name ? WORKER_COLOR[name] : WORKER_COLOR[name] + '33',
+              backgroundColor: focused === name ? workerColor(name) : workerColor(name) + '33',
             }} />
           ))}
         </Box>

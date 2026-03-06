@@ -12,13 +12,15 @@ import type { MemoryCategory } from '../hooks/useMemory';
 
 const CATEGORIES: MemoryCategory[] = ['insight', 'pattern', 'decision', 'bug', 'user-pref'];
 
-const CAT_COLOR: Record<MemoryCategory, string> = {
-  insight:    C.accent,
-  pattern:    C.approve,
-  decision:   C.warning,
-  bug:        C.deny,
-  'user-pref': C.textMuted,
-};
+function catColor(cat: MemoryCategory): string {
+  switch (cat) {
+    case 'insight':    return C.accent;
+    case 'pattern':    return C.approve;
+    case 'decision':   return C.warning;
+    case 'bug':        return C.deny;
+    case 'user-pref':  return C.textMuted;
+  }
+}
 
 const CAT_ICON: Record<MemoryCategory, string> = {
   insight:    '\u2605',  // ★
@@ -34,7 +36,7 @@ function MemoryRow({ id, category, text, onDelete }: {
   text: string;
   onDelete: () => void;
 }) {
-  const color = CAT_COLOR[category] ?? C.textDim;
+  const color = catColor(category);
   const icon  = CAT_ICON[category]  ?? '·';
 
   return (
@@ -164,7 +166,7 @@ export function MemoryPanel() {
         }}>
           {CATEGORIES.map(cat => {
             const active = activeCategory === cat;
-            const color = CAT_COLOR[cat];
+            const color = catColor(cat);
             return (
               <Pressable key={cat} onPress={() => setActiveCategory(cat)} style={{
                 paddingLeft: 6,
@@ -203,7 +205,7 @@ export function MemoryPanel() {
                 <Box style={{
                   paddingLeft: 10, paddingTop: 6, paddingBottom: 2,
                 }}>
-                  <Text style={{ fontSize: 8, color: CAT_COLOR[cat], fontWeight: 'bold' }}>
+                  <Text style={{ fontSize: 8, color: catColor(cat), fontWeight: 'bold' }}>
                     {cat.toUpperCase()}
                   </Text>
                 </Box>
@@ -235,7 +237,7 @@ export function MemoryPanel() {
         borderColor: C.border,
         flexShrink: 0,
       }}>
-        <Text style={{ fontSize: 10, color: CAT_COLOR[activeCategory] }}>
+        <Text style={{ fontSize: 10, color: catColor(activeCategory) }}>
           {CAT_ICON[activeCategory]}
         </Text>
         <TextInput
@@ -259,12 +261,12 @@ export function MemoryPanel() {
           paddingRight: 8,
           paddingTop: 4,
           paddingBottom: 4,
-          backgroundColor: CAT_COLOR[activeCategory] + '33',
+          backgroundColor: catColor(activeCategory) + '33',
           borderRadius: 4,
           borderWidth: 1,
-          borderColor: CAT_COLOR[activeCategory] + '66',
+          borderColor: catColor(activeCategory) + '66',
         }}>
-          <Text style={{ fontSize: 9, color: CAT_COLOR[activeCategory] }}>{'+'}</Text>
+          <Text style={{ fontSize: 9, color: catColor(activeCategory) }}>{'+'}</Text>
         </Pressable>
       </Box>
     </Box>

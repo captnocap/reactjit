@@ -86,13 +86,15 @@ function FileRow({ file }: { file: FileDiff }) {
 
 const BUCKETS: FilterBucket[] = ['all', 'src', 'lua', 'packages', 'other'];
 
-const BUCKET_COLOR: Record<FilterBucket, string> = {
-  all:      C.accent,
-  src:      C.approve,
-  lua:      C.warning,
-  packages: C.deny,
-  other:    C.textDim,
-};
+function bucketColor(bucket: FilterBucket): string {
+  switch (bucket) {
+    case 'all':      return C.accent;
+    case 'src':      return C.approve;
+    case 'lua':      return C.warning;
+    case 'packages': return C.deny;
+    case 'other':    return C.textDim;
+  }
+}
 
 export function DiffPanel() {
   const { state, fileList, clear } = useDiffAccumulator();
@@ -164,7 +166,7 @@ export function DiffPanel() {
         }}>
           {BUCKETS.filter(b => b === 'all' || counts[b] > 0).map(b => {
             const active = filter === b;
-            const color = BUCKET_COLOR[b];
+            const color = bucketColor(b);
             return (
               <Pressable key={b} onPress={() => setFilter(b)} style={{
                 flexDirection: 'row',

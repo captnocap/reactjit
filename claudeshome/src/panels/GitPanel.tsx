@@ -42,20 +42,19 @@ const EMPTY: GitData = {
   lastFetched: 0,
 };
 
-// Status code → color + label
-const STATUS_META: Record<string, { color: string; label: string }> = {
-  'M ': { color: C.approve, label: 'S' },   // staged modified
-  'A ': { color: C.approve, label: 'A' },   // staged added
-  'D ': { color: C.deny,    label: 'D' },   // staged deleted
-  'R ': { color: C.accent,  label: 'R' },   // renamed
-  ' M': { color: C.warning, label: 'm' },   // unstaged modified
-  ' D': { color: C.deny,    label: 'd' },   // unstaged deleted
-  'MM': { color: C.warning, label: 'M' },   // both staged+unstaged
-  '??': { color: C.textDim, label: '?' },   // untracked
-};
-
-function fileMeta(status: string) {
-  return STATUS_META[status] ?? { color: C.textDim, label: status.trim().slice(0, 1) || '?' };
+// Status code → color + label (evaluated at render time so theme changes apply)
+function fileMeta(status: string): { color: string; label: string } {
+  switch (status) {
+    case 'M ': return { color: C.approve, label: 'S' };   // staged modified
+    case 'A ': return { color: C.approve, label: 'A' };   // staged added
+    case 'D ': return { color: C.deny,    label: 'D' };   // staged deleted
+    case 'R ': return { color: C.accent,  label: 'R' };   // renamed
+    case ' M': return { color: C.warning, label: 'm' };   // unstaged modified
+    case ' D': return { color: C.deny,    label: 'd' };   // unstaged deleted
+    case 'MM': return { color: C.warning, label: 'M' };   // both staged+unstaged
+    case '??': return { color: C.textDim, label: '?' };   // untracked
+    default:   return { color: C.textDim, label: status.trim().slice(0, 1) || '?' };
+  }
 }
 
 function basename(path: string): string {

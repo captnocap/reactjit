@@ -102,15 +102,18 @@ function parseFindOutput(raw: string): TreeNode[] {
 
 // ── Tree node renderer ───────────────────────────────────────────────
 
-const EXT_COLOR: Record<string, string> = {
-  tsx: C.accent,
-  ts:  C.accentDim,
-  lua: C.warning,
-  css: C.approve,
-  md:  C.textDim,
-  json: C.textDim,
-  mjs: C.warning,
-};
+function extColor(ext: string): string {
+  switch (ext) {
+    case 'tsx':  return C.accent;
+    case 'ts':   return C.accentDim;
+    case 'lua':  return C.warning;
+    case 'css':  return C.approve;
+    case 'md':   return C.textDim;
+    case 'json': return C.textDim;
+    case 'mjs':  return C.warning;
+    default:     return C.textMuted;
+  }
+}
 
 function extOf(name: string): string {
   return name.includes('.') ? name.split('.').pop()! : '';
@@ -121,7 +124,7 @@ function FileRow({ node, nowSec, depth }: { node: FileNode; nowSec: number; dept
   const isHot   = ageSec * 1000 < HOT_MS;
   const isWarm  = ageSec * 1000 < WARM_MS;
   const ext     = extOf(node.name);
-  const extColor = EXT_COLOR[ext] ?? C.textMuted;
+  const ec = extColor(ext);
 
   const nameColor = isHot  ? C.warning
                   : isWarm ? C.textDim
@@ -141,7 +144,7 @@ function FileRow({ node, nowSec, depth }: { node: FileNode; nowSec: number; dept
       {!isHot && <Box style={{ width: 4, flexShrink: 0 }} />}
       <Text style={{ fontSize: 10, color: nameColor, flexGrow: 1 }}>{node.name}</Text>
       {ext ? (
-        <Text style={{ fontSize: 8, color: extColor + '88' }}>{ext}</Text>
+        <Text style={{ fontSize: 8, color: ec + '88' }}>{ext}</Text>
       ) : null}
     </Box>
   );

@@ -10,16 +10,19 @@ import { C } from '../theme';
 import { useChatHistory } from '../hooks/useChatHistory';
 import type { ChatTurn } from '../hooks/useChatHistory';
 
-const KIND_COLOR: Record<string, string> = {
-  user_prompt:  C.accent,
-  assistant_text: C.text,
-  tool:         C.warning,
-  result:       C.textMuted,
-  diff:         C.approve,
-  error:        C.deny,
-  thinking:     C.warning,
-  thought_complete: C.textDim,
-};
+function kindColor(kind: string): string {
+  switch (kind) {
+    case 'user_prompt':      return C.accent;
+    case 'assistant_text':   return C.text;
+    case 'tool':             return C.warning;
+    case 'result':           return C.textMuted;
+    case 'diff':             return C.approve;
+    case 'error':            return C.deny;
+    case 'thinking':         return C.warning;
+    case 'thought_complete': return C.textDim;
+    default:                 return C.textDim;
+  }
+}
 
 function TurnRow({ turn, onToggleBookmark }: { turn: ChatTurn; onToggleBookmark: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
@@ -78,7 +81,7 @@ function TurnRow({ turn, onToggleBookmark }: { turn: ChatTurn; onToggleBookmark:
       {expanded && (
         <Box style={{ marginTop: 6, gap: 2, paddingLeft: 12 }}>
           {turn.rows.slice(0, 30).map((row, i) => {
-            const color = KIND_COLOR[row.kind] ?? C.textDim;
+            const color = kindColor(row.kind);
             const display = row.text.length > 80
               ? row.text.slice(0, 80) + '\u2026'
               : row.text;
