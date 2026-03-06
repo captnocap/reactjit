@@ -19,6 +19,7 @@ import { SearchPanel } from './panels/SearchPanel';
 import { FileTreePanel } from './panels/FileTreePanel';
 import { FortuneCookiePanel } from './panels/FortuneCookiePanel';
 import { NotepadPanel } from './panels/NotepadPanel';
+import { MemoryPanel } from './panels/MemoryPanel';
 import { useHearts, HeartsDisplay } from './components/Hearts';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useNotifications } from './hooks/useNotifications';
@@ -37,7 +38,9 @@ import { CurlReceiver } from './components/CurlReceiver';
 import { CpuSparkline } from './components/CpuSparkline';
 import { KonamiEgg } from './components/KonamiEgg';
 import { DailySummaryPanel } from './panels/DailySummaryPanel';
+import { MessagePanel } from './panels/MessagePanel';
 import { useDailySummary } from './hooks/useDailySummary';
+import { useMessages } from './hooks/useMessages';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -128,9 +131,10 @@ interface ShellProps {
   toastHistory:     import('./hooks/useToast').ToastEntry[];
   clearToastHistory: () => void;
   permLog:          ReturnType<typeof usePermissionLog>;
+  msgs:             ReturnType<typeof useMessages>;
 }
 
-function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen, currentTheme, onThemeChange, showToast, toastHistory, clearToastHistory, permLog }: ShellProps) {
+function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen, currentTheme, onThemeChange, showToast, toastHistory, clearToastHistory, permLog, msgs }: ShellProps) {
   const [layout, setLayout] = useState<LayoutMode>('ABCD');
   const [activeWorkers, setActiveWorkers] = useState(0);
   const onActiveCountChange = useCallback((count: number) => setActiveWorkers(count), []);
@@ -142,6 +146,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [permLogOpen,     setPermLogOpen]     = useState(false);
   const [notepadOpen,     setNotepadOpen]     = useState(false);
   const [dailyLogOpen,    setDailyLogOpen]    = useState(false);
+  const [messagesOpen,    setMessagesOpen]    = useState(false);
 
   // ── Uptime counter ─────────────────────────────────────────────────
   const bootTimeRef = useRef(Date.now());
@@ -173,13 +178,15 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const panelNodes = useMemo<PanelContent>(() => ({
     B: dailyLogOpen
       ? <DailySummaryPanel today={dailySummary.today} history={dailySummary.history} todayKey={dailySummary.todayKey} />
-      : notepadOpen ? <NotepadPanel /> : <FortuneCookiePanel />,
+      : notepadOpen ? <NotepadPanel /> : <MemoryPanel />,
     C: <SystemPanel />,
     D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
     E: <GitPanel />,
     F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
-    G: searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
-  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, dailySummary.today, dailySummary.history, dailySummary.todayKey]);
+    G: messagesOpen
+      ? <MessagePanel messages={msgs.messages} unreadCount={msgs.unreadCount} onSend={msgs.send} onMarkRead={msgs.markAllRead} onClear={msgs.clear} />
+      : searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
+  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
 
   // Auto-accumulate daily stats every 30s
   useLuaInterval(30000, () => {
@@ -267,6 +274,13 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   useHotkey('f6', () => setFileTreeOpen(prev => !prev));
   useHotkey('f3', () => {
     setSearchOpen(prev => !prev);
+    setMessagesOpen(false);
+    setFocusedPanel('G');
+  });
+
+  useHotkey('f11', () => {
+    setMessagesOpen(prev => !prev);
+    setSearchOpen(false);
     setFocusedPanel('G');
   });
 
@@ -371,6 +385,23 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
               <Text style={{ fontSize: 9, color: C.approve }}>{`${activeWorkers} active`}</Text>
             </Box>
           )}
+          <Pressable onPress={() => { setMessagesOpen(true); setSearchOpen(false); setFocusedPanel('G'); }} style={{
+            flexDirection:   'row',
+            alignItems:      'center',
+            gap:             4,
+            paddingLeft:     6,
+            paddingRight:    6,
+            paddingTop:      2,
+            paddingBottom:   2,
+            borderRadius:    4,
+            borderWidth:     1,
+            borderColor:     msgs.unreadCount > 0 ? C.accent + '55' : C.border,
+            backgroundColor: msgs.unreadCount > 0 ? C.accent + '11' : 'transparent',
+          }}>
+            <Text style={{ fontSize: 9, color: msgs.unreadCount > 0 ? C.accent : C.textMuted }}>
+              {msgs.unreadCount > 0 ? `\u2709 ${msgs.unreadCount}` : '\u2709'}
+            </Text>
+          </Pressable>
           <Pressable onPress={() => setGraveyardOpen(true)} style={{
             flexDirection:   'row',
             alignItems:      'center',
@@ -448,9 +479,9 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         focusedPanel={focusedPanel}
         onPanelPress={setFocusedPanel}
         panelLabels={{
-          B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'FORTUNE',
+          B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'MEMORY',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
-          G: searchOpen   ? 'SEARCH' : 'HISTORY',
+          G: messagesOpen ? 'MESSAGES' : searchOpen ? 'SEARCH' : 'HISTORY',
         }}
       />
 
@@ -554,6 +585,7 @@ export function App() {
   const [graveyardOpen, setGraveyardOpen] = React.useState(false);
   const { showToast, history: toastHistory, clearHistory: clearToastHistory } = useToast();
   const permLog = usePermissionLog();
+  const msgs = useMessages();
 
   // ── Theme management ───────────────────────────────────────────────
   // useLocalStore persists across restarts. applyTheme mutates C in
@@ -592,7 +624,7 @@ export function App() {
       />
       <AmbientSound status={claude.status} />
       <KonamiEgg />
-      <CurlReceiver />
+      <CurlReceiver onReceive={msgs.receive} messages={msgs.messages} />
 
       {/* Shell — everything Claude edits, sandboxed */}
       <ShellBoundary onCrash={handleCrash}>
@@ -608,6 +640,7 @@ export function App() {
           toastHistory={toastHistory}
           clearToastHistory={clearToastHistory}
           permLog={permLog}
+          msgs={msgs}
         />
       </ShellBoundary>
     </Box>

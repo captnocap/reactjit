@@ -1,27 +1,30 @@
 /**
- * CurlReceiver — HTTP endpoint that lets you send messages to Vesper from anywhere.
+ * CurlReceiver — HTTP endpoint for bidirectional messaging with Vesper.
  *
- * Usage (from any machine that can reach this host):
- *   curl -X POST http://localhost:9100/message -d "hey, quick question..."
- *   curl -X POST http://localhost:9100/message -H "Content-Type: application/json" -d '{"message":"do the thing"}'
+ * Usage (from any terminal):
+ *   curl -X POST http://localhost:9100/message -d "hey vesper"
+ *   curl http://localhost:9100/inbox
+ *   curl http://localhost:9100/ping
  *
  * Endpoints:
- *   POST /message   — send a message to the Claude session (returns 200 OK)
- *   GET  /ping      — health check (returns {"ok":true,"port":9100})
+ *   POST /message   — send a message to Vesper (also forwards to Claude session)
+ *   GET  /inbox     — read the full conversation thread (JSON array)
+ *   GET  /ping      — health check
  */
 
 import React, { useMemo, useRef } from 'react';
 import { useLoveRPC } from '@reactjit/core';
 import { useServer } from '@reactjit/server';
 import type { HttpRequest, HttpResponse } from '@reactjit/server';
+import type { Message } from '../hooks/useMessages';
 
 const PORT = 9100;
 
 function jsonOk(body: object): HttpResponse {
   return {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify(body, null, 2),
   };
 }
 
@@ -33,10 +36,21 @@ function jsonErr(status: number, message: string): HttpResponse {
   };
 }
 
-export function CurlReceiver() {
+interface Props {
+  onReceive: (text: string) => void;
+  messages: Message[];
+}
+
+export function CurlReceiver({ onReceive, messages }: Props) {
   const sendRpc = useLoveRPC('claude:send');
   const sendRef = useRef(sendRpc);
   sendRef.current = sendRpc;
+
+  const onReceiveRef = useRef(onReceive);
+  onReceiveRef.current = onReceive;
+
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const config = useMemo(() => ({
     port: PORT,
@@ -48,10 +62,21 @@ export function CurlReceiver() {
           jsonOk({ ok: true, port: PORT, identity: 'Vesper' }),
       },
       {
+        method: 'GET' as const,
+        path: '/inbox',
+        handler: (_req: HttpRequest): HttpResponse => {
+          const msgs = messagesRef.current.map(m => ({
+            sender: m.sender,
+            text: m.text,
+            time: new Date(m.ts).toISOString(),
+          }));
+          return jsonOk({ messages: msgs, count: msgs.length });
+        },
+      },
+      {
         method: 'POST' as const,
         path: '/message',
         handler: async (req: HttpRequest): Promise<HttpResponse> => {
-          // Accept plain text or JSON { message: string }
           let message = req.body ?? '';
           const ct = (req.headers['content-type'] ?? req.headers['Content-Type'] ?? '');
           if (ct.includes('application/json')) {
@@ -66,12 +91,15 @@ export function CurlReceiver() {
           message = message.trim();
           if (!message) return jsonErr(400, 'empty message');
 
+          // Store in message history
+          onReceiveRef.current(message);
+
+          // Also forward to Claude session
           try {
-            await sendRef.current({ message });
-            return jsonOk({ ok: true });
-          } catch (err: any) {
-            return jsonErr(500, String(err?.message ?? err));
-          }
+            await sendRef.current({ message: `[Message from human] ${message}` });
+          } catch {}
+
+          return jsonOk({ ok: true, stored: true });
         },
       },
     ],
