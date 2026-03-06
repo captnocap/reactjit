@@ -88,6 +88,7 @@ experiments/cartridge-os/*.cart
 # Local development / Tooling
 .claude/settings.local.json
 .claude/local/
+.claude-overflow/
 *.local
 
 # Logs and databases
