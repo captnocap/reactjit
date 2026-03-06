@@ -462,12 +462,14 @@ endif
 	cp -r packages/geo cli/runtime/reactjit/geo
 	cp -r packages/theme cli/runtime/reactjit/theme
 	cp -r packages/math cli/runtime/reactjit/math
+	cp -r packages/convert cli/runtime/reactjit/convert
 	cp -r packages/time cli/runtime/reactjit/time
 	cp -r packages/privacy cli/runtime/reactjit/privacy
 	cp -r packages/icons cli/runtime/reactjit/icons
 	cp -r packages/layouts cli/runtime/reactjit/layouts
 	cp -r packages/terminal cli/runtime/reactjit/terminal
 	cp -r packages/imaging cli/runtime/reactjit/imaging
+	cp -r packages/data cli/runtime/reactjit/data
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts/base ]; then \

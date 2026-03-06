@@ -34,9 +34,11 @@ export const ALIAS_MAP = {
   layouts: '@reactjit/layouts',
   terminal: '@reactjit/terminal',
   math: '@reactjit/math',
+  convert: '@reactjit/convert',
   time: '@reactjit/time',
   privacy: '@reactjit/privacy',
   wireguard: '@reactjit/wireguard',
+  data: '@reactjit/data',
 };
 
 /**
