@@ -106,6 +106,10 @@ export { useRecorder, type RecorderOptions, type RecorderResult } from './useRec
 // Icon registry (populated by @reactjit/icons on import)
 export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
 
+// Classifier (global registry — declares what a name IS + how it looks)
+export { classifier, classifiers } from './classifier';
+export type { ClassifierMap } from './classifier';
+
 // Primitives
 export { Box, Row, Col, Text, Image, Render, DevToolsEmbed, FocusGroup } from './primitives';
 
