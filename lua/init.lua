@@ -441,6 +441,7 @@ local function loadThemes()
     end
     M.currentTheme = resolvedTheme or M.themes[M.currentThemeName]
     if M.painter then M.painter.setTheme(M.currentTheme) end
+    if M.masksmod and M.masksmod.setTheme then M.masksmod.setTheme(M.currentTheme) end
     if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
     if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
     tooltips.setTheme(M.currentTheme)
@@ -715,6 +716,7 @@ function ReactJIT.init(config)
           M.currentThemeName = name
           M.currentTheme = resolvedTheme or M.themes[name]
           if M.painter then M.painter.setTheme(M.currentTheme) end
+          if M.masksmod and M.masksmod.setTheme then M.masksmod.setTheme(M.currentTheme) end
           if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
           if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
           tooltips.setTheme(M.currentTheme)
@@ -1121,6 +1123,16 @@ function ReactJIT.init(config)
     if recOk then
       M.recorder = rec
       for method, handler in pairs(rec.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
+  -- Register chemistry RPC handlers
+  do
+    local chemOk, chem = pcall(require, "lua.capabilities.chemistry")
+    if chemOk then
+      for method, handler in pairs(chem.getHandlers()) do
         rpcHandlers[method] = handler
       end
     end
@@ -2853,6 +2865,7 @@ function ReactJIT.update(dt)
             end
             M.currentTheme = resolvedTheme or M.themes[name]
             if M.painter then M.painter.setTheme(M.currentTheme) end
+            if M.masksmod and M.masksmod.setTheme then M.masksmod.setTheme(M.currentTheme) end
             if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
             if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
             tooltips.setTheme(M.currentTheme)

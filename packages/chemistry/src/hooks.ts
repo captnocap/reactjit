@@ -1,24 +1,30 @@
-import { useState, useMemo } from 'react';
-import { getElement } from './elements';
-import { buildMolecule } from './molecules';
-import { balanceEquation, getEnthalpy } from './reactions';
+import { useState, useMemo, useEffect } from 'react';
+import { useLoveRPC } from '@reactjit/core';
+import { getElement, ELEMENTS } from './elements';
 import type { Element, Molecule, Reaction, EquilibriumState } from './types';
 
 export function useElement(key: number | string): Element | undefined {
   return useMemo(() => getElement(key), [key]);
 }
 
-export function useMolecule(formulaOrName: string): Molecule {
-  return useMemo(() => buildMolecule(formulaOrName), [formulaOrName]);
+export function useMolecule(formulaOrName: string): Molecule | null {
+  const rpc = useLoveRPC<Molecule>('chemistry:molecule');
+  const [result, setResult] = useState<Molecule | null>(null);
+  useEffect(() => {
+    if (!formulaOrName) return;
+    rpc({ formula: formulaOrName }).then(setResult).catch(() => {});
+  }, [formulaOrName]);
+  return result;
 }
 
-export function useReaction(equation: string): Reaction {
-  return useMemo(() => {
-    const reaction = balanceEquation(equation);
-    const enthalpy = getEnthalpy(reaction.balanced);
-    if (enthalpy !== undefined) reaction.enthalpy = enthalpy;
-    return reaction;
+export function useReaction(equation: string): Reaction | null {
+  const rpc = useLoveRPC<Reaction>('chemistry:balance');
+  const [result, setResult] = useState<Reaction | null>(null);
+  useEffect(() => {
+    if (!equation) return;
+    rpc({ equation }).then(setResult).catch(() => {});
   }, [equation]);
+  return result;
 }
 
 export function useEquilibrium(opts: {
@@ -29,26 +35,19 @@ export function useEquilibrium(opts: {
   changeTemp?: number;
   changePressure?: number;
 }): EquilibriumState {
+  const { kEq, temperature, pressure = 1, deltaH, changeTemp, changePressure } = opts;
   return useMemo(() => {
-    const { kEq, temperature, pressure = 1, deltaH, changeTemp, changePressure } = opts;
-
     let shift: EquilibriumState['shift'] = 'none';
     let direction: EquilibriumState['direction'] = 'equilibrium';
 
-    // Le Chatelier's principle
     if (changeTemp && deltaH) {
-      if (changeTemp > 0) {
-        // Increase temp: shift toward endothermic direction
-        shift = deltaH > 0 ? 'right' : 'left';
-      } else {
-        shift = deltaH > 0 ? 'left' : 'right';
-      }
+      shift = changeTemp > 0
+        ? (deltaH > 0 ? 'right' : 'left')
+        : (deltaH > 0 ? 'left' : 'right');
     }
 
     if (changePressure) {
-      // Increase pressure: shift toward fewer moles of gas
-      if (changePressure > 0) shift = 'left'; // simplified
-      else shift = 'right';
+      shift = changePressure > 0 ? 'left' : 'right';
     }
 
     if (kEq > 1) direction = 'forward';
@@ -61,7 +60,7 @@ export function useEquilibrium(opts: {
       temperature: temperature + (changeTemp ?? 0),
       pressure: pressure + (changePressure ?? 0),
     };
-  }, [opts.kEq, opts.temperature, opts.pressure, opts.deltaH, opts.changeTemp, opts.changePressure]);
+  }, [kEq, temperature, pressure, deltaH, changeTemp, changePressure]);
 }
 
 export function usePeriodicTableFilter(filter?: {
@@ -72,10 +71,8 @@ export function usePeriodicTableFilter(filter?: {
   return useMemo(() => {
     if (!filter) return { highlighted: [] };
     const { category, phase, search } = filter;
-    const { ELEMENTS } = require('./elements');
     const highlighted: number[] = [];
-
-    for (const el of ELEMENTS as Element[]) {
+    for (const el of ELEMENTS) {
       if (category && el.category !== category) continue;
       if (phase && el.phase !== phase) continue;
       if (search) {

@@ -1,10 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import { ELEMENTS, getElement } from './elements';
-import { buildMolecule } from './molecules';
-import { balanceEquation, getEnthalpy } from './reactions';
-import { molarMass, massComposition, valenceElectrons, electronConfig } from './utils';
+import { valenceElectrons } from './utils';
+import { useMolecule, useReaction } from './hooks';
 import type {
   Element, PeriodicTableProps, ElementCardProps, MoleculeCardProps,
   ElectronShellProps, ReactionViewProps,
@@ -248,8 +247,24 @@ function InfoChip({ label, value, c }: { label: string; value: string; c: any })
 
 export function MoleculeCard({ formula, showBonds = false, style }: MoleculeCardProps) {
   const c = useThemeColors();
-  const mol = useMemo(() => buildMolecule(formula), [formula]);
-  const composition = useMemo(() => massComposition(formula), [formula]);
+  const mol = useMolecule(formula);
+  const composition = useMemo(() => {
+    if (!mol || mol.molarMass === 0) return {};
+    const result: Record<string, number> = {};
+    for (const a of mol.atoms) {
+      const el = getElement(a.symbol);
+      if (el) result[a.symbol] = Math.round((el.mass * a.count / mol.molarMass) * 10000) / 100;
+    }
+    return result;
+  }, [mol]);
+
+  if (!mol) {
+    return (
+      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, ...style }}>
+        <Text style={{ color: c.muted }}>{'Loading...'}</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box style={{
@@ -390,12 +405,15 @@ export function ElectronShell({ element, animated = false, style }: ElectronShel
 
 export function ReactionView({ equation, animated = false, showEnergy = true, style }: ReactionViewProps) {
   const c = useThemeColors();
-  const reaction = useMemo(() => {
-    const r = balanceEquation(equation);
-    const enthalpy = getEnthalpy(r.balanced);
-    if (enthalpy !== undefined) r.enthalpy = enthalpy;
-    return r;
-  }, [equation]);
+  const reaction = useReaction(equation);
+
+  if (!reaction) {
+    return (
+      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, ...style }}>
+        <Text style={{ color: c.muted }}>{'Balancing...'}</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box style={{

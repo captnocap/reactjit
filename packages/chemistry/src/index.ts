@@ -19,11 +19,11 @@ export type {
 // -- Element data (118 elements) ----------------------------------------------
 export { ELEMENTS, getElement, getElementsByCategory, getElementsByPeriod, getElementsByGroup, getElementsByPhase } from './elements';
 
-// -- Molecule builder + compound library --------------------------------------
-export { buildMolecule, lookupCompound, searchCompounds, listCompounds, COMPOUNDS } from './molecules';
+// -- Compound library (data only — computation in Lua) ------------------------
+export { COMPOUNDS } from './molecules';
 
-// -- Reaction engine ----------------------------------------------------------
-export { balanceEquation, getEnthalpy } from './reactions';
+// -- Enthalpy data (reference) ------------------------------------------------
+export { ENTHALPIES } from './reactions';
 
 // -- Utilities ----------------------------------------------------------------
 export {
@@ -66,9 +66,8 @@ export type { SpectrumType, SpectralPeak, Spectrum, IRAbsorption } from './spect
 // -- PubChem API --------------------------------------------------------------
 export {
   fetchCompound, searchCompoundsPubChem, fetchSynonyms, fetchDescription, fetchHazards,
-  usePubChemCompound, usePubChemSearch, usePubChemSynonyms, usePubChemDescription,
 } from './pubchem';
-export type { PubChemCompound, PubChemSearchResult, PubChemSynonyms } from './pubchem';
+export type { PubChemCompound, PubChemSearchResult } from './pubchem';
 
 // -- Side effect: register chemistry conversions into @reactjit/convert -------
 import './conversions';

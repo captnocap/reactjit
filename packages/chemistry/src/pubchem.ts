@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useFetch } from '@reactjit/core';
-
-// -- PubChem REST API ---------------------------------------------------------
+// PubChem REST API — pure async utilities only.
+// React hooks removed: auto-fetching hooks (usePubChemCompound, usePubChemSearch, etc.)
+// caused React to own network I/O with setState/useEffect/setTimeout in QuickJS.
+// Callers should fetch imperatively (e.g., on button press) and store results in
+// useHotState or pass data down as props.
 // https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest
-// Free, no API key, no auth. Rate limit: 5 requests/second.
+// Free, no API key. Rate limit: 5 req/s.
 
 const BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
 const BASE_VIEW = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view';
@@ -35,21 +36,6 @@ export interface PubChemSearchResult {
   weight: number;
 }
 
-export interface PubChemSynonyms {
-  cid: number;
-  synonyms: string[];
-}
-
-export interface PubChemHazard {
-  cid: number;
-  hazards: string[];
-}
-
-export interface PubChemProperty {
-  cid: number;
-  properties: Record<string, any>;
-}
-
 // -- URL builders -------------------------------------------------------------
 
 function compoundUrl(identifier: string | number, namespace: string, operation: string, output: string = 'JSON'): string {
@@ -60,20 +46,18 @@ function propertyUrl(identifier: string | number, namespace: string, properties:
   return `${BASE}/compound/${namespace}/${encodeURIComponent(identifier)}/property/${properties}/JSON`;
 }
 
-// -- Pure fetch functions (for use outside hooks) -----------------------------
+// -- Pure async fetch functions -----------------------------------------------
 
 export async function fetchCompound(nameOrCid: string | number): Promise<PubChemCompound | null> {
   const ns = typeof nameOrCid === 'number' ? 'cid' : 'name';
   const props = 'IUPACName,MolecularFormula,MolecularWeight,CanonicalSMILES,InChI,InChIKey,Charge,XLogP,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,ExactMass,MonoisotopicMass,TPSA';
   const url = propertyUrl(nameOrCid, ns, props);
-
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const json = await res.json();
     const row = json?.PropertyTable?.Properties?.[0];
     if (!row) return null;
-
     return {
       cid: row.CID,
       iupacName: row.IUPACName,
@@ -98,7 +82,6 @@ export async function fetchCompound(nameOrCid: string | number): Promise<PubChem
 
 export async function searchCompoundsPubChem(query: string, maxResults: number = 10): Promise<PubChemSearchResult[]> {
   const url = `${BASE}/compound/name/${encodeURIComponent(query)}/property/MolecularFormula,MolecularWeight/JSON`;
-
   try {
     const res = await fetch(url);
     if (!res.ok) return [];
@@ -168,90 +151,4 @@ export async function fetchHazards(cid: number): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-// -- React hooks --------------------------------------------------------------
-
-export function usePubChemCompound(nameOrCid: string | number | null): {
-  data: PubChemCompound | null;
-  loading: boolean;
-  error: string | null;
-} {
-  const [data, setData] = useState<PubChemCompound | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const prevKey = useRef<string | number | null>(null);
-
-  useEffect(() => {
-    if (!nameOrCid || nameOrCid === prevKey.current) return;
-    prevKey.current = nameOrCid;
-    setLoading(true);
-    setError(null);
-    fetchCompound(nameOrCid).then(result => {
-      setData(result);
-      setLoading(false);
-      if (!result) setError('Compound not found');
-    }).catch(err => {
-      setError(String(err));
-      setLoading(false);
-    });
-  }, [nameOrCid]);
-
-  return { data, loading, error };
-}
-
-export function usePubChemSearch(query: string | null, maxResults: number = 10): {
-  results: PubChemSearchResult[];
-  loading: boolean;
-} {
-  const [results, setResults] = useState<PubChemSearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const timeoutRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (!query || query.length < 2) {
-      setResults([]);
-      return;
-    }
-
-    // Debounce 300ms
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      setLoading(true);
-      searchCompoundsPubChem(query, maxResults).then(r => {
-        setResults(r);
-        setLoading(false);
-      }).catch(() => setLoading(false));
-    }, 300);
-
-    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
-  }, [query, maxResults]);
-
-  return { results, loading };
-}
-
-export function usePubChemSynonyms(cid: number | null): { synonyms: string[]; loading: boolean } {
-  const [synonyms, setSynonyms] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!cid) { setSynonyms([]); return; }
-    setLoading(true);
-    fetchSynonyms(cid).then(s => { setSynonyms(s); setLoading(false); }).catch(() => setLoading(false));
-  }, [cid]);
-
-  return { synonyms, loading };
-}
-
-export function usePubChemDescription(cid: number | null): { description: string; loading: boolean } {
-  const [description, setDescription] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!cid) { setDescription(''); return; }
-    setLoading(true);
-    fetchDescription(cid).then(d => { setDescription(d); setLoading(false); }).catch(() => setLoading(false));
-  }, [cid]);
-
-  return { description, loading };
 }
