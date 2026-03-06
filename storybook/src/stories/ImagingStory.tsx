@@ -1,98 +1,81 @@
 /**
  * Imaging — GIMP-style image processing in Lua + GLSL.
  *
- * Color adjustments, filters, blend modes — all GPU-accelerated.
- * Lua does the pixel work, React declares the pipeline.
+ * Live demos for color adjustments, filters, blend modes.
+ * All GPU-accelerated via GLSL shaders. Lua does the pixel work,
+ * React declares the pipeline.
  *
+ * PERF: No timers. Demos update only on user interaction (button press).
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Slider } from '../../../packages/core/src';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
 const C = {
-  accent: '#8b5cf6',
-  accentDim: 'rgba(139, 92, 246, 0.12)',
-  callout: 'rgba(59, 130, 246, 0.08)',
-  calloutBorder: 'rgba(59, 130, 246, 0.25)',
-  green: '#a6e3a1',
-  red: '#f38ba8',
-  blue: '#89b4fa',
-  yellow: '#f9e2af',
-  mauve: '#cba6f7',
-  peach: '#fab387',
-  teal: '#94e2d5',
+  accent: '#e67e22',
+  accentDim: 'rgba(230, 126, 34, 0.12)',
+  callout: 'rgba(230, 126, 34, 0.06)',
+  calloutBorder: 'rgba(230, 126, 34, 0.30)',
+  color: '#f9e2af',
+  filter: '#89b4fa',
+  blend: '#cba6f7',
+  pipeline: '#a6e3a1',
+  gpu: '#94e2d5',
+  pattern: '#f5c2e7',
 };
 
 // ── Static code blocks (hoisted — never recreated) ──────
 
 const INSTALL_CODE = `import { useImaging, useBlendModes }
-  from '@reactjit/imaging'`;
+  from '@reactjit/imaging'
 
-const LUA_PIPELINE_CODE = `local Imaging = require("lua.imaging")
+-- Lua (standalone, no React needed):
+local Imaging = require("lua.imaging")`;
 
--- Chain operations (lazy — execute on :apply())
-local result = Imaging.from("photo.jpg")
+const PIPELINE_CODE = `local result = Imaging.from("photo.jpg")
   :brightness(0.2)
   :contrast(1.3)
   :gaussianBlur(3)
   :apply()
 
--- Save to file
 Imaging.save(result, "output.png")`;
 
-const REACT_HOOK_CODE = `const { apply, processing, error }
-  = useImaging()
-
-apply([
-  { op: 'brightness', amount: 0.2 },
-  { op: 'contrast', factor: 1.3 },
-  { op: 'gaussian_blur', radius: 3 },
-])`;
-
-const REACT_COMPONENT_CODE = `<Imaging
+const REACT_CODE = `<Native type="Imaging"
   src="photo.jpg"
-  operations={[
-    { op: 'hue_saturation', hue: 30,
-      saturation: 1.2 },
-    { op: 'sharpen', amount: 0.8 },
-  ]}
-  onComplete={({ width, height }) =>
-    console.log(\`Done: \${width}x\${height}\`)
-  }
-  onError={({ message }) =>
-    console.error(message)
-  }
+  operations={JSON.stringify([
+    { op: 'brightness', amount: 0.2 },
+    { op: 'gaussian_blur', radius: 5 },
+  ])}
+  style={{ width: 300, height: 200 }}
 />`;
 
-const COLOR_OPS_CODE = `// 12 color adjustment operations
-:brightness(amount)       // -1 to 1
-:contrast(factor)         // 0.5 to 3
-:levels(inB, inW, gamma, outB, outW)
-:curves([[0,0], [0.5,0.7], [1,1]])
+const COLOR_OPS_CODE = `:brightness(amount)     // -1 to 1
+:contrast(factor)       // 0.5 to 3
+:levels(inB,inW,gamma,outB,outW)
+:curves([[0,0],[0.5,0.7],[1,1]])
 :hueSaturation(hue, sat, val)
 :invert()
-:threshold(0.5)           // binary B&W
-:posterize(4)             // reduce colors
-:desaturate("luminosity") // grayscale
-:colorize(180, 0.5, 0)    // tint
+:threshold(0.5)         // binary B&W
+:posterize(4)           // reduce colors
+:desaturate("luminosity")
+:colorize(180, 0.5, 0)
 :channelMixer(matrix3x3)
-:gradientMap(gradient)     // tone map`;
+:gradientMap(gradient)`;
 
-const FILTER_OPS_CODE = `// 7 spatial filter operations
-:gaussianBlur(radius)     // soft blur
-:boxBlur(radius)          // fast blur
-:motionBlur(angle, dist)  // directional
-:sharpen(amount)          // unsharp mask
-:edgeDetect("sobel")      // or "laplacian"
-:emboss(angle, depth)     // relief
-:pixelize(blockSize)      // mosaic`;
+const FILTER_OPS_CODE = `:gaussianBlur(radius)   // soft blur
+:boxBlur(radius)        // fast blur
+:motionBlur(angle,dist) // directional
+:sharpen(amount)        // unsharp mask
+:edgeDetect("sobel")    // or "laplacian"
+:emboss(angle, depth)   // relief
+:pixelize(blockSize)    // mosaic`;
 
-const BLEND_MODES_CODE = `// 16 blend modes — all GPU shaders
-:blend("multiply", layer)
+const BLEND_CODE = `:blend("multiply", layer, opacity)
 :blend("screen", layer)
 :blend("overlay", layer)
 :blend("soft_light", layer)
@@ -108,199 +91,351 @@ const BLEND_MODES_CODE = `// 16 blend modes — all GPU shaders
 :blend("color", layer)
 :blend("value", layer)`;
 
-const HYBRID_CODE = `-- GPU shaders by default, CPU fallback
--- Each op has: { gpu = fn, cpu = fn }
--- Pipeline tries GPU first, falls back
--- to ImageData for complex ops
-
--- Manual CPU-only:
-local data = Imaging.toImageData(canvas)
-data:mapPixel(function(x, y, r, g, b, a)
-  return r, g * 0.5, b, a  -- custom
-end)
-
--- Register custom operations:
-Imaging.registerOp("my_filter", {
+const CUSTOM_CODE = `Imaging.registerOp("my_filter", {
   gpu = function(canvas, w, h, params)
     -- GLSL shader path
+    return applyShader(...)
   end,
   cpu = function(canvas, w, h, params)
     -- ImageData pixel path
+    local data = canvas:newImageData()
+    data:mapPixel(function(x,y,r,g,b,a)
+      return r, g * 0.5, b, a
+    end)
+    ...
   end,
 })`;
 
-// ── Shared styles ────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────
 
-const bandStyle = {
-  paddingLeft: 28,
-  paddingRight: 28,
-  paddingTop: 20,
-  paddingBottom: 20,
-  gap: 24,
-  alignItems: 'center' as const,
-};
+function Tag({ text, color }: { text: string; color: string }) {
+  return (
+    <Box style={{ backgroundColor: color + '22', paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+      <Text style={{ color, fontSize: 8, fontFamily: 'monospace' }}>{text}</Text>
+    </Box>
+  );
+}
 
-const halfStyle = {
-  flexGrow: 1,
-  flexBasis: 0,
-  gap: 8,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-};
-
-// ── Section helpers ──────────────────────────────────────
-
-function SectionLabel({ icon, children }: { icon: string; children: string }) {
+function Label({ label, value, color }: { label: string; value: string; color?: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
-        {children}
+    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
+      <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
+    </Box>
+  );
+}
+
+function ActionBtn({ label, color, onPress, active }: { label: string; color: string; onPress: () => void; active?: boolean }) {
+  return (
+    <Pressable onPress={onPress}>
+      <Box style={{
+        backgroundColor: active ? color + '55' : color + '33',
+        paddingLeft: 12, paddingRight: 12,
+        paddingTop: 6, paddingBottom: 6,
+        borderRadius: 4,
+        borderWidth: active ? 1 : 0,
+        borderColor: color,
+      }}>
+        <Text style={{ color, fontSize: 10 }}>{label}</Text>
+      </Box>
+    </Pressable>
+  );
+}
+
+// ── Live Imaging Preview ─────────────────────────────────
+// Thin wrapper around <Native type="Imaging"> with labeled pipeline display
+
+function ImagingPreview({ ops, src, width, height }: {
+  ops: any[];
+  src?: string;
+  width?: number;
+  height?: number;
+}) {
+  const opsJson = JSON.stringify(ops);
+  return (
+    <Native
+      type="Imaging"
+      src={src || ''}
+      operations={opsJson}
+      style={{
+        width: width || 260,
+        height: height || 180,
+        borderRadius: 6,
+        overflow: 'hidden',
+      }}
+    />
+  );
+}
+
+// ── Demo 1: Color Adjustments ────────────────────────────
+
+type ColorOp = 'none' | 'brightness' | 'contrast' | 'invert' | 'threshold' | 'posterize' | 'desaturate' | 'hue_shift' | 'colorize';
+
+const COLOR_PRESETS: { name: ColorOp; label: string; ops: any[] }[] = [
+  { name: 'none', label: 'Original', ops: [] },
+  { name: 'brightness', label: 'Bright +0.3', ops: [{ op: 'brightness', amount: 0.3 }] },
+  { name: 'contrast', label: 'High Contrast', ops: [{ op: 'contrast', factor: 2.0 }] },
+  { name: 'invert', label: 'Invert', ops: [{ op: 'invert' }] },
+  { name: 'threshold', label: 'Threshold', ops: [{ op: 'threshold', level: 0.5 }] },
+  { name: 'posterize', label: 'Posterize 4', ops: [{ op: 'posterize', levels: 4 }] },
+  { name: 'desaturate', label: 'Grayscale', ops: [{ op: 'desaturate', method: 'luminosity' }] },
+  { name: 'hue_shift', label: 'Hue +120\u00B0', ops: [{ op: 'hue_saturation', hue: 120, saturation: 1.0, value: 1.0 }] },
+  { name: 'colorize', label: 'Sepia', ops: [{ op: 'colorize', hue: 35, saturation: 0.4, lightness: 0.0 }] },
+];
+
+function ColorDemo() {
+  const c = useThemeColors();
+  const [selected, setSelected] = useState(0);
+  const preset = COLOR_PRESETS[selected];
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="brightness" color={C.color} />
+        <Tag text="contrast" color={C.color} />
+        <Tag text="invert" color={C.color} />
+        <Tag text="hue_saturation" color={C.color} />
+      </Box>
+
+      <ImagingPreview
+        src="lib/placeholders/landscape.png"
+        ops={preset.ops}
+      />
+
+      <Label label="operation" value={preset.label} color={C.color} />
+      <Label label="pipeline" value={preset.ops.length === 0 ? 'passthrough' : JSON.stringify(preset.ops[0])} />
+
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {COLOR_PRESETS.map((p, i) => (
+          <ActionBtn
+            key={p.name}
+            label={p.label}
+            color={C.color}
+            active={i === selected}
+            onPress={() => setSelected(i)}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Demo 2: Filters ──────────────────────────────────────
+
+const FILTER_PRESETS: { label: string; ops: any[] }[] = [
+  { label: 'Original', ops: [] },
+  { label: 'Blur 3', ops: [{ op: 'gaussian_blur', radius: 3 }] },
+  { label: 'Blur 8', ops: [{ op: 'gaussian_blur', radius: 8 }] },
+  { label: 'Sharpen', ops: [{ op: 'sharpen', amount: 1.5 }] },
+  { label: 'Sobel Edge', ops: [{ op: 'edge_detect', method: 'sobel' }] },
+  { label: 'Laplacian', ops: [{ op: 'edge_detect', method: 'laplacian' }] },
+  { label: 'Emboss', ops: [{ op: 'emboss', angle: 135, depth: 1.0 }] },
+  { label: 'Pixelize 8', ops: [{ op: 'pixelize', size: 8 }] },
+  { label: 'Pixelize 16', ops: [{ op: 'pixelize', size: 16 }] },
+  { label: 'Motion Blur', ops: [{ op: 'motion_blur', angle: 45, distance: 15 }] },
+];
+
+function FilterDemo() {
+  const c = useThemeColors();
+  const [selected, setSelected] = useState(0);
+  const preset = FILTER_PRESETS[selected];
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="gaussian_blur" color={C.filter} />
+        <Tag text="edge_detect" color={C.filter} />
+        <Tag text="sharpen" color={C.filter} />
+        <Tag text="pixelize" color={C.filter} />
+      </Box>
+
+      <ImagingPreview
+        src="lib/placeholders/landscape.png"
+        ops={preset.ops}
+      />
+
+      <Label label="filter" value={preset.label} color={C.filter} />
+      {preset.ops.length > 0 && (
+        <Label label="params" value={JSON.stringify(preset.ops[0])} />
+      )}
+
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {FILTER_PRESETS.map((p, i) => (
+          <ActionBtn
+            key={p.label}
+            label={p.label}
+            color={C.filter}
+            active={i === selected}
+            onPress={() => setSelected(i)}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Demo 3: Pipeline Chaining ────────────────────────────
+
+const PIPELINE_PRESETS: { label: string; ops: any[] }[] = [
+  { label: 'Original', ops: [] },
+  { label: 'Vintage', ops: [
+    { op: 'desaturate', method: 'luminosity' },
+    { op: 'colorize', hue: 35, saturation: 0.35, lightness: 0.0 },
+    { op: 'contrast', factor: 1.2 },
+  ]},
+  { label: 'Neon Edge', ops: [
+    { op: 'edge_detect', method: 'sobel' },
+    { op: 'invert' },
+    { op: 'hue_saturation', hue: 180, saturation: 2.0, value: 1.0 },
+  ]},
+  { label: 'Dream', ops: [
+    { op: 'gaussian_blur', radius: 4 },
+    { op: 'brightness', amount: 0.15 },
+    { op: 'contrast', factor: 0.8 },
+    { op: 'hue_saturation', hue: 30, saturation: 1.3, value: 1.0 },
+  ]},
+  { label: 'Comic', ops: [
+    { op: 'posterize', levels: 5 },
+    { op: 'contrast', factor: 1.5 },
+    { op: 'sharpen', amount: 2.0 },
+  ]},
+  { label: 'Thermal', ops: [
+    { op: 'desaturate', method: 'luminosity' },
+    { op: 'gradient_map', gradient: [
+      [0, 0, 0, 0.2],
+      [0.25, 0.2, 0, 0.8],
+      [0.5, 0.8, 0.2, 0],
+      [0.75, 1, 0.8, 0],
+      [1, 1, 1, 1],
+    ]},
+  ]},
+  { label: 'Glitch', ops: [
+    { op: 'pixelize', size: 4 },
+    { op: 'channel_mixer', matrix: [[1.2, 0, -0.2], [-0.1, 1.1, 0], [0, -0.2, 1.2]] },
+    { op: 'contrast', factor: 1.8 },
+  ]},
+];
+
+function PipelineDemo() {
+  const c = useThemeColors();
+  const [selected, setSelected] = useState(0);
+  const preset = PIPELINE_PRESETS[selected];
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        <Tag text="pipeline" color={C.pipeline} />
+        <Tag text={`${preset.ops.length} ops`} color={C.pipeline} />
+      </Box>
+
+      <ImagingPreview
+        src="lib/placeholders/landscape.png"
+        ops={preset.ops}
+      />
+
+      <Label label="preset" value={preset.label} color={C.pipeline} />
+      <Label label="chain" value={preset.ops.map(o => o.op).join(' \u2192 ') || 'none'} />
+
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {PIPELINE_PRESETS.map((p, i) => (
+          <ActionBtn
+            key={p.label}
+            label={p.label}
+            color={C.pipeline}
+            active={i === selected}
+            onPress={() => setSelected(i)}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Demo 4: Test Pattern (no source image) ───────────────
+
+const PATTERN_PRESETS: { label: string; ops: any[] }[] = [
+  { label: 'Original', ops: [] },
+  { label: 'Levels', ops: [{ op: 'levels', inBlack: 0.2, inWhite: 0.8, gamma: 1.5, outBlack: 0.0, outWhite: 1.0 }] },
+  { label: 'Curves S', ops: [{ op: 'curves', points: [[0, 0], [0.25, 0.15], [0.5, 0.5], [0.75, 0.85], [1, 1]] }] },
+  { label: 'Channel Swap', ops: [{ op: 'channel_mixer', matrix: [[0, 1, 0], [0, 0, 1], [1, 0, 0]] }] },
+  { label: 'Gradient Map', ops: [{ op: 'gradient_map', gradient: [[0, 0.1, 0, 0.2], [0.5, 0.9, 0.3, 0.1], [1, 1, 1, 0.8]] }] },
+];
+
+function PatternDemo() {
+  const c = useThemeColors();
+  const [selected, setSelected] = useState(0);
+  const preset = PATTERN_PRESETS[selected];
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        <Tag text="test pattern" color={C.pattern} />
+        <Tag text="no source file" color={C.pattern} />
+      </Box>
+
+      <ImagingPreview ops={preset.ops} />
+
+      <Label label="effect" value={preset.label} color={C.pattern} />
+      <Text style={{ fontSize: 9, color: c.textDim }}>
+        {'Omit src to get a procedural test pattern — color bars, grayscale gradient, and HSV sweep'}
       </Text>
+
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {PATTERN_PRESETS.map((p, i) => (
+          <ActionBtn
+            key={p.label}
+            label={p.label}
+            color={C.pattern}
+            active={i === selected}
+            onPress={() => setSelected(i)}
+          />
+        ))}
+      </Box>
     </Box>
   );
 }
 
-function Divider() {
+// ── Feature Catalog ──────────────────────────────────────
+
+function FeatureCatalog() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, backgroundColor: c.border }} />;
-}
-
-function Chip({ label, color }: { label: string; color: string }) {
-  return (
-    <Box style={{
-      backgroundColor: color + '20',
-      borderRadius: 4,
-      paddingLeft: 8,
-      paddingRight: 8,
-      paddingTop: 3,
-      paddingBottom: 3,
-    }}>
-      <Text style={{ color, fontSize: 9 }}>{label}</Text>
-    </Box>
-  );
-}
-
-// ── Operation categories overview ────────────────────────
-
-function OpCategoryGrid() {
-  const c = useThemeColors();
-  const categories = [
-    { name: 'Color', count: '12 ops', color: C.peach, desc: 'Brightness, contrast, levels, curves, hue/sat, invert, threshold, posterize, desaturate, colorize, channel mixer, gradient map' },
-    { name: 'Filters', count: '7 ops', color: C.blue, desc: 'Gaussian blur, box blur, motion blur, sharpen, edge detect, emboss, pixelize' },
-    { name: 'Blend', count: '16 modes', color: C.mauve, desc: 'Normal, multiply, screen, overlay, soft/hard light, dodge, burn, difference, exclusion, add, subtract, hue, sat, color, value' },
+  const features = [
+    { label: 'brightness', desc: 'Add/subtract luminance. Range: -1 to 1.', color: C.color },
+    { label: 'contrast', desc: 'Scale around midpoint. 1 = no change, 2 = double.', color: C.color },
+    { label: 'levels', desc: 'Histogram remapping: input range, gamma, output range.', color: C.color },
+    { label: 'curves', desc: 'Piecewise linear tone curve (up to 16 control points).', color: C.color },
+    { label: 'hue_saturation', desc: 'Shift hue (degrees), scale saturation and value.', color: C.color },
+    { label: 'invert', desc: 'Negate RGB channels. Preserves alpha.', color: C.color },
+    { label: 'threshold', desc: 'Binary black/white based on luminance cutoff.', color: C.color },
+    { label: 'posterize', desc: 'Reduce to N color levels per channel.', color: C.color },
+    { label: 'desaturate', desc: 'Grayscale via luminosity, average, or lightness.', color: C.color },
+    { label: 'colorize', desc: 'Apply uniform hue+saturation to grayscale values.', color: C.color },
+    { label: 'channel_mixer', desc: '3x3 matrix multiplication on RGB channels.', color: C.color },
+    { label: 'gradient_map', desc: 'Map luminosity to a color gradient.', color: C.color },
+    { label: 'gaussian_blur', desc: 'Two-pass separable blur. O(n) per pixel.', color: C.filter },
+    { label: 'box_blur', desc: 'Uniform-weight separable blur. Fast.', color: C.filter },
+    { label: 'motion_blur', desc: 'Directional blur along an angle.', color: C.filter },
+    { label: 'sharpen', desc: 'Unsharp mask: original + gain \u00d7 (original - blur).', color: C.filter },
+    { label: 'edge_detect', desc: 'Sobel or Laplacian convolution kernels.', color: C.filter },
+    { label: 'emboss', desc: 'Directional relief. Angle controls light direction.', color: C.filter },
+    { label: 'pixelize', desc: 'Mosaic effect — sample from block centers.', color: C.filter },
+    { label: 'blend (16 modes)', desc: 'Multiply, screen, overlay, dodge, burn, difference, hue, etc.', color: C.blend },
   ];
-
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      {categories.map(cat => (
-        <Box key={cat.name} style={{
-          backgroundColor: c.surface,
-          borderRadius: 8,
-          padding: 10,
-          gap: 4,
-          borderLeftWidth: 3,
-          borderColor: cat.color,
-        }}>
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: cat.color, fontSize: 11, fontWeight: 'bold' }}>{cat.name}</Text>
-            <Chip label={cat.count} color={cat.color} />
-          </Box>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{cat.desc}</Text>
+    <>
+      {features.map(f => (
+        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
+          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 120 }}>{f.label}</Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
         </Box>
       ))}
-    </Box>
+    </>
   );
 }
 
-// ── Blend mode visual reference ──────────────────────────
-
-function BlendModeGrid() {
-  const c = useThemeColors();
-  const modes = [
-    { name: 'multiply', formula: 'a × b', group: 'darken' },
-    { name: 'screen', formula: '1-(1-a)(1-b)', group: 'lighten' },
-    { name: 'overlay', formula: 'conditional', group: 'contrast' },
-    { name: 'soft_light', formula: 'Pegtop', group: 'contrast' },
-    { name: 'hard_light', formula: 'swap overlay', group: 'contrast' },
-    { name: 'dodge', formula: 'a/(1-b)', group: 'lighten' },
-    { name: 'burn', formula: '1-(1-a)/b', group: 'darken' },
-    { name: 'difference', formula: '|a-b|', group: 'inversion' },
-    { name: 'exclusion', formula: 'a+b-2ab', group: 'inversion' },
-    { name: 'hue', formula: 'HSV hue', group: 'component' },
-    { name: 'saturation', formula: 'HSV sat', group: 'component' },
-    { name: 'color', formula: 'HSV h+s', group: 'component' },
-    { name: 'value', formula: 'HSV val', group: 'component' },
-  ];
-
-  const groupColors: Record<string, string> = {
-    darken: C.red,
-    lighten: C.yellow,
-    contrast: C.peach,
-    inversion: C.blue,
-    component: C.mauve,
-  };
-
-  return (
-    <Box style={{ gap: 4, width: '100%' }}>
-      {modes.map(m => (
-        <Box key={m.name} style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-          borderRadius: 4,
-          backgroundColor: c.surface,
-        }}>
-          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: groupColors[m.group] || C.accent }} />
-          <Text style={{ color: c.text, fontSize: 9, minWidth: 70 }}>{m.name}</Text>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{m.formula}</Text>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-// ── Architecture diagram ─────────────────────────────────
-
-function ArchDiagram() {
-  const c = useThemeColors();
-  const layers = [
-    { label: 'React', desc: '<Imaging> component + useImaging() hook', color: C.blue },
-    { label: 'Capability', desc: 'capabilities/imaging.lua — lifecycle + RPC', color: C.mauve },
-    { label: 'Pipeline', desc: 'imaging/pipeline.lua — lazy chaining + apply', color: C.peach },
-    { label: 'Operations', desc: 'ops/color.lua, filter.lua, blend.lua', color: C.green },
-    { label: 'GPU / CPU', desc: 'GLSL shaders (default) | ImageData fallback', color: C.teal },
-  ];
-
-  return (
-    <Box style={{ gap: 2, width: '100%' }}>
-      {layers.map((l, i) => (
-        <Box key={l.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Box style={{
-            width: 50,
-            backgroundColor: l.color + '30',
-            borderRadius: 4,
-            padding: 4,
-            alignItems: 'center',
-          }}>
-            <Text style={{ color: l.color, fontSize: 8, fontWeight: 'bold' }}>{l.label}</Text>
-          </Box>
-          {i < layers.length - 1 && (
-            <Text style={{ color: c.muted, fontSize: 8 }}>{'→'}</Text>
-          )}
-          <Text style={{ color: c.muted, fontSize: 8, flexShrink: 1 }}>{l.desc}</Text>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-// ── Main Story ───────────────────────────────────────────
+// ── ImagingStory ─────────────────────────────────────────
 
 export function ImagingStory() {
   const c = useThemeColors();
@@ -338,7 +473,7 @@ export function ImagingStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'35 operations \u00b7 GPU-accelerated'}
+          {'35 ops \u00b7 GPU-accelerated'}
         </Text>
       </Box>
 
@@ -346,177 +481,161 @@ export function ImagingStory() {
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
-        <Box style={{
-          borderLeftWidth: 3,
-          borderColor: C.accent,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 24,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <HeroBand accentColor={C.accent}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
             {'GIMP-style image processing. In Lua. On the GPU.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'12 color adjustments, 7 filters, 16 blend modes. Chainable pipeline with lazy evaluation. GLSL shaders by default, ImageData CPU fallback when needed. Extend with custom operations.'}
+            {'12 color adjustments, 7 filters, 16 blend modes. Chainable pipeline with lazy evaluation. GLSL shaders by default, ImageData CPU fallback when needed. Every operation produces a new Canvas \u2014 the original is never modified.'}
           </Text>
-        </Box>
+        </HeroBand>
 
         <Divider />
 
-        {/* ── Band 1: text + overview | code — INSTALL ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+        {/* ── Install: text | code ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'The Lua library (lua/imaging/) works standalone — no React needed. The @reactjit/imaging package adds hooks for React integration.'}
+              {'The Lua library (lua/imaging/) works standalone \u2014 no React needed. Import @reactjit/imaging for hooks, or use <Native type="Imaging"> for inline visual processing.'}
             </Text>
-            <OpCategoryGrid />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
-            <ArchDiagram />
-          </Box>
-        </Box>
+          </Half>
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+        </Band>
 
         <Divider />
 
-        {/* ── Band 2: code | text — LUA PIPELINE ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <CodeBlock language="lua" fontSize={9} code={LUA_PIPELINE_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="code">{'LUA PIPELINE'}</SectionLabel>
+        {/* ── Color Adjustments: demo | text + code ── */}
+        <Band>
+          <Half>
+            <ColorDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="palette" accentColor={C.accent}>{'COLOR ADJUSTMENTS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Load an image, chain operations, call :apply(). Operations are lazy — nothing runs until apply. Each step produces a new Canvas, so the original is never modified.'}
+              {'12 per-pixel operations, all as GLSL fragment shaders. Each runs in microseconds even on large images. Click the presets to see them applied live to the landscape photo.'}
             </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
-              {'Imaging.from() loads the file into a Canvas. fromCanvas() and fromImageData() wrap existing data. Pipeline:preview(0.5) runs at half resolution for real-time feedback.'}
-            </Text>
-          </Box>
-        </Box>
-
-        <Divider />
-
-        {/* ── Band 3: text | code — REACT HOOK ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="zap">{'REACT HOOK'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
-              {'useImaging() returns apply(), processing flag, and error state. Pass an array of operations — each is { op: name, ...params }.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
-              {'Under the hood, the hook sends the operation list to Lua via bridge RPC. The Lua capability runs the pipeline and fires onComplete/onError events back.'}
-            </Text>
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <CodeBlock language="tsx" fontSize={9} code={REACT_HOOK_CODE} />
-            <CodeBlock language="tsx" fontSize={9} code={REACT_COMPONENT_CODE} />
-          </Box>
-        </Box>
-
-        <Divider />
-
-        {/* ── Band 4: code | text — COLOR ADJUSTMENTS ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
             <CodeBlock language="lua" fontSize={9} code={COLOR_OPS_CODE} />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="palette">{'COLOR ADJUSTMENTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
-              {'12 per-pixel color operations, all as GLSL fragment shaders. Embarrassingly parallel — runs in microseconds even on large images.'}
-            </Text>
-            <Box style={{ gap: 4, width: '100%' }}>
-              <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-                <Chip label="brightness" color={C.peach} />
-                <Chip label="contrast" color={C.peach} />
-                <Chip label="levels" color={C.peach} />
-                <Chip label="curves" color={C.peach} />
-                <Chip label="hue/sat" color={C.yellow} />
-                <Chip label="invert" color={C.blue} />
-                <Chip label="threshold" color={C.blue} />
-                <Chip label="posterize" color={C.blue} />
-                <Chip label="desaturate" color={C.mauve} />
-                <Chip label="colorize" color={C.mauve} />
-                <Chip label="channel mixer" color={C.teal} />
-                <Chip label="gradient map" color={C.teal} />
-              </Box>
-            </Box>
-          </Box>
-        </Box>
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 5: text | code — FILTERS ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="layers">{'FILTERS'}</SectionLabel>
+        {/* ── Filters: text + code | demo ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="layers" accentColor={C.accent}>{'FILTERS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'7 spatial filter operations. Blur uses two-pass separable convolution — O(n) per pixel instead of O(n\u00b2). Sharpen is unsharp mask (original + gain \u00d7 difference from blur).'}
+              {'7 spatial filters. Gaussian blur uses two-pass separable convolution \u2014 O(n) per pixel instead of O(n\u00b2). Sharpen is unsharp mask: amplify the difference from a blurred copy. Edge detection uses Sobel or Laplacian convolution kernels.'}
             </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
-              {'Edge detect supports Sobel (gradient magnitude) and Laplacian (second derivative). Emboss is directional — angle controls the light direction. Pixelize samples from block centers.'}
-            </Text>
-          </Box>
-          <Box style={{ ...halfStyle }}>
             <CodeBlock language="lua" fontSize={9} code={FILTER_OPS_CODE} />
-          </Box>
-        </Box>
+          </Half>
+          <Half>
+            <FilterDemo />
+          </Half>
+        </Band>
 
         <Divider />
 
-        {/* ── Band 6: blend grid | code — BLEND MODES ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <BlendModeGrid />
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="combine">{'BLEND MODES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
-              {'16 Photoshop/GIMP-standard blend modes in a single parameterized GLSL shader. Composites two canvases with configurable opacity.'}
-            </Text>
-            <CodeBlock language="lua" fontSize={9} code={BLEND_MODES_CODE} />
-          </Box>
-        </Box>
+        {/* ── Callout ── */}
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'All processing runs in Lua + GLSL. The pipeline compiles shaders once (cached), renders to off-screen Canvases, and composites the result at the node\u2019s position. React just declares the pipeline \u2014 zero pixel work crosses the bridge.'}
+          </Text>
+        </CalloutBand>
 
         <Divider />
 
-        {/* ── Band 7: text | code — HYBRID COMPUTE ── */}
-        <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <Box style={{ ...halfStyle }}>
-            <SectionLabel icon="cpu">{'HYBRID COMPUTE'}</SectionLabel>
+        {/* ── Pipeline Chaining: demo | text + code ── */}
+        <Band>
+          <Half>
+            <PipelineDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="zap" accentColor={C.accent}>{'PIPELINE CHAINING'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Every operation has a GPU path (GLSL shader) and can have a CPU path (ImageData pixel manipulation). GPU runs by default. CPU kicks in as fallback or for operations that need per-pixel logic GLSL can\'t express.'}
+              {'Chain multiple operations for creative effects. Vintage = desaturate + colorize + contrast boost. Neon Edge = edge detect + invert + hue shift. Thermal = desaturate + gradient map. Each preset demonstrates real multi-op pipelines.'}
             </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
-              {'Register custom operations with Imaging.registerOp(). Provide gpu, cpu, or both. The pipeline picks the best path automatically.'}
-            </Text>
-            <Box style={{
-              backgroundColor: C.callout,
-              borderLeftWidth: 2,
-              borderColor: C.calloutBorder,
-              borderRadius: 4,
-              padding: 8,
-              gap: 4,
-            }}>
-              <Text style={{ color: C.blue, fontSize: 9, fontWeight: 'bold' }}>{'Extensibility'}</Text>
-              <Text style={{ color: c.muted, fontSize: 9 }}>
-                {'This is the base layer. Flood fill, selections, brushes, layers — all can be added as new operations on top. The pipeline and shader cache handle the plumbing.'}
-              </Text>
-            </Box>
-          </Box>
-          <Box style={{ ...halfStyle }}>
-            <CodeBlock language="lua" fontSize={9} code={HYBRID_CODE} />
-          </Box>
-        </Box>
+            <CodeBlock language="lua" fontSize={9} code={PIPELINE_CODE} />
+          </Half>
+        </Band>
 
-        {/* Bottom spacer */}
-        <Box style={{ height: 40 }} />
+        <Divider />
+
+        {/* ── Test Pattern: text | demo ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="code" accentColor={C.accent}>{'TEST PATTERN'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Omit the src prop to get a procedural test pattern with color bars, grayscale gradient, and HSV hue sweep. Useful for verifying color operations \u2014 levels, curves, channel mixer, and gradient map are immediately visible on known input.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={REACT_CODE} />
+          </Half>
+          <Half>
+            <PatternDemo />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Blend Modes: text + code | info ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="combine" accentColor={C.accent}>{'BLEND MODES'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'16 Photoshop/GIMP-standard blend modes in a single parameterized GLSL shader. Composites two canvases with configurable opacity. Pass a Canvas or Image as the layer argument.'}
+            </Text>
+            <CodeBlock language="lua" fontSize={9} code={BLEND_CODE} />
+          </Half>
+          <Half>
+            <SectionLabel icon="cpu" accentColor={C.accent}>{'HYBRID COMPUTE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Every operation has a GPU path (GLSL shader) and can have a CPU path (ImageData). GPU runs by default. Register custom operations with Imaging.registerOp() \u2014 provide gpu, cpu, or both.'}
+            </Text>
+            <CodeBlock language="lua" fontSize={9} code={CUSTOM_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Feature catalog ── */}
+        <Box style={{
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 24,
+          gap: 8,
+        }}>
+          <SectionLabel icon="terminal" accentColor={C.accent}>{'API SURFACE'}</SectionLabel>
+          <FeatureCatalog />
+        </Box>
 
       </ScrollView>
+
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="image" style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{'Imaging'}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+      </Box>
+
     </Box>
   );
 }
