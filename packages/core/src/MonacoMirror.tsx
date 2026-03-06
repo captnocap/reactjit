@@ -206,11 +206,10 @@ export function MonacoMirror({
 
   const lineCount = Math.max(lines.length, 1);
   const charCount = mirrorText.length;
-
-  const minimapLines = useMemo(() => {
+  const minimapSourceLines = useMemo(() => {
     return lines
       .slice(0, Math.max(1, minimapMaxLines))
-      .map((line) => line.replace(/\t/g, '  ').slice(0, 28));
+      .map((line) => line.replace(/\t/g, '  '));
   }, [lines, minimapMaxLines]);
 
   const explicitWidth = typeof style?.width === 'number' ? style.width : undefined;
@@ -226,7 +225,7 @@ export function MonacoMirror({
   const editorFontSize = compact ? 10 : 12;
 
   const widthCanShowSidebar = explicitWidth === undefined || explicitWidth >= 520;
-  const widthCanShowMinimap = explicitWidth === undefined || explicitWidth >= 680;
+  const widthCanShowMinimap = explicitWidth === undefined || explicitWidth >= 620;
 
   useEffect(() => {
     if (!showSidebar || compact) setSidebarOpen(false);
@@ -239,7 +238,7 @@ export function MonacoMirror({
   useEffect(() => {
     if (panelPreferenceTouched || compact) return;
     if (showSidebar) setSidebarOpen(widthCanShowSidebar);
-    if (showMinimap) setMinimapOpen(widthCanShowMinimap && (explicitWidth === undefined || explicitWidth >= 760));
+    if (showMinimap) setMinimapOpen(widthCanShowMinimap && (explicitWidth === undefined || explicitWidth >= 700));
   }, [compact, explicitWidth, panelPreferenceTouched, showMinimap, showSidebar, widthCanShowMinimap, widthCanShowSidebar]);
 
   const renderActivityBar = showActivityBar && !compact;
@@ -251,14 +250,41 @@ export function MonacoMirror({
     ? Math.max(132, Math.min(sidebarWidth, Math.floor(explicitWidth * 0.38)))
     : sidebarWidth;
   const resolvedMinimapWidth = explicitWidth !== undefined
-    ? Math.max(72, Math.min(minimapWidth, Math.floor(explicitWidth * 0.22)))
+    ? Math.max(58, Math.min(minimapWidth, Math.floor(explicitWidth * 0.18)))
     : minimapWidth;
-  const minimapRowCount = Math.max(minimapLines.length, 1);
+  const minimapRowCount = Math.max(minimapSourceLines.length, 1);
   const chromeHeight = topBarHeight + (renderBreadcrumbs ? 24 : 0) + (showStatusBar ? statusBarHeight : 0);
   const approxEditorViewportHeight = explicitHeight !== undefined ? Math.max(explicitHeight - chromeHeight, 60) : 220;
   const approxEditorVisibleRows = Math.max(4, Math.floor(approxEditorViewportHeight / (editorFontSize + 4)));
   const minimapViewportRows = Math.max(2, Math.min(minimapRowCount, approxEditorVisibleRows));
-  const minimapViewportPx = Math.min(minimapViewportRows * 8, Math.max(14, approxEditorViewportHeight - 26));
+  const minimapTrackRows = Math.max(16, Math.min(84, minimapViewportRows * 5));
+  const minimapRows = useMemo(() => {
+    if (minimapSourceLines.length <= minimapTrackRows) return minimapSourceLines;
+    const sampled: string[] = [];
+    for (let i = 0; i < minimapTrackRows; i += 1) {
+      const ratio = i / Math.max(1, minimapTrackRows - 1);
+      const index = Math.floor(ratio * (minimapSourceLines.length - 1));
+      sampled.push(minimapSourceLines[index] ?? '');
+    }
+    return sampled;
+  }, [minimapSourceLines, minimapTrackRows]);
+  const minimapMaxLineLength = useMemo(() => {
+    let maxLen = 1;
+    for (const row of minimapRows) {
+      const len = row.trim().length;
+      if (len > maxLen) maxLen = len;
+    }
+    return maxLen;
+  }, [minimapRows]);
+  const minimapInkPercents = useMemo(() => {
+    return minimapRows.map((row) => {
+      const len = row.trim().length;
+      if (len === 0) return 6;
+      return Math.max(8, Math.min(100, Math.round((len / minimapMaxLineLength) * 100)));
+    });
+  }, [minimapMaxLineLength, minimapRows]);
+  const minimapTrackHeightPx = minimapRows.length * 3 + 4;
+  const minimapViewportPx = Math.max(10, Math.min(minimapTrackHeightPx, Math.round((minimapViewportRows / minimapRowCount) * minimapTrackHeightPx)));
 
   const candidateExplorerPaths = useMemo(() => {
     const fallbackDir = breadcrumbs.slice(0, -1).join('/');
@@ -694,41 +720,44 @@ export function MonacoMirror({
               <Box
                 style={{
                   width: resolvedMinimapWidth,
-                  minWidth: 72,
+                  minWidth: 58,
                   flexShrink: 1,
                   backgroundColor: '#252526',
                   borderLeftWidth: 1,
                   borderColor: '#3c3c3c',
-                  paddingLeft: 6,
-                  paddingRight: 6,
-                  paddingTop: 6,
-                  paddingBottom: 6,
-                  gap: 1,
+                  paddingLeft: 2,
+                  paddingRight: 2,
+                  paddingTop: 2,
+                  paddingBottom: 2,
+                  gap: 2,
                   position: 'relative',
                   overflow: 'hidden',
                 }}
               >
+                <Box style={{ flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 2 }}>
+                  <Text style={{ color: '#8a8a8a', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'MAP'}</Text>
+                  <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${lineCount}L`}</Text>
+                </Box>
                 <Box>
-                  {minimapLines.map((line, index) => (
-                    <Text
-                      key={`minimap:${index}`}
+                  {minimapInkPercents.map((percent, index) => (
+                    <Box
+                      key={`minimap-ink:${index}`}
                       style={{
-                        color: '#6f6f6f',
-                        fontSize: 7,
-                        fontFamily: 'monospace',
-                        whiteSpace: 'nowrap',
+                        height: 2,
+                        width: `${percent}%`,
+                        borderRadius: 1,
+                        backgroundColor: index % 5 === 0 ? '#727272' : '#575757',
+                        marginBottom: 1,
                       }}
-                    >
-                      {line || ' '}
-                    </Text>
+                    />
                   ))}
                 </Box>
                 <Box
                   style={{
                     position: 'absolute',
-                    left: 3,
-                    right: 3,
-                    top: 6,
+                    left: 2,
+                    right: 2,
+                    top: 12,
                     height: minimapViewportPx,
                     borderWidth: 1,
                     borderColor: '#3f78a8',
