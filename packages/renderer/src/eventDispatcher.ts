@@ -387,6 +387,12 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onSlidingEnd');
   });
 
+  // ── OrderBook events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('orderbook:select', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onLevelPress');
+  });
+
   // ── Capability events (Audio, Timer, etc.) ───────────
   //
   // Single subscription handles ALL capabilities. The Lua side specifies

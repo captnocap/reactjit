@@ -3,11 +3,11 @@
  */
 
 import React, { useMemo } from 'react';
-import { Box, Text, ScrollView, Sparkline, CandlestickChart, LineChart, BarChart } from '@reactjit/core';
+import { Box, Text, ScrollView, Sparkline, CandlestickChart, LineChart, BarChart, OrderBook } from '@reactjit/core';
 import type { Style } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import type { OHLCV, Holding, PortfolioSnapshot, BookLevel, IndicatorPoint, BollingerBand, MACDPoint } from './types';
-import { formatCurrency, formatPercent, formatCompact, formatPrice, spreadBps, formatBps } from './format';
+import { formatCurrency, formatPercent, formatPrice } from './format';
 import { holdingPnL } from './portfolio';
 
 // ── Ticker Symbol ───────────────────────────────────────
@@ -215,55 +215,21 @@ export interface OrderBookPanelProps {
 /** Visual order book with bid/ask depth bars */
 export function OrderBookPanel({ bids, asks, depth = 10, style }: OrderBookPanelProps) {
   const c = useThemeColors();
-  const sortedBids = useMemo(() => bids.slice().sort((a, b) => b.price - a.price).slice(0, depth), [bids, depth]);
-  const sortedAsks = useMemo(() => asks.slice().sort((a, b) => a.price - b.price).slice(0, depth), [asks, depth]);
-  const maxSize = useMemo(() => {
-    let m = 1;
-    for (const l of sortedBids) if (l.size > m) m = l.size;
-    for (const l of sortedAsks) if (l.size > m) m = l.size;
-    return m;
-  }, [sortedBids, sortedAsks]);
-
-  const bestBid = sortedBids[0]?.price ?? 0;
-  const bestAsk = sortedAsks[0]?.price ?? 0;
-  const spread = bestAsk - bestBid;
-  const bps = spreadBps(bestBid, bestAsk);
-
   return (
-    <Box style={{ gap: 6, ...style }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>Order Book</Text>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{`Spread ${spread.toFixed(2)} (${formatBps(bps)})`}</Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
-        {/* Bids */}
-        <Box style={{ flexGrow: 1, gap: 2 }}>
-          <Text style={{ color: '#22c55e', fontSize: 10 }}>Bids</Text>
-          {sortedBids.map((l, i) => (
-            <Box key={`bid-${i}`} style={{ position: 'relative', height: 18, justifyContent: 'center' }}>
-              <Box style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(l.size / maxSize) * 100}%`, backgroundColor: '#22c55e', opacity: 0.18, borderRadius: 2 }} />
-              <Box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 4, paddingRight: 4 }}>
-                <Text style={{ color: '#86efac', fontSize: 10 }}>{l.price.toFixed(2)}</Text>
-                <Text style={{ color: c.muted, fontSize: 10 }}>{formatCompact(l.size, 0)}</Text>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-        {/* Asks */}
-        <Box style={{ flexGrow: 1, gap: 2 }}>
-          <Text style={{ color: '#ef4444', fontSize: 10 }}>Asks</Text>
-          {sortedAsks.map((l, i) => (
-            <Box key={`ask-${i}`} style={{ position: 'relative', height: 18, justifyContent: 'center' }}>
-              <Box style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${(l.size / maxSize) * 100}%`, backgroundColor: '#ef4444', opacity: 0.18, borderRadius: 2 }} />
-              <Box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 4, paddingRight: 4 }}>
-                <Text style={{ color: '#fca5a5', fontSize: 10 }}>{l.price.toFixed(2)}</Text>
-                <Text style={{ color: c.muted, fontSize: 10 }}>{formatCompact(l.size, 0)}</Text>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-    </Box>
+    <OrderBook
+      bids={bids}
+      asks={asks}
+      depth={depth}
+      textColor={c.text}
+      mutedColor={c.muted}
+      bidColor="#22c55e"
+      askColor="#ef4444"
+      bidTextColor="#86efac"
+      askTextColor="#fca5a5"
+      bidBarColor="#22c55e"
+      askBarColor="#ef4444"
+      style={style}
+    />
   );
 }
 

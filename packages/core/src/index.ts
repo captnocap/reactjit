@@ -268,6 +268,7 @@ export { StackedBarChart, type StackedBarChartProps, type StackedBarChartSeries 
 export { LineChart, type LineChartProps, type LineChartPoint } from './LineChart';
 export { CandlestickChart, type CandlestickChartProps, type CandlestickDataPoint, type ChartOverlay } from './CandlestickChart';
 export { DepthChart, type DepthChartProps, type DepthLevel } from './DepthChart';
+export { OrderBook, type OrderBookProps, type OrderBookLevel, type OrderBookSelectEvent } from './OrderBook';
 export { AreaChart, type AreaChartProps } from './AreaChart';
 export { PieChart, type PieChartProps, type PieChartSegment } from './PieChart';
 export { RadarChart, type RadarChartProps, type RadarChartAxis } from './RadarChart';
