@@ -101,20 +101,6 @@ function collectFolderPaths(nodes: ExplorerTreeNode[]): string[] {
   return output;
 }
 
-function getFileExtensionLabel(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.tsx')) return 'TSX';
-  if (lower.endsWith('.ts')) return 'TS';
-  if (lower.endsWith('.jsx')) return 'JSX';
-  if (lower.endsWith('.js')) return 'JS';
-  if (lower.endsWith('.json')) return 'JSON';
-  if (lower.endsWith('.md')) return 'MD';
-  if (lower.endsWith('.lua')) return 'LUA';
-  if (lower.endsWith('.css')) return 'CSS';
-  if (lower.endsWith('.html')) return 'HTML';
-  return 'TXT';
-}
-
 export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineNumbers' | 'syntaxHighlight' | 'style'> {
   style?: Style;
   inputStyle?: Style;
@@ -373,8 +359,7 @@ export function MonacoMirror({
       const isFolder = node.kind === 'folder';
       const isCollapsed = isFolder ? (collapsedFolders[node.path] ?? false) : false;
       const isSelected = !isFolder && node.path === activeFilePath;
-      const leftPad = 8 + depth * 12;
-      const extLabel = isFolder ? '' : getFileExtensionLabel(node.name);
+      const leftPad = 2 + depth * 10;
 
       return (
         <Box key={node.path}>
@@ -382,50 +367,43 @@ export function MonacoMirror({
             onPress={() => (isFolder ? toggleFolder(node.path) : handleFileSelect(node.path))}
             style={({ hovered }) => ({
               backgroundColor: isSelected ? '#37373d' : (hovered ? '#2a2d2e' : 'transparent'),
-              borderRadius: 4,
+              borderRadius: 3,
               paddingLeft: leftPad,
-              paddingRight: 8,
-              paddingTop: 4,
-              paddingBottom: 4,
+              paddingRight: 3,
+              paddingTop: 3,
+              paddingBottom: 3,
             })}
           >
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Box
-                style={{
-                  width: 2,
-                  height: 12,
-                  borderRadius: 2,
-                  backgroundColor: isSelected ? '#0e639c' : 'transparent',
-                }}
-              />
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 0 }}>
               {isFolder && (
-                <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>
-                  {isCollapsed ? '[>]' : '[v]'}
+                <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                  {isCollapsed ? '+' : '-'}
                 </Text>
               )}
-              {!isFolder && <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>{'   '}</Text>}
+              {!isFolder && <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{' '}</Text>}
+              <Box style={{ flexGrow: 1, minWidth: 0 }}>
+                <Text
+                  style={{
+                    color: isSelected ? '#ffffff' : '#c5c5c5',
+                    fontSize: 9,
+                    fontFamily: 'monospace',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {node.name}
+                </Text>
+              </Box>
               <Text
                 style={{
-                  color: isSelected ? '#ffffff' : '#c5c5c5',
-                  fontSize: 9,
+                  color: isSelected ? '#56b6ff' : 'transparent',
+                  fontSize: 8,
                   fontFamily: 'monospace',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {node.name}
+                {'|'}
               </Text>
-              {!isFolder && (
-                <Box style={{ flexGrow: 1, alignItems: 'end' }}>
-                  <Text
-                    style={{
-                      color: isSelected ? '#8bc4ff' : '#6f6f6f',
-                      fontSize: 7,
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {extLabel}
-                  </Text>
-                </Box>
-              )}
             </Box>
           </Pressable>
           {isFolder && !isCollapsed && node.children && renderExplorerNodes(node.children, depth + 1)}
@@ -580,50 +558,56 @@ export function MonacoMirror({
               backgroundColor: '#252526',
               borderRightWidth: 1,
               borderColor: '#3c3c3c',
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 10,
-              paddingBottom: 8,
+              paddingLeft: 4,
+              paddingRight: 4,
+              paddingTop: 4,
+              paddingBottom: 4,
             }}
           >
-            <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>{'EXPLORER'}</Text>
-              <Box style={{ flexDirection: 'row', gap: 4 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0, paddingBottom: 3 }}>
+              <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'EX'}</Text>
+              <Text
+                style={{
+                  color: '#9a9a9a',
+                  fontSize: 8,
+                  fontFamily: 'monospace',
+                  flexGrow: 1,
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {workspaceLabel}
+              </Text>
+              <Box style={{ flexDirection: 'row', gap: 2 }}>
                 <Pressable
                   onPress={handleExpandAll}
                   style={({ hovered }) => ({
                     backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
                     borderRadius: 3,
-                    paddingLeft: 4,
-                    paddingRight: 4,
-                    paddingTop: 2,
-                    paddingBottom: 2,
+                    paddingLeft: 3,
+                    paddingRight: 3,
+                    paddingTop: 1,
+                    paddingBottom: 1,
                   })}
                 >
-                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace' }}>{'OPEN'}</Text>
+                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'O'}</Text>
                 </Pressable>
                 <Pressable
                   onPress={handleCollapseAll}
                   style={({ hovered }) => ({
                     backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
                     borderRadius: 3,
-                    paddingLeft: 4,
-                    paddingRight: 4,
-                    paddingTop: 2,
-                    paddingBottom: 2,
+                    paddingLeft: 3,
+                    paddingRight: 3,
+                    paddingTop: 1,
+                    paddingBottom: 1,
                   })}
                 >
-                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace' }}>{'CLOSE'}</Text>
+                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'C'}</Text>
                 </Pressable>
               </Box>
             </Box>
-            <Text style={{ color: '#c5c5c5', fontSize: 9, fontFamily: 'monospace', paddingTop: 3, paddingBottom: 4 }}>
-              {workspaceLabel}
-            </Text>
-            <Text style={{ color: '#707070', fontSize: 7, fontFamily: 'monospace', paddingBottom: 4 }}>
-              {`${candidateExplorerPaths.length} files`}
-            </Text>
-            <Box style={{ height: 1, backgroundColor: '#3c3c3c', marginBottom: 6 }} />
+            <Box style={{ height: 1, backgroundColor: '#3c3c3c', marginBottom: 2 }} />
             <Box style={{ flexGrow: 1, minHeight: 0, overflow: 'auto' }}>
               {renderExplorerNodes(explorerTree, 0)}
             </Box>
