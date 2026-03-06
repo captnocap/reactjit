@@ -19,6 +19,7 @@ import { FileTreePanel } from './panels/FileTreePanel';
 import { NotepadPanel } from './panels/NotepadPanel';
 import { MemoryPanel } from './panels/MemoryPanel';
 import { LifePanel } from './panels/LifePanel';
+import { PomodoroPanel } from './panels/PomodoroPanel';
 import { useHearts, HeartsDisplay } from './components/Hearts';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useNotifications } from './hooks/useNotifications';
@@ -147,7 +148,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [notepadOpen,     setNotepadOpen]     = useState(false);
   const [dailyLogOpen,    setDailyLogOpen]    = useState(false);
   const [messagesOpen,    setMessagesOpen]    = useState(false);
-  const [gameOpen,        setGameOpen]        = useState(false);
+  const [panelCMode,      setPanelCMode]      = useState<'system' | 'life' | 'pomodoro'>('system');
 
   // ── Uptime counter ─────────────────────────────────────────────────
   const bootTimeRef = useRef(Date.now());
@@ -180,14 +181,16 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
     B: dailyLogOpen
       ? <DailySummaryPanel today={dailySummary.today} history={dailySummary.history} todayKey={dailySummary.todayKey} />
       : notepadOpen ? <NotepadPanel /> : <MemoryPanel />,
-    C: gameOpen ? <LifePanel /> : <SystemPanel />,
+    C: panelCMode === 'life' ? <LifePanel />
+      : panelCMode === 'pomodoro' ? <PomodoroPanel />
+      : <SystemPanel />,
     D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
     E: <GitPanel />,
     F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
     G: messagesOpen
       ? <MessagePanel messages={msgs.messages} unreadCount={msgs.unreadCount} onSend={msgs.send} onMarkRead={msgs.markAllRead} onClear={msgs.clear} />
       : searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
-  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, gameOpen, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
+  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, panelCMode, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
 
   // Auto-accumulate daily stats every 30s
   useLuaInterval(30000, () => {
@@ -298,7 +301,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   });
 
   useHotkey('f12', () => {
-    setGameOpen(prev => !prev);
+    setPanelCMode(prev => prev === 'system' ? 'life' : prev === 'life' ? 'pomodoro' : 'system');
     setFocusedPanel('C');
   });
 
@@ -486,7 +489,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         onPanelPress={setFocusedPanel}
         panelLabels={{
           B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'MEMORY',
-          C: gameOpen ? 'GAME OF LIFE' : 'SYSTEM',
+          C: panelCMode === 'life' ? 'GAME OF LIFE' : panelCMode === 'pomodoro' ? 'POMODORO' : 'SYSTEM',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
           G: messagesOpen ? 'MESSAGES' : searchOpen ? 'SEARCH' : 'HISTORY',
         }}
