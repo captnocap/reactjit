@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text } from './primitives';
 import { Input } from './Input';
 import { Pressable } from './Pressable';
-import type { InputProps, Style } from './types';
+import type { InputProps, LayoutEvent, Style } from './types';
 
 const DEFAULT_ACTIVITY_ITEMS = ['EX', 'SE', 'SC', 'RU'];
 
@@ -174,6 +174,7 @@ export function MonacoMirror({
   const [minimapOpen, setMinimapOpen] = useState(showMinimap);
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [editorViewportHeight, setEditorViewportHeight] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (value !== undefined) setMirrorText(value);
@@ -253,11 +254,14 @@ export function MonacoMirror({
     ? Math.max(58, Math.min(minimapWidth, Math.floor(explicitWidth * 0.18)))
     : minimapWidth;
   const minimapRowCount = Math.max(minimapSourceLines.length, 1);
+  const editorLineHeight = editorFontSize + 4;
   const chromeHeight = topBarHeight + (renderBreadcrumbs ? 24 : 0) + (showStatusBar ? statusBarHeight : 0);
   const approxEditorViewportHeight = explicitHeight !== undefined ? Math.max(explicitHeight - chromeHeight, 60) : 220;
-  const approxEditorVisibleRows = Math.max(4, Math.floor(approxEditorViewportHeight / (editorFontSize + 4)));
-  const minimapViewportRows = Math.max(2, Math.min(minimapRowCount, approxEditorVisibleRows));
-  const minimapTrackRows = Math.max(16, Math.min(84, minimapViewportRows * 5));
+  // Prefer measured editor viewport height so minimap highlight matches what is visible.
+  const effectiveEditorViewportHeight = editorViewportHeight !== undefined ? Math.max(editorViewportHeight, 60) : approxEditorViewportHeight;
+  const editorVisibleRows = Math.max(1, Math.floor((effectiveEditorViewportHeight - 16) / editorLineHeight));
+  const minimapViewportRows = Math.max(1, Math.min(minimapRowCount, editorVisibleRows));
+  const minimapTrackRows = Math.max(16, Math.min(84, minimapRowCount));
   const minimapRows = useMemo(() => {
     if (minimapSourceLines.length <= minimapTrackRows) return minimapSourceLines;
     const sampled: string[] = [];
@@ -283,8 +287,11 @@ export function MonacoMirror({
       return Math.max(8, Math.min(100, Math.round((len / minimapMaxLineLength) * 100)));
     });
   }, [minimapMaxLineLength, minimapRows]);
-  const minimapTrackHeightPx = minimapRows.length * 3 + 4;
-  const minimapViewportPx = Math.max(10, Math.min(minimapTrackHeightPx, Math.round((minimapViewportRows / minimapRowCount) * minimapTrackHeightPx)));
+  const minimapTrackHeightPx = Math.max(minimapRows.length * 3, 12);
+  const minimapAllVisible = minimapViewportRows >= minimapRowCount;
+  const minimapViewportPx = minimapAllVisible
+    ? minimapTrackHeightPx
+    : Math.max(10, Math.min(minimapTrackHeightPx, Math.round((minimapViewportRows / minimapRowCount) * minimapTrackHeightPx)));
 
   const candidateExplorerPaths = useMemo(() => {
     const fallbackDir = breadcrumbs.slice(0, -1).join('/');
@@ -367,6 +374,14 @@ export function MonacoMirror({
     if (selectedFilePath === undefined) setInternalSelectedFile(path);
     onFileSelect?.(path);
   }, [onFileSelect, selectedFilePath]);
+
+  const handleEditorViewportLayout = useCallback((event: LayoutEvent) => {
+    const nextHeight = Math.max(0, Math.round(event.height));
+    setEditorViewportHeight((prev) => {
+      if (prev !== undefined && Math.abs(prev - nextHeight) < 1) return prev;
+      return nextHeight;
+    });
+  }, []);
 
   const handleCollapseAll = useCallback(() => {
     const next: Record<string, boolean> = {};
@@ -673,7 +688,7 @@ export function MonacoMirror({
           )}
 
           <Box style={{ flexGrow: 1, minHeight: 0, flexDirection: 'row' }}>
-            <Box style={{ flexGrow: 1, minWidth: 0 }}>
+            <Box style={{ flexGrow: 1, minWidth: 0 }} onLayout={handleEditorViewportLayout}>
               <Input
                 {...rest}
                 value={value}
@@ -738,32 +753,34 @@ export function MonacoMirror({
                   <Text style={{ color: '#8a8a8a', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'MAP'}</Text>
                   <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${lineCount}L`}</Text>
                 </Box>
-                <Box>
+                <Box style={{ position: 'relative', height: minimapTrackHeightPx, overflow: 'hidden' }}>
                   {minimapInkPercents.map((percent, index) => (
                     <Box
                       key={`minimap-ink:${index}`}
                       style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: index * 3,
                         height: 2,
                         width: `${percent}%`,
                         borderRadius: 1,
                         backgroundColor: index % 5 === 0 ? '#727272' : '#575757',
-                        marginBottom: 1,
                       }}
                     />
                   ))}
+                  <Box
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      height: minimapViewportPx,
+                      borderWidth: 1,
+                      borderColor: '#3f78a8',
+                      backgroundColor: '#3f78a822',
+                    }}
+                  />
                 </Box>
-                <Box
-                  style={{
-                    position: 'absolute',
-                    left: 2,
-                    right: 2,
-                    top: 12,
-                    height: minimapViewportPx,
-                    borderWidth: 1,
-                    borderColor: '#3f78a8',
-                    backgroundColor: '#3f78a822',
-                  }}
-                />
               </Box>
             )}
           </Box>
