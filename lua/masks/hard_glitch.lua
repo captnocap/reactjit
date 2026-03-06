@@ -95,11 +95,11 @@ function HardGlitch.draw(state, w, h, source)
   -- RGB channel split
   if rgbSplit > 0.5 then
     love.graphics.setBlendMode("add")
-    love.graphics.setColor(1, 0, 0, 0.08 * effectMix)
+    love.graphics.setColor(1, 0, 0, 0.2 * effectMix)
     love.graphics.draw(source, -rgbSplit, 0)
-    love.graphics.setColor(0, 0, 1, 0.06 * effectMix)
+    love.graphics.setColor(0, 0, 1, 0.15 * effectMix)
     love.graphics.draw(source, rgbSplit, 0)
-    love.graphics.setColor(0, 1, 0, 0.04 * effectMix)
+    love.graphics.setColor(0, 1, 0, 0.1 * effectMix)
     love.graphics.draw(source, 0, -rgbSplit * 0.5)
     love.graphics.setBlendMode("alpha")
   end
@@ -128,11 +128,11 @@ function HardGlitch.draw(state, w, h, source)
       -- Per-channel displaced strips
       love.graphics.setScissor(max(0, bx), max(0, by), bw, bh)
       love.graphics.setBlendMode("add")
-      love.graphics.setColor(1, 0, 0, 0.2 * effectMix)
+      love.graphics.setColor(1, 0, 0, 0.5 * effectMix)
       love.graphics.draw(source, b.shiftX * 1.5, 0)
-      love.graphics.setColor(0, 1, 0, 0.15 * effectMix)
+      love.graphics.setColor(0, 1, 0, 0.4 * effectMix)
       love.graphics.draw(source, -b.shiftX, 0)
-      love.graphics.setColor(0, 0, 1, 0.2 * effectMix)
+      love.graphics.setColor(0, 0, 1, 0.5 * effectMix)
       love.graphics.draw(source, b.shiftX * 0.7, b.shiftY)
       love.graphics.setBlendMode("alpha")
       love.graphics.setScissor()
@@ -157,7 +157,7 @@ function HardGlitch.draw(state, w, h, source)
     for _ = 1, dotCount do
       local dx = floor(random() * w)
       local dy = floor(random() * h)
-      love.graphics.setColor(random(), random(), random(), 0.15 * effectMix)
+      love.graphics.setColor(random(), random(), random(), 0.5 * effectMix)
       love.graphics.rectangle("fill", dx, dy, max(1, floor(random() * 3)), 1)
     end
   end

@@ -254,10 +254,26 @@ function M.draw(ctx, region)
     drawLV(font, nx, y, "Nodes ", tostring(perf.nodeCount), Style.perf.label, Style.perf.value)
     y = y + fh + 4
 
-    -- Stats row 2: memory + mutations
+    -- Stats row 2: memory + RSS + mutations
     local memKB = collectgarbage("count")
     nx = x0
-    nx = drawLV(font, nx, y, "Memory ", string.format("%.1f MB", memKB / 1024), Style.perf.label, Style.perf.value)
+    nx = drawLV(font, nx, y, "Lua Mem ", string.format("%.1f MB", memKB / 1024), Style.perf.label, Style.perf.value)
+    -- RSS from /proc/self/statm (Linux)
+    local rssMB = nil
+    do
+      local f = io.open("/proc/self/statm", "r")
+      if f then
+        local line = f:read("*l")
+        f:close()
+        if line then
+          local _, rss = line:match("(%d+)%s+(%d+)")
+          if rss then rssMB = tonumber(rss) * 4 / 1024 end
+        end
+      end
+    end
+    if rssMB then
+      nx = drawLV(font, nx, y, "RSS ", string.format("%.0f MB", rssMB), Style.perf.label, Style.perf.value)
+    end
     nx = drawLV(font, nx, y, "Mutations ", tostring(lastMutationStats.total) .. "/frame", Style.perf.label, Style.perf.value)
     if lastMutationStats.total > 0 then
       local parts = {}

@@ -65,7 +65,7 @@ function Ascii.draw(state, w, h, source)
   local imgData = source:newImageData()
   local font = getFont(cellSize)
   love.graphics.setFont(font)
-  local glyphAlpha = (0.08 + opacity * 0.52) * effectMix
+  local glyphAlpha = (0.2 + opacity * 0.8) * effectMix
 
   local cols = floor(w / cellSize)
   local rows = floor(h / cellSize)
@@ -104,7 +104,7 @@ function Ascii.draw(state, w, h, source)
         local cy = row * cellSize
 
         if colored then
-          love.graphics.setColor(max(0.08, r), max(0.08, g), max(0.08, b), glyphAlpha * a * 0.8)
+          love.graphics.setColor(max(0.08, r), max(0.08, g), max(0.08, b), glyphAlpha * a * 1.5)
         else
           local v = brightness * 0.85 + 0.15
           love.graphics.setColor(v, v, v, glyphAlpha * a)

@@ -56,6 +56,8 @@ import { OverlayStory } from './OverlayStory';
 
 import { ImagingStory } from './ImagingStory';
 
+import { CreativeConceptsStory } from './CreativeConceptsStory';
+
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
@@ -97,6 +99,7 @@ export const stories: StoryDef[] = [
 
   { id: 'imaging', title: 'Imaging', section: 'Packages', component: ImagingStory },
 
+
   // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
   { id: 'compatibility', title: 'Compatibility', section: 'Bad Habits', component: CompatibilityStory },
 
@@ -116,4 +119,5 @@ export const stories: StoryDef[] = [
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
   { id: 'overlay', title: 'Overlay', section: 'Core', component: OverlayStory },
+  { id: 'creative-concepts', title: 'CreativeConcepts', section: 'Demos', component: CreativeConceptsStory },
 ];

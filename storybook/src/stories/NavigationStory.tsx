@@ -172,6 +172,15 @@ const OPAQUE_DATA = [
   { id: 'u4', name: 'Diego Flores', email: 'diego@example.com', role: 'Engineer', department: 'Data', joined: 2023, avatar: 'x' },
 ];
 
+const LUA_FILES = FILES.filter((f) => f.meta === 'Lua');
+const TS_FILES = FILES.filter((f) => f.meta !== 'Lua');
+const FLAT_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false, limit: 6 };
+const SECTION_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false };
+const FUZZY_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false, limit: 6 };
+const EXPLICIT_SCHEMA_OPTIONS = { key: 'name' };
+const SEARCH_HISTORY_OPTIONS = { storeKey: 'navStoryHistory' };
+const APP_SEARCH_OPTIONS = { debounce: 120 };
+
 // ── Static doc data ───────────────────────────────────────────────────────────
 
 const USAGE_CODE = `// Sidebar navigation
@@ -392,7 +401,7 @@ function SearchResultsDemo() {
   const [flatQuery, setFlatQuery] = useState('');
   const [flatSelected, setFlatSelected] = useState('');
   const [flatOpen, setFlatOpen] = useState(false);
-  const flatResults = useSearch(FILES, flatQuery, { key: 'label', showAllOnEmpty: false, limit: 6 });
+  const flatResults = useSearch(FILES, flatQuery, FLAT_SEARCH_OPTIONS);
   return (
     <Box style={{ gap: 6 }}>
       <Text style={{ color: c.textDim, fontSize: 10 }}>SearchBar + flat SearchResults dropdown:</Text>
@@ -436,8 +445,8 @@ function SearchSectionsDemo() {
   const [sectQuery, setSectQuery] = useState('');
   const [sectSelected, setSectSelected] = useState('');
   const [sectOpen, setSectOpen] = useState(false);
-  const luaFiles = useSearch(FILES.filter(f => f.meta === 'Lua'), sectQuery, { key: 'label', showAllOnEmpty: false });
-  const tsFiles = useSearch(FILES.filter(f => f.meta !== 'Lua'), sectQuery, { key: 'label', showAllOnEmpty: false });
+  const luaFiles = useSearch(LUA_FILES, sectQuery, SECTION_SEARCH_OPTIONS);
+  const tsFiles = useSearch(TS_FILES, sectQuery, SECTION_SEARCH_OPTIONS);
   return (
     <Box style={{ gap: 6 }}>
       <Text style={{ color: c.textDim, fontSize: 10 }}>SearchResultsSections — grouped by file type:</Text>
@@ -559,7 +568,7 @@ function FuzzySearchDemo() {
   const c = useThemeColors();
   const [fuzzyQuery, setFuzzyQuery] = useState('');
   const [fuzzyOpen, setFuzzyOpen] = useState(false);
-  const { results: fuzzyResults } = useFuzzySearch(FILES, fuzzyQuery, { key: 'label', showAllOnEmpty: false, limit: 6 });
+  const { results: fuzzyResults } = useFuzzySearch(FILES, fuzzyQuery, FUZZY_SEARCH_OPTIONS);
   const dropStyle = { backgroundColor: c.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingLeft: 4, paddingRight: 4, paddingTop: 4, paddingBottom: 4 };
   return (
     <Box style={{ gap: 6 }}>
@@ -612,7 +621,7 @@ function SearchSchemaDemo() {
   const c = useThemeColors();
   const [selected, setSelected] = useState('');
   const autoSchema = useSearchSchema(OPAQUE_DATA);
-  const explicitSchema = useSearchSchema(OPAQUE_DATA, { key: 'name' });
+  const explicitSchema = useSearchSchema(OPAQUE_DATA, EXPLICIT_SCHEMA_OPTIONS);
   const allFields = detectSearchableFields(OPAQUE_DATA);
   return (
     <Box style={{ width: '100%', gap: 10 }}>
@@ -658,7 +667,7 @@ function SearchSchemaDemo() {
 
 function SearchHistoryDemo() {
   const c = useThemeColors();
-  const { history, push: pushHistory, clear: clearHistory } = useSearchHistory({ storeKey: 'navStoryHistory' });
+  const { history, push: pushHistory, clear: clearHistory } = useSearchHistory(SEARCH_HISTORY_OPTIONS);
   const [historyQuery, setHistoryQuery] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   return (
@@ -710,7 +719,7 @@ function AppSearchSection() {
   const [open, setOpen] = useState(false);
   const [hotQuery, setHotQuery] = useState('');
   const [hotOpen, setHotOpen] = useState(false);
-  const { results, loading, search, navigateTo, clear } = useAppSearch({ debounce: 120 });
+  const { results, loading, search, navigateTo, clear } = useAppSearch(APP_SEARCH_OPTIONS);
   const btnStyle = { backgroundColor: c.primary, borderRadius: 8, paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8 };
 
   useHotkey('escape', () => setHotOpen(false), { enabled: hotOpen && hotQuery.trim().length > 0 });

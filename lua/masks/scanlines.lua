@@ -67,8 +67,8 @@ function Scanlines.draw(state, w, h, source)
   end
 
   local lineHeight = max(1, floor(spacing * 0.35))
-  local darkAlpha = 0.004 + intensity * 0.03
-  local glowAlpha = 0.008 + intensity * 0.05
+  local darkAlpha = 0.15 + intensity * 0.2
+  local glowAlpha = 0.15 + intensity * 0.2
 
   -- Very light scanline contrast (non-occluding).
   love.graphics.setBlendMode("alpha")
@@ -105,7 +105,7 @@ function Scanlines.draw(state, w, h, source)
   love.graphics.setBlendMode("alpha")
 
   -- Minimal edge shading so visibility remains high.
-  local vignetteIntensity = intensity * 0.02
+  local vignetteIntensity = intensity * 0.3
   love.graphics.setColor(0, 0, 0, vignetteIntensity)
   love.graphics.rectangle("fill", 0, 0, w, max(1, floor(h * 0.02)))
   love.graphics.rectangle("fill", 0, h - max(1, floor(h * 0.02)), w, max(1, floor(h * 0.02)))

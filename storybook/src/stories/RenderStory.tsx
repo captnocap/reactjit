@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, useLocalStore } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -25,6 +25,7 @@ const C = {
   vm: '#ef5350',
   display: '#26c6da',
   interactive: '#ec4899',
+  libretro: '#f9a825',
 };
 
 // ── Static code blocks (hoisted — never recreated) ──────
@@ -96,6 +97,28 @@ const INTERACTIVE_CODE = `// Interactive screen control
 // VMs default to interactive={true}
 <Render source="debian.iso" />`;
 
+const LIBRETRO_CODE = `// Any libretro-compatible core
+<Libretro
+  core="/usr/lib/libretro/snes9x_libretro.so"
+  rom="zelda.sfc"
+  running
+  volume={0.8}
+  style={{ flexGrow: 1 }}
+/>
+
+// GBA with speed control
+<Libretro
+  core="cores/mgba_libretro.so"
+  rom="pokemon.gba"
+  speed={2}
+  onLoaded={(e) => console.log(e.coreName)}
+/>`;
+
+const LIBRETRO_CONTROLS_CODE = `// Keyboard: Arrows=D-Pad, Z=A, X=B,
+//   A=X, S=Y, Enter=Start, RShift=Select
+//   Q/W=L/R, F5=Save, F9=Load, F6=Reset
+// Gamepads: mapped automatically via Love2D`;
+
 const EVENTS_CODE = `<Render
   source="screen:0"
   onReady={() => console.log('Capture started')}
@@ -114,6 +137,7 @@ const SOURCES = [
   { label: 'display', desc: 'Virtual monitor — other apps render to your ReactJIT window', color: C.display },
   { label: 'file.iso', desc: 'Boot a QEMU VM from ISO (KVM auto-detected)', color: C.vm },
   { label: 'vm:path.qcow2', desc: 'Boot a VM from disk image (.qcow2, .vmdk, .vdi, .vhd)', color: C.vm },
+  { label: '<Libretro>', desc: 'Run any libretro emulator core — NES, SNES, GBA, Genesis, N64, PS1, and more', color: C.libretro },
 ];
 
 const PROPS = [
@@ -224,6 +248,93 @@ function WindowCaptureDemo() {
   );
 }
 
+// ── Live Demo: Libretro ──────────────────────────────────
+
+function LibretroDemo() {
+  const c = useThemeColors();
+  const [corePath, setCorePath] = useLocalStore<string>('libretro:core', '');
+  const [romPath, setRomPath] = useLocalStore<string>('libretro:rom', '');
+  const [status, setStatus] = useState('Set core + ROM paths');
+  const [active, setActive] = useState(false);
+  const [running, setRunning] = useState(true);
+
+  const hasInputs = corePath.length > 0 && romPath.length > 0;
+
+  const onLoaded = useCallback((e: any) => {
+    setStatus(`${e.coreName} v${e.coreVersion}`);
+    setActive(true);
+  }, []);
+
+  const onError = useCallback((e: any) => {
+    setStatus(`Error: ${e.message}`);
+    setActive(false);
+  }, []);
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="Libretro" color={C.libretro} />
+        <Tag text="FFI" color={C.accent} />
+      </Box>
+
+      {/* Core + ROM inputs */}
+      <Box style={{ gap: 4, width: '100%' }}>
+        <Text style={{ fontSize: 8, color: c.textDim }}>{'Core .so path'}</Text>
+        <Input
+          value={corePath}
+          placeholder="/usr/lib/libretro/snes9x_libretro.so"
+          onChangeText={(t: string) => setCorePath(t)}
+          style={{ height: 22, fontSize: 9, backgroundColor: c.surface, borderRadius: 4, paddingLeft: 6, paddingRight: 6, color: c.text, borderWidth: 1, borderColor: c.border }}
+        />
+        <Text style={{ fontSize: 8, color: c.textDim }}>{'ROM path'}</Text>
+        <Input
+          value={romPath}
+          placeholder="game.sfc"
+          onChangeText={(t: string) => setRomPath(t)}
+          style={{ height: 22, fontSize: 9, backgroundColor: c.surface, borderRadius: 4, paddingLeft: 6, paddingRight: 6, color: c.text, borderWidth: 1, borderColor: c.border }}
+        />
+      </Box>
+
+      {/* Viewport */}
+      {hasInputs ? (
+        <Box style={{ width: 280, height: 200, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: C.libretro + '44', backgroundColor: '#000' }}>
+          <Libretro
+            core={corePath}
+            rom={romPath}
+            running={running}
+            onLoaded={onLoaded}
+            onError={onError}
+            style={{ flexGrow: 1 }}
+          />
+        </Box>
+      ) : (
+        <Box style={{
+          width: 280, height: 200, borderRadius: 6,
+          backgroundColor: c.surface,
+          borderWidth: 1, borderColor: C.libretro + '33',
+          justifyContent: 'center', alignItems: 'center', gap: 8,
+        }}>
+          <Image src="cpu" style={{ width: 24, height: 24 }} tintColor={C.libretro} />
+          <Text style={{ fontSize: 9, color: C.libretro }}>{'Libretro Core'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'Enter a core + ROM path above'}</Text>
+        </Box>
+      )}
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? C.webcam : c.textDim }} />
+        <Text style={{ fontSize: 9, color: active ? C.libretro : c.textDim }}>{status}</Text>
+        {active && (
+          <Pressable onPress={() => setRunning(!running)}>
+            <Box style={{ backgroundColor: C.libretro + '22', paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+              <Text style={{ fontSize: 8, color: C.libretro }}>{running ? 'Pause' : 'Resume'}</Text>
+            </Box>
+          </Pressable>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Source Catalog ───────────────────────────────────────
 
 function SourceCatalog() {
@@ -306,7 +417,7 @@ export function RenderStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'OBS + QEMU as a React component'}
+          {'I cant find anything this cant render tbh'}
         </Text>
       </Box>
 
@@ -316,10 +427,10 @@ export function RenderStory() {
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
-            {'Capture screens, webcams, windows, and HDMI. Boot VMs from ISO. Create virtual displays. One component.'}
+            {'Capture screens, webcams, windows, and HDMI. Boot VMs from ISO. Create virtual displays. Run emulator cores. One component family.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'<Render> wraps FFmpeg, XShm, v4l2, QEMU, and Xephyr into a single declarative component. Pass a source string and get live video. Interactive mode forwards mouse and keyboard to the source. VMs use VNC protocol for zero-latency input. Screen capture uses XShm shared memory for sub-millisecond frame delivery.'}
+            {'<Render> wraps FFmpeg, XShm, v4l2, QEMU, and Xephyr into a single declarative component. <Libretro> loads any libretro-compatible emulator core via LuaJIT FFI. Pass a source string and get live video. Interactive mode forwards mouse and keyboard. VMs use VNC, screen capture uses XShm, emulator cores run at native framerate.'}
           </Text>
         </HeroBand>
 
@@ -553,6 +664,28 @@ export function RenderStory() {
 
         <Divider />
 
+        {/* ── Libretro: demo | text + code ── */}
+        <Band>
+          <Half>
+            <LibretroDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="cpu">{'LIBRETRO CORES'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Run any libretro-compatible emulator core as a React component. NES, SNES, GBA, Genesis, N64, PS1 — hundreds of cores available. Loads .so dynamically via LuaJIT FFI. Video, audio, input, save states, and SRAM persistence all handled automatically.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Cores run at their native framerate via a time accumulator. Pixel format conversion (XRGB8888, RGB565, 0RGB1555) happens in a tight LuaJIT loop. Audio streams through a QueueableSource. Gamepads work out of the box.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={LIBRETRO_CODE} />
+            <Text style={{ color: c.muted, fontSize: 9, marginTop: 4 }}>
+              {'Controls: Arrows=D-Pad, Z/X=A/B, A/S=X/Y, Enter=Start, RShift=Select, Q/W=L/R. F5=Save, F9=Load, F6=Reset. Gamepads mapped automatically.'}
+            </Text>
+          </Half>
+        </Band>
+
+        <Divider />
+
         {/* ── Events: text | code ── */}
         <Band>
           <Half>
@@ -601,7 +734,7 @@ export function RenderStory() {
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'Screen capture, webcam feed, HDMI input, window grab, VM boot, virtual display — all the same component, all one prop. The source string is the only thing that changes.'}
+            {'Screen capture, webcam feed, HDMI input, window grab, VM boot, virtual display, emulator cores — all declarative, all one-liners. The source string or core path is the only thing that changes.'}
           </Text>
         </CalloutBand>
 

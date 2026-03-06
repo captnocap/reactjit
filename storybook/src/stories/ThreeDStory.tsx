@@ -6,6 +6,10 @@
  *
  * Live demos for Scene, Camera, Mesh, lights, orbit controls, wireframes,
  * procedural textures, fresnel, specular, opacity, and edge rendering.
+ *
+ * PERF: Only ONE useLuaInterval at 100ms for the planet moon orbit.
+ * All other scenes use orbitControls (Lua-side rotation, zero React cost)
+ * or are static until user interacts via buttons.
  * Static hoist ALL code strings and style objects outside the component.
  */
 
@@ -122,6 +126,7 @@ function ActionBtn({ label, color, onPress }: { label: string; color: string; on
 }
 
 // ── Geometry Showcase Demo ──────────────────────────────
+// No timer — orbitControls handles rotation in Lua. User cycles shapes via button.
 
 type GeoChoice = 'box' | 'sphere' | 'plane';
 const GEO_CHOICES: GeoChoice[] = ['box', 'sphere', 'plane'];
@@ -129,10 +134,7 @@ const GEO_COLORS: Record<GeoChoice, string> = { box: '#a6e3a1', sphere: '#f5c2e7
 
 function GeometryDemo() {
   const c = useThemeColors();
-  const [spin, setSpin] = useState(0);
   const [geo, setGeo] = useState<GeoChoice>('box');
-
-  useLuaInterval(16, () => setSpin(p => p + 0.025));
 
   const cycleGeo = useCallback(() => {
     setGeo(prev => GEO_CHOICES[(GEO_CHOICES.indexOf(prev) + 1) % GEO_CHOICES.length]);
@@ -146,7 +148,7 @@ function GeometryDemo() {
         <Tag text="Mesh" color={C.mesh} />
       </Box>
 
-      <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#12121b">
+      <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#12121b" orbitControls>
         <Camera position={[0, -3, 1.5]} lookAt={[0, 0, 0]} fov={1.05} />
         <AmbientLight color="#1a1a2e" intensity={0.2} />
         <DirectionalLight direction={[1, -1, 1]} color="#ffffff" intensity={1.0} />
@@ -156,30 +158,26 @@ function GeometryDemo() {
           color={GEO_COLORS[geo]}
           edgeColor="#000000"
           edgeWidth={0.03}
-          rotation={[spin * 0.7, spin, spin * 0.3]}
         />
       </Scene>
 
       <Label label="geometry" value={geo} color={GEO_COLORS[geo]} />
-      <Label label="rotation" value={`[${(spin * 0.7).toFixed(1)}, ${spin.toFixed(1)}, ${(spin * 0.3).toFixed(1)}]`} />
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Drag to orbit — rotation handled in Lua'}</Text>
 
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label="Next Shape" color={C.mesh} onPress={cycleGeo} />
       </Box>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Shapes auto-rotate with useLuaInterval'}</Text>
     </Box>
   );
 }
 
 // ── Lighting Lab Demo ───────────────────────────────────
+// No timer — orbitControls for rotation. Buttons change light angle + specular.
 
 function LightingDemo() {
   const c = useThemeColors();
-  const [spin, setSpin] = useState(0);
   const [lightAngle, setLightAngle] = useState(0.6);
   const [specular, setSpecular] = useState(32);
-
-  useLuaInterval(16, () => setSpin(p => p + 0.012));
 
   const lightDir: Vec3 = [
     Math.cos(lightAngle),
@@ -195,7 +193,7 @@ function LightingDemo() {
         <Tag text="specular" color={C.material} />
       </Box>
 
-      <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#0a0a14">
+      <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#0a0a14" orbitControls>
         <Camera position={[0, -3.5, 1.5]} lookAt={[0, 0, 0]} fov={1.0} />
         <AmbientLight color="#1a1a2e" intensity={0.12} />
         <DirectionalLight direction={lightDir} color="#fff5e0" intensity={1.3} />
@@ -203,14 +201,12 @@ function LightingDemo() {
         <Mesh
           geometry="sphere"
           color="#cdd6f4"
-          rotation={[0, spin, 0]}
           specular={specular}
         />
         <Mesh
           geometry="box"
           color="#a6e3a1"
           position={[-1.8, 0, 0]}
-          rotation={[spin * 0.5, spin, 0]}
           specular={specular}
           edgeColor="#1e1e2e"
           edgeWidth={0.03}
@@ -221,7 +217,6 @@ function LightingDemo() {
           position={[1.8, 0, 0]}
           scale={0.7}
           wireframe
-          rotation={[0, spin * 0.8, 0]}
         />
       </Scene>
 
@@ -242,13 +237,14 @@ function LightingDemo() {
 }
 
 // ── Planet Demo ─────────────────────────────────────────
+// Single slow timer (100ms) for moon orbit only. orbitControls for camera.
 
 function PlanetDemo() {
   const c = useThemeColors();
   const [time, setTime] = useState(0);
   const [seed, setSeed] = useState(42);
 
-  useLuaInterval(16, () => setTime(p => p + 0.008));
+  useLuaInterval(100, () => setTime(p => p + 0.05));
 
   const moonX = Math.cos(time * 1.5) * 2.2;
   const moonY = Math.sin(time * 1.5) * 2.2;
@@ -272,14 +268,12 @@ function PlanetDemo() {
           geometry="sphere"
           texture="planet"
           seed={seed}
-          rotation={[0.3, time * 0.4, 0]}
           specular={64}
         />
         <Mesh
           geometry="sphere"
           color="#74c7ec"
           scale={1.04}
-          rotation={[0.3, time * 0.4, 0]}
           opacity={0.3}
           fresnel={3}
           unlit
@@ -289,7 +283,6 @@ function PlanetDemo() {
           color="#9ca0b0"
           scale={0.18}
           position={[moonX, moonY, moonZ]}
-          rotation={[0, time, 0]}
           specular={16}
         />
       </Scene>
@@ -307,14 +300,12 @@ function PlanetDemo() {
 }
 
 // ── Edge & Wireframe Demo ───────────────────────────────
+// No timer — orbitControls for rotation. Buttons toggle wireframe + edge width.
 
 function EdgeDemo() {
   const c = useThemeColors();
-  const [spin, setSpin] = useState(0);
   const [wireframe, setWireframe] = useState(false);
   const [edgeWidth, setEdgeWidth] = useState(0.04);
-
-  useLuaInterval(16, () => setSpin(p => p + 0.02));
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
@@ -324,7 +315,7 @@ function EdgeDemo() {
         <Tag text="wireframe" color={C.edge} />
       </Box>
 
-      <Scene style={{ width: 240, height: 160, borderRadius: 6 }} backgroundColor="#12121b">
+      <Scene style={{ width: 240, height: 160, borderRadius: 6 }} backgroundColor="#12121b" orbitControls>
         <Camera position={[0, -4, 2]} lookAt={[0, 0, 0]} fov={1.0} />
         <AmbientLight color="#1a1a2e" intensity={0.25} />
         <DirectionalLight direction={[1, -1, 1]} intensity={1.0} />
@@ -335,7 +326,6 @@ function EdgeDemo() {
           edgeColor={C.edge}
           edgeWidth={edgeWidth}
           position={[-1.3, 0, 0]}
-          rotation={[spin * 0.6, spin, 0]}
         />
         <Mesh
           geometry="sphere"
@@ -343,7 +333,6 @@ function EdgeDemo() {
           wireframe={wireframe}
           edgeColor={wireframe ? C.scene : undefined}
           position={[1.3, 0, 0]}
-          rotation={[0, spin * 0.5, 0]}
           specular={32}
         />
       </Scene>
@@ -367,14 +356,12 @@ function EdgeDemo() {
 }
 
 // ── Transparency & Fresnel Demo ─────────────────────────
+// No timer — orbitControls for rotation. Buttons adjust fresnel + opacity.
 
 function FresnelDemo() {
   const c = useThemeColors();
-  const [spin, setSpin] = useState(0);
   const [fresnel, setFresnel] = useState(3.0);
   const [opacity, setOpacity] = useState(0.35);
-
-  useLuaInterval(16, () => setSpin(p => p + 0.015));
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
@@ -384,7 +371,7 @@ function FresnelDemo() {
         <Tag text="unlit" color={C.material} />
       </Box>
 
-      <Scene style={{ width: 240, height: 160, borderRadius: 6 }} backgroundColor="#020208" stars>
+      <Scene style={{ width: 240, height: 160, borderRadius: 6 }} backgroundColor="#020208" stars orbitControls>
         <Camera position={[0, -3, 1.2]} lookAt={[0, 0, 0]} fov={1.0} />
         <AmbientLight color="#1a1a3a" intensity={0.15} />
         <DirectionalLight direction={[0.5, -1, 0.5]} color="#ffffff" intensity={1.0} />
@@ -393,7 +380,6 @@ function FresnelDemo() {
           geometry="sphere"
           color="#89b4fa"
           specular={48}
-          rotation={[0, spin, 0]}
         />
         <Mesh
           geometry="sphere"
@@ -402,7 +388,6 @@ function FresnelDemo() {
           opacity={opacity}
           fresnel={fresnel}
           unlit
-          rotation={[0, spin, 0]}
         />
       </Scene>
 

@@ -263,6 +263,8 @@ const PORT_TYPES = [
   { label: 'midi', desc: 'Note/CC event stream (from MIDI devices or sequencer)', color: C.pink },
 ];
 
+const TOPOLOGY_ONLY_RACK_OPTIONS = { topologyOnly: true };
+
 // ── Helpers ──────────────────────────────────────────────
 
 function Divider() {
@@ -300,7 +302,7 @@ const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as c
 function RackInfoDemo() {
   const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack({ topologyOnly: true });
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
   const patchBuilt = useRef(false);
 
   useEffect(() => {
@@ -434,7 +436,7 @@ function ModuleParamDemo() {
 function ClockDemo() {
   const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack({ topologyOnly: true });
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
   const clockReady = useRef(false);
 
   useEffect(() => {
@@ -511,7 +513,7 @@ function ClockDemo() {
 function SequencerDemo() {
   const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack({ topologyOnly: true });
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
   const seqReady = useRef(false);
 
   useEffect(() => {
@@ -581,7 +583,7 @@ function SequencerDemo() {
 function SamplerDemo() {
   const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack({ topologyOnly: true });
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
   const samplerReady = useRef(false);
 
   useEffect(() => {
@@ -1066,7 +1068,7 @@ export function AudioStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Patch it. Play it. All in Lua.'}
+          {'bwaaaaaaaaaamp'}
         </Text>
       </Box>
 

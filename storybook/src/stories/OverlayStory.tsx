@@ -122,9 +122,9 @@ const SHM_PROTOCOL_CODE = `// Shared memory layout (matches overlay_hook.c)
 // ── Hoisted data arrays ─────────────────────────────────
 
 const MODES = [
-  { label: 'passthrough', desc: 'Overlay visible, all input falls through to the game via XFixes empty region', color: C.passthrough },
-  { label: 'interactive', desc: 'Overlay visible and captures input — game receives nothing until you toggle', color: C.interactive },
-  { label: 'hidden', desc: 'Overlay completely invisible, all input goes to game, minimal render cost', color: C.hidden },
+  { label: 'passthrough', desc: 'Visible, input falls through to game', color: C.passthrough },
+  { label: 'interactive', desc: 'Visible, overlay captures all input', color: C.interactive },
+  { label: 'hidden', desc: 'Invisible, zero render cost', color: C.hidden },
 ];
 
 const TRANSPORTS = [
@@ -275,12 +275,14 @@ function TransportDiagram() {
 function FeatureCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <Box style={{ gap: 5, width: '100%' }}>
       {FEATURES.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 10, color: c.text, width: 150, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
+        <Box key={f.label} style={{ gap: 1 }}>
+          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
+            <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{f.label}</Text>
+          </Box>
+          <Text style={{ fontSize: 9, color: c.textSecondary, paddingLeft: 11 }}>{f.desc}</Text>
         </Box>
       ))}
     </Box>
@@ -412,34 +414,45 @@ function HiddenPreview() {
 /** SHM compositing pipeline diagram */
 function SHMPipelinePreview() {
   const c = useThemeColors();
-  const stages = [
+  const row1 = [
     { label: 'Love2D', sub: 'FBO render', color: C.accent },
     { label: 'glReadPixels', sub: 'RGBA out', color: C.hook },
     { label: '/rjit-overlay', sub: 'POSIX shm', color: C.shm },
-    { label: 'LD_PRELOAD', sub: 'hook.so', color: C.cli },
-    { label: 'Composite', sub: 'glXSwapBuffers', color: C.passthrough },
   ];
+  const row2 = [
+    { label: 'LD_PRELOAD', sub: 'hook.so', color: C.cli },
+    { label: 'glXSwapBuffers', sub: 'composite', color: C.passthrough },
+  ];
+  const renderStage = (s: typeof row1[0]) => (
+    <Box key={s.label} style={{
+      flexGrow: 1, flexBasis: 0,
+      backgroundColor: s.color + '18',
+      borderWidth: 1, borderColor: s.color + '44',
+      borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5,
+      alignItems: 'center', gap: 2,
+    }}>
+      <Text style={{ fontSize: 8, color: s.color, fontWeight: 'bold' }}>{s.label}</Text>
+      <Text style={{ fontSize: 7, color: c.muted }}>{s.sub}</Text>
+    </Box>
+  );
+  const arrow = <Text style={{ fontSize: 10, color: c.muted, flexShrink: 0 }}>{'\u2192'}</Text>;
   return (
     <Box style={{ width: '100%', gap: 6 }}>
       <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold', letterSpacing: 1 }}>{'SHM COMPOSITING PIPELINE'}</Text>
       <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-        {stages.map((s, i) => (
-          <React.Fragment key={s.label}>
-            <Box style={{
-              flexGrow: 1, flexBasis: 0,
-              backgroundColor: s.color + '18',
-              borderWidth: 1, borderColor: s.color + '44',
-              borderRadius: 4, padding: 6,
-              alignItems: 'center', gap: 2,
-            }}>
-              <Text style={{ fontSize: 7, color: s.color, fontWeight: 'bold' }}>{s.label}</Text>
-              <Text style={{ fontSize: 6, color: c.muted }}>{s.sub}</Text>
-            </Box>
-            {i < stages.length - 1 && (
-              <Text style={{ fontSize: 10, color: c.muted, flexShrink: 0 }}>{'\u2192'}</Text>
-            )}
-          </React.Fragment>
-        ))}
+        {renderStage(row1[0])}
+        {arrow}
+        {renderStage(row1[1])}
+        {arrow}
+        {renderStage(row1[2])}
+      </Box>
+      <Box style={{ alignItems: 'center' }}>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'\u2193'}</Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        {renderStage(row2[0])}
+        {arrow}
+        {renderStage(row2[1])}
       </Box>
     </Box>
   );
@@ -508,7 +521,7 @@ export function OverlayStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Game overlay — your React UI on top of any OpenGL game'}
+          {'Now you see it, now you don\'t'}
         </Text>
       </Box>
 
@@ -531,6 +544,7 @@ export function OverlayStory() {
         <Band>
           <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Already in the box'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useOverlay() is part of @reactjit/core — no extra package needed. The hook polls overlay:state RPC every 500ms and returns the current mode, opacity, hotkey, and control methods.'}
             </Text>
@@ -550,6 +564,7 @@ export function OverlayStory() {
           </Half>
           <Half>
             <SectionLabel icon="code">{'useOverlay() HOOK'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'One hook to rule them all'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Returns current overlay state and control methods. Polls the Lua overlay module via RPC. When overlay mode is not active (no REACTJIT_OVERLAY env var), enabled is false and controls are no-ops.'}
             </Text>
@@ -563,15 +578,18 @@ export function OverlayStory() {
         <Band>
           <Half>
             <SectionLabel icon="toggle-left">{'VISIBILITY MODES'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Three faces, one hotkey'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Three modes, cycled by hotkey (default F6). The cycle is deterministic: passthrough, interactive, hidden, repeat. Each mode changes both visibility and input routing.'}
             </Text>
-            <Box style={{ gap: 4 }}>
+            <Box style={{ gap: 6 }}>
               {MODES.map(m => (
-                <Box key={m.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                  <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: m.color, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 10, color: m.color, width: 90, flexShrink: 0 }}>{m.label}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{m.desc}</Text>
+                <Box key={m.label} style={{ gap: 2 }}>
+                  <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                    <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: m.color, flexShrink: 0 }} />
+                    <Text style={{ fontSize: 10, color: m.color, fontWeight: 'bold' }}>{m.label}</Text>
+                  </Box>
+                  <Text style={{ fontSize: 9, color: c.muted, paddingLeft: 11 }}>{m.desc}</Text>
                 </Box>
               ))}
             </Box>
@@ -603,6 +621,7 @@ export function OverlayStory() {
           </Half>
           <Half>
             <SectionLabel icon="layers">{'TRANSPORT MODES'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Window or wormhole'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Two ways to get your overlay onto the screen. Transparent window mode is the default — works for any borderless-windowed game with zero setup. Shared memory mode is for true fullscreen games where a separate window can\'t float on top.'}
             </Text>
@@ -618,6 +637,7 @@ export function OverlayStory() {
         <Band>
           <Half>
             <SectionLabel icon="terminal">{'WINDOW MODE (CLI)'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Float like a butterfly'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The default mode. Launches your ReactJIT app as a borderless, always-on-top, transparent SDL2 window. esbuild watch + HMR included — edit your overlay code and see it update in real time over the game.'}
             </Text>
@@ -639,6 +659,7 @@ export function OverlayStory() {
           </Half>
           <Half>
             <SectionLabel icon="hard-drive">{'ATTACH MODE (CLI)'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Inject directly into the vein'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'For true fullscreen games. Builds your app, launches Love2D in shm mode, waits for the RJIT_SHM_READY signal, then launches your game with the LD_PRELOAD hook. The hook intercepts glXSwapBuffers and composites the overlay.'}
             </Text>
@@ -654,6 +675,7 @@ export function OverlayStory() {
         <Band>
           <Half>
             <SectionLabel icon="layout">{'HUD PATTERN'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Heads up, heads down'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Build your overlay like any ReactJIT app. Check overlay.mode to decide what to render — minimal stats bar in passthrough, full settings panel in interactive, nothing expensive in hidden. The mode changes instantly on hotkey press.'}
             </Text>
@@ -673,6 +695,7 @@ export function OverlayStory() {
           </Half>
           <Half>
             <SectionLabel icon="database">{'SHM PROTOCOL'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'32 bytes of trust'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The shared memory segment has a 32-byte header followed by raw RGBA pixel data. The magic number 0x524A4954 ("RJIT") identifies valid segments. frame_seq increments each frame so the hook can detect stale data. Flags control visibility and input routing.'}
             </Text>
@@ -703,7 +726,7 @@ export function OverlayStory() {
           gap: 8,
         }}>
           <SectionLabel icon="list">{'API SURFACE'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'Everything the overlay system exposes:'}</Text>
+          <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'The whole arsenal'}</Text>
           <FeatureCatalog />
         </Box>
 

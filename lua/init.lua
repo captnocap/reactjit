@@ -674,6 +674,15 @@ function ReactJIT.init(config)
   -- (needed for text scale Ctrl+=/-, TextEditor backspace/arrows, etc.)
   love.keyboard.setKeyRepeat(true)
 
+  -- Allow clicks that bring the window into focus to also pass through as
+  -- input events. Without this, clicking an unfocused window requires two
+  -- clicks: one to focus, one to actually interact.
+  pcall(function()
+    local ffi = require("ffi")
+    pcall(ffi.cdef, 'int SDL_SetHint(const char *name, const char *value);')
+    ffi.C.SDL_SetHint("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
+  end)
+
   -- Inspector/console can be disabled for production builds
   M.inspectorEnabled = config.inspector ~= false
   M.screenshotEnabled = config.screenshot ~= false

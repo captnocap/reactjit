@@ -311,7 +311,7 @@ is called every frame during flex distribution. This may be:
 
 const BASIC_CODE = `const [state, actions] = usePackage('user-prefs')
 // Reactive - re-renders when data changes
-if (state.loading) return <Spinner />
+scm-history-item:/home/siah/creative/reactjit?%7B%22repositoryId%22%3A%22scm0%22%2C%22historyItemId%22%3A%22a2e4ff6f3f1db3e50c57dbe17bdb3db71b5d00d3%22%2C%22historyItemParentId%22%3A%2204a2735e313f7252c8cae03b765885a26f027750%22%2C%22historyItemDisplayId%22%3A%22a2e4ff6%22%7Dif (state.loading) return <Spinner />
 if (state.error) return <Error msg={state.error} />
 return <Settings data={state.data} />`;
 

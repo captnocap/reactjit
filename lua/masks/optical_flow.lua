@@ -86,14 +86,14 @@ function OpticalFlow.draw(state, w, h, source)
   love.graphics.setBlendMode("add")
   if colorShift then
     -- Slight color fringing on the trail
-    love.graphics.setColor(0.8, 0.3, 0.2, 0.15 * effectMix)
+    love.graphics.setColor(0.8, 0.3, 0.2, 0.4 * effectMix)
     love.graphics.draw(state.trailCanvas, -1, 0)
-    love.graphics.setColor(0.2, 0.5, 0.8, 0.12 * effectMix)
+    love.graphics.setColor(0.2, 0.5, 0.8, 0.35 * effectMix)
     love.graphics.draw(state.trailCanvas, 1, 0)
-    love.graphics.setColor(0.3, 0.8, 0.3, 0.1 * effectMix)
+    love.graphics.setColor(0.3, 0.8, 0.3, 0.3 * effectMix)
     love.graphics.draw(state.trailCanvas, 0, 0)
   else
-    love.graphics.setColor(1, 1, 1, 0.25 * effectMix)
+    love.graphics.setColor(1, 1, 1, 0.6 * effectMix)
     love.graphics.draw(state.trailCanvas, 0, 0)
   end
   love.graphics.setBlendMode("alpha")

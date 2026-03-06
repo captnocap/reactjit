@@ -2803,6 +2803,20 @@ function drawPerfBar()
   local pad = 6
   local lineH = font:getHeight() + 2
 
+  -- Read RSS from /proc/self/statm (Linux)
+  local rssMB = nil
+  do
+    local f = io.open("/proc/self/statm", "r")
+    if f then
+      local line = f:read("*l")
+      f:close()
+      if line then
+        local _, rss = line:match("(%d+)%s+(%d+)")
+        if rss then rssMB = tonumber(rss) * 4 / 1024 end
+      end
+    end
+  end
+
   -- Build perf text
   local fpsColor = state.fps >= 55 and PERF_GOOD or PERF_WARN
   local items = {
@@ -2810,6 +2824,7 @@ function drawPerfBar()
     { label = "Layout", value = string.format("%.1fms", state.layoutMs), color = PERF_TEXT },
     { label = "Paint", value = string.format("%.1fms", state.paintMs), color = PERF_TEXT },
     { label = "Nodes", value = tostring(state.nodeCount), color = PERF_TEXT },
+    { label = "RSS", value = rssMB and string.format("%.0f MB", rssMB) or "?", color = PERF_TEXT },
   }
 
   -- Measure width

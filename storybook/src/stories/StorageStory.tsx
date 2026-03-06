@@ -183,6 +183,7 @@ const SEARCH_ITEMS = [
   { name: 'Grace', role: 'Data Scientist' },
   { name: 'Hank', role: 'DevOps' },
 ];
+const SEARCH_DEMO_OPTIONS: { key: Array<'name' | 'role'> } = { key: ['name', 'role'] };
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -311,7 +312,7 @@ function HotStateDemo() {
 function SearchDemo() {
   const c = useThemeColors();
   const [query, setQuery] = useState('');
-  const results = useSearch(SEARCH_ITEMS, query, { key: ['name', 'role'] });
+  const results = useSearch(SEARCH_ITEMS, query, SEARCH_DEMO_OPTIONS);
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>

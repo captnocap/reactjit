@@ -529,6 +529,34 @@ export interface EmulatorProps {
   key?: string | number;
 }
 
+export interface LibretroProps {
+  /** Path to libretro core shared library (.so/.dylib) */
+  core?: string;
+  /** Path to ROM file (Love2D VFS or absolute OS path) */
+  rom?: string;
+  /** Run or pause emulation (default: true) */
+  running?: boolean;
+  /** Audio volume 0-1 (default: 1) */
+  volume?: number;
+  /** Emulation speed multiplier (default: 1) */
+  speed?: number;
+  /** Mute audio (default: false) */
+  muted?: boolean;
+
+  style?: Style;
+  w?: number | string;
+  h?: number | string;
+
+  /** Fired when core + ROM are loaded successfully */
+  onLoaded?: (event: LoveEvent) => void;
+  /** Fired on load or runtime error */
+  onError?: (event: LoveEvent) => void;
+  /** Fired when core is reset */
+  onReset?: (event: LoveEvent) => void;
+
+  key?: string | number;
+}
+
 export interface ScrollEvent {
   scrollX: number;
   scrollY: number;

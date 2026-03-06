@@ -21,7 +21,7 @@ import { Native } from './Native';
 import type {
   AudioProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps, ImageSelectProps, ImageProcessProps,
+  BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps,
 } from './types';
 
 /**
@@ -208,4 +208,21 @@ export function I2CDevice(props: I2CDeviceProps) {
  */
 export function SPIDevice(props: SPIDeviceProps) {
   return <Native type="SPIDevice" {...props} />;
+}
+
+/**
+ * Libretro core compatibility layer — run any libretro-compatible emulator core.
+ * Supports NES, SNES, GBA, Genesis, PS1, and hundreds more via .so cores.
+ *
+ * Controls: Arrow keys = D-pad, Z = A, X = B, A = X, S = Y,
+ *           Enter = Start, RShift = Select, Q/W = L/R
+ *           F5 = Save state, F9 = Load state, F6 = Reset
+ *           Gamepads work automatically.
+ *
+ * @example
+ * <Libretro core="/usr/lib/libretro/snes9x_libretro.so" rom="zelda.sfc" running />
+ * <Libretro core="cores/mgba_libretro.so" rom="pokemon.gba" volume={0.6} />
+ */
+export function Libretro(props: LibretroProps) {
+  return <Native type="Libretro" {...props} />;
 }
