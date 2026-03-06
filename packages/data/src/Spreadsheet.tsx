@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Input,
+  type LoveEvent,
   Pressable,
   Text,
   useThemeColorsOptional,
@@ -15,6 +16,8 @@ import {
 import type { SpreadsheetCellMap, SpreadsheetProps, SpreadsheetScalar } from './types';
 
 const ROW_HEADER_WIDTH = 52;
+const DEFAULT_MIN_COLUMN_WIDTH = 72;
+const DEFAULT_MAX_COLUMN_WIDTH = 460;
 
 function toDisplayString(value: SpreadsheetScalar): string {
   if (typeof value === 'number') {
@@ -40,6 +43,32 @@ function updateCellMap(cells: SpreadsheetCellMap, addressInput: string, input: s
   return next;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeColumnWidths(
+  widths: number[] | undefined,
+  cols: number,
+  fallbackWidth: number,
+  minWidth: number,
+  maxWidth: number,
+): number[] {
+  return Array.from({ length: cols }, (_, colIdx) => {
+    const raw = widths?.[colIdx];
+    const width = typeof raw === 'number' && Number.isFinite(raw) ? raw : fallbackWidth;
+    return clamp(width, minWidth, maxWidth);
+  });
+}
+
+function areEqualWidths(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
 export function Spreadsheet({
   rows = 20,
   cols = 8,
@@ -50,7 +79,15 @@ export function Spreadsheet({
   readOnly = false,
   showFormulaBar = true,
   columnWidth = 118,
+  columnWidths,
+  onColumnWidthsChange,
+  resizableColumns = true,
+  minColumnWidth = DEFAULT_MIN_COLUMN_WIDTH,
+  maxColumnWidth = DEFAULT_MAX_COLUMN_WIDTH,
   rowHeight = 30,
+  viewportHeight,
+  minVisibleRows = 6,
+  maxVisibleRows = 14,
   style,
   headerStyle,
   cellStyle,
@@ -72,6 +109,49 @@ export function Spreadsheet({
   const controlled = cells !== undefined;
   const [internalCells, setInternalCells] = useState<SpreadsheetCellMap>(initialCells ?? {});
   const liveCells = controlled ? (cells as SpreadsheetCellMap) : internalCells;
+
+  const widthControlled = columnWidths !== undefined;
+  const canResizeColumns = resizableColumns && !readOnly && (!widthControlled || !!onColumnWidthsChange);
+  const resolvedMinColumnWidth = Math.max(48, minColumnWidth);
+  const resolvedMaxColumnWidth = Math.max(resolvedMinColumnWidth, maxColumnWidth);
+  const [internalColumnWidths, setInternalColumnWidths] = useState<number[]>(() =>
+    normalizeColumnWidths(columnWidths, cols, columnWidth, resolvedMinColumnWidth, resolvedMaxColumnWidth),
+  );
+  const liveColumnWidths = useMemo(() => {
+    const sourceWidths = widthControlled ? columnWidths : internalColumnWidths;
+    return normalizeColumnWidths(
+      sourceWidths,
+      cols,
+      columnWidth,
+      resolvedMinColumnWidth,
+      resolvedMaxColumnWidth,
+    );
+  }, [
+    widthControlled,
+    columnWidths,
+    internalColumnWidths,
+    cols,
+    columnWidth,
+    resolvedMinColumnWidth,
+    resolvedMaxColumnWidth,
+  ]);
+
+  useEffect(() => {
+    if (widthControlled) return;
+    setInternalColumnWidths((prev) => {
+      const next = normalizeColumnWidths(
+        prev,
+        cols,
+        columnWidth,
+        resolvedMinColumnWidth,
+        resolvedMaxColumnWidth,
+      );
+      return areEqualWidths(prev, next) ? prev : next;
+    });
+  }, [widthControlled, cols, columnWidth, resolvedMinColumnWidth, resolvedMaxColumnWidth]);
+
+  const resizeStateRef = useRef<{ columnIndex: number; startWidth: number } | null>(null);
+  const [resizingColumnIndex, setResizingColumnIndex] = useState<number | null>(null);
 
   const [selectedAddress, setSelectedAddress] = useState('A1');
   const selectedKey = normalizeCellAddress(selectedAddress);
@@ -101,9 +181,52 @@ export function Spreadsheet({
     commitCell(selectedKey, input);
   };
 
-  const totalWidth = ROW_HEADER_WIDTH + cols * columnWidth;
-  const viewportRows = Math.max(6, Math.min(14, rows + 1));
-  const gridViewportHeight = viewportRows * rowHeight + 2;
+  const commitColumnWidths = (nextWidths: number[]) => {
+    const normalized = normalizeColumnWidths(
+      nextWidths,
+      cols,
+      columnWidth,
+      resolvedMinColumnWidth,
+      resolvedMaxColumnWidth,
+    );
+    if (!widthControlled) setInternalColumnWidths(normalized);
+    onColumnWidthsChange?.(normalized);
+  };
+
+  const beginColumnResize = (columnIndex: number) => {
+    if (!canResizeColumns) return;
+    resizeStateRef.current = {
+      columnIndex,
+      startWidth: liveColumnWidths[columnIndex] ?? columnWidth,
+    };
+    setResizingColumnIndex(columnIndex);
+  };
+
+  const dragColumnResize = (columnIndex: number, event: LoveEvent) => {
+    const resizeState = resizeStateRef.current;
+    if (!resizeState || resizeState.columnIndex !== columnIndex) return;
+    const delta = event.totalDeltaX ?? event.dx ?? 0;
+    const nextWidth = clamp(
+      resizeState.startWidth + delta,
+      resolvedMinColumnWidth,
+      resolvedMaxColumnWidth,
+    );
+    if (nextWidth === liveColumnWidths[columnIndex]) return;
+    const nextWidths = [...liveColumnWidths];
+    nextWidths[columnIndex] = nextWidth;
+    commitColumnWidths(nextWidths);
+  };
+
+  const endColumnResize = () => {
+    resizeStateRef.current = null;
+    setResizingColumnIndex(null);
+  };
+
+  const totalWidth = ROW_HEADER_WIDTH + liveColumnWidths.reduce((sum, width) => sum + width, 0);
+  const resolvedMinRows = Math.max(1, minVisibleRows);
+  const resolvedMaxRows = Math.max(resolvedMinRows, maxVisibleRows);
+  const viewportRows = Math.max(resolvedMinRows, Math.min(resolvedMaxRows, rows + 1));
+  const gridViewportHeight = viewportHeight ?? viewportRows * rowHeight + 2;
 
   return (
     <Box style={{
@@ -197,17 +320,43 @@ export function Spreadsheet({
               <Box
                 key={`header-${colIdx}`}
                 style={{
-                  width: columnWidth,
+                  width: liveColumnWidths[colIdx],
                   height: rowHeight,
                   borderRightWidth: colIdx < cols - 1 ? 1 : 0,
                   borderColor: colors.border,
                   justifyContent: 'center',
                   alignItems: 'center',
+                  position: 'relative',
                 }}
               >
                 <Text style={{ color: colors.text, fontSize: 10, fontWeight: 'bold' }}>
                   {columnIndexToLabel(colIdx)}
                 </Text>
+                {canResizeColumns && (
+                  <Box
+                    onDragStart={() => beginColumnResize(colIdx)}
+                    onDrag={(event) => dragColumnResize(colIdx, event)}
+                    onDragEnd={endColumnResize}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 0,
+                      width: 8,
+                      height: rowHeight,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      backgroundColor: resizingColumnIndex === colIdx ? colors.accentSoft : 'transparent',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <Box style={{
+                      width: 2,
+                      height: rowHeight - 10,
+                      borderRadius: 2,
+                      backgroundColor: resizingColumnIndex === colIdx ? colors.accent : colors.border,
+                    }} />
+                  </Box>
+                )}
               </Box>
             ))}
           </Box>
@@ -245,7 +394,7 @@ export function Spreadsheet({
                       setFormulaInput(liveCells[normalized] ?? '');
                     }}
                     style={{
-                      width: columnWidth,
+                      width: liveColumnWidths[colIdx],
                       height: rowHeight,
                     }}
                   >

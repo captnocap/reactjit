@@ -30,7 +30,15 @@ export interface SpreadsheetProps {
   readOnly?: boolean;
   showFormulaBar?: boolean;
   columnWidth?: number;
+  columnWidths?: number[];
+  onColumnWidthsChange?: (widths: number[]) => void;
+  resizableColumns?: boolean;
+  minColumnWidth?: number;
+  maxColumnWidth?: number;
   rowHeight?: number;
+  viewportHeight?: number | string;
+  minVisibleRows?: number;
+  maxVisibleRows?: number;
   style?: Style;
   headerStyle?: Style;
   cellStyle?: Style;
