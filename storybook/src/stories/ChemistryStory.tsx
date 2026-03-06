@@ -3,15 +3,17 @@ import { Box, Text, Pressable, ScrollView, TextInput } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import {
   PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView,
+  ReagentTest, SpectrumView, PhaseDiagram,
   useElement, useMolecule, useReaction,
+  usePubChemCompound,
   molarMass, massComposition, parseFormula, balanceEquation,
-  searchCompounds, ELEMENTS,
+  searchCompounds, ELEMENTS, getAllTestedCompounds, REAGENT_INFO,
   massToMoles, molesToMass, molesToParticles,
   CONSTANTS,
 } from '@reactjit/chemistry';
-import type { Element } from '@reactjit/chemistry';
+import type { Element, ReagentType } from '@reactjit/chemistry';
 
-type Tab = 'table' | 'molecules' | 'reactions' | 'tools';
+type Tab = 'table' | 'molecules' | 'reactions' | 'reagents' | 'spectra' | 'tools';
 
 export function ChemistryStory() {
   const c = useThemeColors();
@@ -20,33 +22,40 @@ export function ChemistryStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
       {/* Tab bar */}
-      <Box style={{ flexDirection: 'row', gap: 0, borderBottomWidth: 1, borderBottomColor: c.border }}>
-        {(['table', 'molecules', 'reactions', 'tools'] as Tab[]).map(t => (
-          <Pressable
-            key={t}
-            onPress={() => setTab(t)}
-            style={{
-              paddingTop: 10,
-              paddingBottom: 10,
-              paddingLeft: 16,
-              paddingRight: 16,
-              backgroundColor: tab === t ? c.bgElevated : 'transparent',
-              borderBottomWidth: tab === t ? 2 : 0,
-              borderBottomColor: c.primary,
-            }}
-          >
-            <Text style={{ fontSize: 13, color: tab === t ? c.primary : c.muted, fontWeight: tab === t ? 'bold' : 'normal' }}>
-              {t === 'table' ? 'Periodic Table' : t === 'molecules' ? 'Molecules' : t === 'reactions' ? 'Reactions' : 'Tools'}
-            </Text>
-          </Pressable>
-        ))}
-      </Box>
+      <ScrollView style={{ height: 38 }} horizontal>
+        <Box style={{ flexDirection: 'row', gap: 0, borderBottomWidth: 1, borderBottomColor: c.border }}>
+          {(['table', 'molecules', 'reactions', 'reagents', 'spectra', 'tools'] as Tab[]).map(t => {
+            const labels: Record<Tab, string> = { table: 'Periodic Table', molecules: 'Molecules', reactions: 'Reactions', reagents: 'Reagents', spectra: 'Spectra', tools: 'Tools' };
+            return (
+              <Pressable
+                key={t}
+                onPress={() => setTab(t)}
+                style={{
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                  paddingLeft: 14,
+                  paddingRight: 14,
+                  backgroundColor: tab === t ? c.bgElevated : 'transparent',
+                  borderBottomWidth: tab === t ? 2 : 0,
+                  borderBottomColor: c.primary,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: tab === t ? c.primary : c.muted, fontWeight: tab === t ? 'bold' : 'normal' }}>
+                  {labels[t]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Box>
+      </ScrollView>
 
       {/* Content */}
       <Box style={{ flexGrow: 1 }}>
         {tab === 'table' && <TableTab />}
         {tab === 'molecules' && <MoleculesTab />}
         {tab === 'reactions' && <ReactionsTab />}
+        {tab === 'reagents' && <ReagentsTab />}
+        {tab === 'spectra' && <SpectraTab />}
         {tab === 'tools' && <ToolsTab />}
       </Box>
     </Box>
@@ -277,6 +286,239 @@ function ReactionsTab() {
             <ReactionView key={`${eq}-${i}`} equation={eq} />
           ))}
         </Box>
+      </Box>
+    </ScrollView>
+  );
+}
+
+// -- Reagents Tab -------------------------------------------------------------
+
+const REAGENT_TYPES: ReagentType[] = ['marquis', 'mecke', 'mandelin', 'simons', 'ehrlich'];
+const REAGENT_COMPOUNDS = ['MDMA', 'Amphetamine', 'Methamphetamine', 'LSD', 'Heroin', 'Cocaine', 'Psilocybin', 'DMT', 'Caffeine'];
+
+function ReagentsTab() {
+  const c = useThemeColors();
+  const [compound, setCompound] = useState('MDMA');
+  const [reagent, setReagent] = useState<ReagentType>('marquis');
+  const [lastResult, setLastResult] = useState<string>('');
+
+  return (
+    <ScrollView style={{ flexGrow: 1 }}>
+      <Box style={{ padding: 16, gap: 16 }}>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>{'Reagent Spot Tests'}</Text>
+        <Text style={{ fontSize: 11, color: c.muted }}>
+          {'Color-change presumptive tests. Each reagent reacts differently — stack multiple for higher confidence.'}
+        </Text>
+
+        {/* Compound selector */}
+        <Box style={{ gap: 4 }}>
+          <Text style={{ fontSize: 11, color: c.muted }}>{'Sample Compound'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+            {REAGENT_COMPOUNDS.map(cmp => (
+              <Pressable
+                key={cmp}
+                onPress={() => setCompound(cmp)}
+                style={{
+                  paddingTop: 4, paddingBottom: 4, paddingLeft: 8, paddingRight: 8,
+                  borderRadius: 4,
+                  backgroundColor: compound === cmp ? c.primary : c.surface,
+                }}
+              >
+                <Text style={{ fontSize: 11, color: compound === cmp ? '#fff' : c.text }}>{cmp}</Text>
+              </Pressable>
+            ))}
+          </Box>
+        </Box>
+
+        {/* Multi-reagent test panel */}
+        <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+          {REAGENT_TYPES.map(r => (
+            <Box key={r} style={{ alignItems: 'center', gap: 4 }}>
+              <ReagentTest
+                type={r}
+                sample={compound}
+                speed={1.5}
+                onReactionComplete={(e) => setLastResult(`${r}: ${(e as any).description}`)}
+                style={{ width: 80, height: 100 }}
+              />
+            </Box>
+          ))}
+        </Box>
+
+        {/* Result */}
+        {lastResult !== '' && (
+          <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 10 }}>
+            <Text style={{ fontSize: 12, color: c.text }}>{lastResult}</Text>
+          </Box>
+        )}
+
+        {/* Reagent info */}
+        <Box style={{ gap: 4 }}>
+          <Text style={{ fontSize: 11, color: c.muted }}>{'Reagent selector'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+            {REAGENT_TYPES.map(r => (
+              <Pressable
+                key={r}
+                onPress={() => setReagent(r)}
+                style={{
+                  paddingTop: 3, paddingBottom: 3, paddingLeft: 8, paddingRight: 8,
+                  borderRadius: 4,
+                  backgroundColor: reagent === r ? c.primary : c.surface,
+                }}
+              >
+                <Text style={{ fontSize: 10, color: reagent === r ? '#fff' : c.text }}>
+                  {REAGENT_INFO[r].name}
+                </Text>
+              </Pressable>
+            ))}
+          </Box>
+        </Box>
+
+        <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 10, gap: 4 }}>
+          <Text style={{ fontSize: 13, color: c.text, fontWeight: 'bold' }}>{REAGENT_INFO[reagent].name}</Text>
+          <Text style={{ fontSize: 10, color: c.muted }}>{REAGENT_INFO[reagent].formula}</Text>
+          <Text style={{ fontSize: 11, color: c.text }}>{REAGENT_INFO[reagent].description}</Text>
+        </Box>
+      </Box>
+    </ScrollView>
+  );
+}
+
+// -- Spectra Tab --------------------------------------------------------------
+
+function SpectraTab() {
+  const c = useThemeColors();
+  const [specType, setSpecType] = useState<'ir' | 'uv-vis' | 'mass-spec'>('ir');
+  const [compound, setCompound] = useState('C2H5OH');
+  const [pubchemQuery, setPubchemQuery] = useState('');
+  const pubchem = usePubChemCompound(pubchemQuery || null);
+
+  const specCompounds: Record<string, string[]> = {
+    'ir': ['H2O', 'C2H5OH', 'C3H6O'],
+    'uv-vis': ['C6H6'],
+    'mass-spec': ['C8H10N4O2'],
+  };
+
+  return (
+    <ScrollView style={{ flexGrow: 1 }}>
+      <Box style={{ padding: 16, gap: 16 }}>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>{'Spectrometry'}</Text>
+
+        {/* Spectrum type */}
+        <Box style={{ flexDirection: 'row', gap: 6 }}>
+          {(['ir', 'uv-vis', 'mass-spec'] as const).map(t => (
+            <Pressable
+              key={t}
+              onPress={() => { setSpecType(t); setCompound(specCompounds[t][0] ?? ''); }}
+              style={{
+                paddingTop: 4, paddingBottom: 4, paddingLeft: 10, paddingRight: 10,
+                borderRadius: 4,
+                backgroundColor: specType === t ? c.primary : c.surface,
+              }}
+            >
+              <Text style={{ fontSize: 11, color: specType === t ? '#fff' : c.text }}>
+                {t === 'ir' ? 'IR' : t === 'uv-vis' ? 'UV-Vis' : 'Mass Spec'}
+              </Text>
+            </Pressable>
+          ))}
+        </Box>
+
+        {/* Compound selector */}
+        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+          {(specCompounds[specType] ?? []).map(cmp => (
+            <Pressable
+              key={cmp}
+              onPress={() => setCompound(cmp)}
+              style={{
+                paddingTop: 3, paddingBottom: 3, paddingLeft: 8, paddingRight: 8,
+                borderRadius: 4,
+                backgroundColor: compound === cmp ? c.primary : c.surface,
+              }}
+            >
+              <Text style={{ fontSize: 10, color: compound === cmp ? '#fff' : c.text }}>{cmp}</Text>
+            </Pressable>
+          ))}
+        </Box>
+
+        {/* Spectrum view */}
+        <SpectrumView
+          spectrumType={specType}
+          compound={compound}
+          style={{ height: 280 }}
+        />
+
+        {/* Phase diagram */}
+        <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold', paddingTop: 8 }}>{'Phase Diagrams'}</Text>
+        <Box style={{ flexDirection: 'row', gap: 12 }}>
+          <Box style={{ flexGrow: 1 }}>
+            <PhaseDiagram compound="H2O" style={{ height: 260 }} />
+          </Box>
+          <Box style={{ flexGrow: 1 }}>
+            <PhaseDiagram compound="CO2" style={{ height: 260 }} />
+          </Box>
+        </Box>
+
+        {/* PubChem live lookup */}
+        <Text style={{ fontSize: 16, color: c.text, fontWeight: 'bold', paddingTop: 8 }}>{'PubChem Lookup'}</Text>
+        <TextInput
+          placeholder="Search PubChem (aspirin, caffeine, glucose...)"
+          value={pubchemQuery}
+          onSubmit={() => {}}
+          onChangeText={setPubchemQuery}
+          style={{
+            backgroundColor: c.surface, borderRadius: 6, padding: 10, fontSize: 13, color: c.text,
+          }}
+        />
+        {pubchem.loading && <Text style={{ fontSize: 11, color: c.muted }}>{'Loading from PubChem...'}</Text>}
+        {pubchem.error && <Text style={{ fontSize: 11, color: '#e03838' }}>{pubchem.error}</Text>}
+        {pubchem.data && (
+          <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 6 }}>
+            <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>
+              {`CID ${pubchem.data.cid}: ${pubchem.data.iupacName ?? pubchemQuery}`}
+            </Text>
+            <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              {pubchem.data.molecularFormula && (
+                <Box style={{ gap: 1 }}>
+                  <Text style={{ fontSize: 8, color: c.muted }}>{'Formula'}</Text>
+                  <Text style={{ fontSize: 12, color: c.text }}>{pubchem.data.molecularFormula}</Text>
+                </Box>
+              )}
+              {pubchem.data.molecularWeight && (
+                <Box style={{ gap: 1 }}>
+                  <Text style={{ fontSize: 8, color: c.muted }}>{'MW'}</Text>
+                  <Text style={{ fontSize: 12, color: c.text }}>{`${pubchem.data.molecularWeight} g/mol`}</Text>
+                </Box>
+              )}
+              {pubchem.data.canonicalSmiles && (
+                <Box style={{ gap: 1 }}>
+                  <Text style={{ fontSize: 8, color: c.muted }}>{'SMILES'}</Text>
+                  <Text style={{ fontSize: 10, color: c.text }}>{pubchem.data.canonicalSmiles}</Text>
+                </Box>
+              )}
+              {pubchem.data.xlogp !== undefined && (
+                <Box style={{ gap: 1 }}>
+                  <Text style={{ fontSize: 8, color: c.muted }}>{'XLogP'}</Text>
+                  <Text style={{ fontSize: 12, color: c.text }}>{`${pubchem.data.xlogp}`}</Text>
+                </Box>
+              )}
+              {pubchem.data.hbondDonorCount !== undefined && (
+                <Box style={{ gap: 1 }}>
+                  <Text style={{ fontSize: 8, color: c.muted }}>{'H-bond donors'}</Text>
+                  <Text style={{ fontSize: 12, color: c.text }}>{`${pubchem.data.hbondDonorCount}`}</Text>
+                </Box>
+              )}
+              {pubchem.data.topologicalPolarSurfaceArea !== undefined && (
+                <Box style={{ gap: 1 }}>
+                  <Text style={{ fontSize: 8, color: c.muted }}>{'TPSA'}</Text>
+                  <Text style={{ fontSize: 12, color: c.text }}>{`${pubchem.data.topologicalPolarSurfaceArea}`}</Text>
+                </Box>
+              )}
+            </Box>
+            {pubchem.data.inchiKey && (
+              <Text style={{ fontSize: 9, color: c.muted }}>{`InChIKey: ${pubchem.data.inchiKey}`}</Text>
+            )}
+          </Box>
+        )}
       </Box>
     </ScrollView>
   );

@@ -1,7 +1,9 @@
-// @reactjit/chemistry — Periodic table, molecules, reactions, and conversions.
+// @reactjit/chemistry — Periodic table, molecules, reactions, reagent tests,
+// spectrometry, phase diagrams, PubChem API, and unit conversions.
 //
-// Pure data + hooks + drop-in widgets. No bridge required for core chemistry.
-// Ties into @reactjit/convert for unit conversions, @reactjit/math for geometry.
+// Pure data + hooks + widgets (React-rendered) for static chemistry.
+// Lua capabilities (60fps painters) for reagent tests, spectra, phase diagrams.
+// PubChem REST API for live compound lookups.
 
 // -- Types --------------------------------------------------------------------
 export type {
@@ -38,8 +40,35 @@ export {
 // -- React hooks --------------------------------------------------------------
 export { useElement, useMolecule, useReaction, useEquilibrium, usePeriodicTableFilter } from './hooks';
 
-// -- Drop-in widgets ----------------------------------------------------------
+// -- Drop-in widgets (React-rendered) -----------------------------------------
 export { PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView } from './widgets';
+
+// -- Lua capabilities (60fps painters via <Native>) ---------------------------
+export { ReagentTest, SpectrumView, PhaseDiagram } from './capabilities';
+export type { ReagentTestProps, SpectrumViewProps, PhaseDiagramProps } from './capabilities';
+
+// -- Reagent test data (pure TS, also mirrored in Lua for rendering) ----------
+export {
+  runReagentTest, runMultiReagentTest,
+  getAvailableCompounds, getAllTestedCompounds,
+  REAGENT_INFO,
+} from './reagents';
+export type { ReagentType, ColorReaction, ReagentResult, MultiReagentResult } from './reagents';
+
+// -- Spectra data + IR absorption reference -----------------------------------
+export {
+  getSpectra, getSpectrum, listAvailableSpectra,
+  identifyIRPeaks, wavelengthToColor, absorptionToObservedColor,
+  IR_ABSORPTIONS,
+} from './spectra';
+export type { SpectrumType, SpectralPeak, Spectrum, IRAbsorption } from './spectra';
+
+// -- PubChem API --------------------------------------------------------------
+export {
+  fetchCompound, searchCompoundsPubChem, fetchSynonyms, fetchDescription, fetchHazards,
+  usePubChemCompound, usePubChemSearch, usePubChemSynonyms, usePubChemDescription,
+} from './pubchem';
+export type { PubChemCompound, PubChemSearchResult, PubChemSynonyms } from './pubchem';
 
 // -- Side effect: register chemistry conversions into @reactjit/convert -------
 import './conversions';

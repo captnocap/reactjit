@@ -318,6 +318,10 @@ function Capabilities.loadAll()
     "devtools_embed",
     "imaging",
     "libretro",
+    "tts",
+    "reagent_test",
+    "spectrum_view",
+    "phase_diagram",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do
