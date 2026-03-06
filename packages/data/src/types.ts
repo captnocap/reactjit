@@ -39,10 +39,14 @@ export interface SpreadsheetProps {
   viewportHeight?: number | string;
   minVisibleRows?: number;
   maxVisibleRows?: number;
+  selectedAddress?: string;
+  onSelectedAddressChange?: (address: string) => void;
+  showStatusBar?: boolean;
   style?: Style;
   headerStyle?: Style;
   cellStyle?: Style;
   formulaBarStyle?: Style;
+  statusBarStyle?: Style;
 }
 
 export interface UseSpreadsheetOptions extends SpreadsheetEvaluateOptions {

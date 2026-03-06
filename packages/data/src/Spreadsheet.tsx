@@ -12,6 +12,7 @@ import {
   columnIndexToLabel,
   evaluateSpreadsheet,
   normalizeCellAddress,
+  parseCellAddress,
 } from './formula';
 import type { SpreadsheetCellMap, SpreadsheetProps, SpreadsheetScalar } from './types';
 
@@ -33,6 +34,13 @@ function isNumeric(value: SpreadsheetScalar): boolean {
   const trimmed = String(value).trim();
   if (trimmed.length === 0) return false;
   return Number.isFinite(Number(trimmed));
+}
+
+function valueTypeLabel(value: SpreadsheetScalar): string {
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'string' && value.length === 0) return 'empty';
+  return 'text';
 }
 
 function updateCellMap(cells: SpreadsheetCellMap, addressInput: string, input: string): SpreadsheetCellMap {
@@ -88,10 +96,14 @@ export function Spreadsheet({
   viewportHeight,
   minVisibleRows = 6,
   maxVisibleRows = 14,
+  selectedAddress: selectedAddressProp,
+  onSelectedAddressChange,
+  showStatusBar = true,
   style,
   headerStyle,
   cellStyle,
   formulaBarStyle,
+  statusBarStyle,
 }: SpreadsheetProps) {
   const theme = useThemeColorsOptional();
   const colors = {
@@ -153,8 +165,10 @@ export function Spreadsheet({
   const resizeStateRef = useRef<{ columnIndex: number; startWidth: number } | null>(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState<number | null>(null);
 
-  const [selectedAddress, setSelectedAddress] = useState('A1');
-  const selectedKey = normalizeCellAddress(selectedAddress);
+  const selectionControlled = selectedAddressProp !== undefined;
+  const [internalSelectedAddress, setInternalSelectedAddress] = useState('A1');
+  const selectedKey = normalizeCellAddress(selectionControlled ? (selectedAddressProp as string) : internalSelectedAddress);
+  const selectedLocation = parseCellAddress(selectedKey) ?? { col: 0, row: 0 };
   const [formulaInput, setFormulaInput] = useState(liveCells[selectedKey] ?? '');
 
   useEffect(() => {
@@ -168,6 +182,10 @@ export function Spreadsheet({
   );
 
   const selectedError = evaluation.errors[selectedKey];
+  const selectedRawInput = liveCells[selectedKey] ?? '';
+  const selectedValue = evaluation.values[selectedKey] ?? '';
+  const selectedValueType = valueTypeLabel(selectedValue);
+  const selectedValueDisplay = selectedError ? '#ERR' : toDisplayString(selectedValue);
 
   const commitCell = (address: string, input: string) => {
     if (readOnly) return;
@@ -179,6 +197,13 @@ export function Spreadsheet({
   const commitFormula = (input: string) => {
     setFormulaInput(input);
     commitCell(selectedKey, input);
+  };
+
+  const selectAddress = (address: string) => {
+    const normalized = normalizeCellAddress(address);
+    if (!selectionControlled) setInternalSelectedAddress(normalized);
+    onSelectedAddressChange?.(normalized);
+    setFormulaInput(liveCells[normalized] ?? '');
   };
 
   const commitColumnWidths = (nextWidths: number[]) => {
@@ -293,6 +318,11 @@ export function Spreadsheet({
               {`Formula error in ${selectedKey}: ${selectedError}`}
             </Text>
           )}
+          {!selectedError && !readOnly && (
+            <Text style={{ color: colors.textDim, fontSize: 9 }}>
+              {'Enter applies updates. Drag column separators to resize.'}
+            </Text>
+          )}
         </Box>
       )}
 
@@ -324,12 +354,13 @@ export function Spreadsheet({
                   height: rowHeight,
                   borderRightWidth: colIdx < cols - 1 ? 1 : 0,
                   borderColor: colors.border,
+                  backgroundColor: selectedLocation.col === colIdx ? colors.accentSoft : colors.surface,
                   justifyContent: 'center',
                   alignItems: 'center',
                   position: 'relative',
                 }}
               >
-                <Text style={{ color: colors.text, fontSize: 10, fontWeight: 'bold' }}>
+                <Text style={{ color: selectedLocation.col === colIdx ? colors.accent : colors.text, fontSize: 10, fontWeight: 'bold' }}>
                   {columnIndexToLabel(colIdx)}
                 </Text>
                 {canResizeColumns && (
@@ -369,11 +400,11 @@ export function Spreadsheet({
                 borderRightWidth: 1,
                 borderBottomWidth: 1,
                 borderColor: colors.border,
-                backgroundColor: colors.surface,
+                backgroundColor: selectedLocation.row === rowIdx ? colors.accentSoft : colors.surface,
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: colors.textDim, fontSize: 9 }}>{String(rowIdx + 1)}</Text>
+                <Text style={{ color: selectedLocation.row === rowIdx ? colors.accent : colors.textDim, fontSize: 9 }}>{String(rowIdx + 1)}</Text>
               </Box>
 
               {Array.from({ length: cols }, (_, colIdx) => {
@@ -382,6 +413,7 @@ export function Spreadsheet({
                 const cellValue = evaluation.values[normalized] ?? '';
                 const cellError = evaluation.errors[normalized];
                 const selected = normalized === selectedKey;
+                const inSelectionBand = selectedLocation.col === colIdx || selectedLocation.row === rowIdx;
                 const displayValue = cellError ? '#ERR' : toDisplayString(cellValue);
                 const align = isNumeric(cellValue) && !cellError ? 'right' : 'left';
 
@@ -390,8 +422,7 @@ export function Spreadsheet({
                     key={normalized}
                     disabled={false}
                     onPress={() => {
-                      setSelectedAddress(normalized);
-                      setFormulaInput(liveCells[normalized] ?? '');
+                      selectAddress(normalized);
                     }}
                     style={{
                       width: liveColumnWidths[colIdx],
@@ -404,7 +435,7 @@ export function Spreadsheet({
                       borderRightWidth: colIdx < cols - 1 ? 1 : 0,
                       borderBottomWidth: 1,
                       borderColor: selected ? colors.accent : colors.border,
-                      backgroundColor: selected ? colors.accentSoft : colors.bgAlt,
+                      backgroundColor: selected ? colors.accentSoft : (inSelectionBand ? colors.surface : colors.bgAlt),
                       paddingLeft: 6,
                       paddingRight: 6,
                       paddingTop: 6,
@@ -431,6 +462,31 @@ export function Spreadsheet({
           ))}
         </Box>
       </Box>
+
+      {showStatusBar && (
+        <Box style={{
+          borderTopWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          gap: 3,
+          ...statusBarStyle,
+        }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Text style={{ color: colors.accent, fontSize: 9, fontWeight: 'bold' }}>{`Cell ${selectedKey}`}</Text>
+            <Text style={{ color: colors.textDim, fontSize: 9 }}>{`Type ${selectedValueType}`}</Text>
+            <Text style={{ color: selectedError ? colors.error : colors.textDim, fontSize: 9 }}>
+              {selectedError ? `Error ${selectedError}` : `Value ${selectedValueDisplay}`}
+            </Text>
+          </Box>
+          <Text style={{ color: colors.text, fontSize: 9 }} numberOfLines={1}>
+            {selectedRawInput.length > 0 ? `Input ${selectedRawInput}` : 'Input empty'}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
