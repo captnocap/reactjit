@@ -44,7 +44,7 @@ export function MonacoMirrorStory() {
   const [code, setCode] = useState(STARTER_CODE);
   const [lastSubmitChars, setLastSubmitChars] = useState(STARTER_CODE.length);
 
-  const handleLiveChange = useCallback((next: string) => {
+  const handleChange = useCallback((next: string) => {
     setCode(next);
   }, []);
 
@@ -78,11 +78,12 @@ export function MonacoMirrorStory() {
         <Text style={{ color: c.textDim, fontSize: 10 }}>{`Last submit: ${lastSubmitChars} chars`}</Text>
       </Box>
 
-      <Box style={{ flexGrow: 1, minHeight: 0 }}>
+      <Box style={{ flexGrow: 1, minHeight: 0, gap: 10 }}>
         <MonacoMirror
           value={code}
-          onLiveChange={handleLiveChange}
+          onChange={handleChange}
           onSubmit={handleSubmit}
+          changeDelay={0.08}
           placeholder="Write TypeScript here..."
           filePath="src/playground/CounterCard.tsx"
           workspaceLabel="reactjit-playground"
@@ -91,6 +92,18 @@ export function MonacoMirrorStory() {
           spellCheck={false}
           wordWrap={false}
         />
+
+        <Box style={{ flexShrink: 0, alignItems: 'center', gap: 4 }}>
+          <Text style={{ color: c.textDim, fontSize: 10 }}>{'Auto-compact sample (400x200)'}</Text>
+          <MonacoMirror
+            defaultValue={STARTER_CODE}
+            style={{ width: 400, height: 200 }}
+            filePath="src/small/Widget.tsx"
+            workspaceLabel="small-panel"
+            branch="compact"
+            language="typescript"
+          />
+        </Box>
       </Box>
     </Box>
   );

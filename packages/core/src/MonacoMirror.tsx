@@ -37,6 +37,9 @@ export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineN
   showBreadcrumbs?: boolean;
   showStatusBar?: boolean;
   minimapMaxLines?: number;
+  layoutMode?: 'auto' | 'full' | 'compact';
+  compactMaxWidth?: number;
+  compactMaxHeight?: number;
 }
 
 export function MonacoMirror({
@@ -70,6 +73,9 @@ export function MonacoMirror({
   showBreadcrumbs = true,
   showStatusBar = true,
   minimapMaxLines = 120,
+  layoutMode = 'auto',
+  compactMaxWidth = 560,
+  compactMaxHeight = 260,
   ...rest
 }: MonacoMirrorProps) {
   const initialText = value ?? defaultValue ?? '';
@@ -107,10 +113,34 @@ export function MonacoMirror({
       .map((line) => line.replace(/\t/g, '  ').slice(0, 28));
   }, [lines, minimapMaxLines]);
 
+  const explicitWidth = typeof style?.width === 'number' ? style.width : undefined;
+  const explicitHeight = typeof style?.height === 'number' ? style.height : undefined;
+
+  const compactBySize = !!(
+    (explicitWidth !== undefined && explicitWidth <= compactMaxWidth) ||
+    (explicitHeight !== undefined && explicitHeight <= compactMaxHeight)
+  );
+  const compact = layoutMode === 'compact' || (layoutMode === 'auto' && compactBySize);
+
+  const renderActivityBar = showActivityBar && !compact;
+  const renderSidebar = showSidebar && !compact;
+  const renderMinimap = showMinimap && !compact;
+  const renderBreadcrumbs = showBreadcrumbs && !compact;
+
+  const topBarHeight = compact ? 26 : 34;
+  const statusBarHeight = compact ? 18 : 22;
+  const editorFontSize = compact ? 10 : 12;
+
   const handleLiveChange = useCallback((next: string) => {
     setMirrorText(next);
     onLiveChange?.(next);
   }, [onLiveChange]);
+
+  const handleEditorChange = useCallback((next: string) => {
+    setMirrorText(next);
+    onChange?.(next);
+    onLiveChange?.(next);
+  }, [onChange, onLiveChange]);
 
   const handleChangeText = useCallback((next: string) => {
     setMirrorText(next);
@@ -143,7 +173,7 @@ export function MonacoMirror({
       <Box
         style={{
           flexShrink: 0,
-          height: 34,
+          height: topBarHeight,
           flexDirection: 'row',
           alignItems: 'end',
           backgroundColor: '#252526',
@@ -154,7 +184,7 @@ export function MonacoMirror({
         <Box style={{ width: 10 }} />
         <Box
           style={{
-            height: 28,
+            height: compact ? 22 : 28,
             backgroundColor: '#1e1e1e',
             borderTopLeftRadius: 6,
             borderTopRightRadius: 6,
@@ -173,10 +203,10 @@ export function MonacoMirror({
         <Text
           style={{
             color: '#8a8a8a',
-            fontSize: 9,
+            fontSize: compact ? 8 : 9,
             fontFamily: 'monospace',
             paddingRight: 10,
-            paddingBottom: 8,
+            paddingBottom: compact ? 5 : 8,
           }}
         >
           {branch}
@@ -184,7 +214,7 @@ export function MonacoMirror({
       </Box>
 
       <Box style={{ flexGrow: 1, minHeight: 0, flexDirection: 'row' }}>
-        {showActivityBar && (
+        {renderActivityBar && (
           <Box
             style={{
               width: 42,
@@ -214,7 +244,7 @@ export function MonacoMirror({
           </Box>
         )}
 
-        {showSidebar && (
+        {renderSidebar && (
           <Box
             style={{
               width: 190,
@@ -245,7 +275,7 @@ export function MonacoMirror({
         )}
 
         <Box style={{ flexGrow: 1, minWidth: 0, flexDirection: 'column' }}>
-          {showBreadcrumbs && (
+          {renderBreadcrumbs && (
             <Box
               style={{
                 flexShrink: 0,
@@ -286,8 +316,8 @@ export function MonacoMirror({
                 onSubmit={handleSubmit}
                 onChangeText={handleChangeText}
                 onLiveChange={handleLiveChange}
-                onChange={onChange}
-                changeDelay={changeDelay}
+                onChange={handleEditorChange}
+                changeDelay={changeDelay ?? 0.08}
                 live
                 liveChangeDebounce={liveChangeDebounce ?? 80}
                 multiline
@@ -300,7 +330,7 @@ export function MonacoMirror({
                 cursorColor={cursorColor}
                 textStyle={{
                   fontFamily: 'monospace',
-                  fontSize: 12,
+                  fontSize: editorFontSize,
                   color: '#d4d4d4',
                   ...textStyle,
                 }}
@@ -319,7 +349,7 @@ export function MonacoMirror({
               />
             </Box>
 
-            {showMinimap && (
+            {renderMinimap && (
               <Box
                 style={{
                   width: 120,
@@ -355,7 +385,7 @@ export function MonacoMirror({
       {showStatusBar && (
         <Box
           style={{
-            height: 22,
+            height: statusBarHeight,
             flexShrink: 0,
             flexDirection: 'row',
             alignItems: 'center',
@@ -365,12 +395,12 @@ export function MonacoMirror({
             gap: 10,
           }}
         >
-          <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{languageLabel}</Text>
-          <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'Spaces: 2'}</Text>
-          <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'UTF-8'}</Text>
+          <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{languageLabel}</Text>
+          {!compact && <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'Spaces: 2'}</Text>}
+          {!compact && <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'UTF-8'}</Text>}
           <Box style={{ flexGrow: 1 }} />
-          <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{`Ln ${lineCount}`}</Text>
-          <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{`${charCount} chars`}</Text>
+          <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`Ln ${lineCount}`}</Text>
+          <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`${charCount} chars`}</Text>
         </Box>
       )}
     </Box>
