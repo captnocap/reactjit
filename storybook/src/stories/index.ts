@@ -42,6 +42,7 @@ import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
 import { ConversionsStory } from './ConversionsStory';
+import { DataSpreadsheetStory } from './DataSpreadsheetStory';
 import { CapabilitiesStory } from './CapabilitiesStory';
 import { StorageStory } from './StorageStory';
 import { WindowsStory } from './WindowsStory';
@@ -55,16 +56,18 @@ import { ThreeDStory } from './ThreeDStory';
 import { OverlayStory } from './OverlayStory';
 
 import { ImagingStory } from './ImagingStory';
-import CaptureStory from './CaptureStory';
+import { CaptureStory } from './CaptureStory';
 import RecordingStressStory from './RecordingStressStory';
 
 import { CreativeConceptsStory } from './CreativeConceptsStory';
 import { AIStory } from './AIStory';
 import { FinanceStory } from './FinanceStory';
 import { ChemistryStory } from './ChemistryStory';
+import { GalleryStory } from './GalleryStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
+  { id: 'gallery', title: 'Gallery', section: 'Core', component: GalleryStory },
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
   { id: 'layout', title: 'Layout', section: 'Core', component: LayoutStory },
@@ -86,6 +89,7 @@ export const stories: StoryDef[] = [
   { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
   { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
   { id: 'conversions', title: 'Conversions', section: 'Packages', component: ConversionsStory },
+  { id: 'spreadsheet', title: 'Spreadsheet', section: 'Packages', component: DataSpreadsheetStory },
   { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
