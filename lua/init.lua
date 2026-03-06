@@ -4024,11 +4024,14 @@ function ReactJIT.mousepressed(x, y, button)
       local cx, cy = M.events.screenToContent(hit, x, y)
       M.textinput.handleMousePressed(hit, cx, cy, button)
     elseif hit.type == "CodeBlock" then
-      -- Clicked a CodeBlock: check copy button
+      -- Clicked a CodeBlock: check scrollbar / copy button
       -- Convert screen coords to content-space (account for scroll ancestors)
       if M.codeblock and M.codeblock.handleMousePressed then
         local cx, cy = M.events.screenToContent(hit, x, y)
-        M.codeblock.handleMousePressed(hit, cx, cy, button)
+        if M.codeblock.handleMousePressed(hit, cx, cy, button) then
+          -- Scrollbar or copy button consumed the click — skip text selection
+          return
+        end
       end
     elseif hit.type == "VideoPlayer" then
       -- Clicked a VideoPlayer: handle internally in Lua
