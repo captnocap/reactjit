@@ -165,6 +165,7 @@ export {
 export { Input } from './Input';
 /** @deprecated Use <Input /> */
 export { TextInput } from './TextInput';
+export { MonacoMirror, type MonacoMirrorProps } from './MonacoMirror';
 
 // Search components (headless, Lua-owned input lifecycle)
 export {
