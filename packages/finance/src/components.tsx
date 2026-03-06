@@ -300,17 +300,14 @@ export interface IndicatorLegendProps {
 /** Compact legend for chart overlays */
 export function IndicatorLegend({ items, style }: IndicatorLegendProps) {
   const c = useThemeColors();
-  return (
-    <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', ...style }}>
-      {items.map(item => (
-        <Box key={item.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.color }} />
-          <Text style={{ color: c.muted, fontSize: 10 }}>{item.label}</Text>
-          {item.value !== undefined && (
-            <Text style={{ color: item.color, fontSize: 10, fontWeight: 'bold' }}>{item.value.toFixed(2)}</Text>
-          )}
-        </Box>
-      ))}
-    </Box>
-  );
+  const rows = Math.max(1, Math.ceil(items.length / 3));
+  return React.createElement('IndicatorLegend', {
+    items,
+    textColor: c.muted,
+    style: {
+      width: '100%',
+      height: rows * 14,
+      ...style,
+    },
+  });
 }
