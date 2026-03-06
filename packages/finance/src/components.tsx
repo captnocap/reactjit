@@ -3,10 +3,10 @@
  */
 
 import React from 'react';
-import { Box, Text, Sparkline, OrderBook } from '@reactjit/core';
+import { OrderBook } from '@reactjit/core';
 import type { Style } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
-import type { OHLCV, Holding, PortfolioSnapshot, BookLevel, IndicatorPoint, BollingerBand, MACDPoint } from './types';
+import type { Holding, PortfolioSnapshot, BookLevel, MACDPoint } from './types';
 import { formatPercent, formatPrice } from './format';
 
 // ── Ticker Symbol ───────────────────────────────────────
@@ -53,16 +53,25 @@ export function TickerSymbol({
   const c = useThemeColors();
   const up = item.change >= 0;
   const color = up ? '#22c55e' : '#ef4444';
-  return (
-    <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexShrink: 0, ...style }}>
-      <Text style={{ color: c.text, fontSize: symbolSize, fontWeight: 'bold', flexShrink: 0 }}>{item.symbol}</Text>
-      {showSparkline && item.sparkline && item.sparkline.length > 1 && (
-        <Sparkline data={item.sparkline} width={32} height={12} color={color} />
-      )}
-      <Text style={{ color, fontSize: priceSize, flexShrink: 0 }}>{formatPrice(item.price, '$')}</Text>
-      <Text style={{ color, fontSize: changeSize, flexShrink: 0 }}>{formatPercent(item.change)}</Text>
-    </Box>
-  );
+  const priceText = formatPrice(item.price, '$');
+  const changeText = formatPercent(item.change);
+  const sparkW = showSparkline && item.sparkline && item.sparkline.length > 1 ? 38 : 0;
+  const estWidth = item.symbol.length * 8 + sparkW + priceText.length * 8 + changeText.length * 7 + 18;
+  return React.createElement('TickerSymbol', {
+    item,
+    showSparkline,
+    symbolSize,
+    priceSize,
+    changeSize,
+    textColor: c.text,
+    upColor: '#22c55e',
+    downColor: '#ef4444',
+    style: {
+      width: estWidth,
+      height: Math.max(symbolSize, Math.max(priceSize, changeSize)) + 6,
+      ...style,
+    },
+  });
 }
 
 // ── Ticker Tape ─────────────────────────────────────────

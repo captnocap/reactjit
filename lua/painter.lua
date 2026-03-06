@@ -66,6 +66,7 @@ local MACDPanelModule = nil
 local IndicatorLegendModule = nil
 local HoldingRowModule = nil
 local PortfolioCardModule = nil
+local TickerSymbolModule = nil
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -1734,6 +1735,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       PortfolioCardModule = require("lua.portfolio_card")
     end
     PortfolioCardModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "TickerSymbol" then
+    if not TickerSymbolModule then
+      TickerSymbolModule = require("lua.ticker_symbol")
+    end
+    TickerSymbolModule.draw(node, effectiveOpacity)
 
   elseif not isHidden then
     -- Generic visual capability dispatch: any registered capability with
