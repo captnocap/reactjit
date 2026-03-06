@@ -239,6 +239,8 @@ export interface ImagingSelectionRasterizeRequest {
   width: number;
   height: number;
   mode?: ImagingSelectionMode;
+  /** Soft-edge blur radius in pixels. */
+  featherRadius?: number;
   /** Handle of an existing mask to modify (for add/subtract/intersect modes). */
   baseMaskId?: string;
 }
@@ -248,6 +250,11 @@ export interface ImagingSelectionRasterizeResult {
   /** In-memory mask handle — pass to imaging:apply's maskId. */
   maskId: string;
   error?: string;
+}
+
+export interface ImagingSelectionRasterizeOptions {
+  /** Soft-edge blur radius in pixels. 0 keeps a hard edge. */
+  featherRadius?: number;
 }
 
 // ============================================================================

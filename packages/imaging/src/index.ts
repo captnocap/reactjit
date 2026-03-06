@@ -19,6 +19,7 @@ export type {
   ImagingSelectionShape,
   ImagingSelectionRasterizeRequest,
   ImagingSelectionRasterizeResult,
+  ImagingSelectionRasterizeOptions,
   ImagingToolState,
   UseImagingResult,
   DrawCanvasProps,

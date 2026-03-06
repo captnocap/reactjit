@@ -41,6 +41,11 @@ local max = math.max
 
 local currentTheme = nil
 
+local function newMaskCanvas(w, h)
+  -- Stencil support is requested when binding with setCanvas({ ..., stencil = true }).
+  return love.graphics.newCanvas(w, h)
+end
+
 -- Expand bounds to include visual descendants so masks don't hard-clip
 -- absolutely-positioned overlays or other content extending past parent bounds.
 local function unionDescendantBounds(node, minX, minY, maxX, maxY)
@@ -219,7 +224,7 @@ function Masks.syncWithTree(nodes)
 
           if capW > 0 and capH > 0 and (inst.width ~= capW or inst.height ~= capH) then
             if inst.outputCanvas then inst.outputCanvas:release() end
-            inst.outputCanvas = love.graphics.newCanvas(capW, capH, {stencil = true})
+            inst.outputCanvas = newMaskCanvas(capW, capH)
             inst.width = capW
             inst.height = capH
             inst.needsInit = true
@@ -313,7 +318,7 @@ local function getPooledCanvas(w, h)
   if pool and #pool > 0 then
     return table.remove(pool)
   end
-  return love.graphics.newCanvas(w, h, {stencil = true})
+  return newMaskCanvas(w, h)
 end
 
 local function returnPooledCanvas(canvas, w, h)
