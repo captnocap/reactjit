@@ -23,7 +23,7 @@ import '../../packages/icons/src'; // register icons so <Image src="icon-name" /
 //   disableStatePreservation,
 //   setPreservationBridge,
 // } from '../../packages/core/src/preserveState';
-import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey } from '../../packages/core/src';
+import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -181,11 +181,14 @@ function StoryErrorScreen({ message, stack }: { message: string; stack: string }
 function StorybookPanel() {
   const initialIdx = (globalThis as any).__devState?.activeIdx ?? 0;
   const [activeIdx, setActiveIdx] = useState(initialIdx);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   currentActiveIdx = activeIdx; // sync for __getDevState
   const groups = groupBySection(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;
   const c = useThemeColors();
+  const bp = useBreakpoint();
+  const compact = bp === 'sm';
 
   const handleKeyDown = useCallback((e: any) => {
     const key = e.key || e.scancode;
@@ -273,74 +276,132 @@ function StorybookPanel() {
     crawlingRef.current = false;
   }, [activeIdx, bridge]));
 
-  return (
-    <Box style={{ flexDirection: 'row', width: '100%', height: '100%' }} onKeyDown={handleKeyDown}>
-      {/* Sidebar */}
-      <Box style={{
-        width: 180,
-        backgroundColor: c.bgAlt,
-        borderWidth: 1,
-        borderColor: c.border,
-        padding: 0,
-        overflow: 'scroll',
-      }}>
-        {/* Header */}
-        <Box style={{ paddingTop: 10, paddingLeft: 10, paddingRight: 10, paddingBottom: 8 }}>
-          <Box style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            paddingTop: 6,
-            paddingBottom: 6,
-            paddingLeft: 8,
-            paddingRight: 8,
-            borderRadius: 6,
-            borderWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.surface,
-          }}>
-            <Box style={{ width: 3, height: 14, borderRadius: 2, backgroundColor: c.primary }} />
-            <Box>
-              <Text style={{ color: c.text, fontSize: 11, letterSpacing: 0.6 }}>ReactJIT</Text>
-              <Text style={{ color: c.textDim, fontSize: 8, letterSpacing: 1.1 }}>STORYBOOK</Text>
-            </Box>
+  const sidebarContent = (
+    <>
+      {/* Header */}
+      <Box style={{ paddingTop: 10, paddingLeft: 10, paddingRight: 10, paddingBottom: 8 }}>
+        <Box style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          paddingLeft: 8,
+          paddingRight: 8,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.surface,
+        }}>
+          <Box style={{ width: 3, height: 14, borderRadius: 2, backgroundColor: c.primary }} />
+          <Box>
+            <Text style={{ color: c.text, fontSize: 11, letterSpacing: 0.6 }}>ReactJIT</Text>
+            <Text style={{ color: c.textDim, fontSize: 8, letterSpacing: 1.1 }}>STORYBOOK</Text>
           </Box>
         </Box>
-        <Box style={{ height: 1, backgroundColor: c.border }} />
-
-        {/* Story list */}
-        {Array.from(groups.entries()).map(([section, list]) => (
-          <Box key={section}>
-            <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-              <Text style={{ color: c.textDim, fontSize: 9 }}>{String(section || '').toUpperCase()}</Text>
-            </Box>
-            {list.map(s => {
-              const idx = stories.indexOf(s);
-              const isActive = idx === activeIdx;
-              return (
-                <Pressable
-                  key={s.id}
-                  onPress={() => setActiveIdx(idx)}
-                  style={{
-                    paddingLeft: 16,
-                    paddingRight: 8,
-                    paddingTop: 4,
-                    paddingBottom: 4,
-                    backgroundColor: isActive ? c.surface : 'transparent',
-                  }}
-                >
-                  <Text style={{
-                    color: isActive ? c.text : c.textSecondary,
-                    fontSize: 11,
-                  }}>
-                    {s.title}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </Box>
-        ))}
       </Box>
+      <Box style={{ height: 1, backgroundColor: c.border }} />
+
+      {/* Story list */}
+      {Array.from(groups.entries()).map(([section, list]) => (
+        <Box key={section}>
+          <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
+            <Text style={{ color: c.textDim, fontSize: 9 }}>{String(section || '').toUpperCase()}</Text>
+          </Box>
+          {list.map(s => {
+            const idx = stories.indexOf(s);
+            const isActive = idx === activeIdx;
+            return (
+              <Pressable
+                key={s.id}
+                onPress={() => { setActiveIdx(idx); if (compact) setSidebarOpen(false); }}
+                style={{
+                  paddingLeft: 16,
+                  paddingRight: 8,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  backgroundColor: isActive ? c.surface : 'transparent',
+                }}
+              >
+                <Text style={{
+                  color: isActive ? c.text : c.textSecondary,
+                  fontSize: 11,
+                }}>
+                  {s.title}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Box>
+      ))}
+    </>
+  );
+
+  return (
+    <Box style={{ flexDirection: compact ? 'column' : 'row', width: '100%', height: '100%' }} onKeyDown={handleKeyDown}>
+      {/* Compact: story picker bar + overlay sidebar */}
+      {compact && (
+        <Box style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: c.bgAlt,
+          borderBottomWidth: 1,
+          borderColor: c.border,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          gap: 8,
+        }}>
+          <Pressable
+            onPress={() => setSidebarOpen(!sidebarOpen)}
+            style={{
+              paddingLeft: 8,
+              paddingRight: 8,
+              paddingTop: 4,
+              paddingBottom: 4,
+              borderRadius: 4,
+              backgroundColor: c.surface,
+            }}
+          >
+            <Text style={{ color: c.text, fontSize: 11 }}>{sidebarOpen ? '\u2715' : '\u2630'}</Text>
+          </Pressable>
+          <Text style={{ color: c.text, fontSize: 11, flexGrow: 1 }} numberOfLines={1}>
+            {active?.title ?? ''}
+          </Text>
+        </Box>
+      )}
+
+      {/* Sidebar: inline on desktop, overlay on compact */}
+      {compact ? (
+        sidebarOpen && (
+          <Box style={{
+            position: 'absolute',
+            top: 30,
+            left: 0,
+            width: '80%',
+            height: '100%',
+            backgroundColor: c.bgAlt,
+            borderWidth: 1,
+            borderColor: c.border,
+            zIndex: 100,
+            overflow: 'scroll',
+          }}>
+            {sidebarContent}
+          </Box>
+        )
+      ) : (
+        <Box style={{
+          width: 180,
+          backgroundColor: c.bgAlt,
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 0,
+          overflow: 'scroll',
+        }}>
+          {sidebarContent}
+        </Box>
+      )}
 
       {/* Content */}
       <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'scroll' }}>
