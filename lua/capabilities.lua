@@ -322,6 +322,7 @@ function Capabilities.loadAll()
     "reagent_test",
     "spectrum_view",
     "phase_diagram",
+    "draw_canvas",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do
