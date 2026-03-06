@@ -1,183 +1,142 @@
 === METADATA ===
 title: DevTools
-description: Chrome-style unified developer panel with Elements (tree inspector) and Console (interactive eval) tabs for debugging and live editing
+description: Chrome-style devtools panel with Elements, Console, Network, Performance, Wireframe, Logs, and Source tabs.
 category: Advanced
 platforms: love2d
-keywords: devtools, inspector, console, debug, f12, eval, tree, elements, live-editing, hover-highlight, search
-related: text-scale, event-handling, layout-engine
-difficulty: intermediate
+keywords: devtools, inspector, console, network, performance, wireframe, logs, source, f12, pop-out, embed
+related: debugging.txt, DevToolsEmbed
+difficulty: advanced
 
 === OVERVIEW ===
-DevTools is a unified Chrome-style bottom panel that combines the Elements tab (visual tree inspector with hover highlights and live style editing) and the Console tab (interactive JavaScript and Lua eval with autocomplete, watches, and macros). Toggle it with F12. Canvas overlays (hover highlight, selected outline, tooltip, performance bar) always render on the main canvas regardless of which tab is active. Implemented in lua/devtools.lua, lua/inspector.lua, and lua/console.lua.
+ReactJIT includes a Chrome-style devtools panel that opens with F12. The panel docks to the
+bottom of the window and provides multiple tabs for inspecting different aspects of the
+running application.
+
+Tabs:
+
+- Elements -- the visual inspector. Hover over the canvas to highlight nodes with margin
+  (orange), padding (green), and content (blue) overlays. Click to select a node and see
+  its computed styles, dimensions, parent/child hierarchy, and handler list. Inline style
+  editing is supported -- click a style value to edit it live.
+
+- Console -- JavaScript eval console running inside the QuickJS context. Supports watch
+  expressions (:watch expr) that update every frame. Debug data from useDebug is accessible
+  via __debug['key'].
+
+- Network -- displays bridge traffic (mutation commands and events) with timing.
+
+- Performance -- frame timing graph showing layout and paint milliseconds per frame.
+
+- Wireframe -- renders the element tree as a wireframe overlay with all borders visible.
+
+- Logs -- captures debug log output from Lua modules.
+
+- Source -- live source code viewer that shows the TypeScript source of the selected
+  component (when source maps are available).
+
+The panel supports two modes:
+
+- Docked (default) -- the panel occupies the bottom portion of the window. The app viewport
+  shrinks to fit above it. Toggle with F12.
+
+- Pop-out -- the panel detaches into a separate Love2D window via Ctrl+Shift+D. The app
+  gets the full viewport back. The devtools window shows the same tabs and tracks the same
+  tree. Pop back with Ctrl+Shift+D or Escape.
+
+Canvas overlays (hover highlight, selected outline, tooltip, performance bar) always render
+on the main canvas regardless of which tab is active or whether the panel is popped out.
 
 === API / SYNTAX ===
-Keyboard Shortcuts:
-  F12          Toggle DevTools open/closed
-  `            Switch to Console tab (opens DevTools if closed)
-  Tab          Toggle tree panel sidebar (Elements tab only)
-  Escape       Close DevTools (or clear selection first in Elements tab)
+```tsx
+import { DevToolsEmbed } from '@reactjit/core';
+```
 
-Elements Tab:
-  - Tree inspector shows React component hierarchy with expand/collapse
-  - Hover over canvas to see box model overlay (margin orange, padding green, content blue)
-  - Click to select node and view details in sidebar
-  - Search nodes by type, text content, or style properties
-  - Live style editing via inspector detail panel
+DevToolsEmbed Props:
+| Prop  | Type           | Default   | Description                           |
+|-------|----------------|-----------|---------------------------------------|
+| w     | number/string  | undefined | Width of the embed region             |
+| h     | number/string  | undefined | Height of the embed region            |
+| style | Style          | undefined | Style applied to the embed container  |
 
-Console Tab:
-  Commands:
-    <expr>                    Evaluate JavaScript expression (default mode)
-    :lua <code>              Evaluate Lua code
-    :tree                    Print instance tree
-    :nodes                   List all nodes with IDs
-    :perf                    Show performance metrics
-    :find <query>            Search nodes by type/text/style
-    :watch <expr>            Add watch expression (re-eval every frame)
-    :watch                   List all watches
-    :unwatch <index>         Remove watch expression
-    :macro <name> start      Start recording macro
-    :macro <name> end        Stop recording macro
-    :macro <name>            Replay macro
-    :macros                  List all macros
-    :style <id> <prop> <val> Set style property on node by ID
-    :template <name>         Insert boilerplate template
-    :help                    Show all commands
-
-  Input Controls:
-    Enter        Execute command
-    Tab          Autocomplete (commands, globals, node IDs)
-    Up/Down      History navigation
-    Ctrl+L       Clear output
-    Ctrl+W       Delete word backward
-    Ctrl+U       Clear input line
-
-Configuration:
-  -- In main.lua or init.lua:
-  local devtools = require("lua.devtools")
-  local inspector = require("lua.inspector")
-  local console = require("lua.console")
-
-  devtools.init({
-    inspector = inspector,
-    console = console,
-    tree = tree,
-    pushEvent = pushEvent
-  })
-
-  -- In love.keypressed:
-  if devtools.keypressed(key) then return end
-
-  -- In love.mousepressed:
-  if devtools.mousepressed(x, y, btn) then return end
-
-  -- In love.mousemoved:
-  devtools.mousemoved(x, y)
-
-  -- In love.wheelmoved:
-  if devtools.wheelmoved(x, y) then return end
-
-  -- In love.textinput:
-  if devtools.textinput(text) then return end
-
-  -- In love.draw (after paint):
-  devtools.draw(root)
+Keyboard shortcuts:
+| Key           | Action                                    |
+|---------------|-------------------------------------------|
+| F12           | Toggle devtools open/closed               |
+| `             | Open console tab (opens devtools if closed)|
+| Tab           | Toggle tree panel sidebar (in Elements)   |
+| Ctrl+Shift+D  | Toggle pop-out / dock back               |
+| Escape        | Close devtools or clear selection          |
 
 === EXAMPLES ===
-Example 1: Toggle DevTools and Inspect Layout
+Example 1: Embedding devtools in the React tree
 ---
-1. Press F12 to open DevTools
-2. Elements tab shows component tree on left, detail panel on right
-3. Hover over canvas to see box model overlay on nodes
-4. Click node to select and view computed styles/props in detail panel
-5. Press Tab to toggle tree panel visibility
-6. Press Escape to clear selection, Escape again to close DevTools
----
-Platforms: Love2D
+```tsx
+import { Box, DevToolsEmbed } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-Example 2: Interactive Console Eval
----
-1. Press ` (backtick) to open DevTools to Console tab
-2. Type JavaScript expressions to evaluate:
-   > 2 + 2
-   4
-   > $0
-   (current selected node from Elements tab)
-3. Use :lua prefix for Lua eval:
-   > :lua love.graphics.getWidth()
-   1920
-4. Use built-in commands:
-   > :tree
-   (prints instance tree)
-   > :perf
-   FPS: 60 | Layout: 1.2ms | Paint: 0.8ms | Nodes: 42
----
-Platforms: Love2D
+export function AppWithDevTools() {
+  const c = useThemeColors();
 
-Example 3: Live Style Editing
+  return (
+    <Box style={{ width: '100%', height: '100%' }}>
+      <Box style={{ flexGrow: 1, padding: 16, backgroundColor: c.bg }}>
+        {/* App content */}
+      </Box>
+      <DevToolsEmbed style={{ width: '100%', height: 300 }} />
+    </Box>
+  );
+}
+```
 ---
-1. Open DevTools (F12), switch to Console tab (`)
-2. Find node ID using :nodes command or Elements tree
-3. Edit style properties live:
-   > :style header-123 backgroundColor #ff0000
-   (header background turns red immediately)
-   > :style header-123 padding 20
-   (header padding increases, layout reflows)
-4. Changes persist until hot reload
----
-Platforms: Love2D
+Platforms: love2d
 
-Example 4: Watch Expressions
+Example 2: Using the console for live debugging
 ---
-1. Open Console tab (`)
-2. Add watch expressions to monitor live:
-   > :watch love.timer.getFPS()
-   > :watch $0.computed.x
-   > :watch
-   Watch 1: love.timer.getFPS() = 60.2
-   Watch 2: $0.computed.x = 145.5
-3. Watches re-evaluate every frame and display in status bar
-4. Remove watches:
-   > :unwatch 1
----
-Platforms: Love2D
+```
+Press ` to open the console, then type:
 
-Example 5: Macros for Repetitive Tasks
+> __debug                         // all registered debug entries
+> __debug['PlayerHUD']            // specific component data
+> __debug['PlayerHUD'].health     // specific field
+
+Watch expressions (update every frame):
+> :watch __debug['PlayerHUD'].health
+> :watch __debug['GameState'].score
+
+Remove a watch:
+> :unwatch 0
+
+Clear output:
+> :clear
+```
 ---
-1. Open Console (`), start macro recording:
-   > :macro reset-layout start
-2. Execute commands to record:
-   > :style root-1 width 100%
-   > :style root-1 height 100%
-   > :lua tree.markDirty()
-3. Stop recording:
-   > :macro reset-layout end
-4. Replay macro later:
-   > :macro reset-layout
-   (all three commands execute)
-5. List macros:
-   > :macros
----
-Platforms: Love2D
+Platforms: love2d
+
+=== PLATFORM NOTES ===
+Love2D:
+  The devtools panel is implemented entirely in Lua (lua/devtools/main.lua). It draws
+  using raw Love2D graphics calls and does not participate in the React tree or layout
+  pipeline. When closed, it costs one boolean check per frame.
+
+  The DevToolsEmbed component is a visual capability (lua/capabilities/devtools_embed.lua)
+  that renders the real devtools panel into a node's computed bounds. It is the same panel
+  as F12, just embedded in the layout.
+
+  Pop-out mode uses the window_manager to create a separate Love2D window. The devtools
+  panel renders there while canvas overlays continue on the main window.
+
+  The performance tab shows:
+  - FPS counter with color coding (green > 55fps, yellow > 30fps, red below)
+  - Layout time in milliseconds
+  - Paint time in milliseconds
+  - Total node count in the tree
 
 === CRITICAL RULES ===
-- DevTools consumes input events when open — always call devtools.keypressed(), devtools.mousepressed(), etc. BEFORE app input handlers and return early if they return true
-- DevTools panel reduces viewport height when open — use devtools.getViewportHeight() instead of love.graphics.getHeight() for layout calculation
-- Inspector overlays render with love.graphics calls OUTSIDE the React tree — never try to select or style overlay elements as React components
-- Console eval runs in isolated context — use :lua for Love2D API access, default JS mode for React tree manipulation
-- Console autocomplete triggers on Tab — if Tab is bound to app navigation, DevTools must be checked first
-- Hover highlights use deep hit test — ANY node under cursor highlights, not just nodes with event handlers
-- Selected node persists across DevTools close/reopen — press Escape to clear selection before closing
-- Tree panel scroll state is preserved when toggling visibility — collapsed nodes stay collapsed
-- Performance metrics (FPS, layout time, paint time) update every frame in status bar when DevTools is open
-- Console output is capped at 500 lines — older lines are discarded to prevent memory growth
-- Watch expressions evaluate every frame — avoid expensive computations in watches
-- Macro recording captures all commands except :macro start/end/list — recursive macro definitions are not supported
-- Live style edits via :style bypass React reconciler — changes do NOT trigger re-render, only re-layout if dimensional properties change
-- DevTools panel height is 40% of screen height (min 200px) — cannot be resized (yet)
-- Tree panel and detail panel widths are fixed (280px and 300px) — cannot be resized (yet)
+- DevToolsEmbed needs explicit dimensions (w/h or style width/height). It is a visual capability and follows the surface sizing rules.
+- The console evaluates expressions in the QuickJS context, not a browser context. DOM APIs do not exist.
+- Inline style editing in the Elements tab applies changes live to the Lua tree. Changes are not persisted -- they reset on the next React re-render that touches that node.
+- The devtools panel consumes keyboard and mouse events when it has focus. Click outside the panel to return input to the app.
 
 === SEE ALSO ===
-- Global Text Scale — Ctrl+/- to zoom text globally, works independently of DevTools
-- Event Handling — DevTools uses same hit-test and event dispatch pipeline as app
-- Layout Engine — Inspector visualizes layout.lua computed geometry
-- Error Overlay — Similar rendering approach (raw Love2D calls, zero React tree impact)
+- debugging.txt
+- performance.txt

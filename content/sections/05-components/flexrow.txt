@@ -1,114 +1,96 @@
 === METADATA ===
 title: FlexRow
-description: Convenience wrapper around Box with horizontal flex layout
+description: Horizontal layout container with shorthand props for gap, alignment, and wrapping
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: layout, flex, row, horizontal, flexbox, alignment
-related: Box, FlexColumn, Spacer
+platforms: love2d
+keywords: flexrow, row, horizontal, layout, flex, direction, gap, wrap
+related: FlexColumn, Box, Spacer
 difficulty: beginner
 
 === OVERVIEW ===
-FlexRow is a convenience component that wraps Box with flexDirection='row' pre-configured. It provides simplified props for common horizontal layout tasks: gap spacing, horizontal justification, vertical alignment, and wrapping. Use FlexRow when you need to arrange children horizontally without manually setting flexDirection on every Box.
+FlexRow is a convenience wrapper around Box that sets `flexDirection: 'row'`. It provides shorthand props for the most common horizontal layout needs: gap between children, main-axis justification, cross-axis alignment, and wrapping.
+
+Use FlexRow when you want a horizontal container without writing `style={{ flexDirection: 'row' }}` on a Box. For simple cases, the `Row` primitive from Box also works. FlexRow is best when you need the explicit `gap`, `justify`, `align`, and `wrap` props as a self-documenting API.
 
 === API / SYNTAX ===
+```tsx
 import { FlexRow } from '@reactjit/core';
+```
 
 Props:
-| Prop | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| gap | number | No | undefined | Spacing between children (pixels) |
-| justify | 'flex-start' \| 'flex-end' \| 'center' \| 'space-between' \| 'space-around' \| 'space-evenly' | No | undefined | Horizontal distribution (justifyContent) |
-| align | 'flex-start' \| 'flex-end' \| 'center' \| 'stretch' \| 'baseline' | No | undefined | Vertical alignment (alignItems) |
-| wrap | boolean | No | false | Allow children to wrap to next line (flexWrap: 'wrap') |
-| style | Style | No | {} | Additional style properties (merged after defaults) |
-| children | React.ReactNode | Yes | - | Child elements to lay out horizontally |
+| Prop     | Type                          | Default   | Description                              |
+|----------|-------------------------------|-----------|------------------------------------------|
+| gap      | number                        | undefined | Space between children in pixels         |
+| justify  | Style['justifyContent']       | undefined | Main-axis alignment (start, center, end, space-between, space-around, space-evenly) |
+| align    | Style['alignItems']           | undefined | Cross-axis alignment (start, center, end, stretch) |
+| wrap     | boolean                       | undefined | Enable flex wrapping                     |
+| style    | Style                         | undefined | Additional style overrides               |
+| children | ReactNode                     | required  | Child elements                           |
 
 === EXAMPLES ===
-Example 1: Basic horizontal layout with spacing
+Example 1: Basic horizontal layout
 ---
-import { FlexRow, Text } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
 
-<FlexRow gap={16}>
-  <Text fontSize={16}>First</Text>
-  <Text fontSize={16}>Second</Text>
-  <Text fontSize={16}>Third</Text>
+<FlexRow gap={12}>
+  <Box style={{ width: 48, height: 48, backgroundColor: colors.primary, borderRadius: 8 }} />
+  <Box style={{ width: 48, height: 48, backgroundColor: colors.surface, borderRadius: 8 }} />
+  <Box style={{ width: 48, height: 48, backgroundColor: colors.surface, borderRadius: 8 }} />
 </FlexRow>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Centered content with justify and align
+Example 2: Centering children vertically
 ---
-import { FlexRow, Text, Box } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
 
-<FlexRow
-  justify="center"
-  align="center"
-  style={{ width: '100%', height: 100, backgroundColor: '#f0f0f0' }}
->
-  <Box style={{ width: 50, height: 50, backgroundColor: 'blue' }} />
-  <Text fontSize={16}>Centered</Text>
+<FlexRow gap={8} align="center">
+  <Box style={{ width: 40, height: 40, backgroundColor: colors.primary, borderRadius: 20 }} />
+  <Text style={{ color: colors.text, fontSize: 16 }}>Username</Text>
 </FlexRow>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Space-between distribution (toolbar pattern)
+Example 3: Spacing children apart
 ---
-import { FlexRow, Text } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
 
-<FlexRow justify="space-between" style={{ width: '100%', padding: 8 }}>
-  <Text fontSize={14}>Left</Text>
-  <Text fontSize={14}>Center</Text>
-  <Text fontSize={14}>Right</Text>
+<FlexRow justify="space-between" align="center" style={{ width: '100%', padding: 12 }}>
+  <Text style={{ color: colors.text, fontSize: 14 }}>Left</Text>
+  <Text style={{ color: colors.muted, fontSize: 14 }}>Right</Text>
 </FlexRow>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Wrapping horizontal grid
+Example 4: Wrapping layout
 ---
-import { FlexRow, Box } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
+const tags = ['React', 'Lua', 'Love2D', 'OpenGL', 'QuickJS'];
 
-<FlexRow wrap gap={8} style={{ width: 300 }}>
-  {Array.from({ length: 10 }).map((_, i) => (
-    <Box key={i} style={{ width: 60, height: 60, backgroundColor: 'green' }} />
+<FlexRow gap={8} wrap>
+  {tags.map(tag => (
+    <Box key={tag} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, backgroundColor: colors.surface, borderRadius: 12 }}>
+      <Text style={{ color: colors.text, fontSize: 11 }}>{tag}</Text>
+    </Box>
   ))}
 </FlexRow>
+```
 ---
-Platforms: All
-
-Example 5: Combining with custom styles
----
-import { FlexRow, Text } from '@reactjit/core';
-
-<FlexRow
-  gap={12}
-  align="baseline"
-  style={{
-    padding: 16,
-    backgroundColor: '#333',
-    borderRadius: 8
-  }}
->
-  <Text fontSize={24} style={{ color: 'white' }}>Title</Text>
-  <Text fontSize={14} style={{ color: '#aaa' }}>Subtitle</Text>
-</FlexRow>
----
-Platforms: All
-
-=== PLATFORM NOTES ===
-No platform-specific differences. FlexRow behaves identically on all targets (Love2D, web, terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM). The underlying flex layout engine is consistent across all renderers.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- FlexRow requires explicit width for justify to work properly. Row containers have no intrinsic width (only Text nodes do). Without a width, justifyContent='center' or 'space-between' will have no effect. Always set width: '100%' or a fixed width when using justify.
-- Do not use flexGrow on children without setting a width on FlexRow. Percentage-based children need explicit parent dimensions.
-- Gap spacing is applied between children, not around the edges. Use padding in style prop for outer spacing.
-- The style prop is merged last, so you can override gap, justify, and align by passing conflicting properties in style (though this defeats the purpose of the convenience props).
-- FlexRow auto-sizes to fit content if no width/height is specified. Height is determined by the tallest child. Width is sum of children widths plus gaps.
-- Use wrap={true} when you want a responsive horizontal grid that breaks to multiple rows. Requires explicit width on FlexRow.
-- align='stretch' only works if children do not have explicit heights. Children will stretch to match the tallest sibling.
+- FlexRow sets `flexDirection: 'row'` on the underlying Box. Do not also set `flexDirection` in the `style` prop.
+- Rows auto-wrap by default in the layout engine unless any child has `flexGrow > 0`. Use the `wrap` prop to force wrapping when children have flexGrow.
+- The `style` prop merges after the shorthand props. If you set both `gap={12}` and `style={{ gap: 8 }}`, the style prop wins.
 
 === SEE ALSO ===
-- Box — The underlying primitive that FlexRow wraps
-- FlexColumn — Vertical layout convenience wrapper
-- Spacer — Creates flexible empty space in flex layouts
-- Layout Rules (CLAUDE.md) — Critical layout constraints and common pitfalls
-- Auto-Sizing (CLAUDE.md) — How containers size to fit content
+- FlexColumn
+- Box
+- Spacer

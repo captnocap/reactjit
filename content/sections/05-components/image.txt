@@ -1,115 +1,101 @@
 === METADATA ===
 title: Image
-description: Displays images with sizing and objectFit control
+description: Display images from file paths, URLs, or the built-in icon registry
 category: Components
-platforms: love2d, web
-keywords: image, picture, src, objectFit, contain, cover, fill, sprite, texture
-related: Box, Text
+platforms: love2d
+keywords: image, picture, icon, src, photo, asset
+related: Box, Video
 difficulty: beginner
 
 === OVERVIEW ===
-Image displays an image from a file path or URL. It supports sizing via width/height style properties and content fitting via the objectFit style property. Unlike Box, Image has no children. Image is a surface node — without explicit dimensions, it falls back to 1/4 of its parent's available space (the proportional fallback). For precise control, set width and height explicitly or use flexGrow.
+Image renders an image file as a Lua `Image` node. It accepts a `src` prop pointing to a file path (relative to the Love2D filesystem) or a URL.
 
-In web mode, Image renders as an `<img>` element. In native mode, it outputs an `'Image'` host element that the Lua painter draws using love.graphics.draw() with the image loaded from the src path.
+Image is a surface element — if no explicit dimensions are set and there are no children, it falls back to 1/4 of parent size (proportional surface fallback). Set `w`/`h` or `style.width`/`style.height` for precise control.
+
+Image also integrates with the built-in icon registry. When `src` is a bare name with no path separators or file extension (e.g. `"chevron-right"`), Image looks it up in the icon registry and renders it as vector stroke paths instead of a raster image.
 
 === API / SYNTAX ===
 ```tsx
 import { Image } from '@reactjit/core';
 ```
 
-```tsx
-<Image
-  src="assets/logo.png"
-  style={{ width: 128, height: 128, objectFit: 'contain' }}
-/>
-```
-
 Props:
-| Prop    | Type                         | Default   | Description                          |
-|---------|------------------------------|-----------|--------------------------------------|
-| src     | string                       | REQUIRED  | Image file path or URL               |
-| style   | Style                        | undefined | Sizing and visual styling            |
-| onClick | (event: LoveEvent) => void   | undefined | Click/press handler                  |
-| onWheel | (event: LoveEvent) => void   | undefined | Mouse wheel handler                  |
+| Prop    | Type                       | Default   | Description                         |
+|---------|----------------------------|-----------|-------------------------------------|
+| src     | string                     | required  | File path, URL, or icon name        |
+| w       | number \| string           | undefined | Width shorthand                     |
+| h       | number \| string           | undefined | Height shorthand                    |
+| radius  | number                     | undefined | Border radius shorthand             |
+| style   | Style                      | undefined | Full style object                   |
+| onClick | (event: LoveEvent) => void | undefined | Click handler                       |
+| onWheel | (event: LoveEvent) => void | undefined | Wheel scroll handler                |
 
-objectFit values (set via style.objectFit):
-| Value   | Behavior                                                        |
-|---------|-----------------------------------------------------------------|
-| fill    | Stretch image to fill the element (may distort aspect ratio)    |
-| contain | Scale image to fit entirely within the element (letterboxed)    |
-| cover   | Scale image to cover the element entirely (may crop)            |
-| none    | Display at original size, no scaling                            |
+Relevant style properties:
+| Property  | Type                                      | Description                  |
+|-----------|-------------------------------------------|------------------------------|
+| objectFit | 'fill' \| 'contain' \| 'cover' \| 'none' | How the image fits its box   |
+| width     | number \| string                          | Element width                |
+| height    | number \| string                          | Element height               |
 
 === EXAMPLES ===
-Example 1: Basic image with fixed size
+Example 1: Basic image with explicit size
 ---
 ```tsx
-<Image
-  src="assets/icon.png"
-  style={{ width: 64, height: 64 }}
-/>
+<Image src="assets/logo.png" w={200} h={200} />
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
-Example 2: Image with objectFit contain
+Example 2: Image with object-fit
 ---
 ```tsx
 <Image
-  src="assets/banner.png"
+  src="photos/landscape.jpg"
   style={{
     width: '100%',
-    height: 200,
-    objectFit: 'contain',
-    backgroundColor: '#181825',
+    height: 300,
+    objectFit: 'cover',
+    borderRadius: 12,
   }}
 />
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
-Example 3: Clickable image
+Example 3: Icon from the registry
 ---
 ```tsx
+const colors = useThemeColors();
+
 <Image
-  src="assets/button-sprite.png"
-  style={{ width: 48, height: 48, borderRadius: 8 }}
-  onClick={() => console.log('image clicked')}
+  src="chevron-right"
+  w={24}
+  h={24}
+  style={{ color: colors.text }}
 />
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
-Example 4: Cover image filling a card
+Example 4: Clickable image
 ---
 ```tsx
-<Box style={{ width: 300, height: 200, borderRadius: 12, overflow: 'hidden' }}>
-  <Image
-    src="assets/photo.jpg"
-    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-  />
-</Box>
+<Image
+  src="assets/thumbnail.png"
+  w={120}
+  h={120}
+  radius={8}
+  onClick={() => setSelected(true)}
+/>
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
 === PLATFORM NOTES ===
 Love2D:
-  Renders as an 'Image' host element. The Lua painter loads the image via love.graphics.newImage() and caches it. The src path is relative to the project root (where main.lua lives). Supported formats: PNG, JPEG, BMP, TGA, and other formats Love2D supports. objectFit is implemented by the painter via quad scaling.
-
-Web:
-  Renders as an <img> element with display: block. objectFit maps directly to the CSS object-fit property. src can be a relative path, absolute URL, or data URI.
-
-Terminal:
-  Image is not supported on grid targets. Terminal, ComputerCraft, Neovim, and other character-grid renderers cannot display raster images. Use colored Box elements to approximate pixel art if needed.
-
-=== CRITICAL RULES ===
-- Image is a surface node. Without explicit dimensions, it uses the proportional fallback (1/4 of parent). For precise layouts, provide width and height via the style prop or use flexGrow.
-- The src prop is required. Omitting it will produce an error.
-- Image paths in Love2D are relative to the project root directory, not the source file. Use paths like "assets/image.png", not "../assets/image.png".
-- Image accepts no children. It is a leaf element.
+  Image files are resolved relative to the Love2D filesystem root (the project directory). Supported formats include PNG, JPEG, BMP, and other formats supported by Love2D's image decoder. When src is a bare name (no `/`, `\`, or `.`), the icon registry is checked and the result renders as vector stroke paths colored by the `color` style property.
 
 === SEE ALSO ===
 - Box
-- Text
-- Style type reference
+- Video
+- Layout System

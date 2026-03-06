@@ -235,6 +235,7 @@ reactjit tsl --test                      # run the test suite
 - **Screenshot Capture** — headless `reactjit screenshot` for CI/visual regression
 - **Static Linter** — catches layout bugs (missing fontSize, hardcoded heights, unicode in Text) at build time as blocking errors
 - **Theme Menu** — runtime theme switcher with built-in presets (dark, light, solarized, nord, dracula, etc.)
+- **Theme-aware mask shaders** — CRT/VHS/Watercolor masks now reuse imaging-grade shader passes (HSV/contrast/posterize/grain/vignette) with theme-token tint defaults
 - **On-Screen Keyboard** — soft keyboard for kiosk/touchscreen deployments
 - **Context Menu** — right-click menus with nested submenus
 - **Drag & Drop** — file drop events from OS, in-app drag reordering

@@ -1,231 +1,187 @@
 === METADATA ===
-title: Lua Runtime Internals
-description: Complete inventory of all Lua modules that power the Love2D target
+title: Lua Runtime
+description: LuaJIT runtime, QuickJS FFI bridge, and how to add new Lua modules to the framework.
 category: Advanced
 platforms: love2d
-keywords: lua, runtime, modules, init, layout, painter, tree, events, bridge, measure, animate, http, networking, tor, json
-related: pipeline, layout-engine, painter, event-handling, networking, tor
+keywords: lua, luajit, quickjs, ffi, bridge, runtime, modules, capabilities, source-of-truth
+related: capabilities.txt, pipeline.txt, transport.txt, source-of-truth.txt
 difficulty: advanced
 
 === OVERVIEW ===
-The Lua runtime consists of a collection of modules that collectively implement the rendering
-pipeline for the Love2D target. The entry point is init.lua, which detects the
-operating mode, loads the appropriate bridge, and initializes all submodules. On every
-frame, the runtime ticks the JavaScript engine, drains mutation commands, advances
-animations, runs layout, and paints the tree.
+ReactJIT runs on LuaJIT inside Love2D. The entire rendering pipeline -- layout, painting,
+event dispatch, text measurement, animation -- executes in Lua. React runs inside an
+embedded QuickJS runtime that communicates with Lua via C FFI trampolines.
 
-All Lua files live at lua/ in the monorepo root (source of truth) and are copied into
-projects via `make cli-setup` and `reactjit update`.
+The runtime stack:
 
-=== API / SYNTAX ===
-Module Inventory:
+  Love2D (C/C++) -- owns the run loop, OpenGL context, font rasterizer, event pump
+    LuaJIT -- layout engine, painter, event system, capabilities, devtools
+      QuickJS (via FFI) -- React reconciler, component tree, event handlers
 
-  init.lua           - Entry point. Detects mode (native/web/canvas), loads all
-                       modules, implements love.update/draw/input callbacks.
-                       Manages HMR, interaction styles, deferred mount protocol.
+LuaJIT provides near-native performance for the layout engine and painter. The QuickJS
+runtime is embedded as a shared library (libquickjs.so) loaded via LuaJIT FFI. The bridge
+uses three host functions:
 
-  tree.lua           - Retained instance tree. Receives mutation commands from JS
-                       (createNode, updateProps, appendChild, removeChild, etc.)
-                       and maintains the live node tree. Tracks dirty state.
+  __hostFlush(json) -- JS sends mutation commands to Lua (CREATE, UPDATE, REMOVE, APPEND)
+  __hostGetEvents() -- JS polls the event queue from Lua (click, keydown, etc.)
+  __hostMeasureText(text, fontSize, fontWeight, fontFamily, maxWidth, letterSpacing) --
+    JS requests text measurement from Love2D's font rasterizer
 
-  layout.lua         - Flexbox layout engine. Computes {x, y, w, h} for every node.
-                       Handles flex-grow/shrink, wrap, justify, align, padding,
-                       margin, gap, text measurement, min/max clamping.
+All Lua source files live at the monorepo root in lua/. This is the source of truth.
+Files are copied to projects via the CLI sync pipeline:
 
-  painter.lua        - Love2D painter. Walks computed tree and issues love.graphics
-                       calls. Handles backgrounds, borders, text, images, shadows,
-                       gradients, transforms, opacity, clipping, scrollbars.
+  lua/ -> make cli-setup -> cli/runtime/lua/ -> reactjit update -> project/lua/
 
-  events.lua         - Event handling. Hit testing, hover tracking, drag state,
-                       event creation (click, release, keydown, wheel, touch,
-                       gamepad), bubble path construction.
-
-  measure.lua        - Text measurement. Font loading/caching by (size, family,
-                       weight) tuple. measureText() for layout, getFont() for
-                       painter. Letter spacing width calculation.
-
-  bridge_quickjs.lua - QuickJS FFI bridge. Loads libquickjs.so via LuaJIT FFI.
-                       eval(), callGlobal(), tick(), drainCommands(), pushEvent().
-
-  bridge_fs.lua      - Module.FS bridge. File-based communication via Emscripten
-                       shared filesystem. poll(), flush(), emit().
-
-  animate.lua        - Lua-side transitions and keyframe animations. Processes
-                       CSS-style transition declarations and animation keyframes.
-                       Interpolates style values per frame.
-
-  images.lua         - Image loading and caching. Manages love.graphics.newImage
-                       instances. Handles async loading and placeholder display.
-
-  focus.lua          - Focus manager for Lua-owned inputs (TextEditor). Tracks
-                       which node has focus, handles focus/blur transitions.
-
-  texteditor.lua     - Lua-owned multi-line text editor. Handles cursor, selection,
-                       line numbers, scrolling, key input, mouse selection.
-                       Renders directly via love.graphics calls.
-
-  errors.lua         - Error overlay. Displays runtime errors as a full-screen
-                       overlay with stack traces. Uses raw love.graphics calls
-                       (independent of the tree/layout system).
-
-  inspector.lua      - Visual inspector (F12). Shows node boundaries, computed
-                       dimensions, style properties. Highlights hovered nodes.
-                       Displays layout timing and paint timing.
-
-  console.lua        - Interactive eval console (backtick key). Evaluates JS
-                       expressions via the bridge and displays results.
-
-  screenshot.lua     - Headless screenshot capture. Waits for the first stable
-                       frame, captures the framebuffer, saves as PNG.
-
-  zindex.lua         - Z-index sorting. Returns paint-ordered child lists based
-                       on zIndex style property (stable sort, ascending).
-
-  storage.lua        - Persistent storage RPC handlers. Provides get/set/remove
-                       methods backed by love.filesystem.
-
-  target_love2d.lua  - Love2D target configuration. Contains target-specific
-                       constants and setup.
-
-  http.lua           - Async HTTP client. Supports GET/POST/PUT/DELETE with headers,
-                       proxy (HTTP/SOCKS5), and concurrent request pooling via
-                       love.thread. Bridges to LuaSocket socket.http library.
-
-  network.lua        - WebSocket network manager. Manages multiple concurrent
-                       WebSocket connections with auto-reconnect, backoff,
-                       and SOCKS5 proxy support (for Tor tunneling).
-
-  websocket.lua      - Pure Lua WebSocket client (vendored from flaribbit/love2d-
-                       lua-websocket). Implements RFC 6455 frame encoding/decoding.
-                       Low-level; use network.lua for high-level connection management.
-
-  json.lua           - JSON encoder/decoder. Used internally to serialize/deserialize
-                       mutation commands between JS and Lua. Handles objects, arrays,
-                       strings, numbers, booleans, null.
-
-  socks5.lua         - SOCKS5 proxy client (RFC 1928 + RFC 1929). Establishes TCP
-                       tunnels through SOCKS5 proxies with no-auth and username/
-                       password auth. Used by http.lua and network.lua for Tor support.
-
-  tor.lua            - Tor subprocess manager. Auto-starts Tor, creates hidden
-                       services, polls for bootstrap completion, graceful shutdown.
-                       Opt-in via config.tor in ReactLove.init().
-
-  codeblock.lua      - Syntax-highlighted code block renderer. Direct love.graphics
-                       rendering (like texteditor.lua). Highlights keywords, imports,
-                       strings, numbers, comments.
-
-  textselection.lua  - Text selection and clipboard copy for Text nodes. Manages
-                       global selection state, drag-to-select, multi-line extraction,
-                       Ctrl+C / Cmd+C copy support.
-
-  log_colors.lua     - ANSI color tag library for Lua-side logging. Provides color-
-                       coded print() wrappers (log.info, log.warn, log.error, etc.)
-                       for readable terminal output from Lua modules.
-
-  debug_log.lua      - Structured debug logging with source location. Wraps log_colors
-                       and adds file:line prefixes. Used internally by runtime modules;
-                       toggle verbosity without editing call sites.
-
-  devtools.lua       - Developer tools aggregator. Coordinates inspector, console,
-                       screenshot, and debug_log. Loaded automatically in dev mode;
-                       stripped from production builds.
-
-  settings.lua       - Persistent key-value store for framework settings (inspector
-                       position, theme selection, window state). Backed by love.filesystem.
-
-  theme_menu.lua     - In-app theme switcher overlay (Ctrl+T). Lists all registered
-                       themes, applies them live, and persists the selection via settings.lua.
-
-  system_panel.lua   - System info overlay. Shows frame time, memory usage, node count,
-                       layout timing, and paint timing. Toggled via a dev shortcut.
-
-  permit.lua         - Runtime permission guard. Enforces capability-level permissions
-                       declared in the app manifest. Blocks RPC calls that exceed
-                       declared scope and logs violations via audit.lua.
-
-  audit.lua          - Security audit log. Records all RPC calls, capability invocations,
-                       and permission decisions to a local audit trail. Used with permit.lua.
-
-  manifest.lua       - App manifest loader. Reads the app's capability declarations,
-                       metadata, and permission scope. Feeds permit.lua and the
-                       capability registry.
-
-  cart_reader.lua    - Cartridge reader for self-contained .rjit bundles. Extracts
-                       embedded Lua runtime, JS bundle, and assets from a single-file
-                       distribution. Enables the portable cart deployment format.
-
-  capabilities.lua   - Capability registry. All native capabilities register here
-                       via Capabilities.register(). Provides the capabilities:list
-                       RPC used by useCapabilities().
-
-  pty.lua            - PTY process manager. Spawns pseudo-terminal processes, pipes
-                       output to the bridge, handles resize (SIGWINCH), and manages
-                       session lifecycles for Terminal and SemanticTerminal.
-
-  vterm.lua          - VT100/VT220 terminal emulator (pure Lua). Decodes raw PTY
-                       byte streams into a Unicode text buffer. Used by SemanticTerminal
-                       to strip ANSI codes before classification.
-
-  semantic_graph.lua - Semantic graph builder. Aggregates classified rows into turns,
-                       nodes, and state transitions. Emits onGraphUpdate and onStateChange
-                       events to the React layer.
-
-  session_recorder.lua - PTY output recorder. Captures raw PTY bytes with timestamps
-                         into a .rec.lua file for later playback. See session-recording docs.
-
-  session_player.lua - Playback engine for .rec.lua recordings. Drives the vterm +
-                       classifier pipeline at recorded timing (with speed control and
-                       seeking). Used by SemanticTerminal in playback mode.
+Never edit lua files inside a project directory or cli/runtime/ -- those are disposable
+copies. Always edit the source at the monorepo root.
 
 === EXAMPLES ===
-Example 1: Module Loading Order (Native Mode)
+Example 1: Adding a new Lua module
 ---
-When ReactLove.init() is called in native mode:
+```lua
+-- lua/my_feature.lua
+-- Source of truth: monorepo root lua/
 
-  1. resolveBasePath()                  -- Find the lua/ directory
-  2. require("lua.bridge_quickjs")      -- Load QuickJS FFI bridge
-  3. BridgeQJS.new(libpath)             -- Create bridge with libquickjs.so
-  4. require("lua.measure")             -- Text measurement module
-  5. require("lua.images")              -- Image cache
-  6. require("lua.animate")             -- Animation engine
-  7. require("lua.tree")                -- Retained tree
-  8. tree.init({ images, animate })     -- Wire dependencies
-  9. animate.init({ tree })             -- Wire back-reference
-  10. require("lua.layout")             -- Layout engine
-  11. layout.init({ measure })          -- Wire text measurement
-  12. require("lua.painter")            -- Painter
-  13. painter.init({ measure, images }) -- Wire dependencies
-  14. require("lua.events")             -- Event system
-  15. events.setTreeModule(tree)         -- Wire tree reference
-  16. require("lua.texteditor")         -- Text editor
-  17. texteditor.init({ measure })      -- Wire measurement
-  18. bridge:eval(bundleJS)             -- Load the JS bundle into QuickJS
+local M = {}
 
-  Always-loaded (independent, no init):
-  - require("lua.errors")              -- Error overlay
-  - require("lua.inspector")           -- F12 inspector
-  - require("lua.console")             -- Backtick console
-  - require("lua.focus")               -- Focus manager
-  - require("lua.log_colors")          -- Color logging
-  - require("lua.debug_log")           -- Structured debug logging
-  - require("lua.devtools")            -- Dev tool aggregator (dev builds only)
-  - require("lua.settings")            -- Persistent settings store
-  - require("lua.theme_menu")          -- Theme switcher overlay
-  - require("lua.system_panel")        -- System info overlay
-  - require("lua.permit")              -- Permission guard
-  - require("lua.audit")               -- Audit log
-  - require("lua.manifest")            -- App manifest loader
-  - require("lua.cart_reader")         -- Cartridge format reader
+function M.init(tree, bridge)
+  -- Called once at startup with references to tree and bridge modules
+end
+
+function M.update(dt)
+  -- Called every frame from love.update
+end
+
+function M.draw()
+  -- Called every frame from love.draw (after painter)
+end
+
+return M
+```
+
+Then wire it into the main loop in lua/init.lua:
+
+```lua
+local MyFeature = require("lua.my_feature")
+MyFeature.init(tree, bridge)
+
+-- In love.update:
+MyFeature.update(dt)
+
+-- In love.draw:
+MyFeature.draw()
+```
 ---
 Platforms: love2d
 
+Example 2: Registering a capability instead of a raw module
+---
+```lua
+-- lua/capabilities/countdown.lua
+-- Preferred pattern: register as a capability for React integration
+
+local Capabilities = require("lua.capabilities")
+
+Capabilities.register("Countdown", {
+  visual = false,  -- no visual output (non-visual capability)
+
+  schema = {
+    seconds = { type = "number", default = 10, desc = "Starting seconds" },
+    running = { type = "bool", default = true, desc = "Whether counting" },
+  },
+
+  events = { "onTick", "onComplete" },
+
+  create = function(nodeId, props)
+    return { remaining = props.seconds or 10, elapsed = 0 }
+  end,
+
+  update = function(nodeId, props, prev, state)
+    if props.seconds ~= prev.seconds then
+      state.remaining = props.seconds
+      state.elapsed = 0
+    end
+  end,
+
+  tick = function(nodeId, state, dt, pushEvent, props)
+    if not (props.running ~= false) then return end
+    state.elapsed = state.elapsed + dt
+    if state.elapsed >= 1 then
+      state.elapsed = state.elapsed - 1
+      state.remaining = state.remaining - 1
+      pushEvent({
+        type = "capability",
+        payload = {
+          type = "capability",
+          targetId = nodeId,
+          handler = "onTick",
+          remaining = state.remaining,
+        },
+      })
+      if state.remaining <= 0 then
+        pushEvent({
+          type = "capability",
+          payload = {
+            type = "capability",
+            targetId = nodeId,
+            handler = "onComplete",
+          },
+        })
+      end
+    end
+  end,
+
+  destroy = function(nodeId, state)
+    -- cleanup if needed
+  end,
+})
+```
+---
+Platforms: love2d
+
+Example 3: Using the capability from React
+---
+```tsx
+import { Native } from '@reactjit/core';
+import { useState } from 'react';
+
+// One-liner wrapper -- the user never sees the bridge
+function Countdown(props: {
+  seconds: number;
+  running?: boolean;
+  onTick?: (e: { remaining: number }) => void;
+  onComplete?: () => void;
+}) {
+  return <Native type="Countdown" {...props} />;
+}
+
+// Usage
+export function TimerApp() {
+  const [remaining, setRemaining] = useState(10);
+
+  return (
+    <Countdown
+      seconds={10}
+      running
+      onTick={(e) => setRemaining(e.remaining)}
+      onComplete={() => console.log('Done!')}
+    />
+  );
+}
+```
+---
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- Always edit lua/ at the monorepo root. Never edit cli/runtime/lua/ or project/lua/ directly -- those are disposable copies overwritten by the sync pipeline.
+- After editing any Lua file, run: make cli-setup, then cd project && reactjit update && reactjit build.
+- The storybook reads Lua via symlink (storybook/love/lua -> ../../lua). Never replace this symlink with a real directory.
+- Capability files in lua/capabilities/ are auto-loaded by capabilities.lua. No manual registration wiring is needed.
+- LuaJIT has a 65KB bytecode limit per function. If a function gets too large, split it into multiple local functions.
+- The QuickJS runtime is single-threaded. Heavy computation in JS blocks the frame. Move expensive work to Lua (which runs in the Love2D thread) or use Lua coroutines for frame-distributed work.
+
 === SEE ALSO ===
-- 02-architecture/pipeline.txt - How these modules fit together
-- 02-architecture/layout-engine.txt - layout.lua deep dive
-- 02-architecture/painter.txt - painter.lua deep dive
-- event-handling.txt - events.lua deep dive
-- debugging.txt - inspector.lua, console.lua, errors.lua
-- networking.txt - http.lua, network.lua, websocket.lua, json.lua, socks5.lua
-- tor.txt - tor.lua, Tor hidden service integration
-- rendering.txt - codeblock.lua and textselection.lua for UI features
+- capabilities.txt
+- pipeline.txt
+- transport.txt
+- source-of-truth.txt

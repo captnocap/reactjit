@@ -1,158 +1,226 @@
 === METADATA ===
-title: Common Errors and Solutions
-description: Symptom-to-solution guide for the most frequent ReactJIT issues
+title: Common Errors
+description: Common errors in ReactJIT with causes and fixes -- mixed text children, missing dimensions, stale theme cache, CRLF, and more.
 category: Troubleshooting
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: errors, troubleshooting, text not rendering, flexGrow, justifyContent, build fails, lint
-related: faq, debugging, style-properties, source-of-truth
+platforms: love2d
+keywords: errors, mixed text, children, dimensions, theme, cache, stale, crlf, line endings, flexgrow, scrollview, linter, paddingHorizontal
+related: faq.txt, debugging.txt, performance.txt
 difficulty: beginner
 
 === OVERVIEW ===
-This page lists the most common errors and unexpected behaviors in ReactJIT, organized
-by symptom. Each entry explains why the problem occurs and how to fix it. Most of these
-are caught by the static linter (`reactjit lint`), so running the linter after every
-component change is the fastest way to avoid them.
+This page covers the most common errors and visual bugs in ReactJIT, why they happen,
+and how to fix them. Each entry includes the symptom, the cause, and a before/after code
+fix.
 
 === EXAMPLES ===
-Example 1: Text Not Rendering
+Example 1: Mixed text children stack vertically
 ---
-Symptom: A <Text> component exists in the tree but nothing appears on screen.
+Symptom: Text like "Hello Alice!" renders as three lines instead of one.
 
-Cause: The Text node is missing an explicit fontSize.
-  Without fontSize, the layout engine uses a default of 14 but the linter
-  will block your build. If you bypassed the linter, the text may render
-  at an unexpected size or position.
+Cause: Mixed children in Text (string literals + JSX expressions) create separate __TEXT__
+nodes that stack vertically in the column layout.
 
-Fix: Always provide fontSize on every Text node.
+Before (broken):
+```tsx
+// BAD: creates 3 separate text nodes that stack vertically
+<Text style={{ color: c.text, fontSize: 14 }}>
+  Hello {name}!
+</Text>
+```
 
-  BAD:  <Text style={{ color: '#ffffff' }}>Hello</Text>
-  GOOD: <Text style={{ fontSize: 16, color: '#ffffff' }}>Hello</Text>
+After (fixed):
+```tsx
+// GOOD: single template literal = single text node
+<Text style={{ color: c.text, fontSize: 14 }}>
+  {`Hello ${name}!`}
+</Text>
+```
 
-The linter rule `no-missing-font-size` enforces this.
+The linter catches this as `no-mixed-text-children`.
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: flexGrow Not Working
+Example 2: Empty Box renders at unexpected size
 ---
-Symptom: A node has flexGrow: 1 but does not expand to fill space.
+Symptom: A Box with no children renders at 1/4 of its parent's size instead of zero.
 
-Cause: The parent does not have a known size on the main axis.
-  flexGrow distributes free space. If the parent's size is auto (unknown),
-  there is no free space to distribute.
+Cause: Empty surface nodes (Box, Image, Video) use the proportional fallback -- they get
+1/4 of the parent's available space. This cascades: an unsized Box in an 800px parent
+is 200px; a nested unsized Box inside it is 50px.
 
-Fix: Give the parent an explicit size.
+Fix: Either give it explicit dimensions or add children (which triggers content auto-sizing).
 
-  BAD:
-  <Box>
-    <Box style={{ flexGrow: 1 }} />  {/* Parent has no height */}
-  </Box>
+```tsx
+// Proportional fallback: 1/4 of parent
+<Box />
 
-  GOOD:
-  <Box style={{ height: '100%' }}>
-    <Box style={{ flexGrow: 1 }} />  {/* Parent has known height */}
-  </Box>
+// Explicit dimensions: exactly 0
+<Box style={{ width: 0, height: 0 }} />
 
-For the root container, always use width: '100%', height: '100%'.
-Do NOT use flexGrow: 1 on root containers.
+// Content auto-sizing: sizes to children
+<Box>
+  <Text style={{ fontSize: 14 }}>Content</Text>
+</Box>
+
+// flexGrow: fills remaining space
+<Box style={{ flexGrow: 1 }} />
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: justifyContent Ignored on Row
+Example 3: ScrollView shows nothing
 ---
-Symptom: A row Box has justifyContent: 'center' but children are left-aligned.
+Symptom: A ScrollView with children renders as zero height or is invisible.
 
-Cause: The row Box has no explicit width. Box nodes have no intrinsic width
-  (only Text nodes do via measurement). Without a known width, there is no
-  space to distribute, so justifyContent has no effect.
+Cause: ScrollView is not a surface -- it does not get the proportional fallback. It needs
+explicit height (or flexGrow) to define its scroll viewport.
 
-Fix: Add width: '100%' or a fixed width to row Boxes that need justifyContent.
+Before (broken):
+```tsx
+// BAD: ScrollView has no height -> viewport is zero
+<ScrollView>
+  <Text style={{ fontSize: 14 }}>Content</Text>
+</ScrollView>
+```
 
-  BAD:
-  <Box style={{ flexDirection: 'row', justifyContent: 'center' }}>
-    <Text style={{ fontSize: 14 }}>Centered?</Text>
-  </Box>
+After (fixed):
+```tsx
+// GOOD: flexGrow gives it a viewport
+<ScrollView style={{ flexGrow: 1 }}>
+  <Text style={{ fontSize: 14 }}>Content</Text>
+</ScrollView>
 
-  GOOD:
-  <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'center' }}>
-    <Text style={{ fontSize: 14 }}>Centered!</Text>
-  </Box>
+// Also GOOD: explicit height
+<ScrollView style={{ height: 400 }}>
+  <Text style={{ fontSize: 14 }}>Content</Text>
+</ScrollView>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Mixed Text Children
+Example 4: Root container does not fill the window
 ---
-Symptom: Text content renders incorrectly or only partially.
+Symptom: The root component renders at 1/4 of the window size.
 
-Cause: Using mixed JSX expressions in Text creates multiple child nodes
-  instead of a single text string.
+Cause: The root container needs explicit width and height. The proportional fallback does
+not apply at the root because the root IS the viewport reference.
 
-Fix: Use template literals for dynamic text content.
+Before (broken):
+```tsx
+// BAD: root Box uses proportional fallback -> 1/4 viewport
+export function App() {
+  return (
+    <Box>
+      <Text style={{ fontSize: 16 }}>Hello</Text>
+    </Box>
+  );
+}
+```
 
-  BAD:  <Text style={{ fontSize: 14 }}>Count: {count}</Text>
-  GOOD: <Text style={{ fontSize: 14 }}>{`Count: ${count}`}</Text>
+After (fixed):
+```tsx
+// GOOD: root fills the viewport
+export function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%' }}>
+      <Text style={{ fontSize: 16 }}>Hello</Text>
+    </Box>
+  );
+}
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Build Fails
+Example 5: Stale theme colors after switching themes
 ---
-Symptom: `reactjit build` exits with errors.
+Symptom: Some colors do not update when the theme changes. The app partially shows the
+old theme.
 
-Cause: The build command runs `reactjit lint` as a gate before bundling.
-  Layout lint errors will block the build.
+Cause: Module-level const objects capture theme values at eval time. When applyTheme()
+mutates the color map, module-level references go stale.
 
-Fix: Run `reactjit lint` separately to see all errors. Fix each one.
-  Common lint errors:
-  - no-missing-font-size: Text without fontSize
-  - no-block-char-in-text: Unicode block character in Text (use Box with backgroundColor)
-  - root container without 100% dimensions
+Before (broken):
+```tsx
+// BAD: captures theme values at module load time
+const STYLES = {
+  header: { backgroundColor: C.accent },  // stale after theme switch
+};
+```
 
-If a lint rule is wrong for your use case, use the escape hatch:
-  // rjit-ignore-next-line
+After (fixed):
+```tsx
+// GOOD: read theme colors inside the component
+function Header() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ backgroundColor: c.primary }}>
+      <Text style={{ color: c.text, fontSize: 16 }}>Header</Text>
+    </Box>
+  );
+}
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 6: Runtime Files Outdated
+Example 6: Linter rejects paddingHorizontal/paddingVertical
 ---
-Symptom: After editing framework files (lua/*.lua, packages/shared/), the changes
-  do not appear in your project.
+Symptom: Build fails with a linter error about paddingHorizontal or paddingVertical.
 
-Cause: You edited the source of truth but did not run the sync pipeline.
-  The project still has the old copies.
+Cause: ReactJIT does not support paddingHorizontal or paddingVertical shorthand properties.
+Use the individual side props instead.
 
-Fix: Run the full sync pipeline.
+Before (broken):
+```tsx
+// BAD: linter rejects these
+<Box style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+```
 
-  make cli-setup              # source -> cli/runtime/
-  cd examples/<project>
-  reactjit update           # cli/runtime/ -> project copies
-  reactjit build dist:love  # rebuild
+After (fixed):
+```tsx
+// GOOD: use individual side props
+<Box style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8 }}>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 7: libquickjs.so Not Found
+Example 7: Event handler silently does nothing
 ---
-Symptom: Love2D crashes with an error about loading libquickjs.so.
+Symptom: An onClick or custom event handler is attached to a Box but never fires.
 
-Cause: The QuickJS shared library has not been built or is not in the
-  expected location.
+Cause: The Box component uses an explicit whitelist for event handlers. If a handler is
+not in the destructure list in primitives.tsx, it silently disappears -- extractHandlers
+in hostConfig never sees it, hasHandlers is false, and hit testing skips the node.
 
-Fix: Build QuickJS and sync to the project.
+Fix: Check that the handler prop is listed in all four places:
+1. BoxProps in types.ts (type definition)
+2. Box() destructure in primitives.tsx (extract from props)
+3. Box() createElement call in primitives.tsx (pass to host element)
+4. bridge.subscribe() in eventDispatcher.ts (Lua-to-JS routing)
+---
+Platforms: love2d
 
-  make setup       # Clone quickjs-ng, compile libquickjs.so
-  make cli-setup   # Copy to cli/runtime/lib/
-  cd examples/<project>
-  reactjit update  # Copy to project/lib/
+Example 8: CRLF line endings cause parse errors
+---
+Symptom: Files created on Windows or by some tools have \r\n line endings, causing
+unexpected parse errors or build failures.
+
+Cause: ReactJIT is a Linux-native project. CRLF line endings can confuse parsers.
+
+Fix: Run dos2unix on the affected file. Do not rewrite the file manually.
+
+```bash
+dos2unix path/to/file.tsx
+```
 ---
 Platforms: love2d
 
 === CRITICAL RULES ===
-- Run `reactjit lint` after EVERY component change.
-- The linter catches the most common errors before they become runtime bugs.
-- When in doubt, check the computed layout with the F12 inspector.
-- If changes are not appearing, check whether you edited the source of truth
-  or a copy.
+- The linter (rjit lint) catches many of these errors before they become runtime bugs. Always run it after modifying components.
+- When debugging layout, use the F12 inspector to see computed dimensions. The three sizing tiers (explicit > content auto-sizing > proportional fallback) resolve in order.
+- If a visual bug only appears after a theme switch, it is almost certainly the stale theme cache pattern. Search for module-level objects that reference theme colors.
 
 === SEE ALSO ===
-- faq.txt - General questions
-- 10-advanced/debugging.txt - F12 inspector and console
-- 02-architecture/source-of-truth.txt - File editing rules
-- 04-layout-system/flexbox.txt - Flexbox rules
+- faq.txt
+- debugging.txt
+- devtools.txt
+- performance.txt

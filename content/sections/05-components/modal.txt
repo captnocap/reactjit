@@ -1,177 +1,98 @@
 === METADATA ===
 title: Modal
-description: Fullscreen overlay with backdrop, animations, and dismiss handling
+description: Full-screen overlay with backdrop and dismiss handling
 category: Components
-platforms: love2d, web
-keywords: modal, dialog, overlay, popup, backdrop, portal, escape, dismiss, fade, slide
+platforms: love2d
+keywords: modal, dialog, overlay, popup, backdrop, dismiss
 related: Pressable, Portal, Box
-difficulty: intermediate
+difficulty: beginner
 
 === OVERVIEW ===
-Modal displays content in a fullscreen overlay that sits above the rest of the UI. It renders through the Portal system, ensuring correct z-index layering regardless of where it appears in the component tree. Modal supports a customizable backdrop (color, transparency, click-to-dismiss), simple enter/exit animations (none, fade, slide), and Escape key dismissal.
+Modal renders a full-screen overlay above all other content. It uses `position: absolute` and a high `zIndex` (1000) to layer above everything in the tree — no PortalHost required.
 
-Modal is a controlled component -- you manage visibility via the `visible` prop and handle close events via `onRequestClose`. The backdrop press and Escape key both trigger onRequestClose; the component does not close itself. This gives you full control over dismiss conditions (e.g., confirmation dialogs that ignore backdrop clicks).
+The backdrop is a semi-transparent layer that covers the entire viewport. Clicking the backdrop dismisses the modal (configurable via `backdropDismiss`). Pressing Escape also triggers `onRequestClose`. Content is centered within the viewport by default.
+
+When `visible` is false, Modal renders nothing.
 
 === API / SYNTAX ===
 ```tsx
 import { Modal } from '@reactjit/core';
 ```
 
-```tsx
-const [showModal, setShowModal] = useState(false);
+Props:
+| Prop            | Type       | Default          | Description                                     |
+|-----------------|------------|------------------|-------------------------------------------------|
+| visible         | boolean    | required         | Whether the modal is shown                      |
+| onRequestClose  | () => void | undefined        | Called on backdrop tap or Escape key             |
+| onShow          | () => void | undefined        | Called when modal becomes visible                |
+| transparent     | boolean    | false            | Transparent backdrop (no dimming)                |
+| backdropColor   | Color      | [0, 0, 0, 0.5]  | Backdrop color with alpha                       |
+| backdropDismiss | boolean    | true             | Whether tapping backdrop calls onRequestClose   |
+| style           | Style      | undefined        | Applied to the content wrapper                  |
+| children        | ReactNode  | required         | Modal content                                   |
 
-<Modal
-  visible={showModal}
-  onRequestClose={() => setShowModal(false)}
-  animationType="fade"
->
-  <Box style={{ width: 300, padding: 24, backgroundColor: '#1e1e2e', borderRadius: 12 }}>
-    <Text style={{ fontSize: 18, color: '#cdd6f4' }}>Dialog Title</Text>
-    <Pressable onPress={() => setShowModal(false)}>
-      <Text style={{ fontSize: 14, color: '#89b4fa' }}>Close</Text>
+=== EXAMPLES ===
+Example 1: Basic modal
+---
+```tsx
+const colors = useThemeColors();
+const [visible, setVisible] = useState(false);
+
+<Pressable onPress={() => setVisible(true)} style={{ padding: 12, backgroundColor: colors.primary, borderRadius: 8 }}>
+  <Text style={{ color: '#ffffff' }}>Open Modal</Text>
+</Pressable>
+
+<Modal visible={visible} onRequestClose={() => setVisible(false)}>
+  <Box padding={24} bg={colors.bgElevated} radius={12} style={{ width: 300 }}>
+    <Text size={18} color={colors.text} bold>Dialog Title</Text>
+    <Text size={14} color={colors.muted} style={{ marginTop: 8 }}>
+      This is the modal content.
+    </Text>
+    <Pressable
+      onPress={() => setVisible(false)}
+      style={{ marginTop: 16, padding: 10, backgroundColor: colors.primary, borderRadius: 8 }}
+    >
+      <Text style={{ color: '#ffffff', textAlign: 'center' }}>Close</Text>
     </Pressable>
   </Box>
 </Modal>
 ```
+---
+Platforms: love2d
 
-Props:
-| Prop            | Type                            | Default       | Description                                    |
-|-----------------|---------------------------------|---------------|------------------------------------------------|
-| visible         | boolean                         | REQUIRED      | Show or hide the modal                         |
-| onRequestClose  | () => void                      | undefined     | Called on Escape key or backdrop press          |
-| onShow          | () => void                      | undefined     | Called when modal finishes appearing            |
-| animationType   | 'none' | 'fade' | 'slide'       | 'none'        | Enter/exit animation style                     |
-| transparent     | boolean                         | false         | Use transparent backdrop (overrides color)      |
-| backdropColor   | Color                           | [0,0,0,0.5]   | Backdrop color (RGBA or CSS string)            |
-| backdropDismiss | boolean                         | true          | Whether backdrop press triggers onRequestClose |
-| children        | ReactNode                       | REQUIRED      | Modal content                                  |
-| style           | Style                           | undefined     | Applied to the content wrapper                 |
-
-Animation types:
-| Type  | Enter behavior                   | Exit behavior                    |
-|-------|----------------------------------|----------------------------------|
-| none  | Instant appear                   | Instant disappear                |
-| fade  | Fades in from transparent        | Fades out to transparent         |
-| slide | Slides up from below             | Slides down to below             |
-
-Animation duration is 200ms for both enter and exit.
-
-=== EXAMPLES ===
-Example 1: Basic confirmation dialog
+Example 2: Non-dismissible modal
 ---
 ```tsx
-const [show, setShow] = useState(false);
+const colors = useThemeColors();
 
-<Pressable onPress={() => setShow(true)}>
-  <Text style={{ fontSize: 14, color: '#89b4fa' }}>Delete item</Text>
-</Pressable>
-
-<Modal visible={show} onRequestClose={() => setShow(false)} animationType="fade">
-  <Box style={{
-    width: 320,
-    padding: 24,
-    backgroundColor: '#1e1e2e',
-    borderRadius: 12,
-    gap: 16,
-  }}>
-    <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#cdd6f4' }}>
-      Confirm Delete
-    </Text>
-    <Text style={{ fontSize: 14, color: '#a6adc8' }}>
-      Are you sure? This cannot be undone.
-    </Text>
-    <Box style={{ flexDirection: 'row', justifyContent: 'end', gap: 12, width: '100%' }}>
-      <Pressable onPress={() => setShow(false)}>
-        <Text style={{ fontSize: 14, color: '#a6adc8' }}>Cancel</Text>
-      </Pressable>
-      <Pressable onPress={() => { handleDelete(); setShow(false); }}>
-        <Text style={{ fontSize: 14, color: '#f38ba8' }}>Delete</Text>
-      </Pressable>
-    </Box>
+<Modal visible={loading} backdropDismiss={false}>
+  <Box padding={24} bg={colors.bgElevated} radius={12} align="center">
+    <Text size={16} color={colors.text}>Loading...</Text>
   </Box>
 </Modal>
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
-Example 2: Non-dismissable modal (ignores backdrop click)
+Example 3: Transparent backdrop
 ---
 ```tsx
-<Modal
-  visible={isProcessing}
-  backdropDismiss={false}
-  backdropColor={[0, 0, 0, 0.8]}
->
-  <Box style={{ padding: 32, backgroundColor: '#1e1e2e', borderRadius: 12, alignItems: 'center' }}>
-    <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Processing...</Text>
+const colors = useThemeColors();
+
+<Modal visible={showTooltip} onRequestClose={() => setShowTooltip(false)} transparent>
+  <Box padding={16} bg={colors.surface} radius={8} style={{ borderWidth: 1, borderColor: colors.border }}>
+    <Text size={14} color={colors.text}>Floating content</Text>
   </Box>
 </Modal>
 ```
 ---
-Platforms: Love2D, Web
-
-Example 3: Transparent overlay
----
-```tsx
-<Modal visible={showTooltip} transparent onRequestClose={() => setShowTooltip(false)}>
-  <Box style={{
-    position: 'absolute',
-    top: 100,
-    left: 200,
-    padding: 8,
-    backgroundColor: '#313244',
-    borderRadius: 4,
-  }}>
-    <Text style={{ fontSize: 12, color: '#cdd6f4' }}>Tooltip content</Text>
-  </Box>
-</Modal>
-```
----
-Platforms: Love2D, Web
-
-Example 4: Slide-up modal with onShow callback
----
-```tsx
-<Modal
-  visible={showPanel}
-  onRequestClose={() => setShowPanel(false)}
-  onShow={() => console.log('modal fully visible')}
-  animationType="slide"
->
-  <Box style={{
-    width: '100%',
-    height: '50%',
-    backgroundColor: '#1e1e2e',
-    borderRadius: 16,
-    padding: 24,
-  }}>
-    <Text style={{ fontSize: 20, color: '#cdd6f4' }}>Bottom Sheet</Text>
-  </Box>
-</Modal>
-```
----
-Platforms: Love2D, Web
+Platforms: love2d
 
 === PLATFORM NOTES ===
 Love2D:
-  Modal renders through the Portal system which places content at the top of the instance tree for z-index layering. The backdrop is a full-screen Pressable that intercepts clicks. Escape key handling is wired through the Box onKeyDown handler in native mode. Animations are stepped (4 steps over 200ms) rather than continuous -- adequate for modal transitions but not smooth enough for complex animation needs.
-
-Web:
-  Uses the Portal system (React portal to a PortalHost). The backdrop prevents body scroll by setting document.body.style.overflow = 'hidden'. Escape key handler uses document.addEventListener('keydown'). CSS transitions are used for fade/slide animations in addition to the stepped state machine. The web renderer restores the original body overflow on unmount.
-
-Terminal:
-  Not available on grid targets. For modal-like behavior on character-grid renderers, overlay a view with higher z-index and handle input routing manually.
-
-=== CRITICAL RULES ===
-- Modal is controlled: it will not close itself. You must update the `visible` prop to false in your onRequestClose handler.
-- The `children` prop is required. A Modal with no children renders an empty overlay with just the backdrop.
-- Do not conditionally render Modal itself based on visibility -- always render it and control with `visible`. The component handles its own mount/unmount animation lifecycle internally.
-- When backdropDismiss is false, the only way to close the modal is programmatically or via Escape key (if onRequestClose is provided). Design your content with an explicit close control.
-- onShow fires after the enter animation completes, not when visible becomes true. For 'none' animation type, it fires immediately.
-- Modal uses Portal internally. You do not need to wrap it in a Portal yourself.
+  Modal uses position:absolute to layer above the rest of the tree. The layout engine handles absolute children out-of-flow and the painter sorts by zIndex. Escape key detection uses Love2D key names (lowercase 'escape').
 
 === SEE ALSO ===
-- Pressable
 - Portal
+- Pressable
 - Box
-- Animation

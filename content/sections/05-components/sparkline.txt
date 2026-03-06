@@ -1,16 +1,18 @@
 === METADATA ===
 title: Sparkline
-description: Mini inline chart rendered as vertical bars normalized to the min/max of the data, with optional interactive hover tooltip
+description: Compact inline mini chart for embedding data trends in text-heavy layouts
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: sparkline, mini chart, inline chart, trend, visualization, data, interactive
-related: BarChart, ProgressBar, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: sparkline, mini chart, inline, trend, data, compact, bar
+related: LineChart, BarChart, ProgressBar
+difficulty: intermediate
 
 === OVERVIEW ===
-Sparkline renders a compact inline chart from an array of numbers. Each data point is represented as a thin vertical bar whose height is proportional to the value's position between the dataset's minimum and maximum. This creates a quick visual representation of trends or distributions within a small footprint.
+Sparkline renders a compact mini bar chart from an array of numbers. Each value becomes a vertical bar scaled relative to the min/max of the dataset. Designed for inline use alongside text -- dashboards, table cells, status rows.
 
-Unlike BarChart, Sparkline is designed for inline use where labels and axes are unnecessary. It automatically computes bar widths to fill the given width and normalizes heights against the data range. When interactive mode is enabled, hovering a bar dims all others and shows a ChartTooltip with the raw value and index.
+Built with Box primitives (not a Chart2D surface). When `interactive` is enabled, hovering a bar highlights it and dims others. A tooltip shows the value and index. Press events are available via `onPointPress`.
+
+Defaults to 80x24 pixels -- small enough to sit inline.
 
 === API / SYNTAX ===
 ```tsx
@@ -18,97 +20,65 @@ import { Sparkline } from '@reactjit/core';
 ```
 
 Props:
-| Prop          | Type                                                    | Default    | Description                                                       |
-|---------------|---------------------------------------------------------|------------|-------------------------------------------------------------------|
-| data          | number[]                                                | required   | Array of numeric data points                                      |
-| width         | number                                                  | 80         | Total chart width in pixels                                       |
-| height        | number                                                  | 24         | Total chart height in pixels                                      |
-| color         | Color                                                   | '#3b82f6'  | Bar color                                                         |
-| style         | Style                                                   | undefined  | Additional styles applied to the container Box                    |
-| interactive   | boolean                                                 | false      | Enable hover highlighting and per-bar ChartTooltip                |
-| onPointHover  | (index: number \| null, value: number \| null) => void  | undefined  | Called when the pointer enters or leaves a bar                    |
-| onPointPress  | (index: number, value: number) => void                  | undefined  | Called when a bar is clicked (requires interactive: true)         |
+| Prop         | Type                                           | Default   | Description                          |
+|--------------|-------------------------------------------------|-----------|--------------------------------------|
+| data         | number[]                                       | required  | Array of numeric values              |
+| width        | number                                         | 80        | Total width in pixels                |
+| height       | number                                         | 24        | Total height in pixels               |
+| color        | Color                                          | '#3b82f6' | Bar color                            |
+| interactive  | boolean                                        | false     | Enable hover highlight and tooltips  |
+| onPointHover | (index: number \| null, value: number \| null) => void | undefined | Called on hover/unhover     |
+| onPointPress | (index: number, value: number) => void         | undefined | Called on bar press                   |
+| style        | Style                                          | undefined | Full style object                    |
 
 === EXAMPLES ===
 Example 1: Basic sparkline
 ---
 ```tsx
-import { Sparkline } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Sparkline data={[10, 25, 15, 30, 20, 35, 28]} />
-    </Box>
-  );
-}
+<Sparkline data={[3, 7, 4, 9, 2, 6, 8]} color={colors.primary} />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Custom size and color
+Example 2: Inline with text
 ---
 ```tsx
-import { Sparkline } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Sparkline
-        data={cpuHistory}
-        width={120}
-        height={32}
-        color="#22c55e"
-      />
-    </Box>
-  );
-}
+<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+  <Text style={{ color: colors.text, fontSize: 14 }}>CPU</Text>
+  <Sparkline data={cpuHistory} color={colors.primary} width={60} height={16} />
+  <Text style={{ color: colors.muted, fontSize: 12 }}>{`${cpuHistory[cpuHistory.length - 1]}%`}</Text>
+</Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Inline with text and interactive hover callback
+Example 3: Interactive sparkline
 ---
 ```tsx
-import { useState } from 'react';
-import { Sparkline } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  const [hovered, setHovered] = useState<number | null>(null);
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontSize: 11, color: '#e2e8f0' }}>CPU</Text>
-        <Sparkline
-          data={cpuData}
-          width={60}
-          height={16}
-          color="#ef4444"
-          interactive
-          onPointHover={(_, value) => setHovered(value)}
-        />
-        <Text style={{ fontSize: 11, color: '#94a3b8' }}>
-          {hovered !== null ? `${hovered}%` : '72%'}
-        </Text>
-      </Box>
-    </Box>
-  );
-}
+<Sparkline
+  data={[10, 25, 18, 42, 35, 28, 50, 38]}
+  color={colors.primary}
+  width={120}
+  height={32}
+  interactive
+  onPointPress={(index, value) => console.log(`Point ${index}: ${value}`)}
+/>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The `data` prop is required. An empty array renders an empty placeholder Box at the specified width and height.
-- Sparkline normalizes to the data's own min/max range, not 0-based. If all values are equal, the range defaults to 1, rendering all bars at minimum height (1px).
-- The component has a fixed size based on `width` and `height`. It does not grow or shrink with its container. Pass `style` to override if needed.
-- Bar widths are computed as `Math.max(1, (width - (data.length - 1) * barGap) / data.length)` where `barGap` is 1px. Very long data arrays in a narrow width may compress bars to 1px minimum.
-- For real-time data, pass a new array reference to `data` on each update. Sparkline re-renders whenever the data reference changes.
-- `onPointPress` only fires when `interactive` is also `true`.
-- Hover events require pointer support — not available on all targets.
+- An empty `data` array renders an empty Box at the specified dimensions.
+- Bar widths are computed automatically from the data length, width, and a 1px gap between bars.
+- Sparkline is not a Chart2D surface -- it is built from Box primitives. It sizes from its `width`/`height` props (defaulting to 80x24), not from proportional surface fallback.
 
 === SEE ALSO ===
-- BarChart — full-featured vertical bar chart with labels and axis context
-- ProgressBar — single-value horizontal fill bar
-- ChartTooltip — standalone tooltip primitive used internally by this component
+- LineChart
+- BarChart
+- ProgressBar

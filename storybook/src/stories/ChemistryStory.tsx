@@ -14,7 +14,8 @@ import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput } from '.
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView,
-  ReagentTest, SpectrumView, PhaseDiagram,
+  ReagentTest, SpectrumView, PhaseDiagram, BohrModel, StructureView,
+  ChemFormula, ChemEquation, IsoNotation, ChemFig,
   useElement, useMolecule, useReaction,
   molarMass, massComposition,
   COMPOUNDS, ELEMENTS, REAGENT_INFO,
@@ -46,7 +47,7 @@ const P = {
 // ── Static code blocks (hoisted — never recreated) ──────
 
 const INSTALL_CODE = `import {
-  PeriodicTable, ElementCard, MoleculeCard,
+  PeriodicTable, ElementTile, ElementCard, MoleculeCard,
   ElectronShell, ReactionView,
   useElement, useMolecule, useReaction,
   ReagentTest, SpectrumView, PhaseDiagram,
@@ -118,6 +119,44 @@ molesToParticles(1)       // → 6.022e+23
 const rxn = useReaction('Fe2O3 + CO -> Fe + CO2')
 // rxn.balanced → 'Fe2O3 + 3CO -> 2Fe + 3CO2'`;
 
+const BOHR_CODE = `<BohrModel element={26} />
+<BohrModel element="Fe" animated speed={2} />
+<BohrModel element={6} showLabel={false} />
+
+// Renders animated 3D Bohr model:
+//   - Tilted orbital ellipses per shell
+//   - Orbiting electrons with glow
+//   - CPK-colored nucleus
+//   - All computation in Lua at 60fps`;
+
+const STRUCTURE_CODE = `<StructureView smiles="c1ccccc1" />
+<StructureView smiles="CC(=O)O" showLabels />
+<StructureView smiles="CCO" showHydrogens />
+
+// Uses Indigo C library (FFI):
+//   - SMILES → 2D coordinate layout
+//   - CPK-colored atoms + bond rendering
+//   - Double/triple/aromatic bonds
+//   - Parsed once, rendered at 60fps`;
+
+const NOTATION_CODE = `// mhchem \\ce{} — proper subscripts, charges, arrows
+<ChemFormula formula="H2SO4" />
+<ChemFormula formula="Ca(OH)2" />
+<ChemFormula formula="SO4^{2-}" fontSize={18} />
+
+// Full equations with balanced notation
+<ChemEquation equation="2H2 + O2 -> 2H2O" />
+<ChemEquation equation="N2 + 3H2 <=> 2NH3" />
+<ChemEquation equation="CH4 + 2O2 -> CO2 + 2H2O(g)" />
+
+// Isotope notation: ²³⁵U₉₂
+<IsoNotation symbol="U" mass={235} atomic={92} />
+<IsoNotation symbol="C" mass={14} />
+
+// Linear structural formulas via \\chemfig{}
+<ChemFig formula="H-O-H" />
+<ChemFig formula="H-C#N" />`;
+
 // ── Hoisted data arrays ─────────────────────────────────
 
 const DEMO_FORMULAS = ['H2O', 'CO2', 'C6H12O6', 'C8H10N4O2', 'NaCl', 'CH4', 'NH3', 'C2H5OH', 'H2SO4', 'C6H6'];
@@ -134,15 +173,36 @@ const DEMO_REACTIONS = [
 const REAGENT_TYPES: ReagentType[] = ['marquis', 'mecke', 'mandelin', 'simons', 'ehrlich'];
 const REAGENT_COMPOUNDS = ['MDMA', 'Amphetamine', 'Methamphetamine', 'LSD', 'Heroin', 'Cocaine', 'Psilocybin', 'DMT', 'Caffeine'];
 
+const DEMO_SMILES = [
+  { label: 'Benzene', smiles: 'c1ccccc1' },
+  { label: 'Ethanol', smiles: 'CCO' },
+  { label: 'Acetic acid', smiles: 'CC(=O)O' },
+  { label: 'Aspirin', smiles: 'CC(=O)Oc1ccccc1C(=O)O' },
+  { label: 'Caffeine', smiles: 'Cn1c(=O)c2c(ncn2C)n(C)c1=O' },
+  { label: 'Glucose', smiles: 'OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O' },
+  { label: 'Dopamine', smiles: 'NCCc1ccc(O)c(O)c1' },
+  { label: 'TNT', smiles: 'Cc1c(cc(cc1[N+](=O)[O-])[N+](=O)[O-])[N+](=O)[O-]' },
+];
+
+const BOHR_ELEMENTS = [
+  { n: 1, sym: 'H' }, { n: 2, sym: 'He' }, { n: 6, sym: 'C' },
+  { n: 8, sym: 'O' }, { n: 11, sym: 'Na' }, { n: 17, sym: 'Cl' },
+  { n: 26, sym: 'Fe' }, { n: 29, sym: 'Cu' }, { n: 47, sym: 'Ag' },
+  { n: 79, sym: 'Au' }, { n: 92, sym: 'U' },
+];
+
 const FEATURES = [
-  { label: 'PeriodicTable', desc: 'Interactive 118-element table with color modes', color: P.blue },
-  { label: 'ElementCard', desc: 'Detail card for any element by number or symbol', color: P.teal },
+  { label: 'PeriodicTable', desc: 'Grid of 118 ElementTiles in standard periodic table layout', color: P.blue },
+  { label: 'ElementTile', desc: 'Periodic table tile with click-to-flip properties', color: P.teal },
+  { label: 'ElementCard', desc: 'Full element detail card — all properties at a glance', color: P.green },
   { label: 'ElectronShell', desc: 'Electron shell diagram visualization', color: P.mauve },
   { label: 'MoleculeCard', desc: 'Compound info card — formula, mass, geometry', color: P.green },
   { label: 'ReactionView', desc: 'Balanced equation display with type + enthalpy', color: P.yellow },
   { label: 'ReagentTest', desc: 'Lua 60fps reagent spot test animation', color: P.pink },
   { label: 'SpectrumView', desc: 'IR / UV-Vis / Mass Spec plot (Lua painter)', color: P.peach },
   { label: 'PhaseDiagram', desc: 'P-T phase diagram with triple/critical points', color: P.red },
+  { label: 'BohrModel', desc: 'Animated 3D Bohr model — tilted orbits, electron animation', color: P.mauve },
+  { label: 'StructureView', desc: '2D molecular structure from SMILES via Indigo FFI', color: P.peach },
   { label: 'fetchCompound', desc: 'Imperative PubChem REST API lookup', color: P.blue },
   { label: 'useElement / useMolecule', desc: 'Element lookup + RPC-backed molecule hook', color: P.teal },
   { label: 'useReaction', desc: 'RPC to Lua balancer — LuaJIT coefficient search', color: P.mauve },
@@ -151,39 +211,24 @@ const FEATURES = [
   { label: 'electronConfig / valenceElectrons', desc: 'Electron configuration utilities', color: P.peach },
   { label: 'bondCharacter', desc: 'Electronegativity diff → ionic/polar/nonpolar', color: P.red },
   { label: 'Chemistry conversions', desc: 'mol, M, amu, pH, spectroscopy units → @reactjit/convert', color: P.blue },
+  { label: 'ChemFormula', desc: 'mhchem \\ce{} — subscripts, ionic charges, state symbols', color: P.teal },
+  { label: 'ChemEquation', desc: 'Balanced equations with →, ⇌, ↔ arrows via \\ce{}', color: P.teal },
+  { label: 'IsoNotation', desc: 'Nuclear isotope notation: ²³⁵₉₂U', color: P.teal },
+  { label: 'ChemFig', desc: 'Linear structural formulas with bond symbols (-, =, ≡)', color: P.teal },
 ];
 
 // ── Live Demo: Periodic Table ────────────────────────────
 
 function PeriodicTableDemo() {
-  const c = useThemeColors();
   const [selected, setSelected] = useState<number | null>(null);
-  const [colorBy, setColorBy] = useState<'category' | 'phase' | 'electronegativity'>('category');
   const el = useElement(selected ?? 1);
 
   return (
     <Box style={{ gap: 10, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
-        {(['category', 'phase', 'electronegativity'] as const).map(mode => (
-          <Pressable
-            key={mode}
-            onPress={() => setColorBy(mode)}
-            style={{
-              paddingTop: 4, paddingBottom: 4, paddingLeft: 10, paddingRight: 10,
-              borderRadius: 4,
-              backgroundColor: colorBy === mode ? P.accent : c.surface,
-            }}
-          >
-            <Text style={{ fontSize: 10, color: colorBy === mode ? '#000' : c.text }}>{mode}</Text>
-          </Pressable>
-        ))}
-      </Box>
-
       <PeriodicTable
         onSelect={(el) => setSelected(el.number)}
         selected={selected}
-        colorBy={colorBy}
-        compact
+        tileSize={32}
       />
 
       {el && (
@@ -675,6 +720,126 @@ function FeatureCatalog() {
   );
 }
 
+// ── Notation Demo ────────────────────────────────────────
+
+const NOTATION_FORMULAS = [
+  { label: 'Water', f: 'H2O' },
+  { label: 'Sulfuric acid', f: 'H2SO4' },
+  { label: 'Calcium hydroxide', f: 'Ca(OH)2' },
+  { label: 'Sulfate ion', f: 'SO4^{2-}' },
+  { label: 'Ammonium ion', f: 'NH4^+' },
+  { label: 'Permanganate', f: 'KMnO4' },
+  { label: 'Glucose', f: 'C6H12O6' },
+  { label: 'Carbonate', f: 'CO3^{2-}' },
+];
+
+const NOTATION_EQUATIONS = [
+  '2H2 + O2 -> 2H2O(g)',
+  'CH4 + 2O2 -> CO2 + 2H2O',
+  'N2 + 3H2 <=> 2NH3',
+  'CaCO3 -> CaO + CO2',
+  'CO2 + H2O <-> H2CO3',
+  'Fe2O3 + 3CO -> 2Fe + 3CO2',
+];
+
+const NOTATION_ISOTOPES: Array<{ symbol: string; mass: number; atomic?: number; label: string }> = [
+  { symbol: 'C', mass: 14, label: 'Carbon-14' },
+  { symbol: 'U', mass: 235, atomic: 92, label: 'Uranium-235' },
+  { symbol: 'H', mass: 3, atomic: 1, label: 'Tritium' },
+  { symbol: 'Co', mass: 60, label: 'Cobalt-60' },
+];
+
+const NOTATION_STRUCTURES = [
+  { label: 'Water', f: 'H-O-H' },
+  { label: 'HCN', f: 'H-C#N' },
+  { label: 'Ethane', f: 'H3C-CH3' },
+  { label: 'Ethylene', f: 'H2C=CH2' },
+  { label: 'CO2', f: 'O=C=O' },
+];
+
+function NotationDemo() {
+  const c = useThemeColors();
+
+  return (
+    <Box style={{ gap: 20, width: '100%' }}>
+
+      {/* Formulas */}
+      <Box style={{ gap: 8 }}>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'Formulas — \\ce{...}'}</Text>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {NOTATION_FORMULAS.map(({ label, f }) => (
+            <Box key={f} style={{
+              backgroundColor: c.surface,
+              borderRadius: 6,
+              paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
+              gap: 4,
+              alignItems: 'center',
+            }}>
+              <ChemFormula formula={f} fontSize={15} color={c.text} />
+              <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* Equations */}
+      <Box style={{ gap: 8 }}>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'Equations — arrows, state symbols, equilibrium'}</Text>
+        <Box style={{ gap: 6 }}>
+          {NOTATION_EQUATIONS.map(eq => (
+            <Box key={eq} style={{
+              backgroundColor: c.surface,
+              borderRadius: 6,
+              paddingTop: 6, paddingBottom: 6, paddingLeft: 12, paddingRight: 12,
+            }}>
+              <ChemEquation equation={eq} fontSize={14} color={c.text} />
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* Isotopes */}
+      <Box style={{ gap: 8 }}>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'Isotope notation — mass/atomic number'}</Text>
+        <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+          {NOTATION_ISOTOPES.map(({ symbol, mass, atomic, label }) => (
+            <Box key={label} style={{
+              backgroundColor: c.surface,
+              borderRadius: 6,
+              paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
+              gap: 4,
+              alignItems: 'center',
+            }}>
+              <IsoNotation symbol={symbol} mass={mass} atomic={atomic} fontSize={15} color={c.text} />
+              <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* ChemFig linear */}
+      <Box style={{ gap: 8 }}>
+        <Text style={{ fontSize: 10, color: c.muted }}>{'Structural formulas — \\chemfig{...} (linear chains)'}</Text>
+        <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+          {NOTATION_STRUCTURES.map(({ label, f }) => (
+            <Box key={f} style={{
+              backgroundColor: c.surface,
+              borderRadius: 6,
+              paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
+              gap: 4,
+              alignItems: 'center',
+            }}>
+              <ChemFig formula={f} fontSize={14} color={c.text} />
+              <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+    </Box>
+  );
+}
+
 // ── Constants Reference ──────────────────────────────────
 
 function ConstantsReference() {
@@ -689,6 +854,83 @@ function ConstantsReference() {
           </Text>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+// ── Live Demo: Bohr Model ─────────────────────────────────
+
+function BohrModelDemo() {
+  const c = useThemeColors();
+  const [element, setElement] = useState(26);
+
+  return (
+    <Box style={{ gap: 8, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+        {BOHR_ELEMENTS.map(e => (
+          <Pressable
+            key={e.n}
+            onPress={() => setElement(e.n)}
+            style={{
+              paddingTop: 3, paddingBottom: 3, paddingLeft: 8, paddingRight: 8,
+              borderRadius: 4,
+              backgroundColor: element === e.n ? P.accent : c.surface,
+            }}
+          >
+            <Text style={{ fontSize: 10, color: element === e.n ? '#000' : c.text }}>{e.sym}</Text>
+          </Pressable>
+        ))}
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 12 }}>
+        <BohrModel element={element} speed={1.2} style={{ width: 200, height: 200 }} />
+        <BohrModel element={element} speed={0.5} style={{ width: 140, height: 140 }} />
+      </Box>
+    </Box>
+  );
+}
+
+// ── Live Demo: Structure View ─────────────────────────────
+
+function StructureDemo() {
+  const c = useThemeColors();
+  const [smiles, setSmiles] = useState('c1ccccc1');
+  const [custom, setCustom] = useState('');
+
+  return (
+    <Box style={{ gap: 8, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+        {DEMO_SMILES.map(s => (
+          <Pressable
+            key={s.smiles}
+            onPress={() => setSmiles(s.smiles)}
+            style={{
+              paddingTop: 3, paddingBottom: 3, paddingLeft: 7, paddingRight: 7,
+              borderRadius: 4,
+              backgroundColor: smiles === s.smiles ? P.accent : c.surface,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: smiles === s.smiles ? '#000' : c.text }}>{s.label}</Text>
+          </Pressable>
+        ))}
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 6 }}>
+        <TextInput
+          placeholder="Enter SMILES..."
+          value={custom}
+          onChangeText={setCustom}
+          onSubmit={() => { if (custom.trim()) setSmiles(custom.trim()); }}
+          style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 6, padding: 8, fontSize: 11, color: c.text }}
+        />
+        <Pressable onPress={() => { if (custom.trim()) setSmiles(custom.trim()); }}>
+          <Box style={{ backgroundColor: P.accent, borderRadius: 6, paddingTop: 8, paddingBottom: 8, paddingLeft: 14, paddingRight: 14 }}>
+            <Text style={{ fontSize: 11, color: '#000' }}>{'Render'}</Text>
+          </Box>
+        </Pressable>
+      </Box>
+
+      <StructureView smiles={smiles} showLabels style={{ height: 260 }} />
     </Box>
   );
 }
@@ -750,7 +992,7 @@ export function ChemistryStory() {
           <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Widgets, hooks, utilities, and Lua capabilities — one import. PeriodicTable, ElementCard, and MoleculeCard are React-rendered. ReagentTest, SpectrumView, and PhaseDiagram are 60fps Lua painters.'}
+              {'Widgets, hooks, utilities, and Lua capabilities — one import. PeriodicTable, ElementTile, ElementCard, and MoleculeCard are React-rendered. ReagentTest, SpectrumView, and PhaseDiagram are 60fps Lua painters.'}
             </Text>
           </Half>
           <Half>
@@ -874,9 +1116,40 @@ export function ChemistryStory() {
         <CalloutBand borderColor={P.calloutBorder} bgColor={P.callout}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={P.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'ReagentTest, SpectrumView, and PhaseDiagram are Lua capabilities — 60fps painters with smooth animations, not React re-renders. The React component is a one-liner declarative wrapper.'}
+            {'ReagentTest, SpectrumView, PhaseDiagram, BohrModel, and StructureView are Lua capabilities — 60fps painters with smooth animations, not React re-renders. The React component is a one-liner declarative wrapper.'}
           </Text>
         </CalloutBand>
+
+        <Divider />
+
+        {/* ── Band: demo | text+code — BOHR MODEL ── */}
+        <Band>
+          <Half>
+            <BohrModelDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="atom" accentColor={P.mauve}>{'BOHR MODEL'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Animated 3D Bohr model for any element (Z=1-118). Tilted orbital ellipses with orbiting electrons, CPK-colored nucleus, and element label. All animation runs in Lua — zero frame delay.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Each shell has a different tilt and rotation for the 3D perspective effect. Inner shells orbit faster. Electron count per shell uses actual shell occupancy data from IUPAC.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={BOHR_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Full-width: STRUCTURE VIEW ── */}
+        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 10 }}>
+          <SectionLabel icon="hexagon" accentColor={P.peach}>{'MOLECULAR STRUCTURE'}</SectionLabel>
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'2D structural formula rendering from SMILES strings. Uses the Indigo C library via LuaJIT FFI for SMILES parsing and 2D coordinate generation. Atoms are CPK-colored, bonds show single/double/triple/aromatic. Type any valid SMILES to see the structure.'}
+          </Text>
+          <StructureDemo />
+          <CodeBlock language="tsx" fontSize={9} code={STRUCTURE_CODE} />
+        </Box>
 
         <Divider />
 
@@ -915,6 +1188,21 @@ export function ChemistryStory() {
             <CodeBlock language="tsx" fontSize={9} code={TOOLS_CODE} />
           </Half>
         </Band>
+
+        <Divider />
+
+        {/* ── Full-width: CHEMISTRY NOTATION ── */}
+        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 10 }}>
+          <SectionLabel icon="type" accentColor={P.teal}>{'CHEMISTRY NOTATION'}</SectionLabel>
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'Proper chemical typesetting via the LaTeX renderer. Uses mhchem \\ce{} for formulas and equations: element subscripts, ionic charges, state symbols, and reaction arrows. \\chemfig{} for inline structural chain formulas with bond symbols.'}
+          </Text>
+          <Text style={{ color: c.muted, fontSize: 9 }}>
+            {'The parser runs in Lua (latex_parser.lua) and extends the existing LaTeX math typesetter. No external library — same Love2D glyph renderer, same Latin Modern font.'}
+          </Text>
+          <NotationDemo />
+          <CodeBlock language="tsx" fontSize={9} code={NOTATION_CODE} />
+        </Box>
 
         <Divider />
 

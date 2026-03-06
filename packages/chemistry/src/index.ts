@@ -12,7 +12,7 @@ export type {
   AtomCount, Molecule, MolecularGeometry,
   Reaction, ReactionSide,
   EquilibriumState,
-  PeriodicTableProps, ElementCardProps, MoleculeCardProps,
+  PeriodicTableProps, ElementTileProps, ElementCardProps, ElementDetailProps, MoleculeCardProps,
   ElectronShellProps, ReactionViewProps,
 } from './types';
 
@@ -41,11 +41,15 @@ export {
 export { useElement, useMolecule, useReaction, useEquilibrium, usePeriodicTableFilter } from './hooks';
 
 // -- Drop-in widgets (React-rendered) -----------------------------------------
-export { PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView } from './widgets';
+export { PeriodicTable, ElementTile, ElementCard, ElementDetail, MoleculeCard, ElectronShell, ReactionView } from './widgets';
+
+// -- Chemistry notation (mhchem \ce{} + chemfig via LaTeX typesetter) ----------
+export { ChemFormula, ChemEquation, IsoNotation, ChemFig } from './notation';
+export type { ChemFormulaProps, ChemEquationProps, IsoNotationProps, ChemFigProps } from './notation';
 
 // -- Lua capabilities (60fps painters via <Native>) ---------------------------
-export { ReagentTest, SpectrumView, PhaseDiagram } from './capabilities';
-export type { ReagentTestProps, SpectrumViewProps, PhaseDiagramProps } from './capabilities';
+export { ReagentTest, SpectrumView, PhaseDiagram, BohrModel, StructureView } from './capabilities';
+export type { ReagentTestProps, SpectrumViewProps, PhaseDiagramProps, BohrModelProps, StructureViewProps } from './capabilities';
 
 // -- Reagent test data (pure TS, also mirrored in Lua for rendering) ----------
 export {

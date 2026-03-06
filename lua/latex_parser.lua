@@ -113,6 +113,246 @@ local SPACING = {
 }
 
 -- ============================================================================
+-- mhchem \ce{} chemistry notation parser
+-- Operates on an already-tokenized token list and reinterprets it
+-- according to chemistry notation rules (IUPAC/mhchem subset).
+-- ============================================================================
+
+local function makeCeParser(tokens)
+  local i = 1
+
+  local function peek(offset) return tokens[i + (offset or 0)] end
+  local function advance() local t = tokens[i]; i = i + 1; return t end
+  local function hasMore() return i <= #tokens end
+
+  -- Parse charge content after ^ (braced or inline digits/signs)
+  local function parseCharge()
+    if not hasMore() then return nil end
+    local chargeStr = ""
+    if peek().type == "lbrace" then
+      advance() -- consume {
+      while hasMore() and peek().type ~= "rbrace" do
+        local t = advance()
+        local v = t.value or ""
+        if v == "-" then v = "\226\136\146" end -- U+2212 minus sign
+        chargeStr = chargeStr .. v
+      end
+      if hasMore() then advance() end -- consume }
+    else
+      while hasMore() and peek().type == "literal" and peek().value:match("^[%d%+%-]$") do
+        local v = advance().value
+        if v == "-" then v = "\226\136\146" end -- U+2212
+        chargeStr = chargeStr .. v
+      end
+    end
+    if chargeStr == "" then return nil end
+    return { type = "literal", text = chargeStr }
+  end
+
+  -- Parse a run of element atoms with subscripts (stops at separator/arrow)
+  local function parseSpecies()
+    local nodes = {}
+    while hasMore() do
+      local tok = peek()
+
+      -- Stop at species separators
+      if tok.type == "literal" and (tok.value == "+" or tok.value == "<" or tok.value == ">") then
+        break
+      end
+      -- Stop at reaction arrow starters "->"
+      if tok.type == "literal" and tok.value == "-" then
+        if peek(1) and peek(1).type == "literal" and peek(1).value == ">" then break end
+      end
+
+      -- Element symbol: uppercase + optional lowercase
+      if tok.type == "literal" and tok.value:match("^%u$") then
+        advance()
+        local sym = tok.value
+        if hasMore() and peek().type == "literal" and peek().value:match("^%l$") then
+          sym = sym .. advance().value
+        end
+        -- Subscript digits
+        local subStr = ""
+        while hasMore() and peek().type == "literal" and peek().value:match("^%d$") do
+          subStr = subStr .. advance().value
+        end
+        local symNode = { type = "literal", text = sym, useTextFont = true }
+        local elemNode
+        if subStr ~= "" then
+          elemNode = { type = "sub", base = symNode, script = { type = "literal", text = subStr } }
+        else
+          elemNode = symNode
+        end
+        -- Optional charge via ^
+        if hasMore() and peek().type == "caret" then
+          advance()
+          local chargeNode = parseCharge()
+          if chargeNode then
+            elemNode = { type = "super", base = elemNode, script = chargeNode }
+          end
+        end
+        nodes[#nodes + 1] = elemNode
+
+      -- State symbol or group in parens: (aq), (s), (g), (l), (cr)
+      elseif tok.type == "literal" and tok.value == "(" then
+        advance()
+        local inner = ""
+        while hasMore() and not (peek().type == "literal" and peek().value == ")") do
+          inner = inner .. (advance().value or "")
+        end
+        if hasMore() then advance() end -- consume )
+        if inner == "aq" or inner == "s" or inner == "g" or inner == "l" or inner == "cr" then
+          nodes[#nodes + 1] = { type = "text", body = { type = "literal", text = "(" .. inner .. ")" } }
+        else
+          nodes[#nodes + 1] = { type = "literal", text = "(" .. inner .. ")", useTextFont = true }
+        end
+
+      -- Digits: stoichiometric coefficient
+      elseif tok.type == "literal" and tok.value:match("^%d$") then
+        local numStr = ""
+        while hasMore() and peek().type == "literal" and peek().value:match("^%d$") do
+          numStr = numStr .. advance().value
+        end
+        nodes[#nodes + 1] = { type = "literal", text = numStr }
+
+      -- Bare ^ on previous group (e.g. trailing charge)
+      elseif tok.type == "caret" then
+        advance()
+        local chargeNode = parseCharge()
+        if chargeNode and #nodes > 0 then
+          local last = nodes[#nodes]
+          nodes[#nodes] = { type = "super", base = last, script = chargeNode }
+        end
+
+      -- Underscore subscript
+      elseif tok.type == "underscore" then
+        advance()
+        local subNode
+        if hasMore() and peek().type == "lbrace" then
+          advance()
+          local subStr = ""
+          while hasMore() and peek().type ~= "rbrace" do
+            subStr = subStr .. (advance().value or "")
+          end
+          if hasMore() then advance() end
+          subNode = { type = "literal", text = subStr }
+        else
+          local subStr = ""
+          while hasMore() and peek().type == "literal" and peek().value:match("^%d$") do
+            subStr = subStr .. advance().value
+          end
+          subNode = subStr ~= "" and { type = "literal", text = subStr } or nil
+        end
+        if subNode and #nodes > 0 then
+          local last = nodes[#nodes]
+          nodes[#nodes] = { type = "sub", base = last, script = subNode }
+        end
+
+      -- Commands inside \ce: \cdot, Greek, known symbols
+      elseif tok.type == "command" then
+        advance()
+        if SYMBOLS[tok.value] then
+          nodes[#nodes + 1] = { type = "literal", text = SYMBOLS[tok.value] }
+        elseif GREEK_LOWER[tok.value] then
+          nodes[#nodes + 1] = { type = "literal", text = GREEK_LOWER[tok.value] }
+        elseif GREEK_UPPER[tok.value] then
+          nodes[#nodes + 1] = { type = "literal", text = GREEK_UPPER[tok.value] }
+        end
+
+      -- Other literals pass through
+      elseif tok.type == "literal" then
+        local v = advance().value
+        if v ~= " " then
+          nodes[#nodes + 1] = { type = "literal", text = v, useTextFont = true }
+        end
+
+      else
+        advance()
+      end
+    end
+    return nodes
+  end
+
+  -- Parse full \ce content: species + arrows + operators
+  local function parseAll()
+    local nodes = {}
+    while hasMore() do
+      local tok = peek()
+
+      -- Arrow: "->"
+      if tok.type == "literal" and tok.value == "-" and
+         peek(1) and peek(1).type == "literal" and peek(1).value == ">" then
+        advance(); advance()
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        nodes[#nodes + 1] = { type = "literal", text = "\226\134\146" } -- →
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+
+      -- Equilibrium: "<=>"
+      elseif tok.type == "literal" and tok.value == "<" and
+             peek(1) and peek(1).type == "literal" and peek(1).value == "=" and
+             peek(2) and peek(2).type == "literal" and peek(2).value == ">" then
+        advance(); advance(); advance()
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        nodes[#nodes + 1] = { type = "literal", text = "\226\135\140" } -- ⇌
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+
+      -- Reversible double arrow: "<->"
+      elseif tok.type == "literal" and tok.value == "<" and
+             peek(1) and peek(1).type == "literal" and peek(1).value == "-" and
+             peek(2) and peek(2).type == "literal" and peek(2).value == ">" then
+        advance(); advance(); advance()
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        nodes[#nodes + 1] = { type = "literal", text = "\226\134\148" } -- ↔
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+
+      -- Species separator: "+"
+      elseif tok.type == "literal" and tok.value == "+" then
+        advance()
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        nodes[#nodes + 1] = { type = "literal", text = "+" }
+        nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+
+      -- Arrow commands: \rightarrow, \rightleftharpoons, etc.
+      elseif tok.type == "command" then
+        advance()
+        local cmd = tok.value
+        if cmd == "rightarrow" or cmd == "to" then
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+          nodes[#nodes + 1] = { type = "literal", text = "\226\134\146" }
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        elseif cmd == "leftarrow" then
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+          nodes[#nodes + 1] = { type = "literal", text = "\226\134\144" }
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        elseif cmd == "rightleftharpoons" then
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+          nodes[#nodes + 1] = { type = "literal", text = "\226\135\140" }
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        elseif cmd == "leftrightarrow" then
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+          nodes[#nodes + 1] = { type = "literal", text = "\226\134\148" }
+          nodes[#nodes + 1] = { type = "spacing", size = "thick" }
+        elseif SYMBOLS[cmd] then
+          nodes[#nodes + 1] = { type = "literal", text = SYMBOLS[cmd] }
+        end
+
+      else
+        local speciesNodes = parseSpecies()
+        for _, n in ipairs(speciesNodes) do
+          nodes[#nodes + 1] = n
+        end
+      end
+    end
+
+    if #nodes == 0 then return { type = "group", children = {} } end
+    if #nodes == 1 then return nodes[1] end
+    return { type = "group", children = nodes }
+  end
+
+  return { parseAll = parseAll }
+end
+
+-- ============================================================================
 -- Tokenizer
 -- ============================================================================
 
@@ -390,6 +630,81 @@ local function makeParser(tokens)
     -- Begin/end environments (matrices)
     if cmd == "begin" then
       return P.parseEnvironment()
+    end
+
+    -- mhchem chemistry notation: \ce{H2SO4}, \ce{2H2 + O2 -> 2H2O}
+    if cmd == "ce" then
+      if not P.expect("lbrace") then
+        return { type = "literal", text = "ce" }
+      end
+      local ceTokens = {}
+      local depth = 0
+      while P.peek() do
+        local t = P.peek()
+        if t.type == "rbrace" and depth == 0 then break end
+        if t.type == "lbrace" then depth = depth + 1 end
+        if t.type == "rbrace" then depth = depth - 1 end
+        ceTokens[#ceTokens + 1] = P.advance()
+      end
+      P.expect("rbrace")
+      local ceP = makeCeParser(ceTokens)
+      return ceP.parseAll()
+    end
+
+    -- chemfig linear chain: \chemfig{H-O-H}, \chemfig{C=C}, \chemfig{C#N}
+    if cmd == "chemfig" then
+      if not P.expect("lbrace") then
+        return { type = "literal", text = "chemfig" }
+      end
+      local figTokens = {}
+      local depth = 0
+      while P.peek() do
+        local t = P.peek()
+        if t.type == "rbrace" and depth == 0 then break end
+        if t.type == "lbrace" then depth = depth + 1 end
+        if t.type == "rbrace" then depth = depth - 1 end
+        figTokens[#figTokens + 1] = P.advance()
+      end
+      P.expect("rbrace")
+      -- Linear structural formula: substitute bond symbols, parse elements
+      local figNodes = {}
+      local fi = 1
+      while fi <= #figTokens do
+        local t = figTokens[fi]
+        if t.type == "literal" then
+          local v = t.value
+          if v == "=" then
+            figNodes[#figNodes + 1] = { type = "literal", text = "\226\149\144" } -- ═
+          elseif v == "#" then
+            figNodes[#figNodes + 1] = { type = "literal", text = "\226\137\161" } -- ≡
+          elseif v:match("^%u$") then
+            local sym = v
+            fi = fi + 1
+            if fi <= #figTokens and figTokens[fi].type == "literal" and figTokens[fi].value:match("^%l$") then
+              sym = sym .. figTokens[fi].value
+              fi = fi + 1
+            end
+            local subStr = ""
+            while fi <= #figTokens and figTokens[fi].type == "literal" and figTokens[fi].value:match("^%d$") do
+              subStr = subStr .. figTokens[fi].value
+              fi = fi + 1
+            end
+            local symNode = { type = "literal", text = sym, useTextFont = true }
+            if subStr ~= "" then
+              figNodes[#figNodes + 1] = { type = "sub", base = symNode, script = { type = "literal", text = subStr } }
+            else
+              figNodes[#figNodes + 1] = symNode
+            end
+            fi = fi - 1
+          else
+            figNodes[#figNodes + 1] = { type = "literal", text = v, useTextFont = true }
+          end
+        end
+        fi = fi + 1
+      end
+      if #figNodes == 0 then return { type = "group", children = {} } end
+      if #figNodes == 1 then return figNodes[1] end
+      return { type = "group", children = figNodes }
     end
 
     -- Spacing commands by name

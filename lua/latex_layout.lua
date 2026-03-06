@@ -161,12 +161,17 @@ function Layout.layoutLiteral(node, fontSize)
   local text = node.text or ""
   if text == "" then return newBox() end
 
-  local w, asc, desc = measureChar(text, fontSize)
+  local w, asc, desc
+  if node.useTextFont then
+    w, asc, desc = measureText(text, fontSize, node.bold)
+  else
+    w, asc, desc = measureChar(text, fontSize)
+  end
   local box = newBox()
   box.width = w
   box.height = asc
   box.depth = desc
-  addGlyph(box, text, 0, 0, fontSize, node.italic)
+  addGlyph(box, text, 0, 0, fontSize, node.italic, node.useTextFont, node.bold)
   return box
 end
 

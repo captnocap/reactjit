@@ -94,6 +94,14 @@ function Events.hitTest(node, mx, my)
     childMy = my + (node.scrollState.scrollY or 0)
   end
 
+  -- If this node has an active scaleToFit transform, inverse-transform the
+  -- mouse position so children (in layout space) are hit-tested correctly.
+  if node._scaleToFit then
+    local sf = node._scaleToFit
+    childMx = c.x + (childMx - sf.anchorX) / sf.scale
+    childMy = c.y + (childMy - c.y) / sf.scale
+  end
+
   -- Get children in paint order (sorted by zIndex), then iterate in reverse
   -- so that the topmost (highest zIndex / last-painted) is checked first
   local children = node.children or {}
@@ -141,6 +149,12 @@ function Events.textHitTest(node, mx, my)
   if isScroll and node.scrollState then
     childMx = mx + (node.scrollState.scrollX or 0)
     childMy = my + (node.scrollState.scrollY or 0)
+  end
+
+  if node._scaleToFit then
+    local sf = node._scaleToFit
+    childMx = c.x + (childMx - sf.anchorX) / sf.scale
+    childMy = c.y + (childMy - c.y) / sf.scale
   end
 
   -- Check children first (deepest text node wins)

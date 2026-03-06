@@ -244,7 +244,9 @@ function Videos.loadLibrary()
   get_proc_address_cb = ffi.cast(
     "void *(*)(void *, const char *)",
     function(_, name)
-      return ffi.C.SDL_GL_GetProcAddress(name)
+      local ok, addr = pcall(ffi.C.SDL_GL_GetProcAddress, name)
+      if not ok then return nil end
+      return addr
     end
   )
 

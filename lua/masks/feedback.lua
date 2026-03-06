@@ -12,9 +12,8 @@
 local Masks = require("lua.masks")
 local Util = require("lua.effects.util")
 
-local floor, max = math.floor, math.max
-local sin, cos = math.sin, math.cos
-local noise = love.math.noise
+local max = math.max
+local sin = math.sin
 
 local Feedback = {}
 
@@ -25,14 +24,17 @@ local function clamp(v, lo, hi)
 end
 
 function Feedback.create(w, h, props)
-  local feedCanvas = nil
+  local readCanvas = nil
+  local writeCanvas = nil
   if w > 0 and h > 0 then
-    feedCanvas = love.graphics.newCanvas(w, h)
+    readCanvas = love.graphics.newCanvas(w, h)
+    writeCanvas = love.graphics.newCanvas(w, h)
   end
   return {
     time = 0,
     props = props or {},
-    feedCanvas = feedCanvas,
+    readCanvas = readCanvas,
+    writeCanvas = writeCanvas,
     prevW = w,
     prevH = h,
     initialized = false,
@@ -45,8 +47,10 @@ function Feedback.update(state, dt, props, w, h, mouse)
   state.time = state.time + dt * speed
 
   if (w ~= state.prevW or h ~= state.prevH) and w > 0 and h > 0 then
-    if state.feedCanvas then state.feedCanvas:release() end
-    state.feedCanvas = love.graphics.newCanvas(w, h)
+    if state.readCanvas then state.readCanvas:release() end
+    if state.writeCanvas then state.writeCanvas:release() end
+    state.readCanvas = love.graphics.newCanvas(w, h)
+    state.writeCanvas = love.graphics.newCanvas(w, h)
     state.prevW = w
     state.prevH = h
     state.initialized = false
@@ -66,12 +70,13 @@ function Feedback.draw(state, w, h, source)
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.draw(source, 0, 0)
 
-  if effectMix <= 0 or not state.feedCanvas then return end
+  if effectMix <= 0 or not state.readCanvas or not state.writeCanvas then return end
 
-  -- Update feedback canvas: draw previous feedback (transformed) + new source
+  -- Update write canvas from read canvas (ping-pong to avoid read/write same texture).
   local prevCanvas = love.graphics.getCanvas()
 
-  love.graphics.setCanvas(state.feedCanvas)
+  love.graphics.setCanvas(state.writeCanvas)
+  love.graphics.clear(0, 0, 0, 0)
 
   if not state.initialized then
     -- First frame: start with current source
@@ -90,7 +95,7 @@ function Feedback.draw(state, w, h, source)
     love.graphics.scale(zoom, zoom)
     love.graphics.translate(-cx, -cy)
     love.graphics.setColor(1, 1, 1, decay)
-    love.graphics.draw(state.feedCanvas, 0, 0)
+    love.graphics.draw(state.readCanvas, 0, 0)
     love.graphics.pop()
 
     -- Blend in current source
@@ -99,6 +104,9 @@ function Feedback.draw(state, w, h, source)
   end
 
   love.graphics.setCanvas(prevCanvas)
+
+  -- Swap buffers: new output becomes next frame's read source.
+  state.readCanvas, state.writeCanvas = state.writeCanvas, state.readCanvas
 
   -- Overlay feedback on output
   love.graphics.setBlendMode("add")
@@ -112,14 +120,18 @@ function Feedback.draw(state, w, h, source)
   else
     love.graphics.setColor(1, 1, 1, 0.6 * effectMix)
   end
-  love.graphics.draw(state.feedCanvas, 0, 0)
+  love.graphics.draw(state.readCanvas, 0, 0)
   love.graphics.setBlendMode("alpha")
 end
 
 function Feedback.destroy(state)
-  if state and state.feedCanvas then
-    state.feedCanvas:release()
-    state.feedCanvas = nil
+  if state and state.readCanvas then
+    state.readCanvas:release()
+    state.readCanvas = nil
+  end
+  if state and state.writeCanvas then
+    state.writeCanvas:release()
+    state.writeCanvas = nil
   end
 end
 

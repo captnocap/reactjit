@@ -1,81 +1,109 @@
 === METADATA ===
-title: reactjit init
-description: Create a new ReactJIT project with scaffolded structure and dependencies.
+title: rjit init
+description: Scaffold a new ReactJIT project with interactive package selection and optional code migration.
 category: CLI
 platforms: love2d
-keywords: init, create, new project, scaffold, template, setup
+keywords: init, scaffold, create, project, new, packages, migrate, convert
 related: dev.txt, build.txt, update.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `reactjit init` command creates a new ReactJIT project directory with the complete
-scaffolding needed to start development. It copies the project template, Lua runtime files,
-native libraries, and framework source packages from the CLI runtime directory, writes a
-package.json, and runs npm install.
+`rjit init <name>` creates a new ReactJIT project directory with all the files needed to
+start building. It copies the Lua runtime, libquickjs.so, framework TypeScript packages,
+a starter App.tsx, Love2D entry points (main.lua, conf.lua), and a package.json. It then
+runs npm install automatically.
 
-After init completes, you can immediately start development with `reactjit dev` and
-`love .` in a second terminal.
+In interactive mode (default when run in a terminal), it presents a checkbox menu for
+optional packages. Use arrow keys to navigate, space to toggle, 'a' to toggle all, and
+enter to confirm. In non-interactive mode (piped input or CI), it uses defaults.
+
+The init command can also convert existing code from other frameworks into a ReactJIT
+project via the --convert flag or interactive conversion flow.
 
 === API / SYNTAX ===
 Usage:
-  reactjit init <name>
+  rjit init <project-name> [flags]
 
-Arguments:
-  name    The project name. Creates a directory with this name in the current working directory.
+Flags:
+  --minimal              Include no optional packages (core + renderer only)
+  --all                  Include all optional packages
+  --convert <file>       Convert an existing file from another framework
+  --theme                Include @reactjit/theme (default: on)
+  --router               Include @reactjit/router (default: on)
+  --storage              Include @reactjit/storage (default: on)
+  --3d                   Include @reactjit/3d
+  --audio                Include @reactjit/audio
+  --media                Include @reactjit/media
+  --game                 Include @reactjit/game
+  --apis                 Include @reactjit/apis
+  --server               Include @reactjit/server
+  --rss                  Include @reactjit/rss
+  --webhooks             Include @reactjit/webhooks
+  --geo                  Include @reactjit/geo
+  --crypto               Include @reactjit/crypto
+  --ai                   Include @reactjit/ai
+  --controls             Include @reactjit/controls
 
-What it creates:
+Default packages (included unless --minimal):
+  @reactjit/theme        Design tokens, theme switcher, dark/light support
+  @reactjit/router       Navigation and URL routing
+  @reactjit/storage      CRUD, schemas, data persistence
+
+Project structure created:
   <name>/
     src/
-      App.tsx          Starter application component
-      main.tsx         Entry point (renders App into the reconciler)
-    lua/               Lua runtime files (layout.lua, painter.lua, bridge_quickjs.lua, etc.)
-    lib/
-      libquickjs.so    QuickJS shared library for FFI bridge
-    reactjit/
-      shared/          @reactjit/core package source (primitives, hooks, animation)
-      native/          @reactjit/renderer package source (reconciler host config)
-    main.lua           Love2D entry point
-    conf.lua           Love2D configuration (window size, title)
-    package.json       Project dependencies and scripts
+      App.tsx            Starter application component
+      main.tsx           Love2D entry point (renders App into the reconciler)
+    lua/                 Lua runtime (layout engine, painter, bridge, etc.)
+    lib/                 Native libraries (libquickjs.so)
+    reactjit/            Framework TypeScript source (core, renderer, selected packages)
+    main.lua             Love2D bootstrap
+    conf.lua             Love2D window configuration
+    package.json         Dependencies (react, react-reconciler, esbuild, typescript)
+    tsconfig.json        Generated with path aliases for selected packages
 
-Dependencies installed:
-  react ^18.3.0
-  react-reconciler ^0.29.0
-  esbuild ^0.24.0 (dev)
-  @types/react ^18.3.0 (dev)
-  typescript ^5.5.0 (dev)
+Supported migration frameworks (--convert):
+  .js / .cjs / .mjs      Blessed (Node.js TUI)
+  .py                     Tkinter or PyQt6/PySide6 (Python GUI)
+  .swift                  SwiftUI (iOS/macOS)
+  .dart                   Flutter
+  .html / .htm / .tsx / .jsx   HTML / React (Web)
 
 === EXAMPLES ===
-Example 1: Create a new project
+Example 1: Create a minimal project
 ---
-reactjit init my-game
-cd my-game
-reactjit dev
----
-Platforms: love2d
-
-Example 2: Create and immediately build
----
-reactjit init dashboard
-cd dashboard
-reactjit build dist:love
+rjit init my-app --minimal
+cd my-app
+rjit dev
 ---
 Platforms: love2d
 
-=== PLATFORM NOTES ===
-The init command currently scaffolds for the Love2D target. The project structure includes
-the Lua runtime and QuickJS FFI bridge needed for Love2D rendering. For grid targets
-(terminal, Neovim, etc.), you would add the appropriate entry point and dependencies
-manually after initialization.
+Example 2: Create a project with all packages
+---
+rjit init dashboard --all
+---
+Platforms: love2d
+
+Example 3: Create with specific packages
+---
+rjit init synth-app --audio --controls --ai
+---
+Platforms: love2d
+
+Example 4: Convert an existing Blessed TUI app
+---
+rjit init my-app --convert legacy-tui.js
+# Converted code is in my-app/src/App.tsx
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The project name becomes the directory name -- it must not already exist
-- The CLI runtime directory must be populated first (run `make cli-setup` in the monorepo root)
-- If the runtime is missing, init will warn but still create the project structure
-- Never manually create project directories with mkdir + cp -- always use init
-- Project files (src/, main.lua, conf.lua) are yours to edit. Framework files (lua/, lib/, reactjit/) are managed by the CLI and will be overwritten by `reactjit update`
+- The project directory must not already exist -- init refuses to overwrite
+- If lua/ or lib/ runtime files are missing from the CLI, run make cli-setup first (monorepo development only)
+- The generated tsconfig.json includes path aliases only for selected packages -- add more later by editing paths manually or re-scaffolding
+- npm install runs automatically unless stdin is not a TTY (piped/CI mode)
 
 === SEE ALSO ===
-- dev.txt -- Start development after init
-- update.txt -- Sync framework files after changes
-- build.txt -- Build for distribution
+- dev.txt -- Start developing after init
+- update.txt -- Sync runtime files after framework changes
+- build.txt -- Build for production

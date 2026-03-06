@@ -6,10 +6,12 @@
   React usage:
     <VHS mask />
     <VHS mask tracking={0.5} noise={0.3} />
+    <VHS mask shaderHue={-8} shaderTint="#fab387" />
 ]]
 
 local Masks = require("lua.masks")
 local Util = require("lua.effects.util")
+local ShaderGrade = require("lua.masks.shader_grade")
 
 local floor, min, max = math.floor, math.min, math.max
 local sin = math.sin
@@ -111,8 +113,29 @@ function VHS.draw(state, w, h, source)
   local t = state.time
 
   -- Keep the original captured content intact as the base, offset by the tracking drift.
-  love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.draw(source, state.trackingOffset, 0)
+  local shaderHue = Util.prop(props, "shaderHue", -6)
+  local shaderSaturation = Util.prop(props, "shaderSaturation", 0.92)
+  local shaderValue = Util.prop(props, "shaderValue", 0.98)
+  local shaderContrast = Util.prop(props, "shaderContrast", 1.08)
+  local shaderPosterize = Util.prop(props, "shaderPosterize", 0)
+  local shaderGrain = Util.prop(props, "shaderGrain", 0.04 + noiseAmt * 0.06)
+  local shaderVignette = Util.prop(props, "shaderVignette", 0.14 + tracking * 0.12)
+  local shaderTint = props.shaderTint or props.tint or Masks.getThemeToken("warning", "#fab387")
+  local shaderTintMix = Util.prop(props, "shaderTintMix", 0.12 + tracking * 0.12)
+
+  ShaderGrade.draw(source, w, h, {
+    x = state.trackingOffset,
+    time = t,
+    hue = shaderHue * effectMix,
+    saturation = 1 + (shaderSaturation - 1) * effectMix,
+    value = 1 + (shaderValue - 1) * effectMix,
+    contrast = 1 + (shaderContrast - 1) * effectMix,
+    posterize = effectMix > 0.01 and shaderPosterize or 0,
+    grain = shaderGrain * effectMix,
+    vignette = shaderVignette * effectMix,
+    tint = shaderTint,
+    tintMix = shaderTintMix * effectMix,
+  })
 
   if effectMix <= 0 then
     return

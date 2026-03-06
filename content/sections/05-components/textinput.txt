@@ -1,133 +1,175 @@
 === METADATA ===
-title: TextInput
-description: Editable single-line or multiline text field with cursor, selection, clipboard, and secure entry support.
+title: Input
+description: Unified text input for single-line and multi-line editing
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: text input, input, field, form, editable, cursor, password, text, clipboard, selection
-related: TextEditor, Pressable
-difficulty: beginner
+platforms: love2d
+keywords: input, textinput, text, field, form, keyboard, typing, proxy, keystroke, submit, multiline, editor
+related: CodeBlock, MonacoMirror
+difficulty: intermediate
 
 === OVERVIEW ===
-TextInput is an editable text field that handles keyboard input, cursor positioning, selection, and text manipulation. It supports single-line and multiline modes, placeholder text, secure entry (password masking), clipboard operations, and both controlled and uncontrolled value management.
+Input is the unified text input component. It renders as either a single-line `TextInput` or a multi-line `TextEditor` host element depending on props. Lua owns all interaction: cursor movement, text selection, keyboard handling, and rendering. Only boundary events cross the bridge: focus, blur, submit, and change.
 
-In web mode, TextInput renders a native HTML `<input>` or `<textarea>` with standard browser behavior. In native mode (Love2D), it renders a Lua-owned custom implementation where ALL editing state (text, cursor position, selection, clipboard) lives entirely in Lua. Only boundary events (focus, blur, submit, changeText) cross the JS bridge — there is zero bridge traffic per keystroke.
+By default, Input is single-line. Set `multiline={true}` for multi-line editing. Editor features (`lineNumbers`, `syntaxHighlight`, `tooltipLevel`, `sessionId`) imply multiline automatically and escalate to the TextEditor host element.
+
+Input supports both controlled (`value` prop) and uncontrolled (`defaultValue` prop) modes. In uncontrolled mode, the text lives entirely in Lua and only crosses the bridge on submit or blur.
+
+The `keystrokeTarget` and `submitTarget` props enable the proxy input pattern: raw keystrokes are forwarded to another Lua node (e.g. a PTY canvas) without crossing the bridge. The Input displays a value read from an external source while forwarding all keyboard input to the target. This is how terminal input bars work.
+
+`TextInput` is a deprecated alias that forwards to `Input`.
 
 === API / SYNTAX ===
-Import: import { TextInput } from '@reactjit/core';
-
-Usage:
 ```tsx
-<TextInput
-  value={text}
-  onChangeText={setText}
-  placeholder="Type here..."
-  style={{ width: 200 }}
-/>
+import { Input } from '@reactjit/core';
 ```
 
-Props (from TextInputProps in types.ts):
+Props:
+| Prop               | Type                         | Default     | Description                                        |
+|--------------------|------------------------------|-------------|----------------------------------------------------|
+| value              | string                       | undefined   | Controlled text value                              |
+| defaultValue       | string                       | undefined   | Initial text for uncontrolled mode                 |
+| onChangeText       | (text: string) => void       | undefined   | Fires on blur and submit with final text           |
+| onSubmit           | (text: string) => void       | undefined   | Fires when Enter is pressed (single-line) or submitted |
+| onFocus            | () => void                   | undefined   | Fires when input gains focus                       |
+| onBlur             | (text: string) => void       | undefined   | Fires when input loses focus, receives current text|
+| onLiveChange       | (text: string) => void       | undefined   | Debounced per-keystroke callback (Lua-side debounce) |
+| liveChangeDebounce | number                       | 300         | Debounce delay in ms for onLiveChange              |
+| onChange           | (text: string) => void       | undefined   | Fires after idle timeout (editor mode)             |
+| changeDelay        | number                       | 3           | Seconds of idle before onChange fires              |
+| placeholder        | string                       | undefined   | Placeholder text                                   |
+| placeholderColor   | Color                        | undefined   | Placeholder text color                             |
+| maxLength          | number                       | undefined   | Maximum character count                            |
+| multiline          | boolean                      | false       | Enable multi-line editing                          |
+| editable           | boolean                      | true        | Whether text can be edited                         |
+| secureTextEntry    | boolean                      | false       | Mask text (password field)                         |
+| live               | boolean                      | false       | Forward keystrokes via onLiveChange/onChangeText   |
+| keyboardType       | string                       | 'default'   | On-screen keyboard hint                            |
+| autoFocus          | boolean                      | false       | Focus on mount                                     |
+| cursorColor        | Color                        | undefined   | Cursor color                                       |
+| style              | Style                        | undefined   | Container style                                    |
+| textStyle          | Style                        | undefined   | Text style (fontSize, fontFamily, color, fontWeight)|
 
-| Prop             | Type                       | Default     | Description                                        |
-|------------------|----------------------------|-------------|----------------------------------------------------|
-| value            | string                     | -           | Controlled text value                              |
-| defaultValue     | string                     | -           | Initial value in uncontrolled mode                 |
-| onChangeText     | (text: string) => void     | -           | Called when text changes (blur/submit in native)   |
-| onSubmit         | (text: string) => void     | -           | Called on Enter (single-line) or submit action     |
-| onFocus          | () => void                 | -           | Called when the input gains focus                  |
-| onBlur           | () => void                 | -           | Called when the input loses focus                  |
-| placeholder      | string                     | -           | Placeholder text shown when empty                  |
-| placeholderColor | Color                      | -           | Color of placeholder text (native: '#888888')      |
-| maxLength        | number                     | -           | Maximum character count                            |
-| multiline        | boolean                    | false       | Enables multiline mode (textarea)                  |
-| editable         | boolean                    | true        | Whether text can be edited                         |
-| secureTextEntry  | boolean                    | false       | Masks text with bullet characters                  |
-| keyboardType     | string                     | 'default'   | Hint for on-screen keyboard (numeric, email, etc.) |
-| style            | Style                      | -           | Container style overrides                          |
-| textStyle        | Style                      | -           | Text content style (fontSize, color, etc.)         |
-| autoFocus        | boolean                    | false       | Automatically focus on mount                       |
-| cursorColor      | Color                      | -           | Color of the blinking cursor and focus border      |
+Proxy Props:
+| Prop              | Type   | Default   | Description                                           |
+|-------------------|--------|-----------|-------------------------------------------------------|
+| keystrokeTarget   | string | undefined | Node type to forward raw keystrokes to (Lua-to-Lua)   |
+| submitTarget      | string | undefined | Node type to dump submitted text to on Enter           |
+| escapeTarget      | string | undefined | Node type to forward Escape key to                     |
+
+Editor Props (imply multiline):
+| Prop             | Type    | Default | Description                                   |
+|------------------|---------|---------|-----------------------------------------------|
+| lineNumbers      | boolean | false   | Show line numbers in gutter                   |
+| syntaxHighlight  | boolean | false   | Enable JSX syntax highlighting                |
+| tooltipLevel     | string  | undefined | Hover tooltip verbosity ('beginner' \| 'guided' \| 'clean') |
+| sessionId        | string  | undefined | PTY session ID for keystroke passthrough       |
+| submitOnEnter    | boolean | false   | Enter submits, Shift+Enter inserts newline     |
+| spellCheck       | boolean | false   | Enable inline spell checking                   |
+| wordWrap         | boolean | false   | Wrap long lines at viewport edge               |
 
 === EXAMPLES ===
-Example 1: Basic controlled input
+Example 1: Basic single-line input
 ---
 ```tsx
+const colors = useThemeColors();
 const [name, setName] = useState('');
 
-<TextInput
-  value={name}
-  onChangeText={setName}
+<Input
   placeholder="Enter your name"
-  style={{ width: 250, height: 32 }}
-  textStyle={{ fontSize: 14, color: '#e2e8f0' }}
+  onSubmit={(text) => setName(text)}
+  style={{ padding: 8, backgroundColor: colors.surface, borderRadius: 6 }}
+  textStyle={{ color: colors.text, fontSize: 14 }}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Password field
+Example 2: Controlled input with live updates
 ---
 ```tsx
-<TextInput
-  value={password}
-  onChangeText={setPassword}
-  secureTextEntry
-  placeholder="Password"
-  onSubmit={(text) => handleLogin(text)}
-  style={{ width: 200 }}
+const colors = useThemeColors();
+const [query, setQuery] = useState('');
+
+<Input
+  value={query}
+  onLiveChange={(text) => setQuery(text)}
+  liveChangeDebounce={200}
+  placeholder="Search..."
+  autoFocus
+  style={{ padding: 8, backgroundColor: colors.surface, borderRadius: 6 }}
+  textStyle={{ color: colors.text, fontSize: 14 }}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Multiline with max length
+Example 3: Multi-line editor with line numbers
 ---
 ```tsx
-<TextInput
-  defaultValue=""
+const colors = useThemeColors();
+
+<Input
+  defaultValue="function hello()\n  print('world')\nend"
   multiline
-  maxLength={500}
-  placeholder="Write a message..."
-  style={{ width: 300, height: 120 }}
-  textStyle={{ fontSize: 12 }}
+  lineNumbers
+  syntaxHighlight
+  style={{ flexGrow: 1, backgroundColor: colors.bg }}
+  textStyle={{ fontFamily: 'monospace', fontSize: 12, color: colors.text }}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
+
+Example 4: Proxy input pattern (keystroke forwarding)
+---
+```tsx
+const colors = useThemeColors();
+const promptText = usePromptText();
+
+<Input
+  autoFocus
+  value={promptText}
+  keystrokeTarget="ClaudeCanvas"
+  submitTarget="ClaudeCanvas"
+  style={{ padding: 8, backgroundColor: colors.surface }}
+  textStyle={{ color: colors.text, fontSize: 14 }}
+/>
+```
+---
+Platforms: love2d
+
+Example 5: Password field
+---
+```tsx
+const colors = useThemeColors();
+
+<Input
+  placeholder="Password"
+  secureTextEntry
+  onSubmit={(text) => authenticate(text)}
+  style={{ padding: 8, backgroundColor: colors.surface, borderRadius: 6 }}
+  textStyle={{ color: colors.text, fontSize: 14 }}
+/>
+```
+---
+Platforms: love2d
 
 === PLATFORM NOTES ===
-- Web: Renders `<input>` for single-line, `<textarea>` for multiline. Uses native browser focus, cursor, selection, and clipboard behavior. `placeholderColor` is applied via a scoped `::placeholder` CSS rule. `cursorColor` maps to the CSS `caretColor` property. All keyboard interactions and text changes are handled by the browser.
+Love2D:
+  Lua owns the cursor, selection, and text rendering. React never touches the text buffer directly. In single-line mode, the TextInput host element handles horizontal scrolling for overflow text. In editor mode, the TextEditor host element adds gutter line numbers, syntax highlighting, and code intelligence.
 
-- Native (Love2D): Implements a Lua-owned text input pattern where ALL editing state lives in Lua (`lua/textinput.lua`). The Lua side manages:
-  - Text content, cursor position, selection range
-  - Keyboard input (arrows, home, end, backspace, delete, return)
-  - Mouse interactions (click to position cursor, drag to select)
-  - Clipboard operations (Ctrl+C/X/V)
-  - Cursor blink animation (530ms intervals)
-  - Horizontal scroll for single-line mode
-  - Visual rendering (text, cursor, selection highlight)
+  The proxy input pattern (keystrokeTarget/submitTarget) is entirely Lua-to-Lua. Keystrokes never cross the JS bridge, so there is zero latency between key press and target response.
 
-- Native bridge efficiency: JS side only receives boundary events via named handlers (`onTextInputFocus`, `onTextInputBlur`, `onTextInputSubmit`). No per-keystroke bridge traffic. The `onChangeText` callback is invoked only on blur or submit with the final text value.
-
-- Native keyboard support: Backspace, Delete, Left/Right arrows, Home, End, Return, Escape, Tab keys. Shift+arrows for selection. Ctrl+A (select all), Ctrl+C (copy), Ctrl+X (cut), Ctrl+V (paste). Escape and Tab blur the input. Return triggers `onSubmit` in single-line mode or inserts a newline in multiline mode.
-
-- Native default styling: dark background (`#1a1a1a`), 1px border (`#666666` unfocused, `cursorColor` or `#4A90D9` focused), `borderRadius: 4`, `padding: 4`. The cursor is a 2px-wide colored Box that blinks at 530ms intervals.
-
-- Native controlled value: When the `value` prop changes from JS, Lua syncs the internal state and clamps the cursor position to the new text length. Selection is cleared on external value changes.
-
-- Native mouse interactions: Clicking the input focuses it and positions the cursor at the click location. Dragging creates a text selection. Double-click (future enhancement) can select words.
+  onLiveChange debouncing runs in Lua. No per-keystroke bridge traffic occurs during rapid typing -- only the debounced result crosses.
 
 === CRITICAL RULES ===
-- TextInput needs explicit `width` in its style. Without it, the container will collapse.
-- In native mode, cursor position and selection are maintained entirely in Lua. External `value` changes will clamp the cursor to the new text length and clear any active selection.
-- The `onSubmit` callback fires on Enter in single-line mode. In multiline mode, Enter inserts a newline instead.
-- In native mode, `onChangeText` is invoked only on blur or submit (boundary events), not per keystroke. For real-time text updates, consider using TextEditor or implement a custom bridge event.
-- When `editable` is false, the text is displayed but keystroke events are ignored.
-- `secureTextEntry` replaces each character with a bullet character (U+2022) in the display. The actual text is preserved in the internal state.
-- Native mode requires explicit `fontSize` in `textStyle` or `style` for proper font rendering and cursor positioning. The linter enforces this for Text components; apply the same rule for TextInput.
-- Selection highlighting in native mode uses a semi-transparent blue overlay (`rgba(74, 144, 217, 0.3)`). The selection range is tracked as byte offsets in the UTF-8 encoded text.
+- An Input with keystrokeTarget/submitTarget is NOT a text editor. It is a display rectangle that forwards keystrokes. It must never maintain its own text buffer. Set `value` from an external source and let the target own the state.
+- Do not mix `value` (controlled) with `defaultValue` (uncontrolled). Pick one mode.
+- Editor features (lineNumbers, syntaxHighlight, tooltipLevel, sessionId) automatically imply multiline. You do not need to set `multiline={true}` alongside them.
+- `onChangeText` fires on both blur and submit. If you only want the submit value, use `onSubmit` instead.
+- `textStyle` only extracts fontSize, fontFamily, fontWeight, and color. Other style properties go in `style`.
 
 === SEE ALSO ===
-- TextEditor
+- CodeBlock
+- MonacoMirror
 - Box
-- Text
-- Pressable

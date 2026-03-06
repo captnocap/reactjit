@@ -1,116 +1,36 @@
 === METADATA ===
-title: Components Overview
-description: Reference index for all ReactJIT primitives and components
+title: Components
+description: Primitive and compound components for building ReactJIT interfaces
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: components, primitives, box, text, image, pressable, scrollview, modal, slider, codeblock, reference
-related: Layout System, Hooks, Animation
+platforms: love2d
+keywords: components, primitives, box, text, image, pressable, scrollview, modal
 difficulty: beginner
 
 === OVERVIEW ===
-ReactJIT ships a set of universal primitives and higher-level components that work across all render targets. Every visible element on screen is built from these building blocks. Primitives are the lowest-level elements (Box, Text, Image) that map directly to host elements in each target. Components are composed from primitives and provide richer interaction patterns (Pressable, ScrollView, Modal, Slider, and others).
+ReactJIT provides a small set of primitive components that map directly to nodes in the Lua layout engine. There is no DOM. No `<div>`, no `<span>`, no CSS. Every component you see here becomes a Lua node with position, size, color, and text — rendered by Love2D's OpenGL painter.
 
-All primitives and components are exported from `@reactjit/core`. Grid targets (terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM) use lowercase JSX intrinsics (`<view>`, `<text>`) and typically define local wrapper components; the `@reactjit/core` exports target Love2D and web renderers.
+All components import from `@reactjit/core`:
 
-=== API / SYNTAX ===
 ```tsx
-import {
-  // Primitives
-  Box, Text, Image, Video,
-
-  // Text display
-  CodeBlock,
-
-  // Interaction
-  Pressable, ScrollView, Modal, Slider,
-
-  // Form primitives
-  TextInput, TextEditor, Checkbox, Radio, RadioGroup, Select, Switch,
-
-  // Layout helpers
-  FlexRow, FlexColumn, Spacer, Card, Badge, Divider,
-
-  // Navigation
-  NavPanel, Tabs, Breadcrumbs, Toolbar,
-
-  // Data visualization
-  Table, BarChart, ProgressBar, Sparkline, FlatList,
-
-  // Portal system
-  Portal, PortalHost,
-} from '@reactjit/core';
+import { Box, Text, Image, Pressable, ScrollView, Modal, FlatList, Video, VideoPlayer, Portal, PortalHost } from '@reactjit/core';
 ```
 
-=== COMPONENT INDEX ===
+React's job is to declare the layout tree and diff it. Lua does the rendering, input handling, and runtime work. Components are thin — most are one-liners that pass props through to the reconciler.
 
-Primitives (layout building blocks):
-  Box        - Flexbox layout container. Every UI tree starts here.
-  Text       - Renders text content with font styling.
-  Image      - Displays images with sizing and objectFit control.
-  Video      - Plays video files with hardware acceleration via libmpv (Love2D).
+Primitives:
+- Box — universal container, the building block for all layouts
+- Text — text rendering with font metrics
+- Image — image display from file paths or URLs
+- Pressable — interactive element with press/hover/focus states
+- ScrollView — scrollable container with clipping
+- Modal — full-screen overlay with backdrop
+- FlatList — virtualized scrollable list
+- Video / VideoPlayer — video playback via libmpv
+- Portal / PortalHost — render children in a different part of the tree
 
-Interaction:
-  Pressable  - Interaction wrapper with press, long press, and hover state tracking.
-  ScrollView - Scrollable container with imperative scrollTo API.
-  Modal      - Fullscreen overlay with backdrop, animations, and dismiss handling.
-  Slider     - Draggable range input with track and thumb.
-
-Text Display:
-  CodeBlock  - Syntax-highlighted code display (Lua-owned on Love2D, <pre> on web).
-
-Form Primitives:
-  TextInput  - Single-line and multiline text entry.
-  TextEditor - Multi-line code/document editor with line numbers (Lua-owned).
-  Checkbox   - Toggle checkbox with label support.
-  Radio      - Radio button; use with RadioGroup for mutual exclusion.
-  RadioGroup - Groups Radio buttons for single-selection behavior.
-  Select     - Dropdown selector with option list.
-  Switch     - Toggle switch with on/off states.
-
-Layout Helpers:
-  FlexRow    - Shorthand for Box with flexDirection: 'row'.
-  FlexColumn - Shorthand for Box with flexDirection: 'column'.
-  Spacer     - Flexible or fixed-size empty space.
-  Card       - Styled container with background, padding, border radius, and shadow.
-  Badge      - Small label for status indicators or counts.
-  Divider    - Horizontal or vertical line separator.
-
-Navigation:
-  NavPanel    - Sidebar navigation with sections and items.
-  Tabs        - Tabbed content switcher.
-  Breadcrumbs - Hierarchical path trail.
-  Toolbar     - Horizontal button/action bar.
-
-Data Visualization:
-  Table       - Tabular data display with columns and rows.
-  BarChart    - Horizontal or vertical bar chart.
-  ProgressBar - Determinate or indeterminate progress indicator.
-  Sparkline   - Inline mini line chart.
-  FlatList    - Virtualized list for large datasets.
-
-Portal System:
-  Portal     - Renders children into a PortalHost outside the normal tree.
-  PortalHost - Mounting point for Portal content (used by Modal internally).
-
-=== PLATFORM NOTES ===
-Love2D:
-  All components render as string-typed host elements ('View', 'Text', 'Image') processed by the Lua layout engine and painter. Flexbox is computed by layout.lua. Events go through bridge_quickjs.lua.
-
-Web:
-  Primitives render as DOM elements (div, span, img) with CSS flexbox. Interaction events use standard DOM event listeners. Styles are converted from the Style type to React.CSSProperties by styleToCSS().
-
-Terminal / Grid targets:
-  Use lowercase intrinsics (<view>, <text>) with the grid layout engine. The @reactjit/core components are not used directly; grid targets have their own component wrappers built on @reactjit/grid.
-
-=== CRITICAL RULES ===
-- Always import from '@reactjit/core', never from internal package paths
-- Every <Text> must have an explicit fontSize -- the linter will block your build otherwise
-- Root containers need width: '100%' and height: '100%', not flexGrow: 1
-- Grid targets use different primitives; do not import @reactjit/core components into grid-target code
-- Run `reactjit lint` after any component change to catch layout violations early
+Every component accepts a `style` prop using the shared `Style` type. Layout uses flexbox with three sizing tiers: explicit dimensions, content auto-sizing, and proportional surface fallback. See the Layout System section for details.
 
 === SEE ALSO ===
-- Layout System (04-layout-system)
-- Hooks (06-hooks)
-- Animation (07-animation)
-- Style type reference (12-api-reference)
+- Layout System
+- Style Properties
+- Hooks

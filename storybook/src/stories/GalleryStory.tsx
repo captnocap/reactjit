@@ -149,11 +149,18 @@ const TABS: TabDef[] = [
     callbacks: [],
   },
   {
-    id: 'elementcard', label: 'ElementCard', pkg: 'chemistry',
-    desc: 'Periodic table element tile + detail card. Compact tile shows number, symbol, mass. Press to flip open full detail.',
-    usage: `import { ElementTile, ElementCard } from '@reactjit/chemistry';\n\n<ElementTile element="Fe" size={64} />\n<ElementCard element="Fe" />`,
-    props: [['element', 'number | string'], ['size', 'number (Tile)'], ['selected', 'boolean (Tile)'], ['style', 'Style']],
+    id: 'elementtile', label: 'ElementTile', pkg: 'chemistry',
+    desc: 'Periodic table tile with click-to-flip. Front shows number, symbol, mass. Back shows group, period, phase, EN.',
+    usage: `import { ElementTile } from '@reactjit/chemistry';\n\n<ElementTile element="Fe" size={64} />`,
+    props: [['element', 'number | string'], ['size', 'number'], ['selected', 'boolean'], ['flipped', 'boolean'], ['style', 'Style']],
     callbacks: [['onPress', '(element: Element) => void']],
+  },
+  {
+    id: 'elementcard', label: 'ElementCard', pkg: 'chemistry',
+    desc: 'Full element detail card — all properties visible at a glance, no interaction needed.',
+    usage: `import { ElementCard } from '@reactjit/chemistry';\n\n<ElementCard element="Fe" />`,
+    props: [['element', 'number | string'], ['style', 'Style']],
+    callbacks: [],
   },
   {
     id: 'knob', label: 'Knob', pkg: 'controls',
@@ -329,9 +336,9 @@ const TABS: TabDef[] = [
   // ── Chemistry ──
   {
     id: 'periodictable', label: 'PeriodicTable', pkg: 'chemistry',
-    desc: 'Full 118-element interactive periodic table with category color coding.',
-    usage: `import { PeriodicTable } from '@reactjit/chemistry';\n\n<PeriodicTable\n  onSelect={setElement}\n  colorBy="category" />`,
-    props: [['colorBy', "'category' | 'phase' | 'electronegativity'"], ['compact', 'boolean'], ['highlighted', 'number[]']],
+    desc: 'Grid of 118 ElementTiles in the standard periodic table layout.',
+    usage: `import { PeriodicTable } from '@reactjit/chemistry';\n\n<PeriodicTable\n  onSelect={setElement}\n  tileSize={32} />`,
+    props: [['tileSize', 'number'], ['selected', 'number | null'], ['style', 'Style']],
     callbacks: [['onSelect', '(el: Element) => void']],
   },
   {

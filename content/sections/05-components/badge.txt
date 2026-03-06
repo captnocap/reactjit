@@ -1,177 +1,78 @@
 === METADATA ===
 title: Badge
-description: A small colored label/pill component for displaying status, categories, tags, or counts. Supports five semantic variants with pre-defined color schemes.
+description: Small label for status indicators, tags, and categories with color variants
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: badge, label, tag, pill, status, indicator, variant
-related: Card, Box, Text
+platforms: love2d
+keywords: badge, tag, label, status, variant, chip, indicator
+related: Card, Text, Toolbar
 difficulty: beginner
 
 === OVERVIEW ===
-The Badge component renders a compact, pill-shaped label with semantic color variants. It automatically sizes to fit the label text and uses `alignSelf: 'start'` to prevent unwanted stretching in flex layouts. Badges are ideal for status indicators, category tags, notification counts, or any small textual label that needs visual emphasis. The component provides five built-in variants with carefully chosen background and text color pairings optimized for readability.
+Badge renders a small pill-shaped label with colored background and text. It supports five semantic variants: default, success, warning, error, and info. Each variant provides a pre-defined background and text color pair.
+
+Badge uses `alignSelf: 'start'` by default so it shrink-wraps to its label text rather than stretching to fill the parent width.
 
 === API / SYNTAX ===
 ```tsx
 import { Badge } from '@reactjit/core';
-
-<Badge
-  label="Active"
-  variant="success"
-  style={{ marginLeft: 8 }}
-/>
 ```
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `label` | `string` | (required) | Text content displayed inside the badge |
-| `variant` | `BadgeVariant` | `'default'` | Color scheme: `'default'`, `'success'`, `'warning'`, `'error'`, `'info'` |
-| `style` | `Style` | `{}` | Overrides for the badge container (margins, explicit dimensions, etc.) |
+Props:
+| Prop    | Type         | Default   | Description                                     |
+|---------|--------------|-----------|-------------------------------------------------|
+| label   | string       | required  | Text content of the badge                       |
+| variant | BadgeVariant | 'default' | Color variant: 'default', 'success', 'warning', 'error', 'info' |
+| style   | Style        | undefined | Style overrides for the outer container         |
 
-**Variant Color Schemes:**
-
-| Variant | Background | Text | Use Case |
-|---------|-----------|------|----------|
-| `default` | `#334155` (slate-700) | `#e2e8f0` (slate-200) | Neutral labels, defaults |
-| `success` | `#166534` (green-800) | `#bbf7d0` (green-200) | Active, online, completed, success |
-| `warning` | `#854d0e` (yellow-800) | `#fef08a` (yellow-200) | Caution, pending, warnings |
-| `error` | `#991b1b` (red-800) | `#fecaca` (red-200) | Error, failed, critical, offline |
-| `info` | `#1e40af` (blue-800) | `#bfdbfe` (blue-200) | Information, tips, metadata |
-
-**Default Styling:**
-- Border radius: 10px (pill shape)
-- Padding: 2px vertical, 8px horizontal
-- Font size: 11px
-- Font weight: bold
-- Alignment: `alignSelf: 'start'` (no stretch)
+BadgeVariant colors:
+| Variant | Background | Text    |
+|---------|------------|---------|
+| default | #334155    | #e2e8f0 |
+| success | #166534    | #bbf7d0 |
+| warning | #854d0e    | #fef08a |
+| error   | #991b1b    | #fecaca |
+| info    | #1e40af    | #bfdbfe |
 
 === EXAMPLES ===
-
-Example 1: Basic Badge
+Example 1: Basic badge
 ---
 ```tsx
-<Badge label="New" variant="info" />
+<Badge label="New" />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Status Indicators
+Example 2: Status badges
 ---
 ```tsx
-<Box style={{ gap: 8 }}>
+<FlexRow gap={8}>
   <Badge label="Online" variant="success" />
-  <Badge label="Offline" variant="error" />
-  <Badge label="Away" variant="warning" />
-  <Badge label="Idle" variant="default" />
-</Box>
+  <Badge label="Pending" variant="warning" />
+  <Badge label="Error" variant="error" />
+  <Badge label="Info" variant="info" />
+</FlexRow>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Badge with Text Label (Row Layout)
+Example 3: Badge in a card header
 ---
 ```tsx
-<Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-  <Text fontSize={14} style={{ color: '#e2e8f0' }}>Server Status:</Text>
-  <Badge label="Running" variant="success" />
-</Box>
+const colors = useThemeColors();
+
+<FlexRow gap={8} align="center">
+  <Text style={{ color: colors.text, fontSize: 14, fontWeight: 'bold' }}>Server Status</Text>
+  <Badge label="Healthy" variant="success" />
+</FlexRow>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Notification Count
----
-```tsx
-<Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-  <Text fontSize={14} style={{ color: '#e2e8f0' }}>Messages</Text>
-  <Badge label="12" variant="error" />
-</Box>
-```
----
-Platforms: All
-
-Example 5: Category Tags
----
-```tsx
-<Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-  <Badge label="React" variant="info" />
-  <Badge label="TypeScript" variant="info" />
-  <Badge label="Lua" variant="info" />
-  <Badge label="Love2D" variant="success" />
-</Box>
-```
----
-Platforms: All
-
-Example 6: Badges Inside Cards
----
-```tsx
-<Card title="System Services">
-  <Box style={{ gap: 8 }}>
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text fontSize={12} style={{ color: '#e2e8f0' }}>Web Server</Text>
-      <Badge label="Active" variant="success" />
-    </Box>
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text fontSize={12} style={{ color: '#e2e8f0' }}>Database</Text>
-      <Badge label="Error" variant="error" />
-    </Box>
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text fontSize={12} style={{ color: '#e2e8f0' }}>Cache</Text>
-      <Badge label="Pending" variant="warning" />
-    </Box>
-  </Box>
-</Card>
-```
----
-Platforms: All
-
-Example 7: Custom Styling
----
-```tsx
-<Badge
-  label="Custom"
-  variant="info"
-  style={{
-    marginLeft: 16,
-    borderWidth: 1,
-    borderColor: '#60a5fa',
-  }}
-/>
-```
----
-Platforms: All
-
-Example 8: Dynamic Variant Based on State
----
-```tsx
-function StatusBadge({ status }: { status: 'online' | 'offline' | 'away' }) {
-  const variantMap = {
-    online: 'success',
-    offline: 'error',
-    away: 'warning',
-  } as const;
-
-  return <Badge label={status} variant={variantMap[status]} />;
-}
-
-// Usage:
-<StatusBadge status="online" />
-```
----
-Platforms: All
-
-=== CRITICAL RULES ===
-- Do not use Unicode symbols in the `label` prop (see layout rules)
-- Badge auto-sizes to label text width (no explicit width needed)
-- Uses `alignSelf: 'start'` by default to prevent stretching in flex containers
-- For horizontal alignment with text, wrap in a Box with `flexDirection: 'row'` and `alignItems: 'center'`
-- The internal Text component uses `fontSize: 11` and `fontWeight: 'bold'` (not customizable without forking)
-- Variant colors are hardcoded; for custom colors, fork Badge or use a styled Box + Text
-- Badge has no onClick handler; wrap in Pressable for interactivity
+=== PLATFORM NOTES ===
+Love2D:
+  Badge uses hardcoded variant colors. To customize colors beyond the five variants, use the `style` prop to override `backgroundColor` and wrap a `Text` with your own color.
 
 === SEE ALSO ===
-- Card component for containing badges in structured layouts
-- Pressable for making badges interactive
-- Box primitive for custom badge designs
-- Text styling rules (fontSize requirement, no Unicode symbols)
-- FlexRow helper for horizontal badge + text layouts
+- Card
+- Text
+- Toolbar

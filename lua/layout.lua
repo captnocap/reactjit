@@ -459,6 +459,13 @@ local function computeMinContentW(node, depth)
   local padL = ru(s.paddingLeft, 0) or pad
   local padR = ru(s.paddingRight, 0) or pad
 
+  -- If the node has an explicit pixel width, its min-content contribution to
+  -- the parent row is that explicit width. Text overflow inside is clipped;
+  -- the parent should not reserve more than the box's declared size.
+  if type(s.width) == "number" and s.width > 0 then
+    return s.width
+  end
+
   if node.type == "Text" or node.type == "__TEXT__" then
     local text = resolveTextContent(node)
     if not text then return 0 end

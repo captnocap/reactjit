@@ -6,10 +6,12 @@
   React usage:
     <CRT mask />
     <CRT mask curvature={0.4} scanlineIntensity={0.3} />
+    <CRT mask shaderTint="#a6e3a1" shaderGrain={0.06} />
 ]]
 
 local Masks = require("lua.masks")
 local Util = require("lua.effects.util")
+local ShaderGrade = require("lua.masks.shader_grade")
 
 local floor, max = math.floor, math.max
 local sin = math.sin
@@ -50,10 +52,31 @@ function CRT.draw(state, w, h, source)
   local t = state.time
 
   -- Keep the captured content fully present, then layer CRT artifacts on top.
+  local shaderHue = Util.prop(props, "shaderHue", 0)
+  local shaderSaturation = Util.prop(props, "shaderSaturation", 1.06)
+  local shaderValue = Util.prop(props, "shaderValue", 1.0)
+  local shaderContrast = Util.prop(props, "shaderContrast", 1.08)
+  local shaderPosterize = Util.prop(props, "shaderPosterize", 0)
+  local shaderGrain = Util.prop(props, "shaderGrain", 0.03 + scanIntensity * 0.04)
+  local shaderVignette = Util.prop(props, "shaderVignette", vignetteStr * 0.35)
+  local shaderTint = props.shaderTint or Masks.getThemeToken("success", "#a6e3a1")
+  local shaderTintMix = Util.prop(props, "shaderTintMix", 0.14 + scanIntensity * 0.08)
+
   local mixedBase = 0.95 + (state.flicker - 1.0) * 0.2
   local baseGain = clamp(1 + (mixedBase - 1) * effectMix, 0.85, 1.05)
-  love.graphics.setColor(baseGain, baseGain, baseGain, 1)
-  love.graphics.draw(source, 0, 0)
+  ShaderGrade.draw(source, w, h, {
+    time = t,
+    hue = shaderHue * effectMix,
+    saturation = 1 + (shaderSaturation - 1) * effectMix,
+    value = 1 + (shaderValue - 1) * effectMix,
+    contrast = 1 + (shaderContrast - 1) * effectMix,
+    posterize = effectMix > 0.01 and shaderPosterize or 0,
+    grain = shaderGrain * effectMix,
+    vignette = shaderVignette * effectMix,
+    tint = shaderTint,
+    tintMix = shaderTintMix * effectMix,
+    gain = baseGain,
+  })
 
   if effectMix <= 0 then
     return

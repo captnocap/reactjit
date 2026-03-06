@@ -1,143 +1,110 @@
 === METADATA ===
 title: HorizontalBarChart
-description: Horizontal bar chart component for comparing labeled values side by side
+description: Horizontal bar chart with optional labels and value display
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: chart, bar, horizontal, data, visualization, graph
-related: BarChart, StackedBarChart, Sparkline, LineChart, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: horizontal bar chart, chart, graph, data visualization, bars, horizontal
+related: BarChart, StackedBarChart, ProgressBar
+difficulty: intermediate
 
 === OVERVIEW ===
-HorizontalBarChart renders a series of labeled bars growing left-to-right, each scaled relative to the maximum value in the dataset. Labels appear on the left, the bar fills proportionally, and an optional value readout follows on the right. When interactive mode is enabled, hovering a bar dims all others and reveals a tooltip showing the label, raw value, and percentage of the maximum.
+HorizontalBarChart renders bars horizontally, with optional labels on the left and values on the right. Useful for ranked lists, category comparisons, or any data where horizontal orientation reads better than vertical.
+
+Built with Box and Text primitives (not a Chart2D surface). Each bar is scaled proportionally to the maximum value in the dataset. When `interactive` is enabled, hovering highlights the bar and shows a descriptive tooltip with label, value, and percentage.
 
 === API / SYNTAX ===
 ```tsx
 import { HorizontalBarChart } from '@reactjit/core';
 ```
 
-Data shape:
-```tsx
-interface HorizontalBarChartBar {
-  label: string;   // Row label shown on the left
-  value: number;   // Numeric value driving bar width
-  color?: Color;   // Per-bar override; falls back to the chart-level `color` prop
-}
-```
-
 Props:
-| Prop         | Type                                                              | Default      | Description                                                         |
-|--------------|-------------------------------------------------------------------|--------------|---------------------------------------------------------------------|
-| data         | HorizontalBarChartBar[]                                           | required     | Array of bars to render                                             |
-| width        | number                                                            | 280          | Total width of the chart in pixels                                  |
-| barHeight    | number                                                            | 20           | Height of each bar row in pixels                                    |
-| gap          | number                                                            | 6            | Vertical gap between bar rows in pixels                             |
-| showLabels   | boolean                                                           | true         | Whether to render the label column on the left                      |
-| showValues   | boolean                                                           | false        | Whether to render the numeric value after each bar                  |
-| labelWidth   | number                                                            | 60           | Fixed pixel width reserved for the label column                     |
-| color        | Color                                                             | '#3b82f6'    | Default bar color used when a bar has no per-item `color`           |
-| style        | Style                                                             | undefined    | Additional styles applied to the outer container Box                |
-| interactive  | boolean                                                           | false        | Enable hover highlighting and tooltips                              |
-| onBarHover   | (index: number \| null, bar: HorizontalBarChartBar \| null) => void | undefined  | Called when the pointer enters or leaves a bar                      |
-| onBarPress   | (index: number, bar: HorizontalBarChartBar) => void               | undefined    | Called when a bar is clicked (requires interactive: true)           |
+| Prop       | Type                                                              | Default   | Description                       |
+|------------|-------------------------------------------------------------------|-----------|-----------------------------------|
+| data       | HorizontalBarChartBar[]                                          | required  | Array of bars to render           |
+| width      | number                                                           | 280       | Total chart width in pixels       |
+| barHeight  | number                                                           | 20        | Height of each bar                |
+| gap        | number                                                           | 6         | Vertical gap between bars         |
+| showLabels | boolean                                                          | true      | Show labels to the left of bars   |
+| showValues | boolean                                                          | false     | Show values to the right of bars  |
+| labelWidth | number                                                           | 60        | Width reserved for labels         |
+| color      | Color                                                            | '#3b82f6' | Default bar color                 |
+| interactive| boolean                                                          | false     | Enable hover highlight and tooltips|
+| onBarHover | (index: number \| null, bar: HorizontalBarChartBar \| null) => void | undefined | Called on hover/unhover       |
+| onBarPress | (index: number, bar: HorizontalBarChartBar) => void             | undefined | Called on bar press                |
+| style      | Style                                                            | undefined | Full style object                 |
+
+HorizontalBarChartBar:
+| Field | Type   | Default   | Description                |
+|-------|--------|-----------|----------------------------|
+| label | string | required  | Label text for the bar     |
+| value | number | required  | Numeric value              |
+| color | Color  | undefined | Per-bar color override     |
 
 === EXAMPLES ===
-Example 1: Basic labeled chart
+Example 1: Basic horizontal bar chart
 ---
 ```tsx
-import { HorizontalBarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const languages = [
-  { label: 'TypeScript', value: 84 },
-  { label: 'Lua',        value: 61 },
-  { label: 'Python',     value: 43 },
-  { label: 'Rust',       value: 28 },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <HorizontalBarChart data={languages} width={320} />
-    </Box>
-  );
-}
+<HorizontalBarChart
+  data={[
+    { label: 'TypeScript', value: 45 },
+    { label: 'Lua', value: 30 },
+    { label: 'Python', value: 18 },
+    { label: 'Rust', value: 12 },
+  ]}
+  color={colors.primary}
+  showValues
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Per-bar colors with value readout
+Example 2: Per-bar colors with interaction
 ---
 ```tsx
-import { HorizontalBarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const budget = [
-  { label: 'Rent',    value: 1500, color: '#ef4444' },
-  { label: 'Food',    value: 400,  color: '#f59e0b' },
-  { label: 'Transit', value: 120,  color: '#3b82f6' },
-  { label: 'Savings', value: 300,  color: '#22c55e' },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <HorizontalBarChart
-        data={budget}
-        width={300}
-        barHeight={18}
-        showValues
-      />
-    </Box>
-  );
-}
+<HorizontalBarChart
+  data={[
+    { label: 'Critical', value: 3, color: '#ef4444' },
+    { label: 'Warning', value: 12, color: '#f59e0b' },
+    { label: 'Info', value: 28, color: '#3b82f6' },
+    { label: 'Debug', value: 45, color: '#6b7280' },
+  ]}
+  width={320}
+  barHeight={16}
+  showValues
+  interactive
+  onBarPress={(i, bar) => console.log(bar.label)}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive with hover callback
+Example 3: Compact without labels
 ---
 ```tsx
-import { useState } from 'react';
-import { HorizontalBarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const scores = [
-  { label: 'Alice', value: 92 },
-  { label: 'Bob',   value: 74 },
-  { label: 'Carol', value: 88 },
-  { label: 'Dave',  value: 55 },
-];
-
-export default function App() {
-  const [hovered, setHovered] = useState<string | null>(null);
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 12 }}>
-      <HorizontalBarChart
-        data={scores}
-        width={300}
-        interactive
-        onBarHover={(_, bar) => setHovered(bar ? bar.label : null)}
-      />
-      {hovered && (
-        <Text style={{ fontSize: 12, color: '#94a3b8' }}>
-          {`Hovering: ${hovered}`}
-        </Text>
-      )}
-    </Box>
-  );
-}
+<HorizontalBarChart
+  data={rankings}
+  color={colors.primary}
+  showLabels={false}
+  barHeight={12}
+  gap={4}
+  width={200}
+/>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The `width` prop controls the total chart width; bar fill width is computed from the remaining space after subtracting the label column (`labelWidth + 8`) and value column (40px) when those are shown.
-- When `showLabels` is false, `labelWidth` has no effect but the space is still not reserved — set `showLabels={false}` to reclaim that space.
-- Per-bar `color` takes priority over the chart-level `color` prop.
-- `onBarPress` only fires when `interactive` is also `true`; setting `onBarPress` alone without `interactive` has no effect.
-- Empty `data` arrays render a sized empty Box with no error — safe to pass live data that may start empty.
-- Do not use Unicode symbols in any `<Text>` within this component or in labels passed as data — use Box-based geometry for visual indicators instead.
+- The bar area width is computed as `width - labelWidth - valueWidth`. If `showLabels` is true, the default `labelWidth` of 60 is subtracted. If `showValues` is true, 40px is subtracted for the value text.
+- An empty `data` array renders an empty Box at the specified width.
+- Not a Chart2D surface -- built from Box/Text primitives. Width defaults to 280px; height is determined by the number of bars, barHeight, and gap.
 
 === SEE ALSO ===
-- BarChart — vertical bars for the same kind of comparison
-- StackedBarChart — multi-series bars stacked in a single column
-- Sparkline — compact inline trend line with no axes
-- ChartTooltip — standalone tooltip primitive used internally by this component
+- BarChart
+- StackedBarChart
+- ProgressBar

@@ -1,43 +1,30 @@
 === METADATA ===
 title: Routing
-description: Brief overview of the @reactjit/router package for in-app navigation
+description: Client-side routing for navigating between screens in ReactJIT apps
 category: Routing
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: routing, navigation, router, screens, pages
-related: pipeline, philosophy
+platforms: love2d
+keywords: routing, navigation, router, routes, screens, history, link, navigate
+related: router.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT includes a @reactjit/router package for in-app navigation between screens.
-Since there is no browser URL bar or history API in most targets, routing is purely
-in-memory. The router manages a stack of screens and provides hooks for navigating
-between them.
+@reactjit/router provides client-side routing with no external dependencies. There is no browser URL bar, no server, and no HTTP. Routes are purely in-memory path strings managed by a history adapter. The router matches the current path against route patterns and renders the best match.
 
-The router follows a simple pattern: define your screens as React components, register
-them with the router, and use navigation hooks to push, pop, or replace screens.
+The system has three layers:
 
-=== API / SYNTAX ===
-Basic Usage Pattern:
-  import { Router, Screen, useNavigation } from '@reactjit/router';
+1. History adapter -- manages a stack of location entries (pathname, search, hash). Memory history for Love2D and native targets; browser history for WASM web builds.
 
-  function App() {
-    return (
-      <Router>
-        <Screen name="home" component={HomeScreen} />
-        <Screen name="settings" component={SettingsScreen} />
-      </Router>
-    );
-  }
+2. Route matching -- compiles path patterns into regexps with specificity scoring. Supports named parameters (`:id`), optional parameters (`:id?`), and wildcards (`*`). When multiple routes match, the most specific pattern wins.
 
-  function HomeScreen() {
-    const nav = useNavigation();
-    return (
-      <Pressable onPress={() => nav.push('settings')}>
-        <Text style={{ fontSize: 16 }}>Go to Settings</Text>
-      </Pressable>
-    );
-  }
+3. React components and hooks -- `RouterProvider` wraps your app with routing context. `Routes` and `Route` declare which component renders at which path. Hooks (`useNavigate`, `useParams`, `useLocation`, `useRoute`) let any component read or change the current location.
+
+All imports come from `@reactjit/router`:
+
+```tsx
+import { RouterProvider, Routes, Route, Link, Navigate, Outlet } from '@reactjit/router';
+import { useRouter, useNavigate, useLocation, useParams, useRoute } from '@reactjit/router';
+import { createMemoryHistory, createBrowserHistory } from '@reactjit/router';
+```
 
 === SEE ALSO ===
-- 05-components/pressable.txt - Navigation triggers
-- 01-getting-started/philosophy.txt - Design principles
+- router.txt -- Full API reference: components, hooks, history adapters, route matching

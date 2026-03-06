@@ -1,159 +1,84 @@
 === METADATA ===
 title: usePeerServer
-description: Host a WebSocket server to accept peer connections, broadcast messages, and receive incoming data.
+description: Host a WebSocket server for peer-to-peer connections
 category: Hooks
 platforms: love2d
-keywords: websocket, server, peer, p2p, broadcast, multiplayer, host, networking
-related: useWebSocket, useLove, useLoveSend
+keywords: peer, server, websocket, p2p, broadcast, multiplayer, network
+related: useWebSocket, useFetch
 difficulty: advanced
 
 === OVERVIEW ===
-usePeerServer starts a WebSocket server bound to the given port and manages the full lifecycle of peer connections: tracking connected client IDs, exposing the last received message with its sender ID, and providing send and broadcast functions. It routes through the bridge's __wsListen global, which is provided by the Love2D native target. The hook tears down the server automatically when the component unmounts or the port changes to a new value. Pass null as the port to keep the server stopped.
+usePeerServer hosts a WebSocket server from within your application. Peers connect to the specified port, and you can send messages to individual clients or broadcast to all. Useful for local multiplayer, device pairing, or tool communication.
+
+Pass `null` as the port to shut down the server.
 
 === API / SYNTAX ===
 ```tsx
 import { usePeerServer } from '@reactjit/core';
-import type { PeerMessage } from '@reactjit/core';
+```
+
+Signature:
+```tsx
+function usePeerServer(port: number | null): {
+  ready: boolean;
+  peers: number[];
+  broadcast: (data: string) => void;
+  send: (clientId: number, data: string) => void;
+  lastMessage: PeerMessage | null;
+  error: string | null;
+}
+```
+
+Types:
+```tsx
+interface PeerMessage {
+  clientId: number;
+  data: string;
+}
 ```
 
 Parameters:
-| Param | Type           | Default  | Description |
-|-------|----------------|----------|-------------|
-| port  | number \| null | required | TCP port to listen on (e.g. 8080). Pass null to keep the server stopped. |
+| Param | Type           | Default  | Description                        |
+|-------|----------------|----------|------------------------------------|
+| port  | number \| null | required | Port to listen on, or null to stop |
 
 Returns:
-| Field       | Type                             | Description |
-|-------------|----------------------------------|-------------|
-| ready       | boolean                          | True once the server is bound and listening for connections. |
-| peers       | number[]                         | Array of currently connected client IDs. Updated on connect and disconnect. |
-| broadcast   | (data: string) => void           | Send a string message to every connected peer simultaneously. |
-| send        | (clientId: number, data: string) => void | Send a string message to a single peer identified by its numeric client ID. |
-| lastMessage | PeerMessage \| null              | The most recently received message, or null if nothing has arrived yet. |
-| error       | string \| null                   | Human-readable error string if the server failed to start, otherwise null. |
-
-PeerMessage shape:
-| Field    | Type   | Description |
-|----------|--------|-------------|
-| clientId | number | Numeric ID of the peer that sent this message. |
-| data     | string | The raw string payload received from that peer. |
+| Field       | Type                | Description                           |
+|-------------|---------------------|---------------------------------------|
+| ready       | boolean             | True when server is listening         |
+| peers       | number[]            | Array of connected client IDs         |
+| broadcast   | (data: string) => void | Send to all connected peers        |
+| send        | (clientId, data) => void | Send to a specific peer           |
+| lastMessage | PeerMessage \| null | Most recent message from any peer     |
+| error       | string \| null      | Error if the server failed to start   |
 
 === EXAMPLES ===
-Example 1: Echo server — broadcast each message back to all peers
+Example 1: Host a server and broadcast
 ---
 ```tsx
-import { useEffect } from 'react';
-import { usePeerServer, Box, Text } from '@reactjit/core';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { usePeerServer } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function EchoServer() {
-  const { ready, peers, broadcast, lastMessage, error } = usePeerServer(9050);
-
-  useEffect(() => {
-    if (lastMessage) {
-      broadcast(`[${lastMessage.clientId}]: ${lastMessage.data}`);
-    }
-  }, [lastMessage]);
+export function GameHost() {
+  const colors = useThemeColors();
+  const server = usePeerServer(8080);
 
   return (
-    <Box flexDirection="column" gap={4} padding={12}>
-      <Text fontSize={14}>Server: {ready ? 'Ready' : 'Starting...'}</Text>
-      <Text fontSize={13}>Peers connected: {peers.length}</Text>
-      {error && <Text fontSize={12}>Error: {error}</Text>}
-    </Box>
-  );
-}
-```
----
-Platforms: love2d
-
-Example 2: Reply only to the peer that sent a message
----
-```tsx
-import { useEffect } from 'react';
-import { usePeerServer, Box, Text } from '@reactjit/core';
-
-interface Command {
-  action: string;
-  value: number;
-}
-
-function PingServer() {
-  const { ready, peers, send, lastMessage } = usePeerServer(8080);
-
-  useEffect(() => {
-    if (!lastMessage) return;
-    const cmd: Command = JSON.parse(lastMessage.data);
-    if (cmd.action === 'ping') {
-      send(lastMessage.clientId, JSON.stringify({ action: 'pong', value: cmd.value }));
-    }
-  }, [lastMessage]);
-
-  return (
-    <Box flexDirection="column" gap={4} padding={12}>
-      <Text fontSize={15}>Ping Server</Text>
-      <Text fontSize={13}>Status: {ready ? 'Listening on :8080' : 'Binding...'}</Text>
-      <Text fontSize={13}>Players: {peers.length}</Text>
-    </Box>
-  );
-}
-```
----
-Platforms: love2d
-
-Example 3: Broadcast world state to all peers whenever it changes
----
-```tsx
-import { useEffect } from 'react';
-import { usePeerServer, useLoveState, Box, Text } from '@reactjit/core';
-
-interface WorldState {
-  tick: number;
-  entities: { id: number; x: number; y: number }[];
-}
-
-function WorldServer() {
-  const { ready, peers, broadcast } = usePeerServer(9050);
-  const [world] = useLoveState<WorldState>('world', { tick: 0, entities: [] });
-
-  useEffect(() => {
-    if (ready && peers.length > 0) {
-      broadcast(JSON.stringify(world));
-    }
-  }, [world, ready]);
-
-  return (
-    <Box flexDirection="column" gap={4} padding={12}>
-      <Text fontSize={14}>Tick: {world.tick}</Text>
-      <Text fontSize={13}>Peers: {peers.length}</Text>
-    </Box>
-  );
-}
-```
----
-Platforms: love2d
-
-Example 4: Conditional server — activate only when hosting is toggled on
----
-```tsx
-import { useState } from 'react';
-import { usePeerServer, Box, Text, Pressable } from '@reactjit/core';
-
-function HostToggle() {
-  const [hosting, setHosting] = useState(false);
-  const { ready, peers, error } = usePeerServer(hosting ? 9050 : null);
-
-  return (
-    <Box flexDirection="column" gap={8} padding={12}>
-      <Pressable onPress={() => setHosting(h => !h)}>
-        <Box backgroundColor={hosting ? '#a22' : '#2a7'} padding={8} borderRadius={4}>
-          <Text fontSize={14}>{hosting ? 'Stop Hosting' : 'Start Hosting'}</Text>
-        </Box>
+    <Box style={{ gap: 8, padding: 16 }}>
+      <Text style={{ color: colors.muted }}>
+        {server.ready ? `Listening on :8080` : 'Starting...'}
+      </Text>
+      <Text style={{ color: colors.text }}>
+        {`${server.peers.length} peer(s) connected`}
+      </Text>
+      <Pressable onPress={() => server.broadcast('ping')}>
+        <Text style={{ color: colors.primary }}>Broadcast Ping</Text>
       </Pressable>
-      {hosting && (
-        <Box flexDirection="column" gap={4}>
-          <Text fontSize={13}>Server: {ready ? 'Ready on :9050' : 'Starting...'}</Text>
-          <Text fontSize={13}>Connected peers: {peers.length}</Text>
-          {error && <Text fontSize={12}>Error: {error}</Text>}
-        </Box>
+      {server.lastMessage && (
+        <Text style={{ color: colors.text }}>
+          {`Client ${server.lastMessage.clientId}: ${server.lastMessage.data}`}
+        </Text>
       )}
     </Box>
   );
@@ -162,7 +87,12 @@ function HostToggle() {
 ---
 Platforms: love2d
 
+=== CRITICAL RULES ===
+- The server requires the `__wsListen` host function to be available in the runtime. If it is missing, the hook silently does nothing.
+- Client IDs are assigned by the Lua runtime and are stable for the lifetime of a connection.
+- lastMessage only holds the single most recent message across all peers. For per-peer message history, accumulate in your own state.
+- Passing null as port shuts down the server and disconnects all peers.
+
 === SEE ALSO ===
 - useWebSocket
-- useLove
-- useLoveSend
+- useFetch

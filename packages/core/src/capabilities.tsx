@@ -19,9 +19,9 @@
 import React from 'react';
 import { Native } from './Native';
 import type {
-  AudioProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
+  AudioProps, TTSProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps,
+  BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps, GameServerProps,
 } from './types';
 
 /**
@@ -34,6 +34,21 @@ import type {
  */
 export function Audio(props: AudioProps) {
   return <Native type="Audio" {...props} />;
+}
+
+/**
+ * Declarative text-to-speech via Kokoro TTS.
+ *
+ * Generates speech from text using a local neural TTS model and plays it back.
+ * The pipeline runs entirely offline: text → kokoro-tts → wav → love.audio.
+ *
+ * @example
+ * <TTS text="Hello world" />
+ * <TTS text="Build complete" voice="af_heart" speed={1.2} onComplete={() => next()} />
+ * <TTS text={message} voice="am_adam" playing={shouldSpeak} volume={0.8} />
+ */
+export function TTS(props: TTSProps) {
+  return <Native type="TTS" {...props} />;
 }
 
 /**
@@ -225,4 +240,27 @@ export function SPIDevice(props: SPIDeviceProps) {
  */
 export function Libretro(props: LibretroProps) {
   return <Native type="Libretro" {...props} />;
+}
+
+/**
+ * Declarative game server hosting.
+ *
+ * Supports Valve engines by generation (GoldSrc → Source → Source 2) and Minecraft.
+ * Config can be an inline object, a useLocalStore result, or a JSON file path.
+ *
+ * @example
+ * // CS 1.6 (GoldSrc)
+ * <GameServer type="goldsrc" config={{ port: 27015, game: "cstrike", map: "de_dust2" }} />
+ *
+ * // CS:S / TF2 / GMod (Source)
+ * <GameServer type="source" config={{ port: 27015, game: "cstrike", map: "de_dust2" }} />
+ *
+ * // CS2 (Source 2)
+ * <GameServer type="source2" config={{ port: 27015, game: "cs2", map: "de_dust2" }} />
+ *
+ * // Minecraft
+ * <GameServer type="minecraft" config={{ port: 25565, maxPlayers: 20, difficulty: "normal" }} />
+ */
+export function GameServer({ type: engineType, ...rest }: GameServerProps) {
+  return <Native type="GameServer" engineType={engineType} {...rest} />;
 }

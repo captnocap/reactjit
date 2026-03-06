@@ -1,146 +1,113 @@
 === METADATA ===
 title: BarChart
-description: Vertical bar chart that renders data as proportionally sized colored bars with optional labels, values, and interactive hover tooltips
+description: Vertical bar chart rendered by the Lua chart engine
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: bar chart, chart, graph, visualization, data, bars, interactive, hover
-related: HorizontalBarChart, StackedBarChart, Sparkline, ProgressBar, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: bar chart, chart, graph, data visualization, bars, vertical
+related: HorizontalBarChart, StackedBarChart, LineChart, PieChart
+difficulty: intermediate
 
 === OVERVIEW ===
-BarChart renders a vertical bar chart from an array of data points. Each bar's height is proportional to its value relative to the maximum value in the dataset. Bars can have individual colors or share a default color.
+BarChart renders a vertical bar chart as a Lua `Chart2D` node. Each bar represents a labeled value. The chart is rendered entirely by `lua/chart.lua` -- React declares the data and options, Lua does all the drawing.
 
-The component renders entirely with Box and Text primitives, so it works on all targets. An optional label row appears below the bars, and values can be shown above each bar. When barWidth is omitted, bars auto-size to fill the parent container evenly using flexGrow. When interactive mode is enabled, hovering a bar dims all other bars and reveals a ChartTooltip showing the label, raw value, and percentage of the maximum.
+When `interactive` is enabled, hovering a bar shows a tooltip with label/value pairs. Press events can be handled via `onBarPress`.
+
+BarChart is a surface element. If no explicit dimensions are set, it falls back to proportional surface sizing (1/4 of parent). Set `width`/`height` or use `flexGrow` for precise control.
 
 === API / SYNTAX ===
 ```tsx
 import { BarChart } from '@reactjit/core';
 ```
 
-Data shape:
-```tsx
-interface BarChartBar {
-  label: string;  // Bar label shown below the chart
-  value: number;  // Numeric value driving bar height
-  color?: Color;  // Per-bar color override; falls back to the chart-level `color` prop
-}
-```
-
 Props:
-| Prop        | Type                                                        | Default    | Description                                                      |
-|-------------|-------------------------------------------------------------|------------|------------------------------------------------------------------|
-| data        | BarChartBar[]                                               | required   | Array of bar data points                                         |
-| height      | number                                                      | 120        | Chart area height in pixels                                      |
-| barWidth    | number                                                      | undefined  | Fixed width per bar in pixels; omit for auto-sizing via flexGrow |
-| gap         | number                                                      | 8          | Horizontal gap between bars in pixels                            |
-| showLabels  | boolean                                                     | true       | Show label text below each bar                                   |
-| showValues  | boolean                                                     | false      | Show numeric value above each bar                                |
-| color       | Color                                                       | '#3b82f6'  | Default bar color; overridden per bar via BarChartBar.color      |
-| style       | Style                                                       | undefined  | Additional styles applied to the outer container Box             |
-| interactive | boolean                                                     | false      | Enable hover highlighting and per-bar ChartTooltip               |
-| onBarHover  | (index: number \| null, bar: BarChartBar \| null) => void   | undefined  | Called when the pointer enters or leaves a bar                   |
-| onBarPress  | (index: number, bar: BarChartBar) => void                   | undefined  | Called when a bar is clicked (requires interactive: true)        |
+| Prop       | Type                                               | Default   | Description                          |
+|------------|----------------------------------------------------|-----------|--------------------------------------|
+| data       | BarChartBar[]                                      | required  | Array of bars to render              |
+| height     | number                                             | undefined | Chart height in pixels               |
+| barWidth   | number                                             | undefined | Width of each bar in pixels          |
+| gap        | number                                             | undefined | Gap between bars                     |
+| showLabels | boolean                                            | undefined | Show labels below bars               |
+| showValues | boolean                                            | undefined | Show values above bars               |
+| color      | Color                                              | undefined | Default bar color                    |
+| interactive| boolean                                            | false     | Enable hover tooltips and press      |
+| onBarHover | (index: number \| null, bar: BarChartBar \| null) => void | undefined | Called on bar hover/unhover  |
+| onBarPress | (index: number, bar: BarChartBar) => void          | undefined | Called on bar press                   |
+| style      | Style                                              | undefined | Full style object                    |
+
+BarChartBar:
+| Field | Type   | Default   | Description                |
+|-------|--------|-----------|----------------------------|
+| label | string | required  | Label text for the bar     |
+| value | number | required  | Numeric value              |
+| color | Color  | undefined | Per-bar color override     |
 
 === EXAMPLES ===
-Example 1: Basic bar chart with auto-sizing
+Example 1: Basic bar chart
 ---
 ```tsx
-import { BarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <BarChart
-        data={[
-          { label: 'Q1', value: 40 },
-          { label: 'Q2', value: 65 },
-          { label: 'Q3', value: 52 },
-          { label: 'Q4', value: 78 },
-        ]}
-      />
-    </Box>
-  );
-}
+<BarChart
+  data={[
+    { label: 'Mon', value: 12 },
+    { label: 'Tue', value: 19 },
+    { label: 'Wed', value: 8 },
+    { label: 'Thu', value: 25 },
+    { label: 'Fri', value: 15 },
+  ]}
+  color={colors.primary}
+  height={120}
+  showLabels
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Custom colors per bar with values displayed
+Example 2: Interactive with per-bar colors
 ---
 ```tsx
-import { BarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <BarChart
-        data={[
-          { label: 'CPU',  value: 72, color: '#ef4444' },
-          { label: 'RAM',  value: 45, color: '#3b82f6' },
-          { label: 'Disk', value: 89, color: '#f59e0b' },
-        ]}
-        height={80}
-        showValues
-      />
-    </Box>
-  );
-}
+<BarChart
+  data={[
+    { label: 'React', value: 45, color: '#61dafb' },
+    { label: 'Vue', value: 30, color: '#42b883' },
+    { label: 'Svelte', value: 18, color: '#ff3e00' },
+  ]}
+  height={150}
+  showLabels
+  showValues
+  interactive
+  onBarPress={(index, bar) => console.log(bar.label, bar.value)}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive chart with hover callback
+Example 3: Filling available space
 ---
 ```tsx
-import { useState } from 'react';
-import { BarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const weekly = [
-  { label: 'Mon', value: 32 },
-  { label: 'Tue', value: 58 },
-  { label: 'Wed', value: 47 },
-  { label: 'Thu', value: 71 },
-  { label: 'Fri', value: 55 },
-];
-
-export default function App() {
-  const [active, setActive] = useState<string | null>(null);
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 12 }}>
-      <BarChart
-        data={weekly}
-        height={100}
-        interactive
-        onBarHover={(_, bar) => setActive(bar ? bar.label : null)}
-      />
-      {active && (
-        <Text style={{ fontSize: 12, color: '#94a3b8' }}>
-          {`Hovering: ${active}`}
-        </Text>
-      )}
-    </Box>
-  );
-}
+<Box style={{ width: '100%', height: '100%' }}>
+  <Text style={{ color: colors.text, fontSize: 16 }}>Weekly Sales</Text>
+  <BarChart
+    data={salesData}
+    color={colors.primary}
+    showLabels
+    style={{ flexGrow: 1 }}
+  />
+</Box>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
-=== CRITICAL RULES ===
-- The `data` prop is required. An empty array renders an empty placeholder Box at the specified height.
-- Bar heights are relative to the maximum value in the data. If all values are equal, all bars render at full height.
-- If `maxValue` is 0 (all values are 0), bars are normalized against 1, producing minimum-height (1px) bars.
-- Per-bar `color` overrides the chart-level `color` prop for that specific bar only.
-- BarChart does not handle negative values. All values should be non-negative.
-- When `showValues` is true, 14px of vertical space is reserved above bars for value labels — factor this into the `height` prop.
-- When `barWidth` is omitted, bars use `flexGrow: 1` and fill the parent container. The parent must have an explicit width for this to work.
-- When `barWidth` is set, the chart computes its own total width as `data.length * barWidth + (data.length - 1) * gap`.
-- `onBarPress` only fires when `interactive` is also `true`.
-- Hover events require pointer support — not available on all targets. Check platform capabilities before enabling `interactive`.
+=== PLATFORM NOTES ===
+Love2D:
+  Rendered by lua/chart.lua as a Chart2D surface. The bar layout, scaling, and label rendering are handled entirely in Lua. When interactive is true, a table-layout tooltip is generated from the data array and rendered by the Lua tooltip system on hover.
 
 === SEE ALSO ===
-- HorizontalBarChart — horizontal orientation for the same kind of comparison
-- StackedBarChart — multi-series bars stacked in a single column
-- Sparkline — compact inline trend bars with no axes or labels
-- ProgressBar — single-value horizontal fill bar
-- ChartTooltip — standalone tooltip primitive used internally by this component
+- HorizontalBarChart
+- StackedBarChart
+- LineChart
+- PieChart

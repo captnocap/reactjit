@@ -1,43 +1,33 @@
 === METADATA ===
 title: Targets
-description: Hub page listing all seven ReactJIT render targets
+description: Love2D is the rendering engine for all ReactJIT targets -- native and WASM
 category: Targets
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: targets, platforms, love2d, web, terminal, computercraft, neovim, hammerspoon, awesomewm
-related: love2d, web, terminal, computercraft, neovim, hammerspoon, awesomewm
-difficulty: beginner
+platforms: love2d
+keywords: targets, love2d, wasm, web, rendering, opengl, emscripten, lovejs
+related: love2d.txt, wasm.txt
+difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT renders to seven distinct targets. Each target has its own painter, transport
-mechanism, and build configuration. The core component API (Box, Text, Image, Pressable,
-and all higher-level components) works across all of them. The differences are in
-rendering fidelity, color support, input capabilities, and distribution format.
+ReactJIT has one renderer: Love2D. Every target -- native desktop and WASM web builds -- runs the same rendering pipeline: React reconciler, QuickJS bridge, Lua layout engine, Love2D painter, OpenGL 2.1.
 
-Choose your target based on your deployment environment. Love2D is the primary target
-with the most features. Web mode runs in browsers. The grid targets (terminal, CC,
-Neovim, HS, Awesome) operate on character grids or pixel canvases within their host
-applications.
+The target interface is defined in `lua/target_love2d.lua`. A target is a Lua table with five fields:
 
-=== EXAMPLES ===
-Example 1: Target Comparison
----
-Target          | Transport    | Colors     | Input              | Build Format
-----------------|-------------|------------|--------------------|--------------
-Love2D          | QuickJS FFI | Truecolor  | Mouse/KB/Touch/Pad | IIFE bundle
-Web             | Module.FS   | Full CSS   | Mouse/KB/Touch     | ESM bundle
-Terminal        | (built-in)  | Truecolor  | Keyboard           | Node.js ESM
-ComputerCraft   | WebSocket   | 16 colors  | Keyboard           | Node.js ESM
-Neovim          | stdio       | 256 color  | Keyboard           | Node.js ESM
-Hammerspoon     | WebSocket   | Truecolor  | Mouse/Keyboard     | Node.js ESM
-AwesomeWM       | stdio       | Truecolor  | Mouse/Keyboard     | Node.js ESM
----
-Platforms: All
+- `name` -- target identifier (currently `"love2d"`)
+- `measure` -- text measurement and font cache (`lua/measure.lua`)
+- `images` -- image loading and lifecycle (`lua/images.lua`)
+- `videos` -- video playback via libmpv (`lua/videos.lua`, optional)
+- `painter` -- rendering backend (`lua/painter.lua`)
+
+What differs between native and WASM is the transport layer:
+
+- Native (Love2D desktop): JavaScript runs inside an embedded QuickJS runtime. The bridge uses C FFI trampolines (`bridge_quickjs.lua`) to pass mutation commands and events between JS and Lua in-process. This is the default mode.
+
+- WASM (love.js web): Lua runs inside Emscripten-compiled Love2D in the browser. JavaScript runs natively in the browser context. The bridge uses `Module.FS` file polling (`bridge_fs.lua`) to exchange data -- React writes commands to a virtual file, Lua reads them each frame.
+
+In both cases, the layout engine, painter, and all rendering logic are identical. The only difference is how bytes cross the JS-Lua boundary.
 
 === SEE ALSO ===
-- love2d.txt - Love2D target (primary, most mature)
-- web.txt - Web/browser target
-- terminal.txt - Terminal emulator target
-- computercraft.txt - ComputerCraft (Minecraft) target
-- neovim.txt - Neovim floating windows target
-- hammerspoon.txt - Hammerspoon (macOS) target
-- awesomewm.txt - AwesomeWM (Linux) target
+- love2d.txt -- Love2D native target: entry point, conf.lua, run loop, multi-window
+- wasm.txt -- WASM web target: love.js, Emscripten, Module.FS bridge
+- Architecture
+- Transport

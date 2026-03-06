@@ -1,130 +1,83 @@
 === METADATA ===
 title: FlexColumn
-description: Convenience wrapper around Box with vertical flex layout
+description: Vertical layout container with shorthand props for gap and alignment
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: layout, flex, column, vertical, flexbox, alignment
-related: Box, FlexRow, Spacer
+platforms: love2d
+keywords: flexcolumn, column, vertical, layout, flex, direction, gap, stack
+related: FlexRow, Box, Spacer
 difficulty: beginner
 
 === OVERVIEW ===
-FlexColumn is a convenience component that wraps Box with flexDirection='column' pre-configured. It provides simplified props for common vertical layout tasks: gap spacing, vertical justification, and horizontal alignment. While column is the default flexDirection for Box, FlexColumn offers a cleaner API when you want explicit vertical stacking with readable prop names.
+FlexColumn is a convenience wrapper around Box that sets `flexDirection: 'column'`. It provides shorthand props for gap, main-axis justification, and cross-axis alignment.
+
+Since `flexDirection: 'column'` is already the default in ReactJIT's layout engine, FlexColumn is most useful as a self-documenting component that makes vertical intent explicit and provides the `gap`, `justify`, and `align` shorthands without needing a full `style` object.
 
 === API / SYNTAX ===
+```tsx
 import { FlexColumn } from '@reactjit/core';
+```
 
 Props:
-| Prop | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| gap | number | No | undefined | Spacing between children (pixels) |
-| justify | 'flex-start' \| 'flex-end' \| 'center' \| 'space-between' \| 'space-around' \| 'space-evenly' | No | undefined | Vertical distribution (justifyContent) |
-| align | 'flex-start' \| 'flex-end' \| 'center' \| 'stretch' | No | undefined | Horizontal alignment (alignItems) |
-| style | Style | No | {} | Additional style properties (merged after defaults) |
-| children | React.ReactNode | Yes | - | Child elements to lay out vertically |
+| Prop     | Type                          | Default   | Description                              |
+|----------|-------------------------------|-----------|------------------------------------------|
+| gap      | number                        | undefined | Space between children in pixels         |
+| justify  | Style['justifyContent']       | undefined | Main-axis alignment (start, center, end, space-between, space-around, space-evenly) |
+| align    | Style['alignItems']           | undefined | Cross-axis alignment (start, center, end, stretch) |
+| style    | Style                         | undefined | Additional style overrides               |
+| children | ReactNode                     | required  | Child elements                           |
 
 === EXAMPLES ===
-Example 1: Basic vertical stack with spacing
+Example 1: Stacked labels with gap
 ---
-import { FlexColumn, Text } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
 
-<FlexColumn gap={12}>
-  <Text fontSize={20}>Heading</Text>
-  <Text fontSize={16}>Subheading</Text>
-  <Text fontSize={14}>Body text goes here</Text>
+<FlexColumn gap={8}>
+  <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>Title</Text>
+  <Text style={{ color: colors.muted, fontSize: 12 }}>Subtitle goes here</Text>
+  <Text style={{ color: colors.muted, fontSize: 12 }}>Additional detail</Text>
 </FlexColumn>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Centered card layout
+Example 2: Centered content
 ---
-import { FlexColumn, Text, Box } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
 
-<FlexColumn
-  align="center"
-  gap={8}
-  style={{
-    width: 200,
-    padding: 16,
-    backgroundColor: 'white',
-    borderRadius: 8
-  }}
->
-  <Box style={{ width: 64, height: 64, backgroundColor: 'blue', borderRadius: 32 }} />
-  <Text fontSize={16}>Username</Text>
-  <Text fontSize={12} style={{ color: '#666' }}>@handle</Text>
+<FlexColumn align="center" justify="center" style={{ flexGrow: 1 }}>
+  <Text style={{ color: colors.text, fontSize: 24 }}>Empty State</Text>
+  <Text style={{ color: colors.muted, fontSize: 14 }}>Nothing to show yet</Text>
 </FlexColumn>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Space-between full height layout
+Example 3: Form layout
 ---
-import { FlexColumn, Text } from '@reactjit/core';
+```tsx
+const colors = useThemeColors();
 
-<FlexColumn justify="space-between" style={{ width: '100%', height: '100%' }}>
-  <Text fontSize={18}>Header</Text>
-  <Text fontSize={14}>Content in the middle</Text>
-  <Text fontSize={12} style={{ color: '#999' }}>Footer</Text>
+<FlexColumn gap={16} style={{ padding: 16 }}>
+  <FlexColumn gap={4}>
+    <Text style={{ color: colors.muted, fontSize: 11 }}>NAME</Text>
+    <TextInput placeholder="Enter your name" style={{ color: colors.text }} />
+  </FlexColumn>
+  <FlexColumn gap={4}>
+    <Text style={{ color: colors.muted, fontSize: 11 }}>EMAIL</Text>
+    <TextInput placeholder="Enter your email" style={{ color: colors.text }} />
+  </FlexColumn>
 </FlexColumn>
+```
 ---
-Platforms: All
-
-Example 4: Left-aligned form layout
----
-import { FlexColumn, Text, TextInput } from '@reactjit/core';
-
-<FlexColumn gap={16} align="flex-start" style={{ width: 300, padding: 20 }}>
-  <Text fontSize={14}>Name:</Text>
-  <TextInput
-    placeholder="Enter name"
-    fontSize={14}
-    style={{ width: '100%', padding: 8, backgroundColor: '#f0f0f0' }}
-  />
-  <Text fontSize={14}>Email:</Text>
-  <TextInput
-    placeholder="Enter email"
-    fontSize={14}
-    style={{ width: '100%', padding: 8, backgroundColor: '#f0f0f0' }}
-  />
-</FlexColumn>
----
-Platforms: All
-
-Example 5: Vertically centered viewport content
----
-import { FlexColumn, Text, Box } from '@reactjit/core';
-
-<FlexColumn
-  justify="center"
-  align="center"
-  style={{ width: '100%', height: '100%' }}
->
-  <Box style={{
-    padding: 32,
-    backgroundColor: '#333',
-    borderRadius: 16
-  }}>
-    <Text fontSize={24} style={{ color: 'white' }}>Welcome</Text>
-  </Box>
-</FlexColumn>
----
-Platforms: All
-
-=== PLATFORM NOTES ===
-No platform-specific differences. FlexColumn behaves identically on all targets (Love2D, web, terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM). The underlying flex layout engine is consistent across all renderers.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- FlexColumn requires explicit height for justify to work properly. Without a height, justifyContent='center' or 'space-between' will have no effect on vertical distribution.
-- Root-level FlexColumn components should use width: '100%', height: '100%' to fill the viewport. Do NOT use flexGrow: 1 at the root.
-- Gap spacing is applied between children, not around the edges. Use padding in style prop for outer spacing.
-- The style prop is merged last, so you can override gap, justify, and align by passing conflicting properties in style (though this defeats the purpose of the convenience props).
-- FlexColumn auto-sizes to fit content if no width/height is specified. Height is sum of children heights plus gaps. Width is determined by the widest child.
-- align='stretch' only works if children do not have explicit widths. Children will stretch to match the container's width.
-- Do not use flexGrow on children without setting a height on FlexColumn. Percentage-based children need explicit parent dimensions.
-- FlexColumn is functionally equivalent to Box with flexDirection='column', since column is the default. Use FlexColumn when you want self-documenting code with convenient props. Use Box when you need full style control.
+- FlexColumn sets `flexDirection: 'column'` explicitly, though column is already the engine default. This makes layout direction visible in code.
+- The `style` prop merges after the shorthand props. Conflicting values in `style` override the shorthands.
 
 === SEE ALSO ===
-- Box — The underlying primitive that FlexColumn wraps
-- FlexRow — Horizontal layout convenience wrapper
-- Spacer — Creates flexible empty space in flex layouts
-- Layout Rules (CLAUDE.md) — Critical layout constraints and common pitfalls
-- Auto-Sizing (CLAUDE.md) — How containers size to fit content
+- FlexRow
+- Box
+- Spacer

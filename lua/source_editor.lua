@@ -549,17 +549,27 @@ function SourceEditor.mousepressed(mx, my, btn)
     clickedLine = clamp(clickedLine, 1, #state.lines)
     state.cursorLine = clickedLine
 
-    -- Calculate column from x position
+    -- Calculate column from x position (UTF-8 safe: iterate codepoints, not bytes)
     local line = state.lines[clickedLine] or ""
     local relX = mx - codeX + state.scrollX
-    local col = 0
-    for c = 1, #line do
-      local charW = font:getWidth(line:sub(c, c))
+    local byteCol = 0
+    local pos = 1
+    while pos <= #line do
+      -- Determine byte length of next UTF-8 codepoint
+      local b = line:byte(pos)
+      local charLen = 1
+      if b and b >= 0xF0 then charLen = 4
+      elseif b and b >= 0xE0 then charLen = 3
+      elseif b and b >= 0xC0 then charLen = 2
+      end
+      local ch = line:sub(pos, pos + charLen - 1)
+      local charW = font:getWidth(ch)
       if relX < charW / 2 then break end
       relX = relX - charW
-      col = c
+      byteCol = pos + charLen - 1
+      pos = pos + charLen
     end
-    state.cursorCol = col
+    state.cursorCol = byteCol
   end
 
   return true

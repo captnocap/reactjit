@@ -164,7 +164,8 @@ local READ_BUF = 4096
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
 local function errno()
-  return ffi.C.__errno_location()[0]
+  local ok, errno_ptr = pcall(ffi.C.__errno_location)
+  return ok and errno_ptr[0] or 0
 end
 
 local function strerror(e)

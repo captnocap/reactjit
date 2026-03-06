@@ -1,175 +1,97 @@
 === METADATA ===
 title: DebugOverlay
-description: Context wrapper that visualizes layout boundaries with colored borders and optional dimension labels
+description: Layout debugging wrapper that visualizes Box boundaries with colored borders
 category: Components
-platforms: love2d, web
-keywords: debug, layout, overlay, boundaries, borders, inspector, debugging, visualization, context
-related: Box, DebugBox, useDebugOverlay
-difficulty: intermediate
+platforms: love2d
+keywords: debug, overlay, layout, borders, inspection, devtools
+related: Box, useDebugOverlay
+difficulty: beginner
 
 === OVERVIEW ===
-DebugOverlay is a React context provider that wraps any subtree to visualize layout boundaries without opening the full inspector. It adds colored borders to every Box within its subtree and optionally displays dimension labels on each element. The overlay can be toggled on/off at runtime and customized per-subtree. Use DebugBox as a drop-in replacement for Box to respect the debug context automatically.
+DebugOverlay is a context-based wrapper that enables visual layout debugging for a subtree. Wrap any section of your component tree to add colored borders to every DebugBox inside it, making flex layout boundaries visible at a glance.
 
-DebugOverlay is particularly useful when tracking down layout bugs, verifying flex container alignment, or understanding how nested boxes are sizing themselves. Unlike the full inspector (F12 in Love2D), DebugOverlay can be embedded directly in your component tree and toggled programmatically.
+DebugOverlay itself is just a context provider — it renders no extra nodes. DebugBox is a drop-in replacement for Box that reads the debug context and conditionally adds a colored border.
+
+The useDebugOverlay hook returns the current debug context (enabled, borderColor, showLabels) for components that need to react to debug state.
+
+This is lighter than the full F12 inspector. Use it when you want quick visual feedback on a specific section's layout without opening devtools.
 
 === API / SYNTAX ===
 ```tsx
 import { DebugOverlay, DebugBox, useDebugOverlay } from '@reactjit/core';
 ```
 
-```tsx
-<DebugOverlay enabled={true} borderColor="rgba(255, 100, 100, 0.6)" showLabels={false}>
-  <DebugBox style={{ width: '100%', height: '100%' }}>
-    {children}
-  </DebugBox>
-</DebugOverlay>
-```
-
 DebugOverlay Props:
-| Prop        | Type             | Default                      | Description                               |
-|-------------|------------------|------------------------------|-------------------------------------------|
-| children    | ReactNode        | (required)                   | Subtree to wrap with debug context        |
-| enabled     | boolean          | true                         | Toggle overlay on/off                     |
-| borderColor | string           | 'rgba(255, 100, 100, 0.6)'   | Border color for debug outlines           |
-| showLabels  | boolean          | false                        | Show dimension labels on each Box         |
+| Prop        | Type    | Default                    | Description                        |
+|-------------|---------|----------------------------|------------------------------------|
+| children    | ReactNode | required                 | Subtree to debug                   |
+| enabled     | boolean | true                       | Toggle debug borders on/off        |
+| borderColor | string  | 'rgba(255, 100, 100, 0.6)'| Border color for debug outlines    |
+| showLabels  | boolean | false                      | Show dimension labels on each Box  |
 
 DebugBox Props:
-| Prop     | Type      | Default   | Description                                |
-|----------|-----------|-----------|-------------------------------------------|
-| children | ReactNode | undefined | Child elements                            |
-| style    | Style     | undefined | Box style (border added when debug enabled)|
-| ...props | any       | undefined | All other Box props (onClick, etc.)       |
+Same as Box. When inside an enabled DebugOverlay, automatically adds a 1px border in the debug color.
 
-useDebugOverlay Hook:
-Returns `{ enabled: boolean, borderColor: string, showLabels: boolean }` from the nearest DebugOverlay context.
+useDebugOverlay():
+Returns `{ enabled: boolean, borderColor: string, showLabels: boolean }`.
 
 === EXAMPLES ===
-Example 1: Basic overlay for a section
+Example 1: Visualize a row layout
 ---
 ```tsx
-import { DebugOverlay, DebugBox, Text } from '@reactjit/core';
-
-function MyComponent() {
-  return (
-    <DebugOverlay>
-      <DebugBox style={{ width: '100%', height: '100%', flexDirection: 'column', gap: 16 }}>
-        <DebugBox style={{ flexGrow: 1, backgroundColor: '#1e1e2e' }}>
-          <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Section 1</Text>
-        </DebugBox>
-        <DebugBox style={{ flexGrow: 2, backgroundColor: '#313244' }}>
-          <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Section 2</Text>
-        </DebugBox>
-      </DebugBox>
-    </DebugOverlay>
-  );
-}
+<DebugOverlay>
+  <Box style={{ flexDirection: 'row', width: '100%' }}>
+    <DebugBox style={{ flexGrow: 1 }}>
+      <Text style={{ fontSize: 14 }}>Left panel</Text>
+    </DebugBox>
+    <DebugBox style={{ flexGrow: 2 }}>
+      <Text style={{ fontSize: 14 }}>Right panel</Text>
+    </DebugBox>
+  </Box>
+</DebugOverlay>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Toggle overlay with a button
+Example 2: Toggle debug mode
 ---
 ```tsx
-import { useState } from 'react';
-import { DebugOverlay, DebugBox, Box, Text, Pressable } from '@reactjit/core';
+const [debug, setDebug] = useState(false);
 
-function LayoutDebugger() {
-  const [debugEnabled, setDebugEnabled] = useState(false);
+<Pressable onPress={() => setDebug(d => !d)}>
+  <Text style={{ fontSize: 12 }}>{`Debug: ${debug ? 'ON' : 'OFF'}`}</Text>
+</Pressable>
 
-  return (
-    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
-      <Pressable onPress={() => setDebugEnabled(!debugEnabled)}>
-        <Box style={{ padding: 12, backgroundColor: '#313244' }}>
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>
-            {debugEnabled ? 'Hide' : 'Show'} Debug Overlay
-          </Text>
-        </Box>
-      </Pressable>
-
-      <DebugOverlay enabled={debugEnabled}>
-        <DebugBox style={{ flexGrow: 1, padding: 16 }}>
-          <DebugBox style={{ width: '100%', flexDirection: 'row', gap: 12 }}>
-            <DebugBox style={{ flexGrow: 1, height: 100, backgroundColor: '#45475a' }} />
-            <DebugBox style={{ flexGrow: 1, height: 100, backgroundColor: '#585b70' }} />
-          </DebugBox>
-        </DebugBox>
-      </DebugOverlay>
-    </Box>
-  );
-}
+<DebugOverlay enabled={debug} borderColor="rgba(0, 200, 255, 0.5)">
+  <MyComplexLayout />
+</DebugOverlay>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Custom border color and labels
+Example 3: Custom component using the hook
 ---
 ```tsx
-import { DebugOverlay, DebugBox, Text } from '@reactjit/core';
-
-function GridDebug() {
-  return (
-    <DebugOverlay borderColor="rgba(0, 255, 200, 0.8)" showLabels={true}>
-      <DebugBox style={{ width: 400, height: 300, flexDirection: 'column', gap: 8 }}>
-        <DebugBox style={{ width: '100%', height: 50, backgroundColor: '#1e1e2e' }}>
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Header</Text>
-        </DebugBox>
-        <DebugBox style={{ flexGrow: 1, backgroundColor: '#313244' }}>
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Content</Text>
-        </DebugBox>
-      </DebugBox>
-    </DebugOverlay>
-  );
-}
-```
----
-Platforms: All
-
-Example 4: Using the hook to read debug state
----
-```tsx
-import { DebugOverlay, useDebugOverlay, Box, Text } from '@reactjit/core';
-
-function DebugAwareComponent() {
+function MyPanel({ children }) {
   const { enabled, borderColor } = useDebugOverlay();
 
   return (
-    <Box style={{ padding: 16 }}>
-      <Text style={{ fontSize: 14, color: enabled ? '#f38ba8' : '#cdd6f4' }}>
-        Debug mode: {enabled ? 'ON' : 'OFF'}
-      </Text>
-      {enabled && (
-        <Text style={{ fontSize: 12, color: '#a6adc8' }}>
-          Border color: {borderColor}
-        </Text>
-      )}
+    <Box style={{
+      padding: 8,
+      borderWidth: enabled ? 2 : 0,
+      borderColor: enabled ? borderColor : undefined,
+    }}>
+      {children}
     </Box>
-  );
-}
-
-function App() {
-  return (
-    <DebugOverlay enabled={true}>
-      <DebugAwareComponent />
-    </DebugOverlay>
   );
 }
 ```
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-- **Love2D**: DebugOverlay works alongside the built-in inspector (F12). Use DebugOverlay for focused subtree inspection, use the inspector for full tree navigation and interaction state.
-- **Web**: Border colors are applied via CSS. Dimension labels (when showLabels is true) render as absolutely positioned Text elements overlaying each DebugBox.
-- **Grid targets**: Not currently supported. DebugOverlay and DebugBox are only available in `@reactjit/core` (Love2D and web targets).
+Platforms: love2d
 
 === CRITICAL RULES ===
-- **DebugBox is required** — Regular `<Box>` elements inside a DebugOverlay will NOT show debug borders. You must use `<DebugBox>` for context awareness.
-- **Context nesting** — If you nest multiple DebugOverlay providers, the innermost context wins. Each subtree can have its own border color and enabled state.
-- **Performance** — DebugOverlay adds a style merge operation to every DebugBox render. For large subtrees (100+ boxes), consider wrapping only the problematic section instead of the entire tree.
-- **Remove before production** — DebugOverlay is a development tool. Disable it or remove it entirely before building production distributions.
-- **showLabels not implemented** — The `showLabels` prop is accepted but dimension label rendering is not yet implemented. Currently it only affects the context value returned by useDebugOverlay.
+- DebugOverlay only affects DebugBox components, not regular Box. Replace Box with DebugBox in the sections you want to visualize.
+- DebugOverlay is a context provider with zero rendering cost when disabled. Safe to leave in production code with `enabled={false}`.
 
 === SEE ALSO ===
-- Box — The fundamental layout primitive that DebugBox wraps
-- Visual Inspector (F12) — Full-featured inspector for Love2D with tree navigation and interaction state
-- Layout rules (CLAUDE.md) — Critical layout debugging tips and common pitfalls
+- Box

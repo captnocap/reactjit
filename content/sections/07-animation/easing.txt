@@ -1,174 +1,155 @@
 === METADATA ===
-title: Easing Functions
-description: Library of easing functions for timing-based animations.
+title: Easing
+description: Easing functions for controlling animation curves
 category: Animation
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: easing, linear, easeIn, easeOut, easeInOut, bezier, bounce, elastic, cubic, EasingFunction
-related: animatedvalue.txt, usetransition.txt, useanimation.txt
+platforms: love2d
+keywords: easing, linear, ease-in, ease-out, bounce, elastic, bezier, curve
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT provides a set of easing functions that control the rate of change during
-timing-based animations. Easing functions take a progress value t (0 to 1) and return a
-transformed value that determines the animation's velocity curve. They are used with
-AnimatedValue.timing() and useTransition().
+The Easing object provides easing functions that control how an animation's progress maps to its output value. An easing function takes a normalized time value (0 to 1) and returns a normalized progress value.
 
-The library includes standard easing curves (linear, easeIn, easeOut, easeInOut), a cubic
-bezier function for custom curves, a bounce effect, and an elastic overshoot effect. All
-easing functions conform to the EasingFunction type: (t: number) => number.
+Easing functions are used in two contexts:
+
+JS-driven animations pass Easing functions directly to timing configs:
+  anim.timing({ toValue: 1, easing: Easing.bounce })
+
+Lua-driven animations use string names in style.transition and style.animation:
+  transition: { all: { easing: 'bounce' } }
+  animation: { keyframes: {...}, easing: 'elastic' }
+
+Available Lua easing strings: 'linear', 'easeIn', 'easeOut', 'easeInOut', 'bounce', 'elastic'.
 
 === API / SYNTAX ===
+```tsx
+import { Easing } from '@reactjit/core';
+```
+
+Static functions (no arguments):
+| Function       | Curve shape                                              |
+|----------------|----------------------------------------------------------|
+| Easing.linear  | Constant speed, no acceleration                          |
+| Easing.easeIn  | Starts slow, accelerates (quadratic)                     |
+| Easing.easeOut | Starts fast, decelerates (quadratic)                     |
+| Easing.easeInOut | Slow start, fast middle, slow end (quadratic)          |
+| Easing.bounce  | Bounces at the end like a ball hitting the floor         |
+
+Factory functions (return an EasingFunction):
+| Function       | Parameters                     | Description                                    |
+|----------------|--------------------------------|------------------------------------------------|
+| Easing.elastic | bounciness?: number (default 1) | Elastic snap with configurable overshoot      |
+| Easing.bezier  | x1, y1, x2, y2: number        | Custom cubic bezier curve (CSS-style control points) |
+
 Type:
-  type EasingFunction = (t: number) => number
-
-  Input: t is the linear progress from 0 (start) to 1 (end).
-  Output: the eased progress value (may overshoot 0-1 range for elastic/bounce effects).
-
-Static easing functions:
-
-  Easing.linear
-    (t) => t
-    Constant velocity. No acceleration or deceleration.
-
-  Easing.easeIn
-    (t) => t * t
-    Quadratic ease-in. Starts slow, accelerates.
-
-  Easing.easeOut
-    (t) => t * (2 - t)
-    Quadratic ease-out. Starts fast, decelerates.
-
-  Easing.easeInOut
-    (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-    Quadratic ease-in-out. Starts slow, accelerates, then decelerates.
-    This is the default easing for AnimatedValue.timing().
-
-  Easing.bounce
-    Standard bounce curve. Simulates a ball bouncing and settling.
-    Uses four quadratic segments with decreasing amplitude.
-
-Factory easing functions (return an EasingFunction):
-
-  Easing.bezier(x1: number, y1: number, x2: number, y2: number): EasingFunction
-    Creates a cubic bezier easing function. The four parameters define two control points
-    (P1 and P2) of a cubic bezier curve from (0,0) to (1,1). Uses Newton-Raphson iteration
-    (8 iterations) to solve the cubic for the given t value.
-
-    Common presets:
-      Easing.bezier(0.25, 0.1, 0.25, 1)     // CSS ease
-      Easing.bezier(0.42, 0, 1, 1)           // CSS ease-in
-      Easing.bezier(0, 0, 0.58, 1)           // CSS ease-out
-      Easing.bezier(0.42, 0, 0.58, 1)        // CSS ease-in-out
-      Easing.bezier(0.16, 1, 0.3, 1)         // Expo ease-out
-      Easing.bezier(0.34, 1.56, 0.64, 1)     // Back ease-out (overshoot)
-
-  Easing.elastic(bounciness?: number): EasingFunction
-    Creates an elastic easing that overshoots the target and oscillates before settling.
-    Default bounciness: 1. Higher values = more oscillation. Lower values = less overshoot.
-    Uses exponential decay with sinusoidal oscillation.
+```tsx
+type EasingFunction = (t: number) => number;
+```
 
 === EXAMPLES ===
-Example 1: Different easing curves
+Example 1: Built-in easings with timing
 ---
+```tsx
 import { useEffect } from 'react';
-import { useAnimation, Easing, Box } from '@reactjit/core';
+import { useAnimation, Easing } from '@reactjit/core';
 
-function EasingDemo() {
-  const [linearAnim, linearX] = useAnimation(0);
-  const [easeInAnim, easeInX] = useAnimation(0);
-  const [easeOutAnim, easeOutX] = useAnimation(0);
-  const [bounceAnim, bounceX] = useAnimation(0);
-
-  useEffect(() => {
-    linearAnim.timing({ toValue: 300, duration: 1000, easing: Easing.linear }).start();
-    easeInAnim.timing({ toValue: 300, duration: 1000, easing: Easing.easeIn }).start();
-    easeOutAnim.timing({ toValue: 300, duration: 1000, easing: Easing.easeOut }).start();
-    bounceAnim.timing({ toValue: 300, duration: 1000, easing: Easing.bounce }).start();
-  }, [linearAnim, easeInAnim, easeOutAnim, bounceAnim]);
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 16 }}>
-      <Box style={{ width: 40, height: 40, backgroundColor: '#89b4fa', transform: { translateX: linearX } }} />
-      <Box style={{ width: 40, height: 40, backgroundColor: '#a6e3a1', transform: { translateX: easeInX } }} />
-      <Box style={{ width: 40, height: 40, backgroundColor: '#f38ba8', transform: { translateX: easeOutX } }} />
-      <Box style={{ width: 40, height: 40, backgroundColor: '#f9e2af', transform: { translateX: bounceX } }} />
-    </Box>
-  );
-}
----
-Platforms: All
-
-Example 2: Custom bezier curve
----
-import { useEffect } from 'react';
-import { useAnimation, Easing, Box } from '@reactjit/core';
-
-function CustomEase() {
+export function EasingDemo() {
   const [anim, value] = useAnimation(0);
 
   useEffect(() => {
-    anim.timing({
+    const a = anim.timing({
+      toValue: 200,
+      duration: 600,
+      easing: Easing.bounce,
+    });
+    a.start();
+    return () => a.stop();
+  }, [anim]);
+
+  return value; // use in style
+}
+```
+---
+Platforms: love2d
+
+Example 2: Elastic with configurable bounciness
+---
+```tsx
+import { useEffect } from 'react';
+import { useAnimation, Easing } from '@reactjit/core';
+
+// Higher bounciness = more oscillations before settling
+const gentleElastic = Easing.elastic(0.5);
+const wildElastic = Easing.elastic(3);
+
+export function ElasticDemo() {
+  const [anim, value] = useAnimation(0);
+
+  useEffect(() => {
+    const a = anim.timing({
       toValue: 1,
       duration: 800,
-      easing: Easing.bezier(0.34, 1.56, 0.64, 1), // overshoot then settle
-    }).start();
+      easing: wildElastic,
+    });
+    a.start();
+    return () => a.stop();
   }, [anim]);
+
+  return value;
+}
+```
+---
+Platforms: love2d
+
+Example 3: Custom cubic bezier
+---
+```tsx
+import { Easing } from '@reactjit/core';
+
+// Overshoot-and-settle (like CSS cubic-bezier(0.68, -0.6, 0.32, 1.6))
+const overshoot = Easing.bezier(0.68, -0.6, 0.32, 1.6);
+
+// Snappy ease-out
+const snappy = Easing.bezier(0.25, 1, 0.5, 1);
+
+// Use in timing config
+anim.timing({ toValue: 100, duration: 400, easing: overshoot });
+```
+---
+Platforms: love2d
+
+Example 4: Easing in Lua-driven transitions
+---
+```tsx
+import { Box } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function LuaEasingDemo() {
+  const c = useThemeColors();
 
   return (
     <Box style={{
-      width: 100,
-      height: 100,
-      backgroundColor: '#cba6f7',
-      transform: { scaleX: value, scaleY: value },
+      backgroundColor: c.surface,
+      transition: {
+        backgroundColor: { duration: 300, easing: 'easeInOut' },
+        opacity: { duration: 200, easing: 'linear' },
+      },
     }} />
   );
 }
+```
 ---
-Platforms: All
-
-Example 3: Elastic animation
----
-import { useEffect } from 'react';
-import { useAnimation, Easing, Box } from '@reactjit/core';
-
-function ElasticBox() {
-  const [anim, value] = useAnimation(0);
-
-  useEffect(() => {
-    anim.timing({
-      toValue: 200,
-      duration: 1200,
-      easing: Easing.elastic(1.5),
-    }).start();
-  }, [anim]);
-
-  return (
-    <Box style={{
-      width: 60,
-      height: 60,
-      backgroundColor: '#f38ba8',
-      borderRadius: 30,
-      transform: { translateX: value },
-    }} />
-  );
-}
----
-Platforms: All
+Platforms: love2d
 
 === PLATFORM NOTES ===
-Easing functions are pure math -- they work identically on all platforms. The functions
-execute in JavaScript (QuickJS on Love2D, V8/Node on other targets) and are evaluated
-every animation frame.
+Love2D:
+  Easing.bezier uses Newton-Raphson iteration (8 iterations) to solve the cubic bezier. This is computed per frame per animated value, so avoid using many simultaneous bezier-eased animations on low-end hardware.
 
 === CRITICAL RULES ===
-- Easing functions must accept 0 and return 0, and accept 1 and return 1
-- Easing.easeInOut is the default when no easing is specified in timing()
-- Easing.bezier uses Newton-Raphson iteration (8 iterations) -- extremely fast but not exact for extreme curves
-- Easing.elastic and Easing.bounce may produce values outside the 0-1 range (overshoot)
-- Easing.elastic(0) will produce extreme oscillation -- use values >= 0.001
-- All easing functions are stateless and can be shared across animations
+- Easing.elastic() and Easing.bezier() are factory functions that return an EasingFunction. Call them before passing to a config, not inline in a render body (to avoid creating a new function identity each frame).
+- Lua-driven transitions and keyframe animations use string easing names, not Easing.* functions. The available strings are: 'linear', 'easeIn', 'easeOut', 'easeInOut', 'bounce', 'elastic'.
+- Easing.bezier control points follow the CSS cubic-bezier() convention: (x1, y1, x2, y2) where x values should be between 0 and 1, but y values can go negative or above 1 for overshoot effects.
 
 === SEE ALSO ===
-- animatedvalue.txt -- Using easing with AnimatedValue.timing()
-- usetransition.txt -- Using easing with useTransition
-- composite.txt -- Combining eased animations
+- useAnimation
+- useTransition
+- AnimatedValue

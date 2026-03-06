@@ -38,6 +38,10 @@ function love.wheelmoved(x, y)
   ReactJIT.safeCall("wheelmoved", x, y)
 end
 
+function love.mousefocus(focused)
+  ReactJIT.safeCall("mousefocus", focused)
+end
+
 function love.resize(w, h)
   ReactJIT.safeCall("resize", w, h)
 end

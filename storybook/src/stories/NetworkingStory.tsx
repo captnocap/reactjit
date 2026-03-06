@@ -22,6 +22,7 @@ const C = {
   tor: '#f472b6',
   server: '#34d399',
   rss: '#fb923c',
+  gameserver: '#f59e0b',
   wgKernel: '#6366f1',
   wgUser: '#10b981',
 };
@@ -31,6 +32,7 @@ const C = {
 const INSTALL_CODE = `import { useFetch, useWebSocket, usePeerServer } from '@reactjit/core'
 import { useScrape } from '@reactjit/core'
 import { useServer, useStaticServer, useLibrary } from '@reactjit/server'
+import { GameServer, useGameServer, usePlayerList } from '@reactjit/networking'
 import { useRSSFeed, useRSSAggregate } from '@reactjit/rss'
 import { useWebhook, sendWebhook } from '@reactjit/webhooks'
 import { useWireGuard, usePeerTunnel } from '@reactjit/wireguard'`;
@@ -57,6 +59,43 @@ const { ready, peers, broadcast, send, lastMessage } = usePeerServer(8080)
 // Send to one peer or broadcast to all
 send(clientId, JSON.stringify({ type: 'update', data }))
 broadcast(JSON.stringify({ type: 'sync', state: gameState }))`;
+
+const GAME_SERVER_CODE = `// CS 1.6 (GoldSrc)
+<GameServer type="goldsrc" config={{ port: 27015, game: "cstrike", map: "de_dust2" }} />
+
+// CS:S / TF2 / GMod (Source)
+<GameServer type="source" config={{
+  port: 27015, game: "cstrike", map: "de_dust2",
+  maxPlayers: 24, rconPassword: "secret",
+  mapRotation: ["de_dust2", "de_inferno", "de_nuke"],
+}} />
+
+// CS2 (Source 2)
+<GameServer type="source2" config={{ port: 27015, game: "cs2", map: "de_dust2" }} />
+
+// Minecraft (Java Edition)
+<GameServer type="minecraft" config={{
+  port: 25565, maxPlayers: 20,
+  difficulty: "normal", gameType: "survival",
+  rconPassword: "admin", memory: "4G",
+}} />`;
+
+const GAME_SERVER_HOOKS_CODE = `// Full server management — start, stop, RCON, live status
+const server = useGameServer()
+// server.state: 'stopped' | 'starting' | 'running' | 'error'
+// server.status: { online, name, map, players, maxPlayers, bots }
+// server.players: [{ id, name, score, duration }]
+// server.logs: [{ timestamp, level, message }]
+
+server.rcon('sv_maxrate 128')        // raw RCON command
+server.kick('griefer', 'no griefing') // kick by name
+server.changeMap('de_inferno')        // changelevel via RCON
+server.say('Server restarting in 5m') // server chat
+
+// Persisted config — survives app restarts
+const [config, setConfig] = useLocalStore('my-server', defaults)
+<GameServer type="source" config={config} />
+// setConfig({ ...config, map: "de_nuke" }) -> Lua sees new props -> RCON changelevel`;
 
 const SCRAPE_CODE = `// Expert mode — you know CSS selectors
 const { data } = useScrape('https://news.example.com', {
@@ -406,7 +445,7 @@ export function NetworkingStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Fetch & send cat pics'}
+          {'Fetch, host, frag'}
         </Text>
       </Box>
 
@@ -427,7 +466,7 @@ export function NetworkingStory() {
             {'Every network primitive as a one-liner React hook.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Fetch JSON, open WebSockets, host servers, scrape pages, subscribe to RSS, route through Tor, create encrypted P2P tunnels (userspace or real WireGuard), verify webhooks, and plug into Spotify, GitHub, TMDB, CoinGecko, NASA, and Philips Hue — all from declarative hooks backed by non-blocking Lua I/O.'}
+            {'Fetch JSON, open WebSockets, host game servers (Valve GoldSrc/Source/Source2 + Minecraft), scrape pages, subscribe to RSS, route through Tor, create encrypted P2P tunnels (userspace or real WireGuard), verify webhooks, and plug into Spotify, GitHub, TMDB, CoinGecko, NASA, and Philips Hue — all from declarative hooks backed by non-blocking Lua I/O.'}
           </Text>
         </Box>
 
@@ -538,7 +577,93 @@ export function NetworkingStory() {
 
         <Divider />
 
-        {/* ── Band 5: SCRAPE — demo | text ── */}
+        {/* ── Band 5: GAME SERVER — text | code ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="hard-drive">{'GAME SERVER HOSTING'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'One-liner dedicated game server hosting. Supports Valve engines by generation: GoldSrc (CS 1.6, HL1), Source (CS:S, TF2, GMod, L4D2), Source 2 (CS2, Deadlock), and Minecraft Java Edition. Spawns the server process, generates config files, connects RCON for remote admin, and polls the A2S query protocol for live status.'}
+            </Text>
+            <Box style={{ gap: 3 }}>
+              <Box style={{ flexDirection: 'row', gap: 8 }}>
+                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.gameserver }} />
+                  <Text style={{ color: c.muted, fontSize: 8 }}>{'GoldSrc'}</Text>
+                </Box>
+                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.accent }} />
+                  <Text style={{ color: c.muted, fontSize: 8 }}>{'Source'}</Text>
+                </Box>
+                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.ws }} />
+                  <Text style={{ color: c.muted, fontSize: 8 }}>{'Source 2'}</Text>
+                </Box>
+                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.server }} />
+                  <Text style={{ color: c.muted, fontSize: 8 }}>{'Minecraft'}</Text>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={GAME_SERVER_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 6: GAME SERVER HOOKS — code | text ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={GAME_SERVER_HOOKS_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="terminal">{'SERVER MANAGEMENT'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'useGameServer returns full lifecycle control: start, stop, RCON commands, live player list, and server logs. usePlayerList and useServerStatus are lighter hooks for dashboard UIs that only need a slice. Config can be an inline object, a JSON file path, or a useLocalStore result for persistence across restarts.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Config changes flow through React props. The Lua capability diffs old vs new config and applies changes live via RCON when possible (hostname, password, map), or restarts when necessary (port, tickrate).'}
+            </Text>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout: Game server binary ── */}
+        <Box style={{
+          backgroundColor: 'rgba(245, 158, 11, 0.08)',
+          borderLeftWidth: 3,
+          borderColor: C.gameserver,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.gameserver} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'The GameServer capability manages an existing server binary — it does not include one. You provide the path to srcds, hlds, cs2, or a Minecraft .jar. SteamCMD downloads are handled automatically if steamcmdPath is set. Bundle everything with rjit build linux for a single self-extracting binary: your admin UI + config + server binary.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 7: SCRAPE — demo | text ── */}
         <Box style={{
           flexDirection: 'row',
           paddingLeft: 28,

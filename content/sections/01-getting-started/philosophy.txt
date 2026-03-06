@@ -1,71 +1,104 @@
 === METADATA ===
 title: ReactJIT Philosophy
-description: Core design principles behind ReactJIT - React stripped of browser magic, rendered as raw geometry
+description: Core design principles - React as a layout proxy for Lua, one-liner design, capability system
 category: Getting Started
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: philosophy, design, principles, multi-target, rendering, geometry, flexbox
+platforms: love2d
+keywords: philosophy, design, principles, rendering, geometry, flexbox, capabilities
 related: pipeline, layout-engine, source-of-truth
 difficulty: beginner
 
 === OVERVIEW ===
 ReactJIT is React stripped of browser magic and rendered as raw geometry. There is no
 DOM, no CSS cascade, no inherited font stacks, no default margins. Every pixel on screen
-exists because your code put it there — or the layout engine resolved it for you.
+exists because your code put it there -- or the layout engine resolved it for you.
 
-Containers auto-size from their children. Empty surface nodes (Box, Image, Video, Scene3D)
-fall back to 1/4 of their parent when unsized. If you said grow, it grows exactly. If you
-nested flex containers, you own the consequences. If text wraps, it is because you gave it
-nowhere to go. This is not a browser abstraction layer. This is direct rendering — React's
-component model driving actual draw calls on real hardware.
+React's role is strictly limited: it declares layout and diffs the tree. That is it.
+React is not a runtime. It is not an input handler. It is not a state manager. It is a
+proxy for Lua. The pipeline flows from React reconciler to mutation commands to QuickJS
+bridge to Lua layout engine to Love2D painter (OpenGL 2.1). React's job ends when the
+mutation commands flush to Lua.
+
+Lua does the real work. All keyboard, mouse, and touch events are owned by Lua. The
+layout engine is Lua. The painter is Lua. React event handlers (onPress, onKeyDown)
+are callbacks that Lua invokes -- React never polls the OS event pump.
+
+One-Liner Design
+
+Every new capability should be usable in one line by someone who does not code. The
+target user knows their domain (music, art, data, games) but does not know bridges,
+RPCs, or Lua internals. An AI should be able to discover and control every feature
+without documentation.
+
+The pattern is the declarative capability system:
+  1. Lua side: Capabilities.register("Audio", { schema, create, update, tick, destroy })
+  2. React side: <Audio src="beat.mp3" playing volume={0.8} />
+  3. AI discovery: useCapabilities() returns schemas for everything registered
+
+Every Lua-side feature follows this pattern. The Lua module does the work, the React
+component is a one-liner, and the schema is the documentation.
+
+Auto-Sizing
+
+Containers auto-size from their children. Text nodes measure from font metrics. Empty
+surface nodes (Box, Image, Video, Scene3D) with no explicit dimensions and no children
+fall back to 1/4 of their parent's available space. This cascades: in an 800px window,
+an unsized Box is 200px; a nested unsized Box inside it is 50px.
+
+Interactive elements (Text, TextInput, Pressable, ScrollView) are not surfaces -- they
+size from content or require explicit dimensions. Use flexGrow: 1 for elements that
+should absorb remaining space.
 
 === EXAMPLES ===
-Example 1: The Multi-Target Promise
----
-Write a component once:
-
-  import { Box, Text } from '@reactjit/core';
-
-  function Greeting() {
-    return (
-      <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 24, color: '#ffffff' }}>Hello from anywhere</Text>
-      </Box>
-    );
-  }
-
-Then render it on:
-  - Love2D (pixel-perfect 2D graphics engine)
-  - Web browsers (DOM overlay renderer)
-  - Terminals (ANSI truecolor escape sequences)
-  - ComputerCraft (Minecraft 16-color terminal)
-  - Neovim (floating windows)
-  - Hammerspoon (macOS automation canvas)
-  - AwesomeWM (Linux tiling WM widgets)
----
-Platforms: All
-
-Example 2: The Rendering Pipeline
+Example 1: The Rendering Pipeline
 ---
 The data flows through a fixed pipeline on every frame:
 
   1. React reconciler    - Diffs your component tree, produces mutation commands
   2. Mutation commands   - JSON describing createNode, updateProps, appendChild, etc.
-  3. Transport layer     - Delivers commands to the target runtime (QuickJS FFI, WebSocket, stdio, Module.FS)
+  3. QuickJS bridge      - Delivers commands to the Lua runtime via FFI
   4. Layout engine       - Lua-side flexbox computes {x, y, width, height} for every node
-  5. Target painter      - Draws actual pixels, characters, or API calls for the target platform
-
-Each target has its own painter, but the reconciler, mutation protocol, and layout
-engine are shared across all of them.
+  5. Love2D painter      - Draws actual pixels via OpenGL 2.1
 ---
-Platforms: All
+Platforms: love2d
+
+Example 2: One-Liner Capability
+---
+```tsx
+import { Audio } from '@reactjit/core';
+
+// Lua handles playback, format decoding, volume control.
+// React just declares intent.
+<Audio src="music.mp3" playing volume={0.8} />
+```
+---
+Platforms: love2d
+
+Example 3: Auto-Sizing in Action
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+
+// No explicit sizing needed -- container wraps its content
+<Box>
+  <Text style={{ fontSize: 16 }}>Title</Text>
+  <Text style={{ fontSize: 14 }}>Subtitle</Text>
+</Box>
+
+// Column: height = sum of children + gaps + padding
+//         width  = max child width + padding
+```
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Containers auto-size from content. Empty surface nodes get the proportional fallback (1/4 of parent). ScrollView and TextInput still need explicit sizing.
+- There is no DOM. Components are Box, Text, Image, Pressable, ScrollView, TextInput.
+  There are no divs, spans, or HTML elements.
 - There is no CSS cascade. Style properties do not inherit from parent to child
   (except fontSize and color on nested Text nodes).
-- Every Text node MUST have an explicit fontSize. The linter enforces this.
+- React declares layout and diffs the tree. If React is doing anything beyond that,
+  something is wrong.
 - flexGrow only works when the parent has a known size on the main axis.
-- This is NOT a browser. There are no default stylesheets, no user-agent margins,
+- This is not a browser. There are no default stylesheets, no user-agent margins,
   no block/inline flow model. Everything is flexbox, always.
 
 === SEE ALSO ===

@@ -1,145 +1,162 @@
 === METADATA ===
-title: Performance Tips
-description: Optimization strategies for ReactJIT applications
+title: Performance
+description: Avoiding unnecessary re-renders, hoisting styles, static string constants, and the theme cache bug pattern.
 category: Advanced
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: performance, optimization, flex tree, flatlist, virtualization, animated value, shallow
-related: layout-engine, painter, lua-runtime
+platforms: love2d
+keywords: performance, re-render, usememo, hoist, style, static, cache, theme, optimization, fps
+related: debugging.txt, devtools.txt
 difficulty: advanced
 
 === OVERVIEW ===
-ReactJIT runs a full layout pass on every frame where the tree is dirty. The layout
-engine, text measurement, and painter all have costs that scale with tree size and
-complexity. Most applications run comfortably at 60fps, but deeply nested trees, large
-text blocks, or unvirtualized long lists can cause frame drops.
+ReactJIT renders at 60fps. React's job is to declare layout and diff the tree -- the less
+React work per frame, the better. The most common performance problems come from React
+re-rendering unnecessarily, which causes mutation commands to cross the bridge and triggers
+Lua layout recalculation.
 
-The key optimization principle is the same as in any flexbox system: keep the tree
-shallow, give the layout engine as much information as possible upfront, and avoid
-unnecessary re-computation.
+The golden rule: minimize the number of mutation commands per frame. Every prop change that
+crosses the bridge causes the Lua tree to mark itself dirty and re-run layout. If nothing
+changed, zero commands are sent and layout is skipped entirely.
 
 === EXAMPLES ===
-Example 1: Keep Flex Trees Shallow
+Example 1: Hoist styles outside the component
 ---
-SLOW: Deep nesting forces the layout engine to resolve more constraints.
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-  <Box>
-    <Box>
-      <Box>
-        <Box>
-          <Text style={{ fontSize: 14 }}>Deeply nested</Text>
-        </Box>
-      </Box>
+// BAD: creates a new object every render -> identity changes -> bridge update
+function BadCard() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ padding: 16, backgroundColor: c.surface, borderRadius: 8 }}>
+      <Text style={{ fontSize: 14, color: c.text }}>Content</Text>
     </Box>
-  </Box>
+  );
+}
 
-FAST: Flat structure with flexDirection row/column does the same layout
-in fewer nodes.
+// GOOD: style objects are stable references (same object each render)
+const styles = {
+  card: { padding: 16, borderRadius: 8 } as const,
+  text: { fontSize: 14 } as const,
+};
 
-  <Box style={{ flexDirection: 'row' }}>
-    <Text style={{ fontSize: 14 }}>Flat and fast</Text>
-  </Box>
-
-Each additional nesting level adds layout computation. Prefer
-flexDirection: 'row' on a single Box over nested column wrappers.
----
-Platforms: All
-
-Example 2: Use FlatList for Long Lists
----
-SLOW: Rendering 1000 items creates 1000 nodes in the tree.
-  All are laid out and painted every frame.
-
-  {items.map(item => (
-    <Box key={item.id} style={{ height: 40 }}>
-      <Text style={{ fontSize: 14 }}>{item.name}</Text>
+function GoodCard() {
+  const c = useThemeColors();
+  // Only theme-dependent styles are inline
+  return (
+    <Box style={{ ...styles.card, backgroundColor: c.surface }}>
+      <Text style={{ ...styles.text, color: c.text }}>Content</Text>
     </Box>
-  ))}
-
-FAST: FlatList virtualizes the list, only rendering visible items.
-
-  <FlatList
-    data={items}
-    itemHeight={40}
-    renderItem={({ item }) => (
-      <Box style={{ height: 40 }}>
-        <Text style={{ fontSize: 14 }}>{item.name}</Text>
-      </Box>
-    )}
-    keyExtractor={item => item.id}
-    style={{ width: '100%', height: '100%' }}
-  />
-
-FlatList creates nodes only for items visible in the scroll viewport,
-plus a buffer window. Items outside the viewport are recycled.
+  );
+}
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Use AnimatedValue for Smooth Animations
+Example 2: Static string constants for Text children
 ---
-SLOW: Animating via useState triggers React re-renders on every frame.
-  Each re-render produces mutation commands and a full layout pass.
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-  const [opacity, setOpacity] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setOpacity(o => Math.min(o + 0.016, 1));
-    }, 16);
-    return () => clearInterval(interval);
-  }, []);
+// BAD: template literal in render body creates a new string every frame
+function BadScore({ score }: { score: number }) {
+  const c = useThemeColors();
+  return <Text style={{ color: c.text, fontSize: 16 }}>{`Score: ${score}`}</Text>;
+}
 
-FAST: AnimatedValue mutates the value without React re-renders.
-  The value is read directly by the listener.
+// GOOD for static text: hoist the string
+const TITLE = 'Game Over';
 
-  const [anim, value] = useAnimation(0);
-  useEffect(() => {
-    anim.timing({ toValue: 1, duration: 1000 }).start();
-  }, []);
+function GoodTitle() {
+  const c = useThemeColors();
+  return <Text style={{ color: c.text, fontSize: 24 }}>{TITLE}</Text>;
+}
 
-  AnimatedValue bypasses the React reconciler entirely. The animation
-  runs in a frame callback and only triggers targeted state updates.
+// Template literals for dynamic text are fine -- they must be template literals
+// (not mixed children). The key optimization is hoisting STATIC text.
+function ScoreDisplay({ score }: { score: number }) {
+  const c = useThemeColors();
+  return <Text style={{ color: c.text, fontSize: 16 }}>{`Score: ${score}`}</Text>;
+}
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Pre-Compute Grid Dimensions
+Example 3: useMemo for derived data
 ---
-SLOW: Relying on auto-sizing means the layout engine must measure
-  every child to determine the container size.
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+import { useMemo } from 'react';
 
-  <Box>
-    {grid.map(row => (
-      <Box key={row.id} style={{ flexDirection: 'row' }}>
-        {row.cells.map(cell => (
-          <Text key={cell.id} style={{ fontSize: 12 }}>{cell.value}</Text>
-        ))}
-      </Box>
-    ))}
-  </Box>
+interface DataRow {
+  name: string;
+  value: number;
+}
 
-FAST: Pre-compute dimensions based on your data.
+function DataList({ rows, filter }: { rows: DataRow[]; filter: string }) {
+  const c = useThemeColors();
 
-  const cellWidth = 80;
-  const cellHeight = 24;
-  <Box style={{ width: columns * cellWidth, height: rows * cellHeight }}>
-    {/* ... */}
-  </Box>
+  // Memoize expensive filtering so it only re-runs when inputs change
+  const filtered = useMemo(
+    () => rows.filter((r) => r.name.includes(filter)),
+    [rows, filter]
+  );
 
-When the layout engine knows exact dimensions upfront, it skips
-measurement and auto-sizing, reducing computation significantly.
+  return (
+    <Box style={{ padding: 8 }}>
+      {filtered.map((row) => (
+        <Text key={row.name} style={{ color: c.text, fontSize: 14 }}>
+          {`${row.name}: ${row.value}`}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+```
 ---
-Platforms: All
+Platforms: love2d
+
+Example 4: The theme cache bug pattern
+---
+```tsx
+import { useThemeColors } from '@reactjit/theme';
+
+// BAD: module-level object captures theme values at eval time.
+// When applyTheme() changes colors, these go STALE.
+const COLORS = {
+  accent: '#3b82f6',  // captured once at module load
+  bg: '#0a0a0f',
+};
+
+// GOOD: use functions that read theme values at call time
+function getColors() {
+  const c = useThemeColors();
+  return { accent: c.primary, bg: c.bg };
+}
+
+// Or better: just call useThemeColors() inside the component
+function ThemedComponent() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ backgroundColor: c.bg }}>
+      <Text style={{ color: c.primary, fontSize: 16 }}>Themed</Text>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Keep flex trees shallow. Every nesting level costs layout time.
-- Use FlatList for any list longer than ~50 items.
-- Use AnimatedValue for animations. Do not animate via useState.
-- Pre-compute dimensions when you know them. Do not rely on child
-  content to infer container size.
-- Fill the viewport. Love2D is a fixed canvas, not a scrolling page.
-  Use flexGrow: 1 on space-filling elements instead of hardcoded pixel heights.
-- Avoid letterSpacing on large text blocks. Character-by-character
-  rendering is expensive.
+- Never create objects or arrays inside a render function body if they can be hoisted. Each new identity triggers a bridge UPDATE command.
+- Never wrap a Lua-owned primitive (CodeBlock, TextEditor) in a React component that re-renders every frame without memoizing its props. New string/object identities per frame cause downstream cache invalidation at 60fps.
+- Module-level const objects that reference theme colors (C.accent, C.primary) will go stale after applyTheme(). Use functions or read colors inside components.
+- Use React.memo() on components that receive the same props most frames. This prevents the reconciler from even diffing the subtree.
+- The inspector (F12) shows layout and paint timing per frame. If layoutMs is consistently above 2ms, look for unnecessary tree mutations.
+- Avoid useEffect with empty deps that sets up high-frequency intervals. Use useLuaInterval (with unique tick values) to keep timer logic in Lua.
 
 === SEE ALSO ===
-- 02-architecture/layout-engine.txt - How layout computation works
-- 05-components/flatlist.txt - FlatList API
-- 12-api-reference/style-properties.txt - All style properties
+- debugging.txt
+- devtools.txt

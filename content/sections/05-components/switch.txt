@@ -1,88 +1,89 @@
 === METADATA ===
 title: Switch
-description: A toggle switch with on/off states, providing a sliding thumb on a colored track.
+description: Boolean toggle switch with animated thumb
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: switch, toggle, on, off, boolean, form, input
-related: Checkbox, Radio
-difficulty: beginner
+platforms: love2d
+keywords: switch, toggle, boolean, on, off, control
+related: Checkbox, Radio, Slider
+difficulty: intermediate
 
 === OVERVIEW ===
-Switch is a toggle control that slides a thumb along a track to indicate an on/off state. The track changes color based on the current value, and the thumb moves to the left (off) or right (on) edge.
+Switch is a boolean toggle control. It renders as a `Switch` host element with on/off states, thumb animation, and track color transitions all handled in Lua.
 
-Switch supports both controlled and uncontrolled modes. In controlled mode, pass `value` and respond to `onValueChange`. In uncontrolled mode, omit `value` and optionally set `defaultValue`. On web, the thumb animates with a CSS transition. In native mode, the thumb position is driven by flexbox `justifyContent`.
+Supports both controlled (`value` prop) and uncontrolled (`defaultValue` prop) modes. The track shows different colors for the on and off states.
 
 === API / SYNTAX ===
-Import: import { Switch } from '@reactjit/core';
-
-Usage:
 ```tsx
-<Switch
-  value={isEnabled}
-  onValueChange={(v) => setIsEnabled(v)}
-  trackColor={{ true: '#81b0ff', false: '#767577' }}
-/>
+import { Switch } from '@reactjit/core';
 ```
 
 Props:
-
-| Prop         | Type                                    | Default                                | Description                             |
-|--------------|-----------------------------------------|----------------------------------------|-----------------------------------------|
-| value        | boolean                                 | -                                      | Controlled value. Omit for uncontrolled |
-| defaultValue | boolean                                 | false                                  | Initial value in uncontrolled mode      |
-| onValueChange| (value: boolean) => void                | -                                      | Called when the switch is toggled        |
-| disabled     | boolean                                 | false                                  | Disables interaction and dims opacity   |
-| style        | Style                                   | -                                      | Container style overrides               |
-| trackColor   | { true: Color; false: Color }           | { true: '#81b0ff', false: '#767577' }  | Track colors for on/off states          |
-| thumbColor   | Color                                   | '#f4f3f4'                              | Thumb circle color                      |
-| width        | number                                  | 50                                     | Total switch width in pixels            |
-| height       | number                                  | 28                                     | Total switch height in pixels           |
+| Prop         | Type                          | Default                                  | Description                    |
+|--------------|-------------------------------|------------------------------------------|--------------------------------|
+| value        | boolean                       | undefined                                | Controlled toggle state        |
+| defaultValue | boolean                       | false                                    | Initial state for uncontrolled |
+| onValueChange| (value: boolean) => void      | undefined                                | Fires when toggled             |
+| disabled     | boolean                       | false                                    | Disable interaction            |
+| style        | Style                         | undefined                                | Container style                |
+| trackColor   | { true: Color; false: Color } | { true: '#81b0ff', false: '#767577' }    | Track colors for each state    |
+| thumbColor   | Color                         | '#f4f3f4'                                | Thumb color                    |
+| width        | number                        | 50                                       | Switch width in pixels         |
+| height       | number                        | 28                                       | Switch height in pixels        |
 
 === EXAMPLES ===
-Example 1: Basic controlled switch
+Example 1: Basic toggle
 ---
 ```tsx
+const colors = useThemeColors();
 const [enabled, setEnabled] = useState(false);
 
-<Switch value={enabled} onValueChange={setEnabled} />
+<Box direction="row" align="center" gap={12}>
+  <Text style={{ color: colors.text }}>Notifications</Text>
+  <Switch value={enabled} onValueChange={setEnabled} />
+</Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Uncontrolled with custom colors
+Example 2: Custom colors
 ---
 ```tsx
+const colors = useThemeColors();
+const [darkMode, setDarkMode] = useState(true);
+
 <Switch
-  defaultValue={true}
-  trackColor={{ true: '#4ade80', false: '#ef4444' }}
+  value={darkMode}
+  onValueChange={setDarkMode}
+  trackColor={{ true: colors.primary, false: colors.muted }}
   thumbColor="#ffffff"
-  width={60}
-  height={32}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
 Example 3: Disabled switch
 ---
 ```tsx
-<Switch value={true} disabled />
+const colors = useThemeColors();
+
+<Switch
+  value={true}
+  disabled
+  trackColor={{ true: colors.muted, false: colors.muted }}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
 === PLATFORM NOTES ===
-- Web: Renders as nested `<div>` elements. The thumb uses `transition: left 0.2s ease` for smooth animation. Cursor changes to `not-allowed` when disabled.
-- Native (Love2D): Uses `Box` with `flexDirection: 'row'` and `justifyContent` set to `'end'` (on) or `'start'` (off) to position the thumb. No CSS transitions; position changes are instant unless combined with the animation system.
-- The thumb diameter is calculated as `height - 4` (2px padding on each side).
-- The border radius of the track is `height / 2`, creating a pill shape.
+Love2D:
+  The thumb animation (sliding from off to on position) is handled by Lua on every frame. Toggle happens on click -- Lua updates the visual state immediately, then fires the onValueChange event back to React.
 
 === CRITICAL RULES ===
-- Switch has a fixed pixel size. It does not stretch to fill its container by default. The `width` and `height` props control the track dimensions directly.
-- When `disabled` is true, opacity is set to 0.5 and click/toggle events are ignored.
-- In controlled mode, the component does not update visually unless the parent updates the `value` prop in response to `onValueChange`.
+- `trackColor` is an object with `true` and `false` keys, not a single color. Each key maps to the track color for that toggle state.
+- Switch sizes itself from the `width` and `height` props, not from style. The style prop is for positioning and layout (margin, flexGrow, etc.).
 
 === SEE ALSO ===
 - Checkbox
 - Radio
-- Pressable
+- Slider

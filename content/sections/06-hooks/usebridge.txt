@@ -1,285 +1,91 @@
 === METADATA ===
 title: useBridge
-description: Access the IBridge transport instance for direct bridge communication
+description: Access the bridge instance for direct React-to-Lua communication
 category: Hooks
-platforms: love2d, terminal, nvim, cc, hs, awesome
-keywords: bridge, transport, lua, communication, rpc, events, native, ipc
-related: BridgeProvider, IBridge interface, useRendererMode, event dispatcher
-difficulty: Advanced
+platforms: love2d
+keywords: bridge, context, transport, send, rpc, subscribe
+related: useLove, useLoveRPC, useLoveSend
+difficulty: intermediate
 
 === OVERVIEW ===
-Returns the `IBridge` transport instance that handles communication between JavaScript (React) and the native runtime (Lua for Love2D, Node.js IPC for grid targets). Allows direct access to low-level bridge methods: pushing events, calling Lua functions, subscribing to bridge events, and querying runtime state. Required for custom integrations, native API bindings, and performance-critical operations that bypass the reconciler. Only works on native targets — throws error if used in web mode.
+useBridge returns the IBridge instance from React context. This is the low-level escape hatch -- most code should use the higher-level hooks (useLoveRPC, useLoveEvent, useLoveSend) instead. Use useBridge when you need direct access to the bridge for custom communication patterns.
+
+The bridge must be provided by a BridgeProvider higher in the tree. Calling useBridge outside a provider throws an error.
 
 === API / SYNTAX ===
-Import:
-```typescript
-import { useBridge, BridgeProvider } from '@reactjit/core';
-import type { IBridge } from '@reactjit/core';
+```tsx
+import { useBridge } from '@reactjit/core';
 ```
 
-Hook signature:
-```typescript
-useBridge(): IBridge
+Signature:
+```tsx
+function useBridge(): IBridge
 ```
 
-Return value: `IBridge` instance
-
-Provider signature:
-```typescript
-<BridgeProvider bridge={IBridge}>
-  {children}
-</BridgeProvider>
-```
-
-IBridge interface (simplified):
-```typescript
-interface IBridge {
-  // Push mutation to native runtime
-  push(mutation: Mutation): void;
-
-  // Call Lua function and get result (Love2D only)
-  call(fn: string, ...args: any[]): any;
-
-  // Subscribe to bridge events
-  on(event: string, handler: Function): void;
-  off(event: string, handler: Function): void;
-
-  // Query runtime capabilities
-  query(key: string): any;
-
-  // Batch mutations (performance)
-  batch(fn: () => void): void;
-}
-```
-
-Common bridge events:
-- `pointerDown`, `pointerUp`, `pointerMove`
-- `keyDown`, `keyUp`, `textInput`
-- `resize`, `focus`, `blur`
-- `tick` (frame event, Love2D only)
-- Custom events from Lua via `love.event.push('reactEvent', ...)`
+IBridge interface:
+| Method                                          | Description                                |
+|-------------------------------------------------|--------------------------------------------|
+| send(type: string, payload?: any)               | Queue a command for Lua (batched)           |
+| flush()                                         | Write all queued commands to Lua            |
+| subscribe(type: string, fn: Listener): Unsub    | Listen for events from Lua                 |
+| rpc<T>(method: string, args?, timeout?): Promise | Call a Lua function, await response        |
+| setState(key: string, value: any)               | Set a shared state key                      |
+| isReady(): boolean                              | Whether transport is initialized            |
+| onReady(callback: () => void)                   | Register callback for bridge ready          |
+| destroy()                                       | Tear down transport resources               |
 
 === EXAMPLES ===
-Example 1: Direct Lua function call (Love2D)
+Example 1: Direct RPC call
 ---
-function GameAPI() {
+```tsx
+import { useBridge } from '@reactjit/core';
+
+function SaveButton() {
   const bridge = useBridge();
 
-  const loadLevel = (levelId: number) => {
-    // Calls Lua: love.handlers.loadLevel(levelId)
-    const result = bridge.call('love.handlers.loadLevel', levelId);
-    console.log('Level loaded:', result);
+  const handleSave = async () => {
+    await bridge.rpc('file:save', { path: 'data.json', content: '{}' });
   };
 
   return (
-    <Pressable onPress={() => loadLevel(1)}>
-      <Text fontSize={16}>Load Level 1</Text>
+    <Pressable onPress={handleSave}>
+      <Text>Save</Text>
     </Pressable>
   );
 }
+```
 ---
-Platforms: Love2D
+Platforms: love2d
 
-Example 2: Subscribe to custom bridge events
+Example 2: Custom event subscription
 ---
-function CustomEventListener() {
+```tsx
+import { useBridge } from '@reactjit/core';
+
+function useCustomPoller(key: string) {
   const bridge = useBridge();
-  const [message, setMessage] = useState('');
+  const [data, setData] = useState(null);
 
   useEffect(() => {
-    const handler = (data: any) => {
-      setMessage(data.text);
-    };
-
-    bridge.on('customEvent', handler);
-    return () => bridge.off('customEvent', handler);
-  }, [bridge]);
-
-  return <Text fontSize={14}>{message}</Text>;
-}
-
-// From Lua side:
-// love.event.push('reactEvent', 'customEvent', { text = "Hello from Lua" })
----
-Platforms: love2d, terminal, nvim, cc, hs, awesome
-
-Example 3: Query runtime capabilities
----
-function RuntimeInfo() {
-  const bridge = useBridge();
-  const [info, setInfo] = useState(null);
-
-  useEffect(() => {
-    const capabilities = {
-      version: bridge.query('version'),
-      platform: bridge.query('platform'),
-      renderer: bridge.query('renderer'),
-    };
-    setInfo(capabilities);
-  }, [bridge]);
-
-  if (!info) return null;
-
-  return (
-    <Box>
-      <Text fontSize={14}>Version: {info.version}</Text>
-      <Text fontSize={14}>Platform: {info.platform}</Text>
-      <Text fontSize={14}>Renderer: {info.renderer}</Text>
-    </Box>
-  );
-}
----
-Platforms: love2d, terminal, nvim, cc, hs, awesome
-
-Example 4: Batched mutations for performance
----
-function BulkUpdate({ items }) {
-  const bridge = useBridge();
-
-  const updateAll = () => {
-    // Batches all mutations in the callback into a single bridge roundtrip
-    bridge.batch(() => {
-      items.forEach(item => {
-        // Each update normally triggers a bridge push
-        // Batch mode accumulates them
-        updateItem(item);
-      });
+    const unsub = bridge.subscribe(`data:${key}`, (payload) => {
+      setData(payload);
     });
-  };
+    return unsub;
+  }, [bridge, key]);
 
-  return (
-    <Pressable onPress={updateAll}>
-      <Text fontSize={16}>Update {items.length} items</Text>
-    </Pressable>
-  );
+  return data;
 }
+```
 ---
-Platforms: love2d, terminal, nvim, cc, hs, awesome
-
-Example 5: Direct mutation push (advanced)
----
-function DirectMutation() {
-  const bridge = useBridge();
-
-  const setProperty = () => {
-    // Bypass reconciler: push mutation directly
-    bridge.push({
-      type: 'setProperty',
-      nodeId: 123,
-      property: 'backgroundColor',
-      value: '#ff0000',
-    });
-  };
-
-  // WARNING: This bypasses React's reconciler state.
-  // Only use for performance-critical hot paths or native integrations.
-
-  return (
-    <Pressable onPress={setProperty}>
-      <Text fontSize={16}>Direct Mutation</Text>
-    </Pressable>
-  );
-}
----
-Platforms: love2d, terminal, nvim, cc, hs, awesome
-
-Example 6: Frame tick subscription (Love2D)
----
-function GameLoop() {
-  const bridge = useBridge();
-  const [frame, setFrame] = useState(0);
-  const [deltaTime, setDeltaTime] = useState(0);
-
-  useEffect(() => {
-    const tick = (dt: number) => {
-      setDeltaTime(dt);
-      setFrame(f => f + 1);
-    };
-
-    bridge.on('tick', tick);
-    return () => bridge.off('tick', tick);
-  }, [bridge]);
-
-  const fps = deltaTime > 0 ? Math.round(1 / deltaTime) : 0;
-
-  return (
-    <Box>
-      <Text fontSize={14}>Frame: {frame}</Text>
-      <Text fontSize={14}>FPS: {fps}</Text>
-    </Box>
-  );
-}
----
-Platforms: Love2D
-
-Example 7: Provider setup at app root
----
-import { createRoot } from '@reactjit/renderer';
-import { BridgeProvider, RendererProvider } from '@reactjit/core';
-import { createBridge } from '@reactjit/renderer';
-
-const bridge = createBridge();
-
-function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      <CustomComponent />
-    </Box>
-  );
-}
-
-const root = createRoot();
-root.render(
-  <BridgeProvider bridge={bridge}>
-    <RendererProvider mode="native">
-      <App />
-    </RendererProvider>
-  </BridgeProvider>
-);
----
-Platforms: love2d, terminal, nvim, cc, hs, awesome
-
-Example 8: File system integration (Love2D)
----
-function FileLoader() {
-  const bridge = useBridge();
-  const [content, setContent] = useState('');
-
-  const loadFile = async (path: string) => {
-    // Calls Lua: love.filesystem.read(path)
-    const result = bridge.call('love.filesystem.read', path);
-    setContent(result);
-  };
-
-  return (
-    <Box>
-      <Pressable onPress={() => loadFile('config.json')}>
-        <Text fontSize={16}>Load Config</Text>
-      </Pressable>
-      {content && (
-        <Text fontSize={12}>{content}</Text>
-      )}
-    </Box>
-  );
-}
----
-Platforms: Love2D
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Must be used within a `<BridgeProvider>`. Throws error if context is missing.
-- Only works on native targets (Love2D, terminal, nvim, cc, hs, awesome). Web mode has no bridge.
-- Direct mutations bypass React reconciler state. Use sparingly and only for performance-critical hot paths.
-- Event handlers registered via `bridge.on()` MUST be cleaned up via `bridge.off()` in useEffect cleanup. Memory leaks otherwise.
-- `bridge.call()` is synchronous on Love2D (QuickJS FFI), asynchronous on grid targets (IPC). Check target before use.
-- Batched mutations improve performance for bulk updates (10+ mutations per frame). Non-batched is fine for typical component updates.
-- Bridge events are lowercase (`pointerDown`, not `PointerDown`). Event names are target-specific — check bridge implementation.
-- `bridge.query()` is target-specific. Love2D supports `version`, `platform`, `renderer`. Grid targets vary.
-- Mutation format is internal and unstable. Prefer reconciler methods (setState, props) unless implementing a native binding.
-- Bridge is NOT reactive. Changes pushed directly don't trigger React re-renders. Use state if you need reactivity.
+- useBridge throws if called outside a BridgeProvider. The provider is set up automatically by the renderer -- you only need to worry about this if building custom root components.
+- Prefer the higher-level hooks (useLoveRPC, useLoveEvent, useLoveSend) over raw bridge access. They handle cleanup and ref stability for you.
+- The bridge instance is stable across re-renders. It is safe to use in dependency arrays.
 
 === SEE ALSO ===
-- BridgeProvider: Context provider for bridge instance
-- IBridge interface: Full bridge API documentation
-- useRendererMode: Detect web vs native mode
-- Event dispatcher: High-level event handling via props (onPress, onPointerMove, etc.)
-- createBridge: Factory for bridge instances (native targets)
+- useLoveRPC
+- useLoveEvent
+- useLoveSend
+- useLoveReady

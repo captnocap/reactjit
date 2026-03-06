@@ -4414,6 +4414,21 @@ function ReactJIT.mousemoved(x, y)
   end
 end
 
+--- Call from love.mousefocus(focused).
+--- Clears hover state when the mouse leaves the window so no node stays
+--- stuck in hovered state (Love2D stops sending mousemoved when the cursor
+--- exits the window, leaving hoveredNode stale).
+function ReactJIT.mousefocus(focused)
+  if not focused then
+    local prev = M.events and M.events.getHoveredNode()
+    if prev then
+      pushEvent(M.events.createEvent("pointerLeave", prev.id, -1, -1, nil))
+      M.events.clearHover()
+      applyInteractionStyle(prev)
+    end
+  end
+end
+
 --- Call from love.resize(w, h).
 --- Marks the tree dirty so layout is recomputed next frame.
 function ReactJIT.resize(w, h)

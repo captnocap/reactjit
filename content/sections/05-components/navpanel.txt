@@ -1,163 +1,127 @@
 === METADATA ===
 title: NavPanel
-description: Sidebar navigation panel with grouped sections, active item highlighting, and optional header slot.
+description: Sidebar navigation panel with grouped sections and selectable items
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: navigation, sidebar, panel, menu, sections, nav
-related: Tabs, Breadcrumbs
+platforms: love2d
+keywords: navpanel, navigation, sidebar, menu, sections, items, panel
+related: Tabs, Breadcrumbs, Toolbar, Pressable
 difficulty: beginner
 
 === OVERVIEW ===
-NavPanel renders a vertical sidebar navigation component organized into titled sections. Each section contains a list of selectable items. The currently active item is highlighted with a distinct background and text color, and hovering over items provides visual feedback via Pressable.
+NavPanel renders a vertical sidebar with grouped navigation items. Each section has a title and a list of selectable items. The active item is highlighted with a distinct background and border.
 
-An optional header slot renders arbitrary content at the top of the panel, separated from the sections by a divider line. NavPanel uses a fixed width by default but can be customized via the `width` prop or `style` overrides.
+NavPanel supports an optional header slot (any ReactNode) displayed above the sections, and a `contentAlign` prop to center section titles and item labels. It uses `overflow: 'scroll'` internally, so it handles long lists of items gracefully.
+
+Colors are theme-aware via `useThemeColorsOptional()` with dark-theme fallbacks.
 
 === API / SYNTAX ===
-Import: import { NavPanel } from '@reactjit/core';
-
-NavItem type:
-```ts
-interface NavItem {
-  id: string;
-  label: string;
-}
-```
-
-NavSection type:
-```ts
-interface NavSection {
-  title: string;
-  items: NavItem[];
-}
-```
-
-Usage:
 ```tsx
-<NavPanel
-  sections={[
-    {
-      title: 'General',
-      items: [
-        { id: 'dashboard', label: 'Dashboard' },
-        { id: 'settings', label: 'Settings' },
-      ],
-    },
-    {
-      title: 'Data',
-      items: [
-        { id: 'reports', label: 'Reports' },
-        { id: 'analytics', label: 'Analytics' },
-      ],
-    },
-  ]}
-  activeId="dashboard"
-  onSelect={(id) => setPage(id)}
-/>
+import { NavPanel } from '@reactjit/core';
 ```
 
 Props:
+| Prop         | Type                 | Default | Description                                  |
+|--------------|----------------------|---------|----------------------------------------------|
+| sections     | NavSection[]         | required| Array of navigation sections                 |
+| activeId     | string               | undefined | ID of the currently active item            |
+| onSelect     | (id: string) => void | undefined | Callback when an item is pressed           |
+| header       | ReactNode            | undefined | Content rendered above all sections        |
+| width        | number               | 180     | Panel width in pixels                        |
+| contentAlign | 'start' \| 'center' | 'start' | Alignment of section titles and item labels  |
+| style        | Style                | undefined | Outer container style overrides            |
 
-| Prop     | Type                       | Default | Description                            |
-|----------|----------------------------|---------|----------------------------------------|
-| sections | NavSection[]               | (required)| Array of navigation sections         |
-| activeId | string                     | -       | ID of the currently active item        |
-| onSelect | (id: string) => void       | -       | Called when an item is clicked         |
-| header   | ReactNode                  | -       | Content rendered at the top of panel   |
-| width    | number                     | 180     | Panel width in pixels                  |
-| style    | Style                      | -       | Container style overrides              |
+NavSection:
+| Field | Type       | Description              |
+|-------|------------|--------------------------|
+| title | string     | Section heading text     |
+| items | NavItem[]  | Items within the section |
+
+NavItem:
+| Field | Type   | Description           |
+|-------|--------|-----------------------|
+| id    | string | Unique item identifier |
+| label | string | Display text          |
 
 === EXAMPLES ===
-Example 1: Basic sidebar navigation
+Example 1: Basic sidebar
 ---
 ```tsx
-const [page, setPage] = useState('home');
+const [active, setActive] = useState('dashboard');
 
 <NavPanel
   sections={[
-    {
-      title: 'Navigation',
-      items: [
-        { id: 'home', label: 'Home' },
-        { id: 'explore', label: 'Explore' },
-        { id: 'library', label: 'Library' },
-      ],
-    },
+    { title: 'Main', items: [
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'analytics', label: 'Analytics' },
+    ]},
+    { title: 'Settings', items: [
+      { id: 'profile', label: 'Profile' },
+      { id: 'preferences', label: 'Preferences' },
+    ]},
   ]}
-  activeId={page}
-  onSelect={setPage}
+  activeId={active}
+  onSelect={setActive}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: With header and multiple sections
+Example 2: NavPanel with header
 ---
 ```tsx
+const colors = useThemeColors();
+const [active, setActive] = useState('home');
+
 <NavPanel
   header={
-    <Text style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 'bold' }}>
-      My App
-    </Text>
+    <Text style={{ color: colors.text, fontSize: 14, fontWeight: 'bold' }}>My App</Text>
   }
   sections={[
-    {
-      title: 'Main',
-      items: [
-        { id: 'dashboard', label: 'Dashboard' },
-        { id: 'projects', label: 'Projects' },
-      ],
-    },
-    {
-      title: 'Account',
-      items: [
-        { id: 'profile', label: 'Profile' },
-        { id: 'settings', label: 'Settings' },
-      ],
-    },
+    { title: 'Navigation', items: [
+      { id: 'home', label: 'Home' },
+      { id: 'explore', label: 'Explore' },
+      { id: 'library', label: 'Library' },
+    ]},
   ]}
-  activeId="dashboard"
-  onSelect={(id) => navigate(id)}
-  width={200}
+  activeId={active}
+  onSelect={setActive}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Full-height sidebar in layout
+Example 3: Sidebar with content area
 ---
 ```tsx
-<Box style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
+const colors = useThemeColors();
+const [active, setActive] = useState('overview');
+
+<FlexRow style={{ width: '100%', height: '100%' }}>
   <NavPanel
-    sections={sections}
-    activeId={currentPage}
-    onSelect={setCurrentPage}
-    style={{ height: '100%' }}
+    sections={[
+      { title: 'Docs', items: [
+        { id: 'overview', label: 'Overview' },
+        { id: 'api', label: 'API Reference' },
+        { id: 'examples', label: 'Examples' },
+      ]},
+    ]}
+    activeId={active}
+    onSelect={setActive}
   />
-  <Box style={{ flexGrow: 1 }}>
-    {/* Page content */}
+  <Box style={{ flexGrow: 1, padding: 16 }}>
+    <Text style={{ color: colors.text, fontSize: 16 }}>{`Selected: ${active}`}</Text>
   </Box>
-</Box>
+</FlexRow>
 ```
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-- NavPanel uses Pressable for each navigation item, providing hover feedback.
-- Default background: `#0c0c14` with a `1px` border in `#1e293b`.
-- Section titles are rendered in uppercase (`section.title.toUpperCase()`), `fontSize: 9`, `color: '#334155'`, with `paddingLeft: 12`.
-- Active item: `backgroundColor: '#1e293b'`, text `color: '#e2e8f0'`.
-- Inactive item: `backgroundColor: 'transparent'` (hovered: `#111827`), text `color: '#64748b'`.
-- Item text is `fontSize: 11` with `paddingLeft: 16`.
-- The header slot has `padding: 12` and is separated from sections by a 1px divider line in `#1e293b`.
-- The panel uses `overflow: 'scroll'` to handle content that exceeds the panel height.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The `sections` prop is required. An empty array renders only the background panel with optional header.
-- `activeId` is compared against each item's `id` for highlighting. If no item matches, no item is highlighted.
-- NavPanel has a fixed `width` (default 180). It does not grow to fill its container. Override with `style={{ flexGrow: 1 }}` or set an explicit `width` if needed.
-- The header slot renders any ReactNode. It is not affected by section styling.
+- NavPanel has a fixed default `width` of 180px. Set `width` explicitly or use `style` to override if your sidebar needs a different size.
+- The panel uses `overflow: 'scroll'` internally. In a full-height layout, give the NavPanel or its parent a defined height (e.g., `flexGrow: 1`) so the scroll region has a viewport.
+- Section titles are rendered uppercased automatically.
 
 === SEE ALSO ===
 - Tabs
 - Breadcrumbs
-- Pressable
+- Toolbar

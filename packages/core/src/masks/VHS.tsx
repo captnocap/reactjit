@@ -11,6 +11,24 @@ export interface VHSProps extends MaskProps {
   colorBleed?: number;
   /** Optional additive tint color (hex). Example: #ff2bd6 */
   tint?: string;
+  /** Hue shift (degrees) for shader grading. Default -6. */
+  shaderHue?: number;
+  /** Saturation multiplier for shader grading. Default 0.92. */
+  shaderSaturation?: number;
+  /** Value multiplier for shader grading. Default 0.98. */
+  shaderValue?: number;
+  /** Contrast multiplier for shader grading. Default 1.08. */
+  shaderContrast?: number;
+  /** Posterize levels (0 disables). Default 0. */
+  shaderPosterize?: number;
+  /** Film grain strength. 0-1. Default derived from noise. */
+  shaderGrain?: number;
+  /** Vignette strength. 0-1. Default derived from tracking. */
+  shaderVignette?: number;
+  /** Optional grading tint color (hex). Defaults to theme warning. */
+  shaderTint?: string;
+  /** Tint mix amount. 0-1. Default derived from tracking. */
+  shaderTintMix?: number;
 }
 
 /**

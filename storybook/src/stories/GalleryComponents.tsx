@@ -60,7 +60,7 @@ const SAMPLE_TABLE_DATA = [
   { name: 'Card', pkg: 'core', status: 'Stable' },
   { name: 'Knob', pkg: 'controls', status: 'Stable' },
   { name: 'Clock', pkg: 'time', status: 'Stable' },
-  { name: 'ElementCard', pkg: 'chemistry', status: 'Stable' },
+  { name: 'ElementTile', pkg: 'chemistry', status: 'Stable' },
 ];
 
 const SAMPLE_CODE = `import { Card, Badge, Tabs } from '@reactjit/core';
@@ -303,13 +303,36 @@ export function ThumbLoadingDots({ c }: { c: ThemeColors }) {
   );
 }
 
+export function ThumbElementTile({ c }: { c: ThemeColors }) {
+  return (
+    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+      <Box style={{ width: 32, height: 36, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: '#de9a9a', padding: 2, gap: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#de9a9a', fontSize: 3 }}>{'26'}</Text>
+        <Text style={{ color: c.text, fontSize: 8, fontWeight: 'bold' }}>{'Fe'}</Text>
+        <Text style={{ color: c.muted, fontSize: 3 }}>{'55.84'}</Text>
+      </Box>
+    </Box>
+  );
+}
+
 export function ThumbElementCard({ c }: { c: ThemeColors }) {
   return (
     <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 32, height: 36, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: '#10b981', padding: 2, gap: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#10b981', fontSize: 3 }}>{'26'}</Text>
-        <Text style={{ color: c.text, fontSize: 8, fontWeight: 'bold' }}>{'Fe'}</Text>
-        <Text style={{ color: c.muted, fontSize: 3 }}>{'55.84'}</Text>
+      <Box style={{ width: 52, height: 44, backgroundColor: c.bgElevated, borderRadius: 4, borderWidth: 1, borderColor: '#de9a9a', padding: 3, gap: 1 }}>
+        <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+          <Box style={{ width: 12, height: 12, backgroundColor: '#de9a9a', borderRadius: 2, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#000', fontSize: 5, fontWeight: 'bold' }}>{'Au'}</Text>
+          </Box>
+          <Text style={{ color: c.text, fontSize: 5, fontWeight: 'bold' }}>{'Gold'}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ color: c.muted, fontSize: 3 }}>{'Mass'}</Text>
+          <Text style={{ color: c.text, fontSize: 3 }}>{'196.97'}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ color: c.muted, fontSize: 3 }}>{'Phase'}</Text>
+          <Text style={{ color: c.text, fontSize: 3 }}>{'solid'}</Text>
+        </Box>
       </Box>
     </Box>
   );
@@ -675,7 +698,7 @@ export function ThumbPitchWheel({ c }: { c: ThemeColors }) {
 }
 
 export function ThumbPeriodicTable({ c }: { c: ThemeColors }) {
-  const colors = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#38d9a9', '#4dabf7', '#748ffc', '#cc5de8'];
+  const colors = ['#7b6faa', '#9a9cc4', '#de9a9a', '#8fbc8f', '#c8c864', '#59b5e6', '#d4a844', '#c87e4a'];
   return (
     <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 48, gap: 1 }}>
@@ -939,6 +962,7 @@ export const THUMBS: Record<string, (c: ThemeColors) => React.ReactNode> = {
   searchbar: (c) => <ThumbSearchBar c={c} />,
   codeblock: (c) => <ThumbCodeBlock c={c} />,
   loadingdots: (c) => <ThumbLoadingDots c={c} />,
+  elementtile: (c) => <ThumbElementTile c={c} />,
   elementcard: (c) => <ThumbElementCard c={c} />,
   knob: (c) => <ThumbKnob c={c} />,
   fader: (c) => <ThumbFader c={c} />,
@@ -1227,39 +1251,28 @@ export function PreviewLoadingDots({ c }: { c: ThemeColors }) {
   );
 }
 
-export function PreviewElementCard({ c }: { c: ThemeColors }) {
-  // One representative element from each category group
+export function PreviewElementTile({ c }: { c: ThemeColors }) {
   const representatives = [
-    'H',   // nonmetal
-    'Li',  // alkali metal
-    'Be',  // alkaline earth
-    'Fe',  // transition metal
-    'Al',  // post-transition metal
-    'Si',  // metalloid
-    'Cl',  // halogen
-    'Ne',  // noble gas
-    'Nd',  // lanthanide
-    'U',   // actinide
+    'H', 'Li', 'Be', 'Fe', 'Al', 'Si', 'Cl', 'Ne', 'Nd', 'U',
   ];
-  const [selected, setSelected] = useState<string | null>(null);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 16 }}>
-      {/* Compact tile grid — one per category */}
+    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
         {representatives.map(sym => (
-          <ElementTile
-            key={sym}
-            element={sym}
-            size={64}
-            selected={selected === sym}
-            onPress={() => setSelected(prev => prev === sym ? null : sym)}
-          />
+          <ElementTile key={sym} element={sym} size={64} />
         ))}
       </Box>
-      {/* Detail card flips open below when a tile is selected */}
-      {selected && (
-        <ElementCard element={selected} style={{ width: 280 }} />
-      )}
+    </Box>
+  );
+}
+
+export function PreviewElementCard({ c }: { c: ThemeColors }) {
+  return (
+    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+      <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <ElementCard element="Fe" style={{ width: 220 }} />
+        <ElementCard element="Au" style={{ width: 220 }} />
+      </Box>
     </Box>
   );
 }
@@ -1710,7 +1723,7 @@ export function PreviewPeriodicTable({ c }: { c: ThemeColors }) {
   const [selected, setSelected] = useState<number | undefined>(26);
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 8 }}>
-      <PeriodicTable onSelect={(el: any) => setSelected(el.number)} selected={selected} compact />
+      <PeriodicTable onSelect={(el: any) => setSelected(el.number)} selected={selected} tileSize={28} />
     </Box>
   );
 }
@@ -2033,6 +2046,7 @@ export const PREVIEWS: Record<string, (c: ThemeColors) => React.ReactNode> = {
   searchbar: (c) => <PreviewSearchBar c={c} />,
   codeblock: (c) => <PreviewCodeBlock c={c} />,
   loadingdots: (c) => <PreviewLoadingDots c={c} />,
+  elementtile: (c) => <PreviewElementTile c={c} />,
   elementcard: (c) => <PreviewElementCard c={c} />,
   knob: (c) => <PreviewKnob c={c} />,
   fader: (c) => <PreviewFader c={c} />,

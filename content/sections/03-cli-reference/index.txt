@@ -1,98 +1,71 @@
 === METADATA ===
 title: CLI Reference
-description: Overview of the reactjit CLI tool and its commands.
+description: The reactjit (rjit) command-line tool -- project scaffolding, builds, linting, testing, and runtime sync.
 category: CLI
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: cli, reactjit, init, dev, build, update, lint, screenshot, commands
-related: init.txt, dev.txt, build.txt, update.txt, lint.txt, screenshot.txt
+platforms: love2d
+keywords: cli, reactjit, rjit, build, dev, lint, test, screenshot, init, update, esbuild
+related: init.txt, dev.txt, build.txt, lint.txt, screenshot.txt, update.txt, test.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The reactjit CLI is the primary tool for creating, developing, building, and testing
-ReactJIT projects. It encodes correct esbuild flags, enforces lint gates before builds,
-handles runtime file placement, and produces distribution packages. You should always use
-the CLI instead of running raw esbuild commands directly -- manual esbuild will use wrong
-flags, skip linting, and produce broken builds.
+ReactJIT uses a CLI-first workflow. The `reactjit` command (aliased as `rjit`) wraps
+esbuild with the correct flags, enforces lint gates before builds, handles runtime file
+placement, and produces correct distribution packages for every platform.
 
-The CLI manages the distinction between framework files (lua/, lib/, reactjit/) and
-project-specific files (src/, main.lua, conf.lua). Framework files are synced from the CLI
-runtime; project files are yours and never touched by CLI commands.
+Never run raw esbuild commands directly. The CLI encodes target-specific esbuild flags
+(format, global name, externals, JSX mode), resolves entry point priorities, runs the
+static linter before every build, and performs post-build bundle checks. Running esbuild
+manually will use wrong flags, skip linting, and produce broken builds.
 
-=== API / SYNTAX ===
-Available commands:
+The CLI commands:
 
-  reactjit init <name>
-    Create a new ReactJIT project.
-    See: init.txt
+  rjit init <name>       Scaffold a new project with interactive package selection
+  rjit dev               Watch mode with HMR -- rebuilds on file changes, launches Love2D
+  rjit build [target]    Dev build (default) or production build for a specific platform
+  rjit lint              Static layout linter -- catches mistakes before they reach the renderer
+  rjit test <spec.ts>    Built-in test runner -- runs specs inside the Love2D process
+  rjit screenshot        Headless capture -- verify layouts visually without manual inspection
+  rjit update            Sync runtime files (lua/, lib/, reactjit/) from CLI into the project
 
-  reactjit dev
-    Start esbuild in watch mode for live development.
-    See: dev.txt
-
-  reactjit build [target] [flags]
-    Bundle JS or produce distribution packages.
-    Targets: (none), dist:love, dist:terminal
-    Flags: --no-update, --debug
-    See: build.txt
-
-  reactjit update
-    Sync framework runtime files into the current project.
-    See: update.txt
-
-  reactjit lint
-    Run the static layout linter on src/ files.
-    See: lint.txt
-
-  reactjit screenshot [--output path]
-    Capture a headless screenshot of the current app.
-    See: screenshot.txt
+Every build command (dev, build, screenshot) runs the linter first. Lint errors block
+compilation. This is intentional -- layout mistakes caught statically are cheaper than
+debugging visual artifacts at runtime.
 
 === EXAMPLES ===
-Example 1: Typical new project workflow
+Example 1: Typical development workflow
 ---
-reactjit init my-app
+# Create a new project
+rjit init my-app
 cd my-app
-reactjit dev
-# In another terminal:
-love .
+
+# Start watch mode (rebuilds on save, launches Love2D)
+rjit dev
+
+# In another terminal: run the linter manually
+rjit lint
+
+# Take a screenshot for visual verification
+rjit screenshot --output /tmp/preview.png
+
+# Run tests
+rjit test tests/my-app.test.ts
+
+# Production build for Linux
+rjit build linux
 ---
 Platforms: love2d
-
-Example 2: Build and verify workflow
----
-reactjit lint
-reactjit screenshot --output /tmp/preview.png
-reactjit build dist:love
----
-Platforms: love2d
-
-Example 3: After framework changes
----
-# In monorepo root:
-make cli-setup
-# In project directory:
-cd storybook
-reactjit update
-reactjit build
----
-Platforms: All
-
-=== PLATFORM NOTES ===
-The CLI currently covers Love2D scaffolding/builds and terminal distribution. For grid
-target dev builds (terminal, CC, Neovim, Hammerspoon, AwesomeWM), use the npm scripts
-in the root package.json -- these are the only cases where direct esbuild is appropriate.
 
 === CRITICAL RULES ===
-- Always use the CLI instead of running esbuild directly
-- Run `reactjit lint` after every component change
-- Run `reactjit screenshot` to visually verify layouts
-- After editing framework source-of-truth files, run `make cli-setup` then `reactjit update`
-- Never edit cli/runtime/ or project lua/reactjit/ directly -- those are disposable copies
+- Never run raw esbuild commands -- always use rjit build, rjit dev, or rjit build <target>
+- Lint errors block builds -- fix them before the bundle runs
+- After editing framework source files (lua/, packages/core/, packages/renderer/), run make cli-setup then rjit update in consumer projects
+- The storybook reads from source via symlinks -- never run rjit update from the storybook directory
 
 === SEE ALSO ===
-- init.txt -- Create new projects
-- dev.txt -- Watch mode development
-- build.txt -- Building and distribution
-- update.txt -- Syncing framework files
-- lint.txt -- Static layout linter
-- screenshot.txt -- Headless screenshot capture
+- init.txt -- Project scaffolding
+- dev.txt -- Watch mode and HMR
+- build.txt -- Dev and production builds
+- lint.txt -- Static layout linter rules
+- test.txt -- Built-in test runner
+- screenshot.txt -- Headless capture
+- update.txt -- Runtime file sync

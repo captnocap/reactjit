@@ -1,138 +1,89 @@
 === METADATA ===
 title: AreaChart
-description: Filled area chart; a LineChart preset with area fill enabled and dots disabled
+description: Filled line chart, a convenience wrapper around LineChart with area fill enabled
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: chart, area, filled, trend, data, visualization, graph, timeseries
-related: LineChart, Sparkline, BarChart, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: area chart, chart, graph, filled, line, data visualization, trend
+related: LineChart, Sparkline, BarChart
+difficulty: intermediate
 
 === OVERVIEW ===
-AreaChart is a thin wrapper over LineChart with `showArea` forced to true, `showDots` forced to false, and `areaOpacity` defaulting to 0.4. It renders the same column-based layout as LineChart but emphasizes volume and trend through filled regions rather than point markers. All LineChart props are accepted and forwarded; any prop you pass overrides the preset defaults including re-enabling dots or disabling the area.
+AreaChart is a convenience wrapper around LineChart with `showArea` enabled, `showDots` disabled, and `areaOpacity` set to 0.4. It accepts all the same props as LineChart -- any prop you pass overrides the defaults.
+
+Rendered by `lua/chart.lua` as a Chart2D surface, identical to LineChart with area fill.
 
 === API / SYNTAX ===
 ```tsx
 import { AreaChart } from '@reactjit/core';
 ```
 
-AreaChart accepts exactly the same props as LineChart:
+Props: Same as LineChart. The following defaults are overridden:
+| Prop        | AreaChart Default | LineChart Default |
+|-------------|-------------------|-------------------|
+| showArea    | true              | undefined         |
+| showDots    | false             | undefined         |
+| areaOpacity | 0.4               | undefined         |
 
-Data shape:
-```tsx
-interface LineChartPoint {
-  x?:    string;  // Optional x-axis label shown in the hover tooltip
-  value: number;  // Y-axis value; min and max across the dataset define the scale
-}
-```
-
-Props (inherited from LineChart):
-| Prop          | Type                                                              | Default (AreaChart) | Description                                                           |
-|---------------|-------------------------------------------------------------------|---------------------|-----------------------------------------------------------------------|
-| data          | LineChartPoint[]                                                  | required            | Array of data points to plot                                          |
-| width         | number                                                            | 280                 | Total chart width in pixels                                           |
-| height        | number                                                            | 120                 | Total chart height in pixels                                          |
-| color         | Color                                                             | '#3b82f6'           | Color used for the area fill                                          |
-| showDots      | boolean                                                           | false               | Preset to false; pass true to re-enable dots                          |
-| showArea      | boolean                                                           | true                | Preset to true; pass false to produce a dotless line chart            |
-| areaOpacity   | number                                                            | 0.4                 | Opacity of the area fill (0–1)                                        |
-| interactive   | boolean                                                           | false               | Enable hover crosshair and per-point tooltips                         |
-| onPointHover  | (index: number \| null, point: LineChartPoint \| null) => void    | undefined           | Called when the pointer enters or leaves a column                     |
-| onPointPress  | (index: number, point: LineChartPoint) => void                    | undefined           | Called when a column is clicked (requires interactive: true)          |
-| style         | Style                                                             | undefined           | Additional styles applied to the outer container Box                  |
+See LineChart for the full props table.
 
 === EXAMPLES ===
-Example 1: Traffic volume over a week
+Example 1: Basic area chart
 ---
 ```tsx
-import { AreaChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const traffic = [
-  { x: 'Mon', value: 2400 },
-  { x: 'Tue', value: 1800 },
-  { x: 'Wed', value: 3200 },
-  { x: 'Thu', value: 2900 },
-  { x: 'Fri', value: 4100 },
-  { x: 'Sat', value: 1200 },
-  { x: 'Sun', value: 900  },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <AreaChart data={traffic} width={320} height={100} color="#6366f1" />
-    </Box>
-  );
-}
+<AreaChart
+  data={[
+    { x: 'Jan', value: 100 },
+    { x: 'Feb', value: 120 },
+    { x: 'Mar', value: 90 },
+    { x: 'Apr', value: 140 },
+    { x: 'May', value: 160 },
+  ]}
+  color={colors.primary}
+  width={300}
+  height={150}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Stacked feel with reduced opacity and custom color
+Example 2: With dots re-enabled
 ---
 ```tsx
-import { AreaChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const memory = [
-  { value: 1.2 }, { value: 1.8 }, { value: 2.1 },
-  { value: 1.9 }, { value: 2.4 }, { value: 3.0 },
-  { value: 2.7 }, { value: 3.2 }, { value: 2.9 },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <AreaChart
-        data={memory}
-        width={260}
-        height={80}
-        color="#22c55e"
-        areaOpacity={0.6}
-      />
-    </Box>
-  );
-}
+<AreaChart
+  data={memoryUsage}
+  color="#22c55e"
+  width={400}
+  height={180}
+  showDots
+  areaOpacity={0.2}
+  interactive
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive area chart with dots re-enabled
+Example 3: Filling available space
 ---
 ```tsx
-import { AreaChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const latency = [
-  { x: '10s', value: 42 }, { x: '20s', value: 38 },
-  { x: '30s', value: 55 }, { x: '40s', value: 49 },
-  { x: '50s', value: 61 }, { x: '60s', value: 44 },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <AreaChart
-        data={latency}
-        width={300}
-        height={100}
-        color="#ef4444"
-        showDots
-        interactive
-      />
-    </Box>
-  );
-}
+<Box style={{ width: '100%', height: '100%' }}>
+  <Text style={{ color: colors.text, fontSize: 16 }}>Network Traffic</Text>
+  <AreaChart
+    data={trafficData}
+    color={colors.primary}
+    style={{ flexGrow: 1 }}
+  />
+</Box>
 ```
 ---
-Platforms: love2d, web
-
-=== CRITICAL RULES ===
-- AreaChart is not an independent component — it renders a LineChart internally. Every constraint that applies to LineChart applies here.
-- Props you pass to AreaChart override the presets. Passing `showArea={false}` produces a dotless, area-less chart (effectively invisible). Passing `showDots={true}` adds dots back on top of the area fill.
-- The vertical scale is relative to the dataset, not zero-based. A dataset with values [100, 110, 105] will show strong variation even though the values are close together.
-- `onPointPress` requires `interactive={true}` to fire.
-- Do not use Unicode symbols in the `x` label strings of data points.
+Platforms: love2d
 
 === SEE ALSO ===
-- LineChart — the underlying component; use it directly when you need dots-only or full control
-- Sparkline — a simpler no-configuration trend widget for embedding in text-dense layouts
-- BarChart — vertical bars for discrete comparison rather than trend display
-- ChartTooltip — standalone tooltip primitive used internally by the underlying LineChart
+- LineChart
+- Sparkline
+- BarChart

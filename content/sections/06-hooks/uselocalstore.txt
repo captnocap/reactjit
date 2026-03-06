@@ -1,23 +1,20 @@
 === METADATA ===
 title: useLocalStore
-description: Persistent useState backed by SQLite — values survive app restarts
+description: Persistent state backed by SQLite that survives app restarts
 category: Hooks
 platforms: love2d
-keywords: storage, sqlite, persist, state, local, database, hook
-related: useState, useSearchHistory, storage
-difficulty: beginner
+keywords: storage, persistent, sqlite, local, save, load, state, database
+related: useHotState, useLoveState
+difficulty: intermediate
 
 === OVERVIEW ===
-useLocalStore is a drop-in replacement for useState that persists values across app restarts using SQLite on the Lua side. The API is identical to useState — it returns a [value, setValue] tuple. On first mount the stored value is loaded from the database; on every subsequent setValue the new value is written back, debounced at 300ms to avoid write storms.
+useLocalStore is a drop-in replacement for useState that persists values to a SQLite database on the Lua side. Values survive app restarts. Writes are debounced (300ms) to avoid excessive disk I/O during rapid state changes.
 
-Values are stored under a (namespace, key) pair in a local SQLite database (localstore.db). The default namespace is 'app'. Use custom namespaces to avoid key collisions between unrelated parts of your application.
-
-The hook is native-only. In web mode or when the bridge is unavailable, it falls back to plain in-memory state using the defaultValue — no crash, no warning.
+On mount, the hook loads the stored value asynchronously. Until the stored value arrives, the component renders with the provided default. If no stored value exists, the default persists.
 
 === API / SYNTAX ===
 ```tsx
 import { useLocalStore } from '@reactjit/core';
-import type { UseLocalStoreOptions } from '@reactjit/core';
 ```
 
 Signature:
@@ -25,70 +22,80 @@ Signature:
 function useLocalStore<T>(
   key: string,
   defaultValue: T,
-  options?: UseLocalStoreOptions,
+  options?: { namespace?: string }
 ): [T, (value: T | ((prev: T) => T)) => void]
 ```
 
 Parameters:
-| Parameter    | Type                   | Default   | Description                              |
-|--------------|------------------------|-----------|------------------------------------------|
-| key          | string                 | required  | Storage key within the namespace         |
-| defaultValue | T                      | required  | Value to use before storage loads        |
-| options      | UseLocalStoreOptions   | undefined | Optional configuration                   |
+| Parameter    | Type   | Default | Description                                |
+|--------------|--------|---------|--------------------------------------------|
+| key          | string | required | Storage key within the namespace           |
+| defaultValue | T      | required | Default value if nothing is stored         |
+| options.namespace | string | 'app' | Storage namespace (separate databases)  |
 
-UseLocalStoreOptions:
-| Option    | Type   | Default | Description                        |
-|-----------|--------|---------|------------------------------------|
-| namespace | string | 'app'   | Namespace prefix for the key       |
-
-Return value: `[value, setValue]` — identical interface to `useState<T>`.
+Returns:
+| Index | Type                                      | Description            |
+|-------|-------------------------------------------|------------------------|
+| [0]   | T                                         | Current value          |
+| [1]   | (value: T or (prev: T) => T) => void      | Setter (supports updater functions) |
 
 === EXAMPLES ===
-Example 1: Persisted counter
+Example 1: Persistent counter
 ---
 ```tsx
-import { Box, Text, Pressable } from '@reactjit/core';
 import { useLocalStore } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-export default function App() {
+function Counter() {
+  const colors = useThemeColors();
   const [count, setCount] = useLocalStore('counter', 0);
 
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
-      <Text style={{ fontSize: 32, color: '#cdd6f4' }}>{count}</Text>
-      <Pressable onPress={() => setCount(n => n + 1)}>
-        <Box style={{ padding: '8 24', backgroundColor: '#89b4fa', borderRadius: 6 }}>
-          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Increment</Text>
-        </Box>
-      </Pressable>
-    </Box>
+    <Pressable onPress={() => setCount(c => c + 1)}>
+      <Text style={{ color: colors.text, fontSize: 24 }}>{`Count: ${count}`}</Text>
+    </Pressable>
   );
 }
 ```
 ---
 Platforms: love2d
 
-Example 2: Persisted theme preference with namespace
+Example 2: Theme preference with namespace
 ---
 ```tsx
-import { Box, Text, Pressable } from '@reactjit/core';
 import { useLocalStore } from '@reactjit/core';
 
-const THEMES = ['catppuccin', 'dracula', 'gruvbox'] as const;
-type Theme = typeof THEMES[number];
+function useThemePreference() {
+  const [theme, setTheme] = useLocalStore('selected', 'catppuccin', {
+    namespace: 'theme',
+  });
 
-export default function App() {
-  const [theme, setTheme] = useLocalStore<Theme>('selected', 'catppuccin', { namespace: 'theme' });
+  return { theme, setTheme };
+}
+```
+---
+Platforms: love2d
+
+Example 3: Storing structured data
+---
+```tsx
+import { useLocalStore } from '@reactjit/core';
+
+function BookmarkManager() {
+  const [bookmarks, setBookmarks] = useLocalStore<string[]>('bookmarks', []);
+
+  const addBookmark = (url: string) => {
+    setBookmarks(prev => [...prev, url]);
+  };
+
+  const removeBookmark = (url: string) => {
+    setBookmarks(prev => prev.filter(b => b !== url));
+  };
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, flexDirection: 'column', gap: 8 }}>
-      <Text style={{ fontSize: 14, color: '#a6adc8' }}>Active theme: {theme}</Text>
-      {THEMES.map(t => (
-        <Pressable key={t} onPress={() => setTheme(t)}>
-          <Box style={{ padding: '6 16', backgroundColor: theme === t ? '#89b4fa' : '#313244', borderRadius: 4 }}>
-            <Text style={{ fontSize: 13, color: theme === t ? '#1e1e2e' : '#cdd6f4' }}>{t}</Text>
-          </Box>
-        </Pressable>
+    <Box>
+      {bookmarks.map((b, i) => (
+        <Text key={i}>{b}</Text>
       ))}
     </Box>
   );
@@ -97,38 +104,13 @@ export default function App() {
 ---
 Platforms: love2d
 
-Example 3: Persisted complex object (panel layout)
----
-```tsx
-import { useLocalStore } from '@reactjit/core';
-
-interface PanelState {
-  sidebarOpen: boolean;
-  activeTab: string;
-}
-
-const DEFAULT: PanelState = { sidebarOpen: true, activeTab: 'overview' };
-
-export default function App() {
-  const [layout, setLayout] = useLocalStore<PanelState>('panelLayout', DEFAULT);
-
-  const toggleSidebar = () =>
-    setLayout(prev => ({ ...prev, sidebarOpen: !prev.sidebarOpen }));
-
-  // ... render with layout.sidebarOpen, layout.activeTab
-}
-```
----
-Platforms: love2d
-
 === CRITICAL RULES ===
-- useLocalStore is native-only. In web builds the bridge is unavailable and it silently falls back to plain useState with the defaultValue. This means web builds never persist state — it is not an error.
-- The 300ms write debounce means rapid state changes do not hammer the database. Do not call setCount(0) and immediately read from the DB expecting the new value — the write may not have flushed yet.
-- Keys must be unique within their namespace. Two unrelated useLocalStore calls sharing a key in the same namespace will conflict. Use the namespace option to scope keys by feature area.
-- defaultValue is used only until the stored value loads on first mount. This means there is a brief flash of the default value on every app start. If you need to avoid the flash, check a separate loading state before rendering.
-- Values are stored via JSON serialization. Any non-JSON-safe type (functions, class instances, circular references) will lose type fidelity or fail to persist.
+- Writes are debounced at 300ms. If the component unmounts before the debounce fires, the last value may not be persisted. For critical saves, consider calling the RPC directly via useBridge.
+- The setter supports updater functions like useState: `setCount(prev => prev + 1)`. This is safe for rapid updates.
+- The namespace separates storage databases. Different namespaces cannot see each other's keys. Use this to isolate feature-specific data.
+- The stored value loads asynchronously on mount. The component will briefly render with defaultValue before the stored value arrives. Design your UI to handle this flash gracefully.
+- Values are serialized as JSON through the bridge. Functions, symbols, and circular references cannot be stored.
 
 === SEE ALSO ===
-- useSearchHistory
-- storage
-
+- useHotState
+- useLoveState

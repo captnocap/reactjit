@@ -13,6 +13,24 @@ export interface CRTProps extends MaskProps {
   vignette?: number;
   /** Flicker amount. 0-1. Default 0.03. */
   flicker?: number;
+  /** Hue shift (degrees) for shader grading. Default 0. */
+  shaderHue?: number;
+  /** Saturation multiplier for shader grading. Default 1.06. */
+  shaderSaturation?: number;
+  /** Value multiplier for shader grading. Default 1.0. */
+  shaderValue?: number;
+  /** Contrast multiplier for shader grading. Default 1.08. */
+  shaderContrast?: number;
+  /** Posterize levels (0 disables). Default 0. */
+  shaderPosterize?: number;
+  /** Film grain strength. 0-1. Default derived from scanline intensity. */
+  shaderGrain?: number;
+  /** Vignette strength. 0-1. Default derived from vignette prop. */
+  shaderVignette?: number;
+  /** Optional tint color for grading. Example: #a6e3a1. */
+  shaderTint?: string;
+  /** Tint mix amount. 0-1. Default 0.14. */
+  shaderTintMix?: number;
 }
 
 /**

@@ -133,14 +133,16 @@ Capabilities.register("ReagentTest", {
   events = { "onReactionStart", "onReactionComplete" },
 
   create = function(nodeId, props)
+    local db = REAGENT_DBS[props.type]
+    local reaction = db and db[props.sample] or nil
     return {
       elapsed = 0,
       started = false,
       completed = false,
       currentColor = {0.96, 0.96, 0.86, 1}, -- baseline beige
-      reaction = nil,
-      prevType = nil,
-      prevSample = nil,
+      reaction = reaction,
+      prevType = props.type,
+      prevSample = props.sample,
     }
   end,
 

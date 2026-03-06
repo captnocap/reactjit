@@ -476,12 +476,31 @@ export const hostConfig: HostConfig<
           fiber = fiber.return;
         }
 
-        // Try to get source location (requires JSX dev transform)
-        if (internalHandle._debugSource) {
-          debugSource = {
-            fileName: internalHandle._debugSource.fileName,
-            lineNumber: internalHandle._debugSource.lineNumber,
-          };
+        // Walk the fiber chain to find source location (requires JSX dev transform).
+        // createInstance runs for host nodes (View, Text, etc.) whose _debugSource
+        // points to framework internals (primitives.tsx). We follow _debugOwner up
+        // until we find a source file that isn't inside packages/ or node_modules/.
+        const isUserFile = (f: string) =>
+          f && !f.includes('/packages/') && !f.includes('/node_modules/') && !f.includes('\\packages\\') && !f.includes('\\node_modules\\');
+
+        let src = internalHandle._debugSource;
+        if (src && isUserFile(src.fileName)) {
+          debugSource = { fileName: src.fileName, lineNumber: src.lineNumber };
+        } else {
+          // Follow _debugOwner chain to find nearest user-space source
+          let owner = internalHandle._debugOwner;
+          while (owner) {
+            const ownerSrc = owner._debugSource;
+            if (ownerSrc && isUserFile(ownerSrc.fileName)) {
+              debugSource = { fileName: ownerSrc.fileName, lineNumber: ownerSrc.lineNumber };
+              break;
+            }
+            // Also check the element's own source before moving up
+            if (ownerSrc && !debugSource) {
+              debugSource = { fileName: ownerSrc.fileName, lineNumber: ownerSrc.lineNumber };
+            }
+            owner = owner._debugOwner;
+          }
         }
       } catch (e) {
         // Silently fail — fiber internals may change between React versions

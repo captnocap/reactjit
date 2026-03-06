@@ -53,7 +53,7 @@ export interface PianoKeyboardProps {
 const DEFAULT_BLACK_AFTER = [0, 1, 3, 4, 5];
 
 export function PianoKeyboard({
-  whites,
+  whites = [],
   blacks = [],
   blackAfter = DEFAULT_BLACK_AFTER,
   activeKeys,

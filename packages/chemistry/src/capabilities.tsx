@@ -49,3 +49,32 @@ export interface PhaseDiagramProps {
 export function PhaseDiagram(props: PhaseDiagramProps) {
   return <Native type="PhaseDiagram" {...props} />;
 }
+
+// -- BohrModel (Lua capability: bohr_model.lua) -------------------------------
+
+export interface BohrModelProps {
+  element: number | string;
+  animated?: boolean;
+  speed?: number;
+  showLabel?: boolean;
+  style?: Style;
+}
+
+export function BohrModel(props: BohrModelProps) {
+  return <Native type="BohrModel" {...props} />;
+}
+
+// -- StructureView (Lua capability: structure_view.lua) -----------------------
+
+export interface StructureViewProps {
+  smiles: string;
+  showLabels?: boolean;
+  showHydrogens?: boolean;
+  bondColor?: string;
+  atomScale?: number;
+  style?: Style;
+}
+
+export function StructureView(props: StructureViewProps) {
+  return <Native type="StructureView" {...props} />;
+}

@@ -1,96 +1,96 @@
 === METADATA ===
 title: Hooks
-description: Overview of ReactJIT hooks for Love2D communication, state sharing, and event handling.
+description: React hooks for communicating with the Lua runtime, managing state, and responding to events
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: hooks, useLove, useLoveEvent, useLoveRPC, useLoveState, useLoveReady, useLoveSend, useLoveOverlays, bridge
-related: uselove.txt, useloveevent.txt, useloverpc.txt, uselovestate.txt, useloveready.txt, uselovesend.txt, useloveoverlays.txt
+platforms: love2d
+keywords: hooks, bridge, rpc, events, state, love2d, communication
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT provides a set of React hooks for communicating between the React component tree
-and the Lua runtime (or any target-specific backend). These hooks consume the bridge
-interface (IBridge) via React context, so they work identically regardless of the transport
-layer (Module.FS for web, QuickJS FFI for native Love2D, WebSocket for remote targets).
+Hooks are the React-side API for talking to Lua. Every hook in this section consumes the bridge via React context -- they work identically regardless of the transport layer (QuickJS FFI or WASM Module.FS).
 
-The hooks cover three patterns: event subscription (useLove, useLoveEvent), RPC calls
-(useLoveRPC), and shared state (useLoveState). Additional utility hooks provide readiness
-detection (useLoveReady), fire-and-forget sending (useLoveSend), and DOM overlay positioning
-(useLoveOverlays, web mode only).
+React declares layout and diffs the tree. Hooks are how you reach beyond that into the runtime: subscribe to events, call Lua functions, share state, read the clipboard, bind hotkeys, persist data.
 
-=== API / SYNTAX ===
-All hooks are imported from '@reactjit/core':
+All hooks import from `@reactjit/core`:
 
-  import {
-    useLove,
-    useLoveEvent,
-    useLoveRPC,
-    useLoveState,
-    useLoveReady,
-    useLoveSend,
-    useLoveOverlays,
-  } from '@reactjit/core';
+```tsx
+import { useLove, useLoveEvent, useLoveRPC, useLoveState, useLoveReady, useLoveSend } from '@reactjit/core';
+import { useWindowDimensions, useHotkey, useClipboard } from '@reactjit/core';
+import { useLocalStore, useHotState, useBreakpoint, useBridge } from '@reactjit/core';
+```
 
-All hooks require a BridgeProvider ancestor in the component tree, which is set up
-automatically by the framework's entry point.
+Bridge hooks (React <-> Lua):
+- useBridge -- direct access to the bridge instance
+- useLove -- subscribe to an event and get a send function
+- useLoveEvent -- subscribe to a Lua event (fire-and-forget listener)
+- useLoveRPC -- call a Lua function and await the result
+- useLoveState -- bidirectional shared state between React and Lua
+- useLoveReady -- true when the bridge is initialized
+- useLoveSend -- fire-and-forget message to Lua
+- useLoveOverlays -- position overlay windows in WASM mode
 
-=== EXAMPLES ===
-Example 1: Subscribe to events and send commands
----
-import { useLove } from '@reactjit/core';
+Window and input hooks:
+- useWindowDimensions -- reactive viewport width/height
+- useWindowSize -- declaratively set window size
+- useWindowPosition -- declaratively set window position
+- useWindowAlwaysOnTop -- pin/unpin window on top
+- useHotkey -- bind keyboard shortcuts
+- useClipboard -- read/write system clipboard
 
-function GameHUD() {
-  const [health, send] = useLove('player:health', 100);
-  return (
-    <Box style={{ width: '100%', height: '100%' }}
-         onClick={() => send('player:heal', { amount: 20 })}>
-      <Text style={{ fontSize: 24, color: '#cdd6f4' }}>{`HP: ${health}`}</Text>
-    </Box>
-  );
-}
----
-Platforms: All
+State hooks:
+- useLocalStore -- persistent state backed by SQLite (survives restarts)
+- useHotState -- in-memory state that survives HMR (but not restarts)
+- useBreakpoint -- responsive breakpoint based on viewport width
 
-Example 2: Bidirectional shared state
----
-import { useLoveState } from '@reactjit/core';
+Networking:
+- useFetch -- HTTP requests via Lua fetch polyfill
+- useWebSocket -- persistent WebSocket connection
+- usePeerServer -- host a WebSocket server for P2P
+- useScrape -- declarative web scraping with CSS selectors
 
-function Settings() {
-  const [volume, setVolume] = useLoveState('settings.volume', 0.8);
-  return (
-    <Box style={{ width: '100%', height: 50 }}
-         onClick={() => setVolume(volume > 0 ? 0 : 0.8)}>
-      <Text style={{ fontSize: 16, color: '#cdd6f4' }}>
-        {`Volume: ${Math.round(volume * 100)}%`}
-      </Text>
-    </Box>
-  );
-}
----
-Platforms: All
+Timers and automation:
+- useLuaInterval -- Lua-side interval timer
+- useIFTTT -- declarative trigger-action wiring (If This Then That)
 
-=== PLATFORM NOTES ===
-All hooks work on all platforms via the bridge abstraction. The bridge implementation varies
-by target:
-- Love2D native: QuickJS FFI bridge (bridge_quickjs.lua)
-- Web: Module.FS bridge (in-memory event queue)
-- Terminal/grid targets: Bridge over IPC or WebSocket
+System monitoring:
+- useSystemInfo -- OS, CPU, memory, uptime
+- useSystemMonitor -- htop-level per-core CPU, GPU, processes, network, disk
+- usePorts -- open port monitoring with process kill
 
-useLoveOverlays is only meaningful in web mode where React controls the DOM and needs to
-position HTML overlays relative to a canvas element.
+Search:
+- useSearch -- synchronous in-memory search
+- useFuzzySearch -- scored fuzzy matching
+- useAsyncSearch -- async search with loading state
+- useSearchHistory -- persistent search history (SQLite)
+- useCommandSearch -- command palette filtering
 
-=== CRITICAL RULES ===
-- All hooks require BridgeProvider context -- they will throw if used outside it
-- useLoveEvent uses a ref for the handler to avoid re-subscribing on handler changes
-- useLoveState updates both local React state and Lua-side state bidirectionally
-- useLoveRPC returns an async function -- always await the result
-- Hook event type strings must match the event types dispatched by the Lua side
+Events:
+- useEventBus -- create an in-memory event bus
+- useEvent -- subscribe to bus channels
+- useEmit -- emit events on a channel
+
+Terminal:
+- usePTY -- PTY terminal sessions with output accumulation
+- useSemanticTerminal -- classified PTY with playback controls
+
+Multi-agent:
+- useFleet -- manage concurrent Claude Code sessions
+
+Utilities:
+- useId, useUUID -- ID generation via Lua
+- useTimeAgo, useFormatDate -- date/time formatting via Lua
+- useScale -- viewport-proportional scaling
+- useDebug -- expose data for inspector/console
+- useOverlay -- game overlay mode control
+- useGifRecorder, useRecorder -- capture as GIF/MP4
+
+Hardware:
+- usePin, usePWM, useSerial, useI2C -- GPIO hardware hooks
+
+Discovery:
+- useCapabilities -- list all registered Lua capabilities and their schemas
 
 === SEE ALSO ===
-- uselove.txt -- Event subscription with send function
-- useloveevent.txt -- Fire-and-forget event listener
-- useloverpc.txt -- RPC calls to Lua
-- uselovestate.txt -- Bidirectional shared state
-- useloveready.txt -- Bridge readiness detection
-- uselovesend.txt -- Fire-and-forget send function
-- useloveoverlays.txt -- DOM overlay positioning (web mode)
+- Components
+- Animation
+- Layout System

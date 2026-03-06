@@ -1,253 +1,144 @@
 === METADATA ===
-title: Advanced Rendering (CodeBlock & Text Selection)
-description: Syntax-highlighted code blocks and interactive text selection
+title: Custom Rendering
+description: The Render component for screen capture, webcam, HDMI, and VM display sources.
 category: Advanced
 platforms: love2d
-keywords: codeblock, text-selection, rendering, syntax-highlighting, clipboard
-related: lua-runtime, event-handling
-difficulty: intermediate
+keywords: render, capture, screen, webcam, hdmi, vm, display, video, source, objectfit
+related: Video, Image
+difficulty: advanced
 
 === OVERVIEW ===
-Two specialized rendering components extend ReactJIT with advanced text features:
-CodeBlock for syntax-highlighted source code display, and TextSelection for
-interactive text selection with clipboard support.
+The Render component displays live external video sources inside the ReactJIT layout tree.
+It supports screen capture, webcams, HDMI capture cards, window capture, virtual displays,
+and full virtual machines -- all as a single declarative component.
 
-Both are Lua-owned modules like TextEditor: they render directly via love.graphics
-rather than going through the React layout system. This gives precise control over
-line spacing, highlighting colors, and text metrics.
+The source prop determines what is captured:
+- "screen:N" -- capture screen N via XShm (fast path, Linux only)
+- "cam:N" -- webcam N via v4l2
+- "hdmi:N" -- HDMI capture card N
+- "window:Title" -- capture a specific window by its title
+- "/dev/videoN" -- direct v4l2 device path
+- "display" -- virtual display (Xephyr/Xvfb) where apps render into
+- "file.iso" -- boot a virtual machine from an ISO file
+- "vm:path.qcow2" -- boot a VM from a QEMU disk image
 
-=== COMMON PATTERNS ===
-
-CodeBlock:
-Display source code with syntax highlighting for JavaScript, Lua, TypeScript, JSX,
-and other languages. Useful for documentation, error messages, tutorials, REPLs.
-
-Text Selection:
-Allow users to select and copy text from Text nodes. Useful for documentation,
-code blocks (combined), chat messages, or any read-only text that should be
-copyable. Supports multi-line selection and Ctrl+C / Cmd+C.
+The Lua painter renders the live capture image into the node's computed bounds, applying
+objectFit scaling (contain, cover, or fill). When interactive is true, mouse and keyboard
+events within the node's bounds are forwarded to the capture source.
 
 === API / SYNTAX ===
+```tsx
+import { Render } from '@reactjit/core';
+```
 
----- CodeBlock Module (codeblock.lua) ----
-
-CodeBlock.init(config)
-  Initialize the CodeBlock module. Call once at startup.
-
-  config: table with keys:
-          measure - the measure.lua module (for font metrics)
-
-  Example:
-    local codeblock = require("lua.codeblock")
-    codeblock.init({ measure = measure })
-
-CodeBlock.render(node, ctx, effectiveOpacity)
-  Render a code block node. Called by the painter during tree traversal.
-  (Low-level; use React <CodeBlock> component instead.)
-
-  node: the code block instance
-  ctx:  painter context
-  effectiveOpacity: transparency level (0-1)
-
-CodeBlock.measure(node)
-  Measure the dimensions of a code block. Called during layout.
-  (Low-level; used internally.)
-
-  Returns: { width, height }
-
-Node Properties:
-  style.backgroundColor    - background color (table: {r, g, b, a})
-  style.color              - text color (table or table array for syntax coloring)
-  children[1].children[1].content  - the code string (Text node)
-  children[1].props.language       - optional language hint (js, lua, tsx, py, etc.)
-
----- Text Selection Module (textselection.lua) ----
-
-TextSelection.init(config)
-  Initialize the text selection module. Call once at startup.
-
-  config: table with keys:
-          measure - the measure.lua module
-          events  - the events.lua module
-
-  Example:
-    local textselection = require("lua.textselection")
-    textselection.init({ measure = measure, events = events })
-
-TextSelection.isSelectable(node)
-  Check if a Text node allows selection.
-
-  Returns: true unless node.style.userSelect == "none"
-
-TextSelection.start(node, line, col)
-  Start a text selection on a Text node at a specific line and column.
-  Called by event handlers when mouse is pressed on a selectable Text node.
-
-  line: 1-based line number
-  col:  0-based character column
-
-TextSelection.update(line, col)
-  Update selection endpoint during drag. Called by mousemove handlers.
-
-  line, col: same as start()
-
-TextSelection.finalize()
-  Finalize the selection (mouse released). Extracts the selected text and
-  stores it. Clears selection if zero-length. Called by mousereleased handlers.
-
-TextSelection.clear()
-  Clear the active selection. Called when clicking outside text or
-  programmatically.
-
-TextSelection.copyToClipboard()
-  Copy selected text to system clipboard. Called when Ctrl+C / Cmd+C is pressed.
-
-TextSelection.render(node, ctx, effectiveOpacity)
-  Render the selection highlight and selected text. Called by painter.
-  (Low-level; called automatically.)
-
-TextSelection.getSelection()
-  Get the current selection state (for debugging).
-
-  Returns: { text, lines, startLine, startCol, endLine, endCol, isDragging }
-           or nil if no selection active
-
-Node Properties:
-  style.userSelect - "auto" (default, selectable) or "none" (not selectable)
+Props:
+| Prop        | Type                           | Default   | Description                                          |
+|-------------|--------------------------------|-----------|------------------------------------------------------|
+| source      | string                         | required  | Source identifier (see overview for formats)          |
+| fps         | number                         | 30        | Capture framerate                                    |
+| resolution  | string                         | '1280x720'| Capture resolution (e.g. '1920x1080')                |
+| interactive | boolean                        | varies    | Forward mouse/keyboard to source. Default false for capture, true for display/vm. |
+| muted       | boolean                        | true      | Suppress audio from source                           |
+| objectFit   | 'fill' \| 'contain' \| 'cover' | 'contain' | How the capture fits the node bounds                 |
+| vmMemory    | number                         | 2048      | VM RAM in MB (ISO/QCOW2 sources only)                |
+| vmCpus      | number                         | 2         | VM CPU count (ISO/QCOW2 sources only)                |
+| w           | number/string                  | undefined | Shorthand for style.width                            |
+| h           | number/string                  | undefined | Shorthand for style.height                           |
+| radius      | number                         | undefined | Shorthand for style.borderRadius                     |
+| style       | Style                          | undefined | Layout style                                         |
+| onReady     | (event) => void                | undefined | Fires when the source is connected                   |
+| onError     | (event) => void                | undefined | Fires on capture error                               |
+| onFrame     | (event) => void                | undefined | Fires on each captured frame                         |
+| onClick     | (event) => void                | undefined | Fires on click within the render bounds              |
 
 === EXAMPLES ===
-
-Example 1: Display Syntax-Highlighted Code
+Example 1: Webcam preview
 ---
-import { Box, Text } from '@reactjit/core'
-import React from 'react'
+```tsx
+import { Box, Render } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function CodeDemo() {
-  const code = `
-const greeting = "Hello, Lua!"
-function getValue() {
-  return 42
-}
-  `.trim()
+export function WebcamPreview() {
+  const c = useThemeColors();
 
   return (
-    <Box style={{ padding: 16 }}>
-      <CodeBlock
-        language="js"
-        code={code}
-        style={{
-          backgroundColor: { r: 0.1, g: 0.1, b: 0.1, a: 1 },
-          color: { r: 0.8, g: 0.8, b: 0.8, a: 1 },
-        }}
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+      <Render
+        source="cam:0"
+        fps={30}
+        resolution="640x480"
+        style={{ flexGrow: 1, borderRadius: 8 }}
       />
     </Box>
-  )
+  );
 }
-
-export default CodeDemo
+```
 ---
 Platforms: love2d
 
-Example 2: Selectable Text Node
+Example 2: Screen capture with status callback
 ---
-import { Box, Text, Pressable } from '@reactjit/core'
-import React from 'react'
+```tsx
+import { Box, Render, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+import { useState } from 'react';
 
-function SelectableText() {
+export function ScreenCapture() {
+  const c = useThemeColors();
+  const [status, setStatus] = useState('connecting...');
+
   return (
-    <Box style={{ padding: 16 }}>
-      <Text
-        style={{
-          fontSize: 14,
-          color: { r: 1, g: 1, b: 1, a: 1 },
-          // Allow selection (this is the default)
-          userSelect: "auto"
-        }}
-      >
-        This text can be selected and copied.
-        Try clicking and dragging to select.
-      </Text>
-
-      <Text
-        style={{
-          fontSize: 14,
-          color: { r: 0.5, g: 0.5, b: 0.5, a: 1 },
-          // Prevent selection
-          userSelect: "none"
-        }}
-      >
-        This text cannot be selected.
-      </Text>
+    <Box style={{ width: '100%', height: '100%' }}>
+      <Text style={{ color: c.muted, fontSize: 12, padding: 4 }}>{status}</Text>
+      <Render
+        source="screen:0"
+        fps={60}
+        onReady={() => setStatus('capturing')}
+        onError={(e) => setStatus(`error: ${e.message}`)}
+        style={{ flexGrow: 1 }}
+      />
     </Box>
-  )
+  );
 }
-
-export default SelectableText
+```
 ---
 Platforms: love2d
 
-Example 3: Code Block with Custom Styling
+Example 3: Interactive virtual machine
 ---
-import { Box, Text } from '@reactjit/core'
-import React from 'react'
+```tsx
+import { Box, Render, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-const LUA_CODE = `
--- Recursively count files in a directory
-local function countFiles(dir)
-  local count = 0
-  for entry in love.filesystem.getDirectoryItems(dir) do
-    local path = dir .. "/" .. entry
-    count = count + 1
-  end
-  return count
-end
-`
+export function VMDisplay() {
+  const c = useThemeColors();
 
-function LuaHighlight() {
   return (
-    <Box
-      style={{
-        backgroundColor: { r: 0.05, g: 0.05, b: 0.1, a: 1 },
-        padding: 12,
-        borderRadius: 4,
-      }}
-    >
-      <CodeBlock
-        language="lua"
-        code={LUA_CODE}
-        style={{
-          color: { r: 0.9, g: 0.9, b: 0.9, a: 1 },
-        }}
+    <Box style={{ width: '100%', height: '100%' }}>
+      <Text style={{ color: c.text, fontSize: 14, padding: 8 }}>
+        Ubuntu VM
+      </Text>
+      <Render
+        source="vm:ubuntu.qcow2"
+        interactive
+        vmMemory={4096}
+        vmCpus={4}
+        objectFit="contain"
+        style={{ flexGrow: 1 }}
       />
     </Box>
-  )
+  );
 }
-
-export default LuaHighlight
+```
 ---
 Platforms: love2d
 
 === CRITICAL RULES ===
-- CodeBlock is Lua-owned; dimensions are computed directly, not via React layout
-- Text nodes with userSelect="auto" are selectable by default
-- Selection is global (only one selection active at a time)
-- Ctrl+C / Cmd+C is handled internally; no custom key binding needed
-- CodeBlock requires a language hint (js, lua, tsx, py, etc.) for best highlighting
-- TextSelection works only on Text nodes, not TextInput or other components
-
-=== PERFORMANCE ===
-CodeBlock syntax highlighting is done at render time, not cached. For large code
-blocks (1000+ lines), consider splitting into multiple smaller blocks or optimizing
-line count. Text selection tracking has minimal overhead (stores selection state,
-updates on mouse move).
-
-=== PLATFORM NOTES ===
-
-Love2D:
-  Both modules work with love.graphics directly. Performance is GPU-bound for
-  rendering, CPU-bound for selection hit-testing during mouse moves.
+- Render is a surface node. Without explicit dimensions, it falls back to 1/4 of the parent's available space. Use flexGrow: 1 to fill available space.
+- The objectFit prop controls scaling. "contain" preserves aspect ratio within bounds (letterboxing). "cover" fills bounds and clips. "fill" stretches to fit.
+- VM sources (file.iso, vm:*.qcow2) require QEMU to be installed. The capability launches a QEMU process and connects its display to the node.
+- interactive mode forwards all mouse and keyboard events to the source. The node consumes those events -- they do not bubble to parent React handlers.
 
 === SEE ALSO ===
-- lua-runtime.txt - codeblock.lua and textselection.lua internals
-- 05-components/text.txt - Text node styling and properties
-- event-handling.txt - Mouse event handling and hit testing
+- Video
+- Image

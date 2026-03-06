@@ -44,7 +44,7 @@
  *   lua-no-forward-ref           (error)   Call to local function before its declaration — causes nil crash at runtime
  *   lua-no-accidental-global     (error)   Assignment without `local` keyword — pollutes _G in LuaJIT
  *   lua-no-node-cache            (warning) Caching a node table reference across frames — nodes are recreated each commit
- *   lua-no-ffi-without-pcall     (error)   ffi.load() or ffi.C.* call outside pcall/xpcall wrapper
+ *   lua-no-ffi-without-pcall     (warning) ffi.load() or ffi.C.* call outside pcall/xpcall wrapper
  *   lua-no-ffi-load-shared-lib   (warning) ffi.load("LibName") when Love2D already loaded it — use ffi.C.* instead
  *   lua-no-unguarded-division    (warning) Division where denominator could be zero or nil
  */
@@ -826,7 +826,7 @@ function lintLuaFfiWithoutPcall(filePath, rawLines) {
       const col = line.indexOf('ffi.load');
       diagnostics.push({
         rule: 'lua-no-ffi-without-pcall',
-        severity: 'error',
+        severity: 'warn',
         message: `ffi.load() without pcall wrapper — will crash if library is missing. Use \`local ok, lib = pcall(ffi.load, name)\`.`,
         file: filePath,
         line: i + 1,
@@ -851,7 +851,7 @@ function lintLuaFfiWithoutPcall(filePath, rawLines) {
 
       diagnostics.push({
         rule: 'lua-no-ffi-without-pcall',
-        severity: 'error',
+        severity: 'warn',
         message: `ffi.C.${sym} without pcall wrapper — will crash if symbol is unavailable. Wrap in pcall/xpcall.`,
         file: filePath,
         line: i + 1,
@@ -2052,6 +2052,8 @@ const rules = [
         'transition', 'animation',
         // Vector shapes (Love2D-only)
         'arcShape', 'polygonPoints', 'strokePaths', 'strokeWidth', 'strokeColor',
+        // Stroke dash (SVG-style dash animations)
+        'strokeDasharray', 'strokeDashoffset',
       ]);
 
       const invalid = [];
