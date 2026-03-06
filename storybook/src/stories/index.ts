@@ -53,7 +53,7 @@ import { PhysicsStory } from './PhysicsStory';
 import { GeoScene3DStory } from './GeoScene3DStory';
 import { ThreeDStory } from './ThreeDStory';
 import { OverlayStory } from './OverlayStory';
-import { WireGuardStory } from './WireGuardStory';
+
 import { ImagingStory } from './ImagingStory';
 
 export const stories: StoryDef[] = [
@@ -94,7 +94,7 @@ export const stories: StoryDef[] = [
   { id: 'geoscene-3d', title: 'GeoScene3D', section: 'Demos', component: GeoScene3DStory },
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
   { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
-  { id: 'wireguard', title: 'WireGuard', section: 'Packages', component: WireGuardStory },
+
   { id: 'imaging', title: 'Imaging', section: 'Packages', component: ImagingStory },
 
   // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
