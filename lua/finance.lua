@@ -14,7 +14,10 @@ local abs = math.abs
 local max = math.max
 local min = math.min
 local sqrt = math.sqrt
+local floor = math.floor
+local random = math.random
 local insert = table.insert
+local remove = table.remove
 
 local NAN = 0 / 0
 
@@ -43,6 +46,19 @@ local function candle(c)
     close = num(c.close, 0),
     volume = num(c.volume, 0),
   }
+end
+
+local function normalize_candles(candles)
+  local out = {}
+  candles = candles or {}
+  for i = 1, #candles do
+    out[i] = candle(candles[i])
+  end
+  return out
+end
+
+local function round2(v)
+  return floor(v * 100 + 0.5) / 100
 end
 
 -- ============================================================================
@@ -523,6 +539,76 @@ function M.portfolio_remove_holding(holdings, symbol)
 end
 
 -- ============================================================================
+-- Synthetic OHLCV data
+-- ============================================================================
+
+function M.synthetic_generate(args)
+  args = args or {}
+  local count = max(1, floor(num(args.count, 60)))
+  local startPrice = num(args.startPrice, 100)
+  local volatility = num(args.volatility, 2)
+  local seed = floor(num(args.seed, 42))
+  local now = floor(num(args.now, os.time()))
+
+  local candles = {}
+  local price = startPrice
+  local s = seed
+  local function rand()
+    s = (s * 16807) % 2147483647
+    return (s % 2147483647) / 2147483647
+  end
+
+  for i = 1, count do
+    local open = price
+    local drift = (rand() - 0.5) * volatility * 2
+    local close = max(1, open + drift)
+    local high = max(open, close) + rand() * volatility
+    local low = min(open, close) - rand() * volatility
+    local volume = 1000 + floor(rand() * 9000)
+    candles[i] = {
+      time = now - (count - i) * 3600,
+      open = round2(open),
+      high = round2(high),
+      low = round2(max(0.01, low)),
+      close = round2(close),
+      volume = volume,
+    }
+    price = close
+  end
+
+  return candles
+end
+
+function M.synthetic_append(candles, volatility, maxCount)
+  local out = normalize_candles(candles)
+  if #out == 0 then return out end
+
+  volatility = num(volatility, 2)
+  maxCount = max(1, floor(num(maxCount, 200)))
+  local last = out[#out]
+  local open = last.close
+  local drift = (random() - 0.5) * volatility * 2
+  local close = max(1, open + drift)
+  local high = max(open, close) + random() * volatility
+  local low = min(open, close) - random() * volatility
+  local volume = 1000 + floor(random() * 9000)
+
+  insert(out, {
+    time = last.time + 3600,
+    open = round2(open),
+    high = round2(high),
+    low = round2(max(0.01, low)),
+    close = round2(close),
+    volume = volume,
+  })
+
+  if #out > maxCount then
+    remove(out, 1)
+  end
+  return out
+end
+
+-- ============================================================================
 -- RPC handlers
 -- ============================================================================
 
@@ -555,6 +641,18 @@ handlers["finance:portfolio_remove_holding"] = function(args)
   return M.portfolio_remove_holding(
     args and args.holdings or {},
     args and args.symbol or nil
+  )
+end
+
+handlers["finance:synthetic_generate"] = function(args)
+  return M.synthetic_generate(args)
+end
+
+handlers["finance:synthetic_append"] = function(args)
+  return M.synthetic_append(
+    args and args.candles or {},
+    args and args.volatility or nil,
+    args and args.maxCount or nil
   )
 end
 
