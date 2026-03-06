@@ -1,133 +1,154 @@
 === METADATA ===
 title: useTransition
-description: Convenience hook that automatically transitions to a value with timing-based easing.
+description: Timing-based animated transition to a target value with easing
 category: Animation
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: useTransition, hook, timing, easing, transition, convenience, duration, animation
-related: usespring.txt, useanimation.txt, easing.txt
-difficulty: beginner
+platforms: love2d
+keywords: useTransition, transition, easing, duration, timing, tween
+difficulty: intermediate
 
 === OVERVIEW ===
-useTransition is a convenience hook that automatically starts a timing-based animation
-whenever its target value changes. It is the simplest way to add eased transitions to a
-component -- you provide the target value and optional timing configuration, and the hook
-returns the current interpolated value.
+useTransition automatically transitions to a target value whenever it changes, using timing-based animation with a configurable duration and easing curve. Unlike useSpring, which determines its own timing from physics, useTransition gives you precise control over how long the animation takes.
 
-Like useSpring, the hook skips animation on the first render (the value starts at the target
-immediately). On subsequent renders where the target changes, a timing animation with the
-specified duration and easing is started.
+The hook skips animation on the first render and jumps straight to the target value. On subsequent changes, it starts a timing animation from the current position to the new target.
+
+useTransition is best for:
+- Animations that need a specific, predictable duration
+- Progress bars and loading indicators
+- Opacity fades with precise timing
+- Any value that should arrive at its target in exactly N milliseconds
+
+For physics-based motion with natural overshoot, use useSpring instead. For Lua-driven transitions that produce zero JS re-renders, use style.transition in your style objects.
 
 === API / SYNTAX ===
-Signature:
-  function useTransition(value: number, config?: { duration?: number; easing?: EasingFunction }): number
+```tsx
+import { useTransition } from '@reactjit/core';
+
+const currentValue = useTransition(targetValue, config?);
+```
 
 Parameters:
-  value: number
-    The target value to transition towards. When this changes, a new timing animation starts.
+| Parameter   | Type   | Description                                |
+|-------------|--------|--------------------------------------------|
+| targetValue | number | The value to transition toward             |
+| config      | object | Optional timing configuration              |
 
-  config?: object (optional)
-    duration?: number            Duration in milliseconds. Default: 300
-    easing?: EasingFunction      Easing function. Default: Easing.easeInOut
+Config:
+| Field    | Type           | Default          | Description                     |
+|----------|----------------|------------------|---------------------------------|
+| duration | number         | 300              | Duration in milliseconds        |
+| easing   | EasingFunction | Easing.easeInOut | Easing curve for the transition |
 
-Returns:
-  number
-    The current interpolated value. Updates each animation frame, triggering re-render.
+Returns: number — the current interpolated value. Updates each frame during the transition.
 
 === EXAMPLES ===
-Example 1: Smooth opacity transition
+Example 1: Smooth progress bar
 ---
-import { useState } from 'react';
-import { useTransition, Box, Text } from '@reactjit/core';
+```tsx
+import { useState, useEffect } from 'react';
+import { Box, Text, useTransition, Easing } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function FadeToggle() {
-  const [visible, setVisible] = useState(true);
-  const opacity = useTransition(visible ? 1 : 0, { duration: 400 });
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Box style={{ width: 200, height: 80, opacity, backgroundColor: '#89b4fa', borderRadius: 8 }}>
-        <Text style={{ fontSize: 16, color: '#1e1e2e' }}>Content</Text>
-      </Box>
-      <Box
-        style={{ width: 100, height: 40, marginTop: 12, backgroundColor: '#313244', borderRadius: 4 }}
-        onClick={() => setVisible(!visible)}
-      >
-        <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Toggle</Text>
-      </Box>
-    </Box>
-  );
-}
----
-Platforms: All
-
-Example 2: Custom easing
----
-import { useState } from 'react';
-import { useTransition, Easing, Box } from '@reactjit/core';
-
-function SlidePanel() {
-  const [open, setOpen] = useState(false);
-  const x = useTransition(open ? 0 : -250, {
+export function SmoothProgress({ percent }: { percent: number }) {
+  const c = useThemeColors();
+  const width = useTransition(percent, {
     duration: 500,
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    easing: Easing.easeOut,
   });
 
   return (
-    <Box style={{ width: '100%', height: '100%' }}>
+    <Box style={{ height: 8, backgroundColor: c.surface, borderRadius: 4 }}>
       <Box style={{
-        width: 250,
-        height: '100%',
-        backgroundColor: '#313244',
-        transform: { translateX: x },
-      }}>
-        <Text style={{ fontSize: 16, color: '#cdd6f4', padding: 16 }}>Side Panel</Text>
-      </Box>
-      <Box
-        style={{ position: 'absolute', top: 10, right: 10, width: 80, height: 40, backgroundColor: '#a6e3a1', borderRadius: 4 }}
-        onClick={() => setOpen(!open)}
-      >
-        <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Menu</Text>
-      </Box>
-    </Box>
-  );
-}
----
-Platforms: All
-
-Example 3: Progress bar animation
----
-import { useTransition, Box, Text } from '@reactjit/core';
-import { Easing } from '@reactjit/core';
-
-function ProgressBar({ progress }: { progress: number }) {
-  const width = useTransition(progress * 300, { duration: 600, easing: Easing.easeOut });
-
-  return (
-    <Box style={{ width: 300, height: 24, backgroundColor: '#313244', borderRadius: 4 }}>
-      <Box style={{
-        width,
-        height: '100%',
-        backgroundColor: '#a6e3a1',
+        height: 8,
+        width: `${Math.max(0, Math.min(100, width))}%`,
+        backgroundColor: c.primary,
         borderRadius: 4,
       }} />
     </Box>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-=== PLATFORM NOTES ===
-Works identically on all platforms. Uses useAnimation internally with timing-based animation.
+Example 2: Fade between states
+---
+```tsx
+import { useState } from 'react';
+import { Box, Pressable, Text, useTransition, Easing } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function FadeToggle() {
+  const c = useThemeColors();
+  const [active, setActive] = useState(false);
+  const opacity = useTransition(active ? 1 : 0.3, {
+    duration: 400,
+    easing: Easing.easeInOut,
+  });
+
+  return (
+    <Pressable onPress={() => setActive(v => !v)}>
+      <Box style={{
+        opacity,
+        padding: 16,
+        backgroundColor: c.surface,
+        borderRadius: 8,
+      }}>
+        <Text style={{ color: c.text, fontSize: 14 }}>
+          {`${active ? 'Active' : 'Inactive'}`}
+        </Text>
+      </Box>
+    </Pressable>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 3: Animated sidebar width
+---
+```tsx
+import { useState } from 'react';
+import { Box, Pressable, Text, useTransition, Easing } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function CollapsibleSidebar() {
+  const c = useThemeColors();
+  const [open, setOpen] = useState(true);
+  const sidebarWidth = useTransition(open ? 240 : 48, {
+    duration: 250,
+    easing: Easing.easeInOut,
+  });
+
+  return (
+    <Box style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
+      <Box style={{
+        width: sidebarWidth,
+        backgroundColor: c.bgElevated,
+        overflow: 'hidden',
+      }}>
+        <Pressable onPress={() => setOpen(v => !v)}>
+          <Box style={{ padding: 12 }}>
+            <Text style={{ color: c.text, fontSize: 14 }}>
+              {`${open ? 'Collapse' : '>'}`}
+            </Text>
+          </Box>
+        </Pressable>
+      </Box>
+      <Box style={{ flexGrow: 1, backgroundColor: c.bg }} />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Animation is skipped on first render -- value starts at the target immediately
-- A new timing animation starts every time value changes
-- The previous animation is automatically stopped when a new one starts
-- Config changes do NOT restart the animation -- only value changes trigger animation
-- Config is read from a ref at animation start time, so it can be dynamic
-- Default easing is Easing.easeInOut; default duration is 300ms
+- useTransition skips animation on the first render — the component starts at the target value instantly.
+- The component re-renders every frame during the transition. For visual-only effects, prefer Lua-driven style.transition which produces zero JS re-renders.
+- If the target value changes mid-transition, the animation restarts from the current interpolated position to the new target.
 
 === SEE ALSO ===
-- usespring.txt -- Spring-based convenience hook (physics-based alternative)
-- useanimation.txt -- Full control over AnimatedValue
-- easing.txt -- Available easing functions
+- useSpring
+- useAnimation
+- Easing
+- AnimatedValue

@@ -1,262 +1,203 @@
 === METADATA ===
 title: Composite Animations
-description: Combining animations with parallel, sequence, stagger, and loop.
+description: Compose animations with parallel, sequence, stagger, and loop
 category: Animation
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: parallel, sequence, stagger, loop, composite, animation, combine, orchestrate, chain
-related: animatedvalue.txt, useanimation.txt, easing.txt
+platforms: love2d
+keywords: parallel, sequence, stagger, loop, compose, chain, animation
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT provides four functions for composing multiple animations into coordinated
-sequences: parallel (run simultaneously), sequence (run one after another), stagger (start
-each with a delay offset), and loop (repeat an animation). All return an Animation object
-with start() and stop() methods, so they can themselves be composed into larger animations.
+The animation system provides four composition functions that combine Animation objects into more complex motion patterns. Each returns a new Animation with the same start/stop interface, so they can be nested arbitrarily.
 
-These functions operate on Animation objects (returned by AnimatedValue.timing() and
-AnimatedValue.spring()), not on AnimatedValues directly. This means you create individual
-animations first, then compose them.
+parallel() runs all animations at the same time and completes when every animation finishes.
+
+sequence() runs animations one after another. Each animation starts only after the previous one completes.
+
+stagger(delay, animations) starts each animation with an incremental delay between them. The first animation starts immediately, the second starts after delay ms, the third after delay*2 ms, and so on.
+
+loop(animation, config?) repeats an animation. Pass { iterations: N } to repeat N times, or omit for infinite looping. An infinite loop never calls its completion callback.
+
+All four functions accept and return the Animation interface, so they compose freely: you can loop a sequence of staggered parallels if the situation calls for it.
 
 === API / SYNTAX ===
-All functions are imported from '@reactjit/core':
+```tsx
+import { parallel, sequence, stagger, loop } from '@reactjit/core';
+```
 
-  import { parallel, sequence, stagger, loop } from '@reactjit/core';
+| Function | Signature                                                  | Description                             |
+|----------|------------------------------------------------------------|-----------------------------------------|
+| parallel | (animations: Animation[]) => Animation                     | Run all at once, finish when all finish |
+| sequence | (animations: Animation[]) => Animation                     | Run one after another in order          |
+| stagger  | (delay: number, animations: Animation[]) => Animation      | Staggered parallel start                |
+| loop     | (animation: Animation, config?: { iterations?: number }) => Animation | Repeat N times or infinitely  |
 
-parallel(animations: Animation[]): Animation
-  Starts all animations simultaneously. Completes when ALL animations finish.
-  The callback receives { finished: true } only if every animation finished naturally.
-  If any animation is stopped, finished is false.
-  Passing an empty array completes immediately with { finished: true }.
-
-sequence(animations: Animation[]): Animation
-  Runs animations one after another in order. Each animation starts when the previous
-  one finishes. If any animation in the sequence does not finish (stopped), the sequence
-  halts and reports { finished: false }.
-
-stagger(delay: number, animations: Animation[]): Animation
-  Starts each animation with an incremental delay. The first starts immediately, the
-  second after `delay` ms, the third after `2 * delay` ms, etc. Completes when all
-  animations finish.
-
-  delay: number    Milliseconds between each animation start.
-  animations: Animation[]    The animations to stagger.
-
-loop(animation: Animation, config?: { iterations?: number }): Animation
-  Repeats a single animation.
-
-  animation: Animation    The animation to repeat.
-  config.iterations?: number
-    Number of iterations. Default: -1 (infinite).
-    -1 = infinite loop (must be stopped manually).
-    Positive number = run that many times, then complete.
-
-All return Animation:
-  {
-    start(callback?: (result: { finished: boolean }) => void): void
-    stop(): void
-  }
+Loop config:
+| Field      | Type   | Default | Description                        |
+|------------|--------|---------|------------------------------------|
+| iterations | number | -1      | Number of repeats (-1 = infinite)  |
 
 === EXAMPLES ===
 Example 1: Parallel fade + slide
 ---
+```tsx
 import { useEffect } from 'react';
-import { useAnimation, parallel, Box, Text } from '@reactjit/core';
+import { Box, useAnimation, parallel, Easing } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function FadeSlideIn() {
+export function FadeSlideIn() {
+  const c = useThemeColors();
   const [opacityAnim, opacity] = useAnimation(0);
-  const [yAnim, y] = useAnimation(50);
+  const [slideAnim, translateY] = useAnimation(30);
 
   useEffect(() => {
     const anim = parallel([
-      opacityAnim.timing({ toValue: 1, duration: 500 }),
-      yAnim.timing({ toValue: 0, duration: 500 }),
+      opacityAnim.timing({ toValue: 1, duration: 400, easing: Easing.easeOut }),
+      slideAnim.timing({ toValue: 0, duration: 400, easing: Easing.easeOut }),
     ]);
     anim.start();
     return () => anim.stop();
-  }, [opacityAnim, yAnim]);
+  }, [opacityAnim, slideAnim]);
 
   return (
-    <Box style={{
-      width: 200,
-      height: 80,
-      opacity,
-      backgroundColor: '#89b4fa',
-      borderRadius: 8,
-      transform: { translateY: y },
-    }}>
-      <Text style={{ fontSize: 18, color: '#1e1e2e' }}>Hello</Text>
+    <Box style={{ opacity, transform: { translateY }, backgroundColor: c.surface, padding: 16 }}>
+      {/* content */}
     </Box>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Sequential animation chain
+Example 2: Sequence for multi-step animation
 ---
+```tsx
 import { useEffect } from 'react';
-import { useAnimation, sequence, Easing, Box } from '@reactjit/core';
+import { useAnimation, sequence, Easing } from '@reactjit/core';
 
-function SequenceDemo() {
-  const [xAnim, x] = useAnimation(0);
-  const [yAnim, y] = useAnimation(0);
-  const [scaleAnim, scale] = useAnimation(1);
+export function usePopIn() {
+  const [anim, scale] = useAnimation(0);
 
   useEffect(() => {
-    const anim = sequence([
-      xAnim.timing({ toValue: 200, duration: 400, easing: Easing.easeOut }),
-      yAnim.timing({ toValue: 200, duration: 400, easing: Easing.easeOut }),
-      scaleAnim.spring({ toValue: 1.5, stiffness: 200, damping: 12 }),
+    const pop = sequence([
+      anim.timing({ toValue: 1.2, duration: 200, easing: Easing.easeOut }),
+      anim.timing({ toValue: 1.0, duration: 150, easing: Easing.easeInOut }),
     ]);
-    anim.start();
-    return () => anim.stop();
-  }, [xAnim, yAnim, scaleAnim]);
+    pop.start();
+    return () => pop.stop();
+  }, [anim]);
 
-  return (
-    <Box style={{
-      width: 50,
-      height: 50,
-      backgroundColor: '#f38ba8',
-      borderRadius: 25,
-      transform: { translateX: x, translateY: y, scaleX: scale, scaleY: scale },
-    }} />
-  );
+  return scale;
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Staggered list appearance
+Example 3: Staggered list entrance
 ---
+```tsx
 import { useEffect } from 'react';
-import { useAnimation, stagger, Box, Text } from '@reactjit/core';
+import { Box, Text, useAnimation, stagger, Easing } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function StaggeredList() {
-  const [a1, v1] = useAnimation(0);
-  const [a2, v2] = useAnimation(0);
-  const [a3, v3] = useAnimation(0);
-  const [a4, v4] = useAnimation(0);
+export function StaggeredList({ items }: { items: string[] }) {
+  const c = useThemeColors();
+  const anims = items.map(() => useAnimation(0));
 
   useEffect(() => {
-    const anim = stagger(100, [
-      a1.timing({ toValue: 1, duration: 300 }),
-      a2.timing({ toValue: 1, duration: 300 }),
-      a3.timing({ toValue: 1, duration: 300 }),
-      a4.timing({ toValue: 1, duration: 300 }),
-    ]);
-    anim.start();
-    return () => anim.stop();
-  }, [a1, a2, a3, a4]);
-
-  const items = [v1, v2, v3, v4];
-  const labels = ['Item A', 'Item B', 'Item C', 'Item D'];
-  const colors = ['#f38ba8', '#a6e3a1', '#89b4fa', '#f9e2af'];
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 8 }}>
-      {items.map((opacity, i) => (
-        <Box key={i} style={{
-          width: '100%',
-          height: 50,
-          opacity,
-          backgroundColor: colors[i],
-          borderRadius: 8,
-          padding: 12,
-          transform: { translateX: (1 - opacity) * 30 },
-        }}>
-          <Text style={{ fontSize: 16, color: '#1e1e2e' }}>{labels[i]}</Text>
-        </Box>
-      ))}
-    </Box>
-  );
-}
----
-Platforms: All
-
-Example 4: Infinite pulsing loop
----
-import { useEffect } from 'react';
-import { useAnimation, loop, sequence, Box } from '@reactjit/core';
-
-function PulsingDot() {
-  const [scaleAnim, scale] = useAnimation(1);
-
-  useEffect(() => {
-    const pulse = loop(
-      sequence([
-        scaleAnim.timing({ toValue: 1.3, duration: 600 }),
-        scaleAnim.timing({ toValue: 1.0, duration: 600 }),
-      ]),
-      { iterations: -1 }
+    const animations = anims.map(([anim]) =>
+      anim.timing({ toValue: 1, duration: 300, easing: Easing.easeOut })
     );
+    const staggered = stagger(80, animations);
+    staggered.start();
+    return () => staggered.stop();
+  }, []);
+
+  return (
+    <Box style={{ gap: 4 }}>
+      {items.map((item, i) => {
+        const [, opacity] = anims[i];
+        return (
+          <Box key={item} style={{ opacity, padding: 8, backgroundColor: c.surface, borderRadius: 4 }}>
+            <Text style={{ color: c.text, fontSize: 14 }}>{item}</Text>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 4: Infinite pulse with loop + sequence
+---
+```tsx
+import { useEffect } from 'react';
+import { Box, useAnimation, loop, sequence, Easing } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function PulsingDot() {
+  const c = useThemeColors();
+  const [anim, scale] = useAnimation(1);
+
+  useEffect(() => {
+    const pulse = loop(sequence([
+      anim.timing({ toValue: 1.4, duration: 600, easing: Easing.easeInOut }),
+      anim.timing({ toValue: 1.0, duration: 600, easing: Easing.easeInOut }),
+    ]));
     pulse.start();
     return () => pulse.stop();
-  }, [scaleAnim]);
+  }, [anim]);
 
   return (
     <Box style={{
-      width: 40,
-      height: 40,
-      backgroundColor: '#a6e3a1',
-      borderRadius: 20,
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      backgroundColor: c.primary,
       transform: { scaleX: scale, scaleY: scale },
     }} />
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Loop with finite iterations
+Example 5: Finite loop
 ---
+```tsx
 import { useEffect } from 'react';
-import { useAnimation, loop, Box } from '@reactjit/core';
+import { useAnimation, loop, Easing } from '@reactjit/core';
 
-function ShakeBox() {
-  const [xAnim, x] = useAnimation(0);
+export function useFlash(times: number = 3) {
+  const [anim, opacity] = useAnimation(1);
 
   useEffect(() => {
-    const shake = loop(
-      sequence([
-        xAnim.timing({ toValue: 10, duration: 50 }),
-        xAnim.timing({ toValue: -10, duration: 50 }),
-        xAnim.timing({ toValue: 0, duration: 50 }),
-      ]),
-      { iterations: 3 }
+    const flash = loop(
+      anim.timing({ toValue: 0, duration: 150, easing: Easing.linear }),
+      { iterations: times },
     );
-    shake.start();
-    return () => shake.stop();
-  }, [xAnim]);
+    flash.start(() => {
+      anim.setValue(1); // reset after flashing
+    });
+    return () => flash.stop();
+  }, [anim, times]);
 
-  return (
-    <Box style={{
-      width: 100,
-      height: 100,
-      backgroundColor: '#f38ba8',
-      borderRadius: 8,
-      transform: { translateX: x },
-    }} />
-  );
+  return opacity;
 }
+```
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-Composite animations work identically on all platforms. They coordinate Animation objects,
-which internally use the shared frame loop (requestAnimationFrame on web, setTimeout on
-Love2D/native).
-
-stagger uses setTimeout for the delay offsets. On platforms with imprecise timers, the
-actual delay between starts may vary slightly.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- All functions return Animation objects -- you must call .start() to begin
-- Always call .stop() in effect cleanup to prevent memory leaks and runaway animations
-- parallel completes when ALL animations finish -- one slow animation holds up the group
-- sequence halts if any animation is stopped (reports finished: false)
-- stagger delay is in milliseconds, applied cumulatively (0, delay, 2*delay, 3*delay, ...)
-- loop with iterations: -1 runs forever -- you MUST stop it manually
-- Composite animations can be nested: loop(sequence([parallel([...]), ...])) is valid
-- Empty animation arrays complete immediately with { finished: true }
+- sequence() stops if any animation in the chain finishes with { finished: false }. The remaining animations in the sequence are skipped.
+- stagger() uses setTimeout for delays between starts. In an infinite loop, prefer using Lua-driven animation with keyframe delay instead for lower overhead.
+- loop() with no iterations config runs forever and never calls its completion callback. Always stop it in a useEffect cleanup.
+- An empty array passed to parallel(), sequence(), or stagger() completes immediately with { finished: true }.
+- Composition functions return the standard Animation interface, so they can be nested: loop(sequence([parallel([a, b]), c])).
 
 === SEE ALSO ===
-- animatedvalue.txt -- Creating individual Animation objects
-- useanimation.txt -- React hook for animated values
-- easing.txt -- Easing functions used with timing animations
+- useAnimation
+- AnimatedValue
+- Easing
+- Animation Presets

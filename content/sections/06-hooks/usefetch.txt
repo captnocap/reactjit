@@ -1,81 +1,65 @@
 === METADATA ===
 title: useFetch
-description: Fetch JSON data from a URL or local file path with loading and error state.
+description: HTTP requests via the Lua fetch polyfill with loading and error state
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: fetch, http, network, json, loading, data, async, request
-related: useWebSocket, useLoveRPC
-difficulty: beginner
+platforms: love2d
+keywords: fetch, http, request, api, json, loading, network
+related: useWebSocket, useScrape
+difficulty: intermediate
 
 === OVERVIEW ===
-useFetch wraps the global fetch() API in a React hook that manages loading, data, and error state. It works across all ReactJIT targets: on Love2D the fetch polyfill routes HTTP requests through LuaSocket and local file paths through love.filesystem; on web and Node targets the platform's native fetch is used. Pass null as the URL to clear state and skip any in-flight request, which is useful for conditional fetching. The options argument accepts standard RequestInit and is kept in a ref so changing it does not trigger a re-fetch.
+useFetch makes HTTP requests through the Lua runtime. In Love2D it uses the fetch() polyfill which routes to LuaSocket for HTTP or love.filesystem for local files. Returns standard loading/error/data state.
+
+Pass `null` as the URL to disable fetching. The hook re-fetches when the URL changes. Options follow the standard RequestInit interface (method, headers, body).
 
 === API / SYNTAX ===
 ```tsx
 import { useFetch } from '@reactjit/core';
 ```
 
+Signature:
+```tsx
+function useFetch<T = any>(
+  url: string | null,
+  options?: RequestInit
+): { data: T | null; error: Error | null; loading: boolean }
+```
+
 Parameters:
-| Param   | Type           | Default   | Description |
-|---------|----------------|-----------|-------------|
-| url     | string \| null | required  | The URL or local file path to fetch. Pass null to skip fetching and clear state. |
-| options | RequestInit    | undefined | Standard fetch options (method, headers, body, etc.). Changes to this object do not trigger a re-fetch. |
+| Param   | Type            | Default   | Description                          |
+|---------|-----------------|-----------|--------------------------------------|
+| url     | string \| null  | required  | URL to fetch, or null to disable     |
+| options | RequestInit     | undefined | Standard fetch options (method, etc) |
 
 Returns:
-| Field   | Type        | Description |
-|---------|-------------|-------------|
-| data    | T \| null   | The parsed JSON response body, or null while loading or on error. |
-| error   | Error \| null | The fetch or HTTP error, or null when successful or still loading. |
-| loading | boolean     | True while the request is in flight. Starts as true when url is non-null. |
+| Field   | Type          | Description                              |
+|---------|---------------|------------------------------------------|
+| data    | T \| null     | Parsed JSON response, null until loaded  |
+| error   | Error \| null | Error if the request failed              |
+| loading | boolean       | True while the request is in flight      |
 
 === EXAMPLES ===
-Example 1: Fetch a list of users from an API
+Example 1: Fetch JSON data
 ---
 ```tsx
-import { useFetch, Box, Text } from '@reactjit/core';
+import { Box, Text } from '@reactjit/core';
+import { useFetch } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-interface User {
-  id: number;
-  name: string;
-}
+interface User { id: number; name: string; }
 
-function UserList() {
+export function UserList() {
+  const colors = useThemeColors();
   const { data, loading, error } = useFetch<User[]>('https://api.example.com/users');
 
-  if (loading) return <Text fontSize={14}>Loading...</Text>;
-  if (error) return <Text fontSize={14}>Error: {error.message}</Text>;
+  if (loading) return <Text style={{ color: colors.muted }}>Loading...</Text>;
+  if (error) return <Text style={{ color: colors.primary }}>{`Error: ${error.message}`}</Text>;
 
   return (
-    <Box flexDirection="column" gap={4} padding={12}>
+    <Box style={{ gap: 8 }}>
       {data?.map(user => (
-        <Text key={user.id} fontSize={14}>{user.name}</Text>
+        <Text key={user.id} style={{ color: colors.text }}>{user.name}</Text>
       ))}
-    </Box>
-  );
-}
-```
----
-Platforms: All
-
-Example 2: Load a local config file bundled with the Love2D project
----
-```tsx
-import { useFetch, Box, Text } from '@reactjit/core';
-
-interface Config {
-  version: string;
-  theme: string;
-}
-
-function ConfigDisplay() {
-  const { data: config, loading } = useFetch<Config>('data/config.json');
-
-  if (loading || !config) return <Text fontSize={14}>Loading config...</Text>;
-
-  return (
-    <Box flexDirection="column" gap={4} padding={8}>
-      <Text fontSize={14}>Version: {config.version}</Text>
-      <Text fontSize={14}>Theme: {config.theme}</Text>
     </Box>
   );
 }
@@ -83,70 +67,54 @@ function ConfigDisplay() {
 ---
 Platforms: love2d
 
-Example 3: Conditional fetch — only fetch when an ID is selected
+Example 2: Conditional fetching
 ---
 ```tsx
 import { useState } from 'react';
-import { useFetch, Box, Text, Pressable } from '@reactjit/core';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useFetch } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-interface Item {
-  id: number;
-  title: string;
-}
-
-function ItemViewer() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const url = selectedId != null ? `https://api.example.com/items/${selectedId}` : null;
-  const { data, loading } = useFetch<Item>(url);
+export function ConditionalFetch() {
+  const colors = useThemeColors();
+  const [userId, setUserId] = useState<number | null>(null);
+  const { data, loading } = useFetch(userId ? `https://api.example.com/users/${userId}` : null);
 
   return (
-    <Box flexDirection="column" gap={8} padding={12} width="100%">
-      <Box flexDirection="row" gap={8} width="100%">
-        {[1, 2, 3].map(id => (
-          <Pressable key={id} onPress={() => setSelectedId(id)}>
-            <Box backgroundColor="#333" padding={8}>
-              <Text fontSize={13}>Item {id}</Text>
-            </Box>
-          </Pressable>
-        ))}
-      </Box>
-      {loading && <Text fontSize={14}>Loading...</Text>}
-      {data && <Text fontSize={15}>{data.title}</Text>}
+    <Box style={{ gap: 8 }}>
+      <Pressable onPress={() => setUserId(1)}>
+        <Text style={{ color: colors.primary }}>Load User 1</Text>
+      </Pressable>
+      {loading && <Text style={{ color: colors.muted }}>Loading...</Text>}
+      {data && <Text style={{ color: colors.text }}>{`Name: ${data.name}`}</Text>}
     </Box>
   );
 }
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: POST request with custom options
+Example 3: Load a local JSON file
 ---
 ```tsx
-import { useFetch, Text } from '@reactjit/core';
+import { useFetch } from '@reactjit/core';
 
-interface CreateResponse {
-  id: number;
-}
+interface Config { theme: string; fontSize: number; }
 
-function Creator() {
-  const { data, loading, error } = useFetch<CreateResponse>(
-    'https://api.example.com/items',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'New Item' }),
-    }
-  );
-
-  if (loading) return <Text fontSize={14}>Creating...</Text>;
-  if (error) return <Text fontSize={14}>Failed: {error.message}</Text>;
-  if (data) return <Text fontSize={14}>Created with id: {data.id}</Text>;
-  return null;
+export function useConfig() {
+  return useFetch<Config>('data/config.json');
 }
 ```
 ---
-Platforms: web, terminal, cc, nvim, hs, awesome
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- The response is always parsed as JSON. If you need raw text, use bridge.rpc or fetch directly.
+- Passing null as the URL resets data, error, and loading to their initial states.
+- The hook cancels in-flight requests on unmount or URL change to prevent stale updates.
+- Options are captured by ref -- changing options alone does not trigger a re-fetch. Only URL changes trigger re-fetch.
 
 === SEE ALSO ===
 - useWebSocket
+- useScrape
 - useLoveRPC

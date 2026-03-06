@@ -1,93 +1,105 @@
 === METADATA ===
 title: Checkbox
-description: A toggleable checkbox with optional label, supporting controlled and uncontrolled modes.
+description: Toggleable checkbox with optional label
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: checkbox, check, toggle, form, input, label, boolean
-related: Switch, Radio
-difficulty: beginner
+platforms: love2d
+keywords: checkbox, check, toggle, boolean, form, control, label
+related: Switch, Radio, Select
+difficulty: intermediate
 
 === OVERVIEW ===
-Checkbox is a square toggle control that displays a filled inner square when checked. It optionally renders a text label to the right of the checkbox.
+Checkbox renders a toggleable check box with an optional text label. It emits a `Checkbox` host element -- all toggle state, check mark rendering, and click handling are in Lua.
 
-Checkbox supports both controlled and uncontrolled modes. Pass `value` for controlled behavior, or use `defaultValue` for uncontrolled. The checkbox box border color changes between `color` (checked) and `uncheckedColor` (unchecked), and the box fills with `color` when checked with a white inner indicator.
+Supports both controlled (`value` prop) and uncontrolled (`defaultValue` prop) modes. The checkbox size, checked color, and unchecked color are customizable.
 
 === API / SYNTAX ===
-Import: import { Checkbox } from '@reactjit/core';
-
-Usage:
 ```tsx
-<Checkbox
-  value={accepted}
-  onValueChange={(v) => setAccepted(v)}
-  label="Accept terms"
-/>
+import { Checkbox } from '@reactjit/core';
 ```
 
 Props:
-
-| Prop           | Type                       | Default    | Description                              |
-|----------------|----------------------------|------------|------------------------------------------|
-| value          | boolean                    | -          | Controlled value. Omit for uncontrolled  |
-| defaultValue   | boolean                    | false      | Initial value in uncontrolled mode       |
-| onValueChange  | (value: boolean) => void   | -          | Called when the checkbox is toggled       |
-| disabled       | boolean                    | false      | Disables interaction and dims opacity    |
-| label          | string                     | -          | Text label rendered beside the checkbox  |
-| size           | number                     | 20         | Checkbox box size in pixels              |
-| color          | Color                      | '#3b82f6'  | Border and fill color when checked       |
-| uncheckedColor | Color                      | '#6b7280'  | Border color when unchecked              |
-| style          | Style                      | -          | Container style overrides                |
+| Prop           | Type                        | Default   | Description                         |
+|----------------|-----------------------------|-----------|-------------------------------------|
+| value          | boolean                     | undefined | Controlled checked state            |
+| defaultValue   | boolean                     | false     | Initial state for uncontrolled mode |
+| onValueChange  | (value: boolean) => void    | undefined | Fires when toggled                  |
+| disabled       | boolean                     | false     | Disable interaction                 |
+| label          | string                      | undefined | Text label displayed next to checkbox|
+| size           | number                      | 20        | Checkbox size in pixels             |
+| color          | Color                       | '#3b82f6' | Checked state color                 |
+| uncheckedColor | Color                       | '#6b7280' | Unchecked state border color        |
+| style          | Style                       | undefined | Container style overrides           |
 
 === EXAMPLES ===
-Example 1: Basic controlled checkbox with label
+Example 1: Basic checkbox
 ---
 ```tsx
-const [checked, setChecked] = useState(false);
+const colors = useThemeColors();
+const [agreed, setAgreed] = useState(false);
 
 <Checkbox
-  value={checked}
-  onValueChange={setChecked}
-  label="Enable notifications"
+  value={agreed}
+  onValueChange={setAgreed}
+  label="I agree to the terms"
+  color={colors.primary}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Uncontrolled with custom colors
+Example 2: Checkbox without label
 ---
 ```tsx
-<Checkbox
-  defaultValue={true}
-  color="#22c55e"
-  uncheckedColor="#94a3b8"
-  size={24}
-  label="Remember me"
-/>
+const colors = useThemeColors();
+const [selected, setSelected] = useState(false);
+
+<Box direction="row" align="center" gap={8}>
+  <Checkbox value={selected} onValueChange={setSelected} color={colors.primary} />
+  <Text style={{ color: colors.text, fontSize: 14 }}>Custom label layout</Text>
+</Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Disabled checkbox
+Example 3: Multiple checkboxes
 ---
 ```tsx
-<Checkbox value={false} disabled label="Unavailable option" />
+const colors = useThemeColors();
+const [prefs, setPrefs] = useState({ email: true, sms: false, push: true });
+
+<Box gap={8}>
+  <Checkbox
+    value={prefs.email}
+    onValueChange={(v) => setPrefs({ ...prefs, email: v })}
+    label="Email notifications"
+    color={colors.primary}
+  />
+  <Checkbox
+    value={prefs.sms}
+    onValueChange={(v) => setPrefs({ ...prefs, sms: v })}
+    label="SMS notifications"
+    color={colors.primary}
+  />
+  <Checkbox
+    value={prefs.push}
+    onValueChange={(v) => setPrefs({ ...prefs, push: v })}
+    label="Push notifications"
+    color={colors.primary}
+  />
+</Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
 === PLATFORM NOTES ===
-- Web: Renders as `<div>` elements. The checkbox border and fill use CSS `transition` for smooth color changes. Cursor changes to `not-allowed` when disabled. Label renders as a `<span>` with `userSelect: 'none'`.
-- Native (Love2D): Uses `Box` with `borderWidth` and `borderColor` for the checkbox outline. The checked indicator is an inner `Box` with `backgroundColor: '#ffffff'`. Label renders as a `Text` element.
-- The inner check indicator size is `Math.round(size * 0.4)`.
-- The border width is `Math.max(2, Math.round(size / 10))`.
-- Label text color is `#e2e8f0` at `fontSize: 14`. Label and checkbox are laid out in a row with `gap: 8`.
+Love2D:
+  The check mark glyph and toggle animation are rendered by Lua. The checkbox is laid out as a row with the check box on the left and the label text on the right. When a label is provided, the component auto-sizes to fit the label; without a label, it sizes to the `size` prop.
 
 === CRITICAL RULES ===
-- The `size` prop controls only the checkbox square, not the label text size.
-- When `disabled` is true, opacity is set to 0.5 and click events are ignored.
-- In controlled mode, the visual state does not change unless the parent updates `value` in response to `onValueChange`.
+- When using a label, the component width auto-sizes to `size + 8 + 100`. For wider labels, override the width via the `style` prop.
+- The `size` prop controls the checkbox square dimensions, not the overall component height.
 
 === SEE ALSO ===
 - Switch
 - Radio
-- Pressable
+- Select

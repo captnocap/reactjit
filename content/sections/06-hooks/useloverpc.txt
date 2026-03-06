@@ -1,126 +1,115 @@
 === METADATA ===
 title: useLoveRPC
-description: Call Lua RPC methods and await results from the React side.
+description: Call Lua functions and await the result
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: useLoveRPC, hook, rpc, remote procedure call, async, await, promise, bridge, lua
-related: uselove.txt, uselovesend.txt
+platforms: love2d
+keywords: rpc, call, lua, async, bridge, promise, request, response
+related: useLoveSend, useLoveEvent, useBridge
 difficulty: intermediate
 
 === OVERVIEW ===
-useLoveRPC provides a way to call Lua-side RPC (Remote Procedure Call) methods from React
-and await the results. Unlike the event-based hooks (useLove, useLoveEvent), this hook
-supports request-response patterns where you need a return value from the Lua runtime.
+useLoveRPC returns a stable callback that calls a named Lua RPC method and returns a Promise with the result. This is the primary hook for request/response communication with Lua -- querying data, triggering actions that return results, or calling any registered RPC handler.
 
-The hook returns a memoized async function. When called, it sends the RPC request via the
-bridge, waits for the response, and resolves the promise with the result. An optional
-timeout prevents hanging on unresponsive calls.
+The returned function is memoized by method name. It is safe to store in a ref or call from effects without causing re-subscriptions.
 
 === API / SYNTAX ===
-Signature:
-  function useLoveRPC<T = any>(method: string): (args?: any, timeoutMs?: number) => Promise<T>
+```tsx
+import { useLoveRPC } from '@reactjit/core';
+```
 
-Type parameter:
-  T    The expected return type of the RPC call. Defaults to any.
+Signature:
+```tsx
+function useLoveRPC<T = any>(method: string): (args?: any, timeoutMs?: number) => Promise<T>
+```
 
 Parameters:
-  method: string
-    The name of the Lua-side RPC method to call. Must be registered on the Lua side.
+| Parameter | Type   | Description                     |
+|-----------|--------|---------------------------------|
+| method    | string | Lua RPC method name to call     |
 
 Returns:
-  (args?: any, timeoutMs?: number) => Promise<T>
-
-  An async function that:
-    args?: any         Optional arguments passed to the Lua method.
-    timeoutMs?: number Optional timeout in milliseconds. If the Lua side does not respond
-                       within this window, the promise rejects.
-
-  Resolves with the return value from the Lua method (typed as T).
+| Type                                        | Description                              |
+|---------------------------------------------|------------------------------------------|
+| (args?: any, timeoutMs?: number) => Promise  | Async function that calls the RPC method |
 
 === EXAMPLES ===
 Example 1: Query nearby entities
 ---
-import { useState, useEffect } from 'react';
+```tsx
 import { useLoveRPC } from '@reactjit/core';
-
-interface Entity {
-  id: number;
-  type: string;
-  x: number;
-  y: number;
-}
+import { useThemeColors } from '@reactjit/theme';
 
 function NearbyList() {
+  const colors = useThemeColors();
   const getNearby = useLoveRPC<Entity[]>('getNearby');
   const [entities, setEntities] = useState<Entity[]>([]);
 
   useEffect(() => {
-    const fetch = async () => {
-      const nearby = await getNearby({ x: 100, y: 200, range: 500 });
-      setEntities(nearby);
-    };
-    fetch();
-  }, [getNearby]);
+    getNearby({ x: 100, y: 200, range: 500 }).then(setEntities);
+  }, []);
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16 }}>
-      {entities.map((e) => (
-        <Text key={e.id} style={{ fontSize: 12, color: '#cdd6f4' }}>
-          {`${e.type} at (${e.x}, ${e.y})`}
-        </Text>
+    <Box>
+      {entities.map((e, i) => (
+        <Text key={i} style={{ color: colors.text }}>{e.name}</Text>
       ))}
     </Box>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: RPC with timeout
+Example 2: Polling with useLuaInterval
 ---
+```tsx
+import { useLoveRPC, useLuaInterval } from '@reactjit/core';
+
+function SystemMonitor() {
+  const getStats = useLoveRPC<{ fps: number; memory: number }>('system:stats');
+  const [stats, setStats] = useState({ fps: 0, memory: 0 });
+
+  useLuaInterval(1000, () => {
+    getStats().then(setStats);
+  });
+
+  return <Text>{`FPS: ${stats.fps} | Memory: ${stats.memory}MB`}</Text>;
+}
+```
+---
+Platforms: love2d
+
+Example 3: RPC with timeout
+---
+```tsx
 import { useLoveRPC } from '@reactjit/core';
 
-function SaveButton() {
-  const saveGame = useLoveRPC<boolean>('saveGame');
+function SlowQuery() {
+  const query = useLoveRPC<Results>('db:query');
 
-  const handleSave = async () => {
+  const handleSearch = async (term: string) => {
     try {
-      const success = await saveGame({ slot: 1 }, 5000); // 5 second timeout
-      console.log(success ? 'Saved!' : 'Save failed');
-    } catch (err) {
-      console.error('Save timed out or failed:', err);
+      const results = await query({ term }, 5000); // 5 second timeout
+      setResults(results);
+    } catch (e) {
+      console.log('Query timed out');
     }
   };
 
-  return (
-    <Box style={{ width: 120, height: 40, backgroundColor: '#a6e3a1', borderRadius: 8 }}
-         onClick={handleSave}>
-      <Text style={{ fontSize: 16, color: '#1e1e2e' }}>Save</Text>
-    </Box>
-  );
+  // ...
 }
+```
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-The RPC mechanism uses the bridge's rpc() method, which is implemented differently per
-target:
-- Love2D: RPC call is dispatched via QuickJS FFI. The Lua side processes the call and sends
-  the response back through the bridge.
-- Web: RPC is processed via the in-memory bridge queue.
-- Grid targets: RPC travels over IPC/WebSocket.
-
-The Lua-side RPC method must be registered to handle the call. Calling an unregistered
-method will result in an error or timeout.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The returned function is memoized (stable reference) -- safe to include in dependency arrays
-- Always handle promise rejections (timeouts, errors from Lua side)
-- The RPC method name must match a registered handler on the Lua side
-- RPC is async -- do not use it in render functions, use it in effects or event handlers
-- Must be used inside a BridgeProvider context
-- Large payloads may impact performance due to serialization overhead
+- The returned function is memoized on `method`. Changing the method string creates a new function.
+- Store the RPC function in a ref if calling it from a setInterval or other non-React timer. The function identity is stable per method name, but the ref pattern avoids stale closure issues.
+- RPC calls cross the bridge once per call. For high-frequency polling, use useLuaInterval to tick in Lua and push results via events instead.
+- The optional timeoutMs parameter defaults to the bridge's global timeout. If the Lua side does not respond within the timeout, the Promise rejects.
 
 === SEE ALSO ===
-- uselove.txt -- Event-based communication (no request-response)
-- uselovesend.txt -- Fire-and-forget commands (no response)
-- useLoveState -- Shared state (auto-sync, no manual RPC)
+- useLoveSend
+- useLoveEvent
+- useBridge
+- useLuaInterval

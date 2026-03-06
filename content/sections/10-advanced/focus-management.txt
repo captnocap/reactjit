@@ -1,297 +1,182 @@
 === METADATA ===
 title: Focus Management
-description: Tab and gamepad D-pad navigation system with spatial scanning, focus groups, and multi-controller routing
+description: Focus system with FocusGroup, controller navigation, keystrokeTarget/submitTarget, and scroll-into-view.
 category: Advanced
 platforms: love2d
-keywords: focus, navigation, controller, gamepad, D-pad, spatial, tab, keyboard, joystick, multiplayer, focus group
-related: event-handling, lua-runtime, TextInput, TextEditor, VideoPlayer
+keywords: focus, focusgroup, controller, gamepad, navigation, spatial, tab, keystroke, submit, input, scroll-into-view
+related: FocusGroup, Input, Pressable
 difficulty: advanced
 
 === OVERVIEW ===
-Focus management enables keyboard Tab and gamepad D-pad navigation through interactive UI elements. The focus system lives in `lua/focus.lua` and provides automatic focus detection for nodes with event handlers, spatial navigation for directional input (controller D-pad/left stick), scoped focus regions via FocusGroup for multiplayer, per-controller routing, mode switching between mouse and controller input, scroll-into-view on focus change, and animated focus rings with player-based colors.
+ReactJIT has a Lua-owned focus system that supports both mouse and controller input modes.
+Focus determines which node receives keyboard events and is visually indicated by an animated
+focus ring.
 
-The system is input-mode aware: in mouse mode, hover and click work normally with no visible focus ring. When controller input is detected (D-pad, face buttons, or stick movement), it switches to controller mode, restores the last focused element (or picks the first focusable node), and renders an animated focus ring around the active element. Focus state is maintained per group, enabling couch co-op scenarios where Player 1 controls one UI panel via controller 1 and Player 2 controls another via controller 2.
+The system supports two input modes:
+- Mouse mode (default) -- focus follows clicks. No visible focus ring. Keyboard events
+  without a targetId broadcast to all handlers.
+- Controller mode -- activated automatically when a gamepad input is detected. An animated
+  focus ring appears around the focused node. D-pad or left stick navigates spatially between
+  focusable nodes. The system remembers the last focused node and restores it when switching
+  back to controller mode.
+
+A node is focusable if:
+- It has focusable={true} in its props
+- It has React event handlers (hasHandlers == true)
+- It is a hittable capability (e.g. ClaudeCanvas)
+- It does NOT have focusable={false}, display="none", or visibility="hidden"
+
+FocusGroup scopes focus navigation to a region of the tree. Each group maintains its own
+focused node, focusable node list, and optional controller binding. This enables split-screen
+or multi-panel layouts where each controller navigates independently.
+
+When focus changes to a node inside a ScrollView, the system automatically scrolls the
+container to make the focused node visible.
 
 === API / SYNTAX ===
-**Auto-Focus Detection**
-
-Any node with an event handler (`onClick`, `onKeyDown`, `onTextInput`, etc.) or explicit `focusable={true}` prop becomes auto-focusable. The focus system scans the instance tree after layout and builds a flat list of focusable nodes, sorted into groups.
-
-**FocusGroup Component**
-
-Scoped focus regions for multiplayer or modal dialogs. Import from `@reactjit/core`:
-
 ```tsx
 import { FocusGroup } from '@reactjit/core';
-
-<FocusGroup controller={1} ringColor={[0.3, 0.6, 1.0, 0.9]}>
-  {/* Only controller 1 can navigate these elements */}
-  <Pressable onClick={() => {}}>Button A</Pressable>
-  <Pressable onClick={() => {}}>Button B</Pressable>
-</FocusGroup>
 ```
 
-Props (from `FocusGroupProps` in `types.ts`):
+FocusGroup Props:
+| Prop       | Type                                   | Default       | Description                                          |
+|------------|----------------------------------------|---------------|------------------------------------------------------|
+| controller | number                                 | undefined     | Joystick ID that owns this group. Omit for any.      |
+| ringColor  | [number, number, number, number?]      | player-based  | Focus ring RGBA (0-1). Default: P1 blue, P2 red.     |
+| style      | Style                                  | undefined     | Style applied to the wrapping Box.                   |
+| children   | ReactNode                              | required      | Content within the focus scope.                      |
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `controller` | `number` | `undefined` | Joystick ID that owns this group. Omit for any controller. |
-| `ringColor` | `[number, number, number, number?]` | auto | Focus ring color as RGBA (0-1). Defaults to player color: P1 blue, P2 red, P3 green, P4 yellow. |
-| `style` | `Style` | — | Standard Box layout props. |
-| `children` | `React.ReactNode` | — | Focusable elements. |
+Default player colors:
+  P1: blue [0.3, 0.6, 1.0, 0.9]
+  P2: red [1.0, 0.3, 0.3, 0.9]
+  P3: green [0.3, 1.0, 0.5, 0.9]
+  P4: yellow [1.0, 0.8, 0.2, 0.9]
 
-**Focus Events**
+Input keystrokeTarget/submitTarget (on Input component):
+| Prop            | Type   | Description                                                    |
+|-----------------|--------|----------------------------------------------------------------|
+| keystrokeTarget | string | Node type to forward raw keystrokes to (Lua-to-Lua, no bridge)|
+| submitTarget    | string | Node type to forward submitted text to on Enter (clears input)|
+| escapeTarget    | string | Node type to forward Escape key to (Lua-to-Lua, no bridge)   |
 
-Nodes receive `onFocus` and `onBlur` events when focus changes:
-
-```tsx
-<TextInput
-  onFocus={() => console.log('focused')}
-  onBlur={() => console.log('blurred')}
-/>
-```
-
-**Input Mode Switching**
-
-The system tracks whether the user is using a mouse or controller:
-
-- **Mouse mode**: Focus ring hidden, mouse hover/click works normally.
-- **Controller mode**: Focus ring visible, D-pad/stick navigation active, buttons trigger onClick on focused node.
-
-Mode switches automatically: any mouse movement triggers mouse mode, any D-pad/button/stick input triggers controller mode. On mode switch, the last focused element is restored (or the first focusable node is selected).
-
-**Spatial Navigation Algorithm**
-
-When the user presses a D-pad direction, the system finds the best target using spatial scanning:
-
-1. Start from the currently focused node's center point (cx, cy).
-2. Filter candidates in the correct direction (up: dy < 0, down: dy > 0, left: dx < 0, right: dx > 0).
-3. Score each candidate: `mainDist + crossDist * 3` (favors aligned nodes over diagonal ones).
-4. Pick the candidate with the lowest score.
-
-This produces intuitive navigation for grid layouts, forms, and button panels.
-
-**Multi-Controller Routing**
-
-Each FocusGroup can claim a specific controller via the `controller` prop. When a joystick sends input, the system checks:
-
-1. Are there any groups that explicitly claim this joystick ID? Use only those.
-2. Otherwise: route input to the default group (no FocusGroup wrapper) and any unclaimed groups.
-
-This enables split-screen UIs where each player controls their own panel independently.
-
-**Scroll-Into-View**
-
-When focus changes, the system checks if the focused node is inside a ScrollView. If the node is outside the visible viewport, the scroll position is adjusted to bring it into view (minimal scroll, prefers top-left alignment).
-
-**Focus Ring Animation**
-
-Focus rings are rendered by `lua/painter.lua` using exponential smoothing (lerp factor 0.0001 per second). The ring follows the focused node's bounding box with rounded corners and a 4px offset. Ring colors default to player-based colors (P1 blue, P2 red, P3 green, P4 yellow) but can be customized per group via `ringColor` prop.
-
-**Lua API (lua/focus.lua)**
-
-The Lua module exposes:
-
-- `Focus.init(tree, pushEvent)` — Initialize with tree module and event callback.
-- `Focus.set(node)` — Set focus to a node (backwards-compatible default group API).
-- `Focus.clear()` — Clear focus.
-- `Focus.get()` — Get currently focused node (default group).
-- `Focus.isFocused(node)` — Check if node has focus in any group.
-- `Focus.setControllerMode()` — Switch to controller mode (restores focus).
-- `Focus.setMouseMode()` — Switch to mouse mode (remembers focus).
-- `Focus.getInputMode()` — Returns `"mouse"` or `"controller"`.
-- `Focus.rebuildFocusableList(root)` — Rebuild focusable nodes after layout.
-- `Focus.navigate(direction, joystickId)` — Navigate in direction for a controller.
-- `Focus.getForController(joystickId)` — Get focused node for a controller.
-- `Focus.getRingColorForController(joystickId)` — Get ring color for a controller.
-- `Focus.draw()` — Render focus rings (called by painter).
-- `Focus.update(dt)` — Animate focus rings (called by main loop).
-- `Focus.onGamepadPressed(joystick, button)` — Handle button press (space = click).
-- `Focus.onGamepadAxis(joystick, axis, value)` — Handle stick movement (D-pad navigation).
-- `Focus.onKeyPressed(key)` — Handle Tab navigation (keyboard).
-
-**Integration Points**
-
-Focus management integrates with:
-
-- **Lua-owned primitives**: TextInput, TextEditor, VideoPlayer, ContextMenu all respond to focus events and participate in focus navigation.
-- **Event dispatcher**: `onFocus`/`onBlur` events are pushed to JS via `eventDispatcher.ts`.
-- **Painter**: `painter.lua` calls `Focus.draw()` after rendering all nodes.
-- **Main loop**: `main.lua` calls `Focus.update(dt)` for ring animation.
-- **Layout engine**: `layout.lua` calls `Focus.rebuildFocusableList()` after computing layout.
+Spatial navigation constants:
+  Stick deadzone: 0.3
+  Initial repeat delay: 0.4 seconds
+  Repeat rate: 0.15 seconds
 
 === EXAMPLES ===
-Example 1: Basic Tab navigation (auto-detected)
----
-```tsx
-import { Box, Pressable, TextInput } from '@reactjit/core';
-
-function Form() {
-  return (
-    <Box>
-      <TextInput placeholder="Name" />
-      <TextInput placeholder="Email" />
-      <Pressable onClick={() => console.log('submit')}>
-        <Box style={{ backgroundColor: '#3b82f6', padding: 10 }}>
-          <Text fontSize={14}>Submit</Text>
-        </Box>
-      </Pressable>
-    </Box>
-  );
-}
-```
-Press Tab to cycle through inputs and button. Press Enter/Space on focused button to trigger onClick.
----
-Platforms: Love2D
-
-Example 2: Split-screen multiplayer with FocusGroups
+Example 1: Basic FocusGroup for a sidebar
 ---
 ```tsx
 import { Box, FocusGroup, Pressable, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function MultiplayerUI() {
+export function SidebarNav() {
+  const c = useThemeColors();
+  const items = ['Home', 'Settings', 'About'];
+
+  return (
+    <FocusGroup style={{ width: 200, padding: 8 }}>
+      {items.map((label) => (
+        <Pressable
+          key={label}
+          onPress={() => console.log(label)}
+          style={{ padding: 12, borderRadius: 6, backgroundColor: c.surface }}
+        >
+          <Text style={{ color: c.text, fontSize: 14 }}>{label}</Text>
+        </Pressable>
+      ))}
+    </FocusGroup>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Split-screen with per-controller focus
+---
+```tsx
+import { Box, FocusGroup, Pressable, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function SplitScreen() {
+  const c = useThemeColors();
+
   return (
     <Box style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
-      {/* Player 1 panel (left half, controller 1) */}
-      <FocusGroup controller={1} ringColor={[0.3, 0.6, 1.0, 0.9]}>
-        <Box style={{ width: '50%', height: '100%', padding: 20 }}>
-          <Text fontSize={18}>Player 1</Text>
-          <Pressable onClick={() => console.log('P1 attack')}>
-            <Text fontSize={14}>Attack</Text>
-          </Pressable>
-          <Pressable onClick={() => console.log('P1 defend')}>
-            <Text fontSize={14}>Defend</Text>
-          </Pressable>
-        </Box>
+      <FocusGroup
+        controller={1}
+        ringColor={[0.3, 0.6, 1.0, 0.9]}
+        style={{ flexGrow: 1, padding: 16 }}
+      >
+        <Text style={{ color: c.text, fontSize: 18 }}>Player 1</Text>
+        <Pressable
+          onPress={() => console.log('P1 action')}
+          style={{ padding: 12, backgroundColor: c.surface, borderRadius: 8 }}
+        >
+          <Text style={{ color: c.text, fontSize: 14 }}>Action</Text>
+        </Pressable>
       </FocusGroup>
 
-      {/* Player 2 panel (right half, controller 2) */}
-      <FocusGroup controller={2} ringColor={[1.0, 0.3, 0.3, 0.9]}>
-        <Box style={{ width: '50%', height: '100%', padding: 20 }}>
-          <Text fontSize={18}>Player 2</Text>
-          <Pressable onClick={() => console.log('P2 attack')}>
-            <Text fontSize={14}>Attack</Text>
-          </Pressable>
-          <Pressable onClick={() => console.log('P2 defend')}>
-            <Text fontSize={14}>Defend</Text>
-          </Pressable>
-        </Box>
-      </FocusGroup>
-    </Box>
-  );
-}
-```
-Controller 1 can only navigate Player 1's panel. Controller 2 can only navigate Player 2's panel. Each gets their own colored focus ring.
----
-Platforms: Love2D
-
-Example 3: Modal dialog with temporary focus scope
----
-```tsx
-import { Box, FocusGroup, Pressable, Text } from '@reactjit/core';
-
-function ModalDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <Box style={{
-      position: 'absolute',
-      top: 0, left: 0, width: '100%', height: '100%',
-      backgroundColor: [0, 0, 0, 0.5],
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <FocusGroup>
-        <Box style={{
-          backgroundColor: '#1e293b',
-          padding: 20,
-          borderRadius: 8,
-        }}>
-          <Text fontSize={16}>Confirm action?</Text>
-          <Box style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-            <Pressable onClick={onClose}>
-              <Text fontSize={14}>Cancel</Text>
-            </Pressable>
-            <Pressable onClick={() => { /* confirm */ }}>
-              <Text fontSize={14}>OK</Text>
-            </Pressable>
-          </Box>
-        </Box>
+      <FocusGroup
+        controller={2}
+        ringColor={[1.0, 0.3, 0.3, 0.9]}
+        style={{ flexGrow: 1, padding: 16 }}
+      >
+        <Text style={{ color: c.text, fontSize: 18 }}>Player 2</Text>
+        <Pressable
+          onPress={() => console.log('P2 action')}
+          style={{ padding: 12, backgroundColor: c.surface, borderRadius: 8 }}
+        >
+          <Text style={{ color: c.text, fontSize: 14 }}>Action</Text>
+        </Pressable>
       </FocusGroup>
     </Box>
   );
 }
 ```
-While the modal is open, only its buttons are focusable. When dismissed, focus returns to the underlying UI.
 ---
-Platforms: Love2D
+Platforms: love2d
 
-Example 4: Handling focus events
----
-```tsx
-import { TextInput } from '@reactjit/core';
-import { useState } from 'react';
-
-function SearchBox() {
-  const [focused, setFocused] = useState(false);
-
-  return (
-    <TextInput
-      placeholder="Search..."
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      style={{
-        borderWidth: 2,
-        borderColor: focused ? '#3b82f6' : '#334155',
-      }}
-    />
-  );
-}
-```
-Focus events let you update styling or show/hide additional UI (e.g. search suggestions, validation errors).
----
-Platforms: Love2D
-
-Example 5: Custom focusable node (no event handlers)
+Example 3: Input with keystrokeTarget forwarding
 ---
 ```tsx
-import { Box, Text } from '@reactjit/core';
+import { Box, Input, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function Card() {
+export function ProxyInput() {
+  const c = useThemeColors();
+
+  // Keystrokes are forwarded to ClaudeCanvas at the Lua level.
+  // The Input does not manage its own text buffer -- it displays
+  // whatever value is passed via the value prop.
   return (
-    <Box
-      focusable={true}
-      style={{
-        padding: 10,
-        backgroundColor: '#1e293b',
-        borderRadius: 4,
-      }}
-    >
-      <Text fontSize={14}>Focusable card</Text>
+    <Box style={{ padding: 16 }}>
+      <Input
+        autoFocus
+        keystrokeTarget="ClaudeCanvas"
+        submitTarget="ClaudeCanvas"
+        value=""
+        placeholder="Type here..."
+        style={{ backgroundColor: c.surface, color: c.text, fontSize: 14 }}
+      />
     </Box>
   );
 }
 ```
-Use `focusable={true}` to make nodes focusable even if they have no event handlers. Useful for read-only list items, cards, or tiles that should participate in D-pad navigation.
 ---
-Platforms: Love2D
+Platforms: love2d
 
 === CRITICAL RULES ===
-- **Auto-focus requires event handlers or explicit `focusable={true}`** — Nodes without handlers are skipped unless you add `focusable={true}` to the props.
-- **FocusGroup controller prop binds to joystick ID** — The `controller` prop takes a joystick ID (1-based), not a player index. Use `love.joystick.getJoysticks()` to enumerate.
-- **Focus rings are Lua-rendered** — No React components or CSS involved. The focus ring is drawn by `painter.lua` using `love.graphics.rectangle` with rounded corners.
-- **Spatial navigation requires computed layout** — The algorithm uses `node.computed.x/y/w/h` to calculate distances. If layout hasn't run, navigation will fail.
-- **Mode switch is global, focus state is per-group** — Input mode (mouse vs controller) is global, but each FocusGroup maintains its own `focusedNode` and `lastFocused` state.
-- **Stick deadzone is 0.3** — Analog stick values below 0.3 are ignored to prevent drift. Adjust `STICK_DEADZONE` in `focus.lua` if needed.
-- **Repeat rate for held directions** — Initial repeat after 0.4s, then 0.15s between repeats. Adjust `REPEAT_INITIAL` and `REPEAT_RATE` in `focus.lua` for faster/slower navigation.
-- **Tab navigation is keyboard-only** — Gamepad navigation uses D-pad/stick, not face buttons. Pressing A/Space on focused node triggers `onClick`.
-- **Focus events are boundary events** — `onFocus`/`onBlur` cross the JS bridge, but focus state lives in Lua. Don't try to manage focus state in React — use the Lua API via events.
-- **Focus group ring colors default to player colors** — P1 blue, P2 red, P3 green, P4 yellow. Override with `ringColor` prop if needed.
-- **Unclaimed groups accept any controller** — If a FocusGroup has no `controller` prop, any controller can navigate it (unless another group explicitly claims that controller).
-- **Focus restoration on mode switch** — When switching from mouse to controller mode, the system restores the last focused node (or picks the first focusable node if no history). When switching to mouse mode, focus is remembered for later restoration.
+- FocusGroup creates a focus scope. Nodes inside a FocusGroup are navigated independently from nodes outside it.
+- Controller mode activates automatically on gamepad input. Mouse movement switches back to mouse mode.
+- Spatial navigation uses the node's computed bounding box to find the nearest focusable node in the pressed direction (up/down/left/right).
+- keystrokeTarget routes keystrokes at the Lua level -- they never cross the bridge to JS. This is for proxy input patterns where the Input component is just a display.
+- When a focusable node is inside a ScrollView and receives focus, the ScrollView scrolls to make it visible. This happens automatically -- no manual scrolling code is needed.
+- The focusable prop explicitly opts a node in (true) or out (false) of the focusable set, overriding the default behavior based on hasHandlers.
 
 === SEE ALSO ===
-- event-handling.txt - Event system, bubbling, dispatch to JS
-- lua-runtime.txt - All Lua modules including focus.lua
-- TextInput - Lua-owned primitive that participates in focus navigation
-- TextEditor - Lua-owned primitive that participates in focus navigation
-- VideoPlayer - Lua-owned primitive that participates in focus navigation
-- ContextMenu - Lua-owned primitive that participates in focus navigation
+- event-handling.txt
+- Input
+- Pressable
+- ScrollView

@@ -2,7 +2,7 @@
 title: First Interactive App Tutorial
 description: Build a counter app step by step, learning core concepts along the way
 category: Getting Started
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
+platforms: love2d
 keywords: tutorial, counter, first app, step by step, useState, pressable, flexbox
 related: quick-start, philosophy, style-properties
 difficulty: beginner
@@ -11,8 +11,11 @@ difficulty: beginner
 This tutorial walks you through building an interactive counter application from
 scratch. You will learn how to import primitives, manage state with React hooks, handle
 user input with Pressable, and style your UI with flexbox properties. By the end you
-will have a working app with increment and decrement buttons, styled with colors and
-spacing.
+will have a working app with increment and decrement buttons, styled with theme colors
+and proper spacing.
+
+Remember: React is just the layout declaration layer here. It describes what the UI
+looks like, Lua computes the geometry, and Love2D draws the pixels.
 
 === EXAMPLES ===
 Example 1: Step 1 - Create the Project
@@ -20,14 +23,15 @@ Example 1: Step 1 - Create the Project
 reactjit init counter-app
 cd counter-app
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Step 2 - Basic Counter (src/App.tsx)
+Example 2: Step 2 - Display the Count (src/App.tsx)
 ---
+```tsx
 import { useState } from 'react';
-import { Box, Text, Pressable } from '@reactjit/core';
+import { Box, Text } from '@reactjit/core';
 
-export default function App() {
+export function App() {
   const [count, setCount] = useState(0);
 
   return (
@@ -44,16 +48,19 @@ export default function App() {
     </Box>
   );
 }
+```
 
--- Note: The counter displays but has no buttons yet.
--- The root Box uses width/height 100% to fill the viewport.
--- justifyContent and alignItems center the text in both axes.
--- The Text node has an explicit fontSize (required by the linter).
+Key points:
+- The root Box uses width/height '100%' to fill the viewport.
+- justifyContent and alignItems center the text in both axes.
+- Every Text node has an explicit fontSize (the linter enforces this).
+- Dynamic text uses a template literal: {`${count}`}, not mixed children.
 ---
-Platforms: All
+Platforms: love2d
 
 Example 3: Step 3 - Add Buttons
 ---
+```tsx
 import { useState } from 'react';
 import { Box, Text, Pressable } from '@reactjit/core';
 
@@ -76,7 +83,7 @@ function CounterButton({ label, onPress }: { label: string; onPress: () => void 
   );
 }
 
-export default function App() {
+export function App() {
   const [count, setCount] = useState(0);
 
   return (
@@ -93,8 +100,6 @@ export default function App() {
       </Text>
       <Box style={{
         flexDirection: 'row',
-        width: '100%',
-        justifyContent: 'center',
         gap: 16,
       }}>
         <CounterButton label="-" onPress={() => setCount(c => c - 1)} />
@@ -103,17 +108,103 @@ export default function App() {
     </Box>
   );
 }
+```
 
--- Key concepts:
--- 1. Pressable provides press state via render props: ({ pressed }) => ...
--- 2. The row Box has width: '100%' so justifyContent: 'center' works.
---    (Row Boxes without explicit width ignore justifyContent.)
--- 3. gap: 16 adds space between the two buttons.
--- 4. Each button has fixed width/height for a square shape.
+Key concepts:
+- Pressable provides press state via render props: ({ pressed }) => ...
+- gap: 24 adds vertical space between the count and the button row.
+- gap: 16 adds horizontal space between the two buttons.
+- Each button has fixed width/height for a square shape.
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Step 4 - Lint and Screenshot
+Example 4: Step 4 - Add Hover States
+---
+```tsx
+function CounterButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress}>
+      {({ pressed, hovered }) => (
+        <Box style={{
+          width: 60,
+          height: 60,
+          backgroundColor: pressed ? '#1d4ed8' : hovered ? '#2563eb' : '#3b82f6',
+          borderRadius: 12,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <Text style={{ fontSize: 28, color: '#ffffff' }}>{label}</Text>
+        </Box>
+      )}
+    </Pressable>
+  );
+}
+```
+
+Pressable's render props include both `pressed` and `hovered`. The ternary
+chain gives visual feedback: default blue, lighter on hover, darker on press.
+---
+Platforms: love2d
+
+Example 5: Step 5 - Using Theme Colors
+---
+```tsx
+import { useState } from 'react';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+function CounterButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const c = useThemeColors();
+  return (
+    <Pressable onPress={onPress}>
+      {({ pressed, hovered }) => (
+        <Box style={{
+          width: 60,
+          height: 60,
+          backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
+          borderRadius: 12,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <Text style={{ fontSize: 28, color: c.textOnPrimary }}>{label}</Text>
+        </Box>
+      )}
+    </Pressable>
+  );
+}
+
+export function App() {
+  const c = useThemeColors();
+  const [count, setCount] = useState(0);
+
+  return (
+    <Box style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: c.bg,
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 24,
+    }}>
+      <Text style={{ fontSize: 48, color: c.text }}>
+        {`${count}`}
+      </Text>
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <CounterButton label="-" onPress={() => setCount(c => c - 1)} />
+        <CounterButton label="+" onPress={() => setCount(c => c + 1)} />
+      </Box>
+    </Box>
+  );
+}
+```
+
+useThemeColors() returns the current theme's color tokens. This makes
+the app respond to theme changes automatically. The @reactjit/theme
+package is included by default when scaffolding with `reactjit init`.
+---
+Platforms: love2d
+
+Example 6: Step 6 - Lint and Screenshot
 ---
 # Run the static linter to catch layout errors
 reactjit lint
@@ -121,18 +212,19 @@ reactjit lint
 # Take a screenshot to verify the visual result
 reactjit screenshot --output /tmp/counter.png
 
-# Build for distribution
-reactjit build dist:love
+# Start dev mode to iterate with hot reload
+reactjit dev
 ---
 Platforms: love2d
 
 === CRITICAL RULES ===
 - Every Text node MUST have an explicit fontSize.
 - The root container MUST use width: '100%', height: '100%' -- not flexGrow: 1.
-- Row Boxes need explicit width for justifyContent to work.
-- Use template literals (backticks) for dynamic text: {`${count}`}, not mixed
-  children like {count} which creates multiple text nodes.
+- Use template literals for dynamic text: {`${count}`}, not mixed children like
+  <Text>Count: {count}</Text> which creates multiple text nodes that stack vertically.
 - Always run `reactjit lint` after modifying components.
+- Do not use paddingHorizontal or paddingVertical. Use paddingLeft, paddingRight,
+  paddingTop, paddingBottom individually.
 
 === SEE ALSO ===
 - quick-start.txt - Abbreviated version of this tutorial

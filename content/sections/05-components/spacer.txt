@@ -1,81 +1,81 @@
 === METADATA ===
 title: Spacer
-description: Flexible spacing component that fills available space or creates fixed gaps
+description: Flexible space filler that expands to fill available space or adds a fixed gap
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: spacing, layout, flexGrow, gap, padding, margin
-related: Box, Divider, FlexRow, FlexColumn
+platforms: love2d
+keywords: spacer, space, gap, filler, flex, grow, separator
+related: FlexRow, FlexColumn, Divider, Box
 difficulty: beginner
 
 === OVERVIEW ===
-Spacer is a layout utility component that creates space between elements. When used without props, it uses flexGrow to fill all available space in its parent container. When given a size prop, it creates a fixed-height gap. Spacer is the idiomatic way to push elements apart without manual margin calculations.
+Spacer is a layout utility that either fills remaining space or inserts a fixed-size gap between siblings.
+
+Without a `size` prop, Spacer renders a Box with `flexGrow: 1` that expands to absorb all available space in the parent's main axis. This is the most common use — pushing siblings to opposite ends of a row or column.
+
+With a `size` prop, Spacer renders a Box with a fixed `height` in pixels. Use this for consistent spacing between elements when `gap` on the parent is not appropriate (e.g., you need different spacing between specific siblings).
 
 === API / SYNTAX ===
+```tsx
 import { Spacer } from '@reactjit/core';
+```
 
 Props:
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| size | number | undefined | Fixed height in pixels. If omitted, Spacer uses flexGrow: 1 to fill available space |
+| Prop | Type   | Default   | Description                                              |
+|------|--------|-----------|----------------------------------------------------------|
+| size | number | undefined | Fixed height in pixels. Omit for flexible grow behavior. |
 
 === EXAMPLES ===
-Example 1: Push footer to bottom
+Example 1: Push items to opposite ends
 ---
-<Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
-  <Text fontSize={24}>Header</Text>
-  <Spacer />
-  <Text fontSize={16}>Footer</Text>
-</Box>
----
-Platforms: All
-Description: The Spacer fills all vertical space between header and footer, pushing the footer to the bottom of the container.
+```tsx
+const colors = useThemeColors();
 
-Example 2: Fixed gap between elements
+<FlexRow align="center" style={{ width: '100%', padding: 12 }}>
+  <Text style={{ color: colors.text, fontSize: 14 }}>Logo</Text>
+  <Spacer />
+  <Text style={{ color: colors.muted, fontSize: 12 }}>Settings</Text>
+</FlexRow>
+```
 ---
-<Box style={{ flexDirection: 'column' }}>
-  <Text fontSize={18}>First Item</Text>
-  <Spacer size={20} />
-  <Text fontSize={18}>Second Item</Text>
-</Box>
----
-Platforms: All
-Description: Creates a precise 20-pixel vertical gap between two text elements.
+Platforms: love2d
 
-Example 3: Multiple spacers distribute space
+Example 2: Fixed spacing
 ---
-<Box style={{ width: '100%', height: 200, flexDirection: 'column' }}>
-  <Text fontSize={16}>Top</Text>
-  <Spacer />
-  <Text fontSize={16}>Middle</Text>
-  <Spacer />
-  <Text fontSize={16}>Bottom</Text>
-</Box>
----
-Platforms: All
-Description: Two Spacers with flexGrow: 1 each split the available space equally, distributing elements evenly.
+```tsx
+const colors = useThemeColors();
 
-Example 4: Horizontal spacing in row
+<FlexColumn>
+  <Text style={{ color: colors.text, fontSize: 18 }}>Section One</Text>
+  <Spacer size={24} />
+  <Text style={{ color: colors.text, fontSize: 18 }}>Section Two</Text>
+  <Spacer size={12} />
+  <Text style={{ color: colors.text, fontSize: 18 }}>Section Three</Text>
+</FlexColumn>
+```
 ---
-<Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center' }}>
-  <Text fontSize={16}>Left</Text>
+Platforms: love2d
+
+Example 3: Header with title and actions
+---
+```tsx
+const colors = useThemeColors();
+
+<FlexRow align="center" style={{ padding: 12, backgroundColor: colors.bgElevated }}>
+  <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>Dashboard</Text>
   <Spacer />
-  <Text fontSize={16}>Right</Text>
-</Box>
+  <Pressable onPress={() => refresh()} style={{ padding: 8 }}>
+    <Text style={{ color: colors.primary, fontSize: 12 }}>Refresh</Text>
+  </Pressable>
+</FlexRow>
+```
 ---
-Platforms: All
-Description: Spacer works in row containers too, filling horizontal space to push elements to the edges.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Spacer with no size prop requires a parent with known dimensions — flexGrow only works when there's space to fill
-- In row containers, Spacer fills horizontal space (width); in column containers, it fills vertical space (height)
-- Fixed-size Spacers (with size prop) behave like Box with explicit height — they don't grow
-- Never use Spacer inside auto-sized containers — flexGrow collapses to zero when there's no available space
-- Multiple flexGrow Spacers in the same container share available space equally
-- Prefer Spacer over manual marginTop/marginBottom for cleaner, more maintainable layouts
-- Spacer is effectively a shorthand for Box with either flexGrow: 1 or a fixed height — use Box directly if you need additional styling
+- Without `size`, Spacer uses `flexGrow: 1`. The parent must have a defined size (explicit or from its own parent) for grow to work.
+- With `size`, Spacer sets a fixed `height`. In a row, this means the spacer adds vertical height, not horizontal width. For horizontal fixed spacing in a row, use `gap` on the parent or a Box with explicit `width`.
 
 === SEE ALSO ===
-- Box — primitive container that Spacer is built on
-- Divider — visual separator line (vs. Spacer's invisible space)
-- FlexRow/FlexColumn — helper components that often contain Spacers
-- Layout Rules — understanding flexGrow behavior and container sizing
+- FlexRow
+- FlexColumn
+- Divider

@@ -136,7 +136,9 @@ local BAUD_MAP = {
 local serial = {}
 
 local function getErrno()
-  return ffi.C.__errno_location()[0]
+  local ok, ptr = pcall(ffi.C.__errno_location)
+  if not ok then return 0 end
+  return ptr[0]
 end
 
 local function getError()

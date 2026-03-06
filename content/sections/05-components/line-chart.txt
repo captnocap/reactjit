@@ -1,149 +1,109 @@
 === METADATA ===
 title: LineChart
-description: Column-based line chart that plots a series of values as dots with optional area fill
+description: Line graph with optional dots and area fill, rendered by the Lua chart engine
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: chart, line, trend, data, visualization, graph, timeseries
-related: AreaChart, Sparkline, BarChart, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: line chart, chart, graph, line, data visualization, points, trend
+related: AreaChart, Sparkline, BarChart
+difficulty: intermediate
 
 === OVERVIEW ===
-LineChart renders a fixed-size canvas divided into equal-width columns, one per data point. Each column positions a dot at the correct vertical height based on its normalized value, with the minimum value mapped to the bottom and the maximum to the top. An optional area fill extends from each dot to the bottom of the chart. When interactive mode is enabled, hovering a column shows a crosshair line and a tooltip with the optional x-label and raw value, while all other dots fade.
+LineChart renders a line graph as a Lua `Chart2D` node. Data points are connected by lines, with optional dot markers and area fill. The chart is rendered entirely by `lua/chart.lua`.
+
+When `interactive` is enabled, hovering near a point shows a tooltip. Press events are available via `onPointPress`.
+
+LineChart is a surface element. If no explicit dimensions are set, it falls back to proportional surface sizing (1/4 of parent). Set `width`/`height` or use `flexGrow` for precise control.
 
 === API / SYNTAX ===
 ```tsx
 import { LineChart } from '@reactjit/core';
 ```
 
-Data shape:
-```tsx
-interface LineChartPoint {
-  x?:    string;  // Optional x-axis label shown in the hover tooltip
-  value: number;  // Y-axis value; min and max across the dataset define the scale
-}
-```
-
 Props:
-| Prop          | Type                                                              | Default    | Description                                                           |
-|---------------|-------------------------------------------------------------------|------------|-----------------------------------------------------------------------|
-| data          | LineChartPoint[]                                                  | required   | Array of data points to plot                                          |
-| width         | number                                                            | 280        | Total chart width in pixels                                           |
-| height        | number                                                            | 120        | Total chart height in pixels                                          |
-| color         | Color                                                             | '#3b82f6'  | Color used for dots, area fill, and the hover crosshair               |
-| showDots      | boolean                                                           | true       | Whether to render a dot at each data point                            |
-| showArea      | boolean                                                           | false      | Whether to render a filled area from the dot down to the baseline     |
-| areaOpacity   | number                                                            | 0.3        | Opacity of the area fill (0–1); has no effect when showArea is false  |
-| interactive   | boolean                                                           | false      | Enable hover crosshair and per-point tooltips                         |
-| onPointHover  | (index: number \| null, point: LineChartPoint \| null) => void    | undefined  | Called when the pointer enters or leaves a column                     |
-| onPointPress  | (index: number, point: LineChartPoint) => void                    | undefined  | Called when a column is clicked (requires interactive: true)          |
-| style         | Style                                                             | undefined  | Additional styles applied to the outer container Box                  |
+| Prop         | Type                                                        | Default   | Description                              |
+|--------------|-------------------------------------------------------------|-----------|------------------------------------------|
+| data         | LineChartPoint[]                                            | required  | Array of data points                     |
+| width        | number                                                      | undefined | Chart width in pixels                    |
+| height       | number                                                      | undefined | Chart height in pixels                   |
+| color        | Color                                                       | undefined | Line and dot color                       |
+| showDots     | boolean                                                     | undefined | Show dot markers at each point           |
+| showArea     | boolean                                                     | undefined | Fill the area below the line             |
+| areaOpacity  | number                                                      | undefined | Opacity of the area fill (0-1)           |
+| interactive  | boolean                                                     | undefined | Enable hover tooltips and press events   |
+| onPointHover | (index: number \| null, point: LineChartPoint \| null) => void | undefined | Called on point hover/unhover         |
+| onPointPress | (index: number, point: LineChartPoint) => void              | undefined | Called on point press                    |
+| style        | Style                                                       | undefined | Full style object                        |
+
+LineChartPoint:
+| Field | Type   | Default   | Description                          |
+|-------|--------|-----------|--------------------------------------|
+| x     | string | undefined | Label for the x-axis position        |
+| value | number | required  | Y-axis value                         |
 
 === EXAMPLES ===
-Example 1: Simple line chart with dots
+Example 1: Basic line chart
 ---
 ```tsx
-import { LineChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const cpu = [
-  { x: '00:00', value: 18 },
-  { x: '01:00', value: 22 },
-  { x: '02:00', value: 15 },
-  { x: '03:00', value: 31 },
-  { x: '04:00', value: 44 },
-  { x: '05:00', value: 38 },
-  { x: '06:00', value: 60 },
-  { x: '07:00', value: 75 },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <LineChart data={cpu} width={300} height={100} color="#22c55e" />
-    </Box>
-  );
-}
+<LineChart
+  data={[
+    { x: 'Mon', value: 10 },
+    { x: 'Tue', value: 25 },
+    { x: 'Wed', value: 18 },
+    { x: 'Thu', value: 32 },
+    { x: 'Fri', value: 22 },
+  ]}
+  color={colors.primary}
+  width={300}
+  height={150}
+  showDots
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Area fill for cumulative data
+Example 2: Line chart with area fill
 ---
 ```tsx
-import { LineChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const downloads = [
-  { value: 120 }, { value: 145 }, { value: 162 },
-  { value: 188 }, { value: 201 }, { value: 230 },
-  { value: 215 }, { value: 248 },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <LineChart
-        data={downloads}
-        width={280}
-        height={80}
-        color="#6366f1"
-        showArea
-        areaOpacity={0.4}
-        showDots={false}
-      />
-    </Box>
-  );
-}
+<LineChart
+  data={revenueData}
+  color={colors.primary}
+  width={400}
+  height={200}
+  showArea
+  areaOpacity={0.3}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive with click handler
+Example 3: Interactive with press handler
 ---
 ```tsx
-import { useState } from 'react';
-import { LineChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const temps = [
-  { x: 'Mon', value: 12 }, { x: 'Tue', value: 15 },
-  { x: 'Wed', value: 11 }, { x: 'Thu', value: 18 },
-  { x: 'Fri', value: 22 }, { x: 'Sat', value: 25 },
-  { x: 'Sun', value: 19 },
-];
-
-export default function App() {
-  const [selected, setSelected] = useState<string | null>(null);
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 12 }}>
-      <LineChart
-        data={temps}
-        width={300}
-        height={100}
-        color="#f59e0b"
-        interactive
-        onPointPress={(_, point) => setSelected(point.x ?? null)}
-      />
-      {selected && (
-        <Text style={{ fontSize: 12, color: '#94a3b8' }}>
-          {`Selected: ${selected}`}
-        </Text>
-      )}
-    </Box>
-  );
-}
+<LineChart
+  data={temperatureReadings}
+  color="#ef4444"
+  height={180}
+  showDots
+  interactive
+  onPointPress={(index, point) => setSelectedDay(point.x)}
+  style={{ flexGrow: 1 }}
+/>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
-=== CRITICAL RULES ===
-- The chart uses column-based rendering: each data point occupies a column of width `width / data.length`. Dots are visually positioned within this column but there are no connecting line segments drawn between them. For a filled area presentation, use AreaChart instead.
-- The vertical scale is relative: the minimum value in the dataset maps to the bottom and the maximum to the top. A flat dataset where all values are equal results in all dots at the bottom of their range.
-- `onPointPress` only fires when `interactive` is also `true`.
-- Hovered dots expand by 2px and non-hovered dots fade to 35% opacity. Hover requires pointer events, which are not available on all targets — check platform support before enabling `interactive`.
-- Empty `data` arrays render a sized empty Box safely.
-- Do not use Unicode symbols in tooltip labels (`x` field of each point).
+=== PLATFORM NOTES ===
+Love2D:
+  Rendered by lua/chart.lua as a Chart2D surface. Lines are drawn with love.graphics.line, dots with love.graphics.circle. Area fill uses a polygon from the line points to the bottom of the chart area. All scaling and coordinate mapping is handled in Lua.
 
 === SEE ALSO ===
-- AreaChart — convenience wrapper over LineChart with area fill on and dots off by default
-- Sparkline — minimal no-configuration trend line for embedding in tight layouts
-- BarChart — vertical bars for the same dataset
-- ChartTooltip — standalone tooltip primitive used internally by this component
+- AreaChart
+- Sparkline
+- BarChart
+- CandlestickChart

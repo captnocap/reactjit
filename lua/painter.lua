@@ -1807,6 +1807,61 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   local children = node.children or {}
   local paintOrder = ZIndex.getSortedChildren(children)
 
+  -- scaleToFit: uniformly scale children to fit horizontally within the container.
+  -- Auto-applies to any row that overflows. Scroll containers are excluded.
+  -- Opt out with scaleToFit=false; opt in explicitly on non-rows with scaleToFit=true.
+  --
+  -- Two subtleties handled here:
+  --   1. Auto-sized rows get c.w = natural content width, so compare against the
+  --      PARENT's inner width (the actual visible budget) instead.
+  --   2. When a parent has alignItems:'center' and the row overflows, the layout
+  --      engine centers it — pushing c.x LEFT of the parent's content area. The
+  --      scissor then clips the first card. Fix: anchor the scale at the parent's
+  --      content-left edge. The formula translate(anchorX - c.x*scale, c.y*(1-scale))
+  --      then scale(s,s) maps content at c.x → anchorX and c.x+contentW → anchorX+availableW.
+  local didScaleToFit = false
+  local isRow = s.flexDirection == "row"
+  local wantScale = s.scaleToFit ~= false and (s.scaleToFit or isRow)
+  if wantScale and not isScroll and c.w > 0 then
+    local availableW = c.w
+    local anchorX = c.x
+    if node.parent then
+      local pc = node.parent.computed
+      local ps = node.parent.style or {}
+      local pl = ps.paddingLeft or ps.padding or 0
+      local pr = ps.paddingRight or ps.padding or 0
+      if pc then
+        local parentContentX = pc.x + pl
+        local parentInnerW = pc.w - pl - pr
+        if parentInnerW > 0 and parentInnerW < availableW then
+          availableW = parentInnerW
+        end
+        if parentContentX > anchorX then
+          anchorX = parentContentX
+        end
+      end
+    end
+    local contentRight = c.x
+    for _, child in ipairs(paintOrder) do
+      local cc = child.computed
+      if cc then contentRight = math.max(contentRight, cc.x + cc.w) end
+    end
+    local contentW = contentRight - c.x
+    if contentW > availableW then
+      local scale = availableW / contentW
+      -- Store on node so hit-tester can apply the inverse transform
+      node._scaleToFit = { scale = scale, anchorX = anchorX }
+      love.graphics.push()
+      love.graphics.translate(anchorX - c.x * scale, c.y * (1 - scale))
+      love.graphics.scale(scale, scale)
+      didScaleToFit = true
+    else
+      node._scaleToFit = nil
+    end
+  else
+    node._scaleToFit = nil
+  end
+
   -- Apply scroll transform if this is a scroll container
   local scrollX, scrollY = 0, 0
   if isScroll and node.scrollState then
@@ -1849,6 +1904,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
 
   -- Restore scroll transform
   if isScroll and (scrollX ~= 0 or scrollY ~= 0) then
+    love.graphics.pop()
+  end
+
+  -- Restore scaleToFit transform
+  if didScaleToFit then
     love.graphics.pop()
   end
 

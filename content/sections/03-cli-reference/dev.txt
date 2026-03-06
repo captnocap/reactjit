@@ -1,68 +1,84 @@
 === METADATA ===
-title: reactjit dev
-description: Start esbuild in watch mode for live Love2D development.
+title: rjit dev
+description: Watch mode with hot module reload -- rebuilds on file changes and launches Love2D automatically.
 category: CLI
 platforms: love2d
-keywords: dev, watch, hmr, live reload, esbuild, development
-related: build.txt, init.txt
+keywords: dev, watch, hmr, hot reload, esbuild, development, live
+related: build.txt, lint.txt, init.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `reactjit dev` command starts esbuild in watch mode, continuously rebuilding the
-JavaScript bundle whenever source files change. It uses the correct esbuild flags for the
-Love2D target (IIFE format, ReactLove global name, ES2020 target, automatic JSX).
+`rjit dev` starts esbuild in watch mode, monitoring your source files for changes. On every
+save, esbuild rebundles the project and Love2D's HMR system picks up the new bundle.js
+in-place -- no restart needed.
 
-Run `love .` in a separate terminal to see your app. Love2D reads the bundle.js file on
-each frame update, so changes appear in real time without restarting Love2D.
+On the first successful build, dev mode automatically launches Love2D (via `love .` or
+`love love/` depending on project structure). Subsequent rebuilds are picked up by Love2D's
+hot reload system without restarting the process.
+
+The command uses esbuild's --watch flag with the --jsx-dev flag enabled, which populates
+_debugSource on React fibers for better error messages and the visual inspector (F12).
+
+TSL files (.tsl) in src/ are transpiled to Lua before the initial build and watched for
+changes alongside TypeScript sources. TSL transpilation errors block the build.
 
 === API / SYNTAX ===
 Usage:
-  reactjit dev
+  rjit dev [target]
 
-Entry point:
-  src/main.tsx (required -- the command exits with an error if this file does not exist)
+Arguments:
+  target                 Build target (default: 'love'). Available: 'love', 'web'.
 
-Output:
-  bundle.js in the project root
+Behavior:
+  1. Transpiles any .tsl files in src/ to lua/ (Love2D target only)
+  2. Starts esbuild in watch mode with the correct flags for the target
+  3. On first successful build, launches Love2D automatically
+  4. Subsequent rebuilds trigger HMR -- Love2D detects the changed bundle.js
 
-esbuild flags used:
-  --bundle
-  --format=iife
-  --global-name=ReactLove
-  --target=es2020
-  --jsx=automatic
-  --outfile=bundle.js
-  --watch
+esbuild flags (set automatically via targets.mjs):
+  --bundle --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic --jsx-dev
+  --external:react-dom --external:child_process --watch
+
+Output file:
+  love/bundle.js (Love2D target)
+  web/bundle.js (Web target)
+
+Entry point resolution (checked in order):
+  Love2D: src/main-love.tsx, src/main.tsx
+  Web: src/main-wasm.tsx, src/main-web.tsx
 
 === EXAMPLES ===
-Example 1: Standard development workflow
+Example 1: Start development (most common)
 ---
-# Terminal 1:
-cd my-project
-reactjit dev
+cd my-app
+rjit dev
+# esbuild watches src/, Love2D launches on first build
+# Edit src/App.tsx -- save -- see changes instantly
+---
+Platforms: love2d
 
-# Terminal 2:
-cd my-project
-love .
+Example 2: Dev mode for web target
+---
+rjit dev web
+# Bundles to web/bundle.js, does not launch a runtime
+# Serve web/ with any HTTP server to view
 ---
 Platforms: love2d
 
 === PLATFORM NOTES ===
-This command is specific to the Love2D target. It produces an IIFE bundle that runs inside
-QuickJS via the Love2D bridge. For grid target development (terminal, Neovim, etc.), use
-the npm scripts in the monorepo root package.json instead.
-
-The dev command does not run the linter automatically. Run `reactjit lint` separately
-after making component changes.
+Love2D:
+Dev mode detects whether the project uses a love/ subdirectory (has love/main.lua) or the
+project root as the Love2D directory. Love2D is launched with `love <dir>` and stdio is
+inherited so Love2D output appears in your terminal. If Love2D exits with a non-zero code,
+dev mode reports the error but keeps esbuild watching.
 
 === CRITICAL RULES ===
-- The project must have a src/main.tsx entry point
-- Do NOT run raw esbuild --watch manually -- the CLI encodes the correct flags
-- The dev command requires local lua/ and lib/ directories (run `reactjit update` first if missing)
-- Love2D must be running in a separate terminal -- the dev command only watches and bundles JS
-- Ctrl+C exits the watcher
+- Dev mode does NOT run the linter -- use rjit lint separately or rely on rjit build for lint-gated builds
+- The --jsx-dev flag is only added in dev mode, not in production builds
+- If the entry point is not found, dev mode exits with an error -- make sure src/main.tsx (or src/main-love.tsx) exists
+- Ctrl+C cleanly shuts down both esbuild and the Love2D process
 
 === SEE ALSO ===
-- build.txt -- Production builds (includes lint gate)
-- lint.txt -- Run the linter separately during development
-- init.txt -- Creating new projects with the correct structure
+- build.txt -- Production builds (lint-gated, no watch mode)
+- lint.txt -- Run the linter manually during development
+- init.txt -- Create a project to develop

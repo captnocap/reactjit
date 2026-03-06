@@ -1,160 +1,99 @@
 === METADATA ===
 title: Card
-description: A styled container component with optional header, title, subtitle, and body sections. Provides a consistent visual structure for grouping related content with automatic borders, padding, and spacing.
+description: Elevated container with optional title, subtitle, padding, and border radius
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: card, container, panel, box, layout, header, title, subtitle
-related: Badge, Box, FlexRow, FlexCol
+platforms: love2d
+keywords: card, container, panel, elevated, title, subtitle, section, surface
+related: Box, Divider, Badge
 difficulty: beginner
 
 === OVERVIEW ===
-The Card component is a pre-styled container that provides a visual boundary around related content. It automatically includes dark theme styling (slate colors), rounded corners, borders, and proper padding. Cards can optionally display a header section with a title and subtitle, separated from the body content by a horizontal divider. The component auto-sizes to its content unless explicit dimensions are provided via the `style` prop.
+Card is a styled container that provides a rounded, bordered surface with optional header (title and subtitle) and padded body. It renders as a Box with background color, border, border radius, and overflow hidden.
+
+When `title` or `subtitle` is provided, Card renders a header section separated from the body by a bottom border. The body always receives 12px padding by default.
+
+Use Card to group related content into visually distinct sections. Both `headerStyle` and `bodyStyle` allow overriding the default styling of those regions.
 
 === API / SYNTAX ===
 ```tsx
 import { Card } from '@reactjit/core';
-
-<Card
-  title="Optional Title"
-  subtitle="Optional Subtitle"
-  style={{ width: 300 }}
-  headerStyle={{ backgroundColor: '#2d3748' }}
-  bodyStyle={{ gap: 8 }}
->
-  {children}
-</Card>
 ```
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `children` | `React.ReactNode` | (required) | Content rendered in the card body section |
-| `title` | `string` | `undefined` | Optional title displayed in the header (bold, 14px, light gray) |
-| `subtitle` | `string` | `undefined` | Optional subtitle below title (11px, muted gray) |
-| `style` | `Style` | `{}` | Overrides for the outer card container (dimensions, margins, etc.) |
-| `headerStyle` | `Style` | `{}` | Overrides for the header section (padding, background, borders) |
-| `bodyStyle` | `Style` | `{}` | Overrides for the body section (padding, gap, alignment) |
-
-**Default Styling:**
-- Background: `#1e293b` (slate-800)
-- Border: 1px `#334155` (slate-700)
-- Border radius: 8px
-- Header padding: 12px
-- Body padding: 12px
-- Header border-bottom: 1px when title or subtitle present
+Props:
+| Prop        | Type      | Default   | Description                              |
+|-------------|-----------|-----------|------------------------------------------|
+| title       | string    | undefined | Header title text                        |
+| subtitle    | string    | undefined | Header subtitle text (smaller, muted)    |
+| children    | ReactNode | required  | Body content                             |
+| style       | Style     | undefined | Outer container style overrides          |
+| headerStyle | Style     | undefined | Header section style overrides           |
+| bodyStyle   | Style     | undefined | Body section style overrides             |
 
 === EXAMPLES ===
-
-Example 1: Basic Card with Title
+Example 1: Card with title
 ---
 ```tsx
+const colors = useThemeColors();
+
 <Card title="System Status">
-  <Text fontSize={14} style={{ color: '#e2e8f0' }}>
-    All systems operational
-  </Text>
+  <Text style={{ color: colors.text, fontSize: 12 }}>All services operational</Text>
 </Card>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Card with Title and Subtitle
+Example 2: Card with title and subtitle
 ---
 ```tsx
-<Card
-  title="Player Stats"
-  subtitle="Last updated 2 minutes ago"
->
-  <Box style={{ gap: 4 }}>
-    <Text fontSize={12} style={{ color: '#e2e8f0' }}>Health: 100/100</Text>
-    <Text fontSize={12} style={{ color: '#e2e8f0' }}>Mana: 85/100</Text>
-  </Box>
+const colors = useThemeColors();
+
+<Card title="CPU Usage" subtitle="Last 60 seconds">
+  <Text style={{ color: colors.text, fontSize: 24, fontWeight: 'bold' }}>42%</Text>
 </Card>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Card with No Header
+Example 3: Card without header
 ---
 ```tsx
+const colors = useThemeColors();
+
 <Card>
-  <Text fontSize={14} style={{ color: '#e2e8f0' }}>
-    This card has no header section.
-    Use it for simple content grouping.
-  </Text>
+  <FlexRow gap={12} align="center">
+    <Box style={{ width: 40, height: 40, backgroundColor: colors.primary, borderRadius: 20 }} />
+    <FlexColumn gap={2}>
+      <Text style={{ color: colors.text, fontSize: 14 }}>User Name</Text>
+      <Text style={{ color: colors.muted, fontSize: 11 }}>Online</Text>
+    </FlexColumn>
+  </FlexRow>
 </Card>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Custom Dimensions and Styling
+Example 4: Custom styled card
 ---
 ```tsx
+const colors = useThemeColors();
+
 <Card
-  title="Fixed Width Card"
-  style={{ width: 400, height: 200 }}
-  headerStyle={{ backgroundColor: '#2d3748', padding: 16 }}
-  bodyStyle={{ gap: 12, padding: 16 }}
+  title="Alerts"
+  style={{ borderColor: colors.primary }}
+  headerStyle={{ padding: 16 }}
+  bodyStyle={{ padding: 16, gap: 8 }}
 >
-  <Text fontSize={14} style={{ color: '#e2e8f0' }}>
-    Custom header background and increased padding.
-  </Text>
+  <Text style={{ color: colors.text, fontSize: 12 }}>No new alerts</Text>
 </Card>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Dashboard Card Grid
----
-```tsx
-<Box style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
-  <Card title="CPU Usage" style={{ width: 200 }}>
-    <Text fontSize={24} style={{ color: '#22c55e' }}>42%</Text>
-  </Card>
-  <Card title="Memory" style={{ width: 200 }}>
-    <Text fontSize={24} style={{ color: '#eab308' }}>67%</Text>
-  </Card>
-  <Card title="Disk" style={{ width: 200 }}>
-    <Text fontSize={24} style={{ color: '#ef4444' }}>89%</Text>
-  </Card>
-</Box>
-```
----
-Platforms: All
-
-Example 6: Card with Badge
----
-```tsx
-<Card
-  title="Task Manager"
-  subtitle="Active processes"
->
-  <Box style={{ gap: 8 }}>
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text fontSize={12} style={{ color: '#e2e8f0' }}>Server</Text>
-      <Badge label="Running" variant="success" />
-    </Box>
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text fontSize={12} style={{ color: '#e2e8f0' }}>Database</Text>
-      <Badge label="Error" variant="error" />
-    </Box>
-  </Box>
-</Card>
-```
----
-Platforms: All
-
-=== CRITICAL RULES ===
-- All `<Text>` children inside Card must have explicit `fontSize` (linter enforces this)
-- Card auto-sizes to content unless explicit `width`/`height` provided in `style`
-- Header section only renders if `title` or `subtitle` is provided
-- Do not use Unicode symbols in Text children (see layout rules)
-- For full-viewport cards, use `style={{ width: '100%', height: '100%' }}`
-- Use `bodyStyle={{ gap: X }}` instead of manual spacing between children
-- `headerStyle` and `bodyStyle` merge with defaults (use to override padding, colors, etc.)
-- Card uses `overflow: 'hidden'` to clip content at rounded corners
+=== PLATFORM NOTES ===
+Love2D:
+  Card uses hardcoded dark theme colors as defaults (bg: #1e293b, border: #334155). To integrate with the theme system, pass colors through the `style` prop: `style={{ backgroundColor: colors.bgElevated, borderColor: colors.border }}`.
 
 === SEE ALSO ===
-- Badge component for status indicators inside cards
-- Box primitive for custom containers without styling
-- FlexRow/FlexCol helpers for card body layouts
-- ScrollView for scrollable card content
-- Layout Rules: auto-sizing behavior (CLAUDE.md)
+- Box
+- Badge
+- Divider

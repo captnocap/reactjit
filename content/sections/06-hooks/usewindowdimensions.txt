@@ -1,154 +1,130 @@
 === METADATA ===
 title: useWindowDimensions
-description: Get the current viewport width and height with reactive updates on window resize.
+description: Reactive viewport dimensions and declarative window control hooks
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: useWindowDimensions, hook, viewport, dimensions, width, height, resize, responsive, window
-related: useloveevent.txt, uselove.txt
-difficulty: beginner
+platforms: love2d
+keywords: window, dimensions, viewport, width, height, resize, size, position, always-on-top
+related: useBreakpoint
+difficulty: intermediate
 
 === OVERVIEW ===
-useWindowDimensions returns an object containing the current viewport width and height. The
-values update reactively whenever the window is resized, allowing components to respond to
-layout changes dynamically.
+useWindowDimensions returns the current viewport width and height, updating reactively on window resize. The value is cached across remounts so tab switches pick up the last known size instantly without waiting for a new resize event from Lua.
 
-The hook subscribes to the 'viewport' bridge event and updates state whenever new dimensions
-are received from the Lua runtime. Initial dimensions may be {width: 0, height: 0} until the
-first viewport event is dispatched.
+This file also covers three declarative window control hooks: useWindowSize, useWindowPosition, and useWindowAlwaysOnTop. These hooks set window properties as side effects -- mount the component to apply the setting, unmount to optionally revert.
 
 === API / SYNTAX ===
 ```tsx
-import { useWindowDimensions } from '@reactjit/core';
+import { useWindowDimensions, useWindowSize, useWindowPosition, useWindowAlwaysOnTop } from '@reactjit/core';
 ```
 
-Signature:
-  function useWindowDimensions(): { width: number; height: number }
+useWindowDimensions:
+```tsx
+function useWindowDimensions(): { width: number; height: number }
+```
 
-Parameters:
-  (none)
+useWindowSize:
+```tsx
+function useWindowSize(width: number, height: number, options?: WindowControlOptions): void
+```
 
-Returns:
-  Object with two properties:
-    width: number
-      Current viewport width in pixels (or character columns for grid targets)
-    height: number
-      Current viewport height in pixels (or character rows for grid targets)
+useWindowPosition:
+```tsx
+function useWindowPosition(x: number, y: number, options?: WindowControlOptions): void
+```
+
+useWindowAlwaysOnTop:
+```tsx
+function useWindowAlwaysOnTop(onTop: boolean, options?: { windowId?: number; revert?: boolean }): void
+```
+
+WindowControlOptions:
+| Option    | Type    | Default | Description                                        |
+|-----------|---------|---------|----------------------------------------------------|
+| windowId  | number  | 0       | Target window (0 = main, 1+ = child windows)      |
+| animate   | boolean | false   | Smoothly animate the transition                    |
+| duration  | number  | 300     | Animation duration in ms (only when animate=true)  |
+| revert    | boolean | false   | Revert to previous value on unmount                |
 
 === EXAMPLES ===
 Example 1: Responsive layout
 ---
-import { useWindowDimensions, Box, Text } from '@reactjit/core';
+```tsx
+import { useWindowDimensions } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
 function ResponsiveLayout() {
+  const colors = useThemeColors();
   const { width, height } = useWindowDimensions();
   const isWide = width > 800;
-  const isTall = height > 600;
 
   return (
-    <Box style={{
-      width: '100%',
-      height: '100%',
-      flexDirection: isWide ? 'row' : 'column',
-      backgroundColor: '#1e1e2e'
-    }}>
-      <Box style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 20, color: '#cdd6f4' }}>
-          {width} x {height}
-        </Text>
+    <Box style={{ flexDirection: isWide ? 'row' : 'column', flexGrow: 1 }}>
+      <Box style={{ width: isWide ? 200 : '100%', backgroundColor: colors.bgElevated }}>
+        <Text style={{ color: colors.text }}>Sidebar</Text>
       </Box>
-      <Box style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 16, color: '#a6adc8' }}>
-          Layout: {isWide ? 'Wide' : 'Narrow'}
-        </Text>
+      <Box style={{ flexGrow: 1 }}>
+        <Text style={{ color: colors.text }}>{`${width}x${height}`}</Text>
       </Box>
     </Box>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Conditional rendering based on viewport size
+Example 2: Set window size on mount
 ---
-import { useWindowDimensions, Box, Text } from '@reactjit/core';
+```tsx
+import { useWindowSize } from '@reactjit/core';
 
-function AdaptiveUI() {
-  const { width } = useWindowDimensions();
-  const showSidebar = width >= 1024;
-  const showMobileNav = width < 768;
+function CompactMode() {
+  useWindowSize(400, 300, { animate: true, revert: true });
 
-  return (
-    <Box style={{ width: '100%', height: '100%', flexDirection: 'row' }}>
-      {showSidebar && (
-        <Box style={{ width: 200, backgroundColor: '#313244' }}>
-          <Text style={{ fontSize: 16, color: '#cdd6f4', padding: 10 }}>Sidebar</Text>
-        </Box>
-      )}
-      <Box style={{ flex: 1 }}>
-        {showMobileNav && (
-          <Box style={{ height: 50, backgroundColor: '#45475a' }}>
-            <Text style={{ fontSize: 14, color: '#cdd6f4', padding: 10 }}>Mobile Nav</Text>
-          </Box>
-        )}
-        <Box style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 18, color: '#cdd6f4' }}>Content</Text>
-        </Box>
-      </Box>
-    </Box>
-  );
+  return <Text>Compact view -- window reverts on unmount</Text>;
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Calculate aspect ratio
+Example 3: Pin window on top
 ---
-import { useWindowDimensions, Box, Text } from '@reactjit/core';
+```tsx
+import { useWindowAlwaysOnTop } from '@reactjit/core';
 
-function AspectRatioDisplay() {
-  const { width, height } = useWindowDimensions();
-  const aspectRatio = height > 0 ? (width / height).toFixed(2) : '0.00';
-  const orientation = width > height ? 'Landscape' : 'Portrait';
+function PinnedOverlay({ pinned }: { pinned: boolean }) {
+  useWindowAlwaysOnTop(pinned, { revert: true });
 
-  return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontSize: 24, color: '#cdd6f4' }}>
-        {width} x {height}
-      </Text>
-      <Text style={{ fontSize: 18, color: '#a6adc8', marginTop: 10 }}>
-        Aspect Ratio: {aspectRatio}
-      </Text>
-      <Text style={{ fontSize: 16, color: '#89b4fa', marginTop: 5 }}>
-        {orientation}
-      </Text>
-    </Box>
-  );
+  return <Text>{pinned ? 'Pinned' : 'Unpinned'}</Text>;
 }
+```
 ---
-Platforms: All
+Platforms: love2d
+
+Example 4: Position a child window
+---
+```tsx
+import { useWindowPosition, useWindowSize } from '@reactjit/core';
+
+function ToolWindow() {
+  useWindowSize(300, 200, { windowId: 1 });
+  useWindowPosition(100, 100, { windowId: 1, animate: true });
+
+  return <Text>Tool window at 100, 100</Text>;
+}
+```
+---
+Platforms: love2d
 
 === PLATFORM NOTES ===
-The meaning of "dimensions" varies by target:
+Love2D:
+  The viewport event is pushed from Lua whenever the Love2D window is resized. The initial value comes from the first viewport event after bridge initialization. The module-level cache ensures that if a component unmounts and remounts (e.g., tab switch), it immediately gets the last known dimensions instead of starting at 0x0.
 
-- Love2D: Pixel dimensions of the Love2D window (set in conf.lua or via love.window.setMode)
-- Web: Pixel dimensions of the canvas element
-- Terminal: Character columns and rows of the terminal viewport
-- ComputerCraft: Character columns and rows of the monitor/terminal
-- Neovim: Character columns and rows of the floating window
-- Hammerspoon: Pixel dimensions of the canvas
-- AwesomeWM: Pixel dimensions of the widget area
-
-For grid-based targets (terminal, cc, nvim), layout calculations are performed in character
-units, not pixels. The dimensions update when the terminal window is resized or when the user
-changes font size.
+  Window control hooks (useWindowSize, useWindowPosition, useWindowAlwaysOnTop) send RPC calls to Lua which forwards them to love.window APIs. Animation support depends on the Lua-side window manager interpolation.
 
 === CRITICAL RULES ===
-- Initial dimensions may be {width: 0, height: 0} until the first viewport event fires
-- Check for zero dimensions before dividing (e.g., calculating aspect ratio)
-- Must be used inside a BridgeProvider context
-- Updates are reactive -- components re-render automatically on resize
-- For Love2D, dimensions are set in conf.lua via t.window.width and t.window.height
-- Grid targets measure in character units, not pixels
+- useWindowDimensions returns { width: 0, height: 0 } before the first viewport event. Design your layout to handle this gracefully (use flexGrow instead of pixel math based on window size).
+- The revert option on window control hooks captures the previous value at mount time and restores it on unmount. If the window was resized by the user between mount and unmount, the revert goes back to the captured value, not the current one.
+- Window control hooks are declarative side effects. Changing the width/height/position props re-applies the setting. Do not call them conditionally -- mount/unmount the component instead.
 
 === SEE ALSO ===
-- useloveevent.txt -- Subscribe to custom viewport-related events
-- uselove.txt -- General-purpose bridge event subscription
-- Box primitive -- Use percentage widths/heights relative to these dimensions
+- useBreakpoint

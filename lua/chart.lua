@@ -9,6 +9,16 @@
 local Chart = {}
 local ColorUtils = require("lua.color") -- helper to parse Hex/RGBA from TS to Lua array
 
+local function val(item)
+  if type(item) == "number" then return item end
+  return item.value
+end
+
+local function clr(item, fallback)
+  if type(item) == "table" and item.color then return item.color end
+  return fallback
+end
+
 function Chart.draw(props, x, y, width, height)
   if not props or not props.data or not props.chartType then return end
   local data = props.data
@@ -28,37 +38,37 @@ function Chart.draw(props, x, y, width, height)
   if props.chartType == "bar" then
     local gap = props.gap or 8
     local barWidth = props.barWidth or ((width - (gap * (len - 1))) / len)
-    local maxValue = data[1].value
-    for i=2, len do if data[i].value > maxValue then maxValue = data[i].value end end
+    local maxValue = val(data[1])
+    for i=2, len do if val(data[i]) > maxValue then maxValue = val(data[i]) end end
     if maxValue <= 0 then maxValue = 1 end
-    
+
     local cx = x
     for i=1, len do
-      local val = data[i].value
-      local bh = math.max(1, (val / maxValue) * height)
-      local clr = data[i].color or props.color or "#3b82f6"
-      ColorUtils.set(clr)
+      local v = val(data[i])
+      local bh = math.max(1, (v / maxValue) * height)
+      ColorUtils.set(clr(data[i], props.color or "#3b82f6"))
       love.graphics.rectangle("fill", cx, y + height - bh, barWidth, bh)
       cx = cx + barWidth + gap
     end
     
   elseif props.chartType == "line" then
-    local minVal = data[1].value
-    local maxVal = data[1].value
+    local minVal = val(data[1])
+    local maxVal = val(data[1])
     for i=2, len do
-      if data[i].value < minVal then minVal = data[i].value end
-      if data[i].value > maxVal then maxVal = data[i].value end
+      local v = val(data[i])
+      if v < minVal then minVal = v end
+      if v > maxVal then maxVal = v end
     end
     local range = maxVal - minVal
     if range == 0 then range = 1 end
-    
+
     local points = {}
     local stepX = width / math.max(1, len - 1)
-    
+
     -- Gather vertices
     for i=1, len do
       local px = x + ((i - 1) * stepX)
-      local norm = (data[i].value - minVal) / range
+      local norm = (val(data[i]) - minVal) / range
       local py = y + height - (norm * height)
       table.insert(points, px)
       table.insert(points, py)
@@ -73,17 +83,17 @@ function Chart.draw(props, x, y, width, height)
     
   elseif props.chartType == "pie" then
     local total = 0
-    for i=1, len do total = total + data[i].value end
+    for i=1, len do total = total + val(data[i]) end
     if total == 0 then total = 1 end
-    
+
     local cx = x + (width / 2)
     local cy = y + (height / 2)
     local radius = math.min(width, height) / 2
     local startAngle = -math.pi / 2
-    
+
     for i=1, len do
-      local slice = (data[i].value / total) * math.pi * 2
-      ColorUtils.set(data[i].color or "#ffffff")
+      local slice = (val(data[i]) / total) * math.pi * 2
+      ColorUtils.set(clr(data[i], "#ffffff"))
       love.graphics.arc("fill", cx, cy, radius, startAngle, startAngle + slice)
       startAngle = startAngle + slice
     end

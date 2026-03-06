@@ -36,6 +36,7 @@ local NetworkTab   = require("lua.devtools.tab_network")
 local PerfTab      = require("lua.devtools.tab_perf")
 local WireframeTab = require("lua.devtools.tab_wireframe")
 local LogsTab      = require("lua.devtools.tab_logs")
+local SourceTab    = require("lua.devtools.tab_source")
 
 local DevTools = {}
 
@@ -122,6 +123,7 @@ local STATUS_WARN  = { 0.95, 0.75, 0.20, 1 }
 -- Tab definitions
 local TABS = {
   { id = "elements",  label = "Elements" },
+  { id = "source",    label = "Source" },
   { id = "wireframe", label = "Wireframe" },
   { id = "perf",      label = "Perf" },
   { id = "network",   label = "Network" },
@@ -687,6 +689,8 @@ function DevTools.keypressed(key)
     return console.keypressed(key)
   elseif state.activeTab == "elements" then
     return inspector.keypressed(key)
+  elseif state.activeTab == "source" then
+    return SourceTab.keypressed(buildCtx(), key)
   end
 
   return false
@@ -700,6 +704,8 @@ function DevTools.textinput(text)
     return inspector.textinput(text)
   elseif state.activeTab == "console" then
     return console.textinput(text)
+  elseif state.activeTab == "source" then
+    return SourceTab.textinput(buildCtx(), text)
   end
 
   return false
@@ -849,6 +855,8 @@ function DevTools.mousepressed(x, y, button)
         state.activeTab = tab.id
         if tab.id == "console" then
           console.show()
+        elseif tab.id == "source" then
+          SourceTab.onTabActivated(buildCtx())
         end
         return true
       end
@@ -954,6 +962,8 @@ function DevTools.mousepressed(x, y, button)
   elseif state.activeTab == "logs" then
     local region = { x = 0, y = contentY, w = screenW, h = contentH }
     return LogsTab.mousepressed(buildCtx(), x, y, button, region)
+  elseif state.activeTab == "source" then
+    return SourceTab.mousepressed(buildCtx(), x, y, button)
   end
 
   return true
@@ -1074,6 +1084,8 @@ function DevTools.wheelmoved(x, y)
         return console.wheelmoved(x, y)
       elseif state.activeTab == "logs" then
         return LogsTab.wheelmoved(buildCtx(), x, y)
+      elseif state.activeTab == "source" then
+        return SourceTab.wheelmoved(buildCtx(), x, y)
       end
       return true
     end
@@ -1095,6 +1107,8 @@ function DevTools.wheelmoved(x, y)
       return console.wheelmoved(x, y)
     elseif state.activeTab == "logs" then
       return LogsTab.wheelmoved(buildCtx(), x, y)
+    elseif state.activeTab == "source" then
+      return SourceTab.wheelmoved(buildCtx(), x, y)
     end
     return false
   end
@@ -1115,6 +1129,8 @@ function DevTools.wheelmoved(x, y)
     return console.wheelmoved(x, y)
   elseif state.activeTab == "logs" then
     return LogsTab.wheelmoved(buildCtx(), x, y)
+  elseif state.activeTab == "source" then
+    return SourceTab.wheelmoved(buildCtx(), x, y)
   end
 
   return false
@@ -1333,6 +1349,9 @@ local function drawPanelContent(root)
 
   elseif state.activeTab == "logs" then
     LogsTab.draw(buildCtx(), { x = 0, y = contentY, w = screenW, h = contentH })
+
+  elseif state.activeTab == "source" then
+    SourceTab.draw(buildCtx(), { x = 0, y = contentY, w = screenW, h = contentH })
   end
 
   -- Status bar (bottom of panel)

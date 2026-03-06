@@ -402,7 +402,10 @@ function Bridge.new(libpath)
     end
   end
 
-  local qjs = ffi.load(libpath)
+  local ok, qjs = pcall(ffi.load, libpath)
+  if not ok then
+    error("[bridge_quickjs] Cannot load libquickjs from " .. libpath .. " — run `make setup` to build it.\n" .. tostring(qjs))
+  end
 
   local self = setmetatable({
     qjs = qjs,

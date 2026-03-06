@@ -1,115 +1,123 @@
 === METADATA ===
-title: reactjit build
-description: Bundle JS for development or produce self-contained distribution packages.
+title: rjit build
+description: Dev builds and production distribution builds for Love2D, Linux, macOS, Windows, and WASM.
 category: CLI
-platforms: love2d, terminal
-keywords: build, bundle, dist, love, terminal, self-extracting, binary, esbuild, lint gate
-related: dev.txt, update.txt, lint.txt
-difficulty: intermediate
+platforms: love2d
+keywords: build, dist, production, linux, macos, windows, web, wasm, esbuild, bundle, binary
+related: dev.txt, lint.txt, update.txt
+difficulty: beginner
 
 === OVERVIEW ===
-The `reactjit build` command bundles JavaScript and optionally produces self-contained
-distribution packages. Without a target, it runs the lint gate and bundles JS for the
-`love .` dev workflow. With a target (dist:love or dist:terminal), it produces a standalone
-executable.
+`rjit build` bundles your project for development or production. Without arguments, it
+produces a Love2D dev build (love/bundle.js). With a platform target, it produces a
+self-contained distribution binary.
 
-Every build automatically runs `reactjit update` first (unless --no-update) and passes
-through the lint gate -- builds fail on lint errors. This ensures that distribution packages
-always contain up-to-date framework files and pass layout validation.
+Every build path runs the static linter first. Lint errors exit with code 1 before esbuild
+runs. Post-build bundle checks (duplicate contexts, crypto miner detection) run on the
+compiled output. The build also auto-runs `rjit update` to sync runtime files before
+bundling (skipped for the storybook and with --no-update).
+
+TSL files (.tsl) in src/ are automatically transpiled to Lua before linting and bundling.
+TSL transpilation errors block the build. Video files (.mp4, .mkv, etc.) in the project
+are auto-converted to .ogv (Theora) format for Love2D compatibility when ffmpeg is available.
 
 === API / SYNTAX ===
 Usage:
-  reactjit build [target] [flags]
+  rjit build [target] [flags]
 
-Targets:
-  (none)          Lint gate + bundle JS for dev (outputs bundle.js for `love .` workflow)
-  dist:love       Self-extracting Linux binary with bundled glibc, Love2D, and QuickJS
-  dist:terminal   Single-file Node.js executable with shebang
+Dev builds (bundle only, no packaging):
+  rjit build                     Love2D dev build (default)
+  rjit build love                Love2D dev build (explicit)
+
+Production builds (self-contained binaries):
+  rjit build linux               Self-extracting Linux binary (x64)
+  rjit build macos               macOS bundle (Intel x64)
+  rjit build macmseries          macOS bundle (Apple Silicon arm64)
+  rjit build windows             Windows archive (x64)
+  rjit build web                 WASM bundle (love.js / Emscripten)
+  rjit build dist:love           Self-extracting Love2D binary (host platform)
 
 Flags:
-  --no-update     Skip the automatic `reactjit update` step
-  --debug         Enable the visual inspector (F12) in dist:love builds
-                  (inspector is disabled by default in dist builds)
+  --no-lint              Skip the lint gate (use sparingly)
+  --no-update            Skip auto-update of runtime files
+  --debug                Include debug symbols in dist builds
+  --target <platform>    Cross-compile target (linux-x64, macos-x64, macos-arm64, windows-x64)
 
-Build steps for each target:
+Build pipeline (dev build):
+  1. Auto-update runtime files (rjit update)
+  2. Transpile .tsl files to .lua
+  3. Run static linter (rjit lint)
+  4. Bundle with esbuild (IIFE format, ES2020 target, JSX automatic)
+  5. Post-build bundle checks (duplicate contexts, miner detection)
+  6. Output: love/bundle.js
 
-  No target (dev bundle):
-    1. reactjit update (sync runtime files)
-    2. Lint gate (fail on errors)
-    3. esbuild --format=iife --global-name=ReactLove
-    4. Output: bundle.js
+Build pipeline (dist:love):
+  1-5. Same as dev build
+  6. Copy lua/, lib/, assets, fonts into staging directory
+  7. Create .love archive (zip of staging directory)
+  8. Fuse Love2D binary with .love archive
+  9. Bundle shared libraries (libquickjs.so, system deps)
+  10. Generate self-extracting binary with embedded launcher script
+  11. Output: dist/<project-name>
 
-  dist:love:
-    1. reactjit update
-    2. Bundle JS (IIFE for QuickJS)
-    3. Stage .love archive (main.lua, conf.lua, lua/, bundle.js)
-    4. Create .love zip archive
-    5. Bundle Love2D binary + all shared libraries (including glibc)
-    6. Create launcher script
-    7. Pack into single self-extracting binary
-    8. Output: dist/<project-name>
-    Entry: src/main-love.tsx or src/main.tsx (first found)
+Entry point resolution:
+  Love2D: src/main-love.tsx, then src/main.tsx
+  Web: src/main-wasm.tsx, then src/main-web.tsx
 
-  dist:terminal:
-    1. Bundle JS (CJS for Node.js, --platform=node, --external:ws)
-    2. Prepend shebang (#!/usr/bin/env node)
-    3. Output: dist/<project-name>-terminal
-    Entry: src/main-terminal.tsx
+esbuild flags (from targets.mjs):
+  Love2D: --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic
+          --external:react-dom --external:child_process
+  Web:    --format=iife --global-name=ReactJIT --target=es2020 --jsx=automatic
+          --external:child_process
 
 === EXAMPLES ===
-Example 1: Dev bundle
+Example 1: Development build (most common)
 ---
-reactjit build
-love .
----
-Platforms: love2d
-
-Example 2: Self-extracting Love2D binary
----
-reactjit build dist:love
-./dist/my-app
+cd my-app
+rjit build
+# Output: love/bundle.js
+# Run: love .
 ---
 Platforms: love2d
 
-Example 3: Debug build with inspector
+Example 2: Production Linux binary
 ---
-reactjit build dist:love --debug
----
-Platforms: love2d
-
-Example 4: Terminal executable
----
-reactjit build dist:terminal
-./dist/my-app-terminal
----
-Platforms: terminal
-
-Example 5: Skip runtime update
----
-reactjit build --no-update
+rjit build linux
+# Output: dist/my-app (self-extracting binary)
+# Run: ./dist/my-app
 ---
 Platforms: love2d
 
-=== PLATFORM NOTES ===
-dist:love: Produces a self-extracting binary for x86_64 Linux. Bundles ALL shared libraries
-from the host system (same technique as Steam Runtime / AppImage), including glibc and the
-dynamic linker. The binary extracts to ~/.cache/reactjit-<name>/ and uses an MD5 signature
-to avoid re-extraction on subsequent runs. Requires Love2D and ldd to be available on the
-build system.
+Example 3: macOS Apple Silicon build
+---
+rjit build macmseries
+# Output: dist/my-app.app (macOS bundle)
+---
+Platforms: love2d
 
-dist:terminal: Produces a single-file Node.js executable. Uses CJS format (not ESM) to
-avoid module warnings. The ws package is marked as external.
+Example 4: Skip lint for quick iteration
+---
+rjit build --no-lint
+# Skips linter -- useful for rapid prototyping, not for final builds
+---
+Platforms: love2d
+
+Example 5: WASM build for browser deployment
+---
+rjit build web
+# Output: web/bundle.js (served via love.js / Emscripten canvas)
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Build always runs the lint gate -- fix all lint errors before building
-- Build always runs `reactjit update` unless --no-update is passed
-- The inspector (F12) is automatically disabled in dist:love builds (pass --debug to keep it)
-- dist:love only works on x86_64 Linux (bundles host system's glibc and shared libraries)
-- dist:love requires Love2D installed on the build machine
-- Never run raw esbuild manually -- the CLI encodes correct flags for each target
+- Lint errors block the build -- fix them or use --no-lint (not recommended for production)
+- Never run raw esbuild commands -- the CLI sets format, global-name, externals, and target correctly
+- Production builds (dist:love) bundle ALL shared libraries including glibc for zero-dependency deployment
+- The build auto-runs rjit update before bundling -- use --no-update to skip if you manage runtime files manually
+- Video files are auto-converted to .ogv if ffmpeg is installed -- this is required for Love2D video playback
 
 === SEE ALSO ===
 - dev.txt -- Watch mode for iterative development
-- lint.txt -- Lint gate details
-- update.txt -- Runtime file sync
-- screenshot.txt -- Visual verification before building
+- lint.txt -- The lint rules that gate builds
+- update.txt -- How runtime files are synced before builds
+- screenshot.txt -- Visual verification after building

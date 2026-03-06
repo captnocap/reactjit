@@ -1,110 +1,88 @@
 === METADATA ===
 title: useLoveState
-description: Bidirectional shared state between React and Lua with automatic synchronization.
+description: Bidirectional shared state between React and Lua
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: useLoveState, hook, shared state, bidirectional, sync, bridge, setState, subscribe
-related: uselove.txt, uselovesend.txt
+platforms: love2d
+keywords: state, shared, bidirectional, sync, bridge, reactive
+related: useLove, useHotState, useLocalStore
 difficulty: intermediate
 
 === OVERVIEW ===
-useLoveState provides bidirectional shared state between React and the Lua runtime. It works
-like React's useState but with automatic synchronization: when you call setValue from React,
-it updates both the local React state and the Lua-side state via the bridge. When the Lua
-side updates the state, the change propagates to React via a `state:${key}` event.
+useLoveState creates a shared state value that both React and Lua can read and write. When React calls the setter, it updates both local React state and the Lua-side state. When Lua changes the value, the update flows back to React via a bridge event.
 
-This hook is ideal for settings, configuration values, and any state that both React and Lua
-need to read and write.
+The API matches useState: it returns a [value, setValue] tuple. The key string namespaces the state so multiple useLoveState calls with different keys are independent.
 
 === API / SYNTAX ===
+```tsx
+import { useLoveState } from '@reactjit/core';
+```
+
 Signature:
-  function useLoveState<T>(key: string, initialValue: T): [T, (value: T) => void]
+```tsx
+function useLoveState<T>(key: string, initialValue: T): [T, (value: T) => void]
+```
 
 Parameters:
-  key: string
-    A unique key identifying this shared state. The hook subscribes to `state:${key}` events
-    from the bridge. Use dot notation for namespacing (e.g., 'player.health', 'settings.volume').
-
-  initialValue: T
-    The initial value before any sync events arrive from the Lua side.
+| Parameter    | Type   | Description                               |
+|--------------|--------|-------------------------------------------|
+| key          | string | Unique state key (namespaces the value)   |
+| initialValue | T      | Initial value before Lua sends an update  |
 
 Returns:
-  [value, setValue]
-
-  value: T
-    The current value of the shared state.
-
-  setValue: (value: T) => void
-    Updates both the local React state and the Lua-side state. Calls setLocal(value) for
-    immediate React update and bridge.setState(key, value) to sync to Lua.
+| Index | Type             | Description                                |
+|-------|------------------|--------------------------------------------|
+| [0]   | T                | Current value                              |
+| [1]   | (value: T) => void | Setter -- updates React and Lua atomically |
 
 === EXAMPLES ===
-Example 1: Shared volume setting
+Example 1: Player health
 ---
+```tsx
 import { useLoveState } from '@reactjit/core';
-
-function VolumeControl() {
-  const [volume, setVolume] = useLoveState('settings.volume', 0.8);
-
-  return (
-    <Box style={{ width: '100%', padding: 16 }}>
-      <Text style={{ fontSize: 16, color: '#cdd6f4' }}>
-        {`Volume: ${Math.round(volume * 100)}%`}
-      </Text>
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 8 }}>
-        <Box style={{ width: 60, height: 40, backgroundColor: '#f38ba8', borderRadius: 4 }}
-             onClick={() => setVolume(Math.max(0, volume - 0.1))}>
-          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>-</Text>
-        </Box>
-        <Box style={{ width: 60, height: 40, backgroundColor: '#a6e3a1', borderRadius: 4 }}
-             onClick={() => setVolume(Math.min(1, volume + 0.1))}>
-          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>+</Text>
-        </Box>
-      </Box>
-    </Box>
-  );
-}
----
-Platforms: All
-
-Example 2: Player health synced from Lua
----
-import { useLoveState } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
 function HealthBar() {
+  const colors = useThemeColors();
   const [health, setHealth] = useLoveState('player.health', 100);
 
   return (
-    <Box style={{ width: 200, height: 20, backgroundColor: '#313244', borderRadius: 4 }}>
-      <Box style={{
-        width: `${health}%`,
-        height: '100%',
-        backgroundColor: health > 50 ? '#a6e3a1' : '#f38ba8',
-        borderRadius: 4,
-      }} />
+    <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <Text style={{ color: colors.text }}>{`HP: ${health}`}</Text>
+      <Pressable onPress={() => setHealth(100)}>
+        <Text style={{ color: colors.primary }}>Heal</Text>
+      </Pressable>
     </Box>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-=== PLATFORM NOTES ===
-The bidirectional sync works on all platforms via the bridge abstraction:
-- React to Lua: setValue calls bridge.setState(key, value)
-- Lua to React: Lua dispatches a `state:${key}` event, which the hook subscribes to
+Example 2: Pause toggle
+---
+```tsx
+import { useLoveState } from '@reactjit/core';
 
-The sync is eventual -- there may be a frame of latency between setValue and the Lua side
-seeing the update, and vice versa. For time-critical state, consider using RPC instead.
+function PauseButton() {
+  const [paused, setPaused] = useLoveState('game.paused', false);
+
+  return (
+    <Pressable onPress={() => setPaused(!paused)}>
+      <Text>{paused ? 'Resume' : 'Pause'}</Text>
+    </Pressable>
+  );
+}
+```
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- setValue updates React state immediately (optimistic) and then syncs to Lua
-- State from Lua arrives as events with type `state:${key}` -- the key must match exactly
-- The setValue function is memoized (stable reference) when the key does not change
-- Multiple components can share the same key -- they will all receive updates
-- Must be used inside a BridgeProvider context
-- The initial value is used only on first render -- Lua-side state takes precedence once synced
+- The key string is used as the state namespace. Two components using the same key share the same state -- changes from one are reflected in the other.
+- The setter updates React state immediately (optimistic) and sends the update to Lua. There is no round-trip delay for the local update.
+- Lua-side changes are pushed as `state:<key>` bridge events. The hook subscribes to this automatically.
+- For state that needs to survive app restarts, use useLocalStore instead. For state that survives HMR but not restarts, use useHotState.
 
 === SEE ALSO ===
-- uselove.txt -- Event subscription with manual send
-- useloverpc.txt -- Request-response communication
-- uselovesend.txt -- Fire-and-forget commands
+- useLove
+- useHotState
+- useLocalStore

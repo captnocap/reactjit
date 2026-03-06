@@ -1,122 +1,203 @@
 === METADATA ===
 title: FAQ
-description: Frequently asked questions about ReactJIT capabilities, limitations, and workflows
+description: Frequently asked questions about ReactJIT -- where is the DOM, why no CSS, how to add features, and more.
 category: Troubleshooting
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: faq, questions, npm packages, debug, hot reload, react version, css, text measurement
-related: common-errors, installation, philosophy, debugging
+platforms: love2d
+keywords: faq, questions, dom, css, flexbox, features, capabilities, why, how
+related: common-errors.txt, capabilities.txt, lua-runtime.txt
 difficulty: beginner
 
 === OVERVIEW ===
-This page answers the most frequently asked questions about ReactJIT. If your question
-is not here, check the common errors page for specific error symptoms, or the debugging
-page for runtime investigation tools.
+Answers to the most common questions about ReactJIT's architecture, design decisions,
+and how to accomplish tasks that would be straightforward in a browser environment.
 
 === EXAMPLES ===
-Example 1: Can I use npm packages?
+Example 1: Where is the DOM?
 ---
-Q: Can I install and use npm packages in my ReactJIT app?
+There is no DOM. ReactJIT does not use react-dom. There is no browser, no HTML, no CSS,
+no document object, no window object.
 
-A: Yes. Your src/ directory is a standard TypeScript/React project. Install packages
-with `npm install` and import them normally. The esbuild bundler resolves and bundles
-npm dependencies into the output.
+React renders to a custom reconciler that emits mutation commands (CREATE, UPDATE, REMOVE,
+APPEND). These commands cross the QuickJS bridge to Lua, which maintains an in-memory
+element tree. Lua runs flexbox layout on this tree and paints it using Love2D's OpenGL
+backend.
 
-Note: For the Love2D target, the bundle runs inside QuickJS, which has no Node.js
-APIs (no fs, no http, no child_process). Pure JavaScript packages work. Packages
-that depend on Node.js built-ins will not work in Love2D native mode but will work
-in web mode or grid targets (which run on Node.js).
----
-Platforms: All
+The components are Box (not div), Text (not span), Image (not img), and Pressable (not
+button). They accept style props that map directly to the flex layout engine.
 
-Example 2: How do I debug on Love2D?
----
-Q: How do I inspect my UI layout at runtime on Love2D?
-
-A: Press F12 to open the visual inspector. It overlays node boundaries, computed
-dimensions, and style properties on your live UI. Move your mouse over elements to
-see their layout data. Press F12 again to close.
-
-For evaluating expressions at runtime, press the backtick key (`) to open the
-interactive console. Type JavaScript expressions and see results inline.
+```tsx
+// There is no DOM equivalent. This is the entire rendering target:
+<Box style={{ flexDirection: 'row', padding: 16, gap: 8 }}>
+  <Text style={{ fontSize: 14 }}>Hello</Text>
+  <Image src="icon.png" style={{ width: 24, height: 24 }} />
+</Box>
+```
 ---
 Platforms: love2d
 
-Example 3: How does hot reload work?
+Example 2: Why no CSS?
 ---
-Q: How do I see my changes without restarting Love2D?
+CSS does not exist in ReactJIT. Styles are JavaScript objects passed via the style prop.
+The layout engine implements a subset of CSS flexbox, but it is a clean-room Lua
+implementation -- not a browser engine.
 
-A: Use `reactjit dev` in one terminal (watch mode, rebuilds bundle.js on change)
-and `love .` in another terminal. The Lua runtime polls bundle.js every ~1 second.
-When it detects a change, it:
-  1. Reads dev state from JS (__getDevState)
-  2. Destroys the QuickJS context
-  3. Clears all Lua-side state (tree, images, animations, hover, focus)
-  4. Creates a new QuickJS context
-  5. Loads the new bundle
-  6. Injects cached dev state (__devState)
-  7. Triggers mount
+Supported style properties map to flexbox concepts: flexDirection, justifyContent,
+alignItems, flexGrow, flexShrink, flexBasis, width, height, padding, margin, gap,
+position (relative/absolute), overflow, borderRadius, backgroundColor, opacity, and more.
 
-This gives you near-instant reload without restarting Love2D.
+What is NOT supported:
+- CSS selectors, class names, or stylesheets
+- CSS Grid
+- CSS transitions or @keyframes (use useAnimation/useSpring instead)
+- Media queries (use useBreakpoint or useWindowDimensions)
+- Pseudo-elements (::before, ::after)
+- Cascading -- styles only apply to the element they are set on
+
+```tsx
+// Styles are always inline objects, not class names
+<Box style={{
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 16,
+  gap: 8,
+  backgroundColor: c.surface,
+  borderRadius: 8,
+}}>
+  <Text style={{ fontSize: 16, fontWeight: 'bold', color: c.text }}>Title</Text>
+</Box>
+```
 ---
 Platforms: love2d
 
-Example 4: What React version is required?
+Example 3: Why flexGrow instead of hardcoded heights?
 ---
-Q: What version of React does ReactJIT use?
+Hardcoded pixel heights break at different window sizes. A panel with height: 260 in a
+600px window leaves 340px of dead space. Resize to 800px and there is 540px of dead space.
+Resize to 500px and it overflows.
 
-A: React 18.3+ with react-reconciler 0.29. The reconciler version must match
-the React version. ReactJIT uses React's concurrent features where applicable.
+flexGrow: 1 tells the element to absorb whatever space remains after siblings are measured.
+It works at any resolution without manual math.
+
+```tsx
+// BAD: hardcoded heights break at different window sizes
+<Box style={{ width: '100%', height: '100%' }}>
+  <Box style={{ height: 48 }}>{/* header */}</Box>
+  <Box style={{ height: 500 }}>{/* content -- what if window is 400px tall? */}</Box>
+  <Box style={{ height: 32 }}>{/* footer */}</Box>
+</Box>
+
+// GOOD: flexGrow absorbs remaining space at any resolution
+<Box style={{ width: '100%', height: '100%' }}>
+  <Box style={{ height: 48 }}>{/* header: fixed */}</Box>
+  <Box style={{ flexGrow: 1 }}>{/* content: fills remaining space */}</Box>
+  <Box style={{ height: 32 }}>{/* footer: fixed */}</Box>
+</Box>
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Can I use CSS?
+Example 4: How do I add a new feature to the framework?
 ---
-Q: Can I use CSS stylesheets, CSS modules, or Tailwind CSS?
+Use the capability system. It is the standard pattern for adding new Lua-side features
+with React integration and AI discoverability.
 
-A: No. ReactJIT uses Style objects with flexbox properties, not CSS. The Style
-interface is defined in TypeScript and supports a subset of CSS flexbox properties
-plus custom properties for the target renderers.
+Step 1: Register the capability in Lua (create a file in lua/capabilities/):
+```lua
+local Capabilities = require("lua.capabilities")
 
-In web mode, Style objects are converted to React CSSProperties by the styleToCSS()
-function. But you write Style objects, not CSS.
+Capabilities.register("MyFeature", {
+  visual = false,
+  schema = {
+    value = { type = "number", default = 0, desc = "The value" },
+  },
+  events = { "onChange" },
+  create  = function(nodeId, props) return {} end,
+  update  = function(nodeId, props, prev, state) end,
+  tick    = function(nodeId, state, dt, pushEvent, props) end,
+  destroy = function(nodeId, state) end,
+})
+```
 
-There is no CSS cascade, no class selectors, no media queries, and no CSS variables.
-All styling is explicit and co-located with components.
+Step 2: Create a one-liner React wrapper:
+```tsx
+import { Native } from '@reactjit/core';
+
+export function MyFeature(props: {
+  value?: number;
+  onChange?: (e: { value: number }) => void;
+}) {
+  return <Native type="MyFeature" {...props} />;
+}
+```
+
+Step 3: Use it:
+```tsx
+<MyFeature value={42} onChange={(e) => console.log(e.value)} />
+```
+
+An AI agent discovers it automatically via useCapabilities() -- no documentation needed
+beyond the schema.
 ---
-Platforms: All
+Platforms: love2d
 
-Example 6: How does text measurement work?
+Example 5: How do I use browser APIs (fetch, localStorage, WebSocket)?
 ---
-Q: How does ReactJIT know how wide text is?
+Browser APIs do not exist in ReactJIT. The runtime is LuaJIT + QuickJS, not a browser.
+For equivalent functionality:
 
-A: On Love2D, text measurement uses Love2D's font:getWrap() and font:getWidth()
-APIs. The measure.lua module loads fonts by (size, family, weight) and caches
-them. When the layout engine encounters a Text node without explicit dimensions,
-it calls measureText() to get the intrinsic width and height based on the font
-metrics and the available width constraint.
+- HTTP requests: use useFetch() from @reactjit/core or bridge.rpc('http:get', { url })
+- Persistent storage: use useLocalStore() from @reactjit/core (backed by SQLite)
+- WebSocket: use useWebSocket() from @reactjit/core (backed by Lua luasocket)
+- Clipboard: use useClipboard() from @reactjit/core
+- Timers: use the Timer capability component or useLuaInterval()
 
-On web, the browser's own text measurement is used (via CSS).
+```tsx
+import { useLocalStore, useFetch } from '@reactjit/core';
 
-On grid targets, text width equals the character count (monospace grids).
+function DataComponent() {
+  // Persistent storage (survives app restart)
+  const [data, setData] = useLocalStore('myData', { count: 0 });
+
+  // HTTP fetch (Lua-backed, not browser fetch)
+  const { data: apiData, loading } = useFetch('https://api.example.com/data');
+
+  return null;
+}
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 7: Can I mix targets?
+Example 6: Why does my component render but not respond to clicks?
 ---
-Q: Can I render the same component to multiple targets simultaneously?
+Check these in order:
 
-A: Each build is target-specific. You cannot render to Love2D and a terminal
-from the same running process. However, shared components (those that only use
-Box, Text, Pressable, and standard Style properties) work across all targets
-without modification.
+1. Is the component wrapped in Pressable? Plain Box does not have press behavior by
+   default. Use Pressable for tap handling, or attach onClick directly to Box.
 
-The recommended approach: write your components in a shared package, then
-create target-specific entry points that import and render them.
+2. Does Box have the handler in its whitelist? Box uses an explicit prop whitelist. If
+   your handler prop is not destructured in primitives.tsx, it silently disappears.
+
+3. Is there a higher-zIndex element covering it? The inspector (F12) shows which node
+   the hit test finds. If another element is on top, it intercepts the event.
+
+4. Is the element inside a scroll container? Scroll containers adjust hit test coordinates.
+   If the ScrollView has no explicit height, it may have zero viewport and not be
+   intercepting correctly.
+
+5. Is display: 'none' or visibility: 'hidden' set? Hidden elements are excluded from
+   hit testing entirely.
 ---
-Platforms: All
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- There is no DOM and there never will be. Do not attempt to use document, window, or any Web API.
+- react-dom is not a dependency. Components do not render HTML elements.
+- All styles are inline objects. There are no CSS files, class names, or style sheets.
+- The capability system is the correct way to add new features. If a user needs to call bridge.rpc() directly, the feature is not finished -- wrap it in a capability.
 
 === SEE ALSO ===
-- common-errors.txt - Specific error messages and fixes
-- 10-advanced/debugging.txt - F12 inspector and console details
-- 01-getting-started/installation.txt - Setup and prerequisites
-- 01-getting-started/philosophy.txt - Design principles
+- common-errors.txt
+- capabilities.txt
+- lua-runtime.txt
+- event-handling.txt

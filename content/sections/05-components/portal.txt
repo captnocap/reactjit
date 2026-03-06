@@ -1,79 +1,69 @@
 === METADATA ===
 title: Portal
-description: Render children at the top level of the tree, outside normal component hierarchy. Used for modals, dropdowns, tooltips, and overlays.
+description: Render children into a different part of the React tree
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: portal, overlay, modal, dropdown, top-level, render, z-index, absolute positioning
-related: Modal, ContextMenu
+platforms: love2d
+keywords: portal, overlay, teleport, host, layer
+related: Modal, Box
 difficulty: intermediate
 
 === OVERVIEW ===
-Portal renders children at the top level of the render tree, escaping the normal parent-child hierarchy. This is essential for UI elements that need to appear above all other content, such as modals, tooltips, dropdowns, and context menus. PortalHost is the container that receives portal content in native mode. In web mode, Portal falls back to ReactDOM.createPortal when no PortalHost is present.
+Portal and PortalHost work together to render children outside their position in the component tree. A PortalHost wraps a section of your app and collects any Portal content from its descendants. Portal content is rendered as absolute-positioned overlays (zIndex: 1000) at the PortalHost level.
+
+This is useful for dropdown menus, tooltips, and other UI that needs to visually escape its parent's clipping or stacking context — without restructuring your component hierarchy.
+
+Portal registers its children with the nearest PortalHost via React context. When the Portal unmounts, its content is automatically removed from the host.
 
 === API / SYNTAX ===
 ```tsx
 import { Portal, PortalHost } from '@reactjit/core';
 ```
 
-**Portal Props**
+PortalHost Props:
+| Prop     | Type      | Default  | Description                        |
+|----------|-----------|----------|------------------------------------|
+| children | ReactNode | required | App content that may contain Portals|
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| children | ReactNode | required | Content to render at the top level |
-| name | string | undefined | Optional identifier for the portal (auto-generated if omitted) |
-
-**PortalHost Props**
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| children | ReactNode | required | The main app content (renders below portals) |
+Portal Props:
+| Prop     | Type      | Default   | Description                    |
+|----------|-----------|-----------|--------------------------------|
+| children | ReactNode | required  | Content to render at the host  |
+| name     | string    | undefined | Optional name for the portal   |
 
 === EXAMPLES ===
-
-Example 1: Basic Portal Usage
+Example 1: Basic portal setup
 ---
 ```tsx
-import { Portal, Box, Text } from '@reactjit/core';
+const colors = useThemeColors();
 
 function App() {
-  const [showOverlay, setShowOverlay] = useState(false);
+  return (
+    <PortalHost>
+      <Box fill>
+        <Toolbar />
+        <Content />
+      </Box>
+    </PortalHost>
+  );
+}
+
+function Content() {
+  const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      <Text fontSize={16}>Main content</Text>
-      <Pressable onPress={() => setShowOverlay(true)}>
-        <Text fontSize={14}>Show Overlay</Text>
+    <Box padding={16}>
+      <Pressable onPress={() => setShowMenu(true)} style={{ padding: 8, backgroundColor: colors.surface }}>
+        <Text style={{ color: colors.text }}>Show Menu</Text>
       </Pressable>
 
-      {showOverlay && (
+      {showMenu && (
         <Portal>
-          <Box
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: [0, 0, 0, 0.7],
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <Box
-              style={{
-                width: 400,
-                height: 200,
-                backgroundColor: [1, 1, 1, 1],
-                borderRadius: 8,
-                padding: 20,
-              }}
-            >
-              <Text fontSize={18}>Portal Overlay</Text>
-              <Pressable onPress={() => setShowOverlay(false)}>
-                <Text fontSize={14}>Close</Text>
-              </Pressable>
+          <Pressable onPress={() => setShowMenu(false)} style={{ width: '100%', height: '100%' }}>
+            <Box style={{ position: 'absolute', top: 100, left: 50, padding: 12, backgroundColor: colors.bgElevated, borderRadius: 8 }}>
+              <Text style={{ color: colors.text }}>Menu Item 1</Text>
+              <Text style={{ color: colors.text }}>Menu Item 2</Text>
             </Box>
-          </Box>
+          </Pressable>
         </Portal>
       )}
     </Box>
@@ -81,163 +71,33 @@ function App() {
 }
 ```
 ---
-Platforms: love2d, web, terminal, cc, nvim, hs, awesome
+Platforms: love2d
 
-Example 2: Setting Up PortalHost in Native Mode
+Example 2: Named portal
 ---
 ```tsx
-import { PortalHost, Box, Text } from '@reactjit/core';
-import { createRoot } from '@reactjit/renderer';
-import { NativeBridge } from '@reactjit/renderer';
-import { BridgeProvider, RendererProvider } from '@reactjit/core';
-
-function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      <Text fontSize={16}>App content here</Text>
-      {/* Portals will render above this content */}
-    </Box>
-  );
-}
-
-// Entry point
-const bridge = new NativeBridge();
-const root = createRoot(bridge);
-
-root.render(
-  <BridgeProvider bridge={bridge}>
-    <RendererProvider mode="native">
-      <PortalHost>
-        <App />
-      </PortalHost>
-    </RendererProvider>
-  </BridgeProvider>
-);
-```
----
-Platforms: love2d, terminal, cc, nvim, hs, awesome
-
-Example 3: Named Portals
----
-```tsx
-import { Portal, Box, Text } from '@reactjit/core';
-
-function NotificationSystem() {
-  return (
-    <Portal name="notifications">
-      <Box
-        style={{
-          position: 'absolute',
-          top: 20,
-          right: 20,
-          width: 300,
-        }}
-      >
-        <Text fontSize={14}>Notification message</Text>
-      </Box>
-    </Portal>
-  );
-}
-
-function TooltipSystem() {
-  return (
-    <Portal name="tooltips">
-      <Box
-        style={{
-          position: 'absolute',
-          top: 100,
-          left: 100,
-        }}
-      >
-        <Text fontSize={12}>Tooltip text</Text>
-      </Box>
-    </Portal>
-  );
-}
-```
----
-Platforms: love2d, web, terminal, cc, nvim, hs, awesome
-
-Example 4: Portal with Modal Component
----
-```tsx
-import { Modal, Box, Text, Pressable } from '@reactjit/core';
-
-function ModalDemo() {
-  const [visible, setVisible] = useState(false);
-
-  return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      <Pressable onPress={() => setVisible(true)}>
-        <Text fontSize={16}>Open Modal</Text>
+<Portal name="dropdown-menu">
+  <Box style={{ position: 'absolute', top: anchorY, left: anchorX, backgroundColor: colors.bgElevated, borderRadius: 8, padding: 8 }}>
+    {menuItems.map((item, i) => (
+      <Pressable key={i} onPress={() => onSelect(item)} style={{ padding: 8 }}>
+        <Text style={{ color: colors.text }}>{item.label}</Text>
       </Pressable>
-
-      {/* Modal uses Portal internally */}
-      <Modal
-        visible={visible}
-        onRequestClose={() => setVisible(false)}
-        animationType="fade"
-        backdropDismiss={true}
-      >
-        <Box
-          style={{
-            width: 500,
-            height: 300,
-            backgroundColor: [1, 1, 1, 1],
-            borderRadius: 8,
-            padding: 20,
-          }}
-        >
-          <Text fontSize={18}>Modal Content</Text>
-        </Box>
-      </Modal>
-    </Box>
-  );
-}
+    ))}
+  </Box>
+</Portal>
 ```
 ---
-Platforms: love2d, web, terminal, cc, nvim, hs, awesome
+Platforms: love2d
 
 === PLATFORM NOTES ===
-
 Love2D:
-  - Portals render with zIndex: 1000 in absolute positioning
-  - PortalHost must wrap your root component in main.tsx
-  - Multiple portals stack in registration order (later portals appear on top)
-  - Portal content is positioned absolutely relative to the viewport
-
-Web:
-  - Falls back to ReactDOM.createPortal when no PortalHost is present
-  - Creates a fixed-position div appended to document.body
-  - PortalHost is optional in web mode but recommended for consistency
-  - Supports CSS transitions and transforms on portal content
-
-Terminal / Grid targets:
-  - Portals render in absolute coordinates over the character grid
-  - Use explicit positioning (top, left) to place portal content
-  - PortalHost required in all grid-based targets
-  - Z-ordering follows registration order
+  Portal content is rendered as absolute-positioned children of the PortalHost with zIndex 1000. The Lua painter sorts by zIndex, so portal content draws above regular content. Each portal gets its own full-viewport Box wrapper.
 
 === CRITICAL RULES ===
-
-- In native mode (Love2D, terminal, grid targets), you MUST wrap your root component in PortalHost for portals to work
-- Portal children should use absolute positioning (position: 'absolute') with explicit coordinates
-- Portal content renders at zIndex: 1000 by default — override via style if needed
-- Multiple portals stack in registration order (first registered = bottom, last = top)
-- The name prop is optional but recommended for debugging and stable portal identity
-- Portal content is NOT clipped by parent containers — it always renders at the top level
-- In web mode without PortalHost, Portal automatically falls back to ReactDOM.createPortal
-- Do not nest PortalHost components — only one PortalHost per app root
-- Portal children receive the same dimensions as the viewport (width: '100%', height: '100%')
-- Use Portal for overlays, modals, dropdowns, tooltips, context menus, and notifications
-- Portal does NOT handle backdrop clicks or Escape key dismissal — use Modal component for that
-- Portals persist until unmounted — conditional rendering ({showPortal && <Portal>...</Portal>}) controls visibility
+- A PortalHost must be an ancestor of any Portal that uses it. Without a PortalHost in the tree, Portal content will not render.
+- Portal content is positioned absolute at zIndex 1000. You are responsible for positioning the content within the viewport (using `position: 'absolute'` with `top`/`left`).
+- For simple overlay needs, Modal may be more appropriate — it includes backdrop handling and dismiss logic built in.
 
 === SEE ALSO ===
-
-- Modal — Full-screen overlay with backdrop and animations (uses Portal internally)
-- ContextMenu — Right-click menu system (uses Portal internally)
-- Pressable — For interactive elements inside portal content
-- ScrollView — Can be used inside portal content for scrollable overlays
-- useWindowDimensions — Get viewport size for centering portal content
-- Box positioning — position: 'absolute', top, left, right, bottom for portal layout
+- Modal
+- Box

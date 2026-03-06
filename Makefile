@@ -90,6 +90,7 @@ build-storybook-love: node_modules
 		--global-name=ReactJITStorybook \
 		--target=es2020 \
 		--jsx=automatic \
+		--jsx-dev \
 		--external:child_process \
 		--external:ws \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
@@ -301,6 +302,7 @@ dev-storybook-love: setup $(STORYBOOK_LIB)/libquickjs$(LIB_EXT) node_modules
 		--global-name=ReactJITStorybook \
 		--target=es2020 \
 		--jsx=automatic \
+		--jsx-dev \
 		--outfile=$(STORYBOOK_LOVE)/bundle.js \
 		--watch \
 		storybook/src/main.tsx

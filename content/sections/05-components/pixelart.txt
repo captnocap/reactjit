@@ -1,263 +1,121 @@
 === METADATA ===
 title: PixelArt
-description: Convert Unicode symbols or string art into Box-based geometry for Love2D compatibility
+description: Pixel art renderer from built-in symbols or custom string art patterns
 category: Components
-platforms: love2d, web
-keywords: pixelart, unicode, symbols, icons, box, grid, bitmap, art, geometry, hook
-related: Box, usePixelArt, getPixelArtSymbols
-difficulty: intermediate
+platforms: love2d
+keywords: pixel, art, icon, symbol, bitmap, grid, play, pause, arrow, heart
+related: Box, Image
+difficulty: beginner
 
 === OVERVIEW ===
-PixelArt converts Unicode symbols (▶ ⏸ ● ✓ arrows, etc.) and custom string art into rendered Box grids. Love2D's default font does not include Unicode symbols, so PixelArt renders them as colored Box elements instead. It provides a library of built-in symbols (play, pause, check, heart, etc.) and supports custom bitmap art defined as string arrays.
+PixelArt renders small bitmap icons as colored Box grids. It solves the problem of Unicode symbols not rendering reliably across all Love2D font configurations — instead of relying on font glyphs, PixelArt draws each pixel as a tiny colored Box.
 
-The component and hook use a "filled pixel" convention: any non-space character in the input string represents a filled pixel, which renders as a Box with the specified color. Spaces render as transparent. Per-row coloring is supported for multi-color designs like gradients or layered effects.
+There are two ways to use it: the PixelArt component (declarative) and the usePixelArt hook (returns a memoized React element). Both accept either a built-in symbol name or an array of custom string art lines where any non-space character represents a filled pixel.
+
+Built-in symbols: play, pause, stop, skip-next, skip-prev, check, close, arrow-up, arrow-down, arrow-left, arrow-right, circle, circle-outline, dot, plus, minus, heart, star, volume, mute, chevron-right, chevron-left, menu.
+
+Use `getPixelArtSymbols()` to get the full list of built-in symbol names at runtime.
 
 === API / SYNTAX ===
 ```tsx
 import { PixelArt, usePixelArt, getPixelArtSymbols } from '@reactjit/core';
 ```
 
-```tsx
-// Component usage
-<PixelArt art="play" size={4} color="#ffffff" />
+PixelArt Props:
+| Prop   | Type             | Default   | Description                               |
+|--------|------------------|-----------|-------------------------------------------|
+| art    | string \| string[] | required | Built-in symbol name or string art lines |
+| size   | number           | 4         | Pixel size in logical units               |
+| color  | string           | '#ffffff' | Fill color for all pixels                 |
+| colors | string[]         | undefined | Per-row fill colors (overrides color)     |
+| gap    | number           | 0         | Gap between pixels in logical units       |
+| style  | Style            | undefined | Container style                           |
 
-// Hook usage
-const playIcon = usePixelArt('play', { size: 4, color: '#ffffff' });
-return <Box>{playIcon}</Box>;
+usePixelArt(art, options):
+| Option | Type     | Default   | Description                           |
+|--------|----------|-----------|---------------------------------------|
+| size   | number   | 4         | Pixel size in logical units           |
+| color  | string   | '#ffffff' | Fill color for all pixels             |
+| colors | string[] | undefined | Per-row fill colors (overrides color) |
+| gap    | number   | 0         | Gap between pixels                    |
 
-// Get list of available symbols
-const symbols = getPixelArtSymbols();
-```
-
-PixelArt Component Props:
-| Prop   | Type              | Default     | Description                                    |
-|--------|-------------------|-------------|------------------------------------------------|
-| art    | string \| string[] | (required)  | Built-in symbol name OR array of string art    |
-| size   | number            | 4           | Pixel size in logical units                    |
-| color  | string            | '#ffffff'   | Single fill color for all pixels               |
-| colors | string[]          | undefined   | Per-row fill colors (overrides color)          |
-| gap    | number            | 0           | Gap between pixels in logical units            |
-| style  | Style             | undefined   | Container style overrides                      |
-
-usePixelArt Hook:
-```tsx
-function usePixelArt(
-  art: string | string[],
-  options?: PixelArtOptions
-): React.ReactElement
-```
-
-Options:
-| Key    | Type      | Default    | Description                              |
-|--------|-----------|------------|------------------------------------------|
-| size   | number    | 4          | Pixel size in logical units              |
-| color  | string    | '#ffffff'  | Single fill color for all pixels         |
-| colors | string[]  | undefined  | Per-row fill colors (overrides color)    |
-| gap    | number    | 0          | Gap between pixels in logical units      |
+Returns: React.ReactElement (memoized).
 
 getPixelArtSymbols():
-Returns an array of all built-in symbol names.
-
-Built-in Symbols:
-play, pause, stop, skip-next, skip-prev, check, close, arrow-up, arrow-down, arrow-left, arrow-right, circle, circle-outline, dot, plus, minus, heart, star, volume, mute, chevron-right, chevron-left, menu
+Returns: string[] — all available built-in symbol names.
 
 === EXAMPLES ===
 Example 1: Built-in play icon
 ---
 ```tsx
-import { PixelArt, Box } from '@reactjit/core';
-
-function PlayButton() {
-  return (
-    <Box style={{ padding: 16, backgroundColor: '#313244', borderRadius: 8 }}>
-      <PixelArt art="play" size={6} color="#a6e3a1" />
-    </Box>
-  );
-}
+<PixelArt art="play" size={4} color="#00ff88" />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Custom string art (single color)
+Example 2: Using the hook
 ---
 ```tsx
-import { PixelArt } from '@reactjit/core';
+const playIcon = usePixelArt('play', { size: 3, color: '#ffffff' });
+const pauseIcon = usePixelArt('pause', { size: 3, color: '#ffffff' });
 
-function CustomIcon() {
-  const logo = [
-    ' ███ ',
-    '█   █',
-    '█ ▪ █',
-    '█   █',
-    ' ███ ',
-  ];
-
-  return <PixelArt art={logo} size={8} color="#f9e2af" />;
-}
+<Box style={{ flexDirection: 'row', gap: 12 }}>
+  {isPlaying ? pauseIcon : playIcon}
+</Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Multi-color gradient heart
+Example 3: Custom string art
 ---
 ```tsx
-import { PixelArt } from '@reactjit/core';
+const heartArt = [
+  ' ## ## ',
+  '#######',
+  '#######',
+  ' ##### ',
+  '  ###  ',
+  '   #   ',
+];
 
-function Heart() {
-  const heartArt = [
-    '  ███   ███  ',
-    ' █████ █████ ',
-    '█████████████',
-    ' ███████████ ',
-    '  █████████  ',
-    '   ███████   ',
-    '    █████    ',
-    '     ███     ',
-    '      █      ',
-  ];
-
-  const heartColors = [
-    '#ff6b9d',
-    '#ff5277',
-    '#e94560',
-    '#c9184a',
-    '#a4133c',
-    '#800f2f',
-    '#590d22',
-    '#3c0919',
-    '#1a040c',
-  ];
-
-  return <PixelArt art={heartArt} size={12} colors={heartColors} />;
-}
+<PixelArt
+  art={heartArt}
+  size={6}
+  colors={['#ff6b9d', '#ff5277', '#e94560', '#c23152', '#a11d42', '#8b1538']}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Using the hook for dynamic icons
+Example 4: Media controls toolbar
 ---
 ```tsx
-import { useState } from 'react';
-import { usePixelArt, Box, Pressable } from '@reactjit/core';
+const colors = useThemeColors();
 
-function MediaControls() {
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  const icon = usePixelArt(
-    isPlaying ? 'pause' : 'play',
-    { size: 5, color: isPlaying ? '#f38ba8' : '#a6e3a1' }
-  );
-
-  return (
-    <Pressable onPress={() => setIsPlaying(!isPlaying)}>
-      <Box style={{ padding: 12, backgroundColor: '#313244', borderRadius: 8 }}>
-        {icon}
-      </Box>
-    </Pressable>
-  );
-}
+<Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+  <Pressable onPress={onPrev}>
+    <PixelArt art="skip-prev" size={3} color={colors.text} />
+  </Pressable>
+  <Pressable onPress={onPlayPause}>
+    <PixelArt art={playing ? 'pause' : 'play'} size={4} color={colors.primary} />
+  </Pressable>
+  <Pressable onPress={onNext}>
+    <PixelArt art="skip-next" size={3} color={colors.text} />
+  </Pressable>
+</Box>
 ```
 ---
-Platforms: All
-
-Example 5: Icon grid with all built-in symbols
----
-```tsx
-import { getPixelArtSymbols, PixelArt, Box, Text } from '@reactjit/core';
-
-function IconGallery() {
-  const symbols = getPixelArtSymbols();
-
-  return (
-    <Box style={{ width: '100%', padding: 16, flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
-      {symbols.map(symbol => (
-        <Box key={symbol} style={{ alignItems: 'center', gap: 4 }}>
-          <Box style={{ padding: 8, backgroundColor: '#313244', borderRadius: 4 }}>
-            <PixelArt art={symbol} size={4} color="#cdd6f4" />
-          </Box>
-          <Text style={{ fontSize: 10, color: '#a6adc8' }}>{symbol}</Text>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-```
----
-Platforms: All
-
-Example 6: Animated arrow with pixel gap
----
-```tsx
-import { useState, useEffect } from 'react';
-import { PixelArt, Box } from '@reactjit/core';
-
-function AnimatedArrow() {
-  const [direction, setDirection] = useState<'arrow-up' | 'arrow-down' | 'arrow-left' | 'arrow-right'>('arrow-right');
-
-  useEffect(() => {
-    const directions = ['arrow-right', 'arrow-down', 'arrow-left', 'arrow-up'] as const;
-    let index = 0;
-    const interval = setInterval(() => {
-      index = (index + 1) % 4;
-      setDirection(directions[index]);
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <Box style={{ padding: 24, backgroundColor: '#1e1e2e' }}>
-      <PixelArt art={direction} size={8} color="#89dceb" gap={2} />
-    </Box>
-  );
-}
-```
----
-Platforms: All
-
-Example 7: Custom navigation chevrons
----
-```tsx
-import { PixelArt, Box, Text, Pressable } from '@reactjit/core';
-
-function Pagination() {
-  return (
-    <Box style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', padding: 16 }}>
-      <Pressable onPress={() => console.log('prev')}>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', padding: 8 }}>
-          <PixelArt art="chevron-left" size={3} color="#a6adc8" />
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Previous</Text>
-        </Box>
-      </Pressable>
-
-      <Pressable onPress={() => console.log('next')}>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', padding: 8 }}>
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Next</Text>
-          <PixelArt art="chevron-right" size={3} color="#a6adc8" />
-        </Box>
-      </Pressable>
-    </Box>
-  );
-}
-```
----
-Platforms: All
+Platforms: love2d
 
 === PLATFORM NOTES ===
-- **Love2D**: PixelArt is essential for Love2D because the default font lacks Unicode symbol support. All UI controls (play buttons, checkmarks, arrows) should use PixelArt or custom Box-based shapes.
-- **Web**: PixelArt works but is unnecessary if you have a web font that includes Unicode symbols. Prefer native symbols for performance. PixelArt is useful for retro/pixel aesthetics or cross-target consistency.
-- **Grid targets**: Not currently supported. PixelArt is only available in `@reactjit/core` (Love2D and web targets). Terminal/ComputerCraft targets can render Unicode symbols natively.
+Love2D:
+  Each pixel is a Box element. Large pixel art grids (many rows/columns) create many nodes. Keep art patterns small — the built-in symbols are designed at 5-7 rows. For larger artwork, consider Image instead.
 
 === CRITICAL RULES ===
-- **Never put Unicode symbols in `<Text>`** — Characters like ▶ ⏸ █ ● ✓ arrows, dingbats, and geometric shapes won't render in Love2D's default font. Always use PixelArt or Box-based geometry instead. The linter enforces this via `no-unicode-symbol-in-text`.
-- **Filled pixel convention** — Any non-space character in the art string = filled pixel. Spaces = transparent. Use any character (█, X, #, etc.) for readability — they all render identically.
-- **Size units are logical** — The `size` prop is in logical units, not pixels. On a 2x DPI screen, `size={4}` renders as 8 physical pixels.
-- **Colors array falls back** — If `colors` array is shorter than the number of rows, remaining rows use the `color` prop. If neither is provided, defaults to white.
-- **Memoization is automatic** — The `usePixelArt` hook memoizes the result. Changing `art`, `size`, `color`, `colors`, or `gap` triggers a re-render, but otherwise the element is cached.
-- **Gap adds spacing** — The `gap` prop adds space between pixels, useful for retro/chunky aesthetics. Default is 0 (no gap).
-- **Container style wraps** — When using the PixelArt component with a `style` prop, it wraps the rendered grid in an additional Box. When using the hook, no wrapper is added.
+- When using a string (not an array) as the `art` prop, it first checks built-in symbols by name. If no match is found, it splits the string by newlines and treats it as custom art.
+- The `colors` array maps to rows (index 0 = first row). Rows beyond the array length fall back to the `color` prop.
+- usePixelArt is memoized on art, size, color, colors, and gap. Avoid creating new arrays/objects inline each render — hoist them to constants or useMemo.
 
 === SEE ALSO ===
-- Box — The primitive used to render each pixel
-- Layout rules (CLAUDE.md) — Critical rule #8: no Unicode symbols in Text
-- Static linter — Enforces no-unicode-symbol-in-text at build time
-- Storybook NeofetchDemo — Example of complex pixel art (heart logo)
+- Box
+- Image

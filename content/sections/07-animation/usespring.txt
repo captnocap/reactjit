@@ -1,139 +1,152 @@
 === METADATA ===
 title: useSpring
-description: Convenience hook that automatically springs to a target value when it changes.
+description: Physics-based spring animation that settles naturally to a target value
 category: Animation
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: useSpring, hook, spring, physics, animation, automatic, convenience, stiffness, damping, mass
-related: useanimation.txt, usetransition.txt, animatedvalue.txt
-difficulty: beginner
+platforms: love2d
+keywords: useSpring, spring, physics, stiffness, damping, bounce
+difficulty: intermediate
 
 === OVERVIEW ===
-useSpring is a convenience hook that automatically starts a spring animation whenever its
-target value changes. It is the simplest way to add spring-based motion to a component --
-you provide the target value and optional spring configuration, and the hook returns the
-current interpolated value that updates each frame.
+useSpring automatically springs to a target value whenever it changes. It uses a physics simulation with stiffness, damping, and mass to produce natural-feeling motion that overshoots and settles. No duration is needed — the spring determines its own timing based on the physics parameters.
 
-The hook skips animation on the first render (the value starts at the target immediately).
-On subsequent renders where the target changes, a spring animation is started to
-transition from the current value to the new target.
+The hook skips animation on the first render and jumps straight to the target value. On subsequent changes to targetValue, it starts a spring animation from the current position.
+
+useSpring is the most commonly used animation hook. It works well for:
+- Counters and numeric displays that animate between values
+- Toggle states (0/1) with natural bounce
+- Position and size changes that need to feel physical
+- Any value that changes in response to user interaction
+
+For timing-based animations with explicit duration, use useTransition instead.
 
 === API / SYNTAX ===
-Signature:
-  function useSpring(targetValue: number, config?: { stiffness?: number; damping?: number; mass?: number }): number
+```tsx
+import { useSpring } from '@reactjit/core';
+
+const currentValue = useSpring(targetValue, config?);
+```
 
 Parameters:
-  targetValue: number
-    The value to spring towards. When this changes, a new spring animation starts.
+| Parameter   | Type   | Description                                   |
+|-------------|--------|-----------------------------------------------|
+| targetValue | number | The value to spring toward                    |
+| config      | object | Optional spring physics configuration         |
 
-  config?: object (optional)
-    stiffness?: number   Spring stiffness. Higher = snappier. Default: 100
-    damping?: number     Damping coefficient. Higher = less oscillation. Default: 10
-    mass?: number        Mass of the object. Higher = slower/heavier. Default: 1
+Config:
+| Field     | Type   | Default | Description                          |
+|-----------|--------|---------|--------------------------------------|
+| stiffness | number | 100     | Spring stiffness (higher = snappier) |
+| damping   | number | 10      | Damping factor (lower = bouncier)    |
+| mass      | number | 1       | Mass of the object                   |
 
-Returns:
-  number
-    The current interpolated value. Updates each animation frame, triggering re-render.
+Returns: number — the current interpolated value. Updates each frame during motion.
 
-Spring behavior:
-  - stiffness controls how strongly the spring pulls toward the target
-  - damping controls how quickly oscillation settles
-  - mass controls how heavy the animated object feels
-  - Low damping + high stiffness = bouncy
-  - High damping + low stiffness = sluggish
-  - The animation uses Verlet integration with clamped dt (max 64ms) to avoid instability
+Common presets:
+- Stiff: { stiffness: 300, damping: 20 } — quick snap with minimal overshoot
+- Bouncy: { stiffness: 120, damping: 8 } — visible bounce before settling
+- Sloppy: { stiffness: 80, damping: 5 } — heavy overshoot, multiple bounces
 
 === EXAMPLES ===
-Example 1: Toggle width
+Example 1: Animated counter
 ---
+```tsx
 import { useState } from 'react';
-import { useSpring, Box, Text } from '@reactjit/core';
+import { Box, Pressable, Text, useSpring } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function ExpandableBox() {
-  const [expanded, setExpanded] = useState(false);
-  const width = useSpring(expanded ? 300 : 100);
+export function SpringCounter() {
+  const c = useThemeColors();
+  const [count, setCount] = useState(0);
+  const display = useSpring(count, { stiffness: 200, damping: 15 });
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Box
-        style={{ width, height: 80, backgroundColor: '#89b4fa', borderRadius: 8 }}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <Text style={{ fontSize: 16, color: '#1e1e2e' }}>
-          {expanded ? 'Collapse' : 'Expand'}
-        </Text>
-      </Box>
-    </Box>
-  );
-}
----
-Platforms: All
-
-Example 2: Bouncy spring
----
-import { useState } from 'react';
-import { useSpring, Box } from '@reactjit/core';
-
-function BouncyButton() {
-  const [pressed, setPressed] = useState(false);
-  const scale = useSpring(pressed ? 0.85 : 1.0, { stiffness: 400, damping: 8, mass: 0.5 });
-
-  return (
-    <Box
-      style={{
-        width: 120,
-        height: 120,
-        backgroundColor: '#f38ba8',
-        borderRadius: 60,
-        transform: { scaleX: scale, scaleY: scale },
-      }}
-      onClick={() => setPressed(!pressed)}
-    />
-  );
-}
----
-Platforms: All
-
-Example 3: Smooth height transition
----
-import { useState } from 'react';
-import { useSpring, Box, Text } from '@reactjit/core';
-
-function AccordionItem({ title, content }: { title: string; content: string }) {
-  const [open, setOpen] = useState(false);
-  const height = useSpring(open ? 120 : 0, { stiffness: 200, damping: 25 });
-
-  return (
-    <Box style={{ width: '100%' }}>
-      <Box
-        style={{ width: '100%', height: 40, backgroundColor: '#313244', padding: 8 }}
-        onClick={() => setOpen(!open)}
-      >
-        <Text style={{ fontSize: 16, color: '#cdd6f4' }}>{title}</Text>
-      </Box>
-      <Box style={{ width: '100%', height, overflow: 'hidden', backgroundColor: '#1e1e2e' }}>
-        <Box style={{ padding: 8 }}>
-          <Text style={{ fontSize: 14, color: '#a6adc8' }}>{content}</Text>
+    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Pressable onPress={() => setCount(n => n + 100)}>
+        <Box style={{ padding: 8, backgroundColor: c.primary, borderRadius: 4 }}>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>{'+100'}</Text>
         </Box>
-      </Box>
+      </Pressable>
+      <Text style={{ color: c.text, fontSize: 28, fontWeight: 'bold' }}>
+        {`${Math.round(display)}`}
+      </Text>
     </Box>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
+
+Example 2: Toggle with bounce
+---
+```tsx
+import { useState } from 'react';
+import { Box, Pressable, Text, useSpring } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function BouncyToggle() {
+  const c = useThemeColors();
+  const [on, setOn] = useState(false);
+  const progress = useSpring(on ? 1 : 0, { stiffness: 180, damping: 12 });
+
+  return (
+    <Pressable onPress={() => setOn(v => !v)}>
+      <Box style={{
+        width: 50,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: c.surface,
+        padding: 2,
+      }}>
+        <Box style={{
+          width: 24,
+          height: 24,
+          borderRadius: 12,
+          backgroundColor: c.primary,
+          transform: { translateX: progress * 22 },
+        }} />
+      </Box>
+    </Pressable>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 3: Spring-driven bar chart
+---
+```tsx
+import { useSpring, Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+function Bar({ value, max, color }: { value: number; max: number; color: string }) {
+  const width = useSpring((value / max) * 200, { stiffness: 120, damping: 14 });
+
+  return (
+    <Box style={{ height: 20, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 4 }}>
+      <Box style={{
+        height: 20,
+        width: Math.max(0, width),
+        backgroundColor: color,
+        borderRadius: 4,
+      }} />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
 
 === PLATFORM NOTES ===
-Works identically on all platforms. Uses useAnimation internally, which handles the
-requestAnimationFrame / setTimeout fallback.
+Love2D:
+  The spring simulation uses Verlet integration with a clamped dt (max 64ms) to prevent instability during frame drops. The spring settles when both velocity and displacement drop below the restThreshold (0.001 by default).
 
 === CRITICAL RULES ===
-- Animation is skipped on first render -- value starts at targetValue immediately
-- A new spring animation starts every time targetValue changes
-- The previous animation is automatically stopped when a new one starts
-- Config changes do NOT restart the animation -- only targetValue changes trigger animation
-- Config is read from a ref at animation start time, so it can be dynamic
-- The returned value triggers React re-render every animation frame
+- useSpring skips animation on the first render — the component starts at the target value instantly.
+- The component re-renders every frame while the spring is in motion. For pure visual effects without layout impact, prefer Lua-driven style.transition instead.
+- Very low damping values (below 3) can cause springs that oscillate for a long time before settling.
 
 === SEE ALSO ===
-- usetransition.txt -- Timing-based convenience hook (alternative to spring)
-- useanimation.txt -- Full control over AnimatedValue
-- animatedvalue.txt -- AnimatedValue spring configuration details
+- useAnimation
+- useTransition
+- useBounce
+- AnimatedValue

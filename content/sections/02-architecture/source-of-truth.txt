@@ -1,91 +1,131 @@
 === METADATA ===
-title: Source-of-Truth Architecture
-description: Critical guide to file organization, editing rules, and the sync pipeline
+title: Source of Truth
+description: Monorepo file ownership -- which files to edit, which are copies, and how the sync pipeline works.
 category: Architecture
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: source of truth, sync, cli-setup, reactjit update, editing rules, file organization, copies
-related: pipeline, installation
+platforms: love2d
+keywords: source of truth, monorepo, sync, cli-setup, update, lua, packages, storybook, runtime, copies
+related: pipeline.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT has two categories of files: globally distributed framework files and
-project-specific application files. Editing the wrong copy is the number one source of
-"it builds but does not work" bugs. Framework files have a single source of truth at the
-monorepo root. They are copied into projects by the CLI. Application files are unique to
-each project and are safe to edit directly.
+ReactJIT is an npm workspaces monorepo. There are two categories of files: globally
+distributed framework files and project-specific application files. Editing the wrong copy
+is the number one source of "it builds but doesn't work" bugs.
 
-Understanding this distinction and following the sync pipeline is critical for any work
-that touches framework internals.
+Globally distributed files live at the monorepo root and get copied into projects by the CLI.
+The sync pipeline has two stages:
+
+  Stage 1: make cli-setup
+    Copies source-of-truth files into cli/runtime/:
+      lua/*                  -> cli/runtime/lua/
+      packages/core/         -> cli/runtime/reactjit/shared/
+      packages/renderer/     -> cli/runtime/reactjit/renderer/
+      quickjs/libquickjs.so  -> cli/runtime/lib/
+
+  Stage 2: reactjit update (run from a project directory)
+    Copies cli/runtime/ into the project:
+      cli/runtime/lua/       -> <project>/lua/
+      cli/runtime/reactjit/  -> <project>/reactjit/
+      cli/runtime/lib/       -> <project>/lib/
+
+Always edit the source-of-truth files: lua/ and packages/*/src/ at the monorepo root. Never
+edit cli/runtime/ or the local copies inside a project. Those are disposable and get
+overwritten on the next sync.
+
+Project-specific files are unique to each project and not managed by the CLI:
+  src/          -- application code (App.tsx, components, etc.)
+  main.lua      -- Love2D entry point
+  conf.lua      -- Love2D configuration
+  package.json  -- project dependencies
+
+These files are safe to edit directly. reactjit init creates starter versions; reactjit update
+never touches them.
+
+The storybook is special. It is NOT a consumer project -- it IS the framework. It reads from
+source-of-truth directly:
+  - TypeScript resolves from packages/*/src/ via workspace symlinks
+  - Lua reads via storybook/love/lua which is a symlink to ../../lua
+  - Do NOT run reactjit update from the storybook directory
+  - Do NOT create storybook/lua/ or storybook/reactjit/ as real directories
 
 === API / SYNTAX ===
-Source-of-Truth Locations:
-  lua/*.lua                    -> Lua runtime (layout, painter, tree, events, etc.)
-  packages/shared/src/         -> Core primitives, components, hooks, animation, types
-  packages/renderer/src/         -> React reconciler, host config, bridge, entry points
-  quickjs/libquickjs.so        -> QuickJS shared library
+File ownership map:
 
-Copy Destinations (managed by tooling, NEVER edit directly):
-  cli/runtime/lua/             <- make cli-setup copies lua/*.lua here
-  cli/runtime/reactjit/shared/ <- make cli-setup copies packages/shared/ here
-  cli/runtime/reactjit/native/ <- make cli-setup copies packages/renderer/ here
-  cli/runtime/lib/             <- make cli-setup copies quickjs/libquickjs.so here
-  <project>/lua/               <- reactjit update copies here
-  <project>/reactjit/shared/ <- reactjit update copies here
-  <project>/reactjit/native/ <- reactjit update copies here
-  <project>/lib/               <- reactjit update copies here
+  Source of truth         | Copied to by make cli-setup    | Copied to projects by reactjit update
+  lua/*.lua               | cli/runtime/lua/               | <project>/lua/
+  packages/core/          | cli/runtime/reactjit/shared/   | <project>/reactjit/shared/
+  packages/renderer/      | cli/runtime/reactjit/renderer/ | <project>/reactjit/renderer/
+  quickjs/libquickjs.so   | cli/runtime/lib/               | <project>/lib/
 
-Project-Specific Files (safe to edit directly):
-  src/                         - Application code (App.tsx, stories, etc.)
-  main.lua                     - Love2D entry point
-  conf.lua                     - Love2D configuration
-  package.json                 - Project dependencies
-  packaging/                   - Build customizations
+Sync commands:
+
+  make cli-setup
+    Propagates source-of-truth files to cli/runtime/. Run this after editing any framework
+    file (lua/, packages/core/, packages/renderer/).
+
+  reactjit update
+    Syncs cli/runtime/ into the current project directory. Copies lua/, lib/, and reactjit/
+    without touching src/ or any project-specific files. Symlink-aware: if a destination is
+    a symlink, it skips the copy and prints a message.
+
+  reactjit init <name>
+    Scaffolds a new project with fresh copies of all runtime files plus starter application
+    code. Gets everything from cli/runtime/.
+
+  reactjit build
+    Builds the project. Has a fallback: if no local lua/ exists, it reads from cli/runtime/lua/.
+    But reactjit dev requires local copies, so always run reactjit update for dev workflows.
+
+The storybook build uses make build-storybook-love which rebuilds the storybook bundle.
+The storybook picks up Lua changes via symlink and TypeScript changes via esbuild resolution
+-- no copy step needed.
 
 === EXAMPLES ===
-Example 1: The Sync Pipeline
+Example 1: Adding a new Lua-side feature
 ---
-When you edit a framework file (e.g., lua/layout.lua or packages/shared/src/types.ts):
+# 1. Edit the source of truth
+# Edit lua/my_feature.lua (Lua implementation)
+# Edit packages/core/src/MyFeature.tsx (React component)
 
-  # Step 1: Edit the source-of-truth file at the monorepo root
-  vim lua/layout.lua
+# 2. The storybook picks up changes automatically
+# (Lua via symlink, TypeScript via esbuild resolution)
+# Rebuild the storybook bundle:
+make build-storybook-love
 
-  # Step 2: Propagate to CLI runtime
-  make cli-setup
+# 3. Propagate to cli/runtime/ for consumer projects
+make cli-setup
 
-  # Step 3: For each project that needs the change
-  cd storybook
-  reactjit update          # Syncs lua/, lib/, reactjit/ from CLI runtime
-  reactjit build dist:love # Rebuild with new code
+# 4. Update each example project that needs the feature
+cd examples/my-app
+reactjit update    # syncs runtime files
+reactjit build     # rebuilds
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Adding a New Lua-Side Feature (Checklist)
+Example 2: Creating a new project
 ---
-1. Edit/create files in lua/ (the source of truth)
-2. Edit/create files in packages/shared/src/ and packages/renderer/src/ as needed
-3. Run: make cli-setup
-4. For each example project that needs the feature:
-   cd examples/<project>
-   reactjit update
-   reactjit build dist:love
-5. For new projects: reactjit init <name> gets everything automatically
+# Scaffold a new project (gets all runtime files + starter code)
+reactjit init my-app
+cd my-app
+
+# Edit application code
+# src/App.tsx is yours -- edit freely
+
+# Build and run
+reactjit build
+
+# After framework changes upstream:
+reactjit update    # re-syncs lua/, lib/, reactjit/ from cli/runtime
+reactjit build     # rebuilds with updated framework
 ---
-Platforms: All
+Platforms: love2d
 
 === CRITICAL RULES ===
-- ALWAYS edit source-of-truth files (lua/, packages/shared/, packages/renderer/).
-- NEVER edit copies (cli/runtime/, <project>/lua/, <project>/reactjit/).
-  Those are disposable and will be overwritten by the next sync.
-- After editing any source-of-truth file, run the full sync pipeline:
-  make cli-setup, then reactjit update in affected projects.
-- reactjit update syncs lua/, lib/, and reactjit/ from CLI runtime into
-  the project. It NEVER touches src/ (your application code is safe).
-- reactjit init creates starter versions of src/, main.lua, conf.lua.
-  reactjit update never touches those files.
-- reactjit build dist:love has a fallback: if no local lua/ exists, it reads
-  from cli/runtime/lua/. But reactjit dev and love . require local copies,
-  so always run reactjit update for dev workflows.
+- ALWAYS edit source-of-truth files (lua/, packages/core/, packages/renderer/). NEVER edit cli/runtime/ or project-local copies (project/lua/, project/reactjit/) -- those are disposable and get overwritten.
+- After editing any source-of-truth file, run the full sync pipeline: make cli-setup, then cd to the project and run reactjit update, then reactjit build.
+- Do NOT run reactjit update from the storybook directory. The storybook reads from source directly via symlinks.
+- Do NOT create storybook/lua/ or storybook/reactjit/ as real directories. Both are gitignored. If they appear, something is wrong.
+- reactjit update is symlink-aware. If a destination (e.g. lua/) is a symlink, it skips the copy and prints a message. This protects the storybook's source-of-truth symlinks.
 
 === SEE ALSO ===
-- 01-getting-started/installation.txt - Initial setup including make cli-setup
-- 11-troubleshooting/common-errors.txt - "Runtime files outdated" and similar issues
+- pipeline.txt -- How the framework components fit together

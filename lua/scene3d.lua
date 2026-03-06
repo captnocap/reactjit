@@ -119,6 +119,51 @@ local function generateSphere(radius, segments, rings)
   return verts
 end
 
+--- Generate vertex data for a torus (donut shape)
+local function generateTorus(majorRadius, minorRadius, segments, rings)
+  majorRadius = majorRadius or 1.0
+  minorRadius = minorRadius or 0.25
+  segments = segments or 48
+  rings = rings or 24
+  local verts = {}
+  local pi = math.pi
+
+  for i = 0, rings - 1 do
+    local theta1 = 2 * pi * i / rings
+    local theta2 = 2 * pi * (i + 1) / rings
+    for j = 0, segments - 1 do
+      local phi1 = 2 * pi * j / segments
+      local phi2 = 2 * pi * (j + 1) / segments
+
+      local function pt(theta, phi)
+        local ct, st = math.cos(theta), math.sin(theta)
+        local cp, sp = math.cos(phi), math.sin(phi)
+        local x = (majorRadius + minorRadius * ct) * cp
+        local y = (majorRadius + minorRadius * ct) * sp
+        local z = minorRadius * st
+        local nx, ny, nz = ct * cp, ct * sp, st
+        local u = phi / (2 * pi)
+        local v = theta / (2 * pi)
+        return {x, y, z, u, v, nx, ny, nz}
+      end
+
+      local p1 = pt(theta1, phi1)
+      local p2 = pt(theta1, phi2)
+      local p3 = pt(theta2, phi2)
+      local p4 = pt(theta2, phi1)
+
+      verts[#verts + 1] = p1
+      verts[#verts + 1] = p4
+      verts[#verts + 1] = p3
+      verts[#verts + 1] = p1
+      verts[#verts + 1] = p3
+      verts[#verts + 1] = p2
+    end
+  end
+
+  return verts
+end
+
 --- Generate vertex data for a flat plane (XY, Z=0)
 local function generatePlane(w, h)
   w = (w or 1) / 2
@@ -138,6 +183,7 @@ local geometryGenerators = {
   box = generateBox,
   cube = generateBox,
   sphere = generateSphere,
+  torus = generateTorus,
   plane = generatePlane,
 }
 

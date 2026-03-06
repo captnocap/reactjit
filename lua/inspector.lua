@@ -1466,14 +1466,57 @@ local function getDimNameColor(node)
   return { c[1], c[2], c[3], (c[4] or 1) * 0.5 }
 end
 
+--- Strip invalid UTF-8 byte sequences so love.graphics.print never crashes
+local function sanitizeUTF8(s)
+  local result = {}
+  local i = 1
+  local len = #s
+  while i <= len do
+    local b = s:byte(i)
+    if b < 0x80 then
+      result[#result+1] = s:sub(i, i)
+      i = i + 1
+    elseif b < 0xC0 then
+      -- stray continuation byte — skip
+      i = i + 1
+    elseif b < 0xE0 then
+      local b2 = s:byte(i+1)
+      if b2 and b2 >= 0x80 and b2 < 0xC0 then
+        result[#result+1] = s:sub(i, i+1); i = i + 2
+      else i = i + 1 end
+    elseif b < 0xF0 then
+      local b2, b3 = s:byte(i+1), s:byte(i+2)
+      if b2 and b2 >= 0x80 and b2 < 0xC0 and b3 and b3 >= 0x80 and b3 < 0xC0 then
+        result[#result+1] = s:sub(i, i+2); i = i + 3
+      else i = i + 1 end
+    elseif b < 0xF8 then
+      local b2, b3, b4 = s:byte(i+1), s:byte(i+2), s:byte(i+3)
+      if b2 and b2 >= 0x80 and b2 < 0xC0 and b3 and b3 >= 0x80 and b3 < 0xC0
+         and b4 and b4 >= 0x80 and b4 < 0xC0 then
+        result[#result+1] = s:sub(i, i+3); i = i + 4
+      else i = i + 1 end
+    else
+      i = i + 1
+    end
+  end
+  return table.concat(result)
+end
+
 --- Get text content from a __TEXT__ node, truncated to ~40 chars
 local function getTextContent(node)
   local text = node.text or (node.props and node.props.text) or ""
   text = tostring(text)
   if #text > 40 then
-    text = text:sub(1, 37) .. "..."
+    -- Walk back to a valid UTF-8 boundary before appending "..."
+    local i = 37
+    while i > 0 do
+      local b = text:byte(i) or 0
+      if b < 0x80 or b >= 0xC0 then break end  -- ASCII or lead byte
+      i = i - 1
+    end
+    text = text:sub(1, i) .. "..."
   end
-  return text
+  return sanitizeUTF8(text)
 end
 
 --- Append inline prop segments to a segments array (max 3 props)

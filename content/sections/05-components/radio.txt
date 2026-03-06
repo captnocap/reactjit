@@ -1,102 +1,103 @@
 === METADATA ===
-title: Radio / RadioGroup
-description: Radio button with RadioGroup for exclusive single-selection within a group.
+title: Radio
+description: Radio button and RadioGroup for exclusive selection
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: radio, radio button, radio group, selection, form, input, exclusive
+platforms: love2d
+keywords: radio, radiogroup, option, select, exclusive, choice, form, control
 related: Checkbox, Switch, Select
-difficulty: beginner
+difficulty: intermediate
 
 === OVERVIEW ===
-Radio and RadioGroup work together for exclusive selection. RadioGroup wraps a set of Radio components and provides shared context so that selecting one Radio automatically deselects the others.
+Radio and RadioGroup provide exclusive single-selection from a set of options. RadioGroup wraps multiple Radio children and manages which option is selected. Each Radio renders as a `Radio` host element -- Lua handles the circle rendering, fill animation, and click detection.
 
-RadioGroup supports both controlled and uncontrolled modes. In controlled mode, pass `value` and respond to `onValueChange`. In uncontrolled mode, optionally set `defaultValue`. Each Radio reads the group state from React context and renders a circular indicator that fills when its value matches the group's selected value.
+RadioGroup uses React context to share selection state. Radio reads from this context to determine whether it is selected and calls back to the group when clicked.
+
+Both controlled (`value` prop on RadioGroup) and uncontrolled (`defaultValue` on RadioGroup) modes are supported.
 
 === API / SYNTAX ===
-Import: import { Radio, RadioGroup } from '@reactjit/core';
-
-Usage:
 ```tsx
-<RadioGroup value={selected} onValueChange={setSelected}>
-  <Radio value="a" label="Option A" />
-  <Radio value="b" label="Option B" />
-  <Radio value="c" label="Option C" />
-</RadioGroup>
+import { Radio, RadioGroup } from '@reactjit/core';
 ```
 
 RadioGroup Props:
-
-| Prop          | Type                      | Default | Description                                |
-|---------------|---------------------------|---------|--------------------------------------------|
-| value         | string                    | -       | Controlled selected value                  |
-| defaultValue  | string                    | -       | Initial value in uncontrolled mode         |
-| onValueChange | (value: string) => void   | -       | Called when selection changes               |
-| disabled      | boolean                   | false   | Disables all Radio children                |
-| children      | ReactNode                 | -       | Radio components (required)                |
-| style         | Style                     | -       | Container style overrides                  |
+| Prop          | Type                        | Default   | Description                            |
+|---------------|-----------------------------|-----------|----------------------------------------|
+| value         | string                      | undefined | Controlled selected value              |
+| defaultValue  | string                      | undefined | Initial value for uncontrolled mode    |
+| onValueChange | (value: string) => void     | undefined | Fires when selection changes           |
+| disabled      | boolean                     | false     | Disable all children                   |
+| style         | Style                       | undefined | Container style (defaults gap: 8)      |
+| children      | ReactNode                   | required  | Radio children                         |
 
 Radio Props:
-
-| Prop           | Type    | Default    | Description                               |
-|----------------|---------|------------|-------------------------------------------|
-| value          | string  | (required) | Value this radio represents               |
-| label          | string  | -          | Text label rendered beside the circle     |
-| disabled       | boolean | false      | Disables this specific radio              |
-| size           | number  | 20         | Circle diameter in pixels                 |
-| color          | Color   | '#3b82f6'  | Border and inner dot color when selected  |
-| uncheckedColor | Color   | '#6b7280'  | Border color when not selected            |
-| style          | Style   | -          | Container style overrides                 |
+| Prop           | Type   | Default   | Description                           |
+|----------------|--------|-----------|---------------------------------------|
+| value          | string | required  | Option value (matched against group)  |
+| label          | string | undefined | Text label next to the radio circle   |
+| disabled       | boolean| false     | Disable this specific option          |
+| size           | number | 20        | Radio circle diameter in pixels       |
+| color          | Color  | '#3b82f6' | Selected state color                  |
+| uncheckedColor | Color  | '#6b7280' | Unselected state border color         |
+| style          | Style  | undefined | Container style overrides             |
 
 === EXAMPLES ===
-Example 1: Controlled radio group
+Example 1: Basic radio group
 ---
 ```tsx
+const colors = useThemeColors();
+const [size, setSize] = useState('medium');
+
+<RadioGroup value={size} onValueChange={setSize}>
+  <Radio value="small" label="Small" color={colors.primary} />
+  <Radio value="medium" label="Medium" color={colors.primary} />
+  <Radio value="large" label="Large" color={colors.primary} />
+</RadioGroup>
+```
+---
+Platforms: love2d
+
+Example 2: Uncontrolled with default
+---
+```tsx
+const colors = useThemeColors();
+
+<RadioGroup
+  defaultValue="light"
+  onValueChange={(theme) => applyTheme(theme)}
+>
+  <Radio value="light" label="Light theme" color={colors.primary} />
+  <Radio value="dark" label="Dark theme" color={colors.primary} />
+  <Radio value="system" label="System default" color={colors.primary} />
+</RadioGroup>
+```
+---
+Platforms: love2d
+
+Example 3: Disabled options
+---
+```tsx
+const colors = useThemeColors();
 const [plan, setPlan] = useState('free');
 
 <RadioGroup value={plan} onValueChange={setPlan}>
-  <Radio value="free" label="Free" />
-  <Radio value="pro" label="Pro" />
-  <Radio value="enterprise" label="Enterprise" />
+  <Radio value="free" label="Free" color={colors.primary} />
+  <Radio value="pro" label="Pro" color={colors.primary} />
+  <Radio value="enterprise" label="Enterprise" disabled color={colors.muted} />
 </RadioGroup>
 ```
 ---
-Platforms: All
-
-Example 2: Uncontrolled with custom styling
----
-```tsx
-<RadioGroup defaultValue="dark">
-  <Radio value="light" label="Light" color="#f59e0b" size={24} />
-  <Radio value="dark" label="Dark" color="#f59e0b" size={24} />
-</RadioGroup>
-```
----
-Platforms: All
-
-Example 3: Disabled group
----
-```tsx
-<RadioGroup value="locked" disabled>
-  <Radio value="locked" label="Locked option" />
-  <Radio value="other" label="Other option" />
-</RadioGroup>
-```
----
-Platforms: All
+Platforms: love2d
 
 === PLATFORM NOTES ===
-- Web: RadioGroup renders as a `<div>` with `flexDirection: 'column'` and `gap: 8`. Each Radio renders as a `<div>` row. Cursor changes to `not-allowed` when disabled.
-- Native (Love2D): RadioGroup renders as a `Box` with `gap: 8`. Each Radio renders as a `Box` row with a circular border and an inner filled circle when selected.
-- A Radio is disabled if either its own `disabled` prop is true OR the parent RadioGroup's `disabled` prop is true.
-- The inner dot size is `Math.round(size * 0.5)`.
-- The border width is `Math.max(2, Math.round(size / 10))`.
-- Radio must be a child of RadioGroup. Without a RadioGroup parent, clicking a Radio does nothing (the group context is null).
-- Label text color is `#e2e8f0` at `fontSize: 14`, with `gap: 8` between circle and label.
+Love2D:
+  Each Radio emits a `Radio` host element. Lua renders the outer circle, inner fill dot for the selected state, and optional label text. The RadioGroup itself renders as a Box with gap spacing and provides React context -- it does not emit a special host element.
+
+  Disabling a RadioGroup disables all Radio children within it. A Radio can also be individually disabled even if the group is enabled.
 
 === CRITICAL RULES ===
-- Radio MUST be wrapped in a RadioGroup. A Radio rendered outside a RadioGroup will not respond to clicks.
-- The `value` prop on Radio is required and must be a string. It identifies which option this Radio represents within the group.
-- In controlled mode, the RadioGroup does not update its selection unless the parent updates the `value` prop in response to `onValueChange`.
+- Radio must be a child of RadioGroup. Without a RadioGroup ancestor, the Radio has no selection context and clicks do nothing.
+- Each Radio's `value` prop must be unique within its RadioGroup. Duplicate values cause undefined selection behavior.
+- RadioGroup lays out children in a column with 8px gap by default. Override via the `style` prop.
 
 === SEE ALSO ===
 - Checkbox

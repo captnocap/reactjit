@@ -1,32 +1,45 @@
 === METADATA ===
 title: useHotkey
-description: Register a global keyboard shortcut that fires a handler when a key combo is pressed.
+description: Bind global keyboard shortcuts
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: keyboard, hotkey, shortcut, keydown, combo, ctrl, shift, alt
-related: useLoveEvent, useClipboard
-difficulty: beginner
+platforms: love2d
+keywords: hotkey, keyboard, shortcut, keybind, ctrl, shift, alt, combo
+related: useLoveEvent, useIFTTT
+difficulty: intermediate
 
 === OVERVIEW ===
-useHotkey binds a callback to a keyboard combination string such as "ctrl+z" or "ctrl+shift+s". The combo is parsed once on mount and matched against every keydown event received from the bridge. The handler reference is always kept current without re-subscribing, so passing an inline arrow function is safe. Pass `enabled: false` in options to conditionally disable the binding without unmounting the component.
+useHotkey registers a global keyboard shortcut that fires a callback when the key combination is pressed. It works even when a TextEditor is focused (for unhandled combos like Ctrl+Z). The combo string supports modifier keys: ctrl, shift, alt, meta (or cmd/gui).
+
+The hook subscribes to bridge `keydown` events and matches against the parsed combo. The handler ref is kept fresh automatically -- no stale closures.
 
 === API / SYNTAX ===
 ```tsx
 import { useHotkey } from '@reactjit/core';
 ```
 
-Parameters:
-| Param   | Type                       | Default   | Description |
-|---------|----------------------------|-----------|-------------|
-| combo   | string                     | required  | Key combination string. Use "+" as separator. Modifiers: ctrl, control, shift, alt, meta, cmd, gui. Key names are lowercased (e.g. "s", "z", "escape", "f1"). |
-| handler | (event: LoveEvent) => void | required  | Called when the combo is matched. Receives the raw LoveEvent payload. |
-| options | { enabled?: boolean }      | undefined | Optional config object. Set enabled: false to disable the binding temporarily. |
+Signature:
+```tsx
+function useHotkey(
+  combo: string,
+  handler: (event: LoveEvent) => void,
+  options?: { enabled?: boolean }
+): void
+```
 
-Returns:
-void — this hook has no return value.
+Parameters:
+| Parameter | Type                        | Default   | Description                      |
+|-----------|-----------------------------|-----------|----------------------------------|
+| combo     | string                      | required  | Key combination (e.g. 'ctrl+s') |
+| handler   | (event: LoveEvent) => void  | required  | Callback on match                |
+| options   | { enabled?: boolean }       | undefined | Set enabled=false to disable     |
+
+Combo format:
+- Single key: `'escape'`, `'space'`, `'f1'`
+- With modifiers: `'ctrl+s'`, `'ctrl+shift+z'`, `'alt+tab'`
+- Modifier names: `ctrl`/`control`, `shift`, `alt`, `meta`/`cmd`/`gui`
 
 === EXAMPLES ===
-Example 1: Undo and redo shortcuts
+Example 1: Undo/Redo
 ---
 ```tsx
 import { useHotkey } from '@reactjit/core';
@@ -34,71 +47,58 @@ import { useHotkey } from '@reactjit/core';
 function Editor() {
   useHotkey('ctrl+z', () => undo());
   useHotkey('ctrl+shift+z', () => redo());
+  useHotkey('ctrl+s', () => save());
 
-  return <EditorCanvas />;
+  return <Text>Editor with keyboard shortcuts</Text>;
 }
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Escape closes a modal only while it is open
+Example 2: Conditional hotkey
 ---
 ```tsx
-import { useState } from 'react';
-import { useHotkey, Box, Text } from '@reactjit/core';
+import { useHotkey } from '@reactjit/core';
 
-function App() {
-  const [open, setOpen] = useState(false);
+function Modal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  useHotkey('escape', () => onClose(), { enabled: isOpen });
 
-  useHotkey('escape', () => setOpen(false), { enabled: open });
+  if (!isOpen) return null;
 
   return (
-    <Box width="100%" height="100%">
-      {open && (
-        <Box backgroundColor="#222" padding={16}>
-          <Text fontSize={14}>Press Escape to close</Text>
-        </Box>
-      )}
+    <Box style={{ backgroundColor: 'rgba(0,0,0,0.5)', flexGrow: 1 }}>
+      <Text>Press Escape to close</Text>
     </Box>
   );
 }
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Save with Ctrl+S and Ctrl+Shift+S for save-as
+Example 3: Tool switching
 ---
 ```tsx
 import { useHotkey } from '@reactjit/core';
 
-function Document() {
-  useHotkey('ctrl+s', () => save());
-  useHotkey('ctrl+shift+s', () => saveAs());
+function ToolPalette() {
+  const [tool, setTool] = useState('brush');
 
-  return <DocumentView />;
+  useHotkey('1', () => setTool('brush'));
+  useHotkey('2', () => setTool('eraser'));
+  useHotkey('3', () => setTool('fill'));
+
+  return <Text>{`Active: ${tool}`}</Text>;
 }
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: Access the raw LoveEvent in the handler
----
-```tsx
-import { useHotkey } from '@reactjit/core';
-import type { LoveEvent } from '@reactjit/core';
-
-function DevTools() {
-  useHotkey('f12', (event: LoveEvent) => {
-    console.log('key:', event.key, 'shift:', event.shift);
-    toggleDebugPanel();
-  });
-
-  return <App />;
-}
-```
----
-Platforms: love2d, web
+=== CRITICAL RULES ===
+- The combo string is case-insensitive. `'Ctrl+S'` and `'ctrl+s'` are equivalent.
+- Modifier keys must come before the final key in the combo string. `'s+ctrl'` will not work.
+- When `enabled` is false, the subscription is removed entirely. This is more efficient than checking a condition inside the handler.
+- Multiple useHotkey calls with the same combo all fire. There is no conflict resolution -- be careful not to register the same combo in multiple mounted components unless intended.
 
 === SEE ALSO ===
 - useLoveEvent
-- useClipboard
+- useIFTTT

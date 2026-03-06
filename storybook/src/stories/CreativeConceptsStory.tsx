@@ -117,7 +117,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
                   <Box style={{ width: 400, height: 400, backgroundColor: '#050510', alignItems: 'center', justifyContent: 'center' }}>
                     {/* Mock sphere using a generic geometric Box pattern */}
                     <Box style={{ width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(0, 255, 255, 0.4)', borderWidth: 5, borderColor: '#00ffff' }} />
-                    <Box style={{ position: 'absolute', width: 260, height: 260, borderRadius: 130, borderWidth: 2, borderColor: '#ff0055', borderStyle: 'dotted' }} />
+                    <Box style={{ position: 'absolute', width: 260, height: 260, borderRadius: 130, borderWidth: 2, borderColor: '#ff0055', opacity: 0.6 }} />
                   </Box>
                 </LumaMesh>
               </VHS>
@@ -154,7 +154,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
             </Text>
             {/* Mocking RadarSweep */}
             <Box style={{ width: 174, height: 174, borderRadius: 87, borderWidth: 1, borderColor: '#00ff00', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              <Box style={{ width: 87, height: 87, backgroundColor: 'rgba(0, 255, 0, 0.2)', position: 'absolute', top: 0, right: 0, transform: [{ rotate: '45deg' }], transformOrigin: '0% 100%' }} />
+              <Box style={{ width: 87, height: 87, backgroundColor: 'rgba(0, 255, 0, 0.2)', position: 'absolute', top: 0, right: 0, transform: [{ rotate: '45deg' }] }} />
               {Array.from({ length: 4 }).map((_, i) => (
                 <Box key={i} style={{ width: (i + 1) * 40, height: (i + 1) * 40, borderRadius: (i + 1) * 20, borderWidth: 1, borderColor: 'rgba(0, 255, 0, 0.3)', position: 'absolute' }} />
               ))}

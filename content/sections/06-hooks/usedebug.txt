@@ -1,177 +1,87 @@
 === METADATA ===
 title: useDebug
-description: Register live component data in a global registry accessible from the inspector console.
+description: Register debug data from components for inspector and console access
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: debugging, inspector, console, dev tools, live data, watch expressions, globalThis
-related: registerDebug, getDebugData
+platforms: love2d
+keywords: debug, inspect, devtools, console, watch, logging
+related: useSystemInfo, useCapabilities
 difficulty: beginner
 
 === OVERVIEW ===
-useDebug registers arbitrary component data under a named key on `globalThis.__debug`, making it available for live evaluation in the Love2D inspector console (F12) or any JavaScript REPL attached to the runtime. Data is written on every render so values are always current, and the entry is automatically removed when the component unmounts. This hook adds zero visible output — it is purely a debugging side-channel, not an overlay or HUD.
+useDebug registers arbitrary data under a key on `globalThis.__debug`. The inspector console and watch expressions can read this data live. Automatically unregisters on unmount.
+
+This is the primary way to expose component state for debugging. No serialization overhead -- data is written directly to a global object.
 
 === API / SYNTAX ===
 ```tsx
 import { useDebug, getDebugData, registerDebug } from '@reactjit/core';
 ```
 
-Hook signature:
+Hook:
 ```tsx
-useDebug(key: string, data: any): void
+function useDebug(key: string, data: any): void
+```
+
+Utilities:
+```tsx
+function getDebugData(): Record<string, any>
+function registerDebug(key: string, data: any): () => void
 ```
 
 Parameters:
-
-| Parameter | Type   | Description                                                           |
-|-----------|--------|-----------------------------------------------------------------------|
-| key       | string | Unique identifier for the debug entry. Usually the component name.    |
-| data      | any    | Any value to expose. Updated every render. Cleaned up on unmount.     |
-
-Returns: void
-
-Companion utilities:
-```tsx
-// Read all currently registered debug entries (non-hook, for tooling use).
-getDebugData(): Record<string, any>
-
-// Register debug data imperatively outside of React (e.g. in a game loop).
-// Returns an unregister function — call it when done.
-registerDebug(key: string, data: any): () => void
-```
-
-Console access patterns:
-```
-> __debug                         // all registered entries
-> __debug['PlayerHUD']            // specific component
-> __debug['PlayerHUD'].health     // specific field
-:watch __debug['PlayerHUD'].fps   // live-updating watch expression
-```
+| Param | Type   | Default  | Description                          |
+|-------|--------|----------|--------------------------------------|
+| key   | string | required | Unique identifier (usually component name) |
+| data  | any    | required | Data to expose for debugging         |
 
 === EXAMPLES ===
-Example 1: Basic component state inspection
+Example 1: Expose component state
 ---
 ```tsx
+import { useState } from 'react';
+import { Box, Text } from '@reactjit/core';
 import { useDebug } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function PlayerHUD({ player }: { player: Player }) {
-  const [health, setHealth] = useState(player.maxHealth);
-  const [mana, setMana]     = useState(player.maxMana);
-
-  useDebug('PlayerHUD', { health, mana, level: player.level });
+export function PlayerHUD({ health, mana, position }: {
+  health: number;
+  mana: number;
+  position: { x: number; y: number };
+}) {
+  const colors = useThemeColors();
+  useDebug('PlayerHUD', { health, mana, position });
 
   return (
-    <Box>
-      <Text fontSize={16}>HP: {health}</Text>
-      <Text fontSize={16}>MP: {mana}</Text>
+    <Box style={{ padding: 8 }}>
+      <Text style={{ color: colors.text }}>{`HP: ${health} | MP: ${mana}`}</Text>
     </Box>
   );
 }
-
-// Inspector console (F12):
-// > __debug['PlayerHUD']
-// { health: 85, mana: 40, level: 12 }
+// Console: __debug['PlayerHUD'].health
+// Watch:   :watch __debug['PlayerHUD'].health
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: FPS and frame counter via watch expression
----
-```tsx
-import { useRef } from 'react';
-import { useDebug } from '@reactjit/core';
-
-function GameLoop({ deltaTime }: { deltaTime: number }) {
-  const frameCount = useRef(0);
-  frameCount.current++;
-
-  const fps = deltaTime > 0 ? Math.round(1 / deltaTime) : 0;
-
-  useDebug('GameLoop', { fps, frameCount: frameCount.current, deltaTime });
-
-  return null;
-}
-
-// Inspector console:
-// :watch __debug['GameLoop'].fps
-// :watch __debug['GameLoop'].frameCount
-```
----
-Platforms: All
-
-Example 3: Multiple components sharing the debug registry
----
-```tsx
-import { useDebug } from '@reactjit/core';
-
-function Inventory({ items }: { items: Item[] }) {
-  useDebug('Inventory', {
-    count: items.length,
-    totalWeight: items.reduce((s, i) => s + i.weight, 0),
-  });
-  return <Box>...</Box>;
-}
-
-function QuestLog({ quests }: { quests: Quest[] }) {
-  useDebug('QuestLog', {
-    active:    quests.filter(q => q.active).length,
-    completed: quests.filter(q => q.completed).length,
-  });
-  return <Box>...</Box>;
-}
-
-// Inspector console:
-// > __debug
-// { Inventory: { count: 23, totalWeight: 45.2 }, QuestLog: { active: 3, completed: 17 } }
-```
----
-Platforms: All
-
-Example 4: Imperative registration from a game service
+Example 2: Register debug data outside React
 ---
 ```tsx
 import { registerDebug } from '@reactjit/core';
 
-const gameState = { running: true, paused: false, tickCount: 0 };
+// In a game loop or service
+const unregister = registerDebug('GameLoop', { fps: 60, entities: 42 });
 
-// Register once at startup; update the reference object in place each tick.
-const unregister = registerDebug('GameState', gameState);
-
-function tick() {
-  gameState.tickCount++;
-  // The object reference is already registered — mutations are visible immediately.
-  requestAnimationFrame(tick);
-}
-
-tick();
-
-// On teardown:
+// Later, clean up
 unregister();
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Read all debug data from tooling code
----
-```tsx
-import { getDebugData } from '@reactjit/core';
-
-function DebugSnapshot() {
-  const snapshot = getDebugData();
-  const keys = Object.keys(snapshot);
-
-  return (
-    <Box style={{ padding: 8, gap: 4 }}>
-      {keys.map(k => (
-        <Text key={k} fontSize={12}>{k}: {JSON.stringify(snapshot[k])}</Text>
-      ))}
-    </Box>
-  );
-}
-```
----
-Platforms: All
+=== CRITICAL RULES ===
+- Keys must be unique across your app. Using the same key from two components overwrites one's data.
+- Data is updated every render. Keep it cheap -- avoid allocating large objects just for debugging.
+- useDebug auto-unregisters on unmount. registerDebug returns an unregister function you must call manually.
 
 === SEE ALSO ===
-- getDebugData — non-hook read of the full debug registry
-- registerDebug — imperative registration for non-React code
-- Inspector (F12) — Love2D dev overlay with console and watch expressions
+- useCapabilities
+- Advanced Debugging

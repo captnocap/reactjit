@@ -1,113 +1,158 @@
 === METADATA ===
-title: reactjit lint
-description: Static layout linter that catches common ReactJIT mistakes at build time.
+title: rjit lint
+description: Static layout linter -- catches component mistakes, invalid styles, security issues, and Lua errors before they reach the renderer.
 category: CLI
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: lint, linter, static analysis, layout, errors, warnings, no-mixed-text-children, no-invalid-style-props, no-image-without-src
-related: build.txt, ../04-layout-system/critical-rules.txt
+platforms: love2d
+keywords: lint, linter, static analysis, rules, errors, warnings, rjit-ignore-next-line, style props, security
+related: build.txt, dev.txt, test.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `reactjit lint` command runs a static layout linter on all .tsx files in the project's
-src/ directory. It uses TypeScript's AST parser (ts.createSourceFile) to analyze JSX elements
-and their style props without type checking. The linter catches layout mistakes that would
-produce invisible, overlapping, or incorrectly sized elements at runtime.
+`rjit lint` runs a static analysis pass over your project's TypeScript (.tsx), TSL (.tsl),
+and Lua (.lua) files. It uses TypeScript's AST parser (no type checker -- fast) to detect
+layout mistakes, missing props, invalid style properties, and security issues before they
+reach the renderer.
 
-The linter is also run automatically as a lint gate during `reactjit build` -- builds fail
-when error-level rules are violated. You should run the linter after every component change
-to catch issues early.
+The linter is incremental. It caches results per file by modification time in
+.rjit-lint-cache.json, so unchanged files skip parsing entirely on subsequent runs. The
+cache is non-essential -- deleting it just forces a full re-scan.
 
-NOTE: Seven layout-related lint rules were removed in recent versions because the layout engine
-now handles these cases correctly: no-text-without-fontsize, no-unicode-symbol-in-text,
-no-row-justify-without-width, no-flexrow-flexcolumn, no-uncontexted-flexgrow, no-deep-flex-nesting,
-and no-implicit-container-sizing. The engine is mature enough that these patterns work reliably.
+Every build path (rjit build, rjit screenshot) runs the linter automatically. Lint errors
+exit with code 1 and block compilation. Warnings are reported but do not block builds.
 
 === API / SYNTAX ===
 Usage:
-  reactjit lint
+  rjit lint
 
-Runs on:
-  All .tsx files under src/ (recursively, skipping node_modules, dist, .git, build, out)
-
-Error rules (block builds):
-
-  no-mixed-text-children
-    Mixed literal text and JSX expressions in <Text> (e.g., Score: {score}) creates multiple
-    __TEXT__ nodes that overlap. Use a template literal: {`Score: ${score}`}.
-
-  no-invalid-style-props
-    Style object contains properties not recognized by ReactJIT's style system. Only
-    checked on ReactJIT primitives (Box, Text, Image, etc.), not on HTML elements.
-
-  no-link-without-to
-    <Link> component is missing the "to" prop for navigation target.
-
-  no-image-without-src
-    <Image> component is missing the "src" prop.
-
-  no-usecrud-without-schema
-    useCRUD() hook called without a schema argument (requires at least 2 arguments).
-
-Warning rules (advisory):
-
-  no-routes-without-fallback
-    <Routes> without a <Route path="*"> catch-all for 404 handling.
-
-  no-pressable-without-onpress
-    <Pressable> component lacks an onPress handler.
+Runs from the current directory. Scans src/ for .tsx files, src/ for .tsl files, and lua/
+for .lua files. No flags or arguments.
 
 Escape hatch:
-  // rjit-ignore-next-line
-  Place this comment on the line immediately before the JSX element to suppress all rules
-  for that element.
+  Place a comment on the line immediately before the flagged line:
+    // rjit-ignore-next-line     (in .tsx and .tsl files)
+    -- rjit-ignore-next-line     (in .lua files)
 
-Exit code:
-  0 if no errors (warnings are OK)
-  1 if any error-level rules are violated
+  The crypto miner rule (no-crypto-miner) cannot be suppressed.
+
+TSX rules (checked on .tsx files in src/):
+
+  no-invalid-style-props (error)
+    Style properties not recognized by ReactJIT. Catches typos and CSS-only properties
+    that do not exist in the layout engine (e.g. 'display: grid', 'position: fixed').
+
+  no-link-without-to (error)
+    <Link> component used without a "to" prop.
+
+  no-routes-without-fallback (warning)
+    <Routes> used without a path="*" catch-all route.
+
+  no-image-without-src (error)
+    <Image> component used without a "src" prop.
+
+  no-pressable-without-onpress (warning)
+    <Pressable> used without an onPress handler.
+
+  no-usecrud-without-schema (error)
+    useCRUD() called without a schema argument.
+
+  no-crypto-miner (error, non-suppressable)
+    Detects known crypto mining libraries, pool domains, stratum protocols, WASM exports,
+    and behavioral patterns. Uses confidence scoring: hard triggers (libraries, pools,
+    protocols) quarantine on a single hit; composite triggers (behavioral patterns, config
+    tokens) require matches from 2+ categories.
+
+TSL rules (checked on .tsl files in src/):
+
+  tsl-no-js-globals (error)
+    JS globals that do not exist in LuaJIT: console, Date, setTimeout, setInterval,
+    clearTimeout, clearInterval, fetch, window, document, process, Buffer, Promise,
+    JSON (partial), Array methods, Object methods, etc.
+
+  tsl-no-zero-index (error)
+    Array access with index 0 (arr[0]) -- Lua arrays are 1-indexed, so arr[0] is nil.
+
+  tsl-no-any (warning)
+    Use of the `any` type suppresses type checking. Suppress with // tsl-any on the same
+    line or the line above.
+
+Lua rules (checked on .lua files in lua/):
+
+  lua-no-forward-ref (error)
+    Call to a local function before its declaration. In Lua, calling a local function that
+    has not been declared yet resolves to nil and crashes at runtime. Fix by adding a
+    forward declaration: `local myFunc` before the call site.
+
+  lua-no-accidental-global (error)
+    Assignment without the `local` keyword outside a known global whitelist. This pollutes
+    the global table (_G) in LuaJIT and causes hard-to-track bugs.
+
+  lua-no-node-cache (warning)
+    Caching a node table reference across frames. Nodes are recreated each commit cycle,
+    so cached references become stale.
+
+  lua-no-ffi-without-pcall (warning)
+    ffi.load() or ffi.C.* call outside a pcall/xpcall wrapper. FFI calls can throw on
+    missing libraries -- always wrap in pcall.
+
+  lua-no-ffi-load-shared-lib (warning)
+    ffi.load("LibName") when Love2D has already loaded the library. Use ffi.C.* instead
+    to access symbols from the already-loaded library.
+
+  lua-no-unguarded-division (warning)
+    Division where the denominator could be zero or nil. Guard with math.max or a nil check.
+
+Bundle checks (post-build, on compiled output):
+
+  no-duplicate-context (error)
+    Multiple createContext() calls with the same name in the bundle indicate a duplicated
+    shared module. Components will read the wrong React context and silently break.
+
+API settings detection:
+
+  suggest-settings-menu (info)
+    API hooks used without useSettingsRegistry(). Suggests adding a settings UI for API keys.
+
+Removed rules (layout engine handles these correctly now):
+  no-text-without-fontsize, no-unicode-symbol-in-text, no-row-justify-without-width,
+  no-flexrow-flexcolumn, no-uncontexted-flexgrow, no-deep-flex-nesting,
+  no-implicit-container-sizing
 
 === EXAMPLES ===
 Example 1: Run the linter
 ---
-cd my-project
-reactjit lint
+cd my-app
+rjit lint
+# Output:
+#   src/App.tsx:12:5  error  no-invalid-style-props  Unknown style property 'display'
+#   src/App.tsx:25:3  warning  no-pressable-without-onpress  <Pressable> without onPress
+#
+#   1 error, 1 warning
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Suppress a lint rule
+Example 2: Suppress a warning with rjit-ignore-next-line
 ---
-{/* This Text intentionally has no fontSize for testing */}
-{/* // rjit-ignore-next-line */}
-<Text style={{ color: '#cdd6f4' }}>Special case</Text>
+// rjit-ignore-next-line
+<Pressable style={{ padding: 8 }}>
+  <Text style={{ fontSize: 14, color: c.text }}>Decorative only</Text>
+</Pressable>
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Typical lint output
+Example 3: Suppress a Lua lint warning
 ---
-  src/App.tsx
-    12:5  error  Mixed text and expressions in Text node  [no-mixed-text-children]
-    28:3  error  Image element missing src prop            [no-image-without-src]
-    45:7  warn   Pressable has no onPress handler          [no-pressable-without-onpress]
-
-  2 errors, 1 warning in 3 files
+-- rjit-ignore-next-line
+local cached_node = tree.nodes[id]
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-The linter runs on the source TypeScript level and applies to all platforms. It does not
-depend on any target-specific runtime. The rules are designed to catch issues that affect
-the Lua layout engine (Love2D), CSS Flexbox (web), and grid layout engines equally.
-
-The linter requires TypeScript to be installed as a dev dependency (npm install -D typescript).
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Run the linter after EVERY component change
-- Error-level rules block builds -- they must be fixed or explicitly suppressed
-- The escape hatch (// rjit-ignore-next-line) should be used sparingly
-- Style passed via variables (style={myStyle}) cannot be analyzed -- the linter skips those
-- Style objects with spread operators ({...baseStyle, color: '#fff'}) are partially analyzed
-- Only ReactJIT primitives are linted (Box, Text, Image, etc.) -- HTML elements are skipped
+- Lint errors block builds -- this is intentional and non-configurable (except --no-lint)
+- The crypto miner rule cannot be suppressed with rjit-ignore-next-line
+- Lint results are cached per-file by mtime in .rjit-lint-cache.json -- delete it to force a full re-scan
+- Do not use paddingHorizontal or paddingVertical -- the linter rejects them (use paddingLeft/paddingRight/paddingTop/paddingBottom)
 
 === SEE ALSO ===
-- build.txt -- Build command includes lint gate
-- ../04-layout-system/critical-rules.txt -- Detailed explanations of each critical rule
-- screenshot.txt -- Visual verification after linting
+- build.txt -- Lint gates every build path
+- dev.txt -- Dev mode does not run the linter automatically
+- test.txt -- Test runner for runtime verification (complements static linting)

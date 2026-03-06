@@ -1,16 +1,21 @@
 /**
  * ClassifierStory — test page for the classifier system.
  *
- * Registers classifiers globally, then uses them to build a page entirely
- * from classified primitives. Includes a side-by-side comparison of the
- * real ElementTile component vs a classifier-only rebuild.
+ * Three-row ElementTile comparison:
+ *   1. Component — raw primitives with inline styles
+ *   2. Partial — classifiers for structure, style still inline
+ *   3. Classified Component — built entirely from classifiers, only dynamic values in JSX
+ *
+ * Classifiers are vocabulary (named primitives). Classified Components are
+ * sentences (compositions of classifiers with logic). The classifier doesn't
+ * replace the component — it's what the component is built from.
  */
 
 import React, { useState } from 'react';
 import { Box, Text, Pressable, classifier, classifiers, useSpring } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { ElementTile } from '../../../packages/chemistry/src';
-import { getElement, ELEMENTS } from '../../../packages/chemistry/src/elements';
+import { getElement } from '../../../packages/chemistry/src/elements';
 
 // ── Register classifiers (global, once) ───────────────────
 
@@ -36,7 +41,7 @@ classifier({
   Badge:      { type: 'Box', px: 8, py: 2, radius: 6, style: { backgroundColor: '#f38ba8' } },
   Well:       { type: 'Box', padding: 12, radius: 8, style: { backgroundColor: '#181825', borderWidth: 1, borderColor: '#313244' } },
 
-  // ElementTile classifiers — single-primitive building blocks
+  // ElementTile v1 — half-committed (structural only, sizing still inline)
   ETile:      { type: 'Box', style: { justifyContent: 'center', alignItems: 'center', borderWidth: 1 } },
   EFront:     { type: 'Box', style: { gap: 2, alignItems: 'center' } },
   EBack:      { type: 'Box', style: { gap: 1, alignItems: 'center', width: '100%' } },
@@ -46,28 +51,36 @@ classifier({
   EPropRow:   { type: 'Box', direction: 'row', style: { justifyContent: 'space-between', width: '100%' } },
   EPropLabel: { type: 'Text', size: 5, style: { color: 'rgba(0,0,0,0.5)' } },
   EPropValue: { type: 'Text', size: 5, color: '#000' },
+
+  // ElementTile v2 — full commitment (complete default appearance for size=64)
+  // s = 64/32 = 2, h = 64*36/32 = 72, tiny = max(2.5*2, 6) = 6
+  Tile:       { type: 'Box', style: { width: 64, height: 72, borderRadius: 6, borderWidth: 1, padding: 4, justifyContent: 'center', alignItems: 'center' } },
+  TileFront:  { type: 'Box', style: { gap: 2, alignItems: 'center' } },
+  TileBack:   { type: 'Box', style: { gap: 1, alignItems: 'center', width: '100%' } },
+  TileNumber: { type: 'Text', size: 6 },
+  TileSymbol: { type: 'Text', size: 16, bold: true },
+  TileMass:   { type: 'Text', size: 6 },
+  TilePropRow:   { type: 'Box', direction: 'row', style: { justifyContent: 'space-between', width: '100%' } },
+  TilePropLabel: { type: 'Text', size: 6, style: { color: 'rgba(0,0,0,0.5)' } },
+  TilePropVal:   { type: 'Text', size: 6, color: '#000' },
+  TileBackSym:   { type: 'Text', size: 6, bold: true, color: '#000' },
 });
 
 const C = classifiers;
 
 // ── Category colors (same as chemistry package) ───────────
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'alkali-metal': '#7b6faa',
-  'alkaline-earth': '#9a9cc4',
-  'transition-metal': '#de9a9a',
-  'post-transition-metal': '#8fbc8f',
-  'metalloid': '#c8c864',
-  'nonmetal': '#59b5e6',
-  'halogen': '#d4a844',
-  'noble-gas': '#c87e4a',
-  'lanthanide': '#c45879',
-  'actinide': '#d4879a',
+const CAT: Record<string, string> = {
+  'alkali-metal': '#7b6faa', 'alkaline-earth': '#9a9cc4',
+  'transition-metal': '#de9a9a', 'post-transition-metal': '#8fbc8f',
+  'metalloid': '#c8c864', 'nonmetal': '#59b5e6',
+  'halogen': '#d4a844', 'noble-gas': '#c87e4a',
+  'lanthanide': '#c45879', 'actinide': '#d4879a',
 };
 
-// ── Classifier-based ElementTile ──────────────────────────
+// ── Partial: classifiers for structure, style still inline ──
 
-function ClassifiedElementTile({ element, size = 64 }: { element: string; size?: number }) {
+function V1Tile({ element }: { element: string }) {
   const tc = useThemeColors();
   const el = getElement(element);
   if (!el) return null;
@@ -76,56 +89,78 @@ function ClassifiedElementTile({ element, size = 64 }: { element: string; size?:
   const prog = useSpring(flipped ? 1 : 0, { stiffness: 200, damping: 18 });
   const scaleX = Math.abs(Math.cos(prog * Math.PI));
   const showBack = prog > 0.5;
-
-  const bg = CATEGORY_COLORS[el.category] ?? '#868e96';
-  const s = size / 32;
-  const h = size * 36 / 32;
+  const bg = CAT[el.category] ?? '#868e96';
 
   return (
     <Pressable onPress={() => setFlipped(f => !f)}>
       <C.ETile style={{
-        width: size,
-        height: h,
+        width: 64, height: 72,
         backgroundColor: showBack ? bg : tc.surface,
-        borderRadius: 3 * s,
-        borderColor: bg,
-        padding: 2 * s,
+        borderRadius: 6, borderColor: bg, padding: 4,
         transform: { scaleX: Math.max(0.01, scaleX) },
       }}>
         {showBack ? (
           <C.EBack>
-            <Text style={{ color: '#000', fontSize: 3 * s, fontWeight: 'bold' }}>{el.symbol}</Text>
-            <C.EPropRow>
-              <C.EPropLabel style={{ fontSize: Math.max(2.5 * s, 6) }}>{'Grp'}</C.EPropLabel>
-              <C.EPropValue style={{ fontSize: Math.max(2.5 * s, 6) }}>{`${el.group}`}</C.EPropValue>
-            </C.EPropRow>
-            <C.EPropRow>
-              <C.EPropLabel style={{ fontSize: Math.max(2.5 * s, 6) }}>{'Per'}</C.EPropLabel>
-              <C.EPropValue style={{ fontSize: Math.max(2.5 * s, 6) }}>{`${el.period}`}</C.EPropValue>
-            </C.EPropRow>
-            <C.EPropRow>
-              <C.EPropLabel style={{ fontSize: Math.max(2.5 * s, 6) }}>{'Phase'}</C.EPropLabel>
-              <C.EPropValue style={{ fontSize: Math.max(2.5 * s, 6) }}>{el.phase}</C.EPropValue>
-            </C.EPropRow>
+            <Text style={{ color: '#000', fontSize: 6, fontWeight: 'bold' }}>{el.symbol}</Text>
+            <C.EPropRow><C.EPropLabel>{'Grp'}</C.EPropLabel><C.EPropValue>{`${el.group}`}</C.EPropValue></C.EPropRow>
+            <C.EPropRow><C.EPropLabel>{'Per'}</C.EPropLabel><C.EPropValue>{`${el.period}`}</C.EPropValue></C.EPropRow>
+            <C.EPropRow><C.EPropLabel>{'Phase'}</C.EPropLabel><C.EPropValue>{el.phase}</C.EPropValue></C.EPropRow>
             {el.electronegativity !== null && (
-              <C.EPropRow>
-                <C.EPropLabel style={{ fontSize: Math.max(2.5 * s, 6) }}>{'EN'}</C.EPropLabel>
-                <C.EPropValue style={{ fontSize: Math.max(2.5 * s, 6) }}>{`${el.electronegativity}`}</C.EPropValue>
-              </C.EPropRow>
+              <C.EPropRow><C.EPropLabel>{'EN'}</C.EPropLabel><C.EPropValue>{`${el.electronegativity}`}</C.EPropValue></C.EPropRow>
             )}
-            <C.EPropRow>
-              <C.EPropLabel style={{ fontSize: Math.max(2.5 * s, 6) }}>{'Mass'}</C.EPropLabel>
-              <C.EPropValue style={{ fontSize: Math.max(2.5 * s, 6) }}>{el.mass.toFixed(1)}</C.EPropValue>
-            </C.EPropRow>
+            <C.EPropRow><C.EPropLabel>{'Mass'}</C.EPropLabel><C.EPropValue>{el.mass.toFixed(1)}</C.EPropValue></C.EPropRow>
           </C.EBack>
         ) : (
-          <C.EFront style={{ gap: 1 * s }}>
-            <C.ENumber style={{ fontSize: 3 * s, color: bg }}>{`${el.number}`}</C.ENumber>
-            <C.ESymbol style={{ fontSize: 8 * s, color: tc.text }}>{el.symbol}</C.ESymbol>
-            <C.EMass style={{ fontSize: 3 * s, color: tc.muted }}>{el.mass.toFixed(2)}</C.EMass>
+          <C.EFront>
+            <C.ENumber style={{ color: bg }}>{`${el.number}`}</C.ENumber>
+            <C.ESymbol style={{ color: tc.text }}>{el.symbol}</C.ESymbol>
+            <C.EMass style={{ color: tc.muted }}>{el.mass.toFixed(2)}</C.EMass>
           </C.EFront>
         )}
       </C.ETile>
+    </Pressable>
+  );
+}
+
+// ── Classified Component: built from classifiers, only dynamic in JSX
+
+function V2Tile({ element }: { element: string }) {
+  const tc = useThemeColors();
+  const el = getElement(element);
+  if (!el) return null;
+
+  const [flipped, setFlipped] = useState(false);
+  const prog = useSpring(flipped ? 1 : 0, { stiffness: 200, damping: 18 });
+  const scaleX = Math.abs(Math.cos(prog * Math.PI));
+  const showBack = prog > 0.5;
+  const bg = CAT[el.category] ?? '#868e96';
+
+  return (
+    <Pressable onPress={() => setFlipped(f => !f)}>
+      <C.Tile style={{
+        backgroundColor: showBack ? bg : tc.surface,
+        borderColor: bg,
+        transform: { scaleX: Math.max(0.01, scaleX) },
+      }}>
+        {showBack ? (
+          <C.TileBack>
+            <C.TileBackSym>{el.symbol}</C.TileBackSym>
+            <C.TilePropRow><C.TilePropLabel>{'Grp'}</C.TilePropLabel><C.TilePropVal>{`${el.group}`}</C.TilePropVal></C.TilePropRow>
+            <C.TilePropRow><C.TilePropLabel>{'Per'}</C.TilePropLabel><C.TilePropVal>{`${el.period}`}</C.TilePropVal></C.TilePropRow>
+            <C.TilePropRow><C.TilePropLabel>{'Phase'}</C.TilePropLabel><C.TilePropVal>{el.phase}</C.TilePropVal></C.TilePropRow>
+            {el.electronegativity !== null && (
+              <C.TilePropRow><C.TilePropLabel>{'EN'}</C.TilePropLabel><C.TilePropVal>{`${el.electronegativity}`}</C.TilePropVal></C.TilePropRow>
+            )}
+            <C.TilePropRow><C.TilePropLabel>{'Mass'}</C.TilePropLabel><C.TilePropVal>{el.mass.toFixed(1)}</C.TilePropVal></C.TilePropRow>
+          </C.TileBack>
+        ) : (
+          <C.TileFront>
+            <C.TileNumber color={bg}>{`${el.number}`}</C.TileNumber>
+            <C.TileSymbol color={tc.text}>{el.symbol}</C.TileSymbol>
+            <C.TileMass color={tc.muted}>{el.mass.toFixed(2)}</C.TileMass>
+          </C.TileFront>
+        )}
+      </C.Tile>
     </Pressable>
   );
 }
@@ -172,99 +207,47 @@ function CardDemo() {
   );
 }
 
-function ChipDemo() {
-  const tags = ['classifier', 'global', 'single-primitive', 'no-duplicates', 'user-wins'];
+// ── Three-row comparison ──────────────────────────────────
+
+const SAMPLE = ['H', 'Li', 'Fe', 'Al', 'Si', 'Cl', 'Ne', 'Nd', 'Au', 'U'];
+
+function TileRow({ label, badgeColor, desc, children }: { label: string; badgeColor: string; desc: string; children: React.ReactNode }) {
   return (
-    <C.Section>
-      <C.Label>{'Chips & Badges'}</C.Label>
-      <C.Divider />
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {tags.map((tag) => (
-          <C.Chip key={tag}>
-            <C.Caption>{tag}</C.Caption>
-          </C.Chip>
-        ))}
+    <>
+      <C.Row>
+        <C.Badge style={{ backgroundColor: badgeColor }}>
+          <Text size={11} bold color="#1e1e2e">{label}</Text>
+        </C.Badge>
+        <C.Caption>{desc}</C.Caption>
+      </C.Row>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+        {children}
       </Box>
-      <C.Row>
-        <C.Badge><Text size={11} bold color="#1e1e2e">{'NEW'}</Text></C.Badge>
-        <C.Badge style={{ backgroundColor: '#a6e3a1' }}><Text size={11} bold color="#1e1e2e">{'PASS'}</Text></C.Badge>
-        <C.Badge style={{ backgroundColor: '#f9e2af' }}><Text size={11} bold color="#1e1e2e">{'WARN'}</Text></C.Badge>
-      </C.Row>
-    </C.Section>
+    </>
   );
 }
-
-function OverrideDemo() {
-  const [count, setCount] = useState(0);
-  return (
-    <C.Section>
-      <C.Label>{'Override test — user props win'}</C.Label>
-      <C.Divider />
-      <C.Row>
-        <C.Card style={{ backgroundColor: '#89b4fa', flexGrow: 1 }}>
-          <C.Label color="#1e1e2e">{'Card with overridden bg'}</C.Label>
-          <C.Body color="#313244">{'style={{ backgroundColor: "#89b4fa" }}'}</C.Body>
-        </C.Card>
-        <C.Card style={{ flexGrow: 1, borderWidth: 2, borderColor: '#f38ba8' }}>
-          <C.Label>{'Card with added border'}</C.Label>
-          <C.Body>{'Default bg preserved, border added'}</C.Body>
-        </C.Card>
-      </C.Row>
-      <C.Well>
-        <C.Row>
-          <C.Body>{`Count: ${count}`}</C.Body>
-          <C.Spacer />
-          <Pressable onClick={() => setCount((c) => c + 1)}>
-            <C.Chip style={{ backgroundColor: '#89b4fa' }}>
-              <C.Caption color="#1e1e2e">{'Increment'}</C.Caption>
-            </C.Chip>
-          </Pressable>
-          <Pressable onClick={() => setCount(0)}>
-            <C.Chip>
-              <C.Caption>{'Reset'}</C.Caption>
-            </C.Chip>
-          </Pressable>
-        </C.Row>
-      </C.Well>
-    </C.Section>
-  );
-}
-
-// ── Side-by-side ElementTile comparison ───────────────────
-
-const SAMPLE_ELEMENTS = ['H', 'Li', 'Fe', 'Al', 'Si', 'Cl', 'Ne', 'Nd', 'Au', 'U'];
 
 function ElementTileComparison() {
   return (
     <C.Section>
-      <C.Label>{'ElementTile — Component vs Classifier (side by side)'}</C.Label>
+      <C.Label>{'ElementTile — Component vs Partial vs Classified Component'}</C.Label>
       <C.Divider />
 
-      <C.Row>
-        <C.Badge style={{ backgroundColor: '#89b4fa' }}>
-          <Text size={11} bold color="#1e1e2e">{'COMPONENT'}</Text>
-        </C.Badge>
-        <C.Caption>{'Original ElementTile from @reactjit/chemistry'}</C.Caption>
-      </C.Row>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-        {SAMPLE_ELEMENTS.map(sym => (
-          <ElementTile key={sym} element={sym} size={64} />
-        ))}
-      </Box>
+      <TileRow label="COMPONENT" badgeColor="#89b4fa" desc="Raw primitives with inline styles">
+        {SAMPLE.map(sym => <ElementTile key={sym} element={sym} size={64} />)}
+      </TileRow>
 
-      <Box style={{ height: 16 }} />
+      <Box style={{ height: 8 }} />
 
-      <C.Row>
-        <C.Badge style={{ backgroundColor: '#a6e3a1' }}>
-          <Text size={11} bold color="#1e1e2e">{'CLASSIFIER'}</Text>
-        </C.Badge>
-        <C.Caption>{'Rebuilt using only classifiers — zero component imports'}</C.Caption>
-      </C.Row>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-        {SAMPLE_ELEMENTS.map(sym => (
-          <ClassifiedElementTile key={sym} element={sym} size={64} />
-        ))}
-      </Box>
+      <TileRow label="PARTIAL" badgeColor="#f9e2af" desc="Classifiers for structure only — sizing and color still inline (wrong)">
+        {SAMPLE.map(sym => <V1Tile key={sym} element={sym} />)}
+      </TileRow>
+
+      <Box style={{ height: 8 }} />
+
+      <TileRow label="CLASSIFIED" badgeColor="#a6e3a1" desc="Classified Component — built from classifiers, only dynamic values in JSX">
+        {SAMPLE.map(sym => <V2Tile key={sym} element={sym} />)}
+      </TileRow>
     </C.Section>
   );
 }
@@ -283,8 +266,6 @@ export function ClassifierStory() {
       <ElementTileComparison />
       <TypographyDemo />
       <CardDemo />
-      <ChipDemo />
-      <OverrideDemo />
     </C.Page>
   );
 }

@@ -352,6 +352,36 @@ function Animate.processStyleUpdate(node, oldValues, newValues)
           -- Register this node as active
           activeNodes[node.id] = node
         end
+
+      elseif node.transitionState and node.transitionState[propName] then
+        -- Orphaned transition fix: rapid style changes in one frame (e.g. hover
+        -- enter+leave) cause the "from write-back" (line above) to make
+        -- oldValue==newValue on the second update, skipping the main branch.
+        -- But the first update's transition is still running toward a stale target.
+        -- Retarget it back to what React actually wants.
+        local existing = node.transitionState[propName]
+        if existing.to ~= newValue then
+          local config = transConfig[propName] or transConfig.all
+          if config and type(config) == "table" then
+            local fromValue = existing.current or existing.from
+            Log.log("animate", "transition retarget id=%s prop=%s from=%s to=%s (orphan fix)", tostring(node.id), propName, tostring(fromValue), tostring(newValue))
+            node.transitionState[propName] = {
+              from = fromValue,
+              to = newValue,
+              startTime = love.timer.getTime(),
+              duration = (config.duration or 300) / 1000,
+              easing = config.easing or "easeInOut",
+              delay = (config.delay or 0) / 1000,
+              current = fromValue,
+            }
+            node.style[propName] = fromValue
+            activeNodes[node.id] = node
+          else
+            -- No transition config for this property anymore: snap
+            node.transitionState[propName] = nil
+            node.style[propName] = newValue
+          end
+        end
       end
     end
   end

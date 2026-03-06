@@ -1,91 +1,161 @@
 === METADATA ===
 title: React Reconciler
-description: How @reactjit/renderer uses react-reconciler to build the instance tree and emit mutation commands
+description: How react-reconciler works in ReactJIT -- host config, instance creation, handler separation, and mutation commands.
 category: Architecture
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: reconciler, react-reconciler, host config, instance tree, mutations, createNode, updateProps
-related: pipeline, transport, layout-engine
+platforms: love2d
+keywords: reconciler, host config, react, instances, mutations, handlers, props, diffing, CREATE, UPDATE, REMOVE
+related: pipeline.txt, transport.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT uses react-reconciler 0.29 (the same package React Native uses) to manage
-the component tree. The reconciler calls into a host config that creates, updates, and
-removes instances. In native mode, these instances are lightweight JavaScript objects
-that map 1:1 to nodes in the Lua-side retained tree.
+ReactJIT uses react-reconciler (v0.29) with a custom host config. The reconciler diffs your
+component tree and emits mutation commands that describe what changed. These commands are the
+only thing that crosses the bridge to Lua. React never directly touches the instance tree,
+the layout engine, or the painter.
 
-The reconciler does not draw anything. It produces mutation commands -- JSON objects
-describing what changed. These commands are batched per frame and flushed to the
-transport layer, which delivers them to the Lua runtime.
+The host config lives in packages/renderer/src/hostConfig.ts. It implements the mutation mode
+(supportsMutation: true) -- no persistent mode, no hydration.
+
+Key design decisions:
+
+Handler separation. Event handlers (onClick, onKeyDown, etc.) never cross the bridge. They
+stay in a JavaScript-side handlerRegistry keyed by node ID. When Lua detects a user
+interaction, it sends an event with a targetId. The event dispatcher looks up handlers in the
+registry and calls them directly. Only serializable props (style, text content, flags) are
+sent to Lua via mutation commands.
+
+Partial diffing. The reconciler does not send full props on every update. prepareUpdate()
+computes a minimal diff between old and new props, including partial style diffs. Only changed
+style keys are sent. Removed keys are tracked separately so Lua can nil them out.
+
+Command coalescing. Multiple UPDATEs to the same node within one React commit are merged into
+a single command before flushing. This reduces bridge traffic when a component updates several
+props across multiple effects or callbacks in the same frame.
+
+HTML remapping. For compatibility, standard HTML element types (div, span, h1, img, etc.) are
+automatically remapped to ReactJIT host types (View, Text, Image). This happens transparently
+in createInstance before the CREATE command is emitted. Lua never sees unknown types.
 
 === API / SYNTAX ===
-Host Element Types:
-  'View'    - Box/container element, maps to <Box> primitive
-  'Text'    - Text element, maps to <Text> primitive
-  'Image'   - Image element, maps to <Image> primitive
+Instance structure (JS side):
 
-Mutation Command Types:
-  createNode     - Create a new node: { type, nodeType, id, props }
-  updateProps    - Update props on existing node: { type, id, props }
-  appendChild    - Append child to parent: { type, parentId, childId }
-  removeChild    - Remove child from parent: { type, parentId, childId }
-  insertBefore   - Insert child before sibling: { type, parentId, childId, beforeId }
-  commitTextUpdate - Update raw text content: { type, id, text }
+  interface Instance {
+    id: number;           // Unique node ID, monotonically increasing
+    type: string;         // Host type: 'View', 'Text', 'Image', etc.
+    props: Record;        // Clean props (no handlers, no children)
+    handlers: Record;     // Event handlers (onClick, onKeyDown, etc.)
+    children: Instance[]; // Child instances
+    renderCount: number;  // How many times this instance has been committed
+  }
 
-Key Exports from @reactjit/renderer:
-  createRoot()       - Create a reconciler root
-  render(element)    - Render a React element into the root
-  unmountAll()       - Tear down all roots
-  createLove2DApp()  - Factory that wires up bridge + reconciler + providers
-  flushToHost()      - Flush pending mutations to the transport
-  hostConfig         - The raw react-reconciler host config object
-  handlerRegistry    - Maps event handler names to node IDs
-  extractHandlers()  - Extracts event handlers from props (they stay in JS, not sent to Lua)
+Mutation commands emitted by the reconciler:
+
+  CREATE { id, type, props, hasHandlers, handlerMeta?, debugName?, debugSource? }
+    Creates a new node. props are clean (handlers extracted). hasHandlers tells Lua whether
+    this node should participate in hit testing. handlerMeta provides function source snippets
+    for the visual inspector.
+
+  CREATE_TEXT { id, text }
+    Creates a text leaf node (the __TEXT__ type in Lua).
+
+  APPEND { parentId, childId }
+    Appends a child to a parent node.
+
+  APPEND_TO_ROOT { childId }
+    Appends a child to the root container.
+
+  UPDATE { id, props, hasHandlers, handlerMeta?, removeKeys?, removeStyleKeys?, renderCount? }
+    Updates an existing node. props contains only changed values. style is a partial diff
+    (only changed keys). removeKeys lists top-level props that were removed. removeStyleKeys
+    lists style properties that were removed.
+
+  UPDATE_TEXT { id, text }
+    Updates text content on a text leaf node.
+
+  REMOVE { parentId, childId }
+    Removes a child from its parent and cleans up all descendants.
+
+  REMOVE_FROM_ROOT { childId }
+    Removes a child from the root container.
+
+  INSERT_BEFORE { parentId, childId, beforeId }
+    Inserts a child before a sibling (for reordering).
+
+Handler registry:
+
+  The handlerRegistry is a Map<number, Record<string, Function>> that maps node IDs to their
+  event handlers. When a node is created or updated, extractHandlers() separates on* function
+  props from serializable props. Handlers are stored in the registry; clean props are sent
+  to Lua. When a node is removed, its handlers (and all descendant handlers) are cleaned up.
 
 === EXAMPLES ===
-Example 1: How createLove2DApp Works
+Example 1: How createInstance works
 ---
-import { createLove2DApp } from '@reactjit/renderer';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-const app = createLove2DApp();
-app.render(<App />);
+function Card({ title, onPress }: { title: string; onPress: () => void }) {
+  const c = useThemeColors();
+  return (
+    <Pressable onClick={onPress}>
+      <Box style={{ padding: 16, backgroundColor: c.surface, borderRadius: 8 }}>
+        <Text style={{ fontSize: 16, color: c.text }}>{`${title}`}</Text>
+      </Box>
+    </Pressable>
+  );
+}
 
--- Internally, createLove2DApp:
--- 1. Creates a NativeBridge (QuickJS FFI transport)
--- 2. Creates a reconciler root via createRoot()
--- 3. Wraps your element in BridgeProvider and RendererProvider
--- 4. Wires up the __mount / __deferMount protocol for Lua init
--- 5. Returns { render, stop, bridge }
+// The reconciler calls createInstance for each host element:
+//
+// 1. Pressable -> createInstance('View', { onClick: fn })
+//    extractHandlers separates: clean={}, handlers={ onClick: fn }
+//    Emits: CREATE { id:1, type:'View', props:{}, hasHandlers:true }
+//    handlerRegistry.set(1, { onClick: fn })
+//
+// 2. Box -> createInstance('View', { style: { padding:16, ... } })
+//    No handlers.
+//    Emits: CREATE { id:2, type:'View', props:{ style:{...} }, hasHandlers:false }
+//
+// 3. Text -> createInstance('Text', { style: { fontSize:16, ... } })
+//    Emits: CREATE { id:3, type:'Text', props:{ style:{...} }, hasHandlers:false }
 ---
 Platforms: love2d
 
-Example 2: The Instance Model
+Example 2: Partial prop diffing on update
 ---
-Each reconciler instance is a plain object:
+import { useState } from 'react';
+import { Box } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-  {
-    type: 'View',           // host element type
-    id: 1,                  // unique numeric ID
-    props: { style: {...} }, // current props (style, event handlers extracted)
-    children: [],           // child instances
-    parent: null,           // parent instance reference
-  }
+function ToggleBox() {
+  const c = useThemeColors();
+  const [active, setActive] = useState(false);
 
-Event handlers (onClick, onKeyDown, etc.) are extracted from props and stored
-in the handlerRegistry on the JS side. They never cross the bridge to Lua.
-Only the handler's existence is communicated (so Lua knows to dispatch events
-back to JS for that node).
+  // When active changes from false to true:
+  // prepareUpdate diffs the style objects:
+  //   old: { padding: 16, backgroundColor: c.surface }
+  //   new: { padding: 16, backgroundColor: c.primary }
+  // Result: { diff: { style: { backgroundColor: c.primary } }, removeKeys: [], removeStyleKeys: [] }
+  // Only the changed backgroundColor is sent to Lua -- padding is unchanged and skipped.
+  return (
+    <Box
+      style={{
+        padding: 16,
+        backgroundColor: active ? c.primary : c.surface,
+        borderRadius: 8,
+      }}
+    />
+  );
+}
 ---
-Platforms: All
+Platforms: love2d
 
-=== PLATFORM NOTES ===
-Web mode uses a different path: the RendererMode context switches primitives to
-render as actual DOM elements (div, span, img) with CSS flexbox. The reconciler
-is React DOM's built-in reconciler, not a custom one.
-
-Grid targets (terminal, CC, Neovim, HS, AwesomeWM) use lowercase JSX intrinsics
-(<view>, <text>) with their own reconciler implementations in each target package.
+=== CRITICAL RULES ===
+- Event handlers NEVER cross the bridge. They stay in the JS handlerRegistry. If you add a new event type, you must add it to the Box destructure list in primitives.tsx AND subscribe to it in eventDispatcher.ts. Skipping this causes handlers to silently disappear.
+- Props are partially diffed. Only changed values are sent on UPDATE. Do not assume Lua receives the full prop object on every update.
+- The hasHandlers flag on CREATE/UPDATE tells Lua whether a node should participate in hit testing. If handlers are removed from a node, hasHandlers is set to false and Lua stops hit-testing it.
+- Node IDs are monotonically increasing integers. They are never reused within a session.
 
 === SEE ALSO ===
-- pipeline.txt - Where the reconciler fits in the pipeline
-- transport.txt - How mutations reach the Lua runtime
-- 10-advanced/event-handling.txt - How events flow back from Lua to JS
+- pipeline.txt -- Where the reconciler fits in the frame cycle
+- transport.txt -- How commands are serialized and sent to Lua

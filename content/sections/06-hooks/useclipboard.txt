@@ -1,119 +1,87 @@
 === METADATA ===
 title: useClipboard
-description: Read and write the system clipboard with a transient "copied" feedback boolean.
+description: Read and write the system clipboard
 category: Hooks
-platforms: love2d, web
-keywords: clipboard, copy, paste, text, feedback
-related: useHotkey, useLoveRPC
+platforms: love2d
+keywords: clipboard, copy, paste, text, system
+related: useHotkey
 difficulty: beginner
 
 === OVERVIEW ===
-useClipboard provides async copy and paste functions that route through the bridge RPC layer to reach the host clipboard — love.system on Love2D and the Web Clipboard API on web targets. After a successful copy call the `copied` boolean flips to true automatically and resets to false after 2 seconds, making it easy to show transient "Copied!" feedback in the UI without managing a timer manually. The cleanup timer is cancelled automatically on unmount.
+useClipboard provides copy and paste functions that interact with the system clipboard via Lua RPCs. It also exposes a `copied` boolean that stays true for 2 seconds after a copy -- useful for "Copied!" feedback in UI.
 
 === API / SYNTAX ===
 ```tsx
 import { useClipboard } from '@reactjit/core';
 ```
 
-Parameters:
-None.
+Signature:
+```tsx
+function useClipboard(): {
+  copy: (text: string) => Promise<void>;
+  paste: () => Promise<string>;
+  copied: boolean;
+}
+```
 
 Returns:
-| Field  | Type                        | Description |
-|--------|-----------------------------|-------------|
-| copy   | (text: string) => Promise<void> | Write the given string to the system clipboard. Sets copied to true for 2 seconds after success. |
-| paste  | () => Promise<string>       | Read the current system clipboard contents and return them as a string. |
-| copied | boolean                     | True for 2 seconds after the last successful copy call, then resets to false. Use this for "Copied!" UI feedback. |
+| Field  | Type                          | Description                                     |
+|--------|-------------------------------|-------------------------------------------------|
+| copy   | (text: string) => Promise     | Write text to the system clipboard              |
+| paste  | () => Promise<string>         | Read text from the system clipboard             |
+| copied | boolean                       | true for 2 seconds after a successful copy      |
 
 === EXAMPLES ===
-Example 1: Copy button with transient feedback
+Example 1: Copy button with feedback
 ---
 ```tsx
-import { useClipboard, Box, Text, Pressable } from '@reactjit/core';
+import { useClipboard } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function CopyButton({ value }: { value: string }) {
+function CopyButton({ text }: { text: string }) {
+  const colors = useThemeColors();
   const { copy, copied } = useClipboard();
 
   return (
-    <Pressable onPress={() => copy(value)}>
-      <Box backgroundColor={copied ? '#2a7' : '#444'} padding={8} borderRadius={4}>
-        <Text fontSize={13}>{copied ? 'Copied!' : 'Copy'}</Text>
-      </Box>
+    <Pressable onPress={() => copy(text)}>
+      <Text style={{ color: colors.primary, fontSize: 14 }}>
+        {copied ? 'Copied!' : 'Copy'}
+      </Text>
     </Pressable>
   );
 }
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
-Example 2: Paste button that reads and displays clipboard text
+Example 2: Copy and paste workflow
 ---
 ```tsx
-import { useState } from 'react';
-import { useClipboard, Box, Text, Pressable } from '@reactjit/core';
+import { useClipboard, useHotkey } from '@reactjit/core';
 
-function PastePreview() {
-  const { paste } = useClipboard();
-  const [content, setContent] = useState('');
-
-  return (
-    <Box flexDirection="column" gap={8} padding={12}>
-      <Pressable onPress={async () => setContent(await paste())}>
-        <Box backgroundColor="#333" padding={8}>
-          <Text fontSize={13}>Paste from clipboard</Text>
-        </Box>
-      </Pressable>
-      {content !== '' && (
-        <Box backgroundColor="#1a1a1a" padding={8}>
-          <Text fontSize={12}>{content}</Text>
-        </Box>
-      )}
-    </Box>
-  );
-}
-```
----
-Platforms: love2d, web
-
-Example 3: Trigger copy via a hotkey
----
-```tsx
-import { useClipboard, useHotkey, Box, Text } from '@reactjit/core';
-
-function TextDisplay({ text }: { text: string }) {
-  const { copy, copied } = useClipboard();
+function TextEditor() {
+  const { copy, paste } = useClipboard();
+  const [text, setText] = useState('');
 
   useHotkey('ctrl+c', () => copy(text));
+  useHotkey('ctrl+v', async () => {
+    const pasted = await paste();
+    setText(prev => prev + pasted);
+  });
 
-  return (
-    <Box padding={12}>
-      <Text fontSize={14}>{text}</Text>
-      {copied && <Text fontSize={12}>Copied to clipboard!</Text>}
-    </Box>
-  );
+  return <Text>{text}</Text>;
 }
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
-Example 4: Copy a JSON payload to clipboard
----
-```tsx
-import { useClipboard, Pressable, Text } from '@reactjit/core';
+=== PLATFORM NOTES ===
+Love2D:
+  Clipboard operations go through `clipboard:write` and `clipboard:read` RPCs which call `love.system.setClipboardText()` and `love.system.getClipboardText()`. These interact with the OS clipboard, so copied text is available in other applications and vice versa.
 
-function ExportButton({ data }: { data: object }) {
-  const { copy, copied } = useClipboard();
-
-  return (
-    <Pressable onPress={() => copy(JSON.stringify(data, null, 2))}>
-      <Text fontSize={14}>{copied ? 'Exported!' : 'Export JSON'}</Text>
-    </Pressable>
-  );
-}
-```
----
-Platforms: love2d, web
+=== CRITICAL RULES ===
+- The `copied` flag auto-resets after 2 seconds. Multiple rapid copies reset the timer.
+- The copy/paste functions are async (return Promises) because they cross the bridge. Await them if you need confirmation.
 
 === SEE ALSO ===
 - useHotkey
-- useLoveRPC

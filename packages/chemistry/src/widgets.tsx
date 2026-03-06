@@ -1,11 +1,11 @@
-import React, { useMemo } from 'react';
-import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
+import React, { useState, useMemo } from 'react';
+import { Box, Text, Pressable, ScrollView, useSpring } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import { ELEMENTS, getElement } from './elements';
 import { valenceElectrons } from './utils';
 import { useMolecule, useReaction } from './hooks';
 import type {
-  Element, PeriodicTableProps, ElementCardProps, MoleculeCardProps,
+  Element, PeriodicTableProps, ElementTileProps, ElementDetailProps, ElementCardProps, MoleculeCardProps,
   ElectronShellProps, ReactionViewProps,
 } from './types';
 import type { Style } from '@reactjit/core';
@@ -13,16 +13,16 @@ import type { Style } from '@reactjit/core';
 // -- Category colors ----------------------------------------------------------
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'alkali-metal': '#ff6b6b',
-  'alkaline-earth': '#ffa94d',
-  'transition-metal': '#ffd43b',
-  'post-transition-metal': '#69db7c',
-  'metalloid': '#38d9a9',
-  'nonmetal': '#4dabf7',
-  'halogen': '#748ffc',
-  'noble-gas': '#cc5de8',
-  'lanthanide': '#f06595',
-  'actinide': '#e599f7',
+  'alkali-metal': '#7b6faa',
+  'alkaline-earth': '#9a9cc4',
+  'transition-metal': '#de9a9a',
+  'post-transition-metal': '#8fbc8f',
+  'metalloid': '#c8c864',
+  'nonmetal': '#59b5e6',
+  'halogen': '#d4a844',
+  'noble-gas': '#c87e4a',
+  'lanthanide': '#c45879',
+  'actinide': '#d4879a',
 };
 
 const PHASE_COLORS: Record<string, string> = {
@@ -66,107 +66,110 @@ const TABLE_LAYOUT: number[][] = [
   [0, 0, 89,90,91,92,93,94,95,96,97,98,99,100,101,102,103, 0],
 ];
 
-function ElementCell({ el, isHighlighted, isSelected, colorBy, onPress, compact }: {
-  el: Element;
-  isHighlighted: boolean;
-  isSelected: boolean;
-  colorBy: PeriodicTableProps['colorBy'];
-  onPress?: (el: Element) => void;
-  compact?: boolean;
-}) {
-  const c = useThemeColors();
-  const bg = categoryColor(el, colorBy);
-  const opacity = isHighlighted ? 1.0 : 0.3;
-  const cellSize = compact ? 28 : 40;
-
-  return (
-    <Pressable
-      onPress={() => onPress?.(el)}
-      style={{
-        width: cellSize,
-        height: cellSize,
-        backgroundColor: bg,
-        opacity,
-        borderRadius: 3,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: isSelected ? 2 : 0,
-        borderColor: c.text,
-      }}
-    >
-      {!compact && (
-        <Text style={{ fontSize: 7, color: '#000', opacity: 0.6 }}>
-          {`${el.number}`}
-        </Text>
-      )}
-      <Text style={{ fontSize: compact ? 9 : 11, color: '#000', fontWeight: 'bold' }}>
-        {el.symbol}
-      </Text>
-    </Pressable>
-  );
-}
-
-function EmptyCell({ compact }: { compact?: boolean }) {
-  const size = compact ? 28 : 40;
-  return <Box style={{ width: size, height: size }} />;
-}
-
 export function PeriodicTable({
   onSelect,
-  highlighted,
-  colorBy = 'category',
   selected,
-  compact = false,
+  tileSize = 40,
   style,
 }: PeriodicTableProps) {
-  const c = useThemeColors();
-  const highlightSet = useMemo(
-    () => new Set(highlighted ?? ELEMENTS.map(el => el.number)),
-    [highlighted],
-  );
-  const gap = compact ? 1 : 2;
+  const h = tileSize * 36 / 32;
+  const gap = Math.max(1, Math.round(tileSize / 20));
 
   return (
-    <Box style={{ gap: compact ? 4 : 8, ...style }}>
+    <Box style={{ gap, ...style }}>
       {TABLE_LAYOUT.map((row, ri) => (
         <Box key={ri} style={{ flexDirection: 'row', gap }}>
           {row.map((num, ci) => {
-            if (num === 0) return <EmptyCell key={ci} compact={compact} />;
-            const el = getElement(num);
-            if (!el) return <EmptyCell key={ci} compact={compact} />;
+            if (num === 0) return <Box key={ci} style={{ width: tileSize, height: h }} />;
             return (
-              <ElementCell
+              <ElementTile
                 key={num}
-                el={el}
-                isHighlighted={highlightSet.has(num)}
-                isSelected={selected === num}
-                colorBy={colorBy}
+                element={num}
+                size={tileSize}
+                selected={selected === num}
                 onPress={onSelect}
-                compact={compact}
               />
             );
           })}
         </Box>
       ))}
-      {!compact && (
-        <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
-          {Object.entries(CATEGORY_COLORS).map(([cat, color]) => (
-            <Box key={cat} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-              <Box style={{ width: 10, height: 10, backgroundColor: color, borderRadius: 2 }} />
-              <Text style={{ fontSize: 9, color: c.muted }}>
-                {cat.replace(/-/g, ' ')}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-      )}
     </Box>
   );
 }
 
-// -- Element Card -------------------------------------------------------------
+// -- Element Tile (compact periodic table cell, click to flip) ----------------
 
-export function ElementCard({ element, style }: ElementCardProps) {
+export function ElementTile({ element, selected, flipped: controlledFlip, size = 64, style, onPress }: ElementTileProps) {
+  const c = useThemeColors();
+  const el = typeof element === 'string' ? getElement(element) : getElement(element);
+  if (!el) return null;
+
+  const [internalFlip, setInternalFlip] = useState(false);
+  const isFlipped = controlledFlip ?? internalFlip;
+  const prog = useSpring(isFlipped ? 1 : 0, { stiffness: 200, damping: 18 });
+  const scaleX = Math.abs(Math.cos(prog * Math.PI));
+  const showBack = prog > 0.5;
+
+  const bg = categoryColor(el, 'category');
+  const s = size / 32;
+  const h = size * 36 / 32;
+  const tiny = Math.max(2.5 * s, 6);
+
+  const handlePress = () => {
+    if (controlledFlip === undefined) setInternalFlip(f => !f);
+    onPress?.(el);
+  };
+
+  return (
+    <Pressable onPress={handlePress}>
+      <Box style={{
+        width: size,
+        height: h,
+        backgroundColor: showBack ? bg : c.surface,
+        borderRadius: 3 * s,
+        borderWidth: 1,
+        borderColor: bg,
+        padding: 2 * s,
+        justifyContent: 'center',
+        alignItems: 'center',
+        transform: { scaleX: Math.max(0.01, scaleX) },
+        ...style,
+      }}>
+        {showBack ? (
+          <Box style={{ gap: 1, alignItems: 'center', width: '100%' }}>
+            <Text style={{ color: '#000', fontSize: 3 * s, fontWeight: 'bold' }}>{el.symbol}</Text>
+            <TileProp label="Grp" value={`${el.group}`} s={s} tiny={tiny} />
+            <TileProp label="Per" value={`${el.period}`} s={s} tiny={tiny} />
+            <TileProp label="Phase" value={el.phase} s={s} tiny={tiny} />
+            {el.electronegativity !== null && (
+              <TileProp label="EN" value={`${el.electronegativity}`} s={s} tiny={tiny} />
+            )}
+            <TileProp label="Mass" value={el.mass.toFixed(1)} s={s} tiny={tiny} />
+          </Box>
+        ) : (
+          <Box style={{ gap: 1 * s, alignItems: 'center' }}>
+            <Text style={{ color: bg, fontSize: 3 * s }}>{`${el.number}`}</Text>
+            <Text style={{ color: c.text, fontSize: 8 * s, fontWeight: 'bold' }}>{el.symbol}</Text>
+            <Text style={{ color: c.muted, fontSize: 3 * s }}>{el.mass.toFixed(2)}</Text>
+          </Box>
+        )}
+      </Box>
+    </Pressable>
+  );
+}
+
+function TileProp({ label, value, s, tiny }: { label: string; value: string; s: number; tiny: number }) {
+  return (
+    <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+      <Text style={{ color: 'rgba(0,0,0,0.5)', fontSize: tiny }}>{label}</Text>
+      <Text style={{ color: '#000', fontSize: tiny }}>{value}</Text>
+    </Box>
+  );
+}
+
+// -- Element Card (full detail) -----------------------------------------------
+
+export function ElementDetail({ element, style }: ElementDetailProps) {
   const c = useThemeColors();
   const el = typeof element === 'string' ? getElement(element) : getElement(element);
   if (!el) return <Box style={style}><Text style={{ color: c.muted }}>{'Unknown element'}</Text></Box>;
@@ -239,6 +242,69 @@ function InfoChip({ label, value, c }: { label: string; value: string; c: any })
     }}>
       <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
       <Text style={{ fontSize: 11, color: c.text }}>{value}</Text>
+    </Box>
+  );
+}
+
+// -- Element Card (full property view — everything at a glance) ---------------
+
+function CardRow({ label, value, c, color }: { label: string; value: string; c: any; color?: string }) {
+  return (
+    <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Text style={{ fontSize: 10, color: c.muted }}>{label}</Text>
+      <Text style={{ fontSize: 10, color: color ?? c.text }}>{value}</Text>
+    </Box>
+  );
+}
+
+export function ElementCard({ element, style }: ElementCardProps) {
+  const c = useThemeColors();
+  const el = typeof element === 'string' ? getElement(element) : getElement(element);
+  if (!el) return <Box style={style}><Text style={{ color: c.muted }}>{'Unknown element'}</Text></Box>;
+
+  const bg = categoryColor(el, 'category');
+  const valence = valenceElectrons(el.number);
+
+  return (
+    <Box style={{
+      backgroundColor: c.bgElevated,
+      borderRadius: 8,
+      borderWidth: 2,
+      borderColor: bg,
+      padding: 12,
+      gap: 2,
+      ...style,
+    }}>
+      {/* Header: symbol badge + name */}
+      <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', paddingBottom: 4 }}>
+        <Box style={{
+          width: 44,
+          height: 44,
+          backgroundColor: bg,
+          borderRadius: 6,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <Text style={{ fontSize: 6, color: '#000', opacity: 0.6 }}>{`${el.number}`}</Text>
+          <Text style={{ fontSize: 20, color: '#000', fontWeight: 'bold' }}>{el.symbol}</Text>
+        </Box>
+        <Box style={{ gap: 1 }}>
+          <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>{el.name}</Text>
+          <Text style={{ fontSize: 9, color: c.muted }}>{el.category.replace(/-/g, ' ')}</Text>
+        </Box>
+      </Box>
+
+      {/* Properties — every row follows the same label : value pattern */}
+      <CardRow label="Atomic Mass" value={`${el.mass} u`} c={c} />
+      <CardRow label="Group" value={`${el.group}`} c={c} />
+      <CardRow label="Period" value={`${el.period}`} c={c} />
+      <CardRow label="Phase" value={el.phase} c={c} color={PHASE_COLORS[el.phase]} />
+      <CardRow label="Valence Electrons" value={`${valence}`} c={c} />
+      <CardRow label="Electronegativity" value={el.electronegativity !== null ? `${el.electronegativity}` : '—'} c={c} />
+      <CardRow label="Melting Point" value={el.meltingPoint !== null ? `${el.meltingPoint} K` : '—'} c={c} />
+      <CardRow label="Boiling Point" value={el.boilingPoint !== null ? `${el.boilingPoint} K` : '—'} c={c} />
+      <CardRow label="Density" value={el.density !== null ? `${el.density} g/cm\u00B3` : '—'} c={c} />
+      <CardRow label="Electron Config" value={el.electronConfig} c={c} />
     </Box>
   );
 }

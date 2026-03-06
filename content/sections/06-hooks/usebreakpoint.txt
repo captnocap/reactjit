@@ -1,130 +1,84 @@
 === METADATA ===
 title: useBreakpoint
-description: React hook that returns the current responsive breakpoint based on viewport width
+description: Responsive layout breakpoints based on viewport width
 category: Hooks
-platforms: love2d, web
-keywords: breakpoint, responsive, layout, viewport, width, adaptive, sm, md, lg, xl
-related: useWindowDimensions, Col, FlexRow
+platforms: love2d
+keywords: breakpoint, responsive, viewport, width, sm, md, lg, xl, grid, column
+related: useScale, useWindowDimensions
 difficulty: beginner
 
 === OVERVIEW ===
-useBreakpoint returns the active responsive breakpoint ('sm', 'md', 'lg', or 'xl') based on the current viewport width. It re-evaluates whenever the window is resized and drives conditional rendering and layout decisions in a single expression.
+useBreakpoint returns the current breakpoint based on viewport width. Use it to build responsive layouts that adapt to different window sizes.
 
-Breakpoints use min-width thresholds: sm starts at 0px, md at 640px, lg at 1024px, and xl at 1440px. The companion utilities resolveSpan and spanToFlexBasis convert semantic span words ('full', 'half', 'third', etc.) to numeric 12-column grid spans and CSS flexBasis percentages, and are used internally by the Col component.
+Breakpoints follow a mobile-first model with four tiers:
+- `sm` -- 0px and up (default)
+- `md` -- 640px and up
+- `lg` -- 1024px and up
+- `xl` -- 1440px and up
+
+The hook also exports utility functions for working with a 12-column grid system: resolveSpan converts semantic words ('half', 'third', 'quarter') to numeric spans, and spanToFlexBasis converts spans to percentage strings.
 
 === API / SYNTAX ===
 ```tsx
-import { useBreakpoint } from '@reactjit/core';
-import type { Breakpoint, SemanticSpan, SpanValue } from '@reactjit/core';
-import { BREAKPOINTS, RESPONSIVE_DEFAULTS, resolveSpan, spanToFlexBasis } from '@reactjit/core';
+import { useBreakpoint, resolveSpan, spanToFlexBasis, BREAKPOINTS, RESPONSIVE_DEFAULTS } from '@reactjit/core';
 ```
 
-Return value:
-| Value | Min-width | Description               |
-|-------|-----------|---------------------------|
-| 'sm'  | 0px       | Small / mobile            |
-| 'md'  | 640px     | Medium / tablet           |
-| 'lg'  | 1024px    | Large / desktop           |
-| 'xl'  | 1440px    | Extra-large / wide screen |
+Signature:
+```tsx
+function useBreakpoint(): Breakpoint
 
-SemanticSpan values (for resolveSpan):
-| SemanticSpan    | Numeric span (of 12) | flexBasis  |
-|-----------------|----------------------|------------|
-| 'full'          | 12                   | 100%       |
-| 'half'          | 6                    | 50%        |
-| 'third'         | 4                    | 33.33%     |
-| 'quarter'       | 3                    | 25%        |
-| 'two-thirds'    | 8                    | 66.67%     |
-| 'three-quarters'| 9                    | 75%        |
+type Breakpoint = 'sm' | 'md' | 'lg' | 'xl';
+```
 
-Utility functions:
-| Function                          | Description                                          |
-|-----------------------------------|------------------------------------------------------|
-| resolveSpan(value: SpanValue)     | Convert number or SemanticSpan to numeric 1–12 span  |
-| spanToFlexBasis(span: number)     | Convert numeric span to flexBasis percentage string  |
+Constants:
+| Name                | Value                                | Description                     |
+|---------------------|--------------------------------------|---------------------------------|
+| BREAKPOINTS         | { sm: 0, md: 640, lg: 1024, xl: 1440 } | Min-width thresholds (px)  |
+| RESPONSIVE_DEFAULTS | { sm: 12, md: 6, lg: 4, xl: 3 }     | Default responsive spans        |
 
-RESPONSIVE_DEFAULTS (used by Col when no per-breakpoint overrides given):
-| Breakpoint | Default span |
-|------------|-------------|
-| sm         | 12 (full)   |
-| md         | 6 (half)    |
-| lg         | 4 (third)   |
-| xl         | 3 (quarter) |
+Utilities:
+| Function       | Signature                  | Description                           |
+|----------------|----------------------------|---------------------------------------|
+| resolveSpan    | (SpanValue) => number      | 'half' -> 6, 'third' -> 4, etc.     |
+| spanToFlexBasis| (number) => string         | 6 -> '50%', 4 -> '33.333%'          |
+
+Semantic span values:
+| Word            | Span |
+|-----------------|------|
+| 'full'          | 12   |
+| 'half'          | 6    |
+| 'third'         | 4    |
+| 'quarter'       | 3    |
+| 'two-thirds'    | 8    |
+| 'three-quarters'| 9    |
 
 === EXAMPLES ===
-Example 1: Conditional layout per breakpoint
+Example 1: Responsive layout
 ---
 ```tsx
 import { Box, Text } from '@reactjit/core';
 import { useBreakpoint } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-export default function App() {
-  const bp = useBreakpoint();
-  const isNarrow = bp === 'sm';
-
-  return (
-    <Box style={{
-      width: '100%',
-      height: '100%',
-      flexDirection: isNarrow ? 'column' : 'row',
-      gap: 16,
-      padding: 16,
-    }}>
-      <Box style={{ flexGrow: 1, backgroundColor: '#313244', padding: 16, borderRadius: 8 }}>
-        <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Panel A</Text>
-      </Box>
-      <Box style={{ flexGrow: 1, backgroundColor: '#313244', padding: 16, borderRadius: 8 }}>
-        <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Panel B</Text>
-      </Box>
-    </Box>
-  );
-}
-```
----
-Platforms: love2d, web
-
-Example 2: Breakpoint-aware font sizing
----
-```tsx
-import { Box, Text } from '@reactjit/core';
-import { useBreakpoint } from '@reactjit/core';
-
-const FONT_SIZE: Record<string, number> = {
-  sm: 12,
-  md: 14,
-  lg: 16,
-  xl: 18,
-};
-
-export default function App() {
+export function ResponsivePanel() {
+  const colors = useThemeColors();
   const bp = useBreakpoint();
 
+  const columns = bp === 'xl' ? 4 : bp === 'lg' ? 3 : bp === 'md' ? 2 : 1;
+
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 24 }}>
-      <Text style={{ fontSize: FONT_SIZE[bp], color: '#cdd6f4' }}>
-        {`Current breakpoint: ${bp} — ${FONT_SIZE[bp]}px`}
-      </Text>
-    </Box>
-  );
-}
-```
----
-Platforms: love2d, web
-
-Example 3: Using resolveSpan for manual grid math
----
-```tsx
-import { Box } from '@reactjit/core';
-import { resolveSpan, spanToFlexBasis } from '@reactjit/core';
-
-// Each card takes one-third of available width
-const cardBasis = spanToFlexBasis(resolveSpan('third')); // '33.333333333333336%'
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      {['A', 'B', 'C'].map(label => (
-        <Box key={label} style={{ flexBasis: cardBasis, backgroundColor: '#313244', padding: 12 }}>
+    <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 16 }}>
+      {Array.from({ length: 8 }, (_, i) => (
+        <Box
+          key={i}
+          style={{
+            flexBasis: `${100 / columns}%`,
+            padding: 12,
+            backgroundColor: colors.surface,
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ color: colors.text }}>{`Card ${i + 1}`}</Text>
         </Box>
       ))}
     </Box>
@@ -132,16 +86,44 @@ export default function App() {
 }
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
+
+Example 2: Conditional content by breakpoint
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useBreakpoint } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function AdaptiveNav() {
+  const colors = useThemeColors();
+  const bp = useBreakpoint();
+  const isWide = bp === 'lg' || bp === 'xl';
+
+  return (
+    <Box style={{ flexDirection: isWide ? 'row' : 'column', gap: 8 }}>
+      {isWide && (
+        <Box style={{ width: 240, padding: 16, backgroundColor: colors.surface }}>
+          <Text style={{ color: colors.text }}>Sidebar</Text>
+        </Box>
+      )}
+      <Box style={{ flexGrow: 1, padding: 16 }}>
+        <Text style={{ color: colors.text }}>Main Content</Text>
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- useBreakpoint reads the viewport width, not a container width. It cannot detect whether a specific panel is narrow — only the whole window.
-- RESPONSIVE_DEFAULTS assumes a 12-column grid and is primarily intended for the Col component. If you are doing manual layout, call spanToFlexBasis(resolveSpan(span)) for the same percentages.
-- Breakpoints are min-width (mobile-first). 'xl' means ≥1440px — you do not need to check lower bounds.
+- Breakpoints are based on viewport width only, not height.
+- The hook uses useWindowDimensions internally -- it reacts to resize events from Lua.
+- resolveSpan clamps numeric values to 1-12.
 
 === SEE ALSO ===
+- useScale
 - useWindowDimensions
-- Col
-- FlexRow
+- Col component (12-column grid)
 - Layout System
-

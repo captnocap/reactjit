@@ -1,148 +1,104 @@
 === METADATA ===
 title: useWebSocket
-description: Open a persistent WebSocket client connection and expose send, lastMessage, and status state.
+description: Persistent WebSocket connection with auto-reconnect and message state
 category: Hooks
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: websocket, ws, realtime, socket, network, streaming, live
-related: usePeerServer, useFetch, useLove
+platforms: love2d
+keywords: websocket, ws, realtime, socket, connection, message, streaming
+related: useFetch, usePeerServer
 difficulty: intermediate
 
 === OVERVIEW ===
-useWebSocket opens a WebSocket client connection to the given URL and keeps it alive for the lifetime of the component. It works across all ReactJIT targets: on Love2D the WebSocket global is polyfilled through the bridge using lua-websocket; on web and Node targets the platform's native WebSocket is used. The hook tracks the connection lifecycle through a typed status field and exposes the most recently received message string. Pass null as the URL to remain disconnected. The send function is a no-op when the socket is not in the open state, so it is always safe to call.
+useWebSocket manages a WebSocket connection with reactive status, send function, and last-received message. In Love2D it uses the WebSocket polyfill backed by lua-websocket via the bridge.
+
+Pass `null` as the URL to close the connection. The hook automatically cleans up on unmount.
 
 === API / SYNTAX ===
 ```tsx
 import { useWebSocket } from '@reactjit/core';
-import type { WebSocketStatus } from '@reactjit/core';
+```
+
+Signature:
+```tsx
+function useWebSocket(url: string | null): {
+  status: 'connecting' | 'open' | 'closed' | 'error';
+  send: (data: string) => void;
+  lastMessage: string | null;
+  error: string | null;
+}
 ```
 
 Parameters:
-| Param | Type           | Default  | Description |
-|-------|----------------|----------|-------------|
-| url   | string \| null | required | WebSocket server URL (e.g. "ws://localhost:9050"). Pass null to stay closed. |
+| Param | Type           | Default  | Description                         |
+|-------|----------------|----------|-------------------------------------|
+| url   | string \| null | required | WebSocket URL, or null to close     |
 
 Returns:
-| Field       | Type            | Description |
-|-------------|-----------------|-------------|
-| status      | WebSocketStatus | Current connection state: "connecting", "open", "closed", or "error". |
-| send        | (data: string) => void | Send a string message. No-op if the connection is not in the "open" state. |
-| lastMessage | string \| null  | The most recently received message string, or null if nothing has arrived yet. |
-| error       | string \| null  | Human-readable error string if status is "error", otherwise null. |
+| Field       | Type                                          | Description                         |
+|-------------|-----------------------------------------------|-------------------------------------|
+| status      | 'connecting' \| 'open' \| 'closed' \| 'error'| Current connection state            |
+| send        | (data: string) => void                        | Send a string message               |
+| lastMessage | string \| null                                | Most recently received message      |
+| error       | string \| null                                | Error description if status='error' |
 
 === EXAMPLES ===
-Example 1: Connect to a server and display live data
+Example 1: Basic WebSocket connection
 ---
 ```tsx
-import { useWebSocket, Box, Text } from '@reactjit/core';
+import { Box, Text } from '@reactjit/core';
+import { useWebSocket } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-interface GameState {
-  score: number;
-  level: number;
-}
-
-function LiveHUD() {
+export function LiveFeed() {
+  const colors = useThemeColors();
   const { status, lastMessage } = useWebSocket('ws://localhost:9050');
-  const state: GameState | null = lastMessage ? JSON.parse(lastMessage) : null;
 
   return (
-    <Box flexDirection="column" gap={4} padding={12}>
-      <Text fontSize={12}>Status: {status}</Text>
-      {state && (
-        <>
-          <Text fontSize={16}>Score: {state.score}</Text>
-          <Text fontSize={14}>Level: {state.level}</Text>
-        </>
+    <Box style={{ gap: 8, padding: 16 }}>
+      <Text style={{ color: colors.muted }}>{`Status: ${status}`}</Text>
+      {lastMessage && (
+        <Text style={{ color: colors.text }}>{`Last: ${lastMessage}`}</Text>
       )}
     </Box>
   );
 }
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Send commands to a server on button press
+Example 2: Send and receive messages
 ---
 ```tsx
-import { useWebSocket, Box, Text, Pressable } from '@reactjit/core';
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useWebSocket } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function CommandPanel() {
-  const { status, send } = useWebSocket('ws://localhost:8080');
-
-  return (
-    <Box flexDirection="column" gap={8} padding={12}>
-      <Text fontSize={12}>Connection: {status}</Text>
-      <Box flexDirection="row" gap={8} width="100%">
-        <Pressable onPress={() => send(JSON.stringify({ cmd: 'start' }))}>
-          <Box backgroundColor="#2a7" padding={8}>
-            <Text fontSize={14}>Start</Text>
-          </Box>
-        </Pressable>
-        <Pressable onPress={() => send(JSON.stringify({ cmd: 'stop' }))}>
-          <Box backgroundColor="#a22" padding={8}>
-            <Text fontSize={14}>Stop</Text>
-          </Box>
-        </Pressable>
-      </Box>
-    </Box>
-  );
-}
-```
----
-Platforms: All
-
-Example 3: Conditional connection — connect only when a toggle is on
----
-```tsx
-import { useState } from 'react';
-import { useWebSocket, Box, Text, Pressable } from '@reactjit/core';
-
-function ConditionalSocket() {
-  const [connected, setConnected] = useState(false);
-  const url = connected ? 'ws://localhost:9050' : null;
-  const { status, lastMessage } = useWebSocket(url);
+export function Chat() {
+  const colors = useThemeColors();
+  const { status, send, lastMessage } = useWebSocket('ws://localhost:9050');
 
   return (
-    <Box flexDirection="column" gap={8} padding={12}>
-      <Pressable onPress={() => setConnected(c => !c)}>
-        <Box backgroundColor={connected ? '#a22' : '#2a7'} padding={8}>
-          <Text fontSize={14}>{connected ? 'Disconnect' : 'Connect'}</Text>
-        </Box>
+    <Box style={{ gap: 8, padding: 16 }}>
+      <Text style={{ color: colors.muted }}>{`Status: ${status}`}</Text>
+      <Pressable onPress={() => send('hello')}>
+        <Text style={{ color: colors.primary }}>Send Hello</Text>
       </Pressable>
-      <Text fontSize={13}>Status: {status}</Text>
-      {lastMessage && <Text fontSize={13}>Last: {lastMessage}</Text>}
-    </Box>
-  );
-}
-```
----
-Platforms: All
-
-Example 4: Display an error when the connection fails
----
-```tsx
-import { useWebSocket, Box, Text } from '@reactjit/core';
-
-function ReliableSocket() {
-  const { status, error, lastMessage } = useWebSocket('ws://localhost:9050');
-
-  return (
-    <Box flexDirection="column" gap={4} padding={12}>
-      {status === 'error' && (
-        <Box backgroundColor="#500" padding={8}>
-          <Text fontSize={13}>Connection error: {error}</Text>
-        </Box>
-      )}
-      {status === 'open' && lastMessage && (
-        <Text fontSize={14}>{lastMessage}</Text>
+      {lastMessage && (
+        <Text style={{ color: colors.text }}>{lastMessage}</Text>
       )}
     </Box>
   );
 }
 ```
 ---
-Platforms: All
+Platforms: love2d
+
+=== CRITICAL RULES ===
+- send() is a no-op if the connection is not in 'open' state.
+- Only string messages are supported. Serialize objects with JSON.stringify before sending.
+- lastMessage only holds the single most recent message. For message history, accumulate in your own state.
+- Passing null closes the connection and resets all state.
 
 === SEE ALSO ===
-- usePeerServer
 - useFetch
-- useLove
+- usePeerServer
+- useLoveEvent

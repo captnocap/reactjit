@@ -40,7 +40,8 @@
       "@reactjit/imaging": ["./packages/imaging/src"],
       "@reactjit/finance": ["./packages/finance/src"],
       "@reactjit/chemistry": ["./packages/chemistry/src"],
-      "@reactjit/data": ["./packages/data/src"]
+      "@reactjit/data": ["./packages/data/src"],
+      "@reactjit/networking": ["./packages/networking/src"]
     }
   }
 }

@@ -1,32 +1,26 @@
 === METADATA ===
 title: Troubleshooting
-description: Hub page for troubleshooting common issues with ReactJIT
+description: Common errors, debugging techniques, and frequently asked questions about ReactJIT.
 category: Troubleshooting
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: troubleshooting, debugging, errors, faq, help, common issues
-related: common-errors, faq, debugging
+platforms: love2d
+keywords: troubleshooting, errors, faq, help, problems, bugs, fixes
+related: common-errors.txt, faq.txt
 difficulty: beginner
 
 === OVERVIEW ===
-This section covers the most common issues encountered when developing with ReactJIT.
-The common errors page lists specific error symptoms and their solutions. The FAQ
-addresses frequently asked questions about capabilities, limitations, and workflows.
+This section covers the most common issues encountered when working with ReactJIT, their
+causes, and how to fix them. If something looks wrong in your layout, a component is not
+rendering, or events are not firing, start here.
 
-If you are seeing unexpected behavior, start with the common errors page. Most issues
-fall into a few categories: missing fontSize on Text nodes, missing dimensions on
-containers, incorrect file editing (editing copies instead of source of truth), or
-outdated runtime files.
+Common errors covers the specific error messages and visual symptoms you are most likely
+to encounter, with before/after code examples showing the fix.
 
-=== EXAMPLES ===
-Example 1: Section Contents
----
-11-troubleshooting/
-  common-errors.txt - Symptom-to-solution guide for frequent errors
-  faq.txt           - Frequently asked questions
----
-Platforms: All
+The FAQ answers fundamental questions about the framework -- why there is no DOM, why
+flexGrow instead of hardcoded heights, how to add new features, and other conceptual
+topics that come up repeatedly.
 
 === SEE ALSO ===
-- common-errors.txt - Start here for specific error messages
-- faq.txt - General questions and answers
-- 10-advanced/debugging.txt - Debug tools (F12 inspector, console)
+- common-errors.txt
+- faq.txt
+- debugging.txt
+- devtools.txt

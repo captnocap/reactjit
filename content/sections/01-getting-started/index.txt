@@ -2,20 +2,21 @@
 title: Getting Started
 description: Hub page for all getting-started topics in ReactJIT
 category: Getting Started
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
+platforms: love2d
 keywords: getting started, introduction, setup, installation, quick start
 related: philosophy, installation, quick-start, first-app
 difficulty: beginner
 
 === OVERVIEW ===
 Welcome to ReactJIT. This section covers everything you need to go from zero to a
-running application. Whether you are targeting Love2D, a terminal emulator, Neovim, or
-any other supported platform, the fundamentals are the same: install the toolchain,
-scaffold a project, write React components, and build.
+running application.
 
-Start with the philosophy document to understand what ReactJIT is and how it differs
-from browser-based React. Then follow the installation guide, run through the quick
-start, and build your first interactive app.
+ReactJIT is a Love2D rendering framework that uses React as its layout declaration
+layer. There is no DOM, no CSS, no browser. React declares the layout tree, Lua
+computes geometry, and Love2D draws pixels via OpenGL 2.1.
+
+Start with the philosophy document to understand the design principles. Then follow the
+installation guide, run through the quick start, and build your first interactive app.
 
 === EXAMPLES ===
 Example 1: Section Contents
@@ -26,7 +27,7 @@ Example 1: Section Contents
   quick-start.txt  - 5-minute path to a running app
   first-app.txt    - Build a counter app step by step
 ---
-Platforms: All
+Platforms: love2d
 
 === SEE ALSO ===
 - philosophy.txt - Core design principles

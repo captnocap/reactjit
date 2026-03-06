@@ -1,225 +1,95 @@
 === METADATA ===
 title: VideoPlayer
-description: Video playback component with built-in Lua-native controls for play/pause, seeking, volume, and fullscreen
+description: Video playback with built-in transport controls
 category: Components
-platforms: love2d, web
-keywords: video, player, controls, playback, seek, volume, fullscreen, mpv, media
-related: Video, Image, Box
-difficulty: intermediate
+platforms: love2d
+keywords: video, player, controls, playback, media, transport, seek
+related: Video, Render
+difficulty: beginner
 
 === OVERVIEW ===
-VideoPlayer wraps the Video primitive and adds interactive playback controls rendered entirely in Lua. On Love2D it displays play/pause buttons, a draggable seek bar, volume slider, time display, loop toggle, and fullscreen mode. Controls auto-hide after 3 seconds of inactivity and reappear on mouse movement or interaction. On web it falls back to a native HTML5 video element with browser controls. Uses libmpv for hardware-accelerated video decoding and supports local files and HTTP streams, including M3U8/HLS URLs.
+VideoPlayer extends Video with built-in transport controls — play/pause, seek bar, and time display. It renders a Video surface with a control overlay managed by the Lua side.
+
+Use VideoPlayer when you want ready-made playback controls without building custom UI. Use Video directly when you need full control over the transport interface.
+
+VideoPlayer is a surface element — without explicit dimensions, it falls back to 1/4 of parent size (proportional surface fallback).
 
 === API / SYNTAX ===
 ```tsx
 import { VideoPlayer } from '@reactjit/core';
-
-<VideoPlayer
-  src="video.mp4"
-  w={640}
-  h={360}
-  controls={true}
-  paused={false}
-  loop={false}
-  muted={false}
-  volume={1}
-  onTimeUpdate={(e) => console.log(e.currentTime)}
-  onPlay={() => console.log('playing')}
-  onPause={() => console.log('paused')}
-  onEnded={() => console.log('ended')}
-  onReady={() => console.log('ready')}
-  onError={(e) => console.log(e.message)}
-  onClick={(e) => console.log('clicked')}
-/>
 ```
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `src` | `string` | **required** | Video file path (local or URL). Love2D uses libmpv and loads supported formats directly (MP4/MKV/WebM/OGV/etc.). Supports M3U8/HLS streams. |
-| `controls` | `boolean` | `true` | Show/hide controls overlay. On Love2D: Lua-rendered play/pause, seek bar, volume, time display, loop toggle, fullscreen. On web: native browser controls. |
-| `paused` | `boolean` | `false` | Control playback state externally. Can be overridden by user clicking play/pause in controls. |
-| `loop` | `boolean` | `false` | Loop video when it reaches the end. |
-| `muted` | `boolean` | `false` | Mute audio. Can be toggled by user clicking mute button in controls. |
-| `volume` | `number` | `1` | Initial volume (0 to 1). Can be adjusted by user via volume slider in controls. |
-| `w` | `number \| string` | — | Width shorthand. Equivalent to `style={{ width: w }}`. |
-| `h` | `number \| string` | — | Height shorthand. Equivalent to `style={{ height: h }}`. |
-| `radius` | `number` | — | Border radius shorthand. Equivalent to `style={{ borderRadius: radius }}`. |
-| `style` | `Style` | — | Standard layout/styling props. `w`/`h`/`radius` are merged into style. |
-| `onTimeUpdate` | `(event: VideoTimeEvent) => void` | — | Fires continuously during playback. `event: { currentTime: number, duration?: number }`. Use this for progress tracking. |
-| `onEnded` | `() => void` | — | Fires when video reaches the end (does not fire if looping). |
-| `onPlay` | `() => void` | — | Fires when playback starts. |
-| `onPause` | `() => void` | — | Fires when playback pauses. |
-| `onReady` | `() => void` | — | Fires when video is loaded and ready to play. |
-| `onError` | `(event: { message: string }) => void` | — | Fires if video fails to load or play. |
-| `onClick` | `(event: LoveEvent) => void` | — | Fires when video surface is clicked. |
+Props (all Video props plus):
+| Prop         | Type                                | Default   | Description                     |
+|--------------|-------------------------------------|-----------|---------------------------------|
+| src          | string                              | required  | Video file path                 |
+| controls     | boolean                             | true      | Show built-in transport controls|
+| paused       | boolean                             | false     | Whether playback is paused      |
+| loop         | boolean                             | false     | Loop playback                   |
+| muted        | boolean                             | false     | Mute audio                      |
+| volume       | number                              | 1         | Volume level (0 to 1)           |
+| w            | number \| string                    | undefined | Width shorthand                 |
+| h            | number \| string                    | undefined | Height shorthand                |
+| radius       | number                              | undefined | Border radius shorthand         |
+| style        | Style                               | undefined | Full style object               |
+| onTimeUpdate | (event: VideoTimeEvent) => void     | undefined | Periodic time update            |
+| onEnded      | () => void                          | undefined | Playback reached end            |
+| onPlay       | () => void                          | undefined | Playback started                |
+| onPause      | () => void                          | undefined | Playback paused                 |
+| onReady      | () => void                          | undefined | Video loaded and ready          |
+| onError      | (event: { message: string }) => void| undefined | Error occurred                  |
+| onClick      | (event: LoveEvent) => void          | undefined | Click handler                   |
 
 === EXAMPLES ===
-Example 1: Basic usage with default controls
+Example 1: Basic player with controls
 ---
 ```tsx
-import { Box, VideoPlayer } from '@reactjit/core';
-
-export function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <VideoPlayer
-        src="sample.mp4"
-        w={640}
-        h={360}
-        radius={8}
-      />
-    </Box>
-  );
-}
-```
----
-Platforms: love2d, web
-
-Example 2: Controlled playback with event handling
----
-```tsx
-import { Box, Text, VideoPlayer } from '@reactjit/core';
-import { useState } from 'react';
-
-export function App() {
-  const [status, setStatus] = useState('Idle');
-  const [time, setTime] = useState('0:00');
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 12 }}>
-      <VideoPlayer
-        src="movie.mp4"
-        w={480}
-        h={270}
-        radius={6}
-        onReady={() => setStatus('Ready')}
-        onPlay={() => setStatus('Playing')}
-        onPause={() => setStatus('Paused')}
-        onEnded={() => setStatus('Ended')}
-        onError={() => setStatus('Error')}
-        onTimeUpdate={(e) => {
-          const m = Math.floor(e.currentTime / 60);
-          const s = Math.floor(e.currentTime % 60);
-          setTime(`${m}:${s < 10 ? '0' : ''}${s}`);
-        }}
-      />
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
-        <Text style={{ fontSize: 12 }}>Status: {status}</Text>
-        <Text style={{ fontSize: 12 }}>Time: {time}</Text>
-      </Box>
-    </Box>
-  );
-}
-```
----
-Platforms: love2d, web
-
-Example 3: M3U8/HLS stream playback
----
-```tsx
-import { Box, VideoPlayer, TextEditor } from '@reactjit/core';
-import { useState } from 'react';
-
-export function App() {
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [streamStatus, setStreamStatus] = useState('No stream loaded');
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20, gap: 12 }}>
-      <TextEditor
-        onSubmit={(text) => {
-          setStreamUrl(text.trim());
-          setStreamStatus('Loading...');
-        }}
-        placeholder="Paste M3U8 URL, Ctrl+Enter to load"
-        lineNumbers={false}
-        style={{ width: '100%', height: 40 }}
-        textStyle={{ fontSize: 12 }}
-      />
-      {streamUrl && (
-        <VideoPlayer
-          src={streamUrl}
-          w={800}
-          h={450}
-          radius={8}
-          onReady={() => setStreamStatus('Ready')}
-          onPlay={() => setStreamStatus('Playing')}
-          onError={() => setStreamStatus('Error loading stream')}
-        />
-      )}
-      <Text style={{ fontSize: 12 }}>{streamStatus}</Text>
-    </Box>
-  );
-}
+<VideoPlayer
+  src="videos/tutorial.mp4"
+  style={{ flexGrow: 1 }}
+/>
 ```
 ---
 Platforms: love2d
 
-Example 4: Looping background video with no controls
+Example 2: Fixed dimensions with border radius
 ---
 ```tsx
-import { Box, VideoPlayer } from '@reactjit/core';
-
-export function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      <VideoPlayer
-        src="background.mp4"
-        w="100%"
-        h="100%"
-        controls={false}
-        loop={true}
-        muted={true}
-      />
-    </Box>
-  );
-}
+<VideoPlayer
+  src="videos/demo.mp4"
+  w={640}
+  h={360}
+  radius={12}
+  loop
+/>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
+
+Example 3: Muted autoplay with event tracking
+---
+```tsx
+<VideoPlayer
+  src="videos/background.mp4"
+  muted
+  loop
+  controls={false}
+  onReady={() => console.log('Video ready')}
+  style={{ width: '100%', height: 300 }}
+/>
+```
+---
+Platforms: love2d
 
 === PLATFORM NOTES ===
 Love2D:
-  - Renders as a single Lua-native host element. All controls (play/pause button, seek bar, volume slider, time display, loop toggle, fullscreen button) are drawn by Lua's painter, avoiding position:absolute layout issues
-  - Controls overlay appears on mouse movement and auto-hides after 3 seconds of inactivity
-  - Play/pause button: Click to toggle playback, or press Space when focused
-  - Seek bar: Click/drag to scrub, or use Left/Right arrow keys (5-second steps) when focused
-  - Volume slider: Click/drag to adjust volume (0-1 range), or use Up/Down arrow keys (0.1 steps) when focused
-  - Mute button: Click to toggle mute
-  - Loop button: Click to toggle loop mode (active state shown with colored highlight)
-  - Fullscreen button: Click to toggle fullscreen mode (F11 also works). Fullscreen overrides layout-computed dimensions
-  - Controls overlay includes gradient background from transparent (top) to semi-black (bottom) for readability
-  - Seek bar shows elapsed fill and a draggable knob
-  - Time display shows "current / duration" format (e.g., "1:23 / 5:47")
-  - Uses libmpv backend for hardware-accelerated video decoding
-  - MP4, MKV, WebM, OGV, and other mpv-supported formats load directly (no Theora transcode step)
-  - M3U8/HLS URLs stream directly through mpv
-  - Video state stored in node._vp (survives re-renders)
-  - Interacts with videos.lua module for playback control
-  - Uses measure.lua for font rendering in time display
-
-Web:
-  - Falls back to HTML5 <video> element with native browser controls
-  - Controls prop enables/disables browser's built-in UI
-  - Playback, volume, seeking handled by browser
-  - Supports any format the browser supports (mp4, webm, ogv, etc.)
-  - M3U8/HLS support depends on browser (Safari native, others may need hls.js)
-  - Events normalized to match Love2D API (onTimeUpdate receives { currentTime, duration })
+  VideoPlayer renders as a 'VideoPlayer' host element. The Lua side draws built-in transport controls (play/pause button, seek bar, elapsed/total time) over the video surface. Controls auto-hide after a period of inactivity and reappear on mouse movement. Set `controls={false}` to suppress the overlay entirely.
 
 === CRITICAL RULES ===
-- **Specify width and height for precise control** — VideoPlayer is a surface node. Without explicit dimensions it falls back to 1/4 of parent, which is rarely the right size for video. Use `w` and `h` props or `style={{ width, height }}` or `flexGrow: 1`.
-- **Any mpv-supported format works directly on Love2D** — Use whichever source format matches your pipeline (mp4/webm/mkv/ogv, etc.).
-- **Give the parent a known size for percentage-based dimensions** — `w="100%"` requires the parent Box to have a resolved width. Root containers need `width: '100%', height: '100%'`.
-- **onTimeUpdate fires frequently** — Throttle expensive operations in the handler (e.g., setState only when seconds change, not on every frame).
-- **M3U8 streams require network availability** — They are streamed by mpv at runtime. Always handle onError for failed streams.
-- **Controls are Lua-owned on Love2D** — Don't try to implement custom controls using React components overlaid with position:absolute — that fights the layout engine. Use controls={false} and implement your own Lua-side controls module if needed, or use the bare Video primitive.
-- **Fullscreen mode is Lua-managed** — When fullscreen, VideoPlayer ignores layout-computed dimensions and fills the entire window. Pressing Esc or clicking the fullscreen button exits.
-- **Loop and muted state can diverge from props** — User interactions (clicking loop button, mute button) update local state. If you need strict control, hide the controls overlay with controls={false}.
-- **Don't use percentage dimensions without an explicit parent size** — `w="100%"` requires the parent Box to have a known width. Root containers need `width: '100%', height: '100%'` to fill the viewport.
+- VideoPlayer is a surface element. Without explicit dimensions, it uses the proportional surface fallback (1/4 of parent). Always set width/height, w/h shorthand, or flexGrow.
+- The `controls` prop defaults to true. Set it to false to remove the Lua-drawn transport overlay.
+- The shorthand props (w, h, radius) are merged into the style object. If both w and style.width are set, style.width takes precedence due to spread order.
 
 === SEE ALSO ===
-- **Video** — Bare video primitive without controls. Use this for custom UI or when you want full programmatic control.
-- **Image** — Static image display. Similar sizing/styling props.
-- **Box** — Container for layout. Use to position VideoPlayer in your UI.
-- **Modal** — Can wrap VideoPlayer for lightbox-style video display.
-- **TextEditor** — Used in Example 3 for URL input. Good pattern for loading user-specified videos/streams.
+- Video
+- Render

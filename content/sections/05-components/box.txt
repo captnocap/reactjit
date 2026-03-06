@@ -1,178 +1,215 @@
 === METADATA ===
 title: Box
-description: Fundamental flexbox layout container for all visual structure
+description: Universal container element for layout and styling
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: box, container, layout, flexbox, div, view, flex, row, column
-related: Text, Image, FlexRow, FlexColumn, Pressable
+platforms: love2d
+keywords: box, container, view, row, col, column, layout, flex, grid
+related: Text, Image, Pressable, ScrollView
 difficulty: beginner
 
 === OVERVIEW ===
-Box is the fundamental layout primitive in ReactJIT. Every visual structure is built from nested Box elements. It renders as a flexbox container with configurable direction, alignment, spacing, and visual styling. In web mode it outputs a `<div>` with CSS flexbox; in native mode it outputs a `'View'` host element processed by the Lua layout engine.
+Box is the fundamental building block. It renders as a Lua `View` node — a rectangle that can have background color, borders, border radius, shadows, gradients, and children. Every layout in ReactJIT starts with Box.
 
-Box also serves as the primary event target. It accepts handlers for pointer, keyboard, touch, gamepad, and drag interactions. For higher-level interaction patterns (press state tracking, long press, hover callbacks), use Pressable instead, which wraps Box internally.
+Box also comes in two convenience variants:
+- `Row` — shorthand for `<Box direction="row">`, sets `flexDirection: 'row'`
+- `Col` — shorthand for `<Box direction="col">`, with optional 12-column grid support via breakpoint-responsive span props
+
+Box supports both a `style` prop (full Style object) and shorthand props for common layout patterns. Shorthands are lower priority — `style={}` wins when both are set.
 
 === API / SYNTAX ===
 ```tsx
-import { Box } from '@reactjit/core';
+import { Box, Row, Col } from '@reactjit/core';
 ```
 
-```tsx
-<Box
-  style={{ width: '100%', height: '100%', flexDirection: 'column', backgroundColor: '#1e1e2e' }}
-  hoverStyle={{ backgroundColor: '#313244' }}
-  activeStyle={{ backgroundColor: '#45475a' }}
-  onClick={(event) => { /* handle click */ }}
->
-  {children}
-</Box>
-```
+Shorthand Props:
+| Prop      | Type                  | Default   | Description                                      |
+|-----------|-----------------------|-----------|--------------------------------------------------|
+| direction | 'row' \| 'col'        | undefined | Sets flexDirection                                |
+| gap       | number \| string      | undefined | Gap between children                              |
+| padding   | number \| string      | undefined | Padding on all sides                              |
+| px        | number \| string      | undefined | Horizontal padding (paddingLeft + paddingRight)   |
+| py        | number \| string      | undefined | Vertical padding (paddingTop + paddingBottom)     |
+| margin    | number \| string      | undefined | Margin on all sides                               |
+| align     | string                | undefined | Maps to alignItems                                |
+| justify   | string                | undefined | Maps to justifyContent                            |
+| xAlign    | string                | undefined | Horizontal alignment (direction-aware)            |
+| yAlign    | string                | undefined | Vertical alignment (direction-aware)              |
+| fill      | boolean               | undefined | Sets width and height to '100%'                   |
+| fit       | boolean               | undefined | Sets width and height to 'fit-content'            |
+| grow      | boolean               | undefined | Sets flexGrow: 1                                  |
+| bg        | Color                 | undefined | Background color                                  |
+| radius    | number                | undefined | Border radius                                     |
+| w         | number \| string      | undefined | Width                                             |
+| h         | number \| string      | undefined | Height                                            |
+| wrap      | boolean               | undefined | Enables flex wrap                                 |
+| scroll    | boolean               | undefined | Sets overflow: 'scroll'                           |
+| hidden    | boolean               | undefined | Sets display: 'none'                              |
+| z         | number                | undefined | zIndex                                            |
 
-Props:
-| Prop                | Type                                       | Default   | Description                                            |
-|---------------------|--------------------------------------------|-----------|--------------------------------------------------------|
-| style               | Style                                      | undefined | Flexbox layout and visual styling                      |
-| hoverStyle          | Style                                      | undefined | Style merged on pointer hover                          |
-| activeStyle         | Style                                      | undefined | Style merged on press/active                           |
-| backgroundVideo     | string                                     | undefined | Path to a video file to play as background             |
-| backgroundVideoFit  | 'fill' \| 'contain' \| 'cover'             | undefined | How the background video fits the box                  |
-| hoverVideo          | string                                     | undefined | Video to play on hover (swaps backgroundVideo)         |
-| hoverVideoFit       | 'fill' \| 'contain' \| 'cover'             | undefined | Fit mode for the hover video                           |
-| focusable           | boolean                                    | undefined | Make this box focusable (receives keyboard events)     |
-| focusGroup          | boolean                                    | undefined | Make this box a focus group (arrow-key navigation)     |
-| fileDropMode        | 'upload' \| 'preview'                      | undefined | How file drops are handled — 'upload' for metadata only, 'preview' reads text content |
-| onClick             | (event: LoveEvent) => void                 | undefined | Click/press handler                                    |
-| onRelease           | (event: LoveEvent) => void                 | undefined | Release handler                                        |
-| onPointerEnter      | (event: LoveEvent) => void                 | undefined | Pointer enters the box                                 |
-| onPointerLeave      | (event: LoveEvent) => void                 | undefined | Pointer leaves the box                                 |
-| onKeyDown           | (event: LoveEvent) => void                 | undefined | Key pressed while focused                              |
-| onKeyUp             | (event: LoveEvent) => void                 | undefined | Key released while focused                             |
-| onTextInput         | (event: LoveEvent) => void                 | undefined | Text input while focused                               |
-| onWheel             | (event: LoveEvent) => void                 | undefined | Mouse wheel / scroll wheel                             |
-| onTouchStart        | (event: LoveEvent) => void                 | undefined | Touch began                                            |
-| onTouchEnd          | (event: LoveEvent) => void                 | undefined | Touch ended                                            |
-| onTouchMove         | (event: LoveEvent) => void                 | undefined | Touch moved                                            |
-| onGamepadPress      | (event: LoveEvent) => void                 | undefined | Gamepad button pressed                                 |
-| onGamepadRelease    | (event: LoveEvent) => void                 | undefined | Gamepad button released                                |
-| onGamepadAxis       | (event: LoveEvent) => void                 | undefined | Gamepad axis moved                                     |
-| onMidiNote          | (event: LoveEvent) => void                 | undefined | MIDI note on/off event                                 |
-| onMidiCC            | (event: LoveEvent) => void                 | undefined | MIDI control change event                              |
-| onDragStart         | (event: LoveEvent) => void                 | undefined | Drag gesture began                                     |
-| onDrag              | (event: LoveEvent) => void                 | undefined | Drag gesture moved                                     |
-| onDragEnd           | (event: LoveEvent) => void                 | undefined | Drag gesture ended                                     |
-| onFileDrop          | (event: LoveEvent) => void                 | undefined | File dropped on the box                                |
-| onDirectoryDrop     | (event: LoveEvent) => void                 | undefined | Directory dropped on the box                           |
-| onFileDragEnter     | (event: LoveEvent) => void                 | undefined | File drag enters the box                               |
-| onFileDragLeave     | (event: LoveEvent) => void                 | undefined | File drag leaves the box                               |
-| onFocus             | (event: LoveEvent) => void                 | undefined | Box gained focus                                       |
-| onBlur              | (event: LoveEvent) => void                 | undefined | Box lost focus                                         |
-| onLayout            | (event: LayoutEvent) => void               | undefined | Fires after layout with computed x, y, width, height   |
-| children            | ReactNode                                  | undefined | Child elements                                         |
+Style Props:
+| Prop        | Type   | Default   | Description                     |
+|-------------|--------|-----------|---------------------------------|
+| style       | Style  | undefined | Full style object               |
+| hoverStyle  | Style  | undefined | Style overrides on hover        |
+| activeStyle | Style  | undefined | Style overrides on press        |
+| focusStyle  | Style  | undefined | Style overrides on focus        |
 
-LayoutEvent fields:
-| Field    | Type   | Description                              |
-|----------|--------|------------------------------------------|
-| targetId | number | Internal node ID                         |
-| x        | number | Computed x position in parent            |
-| y        | number | Computed y position in parent            |
-| width    | number | Computed width after layout              |
-| height   | number | Computed height after layout             |
+Event Handlers:
+| Prop              | Type                        | Description                   |
+|-------------------|-----------------------------|-------------------------------|
+| onClick           | (event: LoveEvent) => void  | Mouse click / tap             |
+| onRelease         | (event: LoveEvent) => void  | Mouse release                 |
+| onPointerEnter    | (event: LoveEvent) => void  | Mouse enters element          |
+| onPointerLeave    | (event: LoveEvent) => void  | Mouse leaves element          |
+| onKeyDown         | (event: LoveEvent) => void  | Key pressed while focused     |
+| onKeyUp           | (event: LoveEvent) => void  | Key released while focused    |
+| onWheel           | (event: LoveEvent) => void  | Mouse wheel scroll            |
+| onTouchStart      | (event: LoveEvent) => void  | Touch begins                  |
+| onTouchEnd        | (event: LoveEvent) => void  | Touch ends                    |
+| onTouchMove       | (event: LoveEvent) => void  | Touch moves                   |
+| onDragStart       | (event: LoveEvent) => void  | Drag begins                   |
+| onDrag            | (event: LoveEvent) => void  | Dragging                      |
+| onDragEnd         | (event: LoveEvent) => void  | Drag ends                     |
+| onFileDrop        | (event: LoveEvent) => void  | File dropped onto element     |
+| onFocus           | (event: LoveEvent) => void  | Element gains focus           |
+| onBlur            | (event: LoveEvent) => void  | Element loses focus           |
+| onLayout          | (event: LayoutEvent) => void| Layout computed (x, y, w, h)  |
+| onGamepadPress    | (event: LoveEvent) => void  | Gamepad button pressed        |
+| onGamepadRelease  | (event: LoveEvent) => void  | Gamepad button released       |
+| onGamepadAxis     | (event: LoveEvent) => void  | Gamepad axis moved            |
+| onMidiNote        | (event: LoveEvent) => void  | MIDI note on/off              |
+| onMidiCC          | (event: LoveEvent) => void  | MIDI control change           |
 
-The `style` prop accepts the full Style type, which includes flexbox properties (flexDirection, justifyContent, alignItems, flexGrow, flexShrink, flexBasis, flexWrap, gap), sizing (width, height, minWidth, minHeight, maxWidth, maxHeight, aspectRatio), spacing (padding*, margin*), visual (backgroundColor, borderRadius, borderWidth, borderColor, opacity, overflow, boxShadow), positioning (position, top/right/bottom/left, zIndex), gradients, transforms, transitions, and animations.
+Other Props:
+| Prop              | Type                        | Default   | Description                               |
+|-------------------|-----------------------------|-----------|-------------------------------------------|
+| tooltip           | string \| TooltipConfig     | undefined | Lua-rendered tooltip on hover             |
+| focusable         | boolean                     | undefined | Makes element focusable                   |
+| fileDropMode      | 'upload' \| 'preview'       | undefined | How dropped files are handled             |
+| backgroundVideo   | string                      | undefined | Video file path for background            |
+| className         | string                      | undefined | Tailwind utility classes (lowest priority)|
+| children          | ReactNode                   | undefined | Child elements                            |
 
-Default flexDirection is 'column'. Default display is 'flex'.
+Col Grid Props (Col only):
+| Prop       | Type              | Default   | Description                          |
+|------------|-------------------|-----------|--------------------------------------|
+| span       | number \| string  | 12        | Column span (1-12) at all breakpoints|
+| sm         | number \| string  | undefined | Span at sm breakpoint (>=0px)        |
+| md         | number \| string  | undefined | Span at md breakpoint (>=640px)      |
+| lg         | number \| string  | undefined | Span at lg breakpoint (>=1024px)     |
+| xl         | number \| string  | undefined | Span at xl breakpoint (>=1440px)     |
+| responsive | boolean           | undefined | Auto-responsive: sm=12 md=6 lg=4 xl=3|
 
 === EXAMPLES ===
-Example 1: Root container filling the viewport
+Example 1: Basic container with padding and background
 ---
 ```tsx
-<Box style={{ width: '100%', height: '100%', backgroundColor: '#1e1e2e' }}>
-  <Text style={{ fontSize: 24, color: '#cdd6f4' }}>Hello</Text>
+const colors = useThemeColors();
+
+<Box style={{ padding: 16, backgroundColor: colors.surface, borderRadius: 8 }}>
+  <Text style={{ color: colors.text }}>Hello, world</Text>
 </Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Horizontal row with centered, spaced children
+Example 2: Using shorthand props
 ---
 ```tsx
-<Box style={{
-  width: '100%',
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: 16,
-}}>
-  <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Left</Text>
-  <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Right</Text>
+const colors = useThemeColors();
+
+<Box padding={16} bg={colors.surface} radius={8}>
+  <Text style={{ color: colors.text }}>Same result, less typing</Text>
 </Box>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive box with hover and active states
+Example 3: Row layout with gap
 ---
 ```tsx
+const colors = useThemeColors();
+
+<Row gap={12} align="center" padding={16}>
+  <Box w={48} h={48} bg={colors.primary} radius={24} />
+  <Text style={{ color: colors.text, fontSize: 18 }}>Username</Text>
+</Row>
+```
+---
+Platforms: love2d
+
+Example 4: Full-height layout with flexGrow
+---
+```tsx
+const colors = useThemeColors();
+
+<Box fill>
+  <Box padding={12} bg={colors.bgElevated}>
+    <Text style={{ color: colors.text, fontSize: 20 }}>Header</Text>
+  </Box>
+  <Box grow padding={16}>
+    <Text style={{ color: colors.text }}>Content fills remaining space</Text>
+  </Box>
+  <Box padding={12} bg={colors.bgElevated}>
+    <Text style={{ color: colors.muted }}>Footer</Text>
+  </Box>
+</Box>
+```
+---
+Platforms: love2d
+
+Example 5: Responsive grid with Col
+---
+```tsx
+const colors = useThemeColors();
+
+<Row gap={16} wrap style={{ padding: 16 }}>
+  <Col responsive>
+    <Box padding={16} bg={colors.surface} radius={8}>
+      <Text style={{ color: colors.text }}>Card 1</Text>
+    </Box>
+  </Col>
+  <Col responsive>
+    <Box padding={16} bg={colors.surface} radius={8}>
+      <Text style={{ color: colors.text }}>Card 2</Text>
+    </Box>
+  </Col>
+  <Col responsive>
+    <Box padding={16} bg={colors.surface} radius={8}>
+      <Text style={{ color: colors.text }}>Card 3</Text>
+    </Box>
+  </Col>
+</Row>
+```
+---
+Platforms: love2d
+
+Example 6: Hover and active styles
+---
+```tsx
+const colors = useThemeColors();
+
 <Box
-  style={{ padding: 12, backgroundColor: '#313244', borderRadius: 8 }}
-  hoverStyle={{ backgroundColor: '#45475a' }}
-  activeStyle={{ backgroundColor: '#585b70' }}
+  style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 8 }}
+  hoverStyle={{ backgroundColor: colors.bgElevated }}
+  activeStyle={{ opacity: 0.7 }}
   onClick={() => console.log('clicked')}
 >
-  <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Click me</Text>
+  <Text style={{ color: colors.text }}>Hover me</Text>
 </Box>
 ```
 ---
-Platforms: Love2D, Web
-
-Example 4: Drag-enabled box
----
-```tsx
-const [pos, setPos] = useState({ x: 100, y: 100 });
-
-<Box
-  style={{
-    position: 'absolute',
-    left: pos.x,
-    top: pos.y,
-    width: 80,
-    height: 80,
-    backgroundColor: '#89b4fa',
-    borderRadius: 8,
-  }}
-  onDragStart={() => {}}
-  onDrag={(e) => setPos({ x: pos.x + (e.dx ?? 0), y: pos.y + (e.dy ?? 0) })}
-  onDragEnd={() => {}}
->
-  <Text style={{ fontSize: 12, color: '#1e1e2e' }}>Drag me</Text>
-</Box>
-```
----
-Platforms: Love2D, Web
-
-=== PLATFORM NOTES ===
-Love2D:
-  Renders as a 'View' host element. Layout computed by layout.lua (yoga-like flexbox). Visual rendering by painter.lua. Supports all style properties including gradients, transforms, box shadows, and per-corner border radii. The Lua painter handles hover/active style merging on the native side for smooth interaction without JS round-trips.
-
-Web:
-  Renders as a <div> with CSS flexbox. Style is converted via styleToCSS(). The web renderer uses React state for hover/active style merging. Drag handlers use pointer capture for reliable cross-element dragging. Keyboard handlers automatically set tabIndex=0 for focus.
-
-Terminal:
-  Grid targets use <view> lowercase intrinsic, not the Box component. Layout is handled by @reactjit/grid.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Root containers MUST have width: '100%' and height: '100%'. Using flexGrow: 1 on the root will produce a zero-height container because there is no parent with a known size to grow into.
-- Row-direction Boxes (flexDirection: 'row') need a known width for justifyContent to distribute space. Use explicit width, '100%', or flexGrow to ensure the container has resolved width.
-- Do not use flexGrow without sibling sizing context. flexGrow only works when the parent has a known size and there are siblings that establish the remaining space.
-- Default flexDirection is 'column'. If you expect horizontal layout, set flexDirection: 'row' explicitly.
-- Keep flex trees shallow. Prefer a single Box with flexDirection: 'row' over multiple nested wrapper Boxes. Deep hierarchies slow down layout computation.
-- Love2D is a fixed canvas, not a scrolling page. Fill the viewport; do not leave empty space expecting it to scroll.
+- Root containers need `width: '100%', height: '100%'` (or `fill`) to fill the viewport. The proportional fallback does not apply at the root.
+- Use `flexGrow: 1` (or `grow`) for space-filling elements. Do not hardcode pixel heights to fill a known window size.
+- Empty Box with no children and no explicit dimensions falls back to 1/4 of parent size (proportional surface fallback).
+- Never use `paddingHorizontal` or `paddingVertical` — the linter rejects them. Use `px`/`py` shorthands or `paddingLeft`/`paddingRight`/`paddingTop`/`paddingBottom`.
+- Event handlers use an explicit whitelist in Box. If you add a new event type at the framework level, you must add it to the destructure list in `Box()` and to the `createElement` props, or the handler will silently disappear.
 
 === SEE ALSO ===
 - Text
-- Image
 - Pressable
-- FlexRow
-- FlexColumn
-- Style type reference
 - Layout System
+- Style Properties

@@ -100,12 +100,14 @@ local function queueEvent(nodeId, eventType, value)
   }
 end
 
--- Map value to angle: 0% = -135deg, 100% = +135deg (270deg sweep, gap at bottom)
+-- Map value to angle: 0% = 135deg (7 o'clock), 100% = 45deg (5 o'clock)
+-- 270deg sweep with gap at bottom (6 o'clock).
+-- In screen coords (y-down): 135deg = lower-left, 45deg = lower-right.
 local function valueToAngle(value, min, max)
   local range = max - min
-  if range <= 0 then return -135 end
+  if range <= 0 then return 135 end
   local normalized = clamp((value - min) / range, 0, 1)
-  return -135 + normalized * 270
+  return 135 + normalized * 270
 end
 
 -- ============================================================================
@@ -173,7 +175,7 @@ function Knob.draw(node, effectiveOpacity)
 
   for i = 0, DOT_COUNT - 1 do
     local t = i / (DOT_COUNT - 1)
-    local angle = -135 + t * 270
+    local angle = 135 + t * 270
     local rad = math.rad(angle)
     local dx = math.cos(rad) * arcRadius
     local dy = math.sin(rad) * arcRadius

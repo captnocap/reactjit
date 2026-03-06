@@ -582,4 +582,18 @@ function M.getHandlers()
   }
 end
 
+-- ── Public accessors (for other Lua modules) ─────────────────────────────────
+
+function M.getElement(key)
+  if type(key) == "number" then return ELEMENTS[key]
+  elseif type(key) == "string" then return BY_SYMBOL[key]
+  end
+  return nil
+end
+
+function M.getShells(key)
+  local e = M.getElement(key)
+  return e and e.shells or nil
+end
+
 return M

@@ -39,13 +39,13 @@ packages/renderer/src/ ──► cli/runtime/reactjit/renderer/ ──► <proje
 
 ### After editing framework files: the sync pipeline
 
-If you touched ANY file in `lua/`, `packages/core/`, or `packages/renderer/`, you MUST run:
+If you touched ANY file in `lua/`, `packages/core/`, or `packages/renderer/`, you MUST run the full sync pipeline:
 
 ```bash
 # Stage 1: source → cli/runtime/
 make cli-setup
 
-# Stage 2: cli/runtime/ → project's local copies
+# Stage 2: cli/runtime/ → project's local copies (only if the project uses the framework)
 cd examples/<project>
 reactjit update
 
@@ -53,16 +53,45 @@ reactjit update
 reactjit build
 ```
 
+**For the storybook specifically,** rebuild after `make cli-setup`:
+
+```bash
+make build-storybook-love
+```
+
+The storybook reads source files directly (no `reactjit update` needed) — it just needs the bundle rebuilt.
+
 **If you are sandboxed and cannot run these commands**, you MUST leave a clear note in your commit message or PR description:
 
 ```
 ⚠️ SYNC REQUIRED: This PR edits framework source files.
 After merging, run:
   make cli-setup
-  cd examples/<project> && reactjit update && reactjit build
+  make build-storybook-love          (to rebuild the storybook)
+  cd examples/<project> && reactjit update && reactjit build  (for each consumer project)
 ```
 
 Do NOT assume the maintainer will know. Spell it out every time.
+
+### Monorepo builds vs. project builds
+
+**`make build`** — Builds the monorepo's own targets (web overlay demo, storybook). Use this if you modified framework code and want to rebuild the storybook. The command rebuilds:
+- `examples/web-overlay/dist/app.js` (web demo)
+- `storybook/love/bundle.js` (storybook React bundle)
+
+```bash
+make build
+```
+
+**`rjit build`** or **`reactjit build`** — Builds consumer projects (examples, user apps). Use this for projects that depend on the framework. Always use this workflow:
+
+```bash
+cd examples/<project>
+reactjit update         # Sync framework files from cli/runtime/
+reactjit build          # Bundle + lint the project
+```
+
+**Do NOT run `make build` for consumer projects.** Always use `rjit build` instead.
 
 ### Storybook is special
 
@@ -93,6 +122,106 @@ Your job is to edit source files cleanly and run the sync pipeline. That's it.
 - Run `git` commands
 - Run the sync pipeline (`make cli-setup`, `reactjit update`, `reactjit build`)
 - Create or modify files that are clearly part of the task you were given
+
+## Dev Servers: Use `dv` CLI (NON-NEGOTIABLE)
+
+**NEVER start dev servers directly.** No `love .`, no `npm run dev`, no direct spawning. Every dev server goes through the `dv` CLI (`~/.local/bin/dv`). Direct spawning causes duplicate processes that pile up and waste system resources.
+
+### Quick reference
+
+```bash
+dv ls                          # List all registered servers + status. ALWAYS check this first.
+dv run <name>                  # Start a registered server (auto-restarts if already running)
+dv run <name> <script>         # Run a specific script (e.g., dv run storybook build)
+dv stop <name>                 # Stop a server
+dv logs <name>                 # Show recent logs for a server
+dv gui                         # Open GUI dashboard (singleton window)
+```
+
+### Registering new servers
+
+If a server is not registered:
+
+```bash
+cd /path/to/project
+dv add                         # Register the project as a dev server
+dv run <name>                  # Now you can start it
+```
+
+To remove a registration:
+
+```bash
+dv rm <name>
+```
+
+### Common workflows
+
+**Check what's running:**
+```bash
+dv ls
+```
+
+**Start the storybook:**
+```bash
+dv run storybook
+```
+
+**Rebuild the storybook (one-shot):**
+```bash
+dv run storybook build
+```
+
+**Check logs while a server runs:**
+```bash
+dv logs storybook              # Show recent logs (doesn't block)
+```
+
+### Important rules
+
+- **Always `dv ls` first** — before starting anything, check what's already running
+- **`dv run` auto-restarts** — if a server is already running, it will restart it automatically (no need to `dv stop` first)
+- **Do NOT chain `dv run` with sleep/timeout** — After starting a server, just let it run. Don't do `dv run storybook && sleep 5 && dv logs`. If you need logs, call `dv logs` separately without timeouts. Timeouts kill the server window.
+- **Check the GUI for details** — `dv gui` opens a dashboard showing all servers, their status, ports, and recent logs
+
+## Committing Your Work (NON-NEGOTIABLE)
+
+**You MUST commit your changes.** This is not optional. Previous agents have left uncommitted work scattered across the tree. Do not repeat this.
+
+### When to commit
+
+- **After each logical unit of work** — Finished a feature? Commit. Fixed a bug? Commit. Added a component? Commit. Do NOT move to the next task with uncommitted changes.
+- **After touching 3+ files** — That's a commit-sized change. Stop and commit before continuing.
+- **After editing framework files** — If you ran `make cli-setup`, committed that work immediately after.
+- **When the user approves** — If the user says "nice", "thanks", "cool", "ok", "that works", or thumbs up, that IS confirmation. Commit immediately.
+- **At the end of your session** — Never leave uncommitted work. The next Claude instance should start with a clean tree.
+
+### How to commit
+
+```bash
+# Check what changed
+git status
+git diff
+
+# Stage your changes
+git add <file1> <file2> ...
+
+# Commit with a clear message
+git commit -m "feat: add new component X with docs
+- Implements feature Y
+- Adds Z tests
+- Updates storybook
+
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>"
+```
+
+**Use conventional commit format:** `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`. One logical change per commit.
+
+### What NOT to do
+
+- Do NOT leave a dozen files modified without committing
+- Do NOT commit unrelated changes together (one feature = one commit)
+- Do NOT assume the user will commit for you — they won't
+- Do NOT skip committing because "it's small" — small changes are the easiest to commit and hardest to reconstruct
 
 ## Style Rules
 

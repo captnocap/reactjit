@@ -1,186 +1,136 @@
 === METADATA ===
 title: Table
-description: Data table with configurable columns, alignment, striping, and custom cell renderers.
+description: Data table with configurable columns, alignment, striping, and custom cell rendering
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: table, data, grid, columns, rows, striped, tabular
-related: FlatList, BarChart
+platforms: love2d
+keywords: table, data, grid, columns, rows, striped, cells, tabular
+related: Card, FlexRow, FlexColumn
 difficulty: beginner
 
 === OVERVIEW ===
-Table renders a structured data grid with a header row and data rows. Each column is defined by a configuration object that specifies the key to read from each data row, the column title, optional width, alignment, and a custom render function.
+Table renders a data table from column definitions and a data array. Each column specifies a key to read from the data objects, a title for the header, an optional fixed width, text alignment, and an optional custom render function for cell content.
 
-Table supports striped row backgrounds, borderless mode, and per-section style overrides for the header, rows, and cells. It uses Box and Text primitives internally, so it works identically on both web and native targets.
+The table supports striped rows, borderless mode, and style overrides for the header, rows, and cells. Columns without an explicit `width` use `flexGrow: 1` to share available space equally.
 
-Auto-sizing: Table automatically sizes to fit its content when all columns have explicit widths. When at least one column lacks an explicit width, the table uses `width: '100%'` and distributes remaining space via flexGrow. For content-based sizing, specify fixed widths for all columns and omit the outer `style.width` prop.
+Colors are theme-aware via `useThemeColorsOptional()` with dark-theme fallbacks.
 
 === API / SYNTAX ===
-Import: import { Table } from '@reactjit/core';
-
-TableColumn<T> type:
-```ts
-interface TableColumn<T = any> {
-  key: string;
-  title: string;
-  width?: number | string;
-  align?: 'left' | 'center' | 'right';
-  render?: (value: any, row: T, index: number) => ReactNode;
-}
+```tsx
+import { Table } from '@reactjit/core';
 ```
 
-TableProps<T> type:
-```ts
-interface TableProps<T = any> {
-  columns: TableColumn<T>[];
-  data: T[];
-  rowKey?: string | ((row: T, index: number) => string);
-  striped?: boolean;
-  borderless?: boolean;
-  headerStyle?: Style;
-  rowStyle?: Style;
-  cellStyle?: Style;
-  style?: Style;
-}
-```
+Props:
+| Prop        | Type                                      | Default   | Description                              |
+|-------------|-------------------------------------------|-----------|------------------------------------------|
+| columns     | TableColumn[]                             | required  | Column definitions                       |
+| data        | T[]                                       | required  | Array of row objects                     |
+| rowKey      | string \| ((row: T, index: number) => string) | undefined | Key extractor for row identity      |
+| striped     | boolean                                   | false     | Alternate row background colors          |
+| borderless  | boolean                                   | false     | Remove all borders                       |
+| headerStyle | Style                                     | undefined | Header row style overrides               |
+| rowStyle    | Style                                     | undefined | Data row style overrides                 |
+| cellStyle   | Style                                     | undefined | Individual cell style overrides          |
+| style       | Style                                     | undefined | Outer container style overrides          |
 
-Usage:
+TableColumn:
+| Field  | Type                                          | Default   | Description                              |
+|--------|-----------------------------------------------|-----------|------------------------------------------|
+| key    | string                                        | required  | Property name to read from each row      |
+| title  | string                                        | required  | Header text                              |
+| width  | number \| string                              | undefined | Fixed column width. Omit for flex growth.|
+| align  | 'left' \| 'center' \| 'right'                | 'left'    | Text alignment                           |
+| render | (value: any, row: T, index: number) => ReactNode | undefined | Custom cell renderer                 |
+
+=== EXAMPLES ===
+Example 1: Basic table
+---
 ```tsx
 <Table
   columns={[
     { key: 'name', title: 'Name' },
-    { key: 'role', title: 'Role', width: 100 },
-    { key: 'status', title: 'Status', align: 'center', width: 80 },
+    { key: 'role', title: 'Role' },
+    { key: 'status', title: 'Status' },
   ]}
   data={[
     { name: 'Alice', role: 'Engineer', status: 'Active' },
     { name: 'Bob', role: 'Designer', status: 'Away' },
+    { name: 'Carol', role: 'Manager', status: 'Active' },
   ]}
-  striped
 />
 ```
+---
+Platforms: love2d
 
-Props:
-
-| Prop        | Type                                          | Default | Description                                |
-|-------------|-----------------------------------------------|---------|--------------------------------------------|
-| columns     | TableColumn<T>[]                              | (required)| Column definitions                       |
-| data        | T[]                                           | (required)| Array of row data objects                 |
-| rowKey      | string \| ((row: T, index: number) => string) | -       | Key field or function for row identity     |
-| striped     | boolean                                       | false   | Alternate row background colors            |
-| borderless  | boolean                                       | false   | Remove all borders                         |
-| headerStyle | Style                                         | -       | Style overrides for the header row         |
-| rowStyle    | Style                                         | -       | Style overrides for each data row          |
-| cellStyle   | Style                                         | -       | Style overrides for each cell              |
-| style       | Style                                         | -       | Outer container style                      |
-
-=== EXAMPLES ===
-Example 1: Simple striped table
+Example 2: Fixed column widths with alignment
 ---
 ```tsx
 <Table
   columns={[
-    { key: 'name', title: 'Name' },
-    { key: 'score', title: 'Score', align: 'right', width: 60 },
+    { key: 'item', title: 'Item', width: 200 },
+    { key: 'qty', title: 'Qty', width: 60, align: 'center' },
+    { key: 'price', title: 'Price', width: 80, align: 'right' },
   ]}
   data={[
-    { name: 'Alice', score: 95 },
-    { name: 'Bob', score: 87 },
-    { name: 'Carol', score: 92 },
+    { item: 'Widget A', qty: 10, price: '$4.99' },
+    { item: 'Widget B', qty: 25, price: '$2.49' },
+    { item: 'Gadget C', qty: 3, price: '$19.99' },
   ]}
   striped
+  rowKey="item"
+/>
+```
+---
+Platforms: love2d
+
+Example 3: Custom cell renderer
+---
+```tsx
+const colors = useThemeColors();
+
+<Table
+  columns={[
+    { key: 'name', title: 'Name', width: 150 },
+    { key: 'status', title: 'Status', width: 100, render: (value) => (
+      <Badge label={value} variant={value === 'Active' ? 'success' : 'warning'} />
+    )},
+    { key: 'score', title: 'Score', width: 80, align: 'right' },
+  ]}
+  data={[
+    { name: 'Alice', status: 'Active', score: 95 },
+    { name: 'Bob', status: 'Pending', score: 72 },
+  ]}
   rowKey="name"
-  style={{ width: '100%' }}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Custom cell renderer
+Example 4: Borderless table
 ---
 ```tsx
 <Table
   columns={[
-    { key: 'name', title: 'Service' },
-    {
-      key: 'status',
-      title: 'Status',
-      width: 80,
-      align: 'center',
-      render: (value) => (
-        <Box style={{
-          backgroundColor: value === 'up' ? '#22c55e' : '#ef4444',
-          borderRadius: 4,
-          padding: 2,
-          paddingLeft: 6,
-          paddingRight: 6,
-        }}>
-          <Text style={{ color: '#ffffff', fontSize: 10 }}>{value}</Text>
-        </Box>
-      ),
-    },
+    { key: 'key', title: 'Property', width: 120 },
+    { key: 'value', title: 'Value' },
   ]}
   data={[
-    { name: 'API', status: 'up' },
-    { name: 'Database', status: 'down' },
+    { key: 'Version', value: '2.1.0' },
+    { key: 'Runtime', value: 'LuaJIT 2.1' },
+    { key: 'Renderer', value: 'Love2D / OpenGL 2.1' },
   ]}
-  style={{ width: 300 }}
-/>
-```
----
-Platforms: All
-
-Example 3: Borderless table
----
-```tsx
-<Table
-  columns={[
-    { key: 'label', title: 'Metric' },
-    { key: 'value', title: 'Value', align: 'right' },
-  ]}
-  data={metrics}
   borderless
 />
 ```
 ---
-Platforms: All
-
-Example 4: Auto-sized table (content-based width)
----
-```tsx
-<Table
-  columns={[
-    { key: 'name', title: 'Name', width: 120 },
-    { key: 'role', title: 'Role', width: 100 },
-    { key: 'status', title: 'Status', width: 80, align: 'center' },
-  ]}
-  data={[
-    { name: 'Alice', role: 'Engineer', status: 'Active' },
-    { name: 'Bob', role: 'Designer', status: 'Away' },
-  ]}
-  striped
-/>
-```
----
-Description: When all columns have explicit widths and no outer width is set, the table sizes to fit its content. The table container uses `alignSelf: 'flex-start'` to avoid stretching.
-Platforms: All
-
-=== PLATFORM NOTES ===
-- Table uses Box and Text primitives, so it renders identically on web and native targets.
-- Default colors: header background `#1e293b`, header text `#e2e8f0`, row background `#0f172a`, alternate row `#1e293b`, cell text `#cbd5e1`, border color `#334155`.
-- Header text is `fontSize: 11`, `fontWeight: 'bold'`. Cell text is `fontSize: 11` with `numberOfLines: 1` (truncation).
-- Columns without an explicit `width` use `flexGrow: 1, flexShrink: 1` to fill available space. Columns with a fixed `width` use `flexGrow: 0, flexShrink: 0`.
-- Column alignment maps: `'left'` -> `alignItems: 'start'`, `'center'` -> `alignItems: 'center'`, `'right'` -> `alignItems: 'end'`.
-- Auto-sizing behavior: If all columns have explicit widths, rows omit `width: '100%'` and the outer container uses `alignSelf: 'flex-start'`, causing the table to size to fit content. If any column lacks an explicit width, rows use `width: '100%'` and flexible columns distribute remaining space.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The `columns` and `data` props are both required. An empty `data` array renders only the header row.
-- Each column's `key` must match a property name in the data objects. If the key does not exist on a row, the cell displays an empty string.
-- When using `render`, the custom renderer receives the raw cell value, the full row object, and the row index. It must return a ReactNode. The default renderer wraps the value in a Text element with `numberOfLines: 1`.
-- Without `rowKey`, rows are keyed by their array index. For data that changes order, provide a stable `rowKey` (either a string property name or a function).
-- Table does NOT scroll. For scrollable tables, wrap Table in a ScrollView or use FlatList with custom rendering.
-- For auto-sizing, all columns must have explicit widths and the outer `style` must not include a `width` property. If any column lacks a width, the table defaults to `width: '100%'` behavior.
+- Columns without a `width` use `flexGrow: 1` to split remaining space. If all columns have fixed widths, the table shrink-wraps via `alignSelf: 'flex-start'`.
+- The `rowKey` prop helps React identify rows efficiently. Provide it when data can change between renders. It can be a string (property name) or a function.
+- The `render` function receives the cell value, the full row object, and the row index. Use it for badges, formatted numbers, or any custom cell content.
+- Default cell text uses `numberOfLines={1}` for truncation. Custom renderers are responsible for their own text overflow handling.
 
 === SEE ALSO ===
-- FlatList
-- BarChart
-- Box
+- Card
+- Badge
+- FlexRow

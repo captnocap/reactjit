@@ -1,94 +1,74 @@
 === METADATA ===
 title: Divider
-description: Horizontal or vertical separator line with configurable color and thickness
+description: Horizontal or vertical separator line between content sections
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: divider, separator, line, horizontal, vertical, border
-related: Box, Spacer, Card, Badge
+platforms: love2d
+keywords: divider, separator, line, horizontal, vertical, rule, hr
+related: Spacer, Card, FlexColumn
 difficulty: beginner
 
 === OVERVIEW ===
-Divider renders a horizontal or vertical separator line between content sections. It's a styled Box with backgroundColor, defaulting to a 1-pixel horizontal line. Use it to visually separate groups of content, create borders, or add structure to complex layouts.
+Divider renders a thin line to visually separate content. It defaults to horizontal (full width, 1px tall) but can be set to vertical (full height, 1px wide).
+
+The divider is a plain Box with a background color. It has no margins by default — use `style` or parent gap to control spacing around it.
 
 === API / SYNTAX ===
+```tsx
 import { Divider } from '@reactjit/core';
+```
 
 Props:
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| direction | 'horizontal' \| 'vertical' | 'horizontal' | Orientation of the divider line |
-| color | string | '#334155' | Color of the line (any valid CSS color: hex, rgb, named) |
-| thickness | number | 1 | Line thickness in pixels |
-| style | Style | undefined | Additional style overrides (merged after direction/color/thickness) |
+| Prop      | Type                        | Default      | Description                          |
+|-----------|-----------------------------|--------------|--------------------------------------|
+| direction | 'horizontal' \| 'vertical' | 'horizontal' | Orientation of the divider           |
+| color     | string                      | '#334155'    | Line color                           |
+| thickness | number                      | 1            | Line thickness in pixels             |
+| style     | Style                       | undefined    | Additional style overrides           |
 
 === EXAMPLES ===
-Example 1: Basic horizontal divider
+Example 1: Horizontal divider
 ---
-<Box style={{ width: '100%', flexDirection: 'column' }}>
-  <Text fontSize={18}>Section 1</Text>
-  <Divider />
-  <Text fontSize={18}>Section 2</Text>
-</Box>
----
-Platforms: All
-Description: Default horizontal divider separates two sections with a subtle gray line.
+```tsx
+const colors = useThemeColors();
 
-Example 2: Vertical divider in row
+<FlexColumn gap={12} style={{ padding: 16 }}>
+  <Text style={{ color: colors.text, fontSize: 14 }}>Section One</Text>
+  <Divider color={colors.border} />
+  <Text style={{ color: colors.text, fontSize: 14 }}>Section Two</Text>
+</FlexColumn>
+```
 ---
-<Box style={{ width: 300, height: 100, flexDirection: 'row', alignItems: 'center' }}>
-  <Text fontSize={16}>Left</Text>
-  <Divider direction="vertical" />
-  <Text fontSize={16}>Right</Text>
-</Box>
----
-Platforms: All
-Description: Vertical divider creates a separator between side-by-side elements.
+Platforms: love2d
 
-Example 3: Custom color and thickness
+Example 2: Vertical divider in a row
 ---
-<Box style={{ width: '100%', flexDirection: 'column' }}>
-  <Text fontSize={20}>Header</Text>
-  <Divider color="#ef4444" thickness={3} />
-  <Text fontSize={14}>Content below the bold red divider</Text>
-</Box>
----
-Platforms: All
-Description: Thick red divider emphasizes the separation between header and content.
+```tsx
+const colors = useThemeColors();
 
-Example 4: Divider with margin spacing
+<FlexRow gap={12} align="center" style={{ height: 40 }}>
+  <Text style={{ color: colors.text, fontSize: 12 }}>Left</Text>
+  <Divider direction="vertical" color={colors.border} />
+  <Text style={{ color: colors.text, fontSize: 12 }}>Right</Text>
+</FlexRow>
+```
 ---
-<Box style={{ width: '100%', flexDirection: 'column' }}>
-  <Text fontSize={16}>Item 1</Text>
-  <Divider style={{ marginTop: 10, marginBottom: 10 }} />
-  <Text fontSize={16}>Item 2</Text>
-</Box>
----
-Platforms: All
-Description: Uses style prop to add vertical margins around the divider for breathing room.
+Platforms: love2d
 
-Example 5: Partial-width divider
+Example 3: Thick accent divider
 ---
-<Box style={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
-  <Text fontSize={18}>Centered Content</Text>
-  <Divider style={{ width: '50%' }} />
-  <Text fontSize={18}>More Content</Text>
-</Box>
+```tsx
+const colors = useThemeColors();
+
+<Divider color={colors.primary} thickness={3} />
+```
 ---
-Platforms: All
-Description: Overrides width to create a shorter divider line, centered within its parent.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Horizontal dividers default to width: '100%' — they fill the parent's width automatically
-- Vertical dividers default to height: '100%' — they fill the parent's height automatically
-- Vertical dividers require a parent with explicit height, or they collapse to zero
-- The style prop is merged last, so you can override any default behavior (width, height, margins, etc.)
-- Divider is purely visual — it doesn't affect layout spacing beyond its own thickness
-- Combine Divider with Spacer for both visual separation and spacing (Divider for the line, Spacer for the gap)
-- In grid targets (terminal, cc, nvim), dividers render as block characters at the cell level
-- Default color (#334155) is a neutral slate gray that works on most backgrounds — adjust for light/dark themes
+- A horizontal divider sets `width: '100%'`. It needs a parent with a defined width to be visible.
+- A vertical divider sets `height: '100%'`. It needs a parent with a defined height to be visible. In a FlexRow, give the row an explicit height or use `align="stretch"` (the default) so the divider inherits height from taller siblings.
 
 === SEE ALSO ===
-- Spacer — invisible spacing component (vs. Divider's visible line)
-- Box — primitive that Divider is built on (use Box directly for borders or complex separators)
-- Card — component that often contains Dividers to separate sections
-- Badge — another layout helper component often used with Dividers
+- Spacer
+- Card
+- Toolbar

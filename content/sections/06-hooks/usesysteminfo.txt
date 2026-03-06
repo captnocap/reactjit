@@ -1,132 +1,93 @@
 === METADATA ===
 title: useSystemInfo
-description: Fetch real OS, CPU, memory, uptime, and user information from the host system.
+description: OS, CPU, memory, uptime, and system identity information
 category: Hooks
 platforms: love2d
-keywords: system info, os, cpu, memory, uptime, hostname, kernel, shell, neofetch
-related: useSystemMonitor, formatUptime, formatMemory, formatBytes
-difficulty: beginner
+keywords: system, os, cpu, memory, uptime, hostname, kernel, hardware, sysinfo
+related: useSystemMonitor, usePorts
+difficulty: intermediate
 
 === OVERVIEW ===
-useSystemInfo retrieves static and semi-static system facts — OS name, kernel version, hostname, logged-in user, shell, CPU model and core count, architecture, memory usage, and uptime — via the Love2D bridge RPC layer. On Love2D, data is gathered by Lua from /proc, io.popen, and os.getenv. Every returned sub-object carries a .toSysLog(path) method for structured append-only JSON logging. The hook fetches once on mount by default; pass a refresh interval in milliseconds to poll periodically for dynamic fields like memory and uptime.
+useSystemInfo returns real system information gathered by Lua from /proc, io.popen, and os.getenv. It provides OS name, kernel version, hostname, user, shell, CPU model, architecture, memory usage, and uptime.
+
+Every sub-object (memory, uptime, and the top-level result) carries a `.toSysLog(path)` method for structured JSON logging to a file.
+
+By default, the hook fetches once on mount. Pass a refresh interval in milliseconds to re-poll dynamic fields (memory, uptime).
 
 === API / SYNTAX ===
 ```tsx
-import {
-  useSystemInfo,
-  formatUptime,
-  formatMemory,
-  formatBytes,
-} from '@reactjit/core';
+import { useSystemInfo, formatUptime, formatMemory } from '@reactjit/core';
 ```
 
-Hook signature:
+Signature:
 ```tsx
-useSystemInfo(refreshInterval?: number): SystemInfo
+function useSystemInfo(refreshInterval?: number): SystemInfo
+```
+
+Types:
+```tsx
+interface SystemInfo {
+  os: string;            // e.g. "Ubuntu 24.04 LTS"
+  kernel: string;        // e.g. "6.14.0-37-generic"
+  hostname: string;
+  user: string;
+  shell: string;         // e.g. "bash"
+  cpu: string;           // e.g. "AMD Ryzen 9 7950X (32 cores)"
+  arch: string;          // e.g. "x86_64"
+  memory: MemoryInfo;
+  uptime: UptimeInfo;
+  loading: boolean;
+  toSysLog: (path: string) => void;
+}
+
+interface MemoryInfo {
+  used: number;
+  total: number;
+  unit: 'GiB' | 'MiB';
+  toSysLog: (path: string) => void;
+}
+
+interface UptimeInfo {
+  days: number;
+  hours: number;
+  minutes: number;
+  toSysLog: (path: string) => void;
+}
 ```
 
 Parameters:
+| Param           | Type   | Default | Description                                |
+|-----------------|--------|---------|--------------------------------------------|
+| refreshInterval | number | 0       | Ms between re-polls. 0 = fetch once.      |
 
-| Parameter       | Type   | Default | Description                                                      |
-|-----------------|--------|---------|------------------------------------------------------------------|
-| refreshInterval | number | 0       | ms between re-polls. 0 = fetch once on mount, no further polls. |
-
-Returns: SystemInfo
-
-SystemInfo shape:
-
-| Field          | Type        | Description                                          |
-|----------------|-------------|------------------------------------------------------|
-| os             | string      | Distro name, e.g. "Ubuntu 24.04.1 LTS"              |
-| kernel         | string      | Kernel release string, e.g. "6.8.0-51-generic"      |
-| hostname       | string      | Machine hostname                                     |
-| user           | string      | Logged-in username                                   |
-| shell          | string      | Shell name, e.g. "bash", "zsh"                       |
-| cpu            | string      | CPU model + core count, e.g. "Ryzen 9 7950X (32)"   |
-| arch           | string      | Architecture, e.g. "x86_64"                         |
-| memory         | MemoryInfo  | { used, total, unit: 'GiB' | 'MiB', toSysLog }     |
-| uptime         | UptimeInfo  | { days, hours, minutes, toSysLog }                   |
-| loading        | boolean     | true until the first fetch completes                 |
-| toSysLog       | fn          | (path: string) => void — append all fields to file   |
-
-MemoryInfo:
-
-| Field    | Type          | Description                  |
-|----------|---------------|------------------------------|
-| used     | number        | Used memory in unit          |
-| total    | number        | Total memory in unit         |
-| unit     | 'GiB' | 'MiB' | Display unit              |
-| toSysLog | fn            | Log this section to a file   |
-
-UptimeInfo:
-
-| Field    | Type   | Description                |
-|----------|--------|----------------------------|
-| days     | number | Whole days of uptime       |
-| hours    | number | Remainder hours            |
-| minutes  | number | Remainder minutes          |
-| toSysLog | fn     | Log this section to a file |
-
-Formatting utilities:
-```tsx
-formatUptime(u: { days: number; hours: number; minutes: number }): string
-// "2 days, 5 hours, 30 mins" or "< 1 min"
-
-formatMemory(m: { used: number; total: number; unit: string }): string
-// "7.2 GiB / 31.2 GiB"
-
-formatBytes(bytes: number): string
-// "14.5 GiB" or "512 MiB"
-```
+Helpers:
+| Function      | Signature                                 | Description                         |
+|---------------|-------------------------------------------|-------------------------------------|
+| formatUptime  | (u: UptimeInfo) => string                 | "2 days, 3 hours, 15 mins"         |
+| formatMemory  | (m: MemoryInfo) => string                 | "12.4 GiB / 31.2 GiB"             |
+| formatBytes   | (bytes: number) => string                 | Human-readable byte string          |
 
 === EXAMPLES ===
-Example 1: Display a neofetch-style system summary
+Example 1: Display system information
 ---
 ```tsx
+import { Box, Text } from '@reactjit/core';
 import { useSystemInfo, formatUptime, formatMemory } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-function SystemCard() {
-  const info = useSystemInfo();
-
-  if (info.loading) {
-    return <Text fontSize={14}>Loading...</Text>;
-  }
-
-  return (
-    <Box style={{ padding: 16, gap: 6 }}>
-      <Text fontSize={16}>{info.user}@{info.hostname}</Text>
-      <Text fontSize={13}>OS:     {info.os}</Text>
-      <Text fontSize={13}>Kernel: {info.kernel}</Text>
-      <Text fontSize={13}>Shell:  {info.shell}</Text>
-      <Text fontSize={13}>CPU:    {info.cpu}</Text>
-      <Text fontSize={13}>Arch:   {info.arch}</Text>
-      <Text fontSize={13}>RAM:    {formatMemory(info.memory)}</Text>
-      <Text fontSize={13}>Uptime: {formatUptime(info.uptime)}</Text>
-    </Box>
-  );
-}
-```
----
-Platforms: love2d
-
-Example 2: Live memory polling every 5 seconds
----
-```tsx
-import { useSystemInfo, formatMemory } from '@reactjit/core';
-
-function MemoryWidget() {
+export function SystemInfoPanel() {
+  const colors = useThemeColors();
   const info = useSystemInfo(5000);
 
-  const pct = info.memory.total > 0
-    ? Math.round((info.memory.used / info.memory.total) * 100)
-    : 0;
+  if (info.loading) return <Text style={{ color: colors.muted }}>Loading...</Text>;
 
   return (
-    <Box style={{ width: 200, gap: 4 }}>
-      <Text fontSize={13}>RAM: {formatMemory(info.memory)} ({pct}%)</Text>
-      <Box style={{ width: '100%', height: 6, backgroundColor: '#333' }}>
-        <Box style={{ width: `${pct}%`, height: 6, backgroundColor: '#00cc88' }} />
-      </Box>
+    <Box style={{ gap: 4, padding: 16 }}>
+      <Text style={{ color: colors.text }}>{`OS: ${info.os}`}</Text>
+      <Text style={{ color: colors.text }}>{`CPU: ${info.cpu}`}</Text>
+      <Text style={{ color: colors.text }}>{`Memory: ${formatMemory(info.memory)}`}</Text>
+      <Text style={{ color: colors.text }}>{`Uptime: ${formatUptime(info.uptime)}`}</Text>
+      <Text style={{ color: colors.muted }}>{`${info.user}@${info.hostname}`}</Text>
     </Box>
   );
 }
@@ -134,20 +95,18 @@ function MemoryWidget() {
 ---
 Platforms: love2d
 
-Example 3: Log a system snapshot to a file on mount
+Example 2: Log system info to file
 ---
 ```tsx
-import { useEffect } from 'react';
 import { useSystemInfo } from '@reactjit/core';
+import { useEffect } from 'react';
 
-function DiagnosticsLogger() {
+export function SysLogger() {
   const info = useSystemInfo();
 
   useEffect(() => {
     if (!info.loading) {
-      info.toSysLog('/tmp/system-snapshot.log');
-      info.memory.toSysLog('/tmp/memory.log');
-      info.uptime.toSysLog('/tmp/uptime.log');
+      info.toSysLog('/tmp/sysinfo.log');
     }
   }, [info.loading]);
 
@@ -157,28 +116,12 @@ function DiagnosticsLogger() {
 ---
 Platforms: love2d
 
-Example 4: Conditional content based on available memory
----
-```tsx
-import { useSystemInfo } from '@reactjit/core';
-
-function AdaptiveApp() {
-  const info = useSystemInfo();
-
-  const highMemory = !info.loading && info.memory.total >= 16;
-
-  return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      {highMemory ? <FullResScene /> : <LowResScene />}
-    </Box>
-  );
-}
-```
----
-Platforms: love2d
+=== CRITICAL RULES ===
+- When using a refresh interval, pick a unique value to avoid timer collisions with other useLuaInterval calls. See useLuaInterval docs for staggering rules.
+- The hook uses useBridgeOptional internally. If no bridge is present, it falls back to Node.js os module (for grid targets).
+- toSysLog writes JSON lines with an _ts timestamp to the given path via bridge RPC.
 
 === SEE ALSO ===
-- useSystemMonitor — per-core CPU, process list, GPU, network, disk I/O
-- formatUptime — format UptimeInfo into a human-readable string
-- formatMemory — format MemoryInfo into "used / total unit"
-- formatBytes — format raw byte counts into GiB/MiB strings
+- useSystemMonitor
+- usePorts
+- useLuaInterval

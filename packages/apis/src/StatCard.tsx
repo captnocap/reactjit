@@ -7,8 +7,8 @@ export interface StatCardProps {
   label: string;
   value: string | number;
   sublabel?: string;
-  /** Positive = up trend, negative = down trend */
-  trend?: number;
+  /** Positive number = up, negative = down. Or pass 'up' | 'down' | 'flat'. */
+  trend?: number | 'up' | 'down' | 'flat';
   accent?: Color;
   style?: Style;
 }
@@ -33,9 +33,12 @@ export function StatCard({
 }: StatCardProps) {
   const c = useThemeColors();
   const accentStr = accent as string;
-  const hasTrend = trend !== undefined;
-  const trendUp = hasTrend && trend! >= 0;
+  const hasTrend = trend !== undefined && trend !== 'flat';
+  const trendUp = hasTrend && (typeof trend === 'number' ? trend >= 0 : trend === 'up');
   const trendColor = trendUp ? '#22c55e' : '#ef4444';
+  const trendLabel = typeof trend === 'number'
+    ? `${trendUp ? '+' : ''}${trend.toFixed(1)}%`
+    : '';
 
   return (
     <Box style={{ gap: 4, ...style }}>
@@ -71,7 +74,7 @@ export function StatCard({
           )}
           {hasTrend && (
             <Text style={{ color: trendColor, fontSize: 11, fontWeight: 'bold' }}>
-              {trendUp ? '+' : ''}{trend!.toFixed(1)}%
+              {trendLabel}
             </Text>
           )}
         </Box>

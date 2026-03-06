@@ -1,232 +1,133 @@
 === METADATA ===
 title: ContextMenu
-description: Right-click context menu with built-in text operations and custom actions
+description: Lua-owned right-click context menu
 category: Components
-platforms: love2d, web
-keywords: context menu, right-click, menu, copy, inspect, inverse pattern, lua-owned
-related: TextInput, TextEditor, Box
+platforms: love2d
+keywords: contextmenu, context, menu, right-click, popup, action, select
+related: Pressable, Box
 difficulty: intermediate
 
 === OVERVIEW ===
-ContextMenu is a right-click context menu component that provides built-in text operations (Copy, Inspect) and supports custom menu items. It follows the "inverse pattern" where Lua handles all interaction state (rendering, hover, keyboard navigation) and JS receives only boundary events (open, close, select). On Love2D, the menu is rendered entirely by Lua; on web, it renders as a positioned dropdown overlay. The menu automatically detects text nodes under the cursor and enables/disables the Copy action based on active text selection.
+ContextMenu wraps content in a right-click context menu region. When the user right-clicks inside the wrapped area, Lua renders a popup menu with the provided items. All menu rendering, hover tracking, and keyboard navigation happen in Lua. React only receives boundary events: open, close, and item selection.
+
+This is a "Lua-owned interaction" primitive. The JS side declares items and receives selection callbacks. Lua handles everything visual.
+
+ContextMenu provides built-in items for text selection (Copy, Select All) automatically when the right-clicked node contains text. Custom items are appended to these built-in options.
 
 === API / SYNTAX ===
 ```tsx
 import { ContextMenu } from '@reactjit/core';
-
-<ContextMenu
-  items={[...]}
-  onSelect={(event) => {...}}
-  onOpen={() => {...}}
-  onClose={() => {...}}
->
-  {children}
-</ContextMenu>
 ```
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `items` | `ContextMenuItem[]` | `undefined` | Custom menu items to append after built-in items |
-| `onSelect` | `(event: ContextMenuEvent) => void` | `undefined` | Called when any menu item is selected (built-in or custom) |
-| `onOpen` | `() => void` | `undefined` | Called when the context menu opens |
-| `onClose` | `() => void` | `undefined` | Called when the context menu closes (click outside, Escape, or item selected) |
-| `children` | `React.ReactNode` | `undefined` | Child elements that will trigger the context menu on right-click |
+Props:
+| Prop     | Type                                  | Default   | Description                           |
+|----------|---------------------------------------|-----------|---------------------------------------|
+| items    | ContextMenuItem[]                     | undefined | Custom menu items                     |
+| onSelect | (event: ContextMenuEvent) => void     | undefined | Fires when any item is selected       |
+| onOpen   | () => void                            | undefined | Fires when the menu opens             |
+| onClose  | () => void                            | undefined | Fires when the menu closes            |
+| children | ReactNode                             | undefined | Content that responds to right-click  |
 
-**ContextMenuItem interface:**
-```tsx
-interface ContextMenuItem {
-  label: string;        // Display text
-  action: string;       // Action identifier dispatched on selection
-  disabled?: boolean;   // Gray out and make unclickable
-  separator?: boolean;  // Render as divider line instead of item
-}
-```
+ContextMenuItem:
+| Field     | Type    | Default   | Description                              |
+|-----------|---------|-----------|------------------------------------------|
+| label     | string  | required  | Display label                            |
+| action    | string  | required  | Action identifier dispatched on selection|
+| disabled  | boolean | false     | Gray out and disable the item            |
+| separator | boolean | false     | Render a divider line instead of an item |
 
-**ContextMenuEvent interface:**
-```tsx
-interface ContextMenuEvent {
-  action: string;           // Action identifier of selected item
-  targetId?: number;        // ID of the node that was right-clicked
-  hasSelection?: boolean;   // Whether text was selected when menu opened
-  selectedText?: string;    // The selected text content (if any)
-}
-```
+ContextMenuEvent:
+| Field        | Type    | Description                                |
+|--------------|---------|--------------------------------------------|
+| action       | string  | The action string of the selected item     |
+| targetId     | number  | ID of the node that was right-clicked      |
+| hasSelection | boolean | Whether text was selected when menu opened |
+| selectedText | string  | The selected text content (if any)         |
 
 === EXAMPLES ===
-
-Example 1: Basic custom menu with actions
+Example 1: Basic context menu
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@reactjit/core';
+const colors = useThemeColors();
 
-function App() {
-  return (
-    <ContextMenu
-      items={[
-        { label: 'Rename', action: 'rename' },
-        { label: 'Delete', action: 'delete' },
-        { separator: true },
-        { label: 'Export', action: 'export', disabled: true },
-      ]}
-      onSelect={(event) => {
-        console.log('Selected:', event.action);
-        if (event.action === 'rename') {
-          // Handle rename
-        } else if (event.action === 'delete') {
-          // Handle delete
-        }
-      }}
-    >
-      <Box padding={20}>
-        <Text fontSize={16}>Right-click this box for options</Text>
-      </Box>
-    </ContextMenu>
-  );
-}
+<ContextMenu
+  items={[
+    { label: 'Edit', action: 'edit' },
+    { label: 'Delete', action: 'delete' },
+  ]}
+  onSelect={(e) => {
+    if (e.action === 'edit') editItem();
+    if (e.action === 'delete') deleteItem();
+  }}
+>
+  <Box padding={16} bg={colors.surface} radius={8}>
+    <Text style={{ color: colors.text }}>Right-click me</Text>
+  </Box>
+</ContextMenu>
 ```
-Platforms: love2d, web
+---
+Platforms: love2d
 
-Example 2: Text selection with Copy support
+Example 2: Menu with separators and disabled items
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@reactjit/core';
+const colors = useThemeColors();
 
-function TextDocument() {
-  return (
-    <ContextMenu
-      onSelect={(event) => {
-        if (event.action === '__copy' && event.selectedText) {
-          // Built-in Copy action (Love2D handles clipboard automatically)
-          console.log('Copied:', event.selectedText);
-        }
-      }}
-    >
-      <Box padding={20}>
-        <Text fontSize={14} style={{ userSelect: 'text' }}>
-          Select some text and right-click to copy. The Copy menu item
-          is automatically enabled when text is selected.
-        </Text>
-      </Box>
-    </ContextMenu>
-  );
-}
+<ContextMenu
+  items={[
+    { label: 'Cut', action: 'cut' },
+    { label: 'Copy', action: 'copy' },
+    { label: 'Paste', action: 'paste', disabled: !hasClipboard },
+    { label: '', action: '', separator: true },
+    { label: 'Select All', action: 'select-all' },
+  ]}
+  onSelect={(e) => handleAction(e.action)}
+>
+  <Box padding={16} bg={colors.surface} radius={8}>
+    <Text style={{ color: colors.text }}>Document content</Text>
+  </Box>
+</ContextMenu>
 ```
-Platforms: love2d, web
-Note: On Love2D, text selection requires `userSelect: 'text'` style. Built-in Copy action (`__copy`) writes to clipboard automatically.
+---
+Platforms: love2d
 
-Example 3: Nested context menus (inner takes precedence)
+Example 3: Responding to open/close events
 ---
 ```tsx
-import { ContextMenu, Box, Text } from '@reactjit/core';
+const colors = useThemeColors();
+const [menuOpen, setMenuOpen] = useState(false);
 
-function NestedMenus() {
-  return (
-    <ContextMenu
-      items={[{ label: 'Outer Action', action: 'outer' }]}
-      onSelect={(e) => console.log('Outer:', e.action)}
-    >
-      <Box padding={20} bg="#222">
-        <Text fontSize={16}>Outer area (right-click)</Text>
-
-        <ContextMenu
-          items={[{ label: 'Inner Action', action: 'inner' }]}
-          onSelect={(e) => console.log('Inner:', e.action)}
-        >
-          <Box margin={20} padding={20} bg="#444">
-            <Text fontSize={14}>Inner area (different menu)</Text>
-          </Box>
-        </ContextMenu>
-      </Box>
-    </ContextMenu>
-  );
-}
+<ContextMenu
+  items={[{ label: 'Inspect', action: 'inspect' }]}
+  onSelect={(e) => handleAction(e.action)}
+  onOpen={() => setMenuOpen(true)}
+  onClose={() => setMenuOpen(false)}
+>
+  <Box
+    padding={16}
+    bg={menuOpen ? colors.bgElevated : colors.surface}
+    radius={8}
+  >
+    <Text style={{ color: colors.text }}>
+      {menuOpen ? 'Menu is open' : 'Right-click for options'}
+    </Text>
+  </Box>
+</ContextMenu>
 ```
-Platforms: love2d, web
-Note: The nearest ContextMenu ancestor wins when determining custom items.
-
-Example 4: Menu lifecycle events
 ---
-```tsx
-import { ContextMenu, Box, Text } from '@reactjit/core';
-import { useState } from 'react';
-
-function MenuLifecycle() {
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  return (
-    <ContextMenu
-      items={[
-        { label: 'Action 1', action: 'action1' },
-        { label: 'Action 2', action: 'action2' },
-      ]}
-      onOpen={() => {
-        console.log('Menu opened');
-        setMenuOpen(true);
-      }}
-      onClose={() => {
-        console.log('Menu closed');
-        setMenuOpen(false);
-      }}
-      onSelect={(event) => {
-        console.log('Selected:', event.action);
-      }}
-    >
-      <Box padding={20}>
-        <Text fontSize={16}>
-          Menu is {menuOpen ? 'OPEN' : 'CLOSED'}
-        </Text>
-      </Box>
-    </ContextMenu>
-  );
-}
-```
-Platforms: love2d, web
+Platforms: love2d
 
 === PLATFORM NOTES ===
-
 Love2D:
-  - Context menu is entirely Lua-owned (lua/contextmenu.lua)
-  - Right-click detection happens in init.lua → calls contextmenu.open()
-  - Lua performs hit testing to find the node under cursor and detect text nodes
-  - Built-in items: Copy (enabled when text selected), Inspect (opens inspector on clicked node)
-  - Copy action automatically writes to clipboard via love.system.setClipboardText()
-  - Keyboard navigation: Arrow keys move selection, Enter confirms, Escape closes
-  - Mouse interaction: Hover highlights items, click selects, click outside closes
-  - Rendering: Dark panel with rounded corners, hover highlight, separators
-  - Custom items from ContextMenu ancestors are appended after built-in Copy, before Inspect
-  - Menu position is clamped to stay within viewport bounds
+  The popup menu is rendered by Lua as an overlay on top of the scene. It supports keyboard navigation (arrow keys, Enter to select, Escape to dismiss) and mouse hover highlighting. The menu auto-positions to stay within the window bounds.
 
-Web:
-  - Renders as positioned div overlay with fixed positioning
-  - Uses native onContextMenu handler to intercept right-clicks
-  - Automatically prevents default browser context menu
-  - Closes on click outside (via window click listener)
-  - Closes on Escape key (via window keydown listener)
-  - CSS styling matches Love2D appearance (dark theme, rounded corners, hover states)
-  - Text selection and clipboard operations use browser APIs
+  Built-in items (Copy, Select All) are added automatically by Lua when applicable. Your custom items array is appended after the built-in items.
 
 === CRITICAL RULES ===
-
-- ContextMenu wraps children and intercepts right-clicks anywhere within the subtree
-- Built-in "Copy" item is ALWAYS present (disabled when no text selected, enabled when text selected)
-- Built-in "Inspect" item is ALWAYS present on Love2D (opens visual inspector F12 on the clicked node)
-- Custom items (via `items` prop) are inserted between Copy and Inspect
-- Use `separator: true` to render divider lines between groups of items
-- Action identifiers starting with `__` are reserved for built-in actions (`__copy`, `__inspect`)
-- The nearest ContextMenu ancestor determines which custom items appear
-- Nested ContextMenus: inner menus take precedence over outer ones
-- On Love2D, text selection requires `userSelect: 'text'` style on Text nodes
-- Menu automatically closes after item selection, click outside, or Escape key
-- Disabled items are grayed out and unclickable but remain visible
-- Separator items do not trigger hover or selection
-- Empty items array is allowed (menu shows only built-in Copy and Inspect)
-- JS receives only boundary events: open, close, select (NO hover, keyboard nav, or render events)
-- On Love2D, the menu is positioned at click coordinates but clamped to viewport
+- ContextMenu wraps children -- it does not render a visible element itself. The children define the right-click target area.
+- The `action` field on ContextMenuItem must be unique within the items array. This is how you identify which item was selected in onSelect.
+- Separator items still require label and action fields, but they are ignored. Use empty strings.
 
 === SEE ALSO ===
-
-- TextInput — Single-line text input with cursor and selection (can be wrapped with ContextMenu for Copy)
-- TextEditor — Multi-line code editor (can be wrapped with ContextMenu for Copy)
-- Box — Container primitive (can be wrapped with ContextMenu for custom actions)
-- Modal — Overlay component (similar inverse pattern where Lua owns interaction)
-- Text — Text primitive with `userSelect: 'text'` for text selection support
+- Pressable
+- Box

@@ -1,392 +1,366 @@
 === METADATA ===
 title: Router
-description: Client-side routing for ReactJIT apps across all targets
+description: Full router API -- RouterProvider, Route, Routes, Link, Navigate, Outlet, hooks, and history adapters
 category: Routing
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: routing, navigation, history, params, location, route, link
-related: useLocation, useParams, useNavigate
+platforms: love2d
+keywords: router, route, routes, link, navigate, outlet, useNavigate, useParams, useLocation, useRoute, useRouter, history, memory, browser, matching, params, wildcard
+related: index.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-@reactjit/router provides client-side routing with no external dependencies.
-It works on every ReactJIT target by abstracting history management behind
-a HistoryAdapter interface: memory-based for native targets, browser-based for
-web. Route matching supports named parameters (:id), optional parameters
-(:id?), and wildcards (*), with highest-specificity-wins semantics when
-multiple routes match.
+The router is a standalone package with zero external dependencies. It provides declarative route matching, programmatic navigation, and nested route support through a React context-based architecture.
 
-Import: import { RouterProvider, Routes, Route, Link, Navigate, Outlet,
-         useRouter, useNavigate, useLocation, useParams, useRoute,
-         createMemoryHistory, createBrowserHistory } from '@reactjit/router';
+For Love2D targets (the default), use `createMemoryHistory()`. The router maintains an in-memory stack of locations -- there is no URL bar. For WASM web builds, `createBrowserHistory()` wraps the browser's History API so the URL bar stays in sync.
+
+Route patterns support three kinds of segments:
+- Static segments (`/users/new`) -- exact match, highest specificity
+- Named parameters (`/users/:id`) -- captures a path segment into `params`
+- Wildcards (`/files/*`) -- captures the rest of the path as `params.$rest`
+- Optional parameters (`/users/:id?`) -- matches with or without the segment
+
+When multiple routes match, the router picks the most specific one. Static segments score highest, then required parameters, then optional parameters, then wildcards.
 
 === API / SYNTAX ===
+```tsx
+import {
+  RouterProvider, Routes, Route, Link, Navigate, Outlet,
+  useRouter, useNavigate, useLocation, useParams, useRoute,
+  createMemoryHistory, createBrowserHistory,
+} from '@reactjit/router';
+```
 
 ---- createMemoryHistory(options?) ----------------------------------------
 
-Creates an in-memory history stack. Use this on all non-web targets (love2d,
-terminal, cc, nvim, hs, awesome).
+Creates an in-memory history adapter. Use this for Love2D targets.
 
-  createMemoryHistory(options?: MemoryHistoryOptions): HistoryAdapter
+```tsx
+createMemoryHistory(options?: MemoryHistoryOptions): HistoryAdapter
+```
 
-  MemoryHistoryOptions:
-    initialEntries?: string[]   // Initial path stack. Default: ['/']
-    initialIndex?:  number      // Active index into initialEntries.
-                                // Default: last entry.
-
-  Returns: HistoryAdapter — pass to <RouterProvider history={...} />
+Options:
+| Option         | Type     | Default | Description                           |
+|----------------|----------|---------|---------------------------------------|
+| initialEntries | string[] | ['/']   | Pre-populated history stack           |
+| initialIndex   | number   | last    | Starting index into initialEntries    |
 
 ---- createBrowserHistory() -----------------------------------------------
 
-Creates a history adapter backed by the browser's History API. Web target only.
-Listens to popstate for back/forward button support.
+Creates a history adapter backed by the browser's History API. Use this for WASM web builds only.
 
-  createBrowserHistory(): HistoryAdapter
+```tsx
+createBrowserHistory(): HistoryAdapter
+```
 
----- RouterProvider --------------------------------------------------------
+---- HistoryAdapter -------------------------------------------------------
 
-Context provider. Wrap your entire app (or the routed subtree) with this once.
-All routing hooks and components require a RouterProvider ancestor.
+The interface both history factories return:
 
-  <RouterProvider history={HistoryAdapter}>
-    {children}
-  </RouterProvider>
+| Method                  | Returns       | Description                              |
+|-------------------------|---------------|------------------------------------------|
+| location                | Location      | Current location (pathname, search, hash)|
+| push(path)              | void          | Navigate forward, adding a history entry |
+| replace(path)           | void          | Replace the current history entry        |
+| back()                  | void          | Go back one entry                        |
+| forward()               | void          | Go forward one entry                     |
+| subscribe(listener)     | () => void    | Listen for location changes; returns unsubscribe |
 
-  Props:
-    history   HistoryAdapter   Required. From createMemoryHistory() or
-                               createBrowserHistory().
-    children  ReactNode        Required.
+---- Location -------------------------------------------------------------
 
----- Routes ----------------------------------------------------------------
+| Field    | Type   | Description                        |
+|----------|--------|------------------------------------|
+| pathname | string | Path portion (e.g. `/users/42`)    |
+| search   | string | Query string including `?`         |
+| hash     | string | Hash including `#`                 |
 
-Container that evaluates all child <Route> elements and renders the single
-best-matching one. "Best" means highest specificity score among all patterns
-that match the current pathname. Use this for exclusive routing.
+---- RouterProvider -------------------------------------------------------
 
-  <Routes>
-    {children}   // One or more <Route> elements
-  </Routes>
+Wraps your app tree with routing context. Must be an ancestor of all routing components and hooks.
 
----- Route -----------------------------------------------------------------
+Props:
+| Prop     | Type           | Default  | Description                                |
+|----------|----------------|----------|--------------------------------------------|
+| history  | HistoryAdapter | required | From createMemoryHistory() or createBrowserHistory() |
+| children | ReactNode      | required | App content                                |
 
-Declares a route. Must be a direct child of <Routes>. Has no visible output
-on its own — Routes does the rendering.
+---- Routes ---------------------------------------------------------------
 
-  <Route path={string} element={ReactNode} />
+Evaluates all child `<Route>` elements and renders the single best match. "Best" means the highest specificity score among matching patterns.
 
-  Props:
-    path     string      Route pattern. Supports:
-                           /users           — static segment
-                           /users/:id       — named parameter
-                           /users/:id?      — optional parameter
-                           /files/*         — wildcard (rest of path)
-                           *                — catch-all / 404 fallback
-    element  ReactNode   What to render when this route matches.
+Props:
+| Prop     | Type      | Default  | Description              |
+|----------|-----------|----------|--------------------------|
+| children | ReactNode | required | `<Route>` elements only  |
 
-  Specificity scoring (higher = matched first):
-    static segment   4 points
-    required param   3 points
-    optional param   2 points
-    wildcard         1 point
+---- Route ----------------------------------------------------------------
 
----- Link ------------------------------------------------------------------
+Declares a path-to-element mapping. Use inside `<Routes>` for best-match semantics.
 
-Navigable wrapper. Calls navigate() on click. On web it renders as <a> so
-the browser gets hover state, right-click, and native link behaviors.
+Props:
+| Prop    | Type      | Default  | Description                      |
+|---------|-----------|----------|----------------------------------|
+| path    | string    | required | Route pattern to match           |
+| element | ReactNode | required | Component to render when matched |
 
-  <Link to={string} replace? style? {...rest}>
-    {children}
-  </Link>
+---- Link -----------------------------------------------------------------
 
-  Props:
-    to        string     Required. Target path.
-    replace?  boolean    Replace current history entry instead of pushing.
-                         Default: false.
-    style?    object     Style object forwarded to the underlying element.
-    children  ReactNode  Required.
+Navigable element that calls `navigate()` on press. Renders as a View node (the reconciler remaps `<a>` to `View`).
 
----- Navigate (declarative redirect) ----------------------------------------
+Props:
+| Prop    | Type      | Default   | Description                             |
+|---------|-----------|-----------|-----------------------------------------|
+| to      | string    | required  | Target path                             |
+| replace | boolean   | false     | Replace current entry instead of pushing|
+| children| ReactNode | required  | Content to render                       |
+| style   | Style     | undefined | Style overrides                         |
 
-When rendered, immediately navigates to `to`. Useful inside route elements for
-conditional redirects or deprecated-path forwarding.
+---- Navigate -------------------------------------------------------------
 
-  <Navigate to={string} replace? />
+Declarative redirect. When rendered, immediately navigates to `to`. Use inside a Route element for redirects.
 
-  Props:
-    to       string    Required. Target path.
-    replace? boolean   Use replace instead of push. Default: false.
+Props:
+| Prop    | Type    | Default | Description                              |
+|---------|---------|---------|------------------------------------------|
+| to      | string  | required| Target path                              |
+| replace | boolean | false   | Replace current entry instead of pushing |
 
----- Outlet ----------------------------------------------------------------
+---- Outlet ---------------------------------------------------------------
 
-Renders nested route content. Place inside a parent route's element component
-to mark where child routes should appear. Backed by OutletContext.
+Renders nested route content. Place inside a parent route's element to show where child routes should appear. Reads from OutletContext.
 
-  <Outlet />
+No props.
 
-  No props.
+---- useRouter() ----------------------------------------------------------
 
----- useRouter() -----------------------------------------------------------
+Returns the full router state object:
 
-Returns the full router state object. Prefer the focused hooks (useNavigate,
-useLocation, useParams) unless you need everything at once.
+```tsx
+const router = useRouter();
+// router.location   — current Location
+// router.navigate   — (to: string, options?: NavigateOptions) => void
+// router.back       — () => void
+// router.forward    — () => void
+```
 
-  useRouter(): RouterState
+Throws if called outside a `<RouterProvider>`.
 
-  RouterState:
-    location  Location                                    Current location.
-    params    Record<string, string>                      Matched route params.
-    navigate  (to: string, opts?: NavigateOptions) => void
-    back      () => void
-    forward   () => void
+---- useNavigate() --------------------------------------------------------
 
-  Throws if called outside a <RouterProvider>.
+Returns the navigate function directly:
 
----- useNavigate() ---------------------------------------------------------
+```tsx
+const navigate = useNavigate();
+navigate('/users/42');
+navigate('/login', { replace: true });
+```
 
-Returns the navigate function. The most common hook for imperative navigation.
+---- useLocation() --------------------------------------------------------
 
-  useNavigate(): (to: string, options?: NavigateOptions) => void
+Returns the current Location object (pathname, search, hash). Re-renders the component when the location changes.
 
-  NavigateOptions:
-    replace?  boolean   Replace history entry instead of pushing.
+```tsx
+const location = useLocation();
+// location.pathname, location.search, location.hash
+```
 
-  Throws if called outside a <RouterProvider>.
+---- useParams() ----------------------------------------------------------
 
----- useLocation() ---------------------------------------------------------
+Returns the params captured by the nearest matched Route pattern. Must be called inside a component rendered by a `<Route>`.
 
-Returns the current Location object. Re-renders the component whenever the
-location changes.
+```tsx
+const params = useParams<{ id: string }>();
+// params.id
+```
 
-  useLocation(): Location
+---- useRoute(pattern) ----------------------------------------------------
 
-  Location:
-    pathname  string   The path portion (e.g. '/users/42').
-    search    string   Query string (e.g. '?tab=profile').
-    hash      string   Hash fragment (e.g. '#bio').
+Match the current location against a route pattern without declaring a Route component. Returns a tuple of `[matched, params]`.
 
-  Throws if called outside a <RouterProvider>.
+```tsx
+const [matched, params] = useRoute('/users/:id');
+```
 
----- useParams<T>() --------------------------------------------------------
+---- NavigateOptions -------------------------------------------------------
 
-Returns the named URL parameters extracted from the matched route pattern.
-Only populated inside a route rendered by <Routes> — parameters are provided
-by RouteParamsContext.
-
-  useParams<T extends Record<string, string> = Record<string, string>>(): T
-
-  Returns: Object mapping parameter names to their decoded string values.
-           Empty object if no parameters matched or used outside <Routes>.
-
-  Example: route '/users/:id', pathname '/users/42' -> { id: '42' }
-
----- useRoute(pattern) -----------------------------------------------------
-
-Imperatively match the current pathname against a pattern. Returns a tuple of
-[matched, params]. Useful for conditional rendering without <Routes>.
-
-  useRoute(pattern: string): [boolean, Record<string, string>]
-
-  Arguments:
-    pattern  string   Route pattern (same syntax as <Route path={...} />).
-
-  Returns:
-    [0]  boolean                 True if current pathname matches.
-    [1]  Record<string, string>  Extracted params if matched, {} otherwise.
-
----- HistoryAdapter interface -----------------------------------------------
-
-Implement this to add custom history backends (e.g., hash-based routing).
-
-  interface HistoryAdapter {
-    readonly location: Location
-    push(path: string): void
-    replace(path: string): void
-    back(): void
-    forward(): void
-    subscribe(listener: (location: Location) => void): () => void
-  }
-
----- Low-level matching utilities -------------------------------------------
-
-  matchRoute(pattern: string, pathname: string): RouteMatch
-    RouteMatch: { matched: boolean; params: Record<string, string>; path: string }
-
-  scorePattern(pattern: string): number
-    Returns specificity score. Higher = more specific.
-
-  findBestMatch(patterns: string[], pathname: string): RouteMatch | null
-    Returns the highest-scoring match among all patterns, or null.
-
-  parsePath(path: string): Location
-    Parses '/users/42?tab=info#bio' into { pathname, search, hash }.
-
-  locationToString(loc: Location): string
-    Reconstructs a full path string from a Location object.
+| Field   | Type    | Default | Description                              |
+|---------|---------|---------|------------------------------------------|
+| replace | boolean | false   | Replace current entry instead of pushing |
 
 === EXAMPLES ===
-
----- Love2D / native target (memory history) --------------------------------
-
-import { RouterProvider, Routes, Route, Link, createMemoryHistory }
-  from '@reactjit/router';
+Example 1: Basic routing setup
+---
+```tsx
 import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+import { RouterProvider, Routes, Route, createMemoryHistory } from '@reactjit/router';
 
-const history = createMemoryHistory({ initialEntries: ['/'] });
+const history = createMemoryHistory();
 
-function HomeScreen() {
-  return (
-    <Box style={{ flex: 1 }}>
-      <Text fontSize={24}>Home</Text>
-      <Link to="/settings">Go to Settings</Link>
-    </Box>
-  );
+function Home() {
+  const colors = useThemeColors();
+  return <Text style={{ color: colors.text, fontSize: 24 }}>Home</Text>;
 }
 
-function SettingsScreen() {
-  return <Text fontSize={18}>Settings</Text>;
+function About() {
+  const colors = useThemeColors();
+  return <Text style={{ color: colors.text, fontSize: 24 }}>About</Text>;
 }
 
 export function App() {
   return (
     <RouterProvider history={history}>
-      <Routes>
-        <Route path="/"         element={<HomeScreen />} />
-        <Route path="/settings" element={<SettingsScreen />} />
-        <Route path="*"         element={<Text fontSize={16}>404</Text>} />
-      </Routes>
+      <Box style={{ width: '100%', height: '100%' }}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+        </Routes>
+      </Box>
     </RouterProvider>
   );
 }
+```
+---
+Platforms: love2d
 
----- Web target (browser history) -------------------------------------------
+Example 2: Navigation with Link and useNavigate
+---
+```tsx
+import { Box, Text, Pressable } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+import { RouterProvider, Routes, Route, Link, useNavigate, createMemoryHistory } from '@reactjit/router';
 
-import { RouterProvider, Routes, Route, createBrowserHistory }
-  from '@reactjit/router';
+const history = createMemoryHistory();
 
-const history = createBrowserHistory();
-
-export function App() {
-  return (
-    <RouterProvider history={history}>
-      <Routes>
-        <Route path="/"       element={<Home />} />
-        <Route path="/about"  element={<About />} />
-      </Routes>
-    </RouterProvider>
-  );
-}
-
----- Named parameters -------------------------------------------------------
-
-import { useParams, useNavigate } from '@reactjit/router';
-
-function UserPage() {
-  const { id } = useParams<{ id: string }>();
+function NavBar() {
+  const colors = useThemeColors();
   const navigate = useNavigate();
 
   return (
-    <Box>
-      <Text fontSize={18}>User: {id}</Text>
-      <Pressable onPress={() => navigate('/users')}>
-        <Text fontSize={14}>Back to list</Text>
+    <Box style={{ flexDirection: 'row', gap: 16, padding: 12, backgroundColor: colors.bgElevated }}>
+      <Link to="/">
+        <Text style={{ color: colors.primary, fontSize: 14 }}>Home</Text>
+      </Link>
+      <Link to="/settings">
+        <Text style={{ color: colors.primary, fontSize: 14 }}>Settings</Text>
+      </Link>
+      <Pressable onPress={() => navigate('/about')}>
+        <Text style={{ color: colors.primary, fontSize: 14 }}>About</Text>
       </Pressable>
     </Box>
   );
 }
 
-// Mount at: <Route path="/users/:id" element={<UserPage />} />
-
----- Imperative navigation with replace -------------------------------------
-
-import { useNavigate } from '@reactjit/router';
-
-function LoginPage() {
-  const navigate = useNavigate();
-
-  async function handleSubmit() {
-    await login();
-    // Replace so the user can't go back to the login screen
-    navigate('/dashboard', { replace: true });
-  }
-
-  return <Pressable onPress={handleSubmit}><Text fontSize={16}>Login</Text></Pressable>;
+export function App() {
+  return (
+    <RouterProvider history={history}>
+      <Box style={{ width: '100%', height: '100%' }}>
+        <NavBar />
+        <Box style={{ flexGrow: 1, padding: 16 }}>
+          <Routes>
+            <Route path="/" element={<Text>Home page</Text>} />
+            <Route path="/settings" element={<Text>Settings page</Text>} />
+            <Route path="/about" element={<Text>About page</Text>} />
+          </Routes>
+        </Box>
+      </Box>
+    </RouterProvider>
+  );
 }
+```
+---
+Platforms: love2d
 
----- Reading current location -----------------------------------------------
+Example 3: Route parameters
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+import { useParams, Routes, Route } from '@reactjit/router';
 
-import { useLocation } from '@reactjit/router';
-
-function NavBar() {
-  const location = useLocation();
-  const isHome = location.pathname === '/';
+function UserProfile() {
+  const colors = useThemeColors();
+  const { id } = useParams<{ id: string }>();
 
   return (
-    <Box flexDirection="row" width="100%">
-      <Text fontSize={14} style={{ color: isHome ? '#fff' : '#888' }}>Home</Text>
+    <Box style={{ padding: 16 }}>
+      <Text style={{ color: colors.text, fontSize: 18 }}>{`User #${id}`}</Text>
     </Box>
   );
 }
 
----- Conditional render with useRoute ---------------------------------------
+// Inside a RouterProvider:
+<Routes>
+  <Route path="/users/:id" element={<UserProfile />} />
+  <Route path="/users/new" element={<Text>New user form</Text>} />
+  <Route path="*" element={<Text>Not found</Text>} />
+</Routes>
+```
+---
+Platforms: love2d
 
+Example 4: Conditional rendering with useRoute
+---
+```tsx
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 import { useRoute } from '@reactjit/router';
 
-function AdminPanel() {
-  const [matched] = useRoute('/admin/*');
-  if (!matched) return null;
-  return <Text fontSize={16}>Admin content</Text>;
+function Sidebar() {
+  const colors = useThemeColors();
+  const [isSettings] = useRoute('/settings');
+  const [isAdmin, adminParams] = useRoute('/admin/:section');
+
+  return (
+    <Box style={{ width: 200, backgroundColor: colors.bgElevated, padding: 12 }}>
+      {isSettings && <Text style={{ color: colors.primary }}>Settings active</Text>}
+      {isAdmin && <Text style={{ color: colors.primary }}>{`Admin: ${adminParams.section}`}</Text>}
+    </Box>
+  );
 }
+```
+---
+Platforms: love2d
 
----- Declarative redirect ----------------------------------------------------
-
+Example 5: Declarative redirects with Navigate
+---
+```tsx
 import { Routes, Route, Navigate } from '@reactjit/router';
 
 <Routes>
-  <Route path="/home"     element={<Home />} />
-  <Route path="/"         element={<Navigate to="/home" replace />} />
-  <Route path="/old-path" element={<Navigate to="/new-path" />} />
+  <Route path="/" element={<Home />} />
+  <Route path="/old-path" element={<Navigate to="/new-path" replace />} />
+  <Route path="/new-path" element={<NewPage />} />
 </Routes>
+```
+---
+Platforms: love2d
 
----- Specificity: static beats dynamic -------------------------------------
+Example 6: Pre-populated history for testing
+---
+```tsx
+import { createMemoryHistory } from '@reactjit/router';
 
-// '/users/new' matches BOTH '/users/:id' (score 3) and '/users/new' (score 4).
-// Routes renders the more specific one: '/users/new'.
+// Start on the third page with back history available
+const history = createMemoryHistory({
+  initialEntries: ['/', '/users', '/users/42'],
+  initialIndex: 2,
+});
 
-<Routes>
-  <Route path="/users/:id"  element={<UserDetail />} />
-  <Route path="/users/new"  element={<NewUser />} />   // wins for /users/new
-  <Route path="*"           element={<NotFound />} />
-</Routes>
+// history.location.pathname === '/users/42'
+// history.back() goes to '/users'
+```
+---
+Platforms: love2d
 
----- Custom history adapter -------------------------------------------------
-
-import type { HistoryAdapter, Location } from '@reactjit/router';
-
-// Hash-based history for environments without pushState support
-function createHashHistory(): HistoryAdapter {
-  const listeners = new Set<(loc: Location) => void>();
-
-  function getLocation(): Location {
-    const hash = window.location.hash.slice(1) || '/';
-    return { pathname: hash, search: '', hash: '' };
-  }
-
-  window.addEventListener('hashchange', () => {
-    const loc = getLocation();
-    for (const fn of listeners) fn(loc);
-  });
-
-  return {
-    get location() { return getLocation(); },
-    push(path)    { window.location.hash = path; },
-    replace(path) { window.location.replace('#' + path); },
-    back()        { window.history.back(); },
-    forward()     { window.history.forward(); },
-    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-  };
-}
+=== CRITICAL RULES ===
+- Always use `createMemoryHistory()` for Love2D targets. `createBrowserHistory()` requires the browser History API and only works in WASM web builds.
+- `RouterProvider` must wrap all routing components and hooks. Calling `useRouter()`, `useNavigate()`, or `useParams()` outside a provider throws an error.
+- `useParams()` only returns params captured by the nearest ancestor `<Route>`. If called outside a Route-rendered component, it returns an empty object.
+- Route specificity determines which route renders when multiple patterns match. `/users/new` (score 8) beats `/users/:id` (score 7) beats `*` (score 1). Static segments score 4, required params score 3, optional params score 2, wildcards score 1.
+- `Link` renders as a View node (the reconciler remaps `<a>` to `View`). It handles navigation via onClick. In Love2D, this means Link is clickable through Lua's event system, not through browser link behavior.
+- `Navigate` fires on mount via useEffect. It renders nothing. Use it inside Route elements for redirects, not as a general-purpose navigation mechanism.
 
 === SEE ALSO ===
-useNavigate
-useLocation
-useParams
-useRoute
+- Routing index
+- Pressable
+- Tabs
+- NavPanel

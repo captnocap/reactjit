@@ -1,87 +1,81 @@
 === METADATA ===
-title: reactjit update
-description: Sync framework runtime files from the CLI into the current project.
+title: rjit update
+description: Sync framework runtime files from the CLI into a consumer project without touching application code.
 category: CLI
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: update, sync, runtime, lua, lib, reactjit, framework, cli-setup
+platforms: love2d
+keywords: update, sync, runtime, lua, lib, reactjit, symlink, framework
 related: init.txt, build.txt
 difficulty: beginner
 
 === OVERVIEW ===
-The `reactjit update` command synchronizes the framework runtime files (lua/, lib/, and
-reactjit/) from the CLI runtime directory into the current project. It replaces these
-directories entirely, bringing the project up to date with the latest framework code.
+`rjit update` copies the latest framework runtime files from the CLI's bundled runtime
+into your project. It updates lua/, lib/, reactjit/ (framework TypeScript source), fonts/,
+data/, and bin/ directories. It never touches your application code in src/.
 
-This command never touches project-specific files (src/, main.lua, conf.lua, package.json).
-It is the second step in the framework update pipeline: first `make cli-setup` copies source-of-truth
-files into the CLI runtime, then `reactjit update` copies from the CLI runtime into each project.
+The command merges files: it copies every file from the CLI runtime into the project,
+creating directories as needed, but preserves any user-created files that do not exist in
+the source. This means custom Lua modules you add to lua/ are kept.
+
+Symlinks are protected. If a destination directory is a symlink (e.g., the storybook's
+lua/ symlink to the monorepo root), the update skips that directory and prints a message.
+Running update from the storybook directory is explicitly blocked -- it reads from source
+via symlinks and should never have stale copies.
+
+The build command (rjit build) runs update automatically before bundling. Use --no-update
+to skip this if you manage runtime files manually. In monorepo development, update also
+overlays critical source-of-truth files (init.lua, bsod.lua, masks.lua, scene3d.lua,
+capabilities.lua) directly from the monorepo root, since the CLI runtime snapshot can lag
+behind active development.
 
 === API / SYNTAX ===
 Usage:
-  reactjit update
+  rjit update
 
-Prerequisite:
-  Must be run from inside an ReactJIT project directory (detected by presence of main.lua
-  or src/ directory).
+No flags or arguments. Must be run from inside a ReactJIT project directory (one that has
+main.lua or src/).
 
-What it syncs:
-  cli/runtime/lua/         ->  <project>/lua/
-  cli/runtime/lib/         ->  <project>/lib/
-  cli/runtime/reactjit/  ->  <project>/reactjit/
+Directories synced:
+  lua/                   Lua runtime (layout engine, painter, bridge, events, etc.)
+  lib/                   Native libraries (libquickjs.so)
+  reactjit/              Framework TypeScript source (core, renderer, optional packages)
+  fonts/                 Font packs (also copied to love/fonts/ if love/ subdirectory exists)
+  data/                  Data files (dictionary, etc.; also copied to love/data/ if applicable)
+  bin/                   Bundled binaries (tor)
 
-What it does NOT touch:
-  src/              Project source code
-  main.lua          Love2D entry point
-  conf.lua          Love2D configuration
-  package.json      Project dependencies
-  packaging/        Build customizations
-
-The update is destructive for the synced directories -- existing lua/, lib/, and reactjit/
-directories are deleted and replaced entirely.
+Source of runtime files:
+  cli/runtime/           Populated by `make cli-setup` from monorepo source-of-truth files
 
 === EXAMPLES ===
-Example 1: After editing framework source files
+Example 1: Update after framework changes
 ---
-# Edit source-of-truth files:
-#   lua/layout.lua
-#   packages/shared/src/primitives.tsx
-
-# Propagate to CLI runtime:
+# After editing lua/ or packages/ in the monorepo:
 make cli-setup
 
-# Sync into project:
-cd storybook
-reactjit update
-
-# Rebuild:
-reactjit build
+# Then in your consumer project:
+cd examples/my-app
+rjit update
+rjit build
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Hydrate an existing project
+Example 2: Automatic update during build
 ---
-cd my-project
-reactjit update
+# rjit build runs update automatically:
+cd examples/my-app
+rjit build
+# Output includes:
+#   ok  lua/ (42 files merged, user files preserved)
+#   ok  lib/
+#   ok  reactjit/
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-The update command works for all targets. The synced files include Lua runtime (needed for
-Love2D), the QuickJS shared library (needed for Love2D FFI bridge), and the TypeScript
-framework packages (needed for all targets).
-
-Note: `reactjit build` runs update automatically before building (unless --no-update is
-passed). You only need to run update manually when using `reactjit dev` or `love .`
-directly.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Always run `make cli-setup` in the monorepo root BEFORE running `reactjit update`
-- The CLI runtime must be populated (`cli/runtime/lua/` and `cli/runtime/reactjit/` must exist)
-- Never edit lua/, lib/, or reactjit/ in a project directly -- those are disposable copies managed by update
-- The update deletes and replaces the target directories entirely -- any local modifications are lost
-- Must be run from inside an ReactJIT project directory
+- Never edit files in a project's lua/ or reactjit/ directly -- those are disposable copies. Edit the source of truth (monorepo root lua/, packages/) and then run make cli-setup + rjit update
+- Never run rjit update from the storybook directory -- it reads from source via symlinks
+- Symlink destinations are skipped, not overwritten -- this protects the storybook's source-of-truth links
+- Update merges files (overwrites framework files, preserves user files) -- it does not delete files that exist in the project but not in the CLI runtime
 
 === SEE ALSO ===
-- init.txt -- Initial project creation (includes the first sync)
-- build.txt -- Build command runs update automatically
-- ../04-layout-system/critical-rules.txt -- Layout rules enforced after update
+- init.txt -- Creates a project with initial runtime files
+- build.txt -- Runs update automatically before bundling

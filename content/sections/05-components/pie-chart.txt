@@ -1,126 +1,98 @@
 === METADATA ===
 title: PieChart
-description: Pixel-grid pie and donut chart rendered entirely from Box primitives
+description: Circular chart with colored segments, optional donut mode
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: chart, pie, donut, radial, segments, data, visualization
-related: RadarChart, BarChart, HorizontalBarChart, ChartTooltip
+platforms: love2d
+keywords: pie chart, chart, donut, circle, segments, data visualization, proportional
+related: BarChart, RadarChart
 difficulty: intermediate
 
 === OVERVIEW ===
-PieChart rasterizes a pie chart into a 2x2-pixel cell grid using polar coordinate math, then renders each run of same-colored cells as a single Box. This approach requires no canvas or SVG — it works on any target that supports Box with backgroundColor. Setting innerRadius greater than zero hollows the center to produce a donut chart. When interactive mode is enabled, hovering the chart reveals a legend tooltip listing every segment's label, raw value, and percentage.
+PieChart renders a circular chart as a Lua `Chart2D` node. Each segment represents a labeled value with a color. The segment angle is proportional to its share of the total.
+
+Set `innerRadius` to a value greater than 0 to create a donut chart. When `interactive` is enabled, a table-layout tooltip shows each segment's label, value, and percentage.
+
+PieChart is a surface element. The `size` prop sets both width and height to create a square bounding box. If no `size` is set, proportional surface fallback applies.
 
 === API / SYNTAX ===
 ```tsx
 import { PieChart } from '@reactjit/core';
 ```
 
-Data shape:
-```tsx
-interface PieChartSegment {
-  label: string;  // Segment name shown in the hover tooltip legend
-  value: number;  // Numeric value; proportions are computed from the total
-  color: Color;   // Fill color for this segment; required per segment
-}
-```
-
 Props:
-| Prop          | Type                   | Default    | Description                                                                     |
-|---------------|------------------------|------------|---------------------------------------------------------------------------------|
-| data          | PieChartSegment[]      | required   | Array of segments; values are proportional, not percentages                     |
-| size          | number                 | 120        | Width and height of the chart square in pixels                                  |
-| innerRadius   | number                 | 0          | Hollow center radius in pixels; 0 = solid pie, >0 = donut ring                 |
-| interactive   | boolean                | false      | Enable hover to show the full segment legend tooltip                            |
-| style         | Style                  | undefined  | Additional styles applied to the outer container Box                            |
+| Prop        | Type              | Default   | Description                              |
+|-------------|-------------------|-----------|------------------------------------------|
+| data        | PieChartSegment[] | required  | Array of segments                        |
+| size        | number            | undefined | Diameter in pixels (sets width + height) |
+| innerRadius | number            | undefined | Inner radius for donut mode (0 = full)   |
+| interactive | boolean           | undefined | Enable hover tooltip                     |
+| style       | Style             | undefined | Full style object                        |
+
+PieChartSegment:
+| Field | Type   | Default  | Description               |
+|-------|--------|----------|---------------------------|
+| label | string | required | Segment label             |
+| value | number | required | Numeric value             |
+| color | Color  | required | Segment color             |
 
 === EXAMPLES ===
 Example 1: Basic pie chart
 ---
 ```tsx
-import { PieChart } from '@reactjit/core';
-
-const marketShare = [
-  { label: 'Chrome',  value: 65, color: '#3b82f6' },
-  { label: 'Safari',  value: 19, color: '#22c55e' },
-  { label: 'Firefox', value: 9,  color: '#f59e0b' },
-  { label: 'Other',   value: 7,  color: '#64748b' },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <PieChart data={marketShare} size={160} />
-    </Box>
-  );
-}
+<PieChart
+  data={[
+    { label: 'Desktop', value: 55, color: '#3b82f6' },
+    { label: 'Mobile', value: 35, color: '#22c55e' },
+    { label: 'Tablet', value: 10, color: '#f59e0b' },
+  ]}
+  size={120}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Donut chart with innerRadius
+Example 2: Donut chart with interaction
 ---
 ```tsx
-import { PieChart } from '@reactjit/core';
-
-const storage = [
-  { label: 'Used',  value: 73, color: '#6366f1' },
-  { label: 'Free',  value: 27, color: '#1e293b' },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <PieChart
-        data={storage}
-        size={140}
-        innerRadius={40}
-      />
-    </Box>
-  );
-}
+<PieChart
+  data={[
+    { label: 'Used', value: 68, color: '#ef4444' },
+    { label: 'Free', value: 32, color: '#1e293b' },
+  ]}
+  size={100}
+  innerRadius={30}
+  interactive
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive pie with legend tooltip
+Example 3: Dashboard usage
 ---
 ```tsx
-import { PieChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const budget = [
-  { label: 'Engineering', value: 45, color: '#3b82f6' },
-  { label: 'Marketing',   value: 25, color: '#ec4899' },
-  { label: 'Operations',  value: 20, color: '#f59e0b' },
-  { label: 'HR',          value: 10, color: '#22c55e' },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <PieChart
-        data={budget}
-        size={160}
-        innerRadius={50}
-        interactive
-      />
-    </Box>
-  );
-}
+<Box style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+  <PieChart
+    data={budgetBreakdown}
+    size={80}
+    innerRadius={20}
+    interactive
+  />
+  <Box>
+    <Text style={{ color: colors.text, fontSize: 14 }}>Budget</Text>
+    <Text style={{ color: colors.muted, fontSize: 12 }}>{`${total} total`}</Text>
+  </Box>
+</Box>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
-=== CRITICAL RULES ===
-- The chart is rendered as a pixel grid at 2px cell resolution. `size` must be even for the grid to divide cleanly; odd values are floored internally via `Math.floor(size / cellSize)`.
-- All segment `color` values are required — there is no fallback color. Omitting `color` from a segment will render that segment transparently.
-- `innerRadius` is specified in the same pixel units as `size`, not as a fraction. A `size={120}` chart with `innerRadius={60}` produces a ring exactly half the radius.
-- The tooltip appears to the right of the chart (`left: '100%'`). Ensure the chart container has enough horizontal space for the tooltip or it will be clipped.
-- Rasterization cost scales with `size`. Very large values (>300) will produce a high Box count; prefer sizes in the 80–200px range.
-- Segments with a value of 0 are included in the legend but produce no visible arc — this is safe.
-- Do not use Unicode symbols in segment `label` strings.
+=== PLATFORM NOTES ===
+Love2D:
+  Rendered by lua/chart.lua as a Chart2D surface. Segments are drawn using love.graphics.arc. The tooltip uses table layout to align label/value/percentage columns. Inner radius creates a donut by drawing a second arc in the background color.
 
 === SEE ALSO ===
-- RadarChart — another pixel-rasterized chart for multi-axis comparisons
-- BarChart — vertical bars for the same categorical data
-- HorizontalBarChart — horizontal bars with proportional fills
-- ChartTooltip — standalone tooltip primitive; PieChart implements its own inline tooltip
+- BarChart
+- RadarChart
+- AreaChart

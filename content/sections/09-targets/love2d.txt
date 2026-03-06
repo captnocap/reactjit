@@ -1,151 +1,188 @@
 === METADATA ===
-title: Love2D Target
-description: The primary ReactJIT target - pixel-perfect rendering via the Love2D game engine
+title: Love2D
+description: Love2D native target -- entry point, conf.lua, run loop, OpenGL 2.1, multi-window
 category: Targets
 platforms: love2d
-keywords: love2d, native, quickjs, pixel rendering, iife, inspector, f12, game engine
-related: web, terminal, pipeline, painter, layout-engine
+keywords: love2d, native, opengl, luajit, quickjs, entry, conf, main, run loop, multi-window, desktop
+related: wasm.txt, index.txt
 difficulty: intermediate
 
 === OVERVIEW ===
-Love2D is the primary and most mature ReactJIT target. Your React components run
-inside QuickJS (a lightweight JavaScript engine embedded in the Love2D process via
-libquickjs.so). The Lua runtime handles layout computation and rendering using
-love.graphics draw calls. This gives you pixel-perfect rendering with full support for
-mouse, keyboard, touch, and gamepad input.
+Love2D is the default and primary target. It runs LuaJIT + Love2D + OpenGL 2.1 on desktop platforms (Linux, macOS, Windows). JavaScript executes inside an embedded QuickJS runtime linked as a shared library (`libquickjs.so`). The bridge between JS and Lua is synchronous -- mutation commands and events are exchanged via C FFI trampolines within the same process.
 
-The Love2D target supports the complete ReactJIT feature set: flexbox layout, text
-measurement and wrapping, image loading, scroll containers, gradients, shadows,
-transforms, transitions, keyframe animations, and the F12 visual inspector.
+Every ReactJIT app has two Lua entry files:
+
+- `conf.lua` -- Love2D configuration (window title, size, vsync, MSAA, enabled modules)
+- `main.lua` -- application bootstrap (loads ReactJIT, wires Love2D callbacks, initializes the bridge)
+
+The CLI generates both when you run `rjit init`. You rarely need to edit `main.lua` -- it follows a standard pattern. `conf.lua` is where you set window properties.
+
+Love2D owns the run loop. Each frame:
+1. `love.update(dt)` calls `ReactJIT.update(dt)` -- polls JS for mutation commands, runs layout
+2. `love.draw()` calls `ReactJIT.draw()` -- walks the laid-out tree and issues OpenGL draw calls
+3. Input callbacks (`love.keypressed`, `love.mousepressed`, etc.) forward to `ReactJIT.safeCall()` -- events are queued for JS to poll on the next frame
+
+React never drives the frame. It only processes events and flushes commands when Lua asks during `love.update()`.
 
 === API / SYNTAX ===
-esbuild Configuration:
-  --format=iife
-  --global-name=ReactLove
 
-Build Commands:
-  reactjit dev              - Watch mode with HMR
-  reactjit build            - Lint gate + production bundle
-  reactjit build dist:love  - Self-extracting Linux binary
+---- conf.lua -------------------------------------------------------------
 
-Runtime Modes:
-  native  - QuickJS FFI bridge (default for `love .`)
-  web     - Module.FS bridge (for love.js / Emscripten builds)
-  canvas  - Module.FS bridge + native rendering pipeline (hybrid web)
+Standard Love2D configuration. Set window properties and enable/disable modules.
 
-Love2D Callbacks (wired in main.lua):
-  love.update(dt)       -> ReactLove.update(dt)
-  love.draw()           -> ReactLove.draw()
-  love.mousepressed()   -> ReactLove.mousepressed(x, y, button)
-  love.mousereleased()  -> ReactLove.mousereleased(x, y, button)
-  love.mousemoved()     -> ReactLove.mousemoved(x, y)
-  love.keypressed()     -> ReactLove.keypressed(key, scancode, isrepeat)
-  love.keyreleased()    -> ReactLove.keyreleased(key, scancode)
-  love.textinput()      -> ReactLove.textinput(text)
-  love.wheelmoved()     -> ReactLove.wheelmoved(x, y)
-  love.touchpressed()   -> ReactLove.touchpressed(id, x, y, dx, dy, pressure)
-  love.touchreleased()  -> ReactLove.touchreleased(id, x, y, dx, dy, pressure)
-  love.touchmoved()     -> ReactLove.touchmoved(id, x, y, dx, dy, pressure)
-  love.gamepadpressed() -> ReactLove.gamepadpressed(joystick, button)
-  love.gamepadreleased()-> ReactLove.gamepadreleased(joystick, button)
-  love.gamepadaxis()    -> ReactLove.gamepadaxis(joystick, axis, value)
-  love.resize()         -> ReactLove.resize(w, h)
-  love.quit()           -> ReactLove.quit()
+```lua
+function love.conf(t)
+  t.identity = "my-app"           -- save directory name
+  t.window.title = "My App"       -- window title bar text
+  t.window.width = 800            -- initial window width
+  t.window.height = 600           -- initial window height
+  t.window.vsync = 1              -- 1 = vsync on, 0 = off
+  t.window.msaa = 4               -- multisample anti-aliasing (0, 2, 4, 8)
+  t.window.resizable = true       -- allow window resizing
+  t.modules.joystick = true       -- enable gamepad support
+  t.modules.physics = false       -- disable Box2D (not used by ReactJIT)
+end
+```
 
-=== EXAMPLES ===
-Example 1: Standard App Entry Point (src/index.tsx)
----
-import { createLove2DApp } from '@reactjit/renderer';
-import App from './App';
+---- main.lua -------------------------------------------------------------
 
-const app = createLove2DApp();
-app.render(<App />);
----
-Platforms: love2d
+Application entry point. Loads ReactJIT, sets up error handling, and wires Love2D callbacks.
 
-Example 2: main.lua Entry Point
----
-local ReactLove = require("lua")
+```lua
+local ReactJIT = require("lua.init")
+
+love.errorhandler = require("lua.bsod")
 
 function love.load()
-  ReactLove.init({
-    bundlePath = "bundle.js",
+  love.graphics.setBackgroundColor(0.04, 0.04, 0.06)
+  ReactJIT.init({
+    mode = "native",
+    bundlePath = "love/bundle.js",
     libpath = "lib/libquickjs",
   })
 end
 
 function love.update(dt)
-  ReactLove.update(dt)
+  ReactJIT.update(dt)
 end
 
 function love.draw()
-  ReactLove.draw()
+  ReactJIT.draw()
+end
+```
+
+ReactJIT.init options:
+| Option     | Type   | Description                                      |
+|------------|--------|--------------------------------------------------|
+| mode       | string | `"native"` for desktop Love2D                   |
+| bundlePath | string | Path to the esbuild output (JS bundle)           |
+| libpath    | string | Path to libquickjs shared library (without extension) |
+
+---- Input callbacks ------------------------------------------------------
+
+All input is forwarded to ReactJIT via `safeCall()`, which wraps the call in pcall for error resilience:
+
+```lua
+function love.keypressed(key, scancode, isrepeat)
+  ReactJIT.safeCall("keypressed", key, scancode, isrepeat)
 end
 
 function love.mousepressed(x, y, button)
-  ReactLove.mousepressed(x, y, button)
-end
-
-function love.mousereleased(x, y, button)
-  ReactLove.mousereleased(x, y, button)
-end
-
-function love.mousemoved(x, y)
-  ReactLove.mousemoved(x, y)
-end
-
-function love.keypressed(key, scancode, isrepeat)
-  ReactLove.keypressed(key, scancode, isrepeat)
-end
-
-function love.keyreleased(key, scancode)
-  ReactLove.keyreleased(key, scancode)
-end
-
-function love.textinput(text)
-  ReactLove.textinput(text)
+  ReactJIT.safeCall("mousepressed", x, y, button)
 end
 
 function love.wheelmoved(x, y)
-  ReactLove.wheelmoved(x, y)
+  ReactJIT.safeCall("wheelmoved", x, y)
 end
 
 function love.resize(w, h)
-  ReactLove.resize(w, h)
+  ReactJIT.safeCall("resize", w, h)
 end
 
-function love.quit()
-  ReactLove.quit()
+function love.textinput(text)
+  ReactJIT.safeCall("textinput", text)
 end
+
+function love.filedropped(file)
+  ReactJIT.safeCall("filedropped", file)
+end
+```
+
+---- Multi-window ---------------------------------------------------------
+
+Each `<Window>` component spawns a child Love2D process connected over TCP via `lua/window_manager.lua`. Child windows run their own Love2D instance with `lua/child_window/main.lua` and receive layout subtrees from the parent process. This is IPC-based, not threading -- each window has its own OpenGL context.
+
+---- Build commands -------------------------------------------------------
+
+```bash
+rjit dev                   # Watch + HMR, launches Love2D automatically
+rjit build                 # Dev build (outputs love/bundle.js)
+rjit build linux           # Self-extracting Linux binary (x64)
+rjit build macos           # macOS bundle (Intel x64)
+rjit build macmseries      # macOS bundle (Apple Silicon arm64)
+rjit build windows         # Windows archive (x64)
+rjit build dist:love       # Self-extracting Linux binary with bundled glibc
+```
+
+=== EXAMPLES ===
+Example 1: Minimal Love2D app
+---
+```tsx
+// src/App.tsx
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+export function App() {
+  const colors = useThemeColors();
+
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ color: colors.text, fontSize: 32 }}>Hello, Love2D</Text>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Custom conf.lua with gamepad support
+---
+```lua
+-- conf.lua
+function love.conf(t)
+  t.identity = "my-game"
+  t.window.title = "My Game"
+  t.window.width = 1280
+  t.window.height = 720
+  t.window.vsync = 1
+  t.window.msaa = 4
+  t.window.resizable = true
+  t.modules.joystick = true
+  t.modules.physics = false
+end
+```
 ---
 Platforms: love2d
 
 === PLATFORM NOTES ===
-Features:
-  - Pixel-perfect rendering (no browser rendering quirks)
-  - Full input support: mouse, keyboard, touch, gamepad
-  - F12 visual inspector for debugging layout
-  - Backtick (`) console for evaluating JS/Lua at runtime
-  - Hot module reload (HMR) -- bundle.js changes detected automatically
-  - Screenshot capture via `reactjit screenshot`
-  - Error overlay for runtime errors
-  - Self-extracting binary distribution (Linux)
+Love2D:
+  OpenGL 2.1 is the graphics backend. This means no compute shaders, no instanced rendering, and no geometry shaders. The painter uses immediate-mode draw calls (love.graphics.rectangle, love.graphics.print, etc.) with stencil-based overflow clipping.
 
-Limitations:
-  - No text selection or clipboard (OS-level)
-  - Font rendering is Love2D's built-in renderer (no HarfBuzz)
-  - Bold is simulated (faux bold via double draw with 0.8px offset)
-  - No sub-pixel antialiasing
+  LuaJIT provides the Lua runtime -- standard Lua 5.1 with JIT compilation and FFI. The QuickJS shared library is loaded via LuaJIT's FFI module.
+
+  MSAA (multisample anti-aliasing) is set in conf.lua. The default template uses MSAA 4. Set to 0 if you need maximum performance on low-end hardware.
+
+  VSync is enabled by default (t.window.vsync = 1). This caps the frame rate to the display refresh rate. Set to 0 for uncapped rendering (useful for benchmarking, not for production).
 
 === CRITICAL RULES ===
-- The bundle format MUST be IIFE with --global-name=ReactLove.
-  ESM or CJS bundles will not load in QuickJS.
-- Always use the CLI for builds: `reactjit build`, not raw esbuild.
-- The Lua runtime files must be present locally for `love .` to work.
-  Run `reactjit update` after any framework changes.
+- Never run `love .` directly. Use `rjit dev` which handles esbuild watch and Love2D launch together. Direct launching causes duplicate processes.
+- The `mode` field in ReactJIT.init must be `"native"` for desktop Love2D. The WASM mode uses a different bridge transport.
+- Edit Lua files in the monorepo root `lua/` directory, not in project-local copies. Run `make cli-setup` then `rjit update` to propagate changes.
+- `conf.lua` is read by Love2D before any Lua code runs. It cannot require other modules or use Love2D APIs.
+- `love.errorhandler` should be set to `require("lua.bsod")` for the custom error screen. Without it, Love2D's default blue error screen has no back button or reload capability.
 
 === SEE ALSO ===
-- 02-architecture/pipeline.txt - How the frame loop works
-- 02-architecture/painter.txt - Love2D painter details
-- 10-advanced/lua-runtime.txt - All 19 Lua modules
-- 10-advanced/debugging.txt - F12 inspector and console
+- WASM target
+- Architecture
+- Pipeline
+- CLI reference

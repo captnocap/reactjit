@@ -1,16 +1,18 @@
 === METADATA ===
 title: ProgressBar
-description: Progress indicator bar that fills proportionally from 0 to 1, with optional label, animation, and interactive hover tooltip
+description: Horizontal progress indicator with optional label and animation
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: progress, bar, loading, percentage, indicator, animated, interactive
-related: Sparkline, BarChart, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: progress, bar, loading, percentage, indicator, fill, track
+related: Sparkline, BarChart
+difficulty: intermediate
 
 === OVERVIEW ===
-ProgressBar displays a horizontal fill bar representing progress from 0 to 1. The fill width is rendered as a percentage of the track width. An optional label shows the percentage or custom text overlay, and the `animated` prop uses `useSpring` to smoothly interpolate value changes.
+ProgressBar displays a horizontal fill indicator for a 0-to-1 value. The fill width is rendered as a percentage of the track. Values outside 0-1 are clamped.
 
-The component uses Box and Text primitives, making it compatible with all targets. The track and fill both use pill-shaped border radii derived from the height. When interactive mode is enabled, hovering the bar reveals a ChartTooltip showing the percentage and exact fill fraction.
+Built with Box and Text primitives (not a Chart2D surface). When `showLabel` is true and height is at least 14px, the percentage or custom label text is overlaid on the bar. The `animated` prop enables a spring transition on the fill width.
+
+When `interactive` is enabled, hovering shows a descriptive tooltip with the label, percentage, and raw value.
 
 === API / SYNTAX ===
 ```tsx
@@ -18,94 +20,86 @@ import { ProgressBar } from '@reactjit/core';
 ```
 
 Props:
-| Prop        | Type    | Default    | Description                                                              |
-|-------------|---------|------------|--------------------------------------------------------------------------|
-| value       | number  | required   | Progress value from 0 to 1; clamped internally to [0, 1]                 |
-| color       | Color   | '#3b82f6'  | Fill bar color                                                           |
-| trackColor  | Color   | '#1e293b'  | Background track color                                                   |
-| height      | number  | 8          | Bar height in pixels                                                     |
-| showLabel   | boolean | false      | Show percentage label overlaid on the bar (requires height >= 14)        |
-| label       | string  | undefined  | Custom label text; defaults to the computed percentage (e.g. "65%")     |
-| animated    | boolean | false      | Animate value changes with a spring (stiffness: 120, damping: 20)       |
-| interactive | boolean | false      | Enable hover to show a ChartTooltip with percentage and fill fraction    |
-| style       | Style   | undefined  | Additional styles applied to the outer container Box                     |
+| Prop        | Type    | Default   | Description                                |
+|-------------|---------|-----------|--------------------------------------------|
+| value       | number  | required  | Progress value from 0 to 1                 |
+| color       | Color   | '#3b82f6' | Fill color                                 |
+| trackColor  | Color   | '#1e293b' | Background track color                     |
+| height      | number  | 8         | Bar height in pixels                       |
+| showLabel   | boolean | false     | Show label text (requires height >= 14)    |
+| label       | string  | undefined | Custom label (defaults to percentage)      |
+| animated    | boolean | false     | Animate width changes with spring easing   |
+| interactive | boolean | false     | Show tooltip on hover                      |
+| style       | Style   | undefined | Full style object (applied to track)       |
 
 === EXAMPLES ===
 Example 1: Basic progress bar
 ---
 ```tsx
-import { ProgressBar } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <ProgressBar value={0.42} style={{ width: '100%' }} />
-    </Box>
-  );
-}
+<ProgressBar value={0.65} color={colors.primary} />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Progress bar with visible label
+Example 2: With label and animation
 ---
 ```tsx
-import { ProgressBar } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <ProgressBar
-        value={0.75}
-        showLabel
-        height={20}
-        color="#22c55e"
-        style={{ width: 200 }}
-      />
-    </Box>
-  );
-}
+<ProgressBar
+  value={progress}
+  color={colors.primary}
+  height={20}
+  showLabel
+  animated
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Animated progress with custom label and interactive tooltip
+Example 3: Custom label and styling
 ---
 ```tsx
-import { ProgressBar } from '@reactjit/core';
+const colors = useThemeColors();
 
-export default function App({ downloaded, total }: { downloaded: number; total: number }) {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <ProgressBar
-        value={downloaded / total}
-        animated
-        label={`${downloaded} / ${total} MB`}
-        showLabel
-        height={18}
-        color="#f59e0b"
-        trackColor="#1e1e24"
-        interactive
-        style={{ width: '100%' }}
-      />
-    </Box>
-  );
-}
+<ProgressBar
+  value={downloaded / total}
+  color="#22c55e"
+  trackColor={colors.surface}
+  height={24}
+  showLabel
+  label={`${downloaded} / ${total} MB`}
+  style={{ borderRadius: 4 }}
+/>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
+
+Example 4: Interactive with tooltip
+---
+```tsx
+const colors = useThemeColors();
+
+<ProgressBar
+  value={0.82}
+  color={colors.primary}
+  trackColor={colors.surface}
+  height={12}
+  interactive
+  label="Upload"
+/>
+```
+---
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The `value` prop is required and is clamped to [0, 1] internally. Values outside this range are silently clamped — no error is thrown.
-- ProgressBar needs a known `width` for the fill bar to render correctly. Use explicit width, '100%', or flexGrow to ensure the track has resolved dimensions.
-- The `showLabel` prop is silently ignored when `height < 14` — the text physically does not fit within the bar at that height.
-- When `animated` is true, the fill width is driven by `useSpring` targeting `value * 100`. The hook is called unconditionally, so animated cannot be toggled conditionally at runtime.
-- Label text is positioned absolutely and centered over the full track width. It is always white (`color: '#ffffff'`) with `fontWeight: 'bold'`.
-- Label font size is `Math.max(9, height - 4)` — it scales with bar height but never goes below 9px.
-- When both `label` and `showLabel` are provided, the custom `label` string is shown instead of the computed percentage.
-- `interactive` adds a ChartTooltip showing the percentage and the raw clamped fraction (e.g. "0.75 / 1.00"). Hover requires pointer support.
+- The `value` prop must be between 0 and 1. Values outside this range are clamped.
+- The label overlay only appears when `showLabel` is true AND `height` is at least 14px. At smaller heights the text would not fit.
+- ProgressBar is not a surface element -- it is built from Box primitives. It does not get proportional surface fallback. Its height defaults to 8px; width comes from the parent container.
 
 === SEE ALSO ===
-- Sparkline — compact inline trend visualization
-- BarChart — multi-bar vertical chart for comparative data
-- ChartTooltip — standalone tooltip primitive used internally by this component
+- Sparkline
+- BarChart
+- HorizontalBarChart

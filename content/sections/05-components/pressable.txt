@@ -1,164 +1,148 @@
 === METADATA ===
 title: Pressable
-description: Interaction component with press, long press, and hover state tracking
+description: Interactive element with press, long press, and hover states
 category: Components
-platforms: love2d, web
-keywords: pressable, button, interaction, press, longpress, hover, touch, click, state, render prop
-related: Box, Modal, Slider
+platforms: love2d
+keywords: pressable, button, click, tap, press, hover, touch, interaction
+related: Box, Modal
 difficulty: beginner
 
 === OVERVIEW ===
-Pressable is a high-level interaction component that tracks pressed, hovered, and focused states. It wraps Box internally and provides callbacks for press, long press, hover, and focus events. Unlike Box's raw event handlers, Pressable manages interaction lifecycle: it fires onPress only on a clean release (not when a long press fires), supports configurable long press delay, and exposes interaction state to children via a render prop pattern.
+Pressable wraps content in an interactive container that tracks press, hover, and focus states. It fires callbacks for press, long press, hover in/out, and press in/out events.
 
-Pressable supports both static and function-based style and children props. When passed a function, it receives a PressableState object with { pressed, hovered, focused } booleans, letting you build reactive UI without manual state management. It also supports hitSlop to expand the touch target beyond visible bounds, and integrates keyboard accessibility (Enter/Space triggers press).
+Pressable pre-computes style variants and passes them to Box as `hoverStyle`/`activeStyle`, so Lua handles visual feedback at zero latency — no bridge round-trip needed for hover/active effects. React state is only used when `children` is a render-prop function that needs the interaction state.
+
+The `style` prop can be either a static Style object or a function that receives `{ pressed, hovered, focused }` and returns a Style. When a function is provided, Pressable computes the diff between base, hovered, and pressed variants and sends them as separate overlay styles to Lua.
 
 === API / SYNTAX ===
 ```tsx
 import { Pressable } from '@reactjit/core';
 ```
 
-```tsx
-<Pressable
-  onPress={(event) => { /* fired on clean tap/click */ }}
-  onLongPress={(event) => { /* fired after delayLongPress ms */ }}
-  style={(state) => ({
-    padding: 12,
-    backgroundColor: state.pressed ? '#45475a' : state.hovered ? '#313244' : '#1e1e2e',
-    borderRadius: 8,
-  })}
->
-  {(state) => (
-    <Text style={{ fontSize: 14, color: state.pressed ? '#89b4fa' : '#cdd6f4' }}>
-      {state.pressed ? 'Pressing...' : 'Press me'}
-    </Text>
-  )}
-</Pressable>
-```
-
 Props:
-| Prop              | Type                                              | Default   | Description                                  |
-|-------------------|----------------------------------------------------|-----------|----------------------------------------------|
-| onPress           | (event: LoveEvent) => void                         | undefined | Fires on release if long press did not fire  |
-| onLongPress       | (event: LoveEvent) => void                         | undefined | Fires after delayLongPress milliseconds      |
-| onPressIn         | (event: LoveEvent) => void                         | undefined | Fires immediately when press begins          |
-| onPressOut        | (event: LoveEvent) => void                         | undefined | Fires when press ends (release or cancel)    |
-| onHoverIn         | (event: LoveEvent) => void                         | undefined | Fires when pointer enters                    |
-| onHoverOut        | (event: LoveEvent) => void                         | undefined | Fires when pointer leaves                    |
-| disabled          | boolean                                            | false     | Disables all interaction                     |
-| delayLongPress    | number                                             | 500       | Milliseconds before long press fires         |
-| style             | Style | (state: PressableState) => Style            | undefined | Static style or function of interaction state|
-| children          | ReactNode | (state: PressableState) => ReactNode   | REQUIRED  | Static children or render prop               |
-| hitSlop           | number | HitSlop                                    | undefined | Expand touch target (px)                     |
-| accessibilityRole | string                                             | undefined | ARIA role (web: defaults to 'button')        |
+| Prop           | Type                                            | Default   | Description                                      |
+|----------------|-------------------------------------------------|-----------|--------------------------------------------------|
+| onPress        | (event: LoveEvent) => void                      | undefined | Fires on completed press (down + up)             |
+| onLongPress    | (event: LoveEvent) => void                      | undefined | Fires after holding for delayLongPress ms        |
+| onPressIn      | (event: LoveEvent) => void                      | undefined | Fires on press down                              |
+| onPressOut     | (event: LoveEvent) => void                      | undefined | Fires on press release                           |
+| onHoverIn      | (event: LoveEvent) => void                      | undefined | Fires when pointer enters                        |
+| onHoverOut     | (event: LoveEvent) => void                      | undefined | Fires when pointer leaves                        |
+| disabled       | boolean                                         | false     | Disables all interaction                         |
+| delayLongPress | number                                          | 500       | Milliseconds before onLongPress fires            |
+| hitSlop        | number \| HitSlop                               | undefined | Extend touch target beyond visible bounds        |
+| style          | Style \| ((state: PressableState) => Style)     | undefined | Static or state-dependent style                  |
+| children       | ReactNode \| ((state: PressableState) => ReactNode) | required | Static or state-dependent children          |
 
 PressableState:
-```ts
-interface PressableState {
-  pressed: boolean;   // true while pointer is down
-  hovered: boolean;   // true while pointer is over the element
-  focused: boolean;   // true while keyboard-focused
-}
-```
+| Field   | Type    | Description                  |
+|---------|---------|------------------------------|
+| pressed | boolean | Currently being pressed      |
+| hovered | boolean | Pointer is over the element  |
+| focused | boolean | Element has keyboard focus   |
 
 HitSlop:
-```ts
-interface HitSlop {
-  top?: number;
-  bottom?: number;
-  left?: number;
-  right?: number;
-}
-```
-
-When hitSlop is a number, it applies equally to all four sides.
+| Field  | Type   | Description                    |
+|--------|--------|--------------------------------|
+| top    | number | Extra tap area above element   |
+| bottom | number | Extra tap area below element   |
+| left   | number | Extra tap area left of element |
+| right  | number | Extra tap area right of element|
 
 === EXAMPLES ===
-Example 1: Simple button
+Example 1: Basic button
 ---
 ```tsx
+const colors = useThemeColors();
+
 <Pressable
   onPress={() => console.log('pressed')}
-  style={{ padding: 12, backgroundColor: '#89b4fa', borderRadius: 8 }}
+  style={{ padding: 12, backgroundColor: colors.primary, borderRadius: 8 }}
 >
-  <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Submit</Text>
+  <Text style={{ color: '#ffffff', textAlign: 'center' }}>Submit</Text>
 </Pressable>
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
-Example 2: Reactive style and children via render props
+Example 2: Style function for state-dependent appearance
 ---
 ```tsx
+const colors = useThemeColors();
+
 <Pressable
-  onPress={() => setCount(c => c + 1)}
-  style={(state) => ({
-    padding: 16,
-    backgroundColor: state.pressed ? '#585b70' : state.hovered ? '#45475a' : '#313244',
-    borderRadius: 12,
-    opacity: state.pressed ? 0.9 : 1,
+  onPress={() => doAction()}
+  style={({ pressed, hovered }) => ({
+    padding: 12,
+    backgroundColor: pressed ? colors.primary : hovered ? colors.bgElevated : colors.surface,
+    borderRadius: 8,
+    opacity: pressed ? 0.8 : 1,
   })}
 >
-  {(state) => (
-    <Text style={{ fontSize: 16, color: state.hovered ? '#89b4fa' : '#cdd6f4' }}>
-      {state.pressed ? 'Pressing...' : `Count: ${count}`}
+  <Text style={{ color: colors.text, textAlign: 'center' }}>Interactive</Text>
+</Pressable>
+```
+---
+Platforms: love2d
+
+Example 3: Long press
+---
+```tsx
+const colors = useThemeColors();
+
+<Pressable
+  onPress={() => selectItem()}
+  onLongPress={() => showContextMenu()}
+  delayLongPress={600}
+  style={{ padding: 16, backgroundColor: colors.surface }}
+>
+  <Text style={{ color: colors.text }}>Tap or hold</Text>
+</Pressable>
+```
+---
+Platforms: love2d
+
+Example 4: Render prop children
+---
+```tsx
+const colors = useThemeColors();
+
+<Pressable
+  onPress={() => toggle()}
+  style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 8 }}
+>
+  {({ pressed, hovered }) => (
+    <Text style={{ color: hovered ? colors.primary : colors.text }}>
+      {pressed ? 'Pressing...' : 'Press me'}
     </Text>
   )}
 </Pressable>
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
-Example 3: Long press with expanded hit area
+Example 5: Disabled state
 ---
 ```tsx
-<Pressable
-  onPress={() => console.log('tap')}
-  onLongPress={() => console.log('long press!')}
-  delayLongPress={800}
-  hitSlop={20}
-  style={{ padding: 8, backgroundColor: '#313244', borderRadius: 4 }}
->
-  <Text style={{ fontSize: 12, color: '#a6adc8' }}>Hold me</Text>
-</Pressable>
-```
----
-Platforms: Love2D, Web
+const colors = useThemeColors();
 
-Example 4: Disabled state
----
-```tsx
 <Pressable
-  onPress={() => {}}
-  disabled={isLoading}
-  style={{ padding: 12, backgroundColor: '#313244', borderRadius: 8 }}
+  onPress={() => submit()}
+  disabled={!isValid}
+  style={{ padding: 12, backgroundColor: isValid ? colors.primary : colors.muted, borderRadius: 8 }}
 >
-  <Text style={{ fontSize: 14, color: '#6c7086' }}>
-    {isLoading ? 'Loading...' : 'Submit'}
+  <Text style={{ color: '#ffffff', textAlign: 'center' }}>
+    {isValid ? 'Submit' : 'Fill required fields'}
   </Text>
 </Pressable>
 ```
 ---
-Platforms: Love2D, Web
+Platforms: love2d
 
 === PLATFORM NOTES ===
 Love2D:
-  In native mode, Pressable wraps a Box and passes interaction state and hitSlop as props to the host element. The Lua event system handles hit testing with hitSlop expansion. Long press timing runs in JavaScript via setTimeout.
-
-Web:
-  Renders as a <div> with pointer event handlers, tabIndex for keyboard focus, and role attribute for accessibility. Disabled state sets cursor: not-allowed and opacity: 0.5. HitSlop is implemented via negative margin + positive padding trick to expand the clickable area without changing visual bounds. Keyboard accessibility: Enter and Space trigger press.
-
-Terminal:
-  Not directly available on grid targets. Build equivalent interaction with the grid target's own event system.
-
-=== CRITICAL RULES ===
-- onPress fires only on release and only if onLongPress did not fire during the same gesture. If you need to know immediately when the finger goes down, use onPressIn.
-- The children prop is required. Pressable with no children renders an empty, invisible touch target.
-- When disabled is true, all event handlers are suppressed and state resets to { pressed: false, hovered: false, focused: false }.
-- If pointer leaves the element while pressed, the press is canceled (pressed becomes false, long press timer is cleared).
-- hitSlop expands the interactive area, not the visual area. The element looks the same but responds to touches outside its visible bounds.
+  Hover and active styles are applied by Lua at paint time, not by React re-renders. This means hover effects are immediate (same frame) with no bridge latency. The render-prop form (`children` as function) does cause React re-renders when state changes, but the common case (static children) is purely Lua-driven.
 
 === SEE ALSO ===
 - Box
 - Modal
-- Slider
-- Switch

@@ -123,7 +123,10 @@ pcall(ffi.cdef, [[
   void vterm_shim_register(VTermScreen *screen, void *user);
 ]])
 
-local lib  = ffi.load("vterm")
+local ok_vterm, lib = pcall(ffi.load, "vterm")
+if not ok_vterm then
+  error("[vterm] Cannot load libvterm — install it with: sudo apt install libvterm-dev\n" .. tostring(lib))
+end
 
 -- Load the shim library — try multiple paths for different contexts (love ., luajit, etc.)
 local shim

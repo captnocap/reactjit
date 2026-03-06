@@ -1,106 +1,117 @@
 === METADATA ===
 title: Toolbar
-description: Horizontal toolbar with action items and dividers for grouping commands.
+description: Horizontal action bar with items and dividers
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: toolbar, actions, commands, buttons, divider, horizontal
-related: Pressable, Tabs, NavPanel
+platforms: love2d
+keywords: toolbar, action, bar, menu, actions, buttons, divider
+related: Tabs, NavPanel, Breadcrumbs, Pressable
 difficulty: beginner
 
 === OVERVIEW ===
-Toolbar renders a horizontal row of action items with optional dividers for visual
-grouping. Each item is a labeled pressable button. Dividers are thin vertical lines
-that separate logical groups.
+Toolbar renders a horizontal bar of pressable action items with optional dividers between groups. Each entry is either an action item (with id, label, and optional disabled state) or a visual divider.
 
-Items are provided as an array of ToolbarEntry objects — either { type: 'item' } with
-an id, label, and optional disabled flag, or { type: 'divider' } for visual separation.
+Items respond to hover and press states with background color changes. Disabled items render at reduced opacity and do not fire `onSelect`.
+
+Colors are theme-aware via `useThemeColorsOptional()` with dark-theme fallbacks.
 
 === API / SYNTAX ===
-Import:
-  import { Toolbar } from '@reactjit/core'
-
-Types:
-  type ToolbarEntry =
-    | { type: 'item'; id: string; label: string; disabled?: boolean }
-    | { type: 'divider' }
-
-  interface ToolbarProps {
-    items: ToolbarEntry[];
-    onSelect?: (id: string) => void;
-    style?: Style;
-  }
+```tsx
+import { Toolbar } from '@reactjit/core';
+```
 
 Props:
-  items       ToolbarEntry[]         Required. Array of items and dividers.
-  onSelect    (id: string) => void   Called when an enabled item is pressed. Receives the item id.
-  style       Style                  Merged onto the root container.
+| Prop     | Type                   | Default   | Description                          |
+|----------|------------------------|-----------|--------------------------------------|
+| items    | ToolbarEntry[]         | required  | Array of items and dividers          |
+| onSelect | (id: string) => void   | undefined | Callback when an item is pressed     |
+| style    | Style                  | undefined | Outer container style overrides      |
 
-ToolbarEntry (item):
-  type        'item'                 Discriminant.
-  id          string                 Unique identifier passed to onSelect.
-  label       string                 Display text.
-  disabled    boolean                Optional. Greys out and disables press. Default false.
-
-ToolbarEntry (divider):
-  type        'divider'              Renders a vertical separator line.
+ToolbarEntry (union type):
+| Type    | Fields                                       | Description          |
+|---------|----------------------------------------------|----------------------|
+| item    | { type: 'item', id: string, label: string, disabled?: boolean } | Pressable action     |
+| divider | { type: 'divider' }                          | Vertical separator   |
 
 === EXAMPLES ===
 Example 1: Basic toolbar
 ---
+```tsx
+<Toolbar
+  items={[
+    { type: 'item', id: 'new', label: 'New' },
+    { type: 'item', id: 'open', label: 'Open' },
+    { type: 'item', id: 'save', label: 'Save' },
+  ]}
+  onSelect={(id) => handleAction(id)}
+/>
+```
+---
+Platforms: love2d
+
+Example 2: Grouped actions with dividers
+---
+```tsx
+<Toolbar
+  items={[
+    { type: 'item', id: 'cut', label: 'Cut' },
+    { type: 'item', id: 'copy', label: 'Copy' },
+    { type: 'item', id: 'paste', label: 'Paste' },
+    { type: 'divider' },
+    { type: 'item', id: 'undo', label: 'Undo' },
+    { type: 'item', id: 'redo', label: 'Redo' },
+  ]}
+  onSelect={(id) => handleEdit(id)}
+/>
+```
+---
+Platforms: love2d
+
+Example 3: Disabled items
+---
+```tsx
 <Toolbar
   items={[
     { type: 'item', id: 'save', label: 'Save' },
-    { type: 'item', id: 'undo', label: 'Undo' },
+    { type: 'item', id: 'publish', label: 'Publish', disabled: !isReady },
     { type: 'divider' },
-    { type: 'item', id: 'settings', label: 'Settings' },
+    { type: 'item', id: 'delete', label: 'Delete', disabled: isLocked },
   ]}
-  onSelect={(id) => console.log('Selected:', id)}
+  onSelect={(id) => handleAction(id)}
 />
+```
 ---
-Platforms: all
+Platforms: love2d
 
-Example 2: Toolbar with disabled items
+Example 4: Toolbar in a page layout
 ---
-<Toolbar
-  items={[
-    { type: 'item', id: 'cut', label: 'Cut', disabled: true },
-    { type: 'item', id: 'copy', label: 'Copy' },
-    { type: 'item', id: 'paste', label: 'Paste' },
-  ]}
-  onSelect={handleAction}
-/>
----
-Platforms: all
+```tsx
+const colors = useThemeColors();
 
-Example 3: Toolbar with custom styling
+<FlexColumn style={{ width: '100%', height: '100%' }}>
+  <Toolbar
+    items={[
+      { type: 'item', id: 'file', label: 'File' },
+      { type: 'item', id: 'edit', label: 'Edit' },
+      { type: 'item', id: 'view', label: 'View' },
+      { type: 'divider' },
+      { type: 'item', id: 'run', label: 'Run' },
+    ]}
+    onSelect={handleMenu}
+  />
+  <Box style={{ flexGrow: 1, padding: 16 }}>
+    <Text style={{ color: colors.text }}>Content area</Text>
+  </Box>
+</FlexColumn>
+```
 ---
-<Toolbar
-  items={[
-    { type: 'item', id: 'play', label: 'Play' },
-    { type: 'divider' },
-    { type: 'item', id: 'stop', label: 'Stop' },
-  ]}
-  onSelect={handleTransport}
-  style={{ backgroundColor: '#1a1a2e', borderRadius: 8, padding: 6 }}
-/>
----
-Platforms: all
-
-=== PLATFORM NOTES ===
-Love2D:
-  Items render as Pressable elements with hover/press state styling.
-  Dividers render as thin Box elements with backgroundColor.
-Web:
-  Same rendering as Love2D — Pressable maps to interactive div elements.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- Every item entry must have a unique `id` — this is the value passed to `onSelect`.
-- Disabled items render with reduced opacity and do not trigger `onSelect`.
-- Dividers are purely visual — they have no id and produce no events.
-- All Text inside Toolbar items must have explicit `fontSize` (the component handles this internally).
-- Toolbar auto-sizes to fit its items. To constrain width, wrap in a Box or set `style.width`.
+- Each item must have a unique `id`. The `onSelect` callback receives this ID.
+- Dividers are purely visual. They render as a 1px wide vertical line between item groups.
+- Disabled items render at 40% opacity and do not trigger `onSelect`.
 
 === SEE ALSO ===
-- Tabs -- Tab navigation for switching views
-- NavPanel -- Sidebar navigation with grouped sections
-- Pressable -- Underlying interaction primitive
+- Tabs
+- NavPanel
+- Breadcrumbs

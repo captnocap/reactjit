@@ -2,10 +2,10 @@
 title: Flexbox Layout Model
 description: How ReactJIT uses Flexbox for all layout, with column as the default direction.
 category: Layout
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: flexbox, flexDirection, justifyContent, alignItems, alignSelf, flexGrow, flexShrink, flexBasis, flexWrap, gap, row, column
+platforms: love2d
+keywords: flexbox, flexDirection, justifyContent, alignItems, alignSelf, flexGrow, flexShrink, flexBasis, flexWrap, gap, row, column, display
 related: sizing.txt, spacing.txt, critical-rules.txt
-difficulty: beginner
+difficulty: intermediate
 
 === OVERVIEW ===
 ReactJIT uses Flexbox for all layout, mirroring React Native's approach. Every Box is
@@ -13,11 +13,16 @@ implicitly a flex container -- there is no need to set display: 'flex' (it is th
 The critical difference from CSS is that flexDirection defaults to 'column', not 'row'.
 This means children stack vertically unless you explicitly set flexDirection: 'row'.
 
-The layout engine on the Lua side resolves flex properties into absolute positions and
-sizes. It supports the standard flex properties: main axis distribution (justifyContent),
-cross axis alignment (alignItems, alignSelf), flex sizing (flexGrow, flexShrink, flexBasis),
-wrapping (flexWrap), and gap spacing. All values use the same names as CSS Flexbox except
-that 'start' and 'end' are used instead of 'flex-start' and 'flex-end'.
+The Lua-side layout engine resolves flex properties into absolute pixel positions and sizes.
+It supports main axis distribution (justifyContent), cross axis alignment (alignItems,
+alignSelf), flex sizing (flexGrow, flexShrink, flexBasis), wrapping (flexWrap), and gap
+spacing. Alignment values use 'start' and 'end' instead of CSS's 'flex-start' and
+'flex-end'. The CSS-prefixed forms ('flex-start', 'flex-end') are normalized automatically,
+so both work.
+
+Rows auto-wrap by default unless any child has flexGrow > 0 (which signals a structural
+layout row like sidebar + content). Columns never wrap unless explicitly set. This
+behavior can be overridden with flexWrap: 'nowrap' or flexWrap: 'wrap'.
 
 === API / SYNTAX ===
 Flexbox style properties (all set via the `style` prop on Box):
@@ -29,13 +34,11 @@ Flexbox style properties (all set via the `style` prop on Box):
   justifyContent: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly'
     Default: 'start'
     Distributes children along the main axis.
-    IMPORTANT: For row containers, justifyContent only works when the Box has a known
-    width (explicit value, '100%', or via flexGrow). Without a resolved width the engine
-    cannot distribute space. The linter enforces this.
 
   alignItems: 'start' | 'center' | 'end' | 'stretch'
     Default: 'stretch'
-    Aligns children along the cross axis.
+    Aligns children along the cross axis. 'stretch' makes children fill the full cross-axis
+    extent of the container (or the tallest sibling in a row).
 
   alignSelf: 'auto' | 'start' | 'center' | 'end' | 'stretch'
     Default: 'auto' (inherits parent's alignItems)
@@ -43,117 +46,174 @@ Flexbox style properties (all set via the `style` prop on Box):
 
   flexGrow: number
     Default: 0
-    How much of the remaining space this child should consume.
-    Must have sibling sizing context to work predictably -- the linter warns when all
-    siblings grow without explicit main-axis dimensions.
+    How much of the remaining free space this child should absorb. When multiple children
+    have flexGrow, the free space is distributed proportionally to their grow values.
 
   flexShrink: number
-    Default: 1
-    How much this child should shrink when the container is too small.
+    Default: 1 (CSS spec default)
+    How much this child should shrink when the container is too small. Shrinking is
+    proportional to flexShrink * basis. Set to 0 to prevent shrinking.
 
   flexBasis: number | string | 'auto'
     Default: 'auto'
-    The initial size of the child before flexGrow/flexShrink are applied.
+    The initial size of the child along the main axis before flexGrow/flexShrink are applied.
+    When 'auto', falls back to the child's width (row) or height (column). Percentage values
+    in wrapping rows with gap are automatically corrected to account for gap consumption.
 
   flexWrap: 'nowrap' | 'wrap'
-    Default: 'nowrap'
-    Whether children wrap to the next line when they exceed the container size.
+    Default: rows auto-wrap, columns do not wrap.
+    Whether children wrap to the next line when they exceed the container's main axis size.
+    In a row, if any child has flexGrow > 0, auto-wrap is suppressed (treated as a
+    structural layout row).
 
   gap: number | string
-    Spacing between children (applied uniformly on the main axis).
+    Spacing between children on the main axis. Also applies between wrap lines.
 
   display: 'flex' | 'none'
     Default: 'flex'
-    Set to 'none' to hide an element entirely (does not occupy space).
+    Set to 'none' to hide an element entirely -- it occupies no space and its children
+    are not laid out.
+
+Shorthand props on Box (alternative to style):
+  direction: 'row' | 'col' -- maps to flexDirection
+  gap: number | string -- maps to style.gap
+  align: -- maps to alignItems
+  justify: -- maps to justifyContent
+  wrap: boolean -- maps to flexWrap: 'wrap'
+  grow: boolean -- maps to flexGrow: 1
+  fill: boolean -- maps to width: '100%', height: '100%'
 
 === EXAMPLES ===
-Example 1: Vertical stack (default)
+Example 1: Vertical stack (default column direction)
 ---
-<Box style={{ width: '100%', height: '100%' }}>
-  <Text style={{ fontSize: 20, color: '#cdd6f4' }}>First</Text>
-  <Text style={{ fontSize: 20, color: '#cdd6f4' }}>Second</Text>
-  <Text style={{ fontSize: 20, color: '#cdd6f4' }}>Third</Text>
-</Box>
+import { Box, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
+
+function Stack() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+      <Text style={{ fontSize: 20, color: c.text }}>First</Text>
+      <Text style={{ fontSize: 20, color: c.text }}>Second</Text>
+      <Text style={{ fontSize: 20, color: c.text }}>Third</Text>
+    </Box>
+  );
+}
 ---
-Platforms: All
+Platforms: love2d
 
 Example 2: Horizontal row with space-between
 ---
+const c = useThemeColors();
 <Box style={{
   flexDirection: 'row',
   width: '100%',
   justifyContent: 'space-between',
   padding: 12,
 }}>
-  <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Left</Text>
-  <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Center</Text>
-  <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Right</Text>
+  <Text style={{ fontSize: 16, color: c.text }}>Left</Text>
+  <Text style={{ fontSize: 16, color: c.text }}>Center</Text>
+  <Text style={{ fontSize: 16, color: c.text }}>Right</Text>
 </Box>
 ---
-Platforms: All
+Platforms: love2d
 
 Example 3: Centered content
 ---
+const c = useThemeColors();
 <Box style={{
   width: '100%',
   height: '100%',
   justifyContent: 'center',
   alignItems: 'center',
+  backgroundColor: c.bg,
 }}>
-  <Text style={{ fontSize: 32, color: '#cdd6f4' }}>Centered</Text>
+  <Text style={{ fontSize: 32, color: c.text }}>Centered</Text>
 </Box>
 ---
-Platforms: All
+Platforms: love2d
 
-Example 4: flexGrow with sibling sizing
+Example 4: flexGrow to fill remaining space
 ---
+const c = useThemeColors();
 <Box style={{ flexDirection: 'row', width: '100%', height: 50 }}>
-  <Box style={{ width: 100, backgroundColor: '#f38ba8' }} />
-  <Box style={{ flexGrow: 1, backgroundColor: '#a6e3a1' }} />
-  <Box style={{ width: 100, backgroundColor: '#89b4fa' }} />
+  <Box style={{ width: 100, backgroundColor: c.primary }} />
+  <Box style={{ flexGrow: 1, backgroundColor: c.surface }} />
+  <Box style={{ width: 100, backgroundColor: c.primary }} />
 </Box>
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Wrapping row
+Example 5: Header + content + footer layout
 ---
+const c = useThemeColors();
+<Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+  <Box style={{ padding: 12, backgroundColor: c.bgElevated }}>
+    <Text style={{ fontSize: 18, color: c.text }}>Header</Text>
+  </Box>
+  <Box style={{ flexGrow: 1, padding: 16 }}>
+    <Text style={{ fontSize: 14, color: c.text }}>
+      {`Content fills remaining space via flexGrow: 1`}
+    </Text>
+  </Box>
+  <Box style={{ padding: 12, backgroundColor: c.bgElevated }}>
+    <Text style={{ fontSize: 14, color: c.muted }}>Footer</Text>
+  </Box>
+</Box>
+---
+Platforms: love2d
+
+Example 6: Wrapping row with gap
+---
+const c = useThemeColors();
 <Box style={{
   flexDirection: 'row',
   flexWrap: 'wrap',
-  width: 300,
+  width: '100%',
   gap: 8,
+  padding: 16,
 }}>
-  <Box style={{ width: 80, height: 80, backgroundColor: '#f38ba8' }} />
-  <Box style={{ width: 80, height: 80, backgroundColor: '#a6e3a1' }} />
-  <Box style={{ width: 80, height: 80, backgroundColor: '#89b4fa' }} />
-  <Box style={{ width: 80, height: 80, backgroundColor: '#f9e2af' }} />
-  <Box style={{ width: 80, height: 80, backgroundColor: '#cba6f7' }} />
+  {Array.from({ length: 12 }, (_, i) => (
+    <Box key={i} style={{
+      width: 80,
+      height: 80,
+      backgroundColor: c.surface,
+      borderRadius: 4,
+    }} />
+  ))}
 </Box>
 ---
-Platforms: All
+Platforms: love2d
+
+Example 7: Using shorthand props
+---
+const c = useThemeColors();
+<Box fill direction="row" gap={12} padding={16}>
+  <Box grow bg={c.surface} radius={8}>
+    <Text style={{ fontSize: 14, color: c.text }}>Left panel</Text>
+  </Box>
+  <Box grow bg={c.surface} radius={8}>
+    <Text style={{ fontSize: 14, color: c.text }}>Right panel</Text>
+  </Box>
+</Box>
+---
+Platforms: love2d
 
 === PLATFORM NOTES ===
-Love2D: The Lua layout engine (layout.lua) performs the flex calculation. flexDirection
-defaults to 'column'. Text nodes have intrinsic width based on font measurement. Containers
-with children auto-size from content. Empty surface nodes (Box, Image, Video, etc.) without
-children or explicit sizing use the proportional fallback (1/4 of parent).
-
-Web: Style values are converted to CSS Flexbox via styleToCSS(). The conversion maps
-'start' to 'flex-start' and 'end' to 'flex-end'. Box renders as a <div> with display:flex.
-
-Grid targets: Flex layout operates in character-cell units rather than pixels. The gap
-property adds character cells of spacing between children.
+Love2D:
+The Lua layout engine processes the flex algorithm in a single pass per frame. Flex
+distribution math (grow, shrink, basis) is exact to the pixel. Text nodes are re-measured
+after flex distribution to account for width changes that affect wrapping height.
 
 === CRITICAL RULES ===
-- flexDirection defaults to 'column', not 'row' -- this is the opposite of CSS default
-- justifyContent on a row Box REQUIRES a known width -- use explicit width, '100%', or flexGrow
-- flexGrow without sibling sizing context produces unreliable layout
-- All siblings using flexGrow without any explicit main-axis size causes content-dependent layout
-- Use 'start'/'end', not 'flex-start'/'flex-end' -- the framework handles the conversion
-- Prefer Box with flexDirection: 'row' over FlexRow component (linter warns about FlexRow)
-- flexGrow on a root container is useless -- there is no parent to grow into
+- flexDirection defaults to 'column' -- children stack vertically unless you set 'row'
+- alignItems defaults to 'stretch' -- children expand to fill the cross axis
+- flexShrink defaults to 1 -- children will shrink proportionally when the container overflows
+- Rows auto-wrap by default unless a child has flexGrow > 0, which signals a structural layout
+- Use flexGrow: 1 on the element that should absorb remaining space, not hardcoded heights
+- Gap applies between children on the main axis AND between wrap lines
 
 === SEE ALSO ===
-- sizing.txt -- Width, height, min/max sizing
-- spacing.txt -- Padding, margin, gap
-- critical-rules.txt -- Complete critical layout rules
+- sizing.txt -- How dimensions resolve (explicit, content, proportional fallback)
+- spacing.txt -- Padding, margin, and gap details
+- critical-rules.txt -- Root sizing, ScrollView, and other critical constraints

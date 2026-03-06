@@ -1,137 +1,106 @@
 === METADATA ===
 title: StackedBarChart
-description: Vertical stacked bar chart for visualizing multi-series data in proportional segments
+description: Vertical stacked bar chart for comparing multiple series across categories
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: chart, bar, stacked, multi-series, data, visualization, graph
-related: BarChart, HorizontalBarChart, LineChart, ChartTooltip
-difficulty: beginner
+platforms: love2d
+keywords: stacked bar chart, chart, series, multi-series, stacked, categories
+related: BarChart, HorizontalBarChart, LineChart
+difficulty: intermediate
 
 === OVERVIEW ===
-StackedBarChart renders a column of vertical bars where each bar is subdivided into colored segments representing multiple data series. Series heights are proportional to the maximum column total across all bars, so every bar uses the full chart height at most. Optional column labels appear below the bars. When interactive mode is enabled, hovering a column dims all others and shows a tooltip with the column total and per-series breakdown.
+StackedBarChart renders vertical bars where each bar is divided into colored segments representing different series. Each column shows how multiple categories contribute to a total.
+
+Built with Box and Text primitives (not a Chart2D surface). Series are rendered bottom-to-top within each column. When `interactive` is enabled, hovering a column highlights it and shows a tooltip with per-series breakdowns.
+
+If `barWidth` is set, bars have fixed width and the chart computes its own total width. If `barWidth` is omitted, bars expand with `flexGrow` to fill the available container width.
 
 === API / SYNTAX ===
 ```tsx
 import { StackedBarChart } from '@reactjit/core';
 ```
 
-Data shape:
-```tsx
-interface StackedBarChartSeries {
-  label: string;   // Series name shown in the hover tooltip
-  color: Color;    // Color for this series' segment
-  data: number[];  // One value per bar column; must be the same length across all series
-}
-```
-
 Props:
-| Prop        | Type                      | Default   | Description                                                                            |
-|-------------|---------------------------|-----------|----------------------------------------------------------------------------------------|
-| series      | StackedBarChartSeries[]   | required  | Array of data series; each series provides one segment per bar column                 |
-| labels      | string[]                  | undefined | Optional column labels rendered below the bars (one per bar column)                   |
-| height      | number                    | 120       | Chart height in pixels; the tallest bar fills this exactly                             |
-| barWidth    | number                    | undefined | Fixed pixel width per bar; when omitted, bars flex to fill the container              |
-| gap         | number                    | 8         | Horizontal gap between bars in pixels                                                  |
-| showLabels  | boolean                   | true      | Whether to render the column label row beneath the bars                                |
-| style       | Style                     | undefined | Additional styles applied to the outer container Box                                   |
-| interactive | boolean                   | false     | Enable hover highlighting and per-column tooltips                                      |
+| Prop        | Type                      | Default   | Description                              |
+|-------------|---------------------------|-----------|------------------------------------------|
+| series      | StackedBarChartSeries[]   | required  | Array of series (each with data array)   |
+| labels      | string[]                  | undefined | Category labels shown below bars         |
+| height      | number                    | 120       | Chart area height in pixels              |
+| barWidth    | number                    | undefined | Fixed bar width (omit for flex fill)     |
+| gap         | number                    | 8         | Gap between columns                      |
+| showLabels  | boolean                   | true      | Show category labels below bars          |
+| interactive | boolean                   | false     | Enable hover highlight and tooltips      |
+| style       | Style                     | undefined | Full style object                        |
+
+StackedBarChartSeries:
+| Field | Type     | Default  | Description                        |
+|-------|----------|----------|------------------------------------|
+| label | string   | required | Series name (shown in tooltip)     |
+| color | Color    | required | Color for this series              |
+| data  | number[] | required | Values per category (one per bar)  |
 
 === EXAMPLES ===
-Example 1: Quarterly revenue by product line
+Example 1: Basic stacked bar chart
 ---
 ```tsx
-import { StackedBarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const series = [
-  { label: 'Hardware', color: '#3b82f6', data: [42, 55, 38, 61] },
-  { label: 'Software', color: '#22c55e', data: [28, 30, 35, 40] },
-  { label: 'Services', color: '#f59e0b', data: [15, 18, 22, 19] },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <StackedBarChart
-        series={series}
-        labels={['Q1', 'Q2', 'Q3', 'Q4']}
-        height={140}
-        barWidth={32}
-        gap={10}
-      />
-    </Box>
-  );
-}
+<StackedBarChart
+  series={[
+    { label: 'Desktop', color: '#3b82f6', data: [30, 25, 40, 35] },
+    { label: 'Mobile', color: '#22c55e', data: [20, 30, 15, 25] },
+    { label: 'Tablet', color: '#f59e0b', data: [10, 5, 8, 12] },
+  ]}
+  labels={['Q1', 'Q2', 'Q3', 'Q4']}
+  height={150}
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Fluid-width bars filling the container
+Example 2: Fixed bar width with interaction
 ---
 ```tsx
-import { StackedBarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const series = [
-  { label: 'Read',  color: '#6366f1', data: [120, 95, 110, 130, 88, 140, 105] },
-  { label: 'Write', color: '#ec4899', data: [60,  45, 70,  55,  40, 80,  65]  },
-];
-
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <StackedBarChart
-        series={series}
-        labels={days}
-        height={100}
-        gap={6}
-      />
-    </Box>
-  );
-}
+<StackedBarChart
+  series={[
+    { label: 'Revenue', color: colors.primary, data: [100, 120, 90, 140, 160] },
+    { label: 'Costs', color: '#ef4444', data: [60, 70, 55, 80, 75] },
+  ]}
+  labels={['Jan', 'Feb', 'Mar', 'Apr', 'May']}
+  height={180}
+  barWidth={24}
+  gap={12}
+  interactive
+/>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Interactive with breakdown tooltip
+Example 3: Filling container width
 ---
 ```tsx
-import { StackedBarChart } from '@reactjit/core';
+const colors = useThemeColors();
 
-const series = [
-  { label: 'Errors',   color: '#ef4444', data: [3, 7, 2, 10, 4] },
-  { label: 'Warnings', color: '#f59e0b', data: [12, 9, 15, 8, 11] },
-  { label: 'Info',     color: '#3b82f6', data: [40, 35, 50, 42, 38] },
-];
-
-export default function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <StackedBarChart
-        series={series}
-        labels={['Mon', 'Tue', 'Wed', 'Thu', 'Fri']}
-        height={160}
-        barWidth={36}
-        interactive
-      />
-    </Box>
-  );
-}
+<Box style={{ width: '100%', padding: 16 }}>
+  <StackedBarChart
+    series={trafficSeries}
+    labels={dayLabels}
+    height={120}
+  />
+</Box>
 ```
 ---
-Platforms: love2d, web
+Platforms: love2d
 
 === CRITICAL RULES ===
-- All series must have `data` arrays of equal length. The number of bars is taken from `series[0].data.length`; extra values in shorter series are ignored and missing values in shorter series default to 0.
-- Segments are rendered bottom-to-top by reversing the series array internally. The first series in your array will appear at the top of each bar visually.
-- When `barWidth` is omitted, bars use `flexGrow: 1` and fill the parent container width. The parent container must have an explicit width for this to produce visible output.
-- When `barWidth` is set, the chart computes its own total width as `numBars * barWidth + (numBars - 1) * gap`. You do not need to set `width` on the chart itself.
-- `showLabels` only renders text if `labels` is also provided. Providing `labels` without `showLabels` does render them; set `showLabels={false}` to suppress the label row entirely.
-- Segments with a computed height of 0 are omitted from the render tree — this is safe and avoids invisible 0-height boxes.
-- Do not use Unicode symbols in any `<Text>` within this component or in labels passed as data.
+- All series must have the same `data` array length. The number of columns equals `series[0].data.length`.
+- If `series` is empty or the first series has no data, an empty Box is rendered.
+- Segment heights are proportional to the maximum column total across all columns.
+- Not a Chart2D surface -- built from Box/Text primitives.
 
 === SEE ALSO ===
-- BarChart — single-series vertical bars
-- HorizontalBarChart — horizontal orientation for the same kind of comparison
-- ChartTooltip — standalone tooltip primitive used internally by this component
-- LineChart — trend lines across the same time-series data
+- BarChart
+- HorizontalBarChart
+- LineChart
+- PieChart

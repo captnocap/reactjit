@@ -1,112 +1,124 @@
 === METADATA ===
-title: Animation System
-description: Overview of the ReactJIT animation system including animated values, timing, springs, easing, and composite animations.
+title: Animation
+description: JS-driven and Lua-driven animation system for ReactJIT
 category: Animation
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: animation, AnimatedValue, timing, spring, easing, parallel, sequence, stagger, loop, useAnimation, useSpring, useTransition
-related: animatedvalue.txt, useanimation.txt, usespring.txt, usetransition.txt, easing.txt, composite.txt
+platforms: love2d
+keywords: animation, motion, spring, easing, transition, keyframes
 difficulty: intermediate
 
 === OVERVIEW ===
-ReactJIT includes a complete animation system built on the AnimatedValue class. It provides
-timing-based animations (with easing functions), physics-based spring animations, and
-composite animations (parallel, sequence, stagger, loop). Three React hooks make it easy to
-integrate animations into components: useAnimation for full control, useSpring for automatic
-spring transitions, and useTransition for automatic timing-based transitions.
+ReactJIT has two animation layers that work together:
 
-The animation system works in both web mode (using requestAnimationFrame) and native mode
-(falling back to setTimeout at ~60fps when requestAnimationFrame is unavailable). All active
-animations share a single frame loop for efficiency. Animations are batched to avoid
-excessive re-renders.
+JS-driven animations run inside the QuickJS runtime. They are driven by Lua's love.update(dt) frame loop via tickAnimations() — there are no independent JS timers or requestAnimationFrame calls. Every frame, Lua calls the bridge, which advances all active animations in lockstep with the renderer. JS animations cause React re-renders each frame during motion, so they are best for values that feed into layout or conditional logic.
 
-=== API / SYNTAX ===
-All animation APIs are imported from '@reactjit/core':
+Lua-driven animations run entirely inside the Lua painter. Style properties like transition and animation (keyframes) are declared in JSX and interpolated by Lua without crossing the bridge. They produce zero JS re-renders during motion and are ideal for hover effects, infinite loops, and visual polish.
 
-  import {
-    AnimatedValue,
-    useAnimation,
-    useSpring,
-    useTransition,
-    Easing,
-    parallel,
-    sequence,
-    stagger,
-    loop,
-  } from '@reactjit/core';
+JS-driven hooks:
+- AnimatedValue — mutable container that notifies listeners when its value changes
+- useAnimation — creates an AnimatedValue and subscribes a component to its changes
+- useSpring — springs to a target value using physics simulation (stiffness, damping, mass)
+- useTransition — transitions to a target value using timing-based easing
+- parallel, sequence, stagger, loop — compose multiple animations together
 
-Core types:
-  Animation: { start(callback?), stop() }
-  TimingConfig: { toValue, duration?, easing?, delay? }
-  SpringConfig: { toValue, stiffness?, damping?, mass?, velocity?, restThreshold? }
-  InterpolationConfig: { inputRange, outputRange, extrapolate? }
-  EasingFunction: (t: number) => number
+Lua-driven style properties:
+- style.transition — per-property or all-property interpolation (duration, easing, delay)
+- style.animation — keyframe-based loops with direction, fill mode, and play state
+- strokeDasharray / strokeDashoffset — SVG-style dash patterns and animated reveals
+
+Animation presets wrap common patterns into one-liners:
+- usePulse — oscillating value for breathing effects and attention indicators
+- useCountUp — animated number counter for statistics and scores
+- useTypewriter — character-by-character text reveal
+- useShake — triggered horizontal shake for error feedback
+- useEntrance — one-shot fade + slide for mount animations
+- useBounce — spring-based bounce to a target value
+- useRepeat — looping 0-to-1 progress value for custom animations
+
+All animation APIs are exported from @reactjit/core.
 
 === EXAMPLES ===
-Example 1: Fade-in animation
+Example 1: Import
 ---
-import { useEffect } from 'react';
-import { useAnimation, Box, Text } from '@reactjit/core';
+```tsx
+import {
+  useAnimation, useSpring, useTransition, Easing,
+  AnimatedValue,
+  parallel, sequence, stagger, loop,
+  usePulse, useCountUp, useTypewriter,
+  useShake, useEntrance, useBounce, useRepeat,
+} from '@reactjit/core';
+```
+---
+Platforms: love2d
 
-function FadeIn({ children }: { children: React.ReactNode }) {
-  const [opacity, opacityValue] = useAnimation(0);
+Example 2: Lua-driven transition (zero JS re-renders)
+---
+```tsx
+import { Box, Pressable, Text } from '@reactjit/core';
+import { useThemeColors } from '@reactjit/theme';
 
-  useEffect(() => {
-    opacity.timing({ toValue: 1, duration: 500 }).start();
-  }, [opacity]);
+export function AnimatedButton() {
+  const c = useThemeColors();
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   return (
-    <Box style={{ width: '100%', height: '100%', opacity: opacityValue }}>
-      {children}
-    </Box>
+    <Pressable
+      onPress={() => {}}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+    >
+      <Box style={{
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: hovered ? c.primary : c.surface,
+        transform: {
+          scaleX: pressed ? 0.95 : 1,
+          scaleY: pressed ? 0.95 : 1,
+        },
+        shadowBlur: hovered ? 12 : 0,
+        transition: { all: { duration: 200, easing: 'easeOut' } },
+      }}>
+        <Text style={{ color: c.text, fontSize: 14 }}>{'Click me'}</Text>
+      </Box>
+    </Pressable>
   );
 }
+```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Spring animation on state change
+Example 3: Lua-driven keyframe animation (infinite spin)
 ---
-import { useState } from 'react';
-import { useSpring, Box, Text } from '@reactjit/core';
-
-function ToggleBox() {
-  const [expanded, setExpanded] = useState(false);
-  const width = useSpring(expanded ? 300 : 100, { stiffness: 200, damping: 20 });
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Box
-        style={{ width, height: 100, backgroundColor: '#89b4fa', borderRadius: 8 }}
-        onClick={() => setExpanded(!expanded)}
-      />
-    </Box>
-  );
-}
+```tsx
+<Box style={{
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  borderWidth: 3,
+  borderColor: c.primary,
+  borderTopColor: 'transparent',
+  animation: {
+    keyframes: {
+      0: { transform: { rotate: 0 } },
+      100: { transform: { rotate: 360 } },
+    },
+    duration: 1000,
+    iterations: -1,
+    easing: 'linear',
+  },
+}} />
+```
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-Web: Uses requestAnimationFrame for the animation loop. Batched state updates align with
-browser rendering frames.
-
-Love2D: Falls back to setTimeout at ~60fps (1000/60 ms intervals). Animations run inside
-the QuickJS JavaScript engine, and updated style values are sent to the Lua renderer each
-frame.
-
-Grid targets: Same setTimeout fallback. Animation granularity depends on the target's
-refresh rate (e.g., terminal refresh is typically 30-60fps).
-
-=== CRITICAL RULES ===
-- AnimatedValue.setValue() stops any active animation before setting the value
-- Starting a new animation on an AnimatedValue automatically stops the previous one
-- useAnimation cleanup stops active animations on unmount
-- useSpring and useTransition skip animation on first render (value starts at target)
-- Composite animations (parallel, sequence, etc.) return Animation objects with start/stop
-- Animation callbacks receive { finished: boolean } -- false if stop() was called
+Platforms: love2d
 
 === SEE ALSO ===
-- animatedvalue.txt -- AnimatedValue class reference
-- useanimation.txt -- Primary animation hook
-- usespring.txt -- Automatic spring transitions
-- usetransition.txt -- Automatic timing transitions
-- easing.txt -- Easing function library
-- composite.txt -- Parallel, sequence, stagger, loop
+- AnimatedValue
+- useAnimation
+- useSpring
+- useTransition
+- Easing
+- Composite Animations
+- Animation Presets

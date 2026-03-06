@@ -91,16 +91,21 @@ local function jsonProp(props, key, fallback)
 end
 
 --- Attempt JSON decode — handles both string and pre-parsed table props.
-local _cjson = nil
+--- Uses the same library detection as bridge_quickjs.lua.
+local _json = nil
 local function safeDecode(val, fallback)
   if type(val) == "table" then return val end
   if type(val) ~= "string" or val == "" then return fallback end
-  if not _cjson then
-    local ok, mod = pcall(require, "cjson")
-    if ok then _cjson = mod else _cjson = false end
+  if not _json then
+    local ok, mod
+    ok, mod = pcall(require, "cjson")    if ok then _json = mod
+    else ok, mod = pcall(require, "json")    if ok then _json = mod
+    else ok, mod = pcall(require, "lib.json")    if ok then _json = mod
+    else ok, mod = pcall(require, "lua.json")    if ok then _json = mod
+    else _json = false end end end end
   end
-  if _cjson then
-    local ok, result = pcall(_cjson.decode, val)
+  if _json then
+    local ok, result = pcall(_json.decode, val)
     if ok then return result end
   end
   return fallback

@@ -1,142 +1,123 @@
 === METADATA ===
 title: Text
-description: Renders text content with font styling and optional truncation
+description: Text rendering with font metrics, sizing, and alignment
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: text, label, font, typography, fontSize, color, truncation, numberOfLines
-related: Box, Image, TextInput, TextEditor
+platforms: love2d
+keywords: text, typography, font, fontSize, textAlign, label
+related: Box, TextInput
 difficulty: beginner
 
 === OVERVIEW ===
-Text is the primitive for rendering text content. It is the only element that carries intrinsic width -- the layout engine measures the text string against the specified font and fontSize to determine how much horizontal space it occupies. This makes Text unique among primitives: it is the only element that can size itself without an explicit width prop.
+Text renders a string as a Lua `Text` node. The layout engine measures text from font metrics — width from glyph advances, height from line height — so Text auto-sizes to its content by default.
 
-Text supports font styling (fontSize, fontFamily, fontWeight, color, textAlign, letterSpacing, lineHeight), text truncation via numberOfLines, and keyboard event handlers. In web mode it renders as a `<span>`; in native mode it outputs a `'Text'` host element for the Lua painter.
+Text supports shorthand props for common styling (`size`, `color`, `bold`, `align`, `font`) alongside the full `style` prop. Shorthands are lower priority — `style={}` wins when both are set.
+
+Text does not support mixed text and expression children. `<Text>Hello {name}!</Text>` creates three separate `__TEXT__` nodes that stack vertically instead of rendering inline. Always use template literals: `{`Hello ${name}!`}`.
 
 === API / SYNTAX ===
 ```tsx
 import { Text } from '@reactjit/core';
 ```
 
-```tsx
-<Text style={{ fontSize: 16, color: '#cdd6f4' }}>
-  Hello, world
-</Text>
-```
+Shorthand Props:
+| Prop   | Type                      | Default   | Description               |
+|--------|---------------------------|-----------|---------------------------|
+| size   | number                    | undefined | Font size in pixels        |
+| color  | Color                     | undefined | Text color                 |
+| bold   | boolean                   | false     | Bold font weight           |
+| italic | boolean                   | false     | Italic style               |
+| align  | 'left' \| 'center' \| 'right' | undefined | Text alignment        |
+| font   | string                    | undefined | Font family name           |
+| lines  | number                    | undefined | Maximum number of lines    |
 
-Props:
-| Prop          | Type                         | Default   | Description                              |
-|---------------|------------------------------|-----------|------------------------------------------|
-| style         | Style                        | undefined | Text styling (fontSize, color, etc.)     |
-| numberOfLines | number                       | undefined | Truncate text to N lines with ellipsis   |
-| onKeyDown     | (event: LoveEvent) => void   | undefined | Key pressed while focused                |
-| onKeyUp       | (event: LoveEvent) => void   | undefined | Key released while focused               |
-| onTextInput   | (event: LoveEvent) => void   | undefined | Text input while focused                 |
-| children      | ReactNode                    | undefined | Text content (strings, numbers, etc.)    |
+Style Props:
+| Prop  | Type  | Default   | Description           |
+|-------|-------|-----------|-----------------------|
+| style | Style | undefined | Full style object     |
 
-Relevant Style properties for Text:
-| Property           | Type                              | Description                              |
-|--------------------|-----------------------------------|------------------------------------------|
-| fontSize           | number                            | Font size in pixels (REQUIRED)           |
-| color              | Color                             | Text color                               |
-| fontFamily         | string                            | Font family name                         |
-| fontWeight         | 'normal' | 'bold' | number        | Font weight                              |
-| textAlign          | 'left' | 'center' | 'right'       | Horizontal text alignment                |
-| textOverflow       | 'clip' | 'ellipsis'               | How overflowing text is handled          |
-| textDecorationLine | 'none' | 'underline' | 'line-through' | Text decoration                    |
-| lineHeight         | number                            | Line height in pixels                    |
-| letterSpacing      | number                            | Extra space between characters            |
-| textShadowColor    | Color                             | Text shadow color                        |
-| textShadowOffsetX  | number                            | Text shadow horizontal offset            |
-| textShadowOffsetY  | number                            | Text shadow vertical offset              |
+Relevant style properties for Text:
+| Property           | Type                                     | Description                    |
+|--------------------|------------------------------------------|--------------------------------|
+| fontSize           | number                                   | Font size in pixels            |
+| color              | Color                                    | Text color                     |
+| fontFamily         | string                                   | Font family                    |
+| fontWeight         | 'normal' \| 'bold' \| number             | Font weight                    |
+| textAlign          | 'left' \| 'center' \| 'right'           | Horizontal text alignment      |
+| lineHeight         | number                                   | Line height in pixels          |
+| letterSpacing      | number                                   | Space between characters       |
+| textDecorationLine | 'none' \| 'underline' \| 'line-through' | Text decoration                |
+| textWrap           | 'wrap' \| 'nowrap'                       | Text wrapping behavior         |
+| textOverflow       | 'clip' \| 'ellipsis'                     | Overflow behavior              |
+| numberOfLines      | number                                   | Clamp to N lines with ellipsis |
+
+Event Handlers:
+| Prop        | Type                       | Description               |
+|-------------|----------------------------|---------------------------|
+| onKeyDown   | (event: LoveEvent) => void | Key pressed               |
+| onKeyUp     | (event: LoveEvent) => void | Key released              |
+| onTextInput | (event: LoveEvent) => void | Text character input      |
 
 === EXAMPLES ===
 Example 1: Basic text
 ---
 ```tsx
-<Text style={{ fontSize: 16, color: '#cdd6f4' }}>
-  Hello, world
+const colors = useThemeColors();
+
+<Text style={{ color: colors.text, fontSize: 16 }}>Hello, world</Text>
+```
+---
+Platforms: love2d
+
+Example 2: Using shorthand props
+---
+```tsx
+const colors = useThemeColors();
+
+<Text size={24} color={colors.text} bold align="center">
+  Page Title
 </Text>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Styled heading
+Example 3: Dynamic text with template literal
 ---
 ```tsx
-<Text style={{
-  fontSize: 32,
-  fontWeight: 'bold',
-  color: '#89b4fa',
-  textAlign: 'center',
-  letterSpacing: 1.2,
-}}>
-  Dashboard
-</Text>
-```
----
-Platforms: All
-
-Example 3: Truncated text with numberOfLines
----
-```tsx
-<Box style={{ width: 200 }}>
-  <Text style={{ fontSize: 14, color: '#a6adc8' }} numberOfLines={2}>
-    This is a long paragraph of text that will be truncated to two lines
-    with an ellipsis at the end if it overflows the available space.
-  </Text>
-</Box>
-```
----
-Platforms: All
-
-Example 4: Dynamic content with template literal
----
-```tsx
+const colors = useThemeColors();
 const count = 42;
 
-<Text style={{ fontSize: 14, color: '#cdd6f4' }}>
-  {`Items: ${count}`}
+<Text style={{ color: colors.text, fontSize: 14 }}>
+  {`You have ${count} items`}
 </Text>
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 5: Text with shadow
+Example 4: Truncated text with ellipsis
 ---
 ```tsx
-<Text style={{
-  fontSize: 24,
-  color: '#cdd6f4',
-  textShadowColor: [0, 0, 0, 0.5],
-  textShadowOffsetX: 2,
-  textShadowOffsetY: 2,
-}}>
-  Shadow Text
+const colors = useThemeColors();
+
+<Text
+  style={{
+    color: colors.text,
+    fontSize: 14,
+    textOverflow: 'ellipsis',
+  }}
+  lines={2}
+>
+  This text will be clamped to two lines. Any overflow beyond the second line is replaced with an ellipsis character.
 </Text>
 ```
 ---
-Platforms: Love2D, Web
-
-=== PLATFORM NOTES ===
-Love2D:
-  Renders as a 'Text' host element. Font measurement happens in Lua via love.graphics.getFont():getWidth(). The painter draws text with love.graphics.print(). Custom fonts are loaded by fontFamily name from the project's font directory. Text wrapping is computed by the layout engine when the parent constrains width.
-
-Web:
-  Renders as a <span> with display: inline. The styleToCSS() converter maps fontSize, color, fontFamily, and other text properties to their CSS equivalents. numberOfLines uses -webkit-line-clamp for multi-line truncation with ellipsis.
-
-Terminal:
-  Grid targets use <text> lowercase intrinsic. Character-grid rendering means fontSize has no effect; text occupies cells based on character count. Color maps to ANSI truecolor or palette indices depending on the target.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- EVERY Text element MUST have an explicit fontSize in its style prop. The static linter (`reactjit lint`) enforces this as a build-blocking error. Text without fontSize will produce unpredictable rendering because the layout engine cannot measure the text.
-- Do not mix bare text and JSX expressions: `"count: {value}"` renders literally as that string. Use template literals instead: `{`count: ${value}`}`.
-- Text is the only primitive with intrinsic width. Box and Image have zero width unless you set one explicitly. This means Text can size itself and its parent, but Box cannot.
-- Do not nest Box inside Text. Text children should be strings, numbers, or other Text elements only.
-- Do not use the block character (U+2588) inside Text. It renders as a font glyph, not a filled pixel. Use colored Box elements with backgroundColor instead. The linter enforces this via `no-block-char-in-text`.
+- Never mix text and expressions in Text children. `<Text>Hello {name}!</Text>` creates three stacked nodes. Use `{`Hello ${name}!`}` instead. The linter enforces this via `no-mixed-text-children`.
+- Text is not a surface — it does not get proportional fallback sizing. It auto-sizes from font metrics.
+- Always use `useThemeColors()` for text color. Never hardcode color values.
 
 === SEE ALSO ===
 - Box
 - TextInput
-- TextEditor
-- Style type reference
 - Layout System

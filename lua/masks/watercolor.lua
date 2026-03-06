@@ -7,10 +7,12 @@
   React usage:
     <Watercolor mask />
     <Watercolor mask bleed={0.5} paper={0.3} />
+    <Watercolor mask shaderTint="#cba6f7" shaderSaturation={0.85} />
 ]]
 
 local Masks = require("lua.masks")
 local Util = require("lua.effects.util")
+local ShaderGrade = require("lua.masks.shader_grade")
 
 local floor, max = math.floor, math.max
 local sin, cos = math.sin, math.cos
@@ -46,9 +48,28 @@ function Watercolor.draw(state, w, h, source)
   local wetness = clamp(Util.prop(props, "wetness", 0.4), 0, 1)
   local t = state.time
 
-  -- Draw source as base with slight desaturation by reducing color intensity
-  love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.draw(source, 0, 0)
+  -- Base pass: shader-graded wash derived from imaging color ops.
+  local shaderHue = Util.prop(props, "shaderHue", 8)
+  local shaderSaturation = Util.prop(props, "shaderSaturation", 0.9)
+  local shaderValue = Util.prop(props, "shaderValue", 1.03)
+  local shaderContrast = Util.prop(props, "shaderContrast", 0.94)
+  local shaderPosterize = Util.prop(props, "shaderPosterize", 0)
+  local shaderGrain = Util.prop(props, "shaderGrain", 0.015 + paper * 0.03)
+  local shaderVignette = Util.prop(props, "shaderVignette", 0.08)
+  local shaderTint = props.shaderTint or Masks.getThemeToken("accent", "#cba6f7")
+  local shaderTintMix = Util.prop(props, "shaderTintMix", 0.08 + bleed * 0.12)
+  ShaderGrade.draw(source, w, h, {
+    time = t,
+    hue = shaderHue * effectMix,
+    saturation = 1 + (shaderSaturation - 1) * effectMix,
+    value = 1 + (shaderValue - 1) * effectMix,
+    contrast = 1 + (shaderContrast - 1) * effectMix,
+    posterize = effectMix > 0.01 and shaderPosterize or 0,
+    grain = shaderGrain * effectMix,
+    vignette = shaderVignette * effectMix,
+    tint = shaderTint,
+    tintMix = shaderTintMix * effectMix,
+  })
 
   if effectMix <= 0 then return end
 

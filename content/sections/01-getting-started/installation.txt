@@ -1,30 +1,28 @@
 === METADATA ===
 title: Installation Guide
-description: Prerequisites and step-by-step setup for the ReactJIT monorepo and CLI
+description: Prerequisites and step-by-step setup for the ReactJIT toolchain
 category: Getting Started
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
+platforms: love2d
 keywords: installation, setup, prerequisites, npm, make, quickjs, cli, love2d
 related: quick-start, first-app, source-of-truth
 difficulty: beginner
 
 === OVERVIEW ===
 ReactJIT is an npm workspaces monorepo. The core framework runs on Node.js for builds
-and development tooling. The Love2D target additionally requires the Love2D runtime and
-a compiled QuickJS shared library. This guide walks through every step from a fresh
-clone to a verified installation.
-
-Grid targets (terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM) only need
-Node.js. The Love2D target needs the full toolchain.
+and development tooling. The rendering target requires Love2D and a compiled QuickJS
+shared library. This guide walks through every step from a fresh clone to a verified
+installation.
 
 === API / SYNTAX ===
 Prerequisites:
   - Node.js 18+ and npm
-  - Love2D 11+ (for Love2D target only)
-  - make + gcc (for QuickJS compilation, Love2D target only)
+  - Love2D 11+ (https://love2d.org)
+  - LuaJIT (bundled with Love2D)
+  - make + gcc or clang (for QuickJS compilation)
   - git
 
 === EXAMPLES ===
-Example 1: Full Installation (All Targets)
+Example 1: Full Installation
 ---
 # 1. Clone the repository
 git clone <repo-url> && cd reactjit
@@ -32,12 +30,12 @@ git clone <repo-url> && cd reactjit
 # 2. Install npm dependencies (workspaces monorepo)
 npm install
 
-# 3. Build QuickJS shared library (needed for Love2D target)
+# 3. Build QuickJS shared library
 #    Clones quickjs-ng and compiles libquickjs.so
 make setup
 
 # 4. Propagate source-of-truth files to CLI runtime
-#    Copies lua/*.lua, packages/shared/, packages/renderer/, libquickjs.so
+#    Copies lua/*.lua, packages/core/, packages/renderer/, libquickjs.so
 #    into cli/runtime/ so the CLI can scaffold projects
 make cli-setup
 
@@ -47,42 +45,47 @@ cd cli && npm link && cd ..
 # 6. Verify the installation
 reactjit help
 ---
-Platforms: All
+Platforms: love2d
 
-Example 2: Minimal Installation (Grid Targets Only)
+Example 2: Installing Love2D
 ---
-# Grid targets (terminal, cc, nvim, hs, awesome) do not need Love2D or QuickJS
+# Linux (Debian/Ubuntu)
+sudo apt install love
 
-# 1. Clone and install
-git clone <repo-url> && cd reactjit
-npm install
+# Linux (AppImage)
+# Download from https://love2d.org and chmod +x
 
-# 2. Build a terminal demo directly
-npm run build:terminal-demo
+# macOS (Homebrew)
+brew install love
 
-# 3. Run it
-node examples/terminal-demo/dist/main.js
+# macOS (direct download)
+# Download from https://love2d.org
+
+# Verify
+love --version
 ---
-Platforms: terminal, cc, nvim, hs, awesome
+Platforms: love2d
+
+Example 3: Verify Everything Works
+---
+# Create a test project
+reactjit init test-app
+cd test-app
+
+# Build and run
+reactjit dev
+
+# You should see a Love2D window with the default starter app.
+# Edit src/App.tsx and save -- the window reloads automatically.
+---
+Platforms: love2d
 
 === PLATFORM NOTES ===
 Love2D:
-  - Install Love2D 11+ from https://love2d.org or your package manager.
-  - On Linux: `sudo apt install love` or download the AppImage.
-  - On macOS: `brew install love` or download from love2d.org.
-  - The `make setup` step compiles libquickjs.so which requires a C compiler (gcc or clang).
-
-Terminal:
-  - Requires a terminal with truecolor support (most modern terminals).
-  - No additional system dependencies beyond Node.js.
-
-ComputerCraft:
-  - Requires a running Minecraft instance with CC: Tweaked mod.
-  - The WebSocket bridge connects to the CC terminal.
-
-Neovim:
-  - Requires Neovim 0.7+ with the `neovim` npm package.
-  - Communication via stdio.
+  Love2D 11+ is required. The framework uses LuaJIT (bundled with Love2D) and
+  OpenGL 2.1 for rendering. The `make setup` step compiles libquickjs.so which
+  requires a C compiler (gcc or clang). On Linux, both gcc and make are typically
+  pre-installed. On macOS, install Xcode Command Line Tools (`xcode-select --install`).
 
 === CRITICAL RULES ===
 - Always run `make cli-setup` after pulling framework changes. This propagates
@@ -90,6 +93,8 @@ Neovim:
 - Never edit files in cli/runtime/ directly. They are overwritten by make cli-setup.
 - The `npm link` step in cli/ must be done once to make the `reactjit` command
   available globally.
+- Never edit lua/ or reactjit/ inside a consumer project. Those are disposable
+  copies. Edit the monorepo source, then run `make cli-setup` and `reactjit update`.
 
 === SEE ALSO ===
 - quick-start.txt - Create your first project after installation

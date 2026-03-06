@@ -1,48 +1,35 @@
 === METADATA ===
 title: Breadcrumbs
-description: Navigation breadcrumb trail with clickable path segments and configurable separator.
+description: Navigation trail showing the current location in a hierarchy
 category: Components
-platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: breadcrumbs, navigation, path, trail, links, hierarchy
-related: Tabs, NavPanel
+platforms: love2d
+keywords: breadcrumbs, breadcrumb, navigation, trail, path, hierarchy, crumb
+related: Tabs, NavPanel, Toolbar
 difficulty: beginner
 
 === OVERVIEW ===
-Breadcrumbs renders a horizontal trail of navigation items separated by a configurable separator character. Each item except the last is clickable via Pressable and triggers the `onSelect` callback with the item's id. The last item in the trail is displayed as bold text, indicating the current location.
+Breadcrumbs renders a horizontal trail of navigation items separated by a configurable separator character. All items except the last are pressable links. The last item is rendered as bold text representing the current location.
 
-The component is built with Box, Text, and Pressable primitives, making it work identically across all targets.
+Colors are theme-aware via `useThemeColorsOptional()`. Non-current items display at reduced opacity and brighten on hover.
 
 === API / SYNTAX ===
-Import: import { Breadcrumbs } from '@reactjit/core';
-
-BreadcrumbItem type:
-```ts
-interface BreadcrumbItem {
-  id: string;
-  label: string;
-}
-```
-
-Usage:
 ```tsx
-<Breadcrumbs
-  items={[
-    { id: 'home', label: 'Home' },
-    { id: 'settings', label: 'Settings' },
-    { id: 'profile', label: 'Profile' },
-  ]}
-  onSelect={(id) => navigate(id)}
-/>
+import { Breadcrumbs } from '@reactjit/core';
 ```
 
 Props:
+| Prop      | Type                   | Default | Description                            |
+|-----------|------------------------|---------|----------------------------------------|
+| items     | BreadcrumbItem[]       | required| Array of breadcrumb items              |
+| onSelect  | (id: string) => void   | undefined | Callback when a non-current item is pressed |
+| separator | string                 | '/'     | Character between items                |
+| style     | Style                  | undefined | Outer container style overrides       |
 
-| Prop      | Type                       | Default | Description                             |
-|-----------|----------------------------|---------|-----------------------------------------|
-| items     | BreadcrumbItem[]           | (required)| Array of breadcrumb path items        |
-| onSelect  | (id: string) => void       | -       | Called when a non-last item is clicked  |
-| separator | string                     | '/'     | Separator character between items       |
-| style     | Style                      | -       | Container style overrides               |
+BreadcrumbItem:
+| Field | Type   | Description                |
+|-------|--------|----------------------------|
+| id    | string | Unique item identifier     |
+| label | string | Display text               |
 
 === EXAMPLES ===
 Example 1: Basic breadcrumbs
@@ -50,50 +37,57 @@ Example 1: Basic breadcrumbs
 ```tsx
 <Breadcrumbs
   items={[
-    { id: 'root', label: 'Dashboard' },
-    { id: 'users', label: 'Users' },
-    { id: 'alice', label: 'Alice' },
+    { id: 'home', label: 'Home' },
+    { id: 'docs', label: 'Docs' },
+    { id: 'components', label: 'Components' },
   ]}
-  onSelect={(id) => setPage(id)}
+  onSelect={(id) => navigate(id)}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
 Example 2: Custom separator
 ---
 ```tsx
 <Breadcrumbs
-  items={path}
-  onSelect={navigateTo}
+  items={[
+    { id: 'root', label: 'Root' },
+    { id: 'src', label: 'src' },
+    { id: 'app', label: 'App.tsx' },
+  ]}
   separator=">"
+  onSelect={(id) => openFolder(id)}
 />
 ```
 ---
-Platforms: All
+Platforms: love2d
 
-Example 3: Single item (current page only)
+Example 3: Breadcrumbs in a page header
 ---
 ```tsx
-<Breadcrumbs items={[{ id: 'home', label: 'Home' }]} />
+const colors = useThemeColors();
+
+<FlexColumn gap={8} style={{ padding: 16 }}>
+  <Breadcrumbs
+    items={[
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'users', label: 'Users' },
+      { id: 'profile', label: 'John Doe' },
+    ]}
+    onSelect={setPage}
+  />
+  <Text style={{ color: colors.text, fontSize: 20, fontWeight: 'bold' }}>John Doe</Text>
+</FlexColumn>
 ```
 ---
-Platforms: All
-
-=== PLATFORM NOTES ===
-- Breadcrumbs uses Pressable for clickable items, inheriting hover behavior. Non-last items have `opacity: 0.7` by default, increasing to `opacity: 1` on hover.
-- The container uses `flexDirection: 'row'`, `width: '100%'`, `alignItems: 'center'`, and `gap: 6`.
-- Non-last item text: `color: '#64748b'`, `fontSize: 11`.
-- Last item text: `color: '#e2e8f0'`, `fontSize: 11`, `fontWeight: 'bold'`.
-- Separator text: `color: '#334155'`, `fontSize: 11`.
+Platforms: love2d
 
 === CRITICAL RULES ===
-- The `items` prop is required. An empty array renders nothing.
-- The last item in the array is always rendered as non-clickable bold text. It does not trigger `onSelect`.
-- Only non-last items are wrapped in Pressable. The last item is a plain Text element.
-- Breadcrumbs renders in a row layout. Ensure the parent container has enough width for the trail, or items will wrap depending on the parent's flexWrap setting.
+- The last item in the `items` array is always rendered as static text (bold, non-pressable). It represents the current page.
+- `onSelect` only fires for items that are not the last item. If the array has one item, nothing is pressable.
 
 === SEE ALSO ===
 - Tabs
 - NavPanel
-- Pressable
+- Toolbar

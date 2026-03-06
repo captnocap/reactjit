@@ -110,10 +110,22 @@ export interface EquilibriumState {
 
 export interface PeriodicTableProps {
   onSelect?: (element: Element) => void;
-  highlighted?: number[];
-  colorBy?: 'category' | 'phase' | 'electronegativity' | 'density';
   selected?: number | null;
-  compact?: boolean;
+  tileSize?: number;
+  style?: Style;
+}
+
+export interface ElementTileProps {
+  element: number | string;
+  selected?: boolean;
+  flipped?: boolean;
+  size?: number;
+  style?: Style;
+  onPress?: (element: Element) => void;
+}
+
+export interface ElementDetailProps {
+  element: number | string;
   style?: Style;
 }
 
