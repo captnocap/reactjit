@@ -9,9 +9,11 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import { useImagingComposer, useImagingHistory, useImaging, useImagingSelection, useDrawCanvas } from '../../../packages/imaging/src';
+import type { BlendMode, ImagingComposition, ImagingLayerCrop, ImagingLayerPivot, ImagingSelectionShape } from '../../../packages/imaging/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
@@ -27,6 +29,10 @@ const C = {
   pipeline: '#a6e3a1',
   gpu: '#94e2d5',
   pattern: '#f5c2e7',
+  graph: '#74c7ec',
+  transform: '#f4b8e4',
+  selection: '#fab387',
+  canvas: '#a6da95',
 };
 
 // ── Static code blocks (hoisted — never recreated) ──────
@@ -106,6 +112,94 @@ const CUSTOM_CODE = `Imaging.registerOp("my_filter", {
   end,
 })`;
 
+const SELECTION_CODE = `const { addShape, rasterize, clearMask } = useImagingSelection();
+const { apply } = useImaging();
+
+// 1. Define a selection shape
+addShape({ type: 'rect', x: 0, y: 0, width: 130, height: 180 });
+
+// 2. Rasterize to an in-memory mask (returns a maskId handle)
+const maskId = await rasterize(260, 180);
+
+// 3. Apply ops only inside the selected region
+await apply({
+  src: 'photo.jpg',
+  operations: [{ op: 'gaussian_blur', radius: 8 }],
+  maskId,
+  output: 'result.png',
+});
+
+// 4. Release mask when done
+await clearMask();`;
+
+const DRAW_CANVAS_CODE = `const dc = useDrawCanvas(400, 300);
+
+// Declare the canvas node
+<Native type="DrawCanvas"
+  canvasId={dc.canvasId}
+  width={400}
+  height={300}
+  style={{ width: 400, height: 300 }}
+/>
+
+// Draw
+await dc.paint([[0,0],[200,150],[400,300]], [1, 0.3, 0, 1], 12);
+await dc.erase([[100,80],[200,120]], 20);
+await dc.fill(50, 50, [0, 0, 1, 1]);
+await dc.clear();
+
+// Compose as a layer
+const composition = {
+  width: 400, height: 300,
+  layers: [
+    { id: 'bg', src: 'photo.jpg' },
+    { id: 'paint', drawCanvasId: dc.canvasId, blendMode: 'overlay' },
+  ],
+};`;
+
+const LAYER_GRAPH_CODE = `const composition = {
+  width: 320,
+  height: 180,
+  layers: [
+    {
+      id: 'base',
+      src: 'lib/placeholders/landscape.png',
+      operations: [{ op: 'contrast', factor: 1.15 }],
+    },
+    {
+      id: 'overlay',
+      src: 'lib/placeholders/poster.png',
+      blendMode: 'overlay',
+      opacity: 0.45,
+      operations: [{ op: 'desaturate', method: 'luminosity' }],
+    },
+  ],
+}
+
+await compose({ composition, output: 'imaging_compose_1.png' })`;
+
+const TRANSFORM_GRAPH_CODE = `const composition = {
+  width: 320,
+  height: 180,
+  layers: [
+    { id: 'base', src: 'lib/placeholders/landscape.png' },
+    {
+      id: 'subject',
+      src: 'lib/placeholders/avatar.png',
+      x: 160,
+      y: 90,
+      scale: 1.2,
+      rotation: 25,
+      pivot: { x: 0.5, y: 0.5, relative: true },
+      crop: { x: 16, y: 16, width: 96, height: 96 },
+      blendMode: 'overlay',
+      opacity: 0.7,
+    },
+  ],
+}
+
+await compose({ composition, output: 'imaging_transform_1.png' })`;
+
 // ── Helpers ──────────────────────────────────────────────
 
 function Tag({ text, color }: { text: string; color: string }) {
@@ -142,6 +236,14 @@ function ActionBtn({ label, color, onPress, active }: { label: string; color: st
     </Pressable>
   );
 }
+
+const DEMO_ACTION_ROW_STYLE = {
+  flexDirection: 'row' as const,
+  gap: 6,
+  flexWrap: 'wrap' as const,
+  alignSelf: 'stretch' as const,
+  justifyContent: 'center' as const,
+};
 
 // ── Live Imaging Preview ─────────────────────────────────
 // Thin wrapper around <Native type="Imaging"> with labeled pipeline display
@@ -190,7 +292,7 @@ function ColorDemo() {
   const preset = COLOR_PRESETS[selected];
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Tag text="brightness" color={C.color} />
         <Tag text="contrast" color={C.color} />
@@ -206,7 +308,7 @@ function ColorDemo() {
       <Label label="operation" value={preset.label} color={C.color} />
       <Label label="pipeline" value={preset.ops.length === 0 ? 'passthrough' : JSON.stringify(preset.ops[0])} />
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
         {COLOR_PRESETS.map((p, i) => (
           <ActionBtn
             key={p.name}
@@ -242,7 +344,7 @@ function FilterDemo() {
   const preset = FILTER_PRESETS[selected];
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Tag text="gaussian_blur" color={C.filter} />
         <Tag text="edge_detect" color={C.filter} />
@@ -260,7 +362,7 @@ function FilterDemo() {
         <Label label="params" value={JSON.stringify(preset.ops[0])} />
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
         {FILTER_PRESETS.map((p, i) => (
           <ActionBtn
             key={p.label}
@@ -323,7 +425,7 @@ function PipelineDemo() {
   const preset = PIPELINE_PRESETS[selected];
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         <Tag text="pipeline" color={C.pipeline} />
         <Tag text={`${preset.ops.length} ops`} color={C.pipeline} />
@@ -337,7 +439,7 @@ function PipelineDemo() {
       <Label label="preset" value={preset.label} color={C.pipeline} />
       <Label label="chain" value={preset.ops.map(o => o.op).join(' \u2192 ') || 'none'} />
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
         {PIPELINE_PRESETS.map((p, i) => (
           <ActionBtn
             key={p.label}
@@ -368,7 +470,7 @@ function PatternDemo() {
   const preset = PATTERN_PRESETS[selected];
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         <Tag text="test pattern" color={C.pattern} />
         <Tag text="no source file" color={C.pattern} />
@@ -381,7 +483,7 @@ function PatternDemo() {
         {'Omit src to get a procedural test pattern — color bars, grayscale gradient, and HSV sweep'}
       </Text>
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
         {PATTERN_PRESETS.map((p, i) => (
           <ActionBtn
             key={p.label}
@@ -391,6 +493,613 @@ function PatternDemo() {
             onPress={() => setSelected(i)}
           />
         ))}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Demo 5: Layer Graph Compose ──────────────────────────
+
+const COMPOSE_TONES = [
+  { label: 'Natural', ops: [] as any[] },
+  { label: 'Cinema', ops: [{ op: 'contrast', factor: 1.25 }, { op: 'colorize', hue: 30, saturation: 0.18, lightness: 0 }] as any[] },
+  { label: 'Noir', ops: [{ op: 'desaturate', method: 'luminosity' }, { op: 'contrast', factor: 1.45 }] as any[] },
+];
+
+const COMPOSE_OVERLAYS = [
+  { label: 'Poster', src: 'lib/placeholders/poster.png', ops: [] as any[] },
+  { label: 'Spotlight', src: 'lib/placeholders/spotlight.png', ops: [{ op: 'gaussian_blur', radius: 2 }] as any[] },
+  { label: 'Avatar', src: 'lib/placeholders/avatar.png', ops: [{ op: 'hue_saturation', hue: 210, saturation: 1.4, value: 1 }] as any[] },
+];
+
+const GRAPH_BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'soft_light'];
+
+type GraphState = {
+  toneIndex: number;
+  overlayIndex: number;
+  blendIndex: number;
+};
+
+const GRAPH_INITIAL: GraphState = {
+  toneIndex: 0,
+  overlayIndex: 0,
+  blendIndex: 3,
+};
+
+function buildComposition(state: GraphState): ImagingComposition {
+  const tone = COMPOSE_TONES[state.toneIndex];
+  const overlay = COMPOSE_OVERLAYS[state.overlayIndex];
+  const blendMode = GRAPH_BLEND_MODES[state.blendIndex];
+
+  return {
+    width: 320,
+    height: 180,
+    layers: [
+      {
+        id: 'base',
+        src: 'lib/placeholders/landscape.png',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        operations: tone.ops,
+      },
+      {
+        id: 'overlay',
+        src: overlay.src,
+        visible: true,
+        opacity: 0.45,
+        blendMode,
+        x: 0,
+        y: 0,
+        operations: overlay.ops,
+      },
+    ],
+  };
+}
+
+function LayerGraphDemo() {
+  const c = useThemeColors();
+  const { compose, processing, error } = useImagingComposer();
+  const { history, commit, undo, redo, canUndo, canRedo } = useImagingHistory<GraphState>(GRAPH_INITIAL);
+  const state = history.present?.state || GRAPH_INITIAL;
+  const [previewSrc, setPreviewSrc] = useState('');
+  const [composeInfo, setComposeInfo] = useState('pending');
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const composition = buildComposition(state);
+      const nonce = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      const output = `imaging_compose_${nonce}.png`;
+      const result = await compose({ composition, output });
+      if (cancelled || !result) return;
+      if (result.ok) {
+        setPreviewSrc(output);
+        setComposeInfo(`${result.width}x${result.height} cache=${result.cacheHit ? 'hit' : 'miss'}`);
+      } else {
+        setComposeInfo(result.error || 'compose failed');
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [state, compose]);
+
+  const setTone = (index: number) => {
+    commit({ ...state, toneIndex: index }, `Tone ${COMPOSE_TONES[index].label}`);
+  };
+
+  const setOverlay = (index: number) => {
+    commit({ ...state, overlayIndex: index }, `Overlay ${COMPOSE_OVERLAYS[index].label}`);
+  };
+
+  const setBlend = (index: number) => {
+    commit({ ...state, blendIndex: index }, `Blend ${GRAPH_BLEND_MODES[index]}`);
+  };
+
+  return (
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="layer graph" color={C.graph} />
+        <Tag text="compose rpc" color={C.graph} />
+        <Tag text="history undo/redo" color={C.graph} />
+      </Box>
+
+      {previewSrc ? (
+        <ImagingPreview src={previewSrc} ops={[]} width={300} height={180} />
+      ) : (
+        <Box style={{ width: 300, height: 180, borderRadius: 6, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>{'waiting for compose output'}</Text>
+        </Box>
+      )}
+
+      <Label label="status" value={processing ? 'processing' : composeInfo} color={C.graph} />
+      <Label label="state" value={`tone=${COMPOSE_TONES[state.toneIndex].label} overlay=${COMPOSE_OVERLAYS[state.overlayIndex].label} blend=${GRAPH_BLEND_MODES[state.blendIndex]}`} />
+      {error ? <Label label="error" value={error} color="#f38ba8" /> : null}
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Tone'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {COMPOSE_TONES.map((tone, i) => (
+          <ActionBtn
+            key={tone.label}
+            label={tone.label}
+            color={C.graph}
+            active={i === state.toneIndex}
+            onPress={() => setTone(i)}
+          />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Overlay'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {COMPOSE_OVERLAYS.map((overlay, i) => (
+          <ActionBtn
+            key={overlay.label}
+            label={overlay.label}
+            color={C.graph}
+            active={i === state.overlayIndex}
+            onPress={() => setOverlay(i)}
+          />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Blend'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {GRAPH_BLEND_MODES.map((mode, i) => (
+          <ActionBtn
+            key={mode}
+            label={mode}
+            color={C.graph}
+            active={i === state.blendIndex}
+            onPress={() => setBlend(i)}
+          />
+        ))}
+      </Box>
+
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        <ActionBtn label="Undo" color={C.graph} active={false} onPress={() => { if (canUndo) undo(); }} />
+        <ActionBtn label="Redo" color={C.graph} active={false} onPress={() => { if (canRedo) redo(); }} />
+      </Box>
+      <Label label="history" value={`past=${history.past.length} future=${history.future.length}`} />
+    </Box>
+  );
+}
+
+// ── Demo 6: Layer Transform Compose ─────────────────────
+
+const TRANSFORM_SCALES = [0.7, 1.0, 1.3];
+const TRANSFORM_ROTATIONS = [-35, -15, 0, 15, 35];
+const TRANSFORM_PIVOTS: { label: string; pivot: ImagingLayerPivot }[] = [
+  { label: 'Center', pivot: { x: 0.5, y: 0.5, relative: true } },
+  { label: 'Top Left', pivot: { x: 0, y: 0, relative: true } },
+  { label: 'Bottom Right', pivot: { x: 1, y: 1, relative: true } },
+];
+const TRANSFORM_CROPS: { label: string; crop?: ImagingLayerCrop }[] = [
+  { label: 'Full' },
+  { label: 'Portrait', crop: { x: 12, y: 8, width: 104, height: 112 } },
+  { label: 'Square', crop: { x: 18, y: 18, width: 92, height: 92 } },
+];
+const TRANSFORM_BLENDS: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay'];
+
+type TransformState = {
+  scaleIndex: number;
+  rotationIndex: number;
+  pivotIndex: number;
+  cropIndex: number;
+  blendIndex: number;
+};
+
+const TRANSFORM_INITIAL: TransformState = {
+  scaleIndex: 1,
+  rotationIndex: 2,
+  pivotIndex: 0,
+  cropIndex: 0,
+  blendIndex: 3,
+};
+
+function buildTransformComposition(state: TransformState): ImagingComposition {
+  const scale = TRANSFORM_SCALES[state.scaleIndex];
+  const rotation = TRANSFORM_ROTATIONS[state.rotationIndex];
+  const pivot = TRANSFORM_PIVOTS[state.pivotIndex].pivot;
+  const crop = TRANSFORM_CROPS[state.cropIndex].crop;
+  const blendMode = TRANSFORM_BLENDS[state.blendIndex];
+
+  return {
+    width: 320,
+    height: 180,
+    layers: [
+      {
+        id: 'base',
+        src: 'lib/placeholders/landscape.png',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      {
+        id: 'subject',
+        src: 'lib/placeholders/avatar.png',
+        visible: true,
+        blendMode,
+        opacity: 0.72,
+        x: 160,
+        y: 90,
+        scale,
+        rotation,
+        pivot,
+        crop,
+        operations: [{ op: 'contrast', factor: 1.1 }, { op: 'hue_saturation', hue: 12, saturation: 1.08, value: 1 }],
+      },
+    ],
+  };
+}
+
+function LayerTransformDemo() {
+  const c = useThemeColors();
+  const { compose, processing, error } = useImagingComposer();
+  const { history, commit, undo, redo, canUndo, canRedo } = useImagingHistory<TransformState>(TRANSFORM_INITIAL);
+  const state = history.present?.state || TRANSFORM_INITIAL;
+  const [previewSrc, setPreviewSrc] = useState('');
+  const [composeInfo, setComposeInfo] = useState('pending');
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const composition = buildTransformComposition(state);
+      const nonce = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      const output = `imaging_transform_${nonce}.png`;
+      const result = await compose({ composition, output });
+      if (cancelled || !result) return;
+      if (result.ok) {
+        setPreviewSrc(output);
+        setComposeInfo(`${result.width}x${result.height} cache=${result.cacheHit ? 'hit' : 'miss'}`);
+      } else {
+        setComposeInfo(result.error || 'compose failed');
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [state, compose]);
+
+  const patch = (next: Partial<TransformState>, label: string) => {
+    commit({ ...state, ...next }, label);
+  };
+
+  return (
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="transform pass" color={C.transform} />
+        <Tag text="crop + pivot + rotate" color={C.transform} />
+        <Tag text="non destructive" color={C.transform} />
+      </Box>
+
+      {previewSrc ? (
+        <ImagingPreview src={previewSrc} ops={[]} width={300} height={180} />
+      ) : (
+        <Box style={{ width: 300, height: 180, borderRadius: 6, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>{'waiting for compose output'}</Text>
+        </Box>
+      )}
+
+      <Label label="status" value={processing ? 'processing' : composeInfo} color={C.transform} />
+      <Label
+        label="state"
+        value={`scale=${TRANSFORM_SCALES[state.scaleIndex]} rot=${TRANSFORM_ROTATIONS[state.rotationIndex]} pivot=${TRANSFORM_PIVOTS[state.pivotIndex].label} crop=${TRANSFORM_CROPS[state.cropIndex].label}`}
+      />
+      {error ? <Label label="error" value={error} color="#f38ba8" /> : null}
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Scale'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {TRANSFORM_SCALES.map((scale, i) => (
+          <ActionBtn
+            key={`${scale}`}
+            label={`${scale}x`}
+            color={C.transform}
+            active={i === state.scaleIndex}
+            onPress={() => patch({ scaleIndex: i }, `Scale ${scale}`)}
+          />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Rotation (deg)'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {TRANSFORM_ROTATIONS.map((rotation, i) => (
+          <ActionBtn
+            key={`${rotation}`}
+            label={`${rotation}`}
+            color={C.transform}
+            active={i === state.rotationIndex}
+            onPress={() => patch({ rotationIndex: i }, `Rotate ${rotation}`)}
+          />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Pivot'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {TRANSFORM_PIVOTS.map((entry, i) => (
+          <ActionBtn
+            key={entry.label}
+            label={entry.label}
+            color={C.transform}
+            active={i === state.pivotIndex}
+            onPress={() => patch({ pivotIndex: i }, `Pivot ${entry.label}`)}
+          />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Crop'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {TRANSFORM_CROPS.map((entry, i) => (
+          <ActionBtn
+            key={entry.label}
+            label={entry.label}
+            color={C.transform}
+            active={i === state.cropIndex}
+            onPress={() => patch({ cropIndex: i }, `Crop ${entry.label}`)}
+          />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Blend'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {TRANSFORM_BLENDS.map((mode, i) => (
+          <ActionBtn
+            key={mode}
+            label={mode}
+            color={C.transform}
+            active={i === state.blendIndex}
+            onPress={() => patch({ blendIndex: i }, `Blend ${mode}`)}
+          />
+        ))}
+      </Box>
+
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        <ActionBtn label="Undo" color={C.transform} active={false} onPress={() => { if (canUndo) undo(); }} />
+        <ActionBtn label="Redo" color={C.transform} active={false} onPress={() => { if (canRedo) redo(); }} />
+      </Box>
+      <Label label="history" value={`past=${history.past.length} future=${history.future.length}`} />
+    </Box>
+  );
+}
+
+// ── Demo 7: Selection Mask ───────────────────────────────
+
+type SelectionShape = { label: string; shape: ImagingSelectionShape | null };
+type SelectionOp    = { label: string; ops: any[] };
+
+const SELECTION_SHAPES: SelectionShape[] = [
+  { label: 'Left Half',    shape: { type: 'rect',    x: 0,   y: 0,  width: 130, height: 180 } },
+  { label: 'Center Oval',  shape: { type: 'ellipse', x: 130, y: 90, width: 90,  height: 65 } },
+  { label: 'Right Third',  shape: { type: 'rect',    x: 174, y: 0,  width: 87,  height: 180 } },
+  { label: 'Full (no mask)', shape: null },
+];
+
+const SELECTION_OPS: SelectionOp[] = [
+  { label: 'Blur',       ops: [{ op: 'gaussian_blur', radius: 10 }] },
+  { label: 'Invert',     ops: [{ op: 'invert' }] },
+  { label: 'Bright +0.5', ops: [{ op: 'brightness', amount: 0.5 }] },
+  { label: 'Pixelize',   ops: [{ op: 'pixelize', size: 14 }] },
+  { label: 'Edge',       ops: [{ op: 'edge_detect', method: 'sobel' }] },
+];
+
+function SelectionDemo() {
+  const c = useThemeColors();
+  const [shapeIdx, setShapeIdx] = useState(0);
+  const [opIdx, setOpIdx]       = useState(0);
+  const [resultSrc, setResultSrc] = useState('');
+  const [status, setStatus]     = useState('pick a shape + op then press Apply');
+  const [busy, setBusy]         = useState(false);
+
+  const { apply } = useImaging();
+  const { rasterize } = useImagingSelection();
+
+  const doApply = async () => {
+    if (busy) return;
+    setBusy(true);
+    setStatus('rasterizing…');
+
+    const shapeEntry = SELECTION_SHAPES[shapeIdx];
+    const opEntry    = SELECTION_OPS[opIdx];
+
+    let maskId: string | null = null;
+    if (shapeEntry.shape) {
+      maskId = await rasterize(260, 180, [shapeEntry.shape]);
+      if (!maskId) {
+        setStatus('rasterize failed');
+        setBusy(false);
+        return;
+      }
+      setStatus('applying ops…');
+    }
+
+    const nonce  = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+    const output = `imaging_sel_${nonce}.png`;
+
+    const result = await apply({
+      src: 'lib/placeholders/landscape.png',
+      operations: opEntry.ops,
+      output,
+      maskId: maskId || undefined,
+    });
+
+    if (result?.ok) {
+      setResultSrc(output);
+      setStatus(`${shapeEntry.label} \u2192 ${opEntry.label}`);
+    } else {
+      setStatus(result?.error || 'apply failed');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="selection" color={C.selection} />
+        <Tag text="rasterize" color={C.selection} />
+        <Tag text="maskId" color={C.selection} />
+      </Box>
+
+      {resultSrc ? (
+        <ImagingPreview src={resultSrc} ops={[]} width={260} height={180} />
+      ) : (
+        <Box style={{ width: 260, height: 180, borderRadius: 6, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>{'press Apply to render'}</Text>
+        </Box>
+      )}
+
+      <Label label="status" value={status} color={C.selection} />
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Shape'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {SELECTION_SHAPES.map((s, i) => (
+          <ActionBtn key={s.label} label={s.label} color={C.selection} active={i === shapeIdx} onPress={() => setShapeIdx(i)} />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Operation'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {SELECTION_OPS.map((op, i) => (
+          <ActionBtn key={op.label} label={op.label} color={C.selection} active={i === opIdx} onPress={() => setOpIdx(i)} />
+        ))}
+      </Box>
+
+      <ActionBtn label={busy ? 'Working…' : 'Apply'} color={C.selection} active={false} onPress={doApply} />
+    </Box>
+  );
+}
+
+// ── Demo 8: Draw Canvas ───────────────────────────────────
+
+const DC_W = 260;
+const DC_H = 180;
+
+type BrushColor = { label: string; rgba: [number, number, number, number] };
+const BRUSH_COLORS: BrushColor[] = [
+  { label: 'Red',    rgba: [0.95, 0.2,  0.15, 1] },
+  { label: 'Green',  rgba: [0.2,  0.85, 0.3,  1] },
+  { label: 'Blue',   rgba: [0.2,  0.4,  0.95, 1] },
+  { label: 'Orange', rgba: [0.95, 0.55, 0.1,  1] },
+  { label: 'White',  rgba: [1,    1,    1,    1] },
+];
+
+type StrokePreset = { label: string; points: [number, number][][] };
+const STROKE_PRESETS: StrokePreset[] = [
+  {
+    label: 'Diagonal',
+    points: [[[10, 10], [DC_W - 10, DC_H - 10]]],
+  },
+  {
+    label: 'X',
+    points: [
+      [[10, 10], [DC_W - 10, DC_H - 10]],
+      [[DC_W - 10, 10], [10, DC_H - 10]],
+    ],
+  },
+  {
+    label: 'Zigzag',
+    points: [[[0, DC_H * 0.5], [DC_W * 0.25, DC_H * 0.15], [DC_W * 0.5, DC_H * 0.5], [DC_W * 0.75, DC_H * 0.85], [DC_W, DC_H * 0.5]]],
+  },
+  {
+    label: 'Dots',
+    points: [
+      [[40,  45], [40,  45]],
+      [[130, 45], [130, 45]],
+      [[220, 45], [220, 45]],
+      [[85,  90], [85,  90]],
+      [[175, 90], [175, 90]],
+      [[40,  135], [40,  135]],
+      [[130, 135], [130, 135]],
+      [[220, 135], [220, 135]],
+    ],
+  },
+];
+
+function DrawCanvasDemo() {
+  const c = useThemeColors();
+  const dc = useDrawCanvas(DC_W, DC_H);
+  const [colorIdx, setColorIdx]  = useState(0);
+  const [brushSize, setBrushSize] = useState(8);
+  const [status, setStatus]      = useState('canvas ready');
+
+  const doPaint = async (preset: StrokePreset) => {
+    const color = BRUSH_COLORS[colorIdx].rgba;
+    setStatus(`painting ${preset.label}…`);
+    for (const pts of preset.points) {
+      await dc.paint(pts, color, brushSize);
+    }
+    setStatus(`drew ${preset.label}`);
+  };
+
+  const doErase = async () => {
+    setStatus('erasing center…');
+    const cx = DC_W * 0.5;
+    const cy = DC_H * 0.5;
+    await dc.erase([[cx - 40, cy], [cx + 40, cy], [cx, cy - 30], [cx, cy + 30]], 24);
+    setStatus('erased');
+  };
+
+  const doClear = async () => {
+    await dc.clear();
+    setStatus('cleared');
+  };
+
+  const doFill = async () => {
+    const color = BRUSH_COLORS[colorIdx].rgba;
+    setStatus('flood fill top-left…');
+    await dc.fill(5, 5, color, 0.1);
+    setStatus('filled');
+  };
+
+  const SIZE_OPTS = [4, 8, 16, 28];
+
+  return (
+    <Box style={{ width: '100%', gap: 8, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="DrawCanvas" color={C.canvas} />
+        <Tag text="canvas:paint" color={C.canvas} />
+        <Tag text="canvas:erase" color={C.canvas} />
+        <Tag text="canvas:fill" color={C.canvas} />
+      </Box>
+
+      <Native
+        type="DrawCanvas"
+        canvasId={dc.canvasId}
+        width={DC_W}
+        height={DC_H}
+        background="transparent"
+        style={{ width: DC_W, height: DC_H, borderRadius: 6, borderWidth: 1, borderColor: c.border }}
+      />
+
+      <Label label="status" value={status} color={C.canvas} />
+      <Label label="canvasId" value={dc.canvasId} />
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Color'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {BRUSH_COLORS.map((col, i) => (
+          <ActionBtn key={col.label} label={col.label} color={C.canvas} active={i === colorIdx} onPress={() => setColorIdx(i)} />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Brush Size'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {SIZE_OPTS.map(s => (
+          <ActionBtn key={`${s}`} label={`${s}px`} color={C.canvas} active={s === brushSize} onPress={() => setBrushSize(s)} />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Stroke Presets'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {STROKE_PRESETS.map(p => (
+          <ActionBtn key={p.label} label={p.label} color={C.canvas} active={false} onPress={() => doPaint(p)} />
+        ))}
+      </Box>
+
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        <ActionBtn label="Erase Center" color={C.canvas} active={false} onPress={doErase} />
+        <ActionBtn label="Fill Corner"  color={C.canvas} active={false} onPress={doFill} />
+        <ActionBtn label="Clear"        color={C.canvas} active={false} onPress={doClear} />
       </Box>
     </Box>
   );
@@ -594,6 +1303,72 @@ export function ImagingStory() {
               {'Every operation has a GPU path (GLSL shader) and can have a CPU path (ImageData). GPU runs by default. Register custom operations with Imaging.registerOp() \u2014 provide gpu, cpu, or both.'}
             </Text>
             <CodeBlock language="lua" fontSize={9} code={CUSTOM_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Layer Graph: demo | text + code ── */}
+        <Band>
+          <Half>
+            <LayerGraphDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="layers" accentColor={C.accent}>{'LAYER GRAPH LAB'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Early non-destructive composition pass: stack layers, set per-layer blend and opacity, then compose through imaging:compose. This section also dogfoods undo/redo history snapshots.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={LAYER_GRAPH_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Layer Transform: text + code | demo ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="layers" accentColor={C.accent}>{'LAYER TRANSFORM LAB'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Per-layer transform pass in compose: crop source pixels, define pivot, then scale and rotate before blend. This stays non-destructive and works with undo/redo snapshots.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={TRANSFORM_GRAPH_CODE} />
+          </Half>
+          <Half>
+            <LayerTransformDemo />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        <Divider />
+
+        {/* ── Selection Lab: demo | text + code ── */}
+        <Band>
+          <Half>
+            <SelectionDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="crop" accentColor={C.accent}>{'SELECTION LAB'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Pick a shape (rect left-half, center oval, right third) and an operation, then press Apply. The selection is rasterized to a grayscale mask canvas in Lua memory — no file I/O. imaging:apply composites the processed result with the original using the mask as a weight: mix(original, processed, mask.r). The mask handle is released when done.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={SELECTION_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Draw Canvas Lab: text + code | demo ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="edit" accentColor={C.accent}>{'DRAW CANVAS LAB'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'A mutable Love2D Canvas owned by a capability. React declares it with <Native type="DrawCanvas">; useDrawCanvas() hook sends strokes, erases, and fills via bridge RPCs. All rendering happens on the GPU side — only coordinates cross the bridge. The live canvas can also be composed as a layer via drawCanvasId in the imaging layer graph.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={DRAW_CANVAS_CODE} />
+          </Half>
+          <Half>
+            <DrawCanvasDemo />
           </Half>
         </Band>
 

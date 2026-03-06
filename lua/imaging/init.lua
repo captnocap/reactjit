@@ -26,6 +26,11 @@ local Pipeline = require("lua.imaging.pipeline")
 
 local Imaging = {}
 
+-- Break circular require during op loading:
+-- ops/*.lua require("lua.imaging") to call Imaging.registerOp(...).
+-- Publish the module table early so those requires resolve to this table.
+package.loaded["lua.imaging"] = Imaging
+
 -- Operation registry: name -> { gpu = fn(canvas, w, h, params), cpu = fn(canvas, w, h, params) }
 local ops = {}
 
@@ -210,6 +215,7 @@ function Imaging.loadOps()
     "color",
     "filter",
     "blend",
+    "mask",
   }
   for _, name in ipairs(opFiles) do
     local ok, err = pcall(require, "lua.imaging.ops." .. name)
