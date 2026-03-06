@@ -1115,10 +1115,72 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register video recorder RPC handlers
+  do
+    local recOk, rec = pcall(require, "lua.recorder")
+    if recOk then
+      M.recorder = rec
+      for method, handler in pairs(rec.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
     if M.gamemod then return M.gamemod.handleCommand(args) end
+  end
+
+  -- List active Libretro instances (returns nodeIds and core info)
+  rpcHandlers["libretro:list"] = function()
+    local Caps = require("lua.capabilities")
+    local results = {}
+    -- Walk the instance table to find Libretro types
+    for nodeId, inst in pairs(Caps._instances or {}) do
+      if inst.type == "Libretro" and inst.state and inst.state.gameLoaded then
+        results[#results + 1] = {
+          nodeId = nodeId,
+          coreName = inst.state.coreName or "",
+          coreVersion = inst.state.coreVersion or "",
+          saveName = inst.state.saveName or "",
+          width = inst.state.fbWidth or 0,
+          height = inst.state.fbHeight or 0,
+          running = inst.state.running or false,
+        }
+      end
+    end
+    return { instances = results, count = #results }
+  end
+
+  -- Read emulator memory from a running Libretro instance (NES RAM, SRAM, VRAM)
+  rpcHandlers["libretro:memory"] = function(args)
+    local Caps = require("lua.capabilities")
+    local nodeId = args and args.nodeId
+    if not nodeId then return { error = "nodeId required" } end
+    local inst = Caps.getInstance(nodeId)
+    if not inst then return { error = "no instance for nodeId " .. tostring(nodeId) } end
+    local state = inst.state
+    if not state or not state.core or not state.gameLoaded then
+      return { error = "no running core for nodeId " .. tostring(nodeId) }
+    end
+    local memType = args.memType or 2  -- 0=SAVE_RAM, 1=RTC, 2=SYSTEM_RAM, 3=VIDEO_RAM
+    local size = tonumber(state.core.retro_get_memory_size(memType))
+    local ptr = state.core.retro_get_memory_data(memType)
+    if ptr == nil or size == 0 then
+      return { error = "memory region empty", memType = memType, size = 0 }
+    end
+    local offset = args.offset or 0
+    local length = math.min(args.length or 256, size - offset, 4096)
+    if offset < 0 or offset >= size then
+      return { error = "offset out of range", size = size }
+    end
+    local bytes = {}
+    local u8 = ffi.cast("const uint8_t*", ptr)
+    for i = 0, length - 1 do
+      bytes[i + 1] = u8[offset + i]
+    end
+    return { bytes = bytes, size = size, offset = offset, length = length, memType = memType }
   end
 
   -- Trigger a hot reload programmatically (dev tooling, demo, devtools button)
@@ -2088,6 +2150,7 @@ function ReactJIT.update(dt)
   if crashRecoveryMode then
     ReactJIT._pollHMR()
     if M.gif then M.gif.update(dt) end
+    if M.recorder then M.recorder.update(dt) end
     return
   end
 
@@ -2186,6 +2249,7 @@ function ReactJIT.update(dt)
     if M.inspectorEnabled then devtools.tick(dt) end
     if M.screenshot then M.screenshot.update() end
     if M.gif then M.gif.update(dt) end
+    if M.recorder then M.recorder.update(dt) end
 
     -- 5. Flush bridge outbox (events back to JS)
     M.bridge.flush()
@@ -3420,6 +3484,7 @@ function ReactJIT.update(dt)
   if M.inspectorEnabled then devtools.tick(dt) end
   if M.screenshot then M.screenshot.update() end
   if M.gif then M.gif.update(dt) end
+  if M.recorder then M.recorder.update(dt) end
 
   end) -- end pcall(function() wrapping native mode app pipeline
 
@@ -3469,6 +3534,7 @@ function ReactJIT.draw()
   if crashRecoveryMode then
     errors.drawBSOD()
     if M.gif then M.gif.captureIfReady() end
+    if M.recorder then M.recorder.captureIfReady() end
     return
   end
 
@@ -3615,6 +3681,9 @@ function ReactJIT.draw()
 
   -- GIF recorder frame capture
   if M.gif then M.gif.captureIfReady() end
+
+  -- Video recorder frame capture
+  if M.recorder then M.recorder.captureIfReady() end
 
   -- (Devtools pop-out renders in its own child Love2D process — no GL switch needed)
 end

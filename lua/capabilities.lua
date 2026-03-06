@@ -90,19 +90,67 @@ end
 -- Tree sync (called per-frame from init.lua)
 -- ============================================================================
 
---- Compare two prop tables (shallow). Returns true if different.
-local function propsChanged(a, b)
-  if a == b then return false end
-  if a == nil or b == nil then return true end
-  -- Check all keys in a
+--- Create a stable snapshot of props so in-place tree mutations don't hide updates.
+--- @param value any
+--- @param depth number|nil
+--- @return any
+local function cloneValue(value, depth)
+  depth = depth or 0
+  if type(value) ~= "table" then
+    return value
+  end
+  if depth >= 12 then
+    return value
+  end
+  local out = {}
+  for k, v in pairs(value) do
+    out[cloneValue(k, depth + 1)] = cloneValue(v, depth + 1)
+  end
+  return out
+end
+
+--- Deep equality for prop snapshots.
+--- @param a any
+--- @param b any
+--- @param depth number|nil
+--- @param seen table|nil
+--- @return boolean
+local function valuesEqual(a, b, depth, seen)
+  if a == b then return true end
+  if type(a) ~= type(b) then return false end
+  if type(a) ~= "table" then return false end
+
+  depth = depth or 0
+  if depth >= 12 then
+    return true
+  end
+
+  seen = seen or {}
+  local prev = seen[a]
+  if prev and prev == b then
+    return true
+  end
+  seen[a] = b
+
   for k, v in pairs(a) do
-    if b[k] ~= v then return true end
+    if not valuesEqual(v, b[k], depth + 1, seen) then
+      return false
+    end
   end
-  -- Check for keys in b not in a
   for k in pairs(b) do
-    if a[k] == nil then return true end
+    if a[k] == nil then
+      return false
+    end
   end
-  return false
+  return true
+end
+
+--- Compare two prop tables. Returns true if different.
+local function propsChanged(a, b)
+  if a == nil or b == nil then
+    return a ~= b
+  end
+  return not valuesEqual(a, b, 0, nil)
 end
 
 --- Extract non-handler props from a node's props table.
@@ -146,7 +194,7 @@ function Capabilities.syncWithTree(nodes, pushEvent, dt)
         if cap.create then
           state = cap.create(id, props) or {}
         end
-        instances[id] = { type = node.type, state = state, props = props }
+        instances[id] = { type = node.type, state = state, props = cloneValue(props) }
       else
         -- Existing: check for prop changes
         local inst = instances[id]
@@ -154,7 +202,7 @@ function Capabilities.syncWithTree(nodes, pushEvent, dt)
           if cap.update then
             cap.update(id, props, inst.props, inst.state)
           end
-          inst.props = props
+          inst.props = cloneValue(props)
         end
       end
 
@@ -246,6 +294,9 @@ end
 function Capabilities.getInstance(id)
   return instances[id]
 end
+
+--- Expose the instances table for iteration (used by libretro:list RPC).
+Capabilities._instances = instances
 
 function Capabilities.loadAll()
   local files = {
