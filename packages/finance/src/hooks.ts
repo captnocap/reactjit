@@ -202,6 +202,32 @@ function normalizePortfolioSnapshot(snapshot: unknown, fallbackHoldings: Holding
   };
 }
 
+function normalizeOHLCV(value: unknown): OHLCV {
+  const c = value as Partial<OHLCV> | null | undefined;
+  return {
+    time: asNumberOrZero(c?.time),
+    open: asNumberOrZero(c?.open),
+    high: asNumberOrZero(c?.high),
+    low: asNumberOrZero(c?.low),
+    close: asNumberOrZero(c?.close),
+    volume: asNumberOrZero(c?.volume),
+  };
+}
+
+function normalizeOHLCVSeries(values: unknown): OHLCV[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizeOHLCV);
+}
+
+function seedSyntheticCandles(startPrice: number): OHLCV[] {
+  const now = Math.floor(Date.now() / 1000);
+  const p = Math.max(1, startPrice);
+  return [
+    { time: now - 3600, open: p, high: p, low: p, close: p, volume: 1000 },
+    { time: now, open: p, high: p, low: p, close: p, volume: 1000 },
+  ];
+}
+
 /** Compute all standard indicators for a candle series in Lua. */
 export function useTechnicalAnalysis(candles: OHLCV[]): TechnicalAnalysis {
   const rpc = useLoveRPC<TechnicalAnalysisRPC>('finance:technical_analysis');
@@ -306,63 +332,49 @@ export function useSyntheticCandles(opts?: {
   const startPrice = opts?.startPrice ?? 100;
   const volatility = opts?.volatility ?? 2;
   const seed = opts?.seed ?? 42;
+  const generateRpc = useLoveRPC<OHLCV[]>('finance:synthetic_generate');
+  const appendRpc = useLoveRPC<OHLCV[]>('finance:synthetic_append');
+  const [candles, setCandles] = useState<OHLCV[]>(() => seedSyntheticCandles(startPrice));
+  const candlesRef = useRef(candles);
+  candlesRef.current = candles;
+  const requestIdRef = useRef(0);
 
-  const generate = useCallback((n: number) => {
-    const candles: OHLCV[] = [];
-    let price = startPrice;
-    let s = seed;
-    const rand = () => {
-      s = (s * 16807 + 0) % 2147483647;
-      return (s & 0x7fffffff) / 2147483647;
-    };
-
-    const now = Math.floor(Date.now() / 1000);
-    for (let i = 0; i < n; i++) {
-      const open = price;
-      const drift = (rand() - 0.5) * volatility * 2;
-      const close = Math.max(1, open + drift);
-      const high = Math.max(open, close) + rand() * volatility;
-      const low = Math.min(open, close) - rand() * volatility;
-      const volume = 1000 + Math.floor(rand() * 9000);
-      candles.push({
-        time: now - (n - i) * 3600,
-        open: +open.toFixed(2),
-        high: +high.toFixed(2),
-        low: +Math.max(0.01, low).toFixed(2),
-        close: +close.toFixed(2),
-        volume,
+  const regenerate = useCallback(() => {
+    const requestId = ++requestIdRef.current;
+    generateRpc({ count, startPrice, volatility, seed })
+      .then(next => {
+        if (requestIdRef.current !== requestId) return;
+        const normalized = normalizeOHLCVSeries(next);
+        setCandles(normalized.length > 0 ? normalized : seedSyntheticCandles(startPrice));
+      })
+      .catch(() => {
+        if (requestIdRef.current !== requestId) return;
+        setCandles(seedSyntheticCandles(startPrice));
       });
-      price = close;
-    }
-    return candles;
-  }, [startPrice, volatility, seed]);
+  }, [generateRpc, count, startPrice, volatility, seed]);
 
-  const [candles, setCandles] = useState<OHLCV[]>(() => generate(count));
+  useEffect(() => {
+    regenerate();
+  }, [regenerate]);
 
   const append = useCallback(() => {
-    setCandles(prev => {
-      const last = prev[prev.length - 1];
-      const open = last.close;
-      const drift = (Math.random() - 0.5) * volatility * 2;
-      const close = Math.max(1, open + drift);
-      const high = Math.max(open, close) + Math.random() * volatility;
-      const low = Math.min(open, close) - Math.random() * volatility;
-      const volume = 1000 + Math.floor(Math.random() * 9000);
-      const next: OHLCV = {
-        time: last.time + 3600,
-        open: +open.toFixed(2),
-        high: +high.toFixed(2),
-        low: +Math.max(0.01, low).toFixed(2),
-        close: +close.toFixed(2),
-        volume,
-      };
-      const out = [...prev, next];
-      if (out.length > 200) out.shift();
-      return out;
-    });
-  }, [volatility]);
+    const requestId = ++requestIdRef.current;
+    appendRpc({
+      candles: candlesRef.current,
+      volatility,
+      maxCount: 200,
+    })
+      .then(next => {
+        if (requestIdRef.current !== requestId) return;
+        const normalized = normalizeOHLCVSeries(next);
+        if (normalized.length > 0) setCandles(normalized);
+      })
+      .catch(() => {});
+  }, [appendRpc, volatility]);
 
-  const reset = useCallback(() => setCandles(generate(count)), [generate, count]);
+  const reset = useCallback(() => {
+    regenerate();
+  }, [regenerate]);
 
   return { candles, append, reset };
 }
