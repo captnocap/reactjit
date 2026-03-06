@@ -207,6 +207,8 @@ local visualOnlyProps = {
   transform = true,
   zIndex = true,
   backgroundGradient = true,
+  strokeDasharray = true,
+  strokeDashoffset = true,
 }
 
 --- Interpolate a transform object component by component.
@@ -261,6 +263,19 @@ local function interpolateValue(from, to, t, propName)
   -- Transform interpolation
   if propName == "transform" then
     return lerpTransform(from, to, t)
+  end
+
+  -- Array interpolation (strokeDasharray, etc.) — element-wise lerp
+  if type(from) == "table" and type(to) == "table"
+      and #from > 0 and #to > 0 and propName ~= "transform" then
+    local result = {}
+    local len = math.max(#from, #to)
+    for i = 1, len do
+      local fv = from[i] or from[#from] or 0
+      local tv = to[i] or to[#to] or 0
+      result[i] = lerp(fv, tv, t)
+    end
+    return result
   end
 
   -- Numeric interpolation
