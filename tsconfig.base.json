@@ -36,7 +36,8 @@
       "@reactjit/convert": ["./packages/convert/src"],
       "@reactjit/privacy": ["./packages/privacy/src"],
       "@reactjit/physics": ["./packages/physics/src"],
-      "@reactjit/wireguard": ["./packages/wireguard/src"]
+      "@reactjit/wireguard": ["./packages/wireguard/src"],
+      "@reactjit/imaging": ["./packages/imaging/src"]
     }
   }
 }

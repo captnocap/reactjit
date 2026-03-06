@@ -54,6 +54,7 @@ import { GeoScene3DStory } from './GeoScene3DStory';
 import { ThreeDStory } from './ThreeDStory';
 import { OverlayStory } from './OverlayStory';
 import { WireGuardStory } from './WireGuardStory';
+import { ImagingStory } from './ImagingStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -94,6 +95,7 @@ export const stories: StoryDef[] = [
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
   { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
   { id: 'wireguard', title: 'WireGuard', section: 'Packages', component: WireGuardStory },
+  { id: 'imaging', title: 'Imaging', section: 'Packages', component: ImagingStory },
 
   // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
   { id: 'compatibility', title: 'Compatibility', section: 'Bad Habits', component: CompatibilityStory },

@@ -119,6 +119,7 @@ end
 --- @param dt number  Delta time since last frame
 local Log = require("lua.debug_log")
 local _syncDebugOnce = false
+local _physicsProbeCount = 0
 function Capabilities.syncWithTree(nodes, pushEvent, dt)
   if not _syncDebugOnce and Log.isOn("capsync") then
     _syncDebugOnce = true
@@ -131,6 +132,21 @@ function Capabilities.syncWithTree(nodes, pushEvent, dt)
     local keys = {}
     for k in pairs(registry) do keys[#keys + 1] = k end
     Log.log("capsync", "total nodes=%d, registry keys: %s", count, table.concat(keys, " "))
+  end
+  -- Temporary physics probe: log once when we first see (or don't see) PhysicsWorld nodes
+  _physicsProbeCount = _physicsProbeCount + 1
+  if _physicsProbeCount == 120 or _physicsProbeCount == 300 then
+    local physCount = 0
+    local totalCount = 0
+    for id, node in pairs(nodes) do
+      totalCount = totalCount + 1
+      if node.type == "PhysicsWorld" or node.type == "RigidBody" or node.type == "Collider" then
+        physCount = physCount + 1
+      end
+    end
+    io.write(string.format("[capsync-probe] frame=%d total_nodes=%d physics_nodes=%d registry_has_PhysicsWorld=%s\n",
+      _physicsProbeCount, totalCount, physCount, tostring(registry["PhysicsWorld"] ~= nil)))
+    io.flush()
   end
   local seen = {}
 
@@ -265,6 +281,7 @@ function Capabilities.loadAll()
     "render",
     "physics",
     "devtools_embed",
+    "imaging",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

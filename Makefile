@@ -325,6 +325,9 @@ cli-setup: setup
 	cp lua/effects/*.lua cli/runtime/lua/effects/
 	mkdir -p cli/runtime/lua/masks
 	cp lua/masks/*.lua cli/runtime/lua/masks/
+	mkdir -p cli/runtime/lua/imaging cli/runtime/lua/imaging/ops
+	cp lua/imaging/*.lua cli/runtime/lua/imaging/
+	cp lua/imaging/ops/*.lua cli/runtime/lua/imaging/ops/
 	mkdir -p cli/runtime/lua/child_window
 	cp lua/child_window/*.lua cli/runtime/lua/child_window/
 	mkdir -p cli/runtime/lua/devtools
@@ -464,6 +467,7 @@ endif
 	cp -r packages/icons cli/runtime/reactjit/icons
 	cp -r packages/layouts cli/runtime/reactjit/layouts
 	cp -r packages/terminal cli/runtime/reactjit/terminal
+	cp -r packages/imaging cli/runtime/reactjit/imaging
 	mkdir -p cli/runtime/lua/themes
 	cp lua/themes/*.lua cli/runtime/lua/themes/
 	@if [ -d fonts/base ]; then \
