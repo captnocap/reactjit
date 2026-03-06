@@ -287,6 +287,179 @@ function FeatureCatalog() {
   );
 }
 
+// ── Visual Preview Mockups ────────────────────────────────
+
+/** Fake game background used by overlay previews */
+function FakeGameScene({ label }: { label?: string }) {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#1a1a2e' }}>
+      {/* Stars */}
+      <Box style={{ position: 'absolute', top: 8, left: 12, width: 2, height: 2, borderRadius: 1, backgroundColor: '#ffffff66' }} />
+      <Box style={{ position: 'absolute', top: 22, left: 45, width: 2, height: 2, borderRadius: 1, backgroundColor: '#ffffff44' }} />
+      <Box style={{ position: 'absolute', top: 14, left: 80, width: 3, height: 3, borderRadius: 2, backgroundColor: '#ffffff55' }} />
+      <Box style={{ position: 'absolute', top: 30, left: 120, width: 2, height: 2, borderRadius: 1, backgroundColor: '#ffffff33' }} />
+      <Box style={{ position: 'absolute', top: 6, left: 160, width: 2, height: 2, borderRadius: 1, backgroundColor: '#ffffff55' }} />
+      {/* Ground */}
+      <Box style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: 20, backgroundColor: '#16213e' }} />
+      <Box style={{ position: 'absolute', bottom: 20, left: 0, width: '100%', height: 1, backgroundColor: '#0f3460' }} />
+      {/* Player placeholder */}
+      <Box style={{ position: 'absolute', bottom: 24, left: 40, width: 12, height: 18, backgroundColor: '#e94560', borderRadius: 2 }} />
+      {/* Enemy placeholder */}
+      <Box style={{ position: 'absolute', bottom: 24, left: 140, width: 14, height: 14, backgroundColor: '#533483', borderRadius: 2 }} />
+      {/* Label */}
+      {label && (
+        <Box style={{ position: 'absolute', bottom: 4, right: 6 }}>
+          <Text style={{ fontSize: 6, color: '#ffffff33' }}>{label}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/** Passthrough mode: transparent HUD floating over game */
+function PassthroughPreview() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', height: 120, borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+      <FakeGameScene label="game.exe" />
+      {/* Passthrough overlay — stats bar, top-right */}
+      <Box style={{
+        position: 'absolute', top: 6, right: 6,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
+        gap: 2,
+      }}>
+        <Text style={{ fontSize: 7, color: C.passthrough, fontWeight: 'bold' }}>{'PASSTHROUGH'}</Text>
+        <Text style={{ fontSize: 6, color: '#ffffffcc' }}>{'FPS: 144  |  GPU: 62%'}</Text>
+        <Text style={{ fontSize: 6, color: '#ffffffaa' }}>{'CPU: 34%  |  RAM: 4.2G'}</Text>
+      </Box>
+      {/* Passthrough indicator dot */}
+      <Box style={{
+        position: 'absolute', top: 6, left: 6,
+        flexDirection: 'row', gap: 4, alignItems: 'center',
+      }}>
+        <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.passthrough }} />
+        <Text style={{ fontSize: 6, color: '#ffffffaa' }}>{'F6 to toggle'}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/** Interactive mode: full UI panel overlay captures input */
+function InteractivePreview() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', height: 120, borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+      <FakeGameScene label="game.exe" />
+      {/* Semi-transparent backdrop */}
+      <Box style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.35)' }} />
+      {/* Interactive overlay panel — centered */}
+      <Box style={{
+        position: 'absolute', top: 12, left: 20, right: 20, bottom: 12,
+        backgroundColor: 'rgba(15,15,25,0.85)',
+        borderRadius: 6, borderWidth: 1, borderColor: C.interactive + '44',
+        padding: 8, gap: 4,
+      }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.interactive }} />
+          <Text style={{ fontSize: 8, color: C.interactive, fontWeight: 'bold' }}>{'INTERACTIVE'}</Text>
+          <Box style={{ flexGrow: 1 }} />
+          <Text style={{ fontSize: 6, color: '#ffffff66' }}>{'F6 to cycle'}</Text>
+        </Box>
+        <Box style={{ height: 1, backgroundColor: '#ffffff11' }} />
+        {/* Fake settings rows */}
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Text style={{ fontSize: 7, color: '#ffffffcc', width: 50 }}>{'Opacity'}</Text>
+          <Box style={{ flexGrow: 1, height: 4, backgroundColor: '#ffffff22', borderRadius: 2 }}>
+            <Box style={{ width: '70%', height: 4, backgroundColor: C.accent, borderRadius: 2 }} />
+          </Box>
+          <Text style={{ fontSize: 6, color: '#ffffffaa' }}>{'0.70'}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Text style={{ fontSize: 7, color: '#ffffffcc', width: 50 }}>{'Hotkey'}</Text>
+          <Box style={{ backgroundColor: '#ffffff11', borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+            <Text style={{ fontSize: 7, color: C.accent }}>{'F6'}</Text>
+          </Box>
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Text style={{ fontSize: 7, color: '#ffffffcc', width: 50 }}>{'Transport'}</Text>
+          <Box style={{ backgroundColor: C.window + '22', borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+            <Text style={{ fontSize: 7, color: C.window }}>{'Window'}</Text>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+/** Hidden mode: game runs unobstructed */
+function HiddenPreview() {
+  return (
+    <Box style={{ width: '100%', height: 120, borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+      <FakeGameScene label="game.exe" />
+      {/* Just a tiny indicator that overlay exists but is hidden */}
+      <Box style={{
+        position: 'absolute', bottom: 6, right: 6,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: 3, paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2,
+      }}>
+        <Text style={{ fontSize: 6, color: C.hidden }}>{'overlay: hidden (F6)'}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/** SHM compositing pipeline diagram */
+function SHMPipelinePreview() {
+  const c = useThemeColors();
+  const stages = [
+    { label: 'Love2D', sub: 'FBO render', color: C.accent },
+    { label: 'glReadPixels', sub: 'RGBA out', color: C.hook },
+    { label: '/rjit-overlay', sub: 'POSIX shm', color: C.shm },
+    { label: 'LD_PRELOAD', sub: 'hook.so', color: C.cli },
+    { label: 'Composite', sub: 'glXSwapBuffers', color: C.passthrough },
+  ];
+  return (
+    <Box style={{ width: '100%', gap: 6 }}>
+      <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold', letterSpacing: 1 }}>{'SHM COMPOSITING PIPELINE'}</Text>
+      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        {stages.map((s, i) => (
+          <React.Fragment key={s.label}>
+            <Box style={{
+              flexGrow: 1, flexBasis: 0,
+              backgroundColor: s.color + '18',
+              borderWidth: 1, borderColor: s.color + '44',
+              borderRadius: 4, padding: 6,
+              alignItems: 'center', gap: 2,
+            }}>
+              <Text style={{ fontSize: 7, color: s.color, fontWeight: 'bold' }}>{s.label}</Text>
+              <Text style={{ fontSize: 6, color: c.muted }}>{s.sub}</Text>
+            </Box>
+            {i < stages.length - 1 && (
+              <Text style={{ fontSize: 10, color: c.muted, flexShrink: 0 }}>{'\u2192'}</Text>
+            )}
+          </React.Fragment>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+/** Three mode states side by side */
+function ModeTriplePreview() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ width: '100%', gap: 6 }}>
+      <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold', letterSpacing: 1 }}>{'VISIBILITY MODES — LIVE PREVIEW'}</Text>
+      <Box style={{ gap: 8 }}>
+        <PassthroughPreview />
+        <InteractivePreview />
+        <HiddenPreview />
+      </Box>
+    </Box>
+  );
+}
+
 // ── Helpers ──────────────────────────────────────────────
 
 function Tag({ text, color }: { text: string; color: string }) {
@@ -373,6 +546,7 @@ export function OverlayStory() {
         <Band>
           <Half>
             <OverlayStateDemo />
+            <PassthroughPreview />
           </Half>
           <Half>
             <SectionLabel icon="code">{'useOverlay() HOOK'}</SectionLabel>
@@ -385,7 +559,7 @@ export function OverlayStory() {
 
         <Divider />
 
-        {/* ── Modes: text + diagram | text ── */}
+        {/* ── Modes: text + diagram | previews ── */}
         <Band>
           <Half>
             <SectionLabel icon="toggle-left">{'VISIBILITY MODES'}</SectionLabel>
@@ -401,10 +575,11 @@ export function OverlayStory() {
                 </Box>
               ))}
             </Box>
-          </Half>
-          <Half>
             <ModeCycleDiagram />
             <CodeBlock language="tsx" fontSize={9} code={MODES_CODE} />
+          </Half>
+          <Half>
+            <ModeTriplePreview />
           </Half>
         </Band>
 
@@ -424,6 +599,7 @@ export function OverlayStory() {
         <Band>
           <Half>
             <TransportDiagram />
+            <SHMPipelinePreview />
           </Half>
           <Half>
             <SectionLabel icon="layers">{'TRANSPORT MODES'}</SectionLabel>
@@ -474,13 +650,14 @@ export function OverlayStory() {
 
         <Divider />
 
-        {/* ── HUD pattern: text | code ── */}
+        {/* ── HUD pattern: text + preview | code ── */}
         <Band>
           <Half>
             <SectionLabel icon="layout">{'HUD PATTERN'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Build your overlay like any ReactJIT app. Check overlay.mode to decide what to render — minimal stats bar in passthrough, full settings panel in interactive, nothing expensive in hidden. The mode changes instantly on hotkey press.'}
             </Text>
+            <InteractivePreview />
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={HUD_CODE} />
