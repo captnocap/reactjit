@@ -101,6 +101,20 @@ function collectFolderPaths(nodes: ExplorerTreeNode[]): string[] {
   return output;
 }
 
+function getFileExtensionLabel(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.tsx')) return 'TSX';
+  if (lower.endsWith('.ts')) return 'TS';
+  if (lower.endsWith('.jsx')) return 'JSX';
+  if (lower.endsWith('.js')) return 'JS';
+  if (lower.endsWith('.json')) return 'JSON';
+  if (lower.endsWith('.md')) return 'MD';
+  if (lower.endsWith('.lua')) return 'LUA';
+  if (lower.endsWith('.css')) return 'CSS';
+  if (lower.endsWith('.html')) return 'HTML';
+  return 'TXT';
+}
+
 export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineNumbers' | 'syntaxHighlight' | 'style'> {
   style?: Style;
   inputStyle?: Style;
@@ -172,6 +186,7 @@ export function MonacoMirror({
   const [internalSelectedFile, setInternalSelectedFile] = useState(normalizePath(filePath));
   const [sidebarOpen, setSidebarOpen] = useState(showSidebar);
   const [minimapOpen, setMinimapOpen] = useState(showMinimap);
+  const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -220,6 +235,12 @@ export function MonacoMirror({
     (explicitHeight !== undefined && explicitHeight <= compactMaxHeight)
   );
   const compact = layoutMode === 'compact' || (layoutMode === 'auto' && compactBySize);
+  const topBarHeight = compact ? 26 : 34;
+  const statusBarHeight = compact ? 18 : 22;
+  const editorFontSize = compact ? 10 : 12;
+
+  const widthCanShowSidebar = explicitWidth === undefined || explicitWidth >= 520;
+  const widthCanShowMinimap = explicitWidth === undefined || explicitWidth >= 680;
 
   useEffect(() => {
     if (!showSidebar || compact) setSidebarOpen(false);
@@ -229,9 +250,15 @@ export function MonacoMirror({
     if (!showMinimap || compact) setMinimapOpen(false);
   }, [showMinimap, compact]);
 
+  useEffect(() => {
+    if (panelPreferenceTouched || compact) return;
+    if (showSidebar) setSidebarOpen(widthCanShowSidebar);
+    if (showMinimap) setMinimapOpen(widthCanShowMinimap && (explicitWidth === undefined || explicitWidth >= 760));
+  }, [compact, explicitWidth, panelPreferenceTouched, showMinimap, showSidebar, widthCanShowMinimap, widthCanShowSidebar]);
+
   const renderActivityBar = showActivityBar && !compact;
-  const renderSidebar = showSidebar && !compact && sidebarOpen;
-  const renderMinimap = showMinimap && !compact && minimapOpen;
+  const renderSidebar = showSidebar && !compact && widthCanShowSidebar && sidebarOpen;
+  const renderMinimap = showMinimap && !compact && widthCanShowMinimap && minimapOpen;
   const renderBreadcrumbs = showBreadcrumbs && !compact;
 
   const resolvedSidebarWidth = explicitWidth !== undefined
@@ -240,10 +267,12 @@ export function MonacoMirror({
   const resolvedMinimapWidth = explicitWidth !== undefined
     ? Math.max(72, Math.min(minimapWidth, Math.floor(explicitWidth * 0.22)))
     : minimapWidth;
-
-  const topBarHeight = compact ? 26 : 34;
-  const statusBarHeight = compact ? 18 : 22;
-  const editorFontSize = compact ? 10 : 12;
+  const minimapRowCount = Math.max(minimapLines.length, 1);
+  const chromeHeight = topBarHeight + (renderBreadcrumbs ? 24 : 0) + (showStatusBar ? statusBarHeight : 0);
+  const approxEditorViewportHeight = explicitHeight !== undefined ? Math.max(explicitHeight - chromeHeight, 60) : 220;
+  const approxEditorVisibleRows = Math.max(4, Math.floor(approxEditorViewportHeight / (editorFontSize + 4)));
+  const minimapViewportRows = Math.max(2, Math.min(minimapRowCount, approxEditorVisibleRows));
+  const minimapViewportPx = Math.min(minimapViewportRows * 8, Math.max(14, approxEditorViewportHeight - 26));
 
   const candidateExplorerPaths = useMemo(() => {
     const fallbackDir = breadcrumbs.slice(0, -1).join('/');
@@ -345,6 +374,7 @@ export function MonacoMirror({
       const isCollapsed = isFolder ? (collapsedFolders[node.path] ?? false) : false;
       const isSelected = !isFolder && node.path === activeFilePath;
       const leftPad = 8 + depth * 12;
+      const extLabel = isFolder ? '' : getFileExtensionLabel(node.name);
 
       return (
         <Box key={node.path}>
@@ -354,15 +384,23 @@ export function MonacoMirror({
               backgroundColor: isSelected ? '#37373d' : (hovered ? '#2a2d2e' : 'transparent'),
               borderRadius: 4,
               paddingLeft: leftPad,
-              paddingRight: 6,
+              paddingRight: 8,
               paddingTop: 4,
               paddingBottom: 4,
             })}
           >
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Box
+                style={{
+                  width: 2,
+                  height: 12,
+                  borderRadius: 2,
+                  backgroundColor: isSelected ? '#0e639c' : 'transparent',
+                }}
+              />
               {isFolder && (
                 <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>
-                  {isCollapsed ? '[+]' : '[-]'}
+                  {isCollapsed ? '[>]' : '[v]'}
                 </Text>
               )}
               {!isFolder && <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>{'   '}</Text>}
@@ -375,6 +413,19 @@ export function MonacoMirror({
               >
                 {node.name}
               </Text>
+              {!isFolder && (
+                <Box style={{ flexGrow: 1, alignItems: 'end' }}>
+                  <Text
+                    style={{
+                      color: isSelected ? '#8bc4ff' : '#6f6f6f',
+                      fontSize: 7,
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {extLabel}
+                  </Text>
+                </Box>
+              )}
             </Box>
           </Pressable>
           {isFolder && !isCollapsed && node.children && renderExplorerNodes(node.children, depth + 1)}
@@ -430,9 +481,17 @@ export function MonacoMirror({
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 8, paddingBottom: 5 }}>
             {showSidebar && (
               <Pressable
-                onPress={() => setSidebarOpen((open) => !open)}
+                onPress={() => {
+                  if (!widthCanShowSidebar) return;
+                  setPanelPreferenceTouched(true);
+                  setSidebarOpen((open) => !open);
+                }}
                 style={({ hovered }) => ({
-                  backgroundColor: sidebarOpen ? '#0e639c' : (hovered ? '#3c3c3c' : '#2d2d2d'),
+                  backgroundColor: !widthCanShowSidebar
+                    ? '#2b2b2b'
+                    : sidebarOpen
+                      ? '#0e639c'
+                      : (hovered ? '#3c3c3c' : '#2d2d2d'),
                   borderRadius: 4,
                   paddingLeft: 6,
                   paddingRight: 6,
@@ -440,14 +499,22 @@ export function MonacoMirror({
                   paddingBottom: 3,
                 })}
               >
-                <Text style={{ color: '#d4d4d4', fontSize: 8, fontFamily: 'monospace' }}>{'EX'}</Text>
+                <Text style={{ color: widthCanShowSidebar ? '#d4d4d4' : '#666666', fontSize: 8, fontFamily: 'monospace' }}>{'EX'}</Text>
               </Pressable>
             )}
             {showMinimap && (
               <Pressable
-                onPress={() => setMinimapOpen((open) => !open)}
+                onPress={() => {
+                  if (!widthCanShowMinimap) return;
+                  setPanelPreferenceTouched(true);
+                  setMinimapOpen((open) => !open);
+                }}
                 style={({ hovered }) => ({
-                  backgroundColor: minimapOpen ? '#0e639c' : (hovered ? '#3c3c3c' : '#2d2d2d'),
+                  backgroundColor: !widthCanShowMinimap
+                    ? '#2b2b2b'
+                    : minimapOpen
+                      ? '#0e639c'
+                      : (hovered ? '#3c3c3c' : '#2d2d2d'),
                   borderRadius: 4,
                   paddingLeft: 6,
                   paddingRight: 6,
@@ -455,7 +522,7 @@ export function MonacoMirror({
                   paddingBottom: 3,
                 })}
               >
-                <Text style={{ color: '#d4d4d4', fontSize: 8, fontFamily: 'monospace' }}>{'MAP'}</Text>
+                <Text style={{ color: widthCanShowMinimap ? '#d4d4d4' : '#666666', fontSize: 8, fontFamily: 'monospace' }}>{'MAP'}</Text>
               </Pressable>
             )}
           </Box>
@@ -552,6 +619,9 @@ export function MonacoMirror({
             </Box>
             <Text style={{ color: '#c5c5c5', fontSize: 9, fontFamily: 'monospace', paddingTop: 3, paddingBottom: 4 }}>
               {workspaceLabel}
+            </Text>
+            <Text style={{ color: '#707070', fontSize: 7, fontFamily: 'monospace', paddingBottom: 4 }}>
+              {`${candidateExplorerPaths.length} files`}
             </Text>
             <Box style={{ height: 1, backgroundColor: '#3c3c3c', marginBottom: 6 }} />
             <Box style={{ flexGrow: 1, minHeight: 0, overflow: 'auto' }}>
@@ -650,21 +720,37 @@ export function MonacoMirror({
                   paddingTop: 6,
                   paddingBottom: 6,
                   gap: 1,
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
-                {minimapLines.map((line, index) => (
-                  <Text
-                    key={`minimap:${index}`}
-                    style={{
-                      color: '#6f6f6f',
-                      fontSize: 7,
-                      fontFamily: 'monospace',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {line || ' '}
-                  </Text>
-                ))}
+                <Box>
+                  {minimapLines.map((line, index) => (
+                    <Text
+                      key={`minimap:${index}`}
+                      style={{
+                        color: '#6f6f6f',
+                        fontSize: 7,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {line || ' '}
+                    </Text>
+                  ))}
+                </Box>
+                <Box
+                  style={{
+                    position: 'absolute',
+                    left: 3,
+                    right: 3,
+                    top: 6,
+                    height: minimapViewportPx,
+                    borderWidth: 1,
+                    borderColor: '#3f78a8',
+                    backgroundColor: '#3f78a822',
+                  }}
+                />
               </Box>
             )}
           </Box>
@@ -687,6 +773,11 @@ export function MonacoMirror({
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{languageLabel}</Text>
           {!compact && <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'Spaces: 2'}</Text>}
           {!compact && <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'UTF-8'}</Text>}
+          {!compact && (
+            <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>
+              {`EX:${renderSidebar ? 'on' : 'off'} MAP:${renderMinimap ? 'on' : 'off'}`}
+            </Text>
+          )}
           <Box style={{ flexGrow: 1 }} />
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`Ln ${lineCount}`}</Text>
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`${charCount} chars`}</Text>

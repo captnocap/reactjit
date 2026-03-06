@@ -55,6 +55,7 @@ export function MonacoMirrorStory() {
   const c = useThemeColors();
   const [code, setCode] = useState(STARTER_CODE);
   const [lastSubmitChars, setLastSubmitChars] = useState(STARTER_CODE.length);
+  const [selectedFile, setSelectedFile] = useState('src/playground/CounterCard.tsx');
 
   const handleChange = useCallback((next: string) => {
     setCode(next);
@@ -89,6 +90,7 @@ export function MonacoMirrorStory() {
         <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>{'Monaco Mirror'}</Text>
         <Text style={{ color: c.textDim, fontSize: 10 }}>{`Last submit: ${lastSubmitChars} chars`}</Text>
       </Box>
+      <Text style={{ color: c.textDim, fontSize: 9 }}>{`Selected: ${selectedFile}`}</Text>
 
       <Box style={{ flexGrow: 1, minHeight: 0, gap: 10 }}>
         <MonacoMirror
@@ -98,6 +100,8 @@ export function MonacoMirrorStory() {
           changeDelay={0.08}
           placeholder="Write TypeScript here..."
           filePath="src/playground/CounterCard.tsx"
+          selectedFilePath={selectedFile}
+          onFileSelect={setSelectedFile}
           workspaceLabel="reactjit-playground"
           branch="feature/monaco-mirror"
           language="typescript"
