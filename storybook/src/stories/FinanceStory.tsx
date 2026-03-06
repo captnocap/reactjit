@@ -2,8 +2,8 @@
  * Finance — Package documentation page (Layout2 zigzag narrative).
  *
  * Technical analysis, portfolio management, candlestick charts, order books,
- * pattern detection, and formatting utilities. Pure TS computations with
- * one-liner React hooks and ready-made display components.
+ * pattern detection, and formatting utilities. Lua-owned runtime compute with
+ * React hook wrappers and ready-made display components.
  *
  * Static hoist ALL code strings and style objects outside the component.
  */
@@ -690,7 +690,7 @@ export function FinanceStory() {
             {'Wall Street in one import.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'13 technical indicators, candlestick pattern detection, portfolio P&L, order book visualization, and price formatting. All pure TypeScript — no network, no API keys, no side effects. useTechnicalAnalysis() computes everything from OHLCV candles. usePortfolio() tracks holdings with live price updates.'}
+            {'13 technical indicators, candlestick pattern detection, portfolio P&L, order book visualization, and price formatting. Runtime computation paths are Lua-owned for low-latency updates. useTechnicalAnalysis() computes from OHLCV candles and usePortfolio() tracks holdings with live price updates.'}
           </Text>
         </Box>
 
@@ -719,7 +719,7 @@ export function FinanceStory() {
           <Half>
             <SectionLabel icon="bar-chart-2" accentColor={C.accent}>{'CANDLESTICK CHART'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Live synthetic OHLCV data streaming at 1.1s intervals. useSyntheticCandles() generates realistic price action with configurable volatility. useTechnicalAnalysis() recomputes all indicators on every new candle.'}
+              {'Live synthetic OHLCV data streaming at 1.1s intervals. useSyntheticCandles() generates realistic price action with configurable volatility. useTechnicalAnalysis() recomputes all indicators in the Lua runtime on every new candle.'}
             </Text>
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'TickerTape scrolls market data. CandlestickChart renders bull/bear candles with configurable colors. IndicatorLegend shows overlay values.'}
@@ -764,7 +764,7 @@ export function FinanceStory() {
         }}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'All indicator functions are pure — no state, no side effects, no network calls. Pass in numbers, get numbers back. NaN for warmup periods. The React hooks are thin memoization wrappers.'}
+            {'All indicator functions are pure — no state, no side effects, no network calls. Pass in numbers, get numbers back. NaN for warmup periods. The React hooks are thin Lua-RPC wrappers.'}
           </Text>
         </Box>
 
@@ -778,7 +778,7 @@ export function FinanceStory() {
           <Half>
             <SectionLabel icon="briefcase" accentColor={C.accent}>{'PORTFOLIO TRACKING'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'usePortfolio() manages holdings with live P&L. Prices jitter every 2.3s in this demo. PortfolioCard shows total value, P&L, and per-holding breakdown. BarChart renders allocation weights.'}
+              {'usePortfolio() manages holdings with live P&L through Lua-owned mutation logic. Prices jitter every 2.3s in this demo. PortfolioCard shows total value, P&L, and per-holding breakdown. BarChart renders allocation weights.'}
             </Text>
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Pure functions available: portfolioSnapshot, holdingPnL, sharpeRatio, maxDrawdown, equityToReturns. Use them outside React if you prefer.'}
@@ -889,7 +889,7 @@ export function FinanceStory() {
               {'Pure functions for portfolio analytics. portfolioSnapshot computes total value, P&L, and allocation weights. holdingPnL for per-position P&L. sharpeRatio and maxDrawdown for risk metrics. equityToReturns converts an equity curve to period returns.'}
             </Text>
             <Text style={{ color: c.muted, fontSize: 9 }}>
-              {'These are standalone functions — use them with or without React. The usePortfolio hook is a thin stateful wrapper around portfolioSnapshot.'}
+              {'These are standalone functions — use them with or without React. The usePortfolio hook now routes state mutations and snapshot computation through Lua RPC handlers.'}
             </Text>
           </Half>
         </Band>
