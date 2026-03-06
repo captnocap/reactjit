@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text } from './primitives';
 import { Input } from './Input';
+import { Pressable } from './Pressable';
 import type { InputProps, Style } from './types';
 
 const DEFAULT_ACTIVITY_ITEMS = ['EX', 'SE', 'SC', 'RU'];
@@ -22,15 +23,98 @@ function splitPath(input: string): string[] {
   return input.replace(/\\/g, '/').split('/').filter(Boolean);
 }
 
+function normalizePath(input: string): string {
+  return input.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/').trim();
+}
+
+function uniquePaths(input: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    const normalized = normalizePath(raw);
+    if (normalized.length === 0 || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+type ExplorerTreeNode = {
+  kind: 'file' | 'folder';
+  name: string;
+  path: string;
+  children?: ExplorerTreeNode[];
+};
+
+function buildExplorerTree(paths: string[]): ExplorerTreeNode[] {
+  const roots: ExplorerTreeNode[] = [];
+
+  for (const path of paths) {
+    const segments = splitPath(path);
+    if (segments.length === 0) continue;
+
+    let level = roots;
+    let runningPath = '';
+
+    for (let i = 0; i < segments.length; i += 1) {
+      const segment = segments[i];
+      const isFile = i === segments.length - 1;
+      runningPath = runningPath.length > 0 ? `${runningPath}/${segment}` : segment;
+
+      let node = level.find((candidate) => candidate.name === segment && candidate.kind === (isFile ? 'file' : 'folder'));
+      if (!node) {
+        node = isFile
+          ? { kind: 'file', name: segment, path: runningPath }
+          : { kind: 'folder', name: segment, path: runningPath, children: [] };
+        level.push(node);
+      }
+
+      if (!isFile) level = node.children as ExplorerTreeNode[];
+    }
+  }
+
+  const sortNodes = (nodes: ExplorerTreeNode[]) => {
+    nodes.sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const node of nodes) {
+      if (node.kind === 'folder' && node.children) sortNodes(node.children);
+    }
+  };
+
+  sortNodes(roots);
+  return roots;
+}
+
+function collectFolderPaths(nodes: ExplorerTreeNode[]): string[] {
+  const output: string[] = [];
+  const walk = (list: ExplorerTreeNode[]) => {
+    for (const node of list) {
+      if (node.kind === 'folder') {
+        output.push(node.path);
+        walk(node.children || []);
+      }
+    }
+  };
+  walk(nodes);
+  return output;
+}
+
 export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineNumbers' | 'syntaxHighlight' | 'style'> {
   style?: Style;
   inputStyle?: Style;
   activityItems?: string[];
   filePath?: string;
+  selectedFilePath?: string;
+  explorerFiles?: string[];
+  onFileSelect?: (path: string) => void;
   tabLabel?: string;
   workspaceLabel?: string;
   branch?: string;
   language?: string;
+  sidebarWidth?: number;
+  minimapWidth?: number;
   showActivityBar?: boolean;
   showSidebar?: boolean;
   showMinimap?: boolean;
@@ -63,10 +147,15 @@ export function MonacoMirror({
   inputStyle,
   activityItems = DEFAULT_ACTIVITY_ITEMS,
   filePath = 'src/App.tsx',
+  selectedFilePath,
+  explorerFiles,
+  onFileSelect,
   tabLabel,
   workspaceLabel = 'workspace',
   branch = 'main',
   language,
+  sidebarWidth = 190,
+  minimapWidth = 120,
   showActivityBar = true,
   showSidebar = true,
   showMinimap = true,
@@ -80,15 +169,25 @@ export function MonacoMirror({
 }: MonacoMirrorProps) {
   const initialText = value ?? defaultValue ?? '';
   const [mirrorText, setMirrorText] = useState(initialText);
+  const [internalSelectedFile, setInternalSelectedFile] = useState(normalizePath(filePath));
+  const [sidebarOpen, setSidebarOpen] = useState(showSidebar);
+  const [minimapOpen, setMinimapOpen] = useState(showMinimap);
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (value !== undefined) setMirrorText(value);
   }, [value]);
 
+  useEffect(() => {
+    if (selectedFilePath === undefined) setInternalSelectedFile(normalizePath(filePath));
+  }, [filePath, selectedFilePath]);
+
+  const activeFilePath = selectedFilePath ? normalizePath(selectedFilePath) : internalSelectedFile;
+
   const breadcrumbs = useMemo(() => {
-    const source = filePath || tabLabel || 'untitled.tsx';
+    const source = activeFilePath || filePath || tabLabel || 'untitled.tsx';
     return splitPath(source);
-  }, [filePath, tabLabel]);
+  }, [activeFilePath, filePath, tabLabel]);
 
   const fileName = useMemo(() => {
     if (tabLabel && tabLabel.length > 0) return tabLabel;
@@ -122,14 +221,73 @@ export function MonacoMirror({
   );
   const compact = layoutMode === 'compact' || (layoutMode === 'auto' && compactBySize);
 
+  useEffect(() => {
+    if (!showSidebar || compact) setSidebarOpen(false);
+  }, [showSidebar, compact]);
+
+  useEffect(() => {
+    if (!showMinimap || compact) setMinimapOpen(false);
+  }, [showMinimap, compact]);
+
   const renderActivityBar = showActivityBar && !compact;
-  const renderSidebar = showSidebar && !compact;
-  const renderMinimap = showMinimap && !compact;
+  const renderSidebar = showSidebar && !compact && sidebarOpen;
+  const renderMinimap = showMinimap && !compact && minimapOpen;
   const renderBreadcrumbs = showBreadcrumbs && !compact;
+
+  const resolvedSidebarWidth = explicitWidth !== undefined
+    ? Math.max(132, Math.min(sidebarWidth, Math.floor(explicitWidth * 0.38)))
+    : sidebarWidth;
+  const resolvedMinimapWidth = explicitWidth !== undefined
+    ? Math.max(72, Math.min(minimapWidth, Math.floor(explicitWidth * 0.22)))
+    : minimapWidth;
 
   const topBarHeight = compact ? 26 : 34;
   const statusBarHeight = compact ? 18 : 22;
   const editorFontSize = compact ? 10 : 12;
+
+  const candidateExplorerPaths = useMemo(() => {
+    const fallbackDir = breadcrumbs.slice(0, -1).join('/');
+    const baseName = fileName || 'App.tsx';
+    const fallback = [
+      `${fallbackDir}/${baseName}`,
+      `${fallbackDir}/index.ts`,
+      `${fallbackDir}/components/EditorPane.tsx`,
+      `${fallbackDir}/components/ExplorerTree.tsx`,
+      `${fallbackDir}/hooks/useEditorState.ts`,
+      'package.json',
+      'tsconfig.json',
+    ];
+    return uniquePaths([...(explorerFiles || []), ...fallback, activeFilePath]);
+  }, [activeFilePath, breadcrumbs, explorerFiles, fileName]);
+
+  const explorerTree = useMemo(() => buildExplorerTree(candidateExplorerPaths), [candidateExplorerPaths]);
+  const folderPaths = useMemo(() => collectFolderPaths(explorerTree), [explorerTree]);
+  const activeFolderAncestors = useMemo(() => {
+    const segments = splitPath(activeFilePath);
+    const folders = segments.slice(0, -1);
+    const output: string[] = [];
+    let current = '';
+    for (const folder of folders) {
+      current = current.length > 0 ? `${current}/${folder}` : folder;
+      output.push(current);
+    }
+    return output;
+  }, [activeFilePath]);
+
+  useEffect(() => {
+    if (activeFolderAncestors.length === 0) return;
+    setCollapsedFolders((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const path of activeFolderAncestors) {
+        if (next[path]) {
+          next[path] = false;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [activeFolderAncestors]);
 
   const handleLiveChange = useCallback((next: string) => {
     setMirrorText(next);
@@ -156,6 +314,74 @@ export function MonacoMirror({
     setMirrorText(next);
     onBlur?.(next);
   }, [onBlur]);
+
+  const toggleFolder = useCallback((path: string) => {
+    setCollapsedFolders((prev) => ({
+      ...prev,
+      [path]: !(prev[path] ?? false),
+    }));
+  }, []);
+
+  const handleFileSelect = useCallback((path: string) => {
+    if (selectedFilePath === undefined) setInternalSelectedFile(path);
+    onFileSelect?.(path);
+  }, [onFileSelect, selectedFilePath]);
+
+  const handleCollapseAll = useCallback(() => {
+    const next: Record<string, boolean> = {};
+    for (const path of folderPaths) next[path] = true;
+    setCollapsedFolders(next);
+  }, [folderPaths]);
+
+  const handleExpandAll = useCallback(() => {
+    const next: Record<string, boolean> = {};
+    for (const path of folderPaths) next[path] = false;
+    setCollapsedFolders(next);
+  }, [folderPaths]);
+
+  const renderExplorerNodes = (nodes: ExplorerTreeNode[], depth: number): React.ReactNode => (
+    nodes.map((node) => {
+      const isFolder = node.kind === 'folder';
+      const isCollapsed = isFolder ? (collapsedFolders[node.path] ?? false) : false;
+      const isSelected = !isFolder && node.path === activeFilePath;
+      const leftPad = 8 + depth * 12;
+
+      return (
+        <Box key={node.path}>
+          <Pressable
+            onPress={() => (isFolder ? toggleFolder(node.path) : handleFileSelect(node.path))}
+            style={({ hovered }) => ({
+              backgroundColor: isSelected ? '#37373d' : (hovered ? '#2a2d2e' : 'transparent'),
+              borderRadius: 4,
+              paddingLeft: leftPad,
+              paddingRight: 6,
+              paddingTop: 4,
+              paddingBottom: 4,
+            })}
+          >
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {isFolder && (
+                <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>
+                  {isCollapsed ? '[+]' : '[-]'}
+                </Text>
+              )}
+              {!isFolder && <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>{'   '}</Text>}
+              <Text
+                style={{
+                  color: isSelected ? '#ffffff' : '#c5c5c5',
+                  fontSize: 9,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {node.name}
+              </Text>
+            </Box>
+          </Pressable>
+          {isFolder && !isCollapsed && node.children && renderExplorerNodes(node.children, depth + 1)}
+        </Box>
+      );
+    })
+  );
 
   return (
     <Box
@@ -200,6 +426,40 @@ export function MonacoMirror({
           <Text style={{ color: '#9cdcfe', fontSize: 10, fontFamily: 'monospace' }}>{fileName}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
+        {!compact && (
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 8, paddingBottom: 5 }}>
+            {showSidebar && (
+              <Pressable
+                onPress={() => setSidebarOpen((open) => !open)}
+                style={({ hovered }) => ({
+                  backgroundColor: sidebarOpen ? '#0e639c' : (hovered ? '#3c3c3c' : '#2d2d2d'),
+                  borderRadius: 4,
+                  paddingLeft: 6,
+                  paddingRight: 6,
+                  paddingTop: 3,
+                  paddingBottom: 3,
+                })}
+              >
+                <Text style={{ color: '#d4d4d4', fontSize: 8, fontFamily: 'monospace' }}>{'EX'}</Text>
+              </Pressable>
+            )}
+            {showMinimap && (
+              <Pressable
+                onPress={() => setMinimapOpen((open) => !open)}
+                style={({ hovered }) => ({
+                  backgroundColor: minimapOpen ? '#0e639c' : (hovered ? '#3c3c3c' : '#2d2d2d'),
+                  borderRadius: 4,
+                  paddingLeft: 6,
+                  paddingRight: 6,
+                  paddingTop: 3,
+                  paddingBottom: 3,
+                })}
+              >
+                <Text style={{ color: '#d4d4d4', fontSize: 8, fontFamily: 'monospace' }}>{'MAP'}</Text>
+              </Pressable>
+            )}
+          </Box>
+        )}
         <Text
           style={{
             color: '#8a8a8a',
@@ -247,30 +507,56 @@ export function MonacoMirror({
         {renderSidebar && (
           <Box
             style={{
-              width: 190,
+              width: resolvedSidebarWidth,
+              minWidth: 132,
+              flexShrink: 1,
               backgroundColor: '#252526',
               borderRightWidth: 1,
               borderColor: '#3c3c3c',
               paddingLeft: 10,
               paddingRight: 10,
               paddingTop: 10,
-              gap: 4,
+              paddingBottom: 8,
             }}
           >
-            <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>{'EXPLORER'}</Text>
-            <Text style={{ color: '#c5c5c5', fontSize: 9, fontFamily: 'monospace' }}>{workspaceLabel}</Text>
-            {breadcrumbs.map((segment, index) => (
-              <Text
-                key={`${segment}-${index}`}
-                style={{
-                  color: index === breadcrumbs.length - 1 ? '#d4d4d4' : '#8a8a8a',
-                  fontSize: 9,
-                  fontFamily: 'monospace',
-                }}
-              >
-                {index === breadcrumbs.length - 1 ? `- ${segment}` : `  ${segment}`}
-              </Text>
-            ))}
+            <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace' }}>{'EXPLORER'}</Text>
+              <Box style={{ flexDirection: 'row', gap: 4 }}>
+                <Pressable
+                  onPress={handleExpandAll}
+                  style={({ hovered }) => ({
+                    backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
+                    borderRadius: 3,
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    paddingTop: 2,
+                    paddingBottom: 2,
+                  })}
+                >
+                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace' }}>{'OPEN'}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleCollapseAll}
+                  style={({ hovered }) => ({
+                    backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
+                    borderRadius: 3,
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    paddingTop: 2,
+                    paddingBottom: 2,
+                  })}
+                >
+                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace' }}>{'CLOSE'}</Text>
+                </Pressable>
+              </Box>
+            </Box>
+            <Text style={{ color: '#c5c5c5', fontSize: 9, fontFamily: 'monospace', paddingTop: 3, paddingBottom: 4 }}>
+              {workspaceLabel}
+            </Text>
+            <Box style={{ height: 1, backgroundColor: '#3c3c3c', marginBottom: 6 }} />
+            <Box style={{ flexGrow: 1, minHeight: 0, overflow: 'auto' }}>
+              {renderExplorerNodes(explorerTree, 0)}
+            </Box>
           </Box>
         )}
 
@@ -288,6 +574,7 @@ export function MonacoMirror({
                 paddingLeft: 10,
                 paddingRight: 10,
                 gap: 4,
+                overflow: 'hidden',
               }}
             >
               {breadcrumbs.map((segment, index) => (
@@ -352,7 +639,9 @@ export function MonacoMirror({
             {renderMinimap && (
               <Box
                 style={{
-                  width: 120,
+                  width: resolvedMinimapWidth,
+                  minWidth: 72,
+                  flexShrink: 1,
                   backgroundColor: '#252526',
                   borderLeftWidth: 1,
                   borderColor: '#3c3c3c',
