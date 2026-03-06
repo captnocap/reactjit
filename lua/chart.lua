@@ -97,7 +97,7 @@ function Chart.draw(props, x, y, width, height)
     end
     local range = maxHigh - minLow
     if range == 0 then range = 1 end
-    
+
     local gap = 4
     local candleWidth = math.max(1, (width - (gap * (len - 1))) / len)
     local cx = x
@@ -127,6 +127,241 @@ function Chart.draw(props, x, y, width, height)
 
       love.graphics.rectangle("fill", cx, bodyTopY, candleWidth, bodyHeight)
       cx = cx + candleWidth + gap
+    end
+
+    -- Overlays: line indicators drawn on top of candles
+    -- Each overlay = { values = number[], color = "#hex", lineWidth = N, style = "solid"|"dashed" }
+    local overlays = props.overlays
+    if overlays then
+      local step = candleWidth + gap
+      for oi = 1, #overlays do
+        local ov = overlays[oi]
+        local vals = ov.values
+        if vals and #vals > 0 then
+          local ovClr = ColorUtils.toTable(ov.color or "#3b82f6", {0.23,0.51,0.96,1})
+          love.graphics.setColor(ovClr[1], ovClr[2], ovClr[3], ovClr[4] * (ov.opacity or 1))
+          love.graphics.setLineWidth(ov.lineWidth or 1.5)
+
+          -- Band overlays: upper + lower lines with optional fill
+          if ov.upper and ov.lower then
+            local upperPts = {}
+            local lowerPts = {}
+            for i = 1, math.min(#ov.upper, len) do
+              local uv = ov.upper[i]
+              local lv = ov.lower[i]
+              if uv and lv and uv == uv and lv == lv then -- NaN check
+                local px = x + (i - 1) * step + candleWidth / 2
+                local uy = y + height - (((uv - minLow) / range) * height)
+                local ly = y + height - (((lv - minLow) / range) * height)
+                table.insert(upperPts, px)
+                table.insert(upperPts, uy)
+                table.insert(lowerPts, px)
+                table.insert(lowerPts, ly)
+              end
+            end
+            -- Fill the band area
+            if ov.fillColor and #upperPts >= 4 then
+              local fillClr = ColorUtils.toTable(ov.fillColor, {0.5,0.5,0.5,0.1})
+              love.graphics.setColor(fillClr[1], fillClr[2], fillClr[3], fillClr[4])
+              -- Build polygon: upper left→right, then lower right→left
+              local poly = {}
+              for i = 1, #upperPts do poly[i] = upperPts[i] end
+              for i = #lowerPts, 1, -2 do
+                table.insert(poly, lowerPts[i - 1])
+                table.insert(poly, lowerPts[i])
+              end
+              if #poly >= 6 then
+                local ok, err = pcall(love.graphics.polygon, "fill", poly)
+                -- polygon may fail with degenerate shapes; just skip
+              end
+            end
+            -- Draw band lines
+            love.graphics.setColor(ovClr[1], ovClr[2], ovClr[3], ovClr[4] * (ov.opacity or 0.6))
+            love.graphics.setLineWidth(ov.lineWidth or 1)
+            if #upperPts >= 4 then love.graphics.line(upperPts) end
+            if #lowerPts >= 4 then love.graphics.line(lowerPts) end
+            -- Middle line from vals
+            local midPts = {}
+            for i = 1, math.min(#vals, len) do
+              local v = vals[i]
+              if v and v == v then
+                local px = x + (i - 1) * step + candleWidth / 2
+                local py = y + height - (((v - minLow) / range) * height)
+                table.insert(midPts, px)
+                table.insert(midPts, py)
+              end
+            end
+            love.graphics.setColor(ovClr[1], ovClr[2], ovClr[3], ovClr[4] * (ov.opacity or 1))
+            love.graphics.setLineWidth(ov.lineWidth or 1.5)
+            if #midPts >= 4 then love.graphics.line(midPts) end
+          else
+            -- Simple line overlay
+            local pts = {}
+            for i = 1, math.min(#vals, len) do
+              local v = vals[i]
+              if v and v == v then -- NaN check
+                local px = x + (i - 1) * step + candleWidth / 2
+                local py = y + height - (((v - minLow) / range) * height)
+                table.insert(pts, px)
+                table.insert(pts, py)
+              end
+            end
+            if ov.style == "dashed" and #pts >= 4 then
+              local dashLen = 6
+              local gapLen = 4
+              for i = 1, #pts - 2, 2 do
+                local x1, y1, x2, y2 = pts[i], pts[i+1], pts[i+2], pts[i+3]
+                local dx, dy = x2 - x1, y2 - y1
+                local segLen = math.sqrt(dx*dx + dy*dy)
+                if segLen > 0 then
+                  local nx, ny = dx / segLen, dy / segLen
+                  local drawn = 0
+                  while drawn < segLen do
+                    local dashEnd = math.min(drawn + dashLen, segLen)
+                    love.graphics.line(
+                      x1 + nx * drawn, y1 + ny * drawn,
+                      x1 + nx * dashEnd, y1 + ny * dashEnd
+                    )
+                    drawn = dashEnd + gapLen
+                  end
+                end
+              end
+            elseif #pts >= 4 then
+              love.graphics.line(pts)
+            end
+          end
+        end
+      end
+    end
+
+  elseif props.chartType == "depth" then
+    -- Depth chart: cumulative bid/ask area chart
+    -- data format: { bids = {{price, size},...}, asks = {{price, size},...} }
+    local bids = props.bids or {}
+    local asks = props.asks or {}
+    local bidClr = ColorUtils.toTable(props.bidColor or "#22c55e", {0,0.77,0.35,1})
+    local askClr = ColorUtils.toTable(props.askColor or "#ef4444", {0.94,0.27,0.27,1})
+    local bidFill = ColorUtils.toTable(props.bidFillColor or "rgba(34,197,94,0.15)", {0.13,0.77,0.37,0.15})
+    local askFill = ColorUtils.toTable(props.askFillColor or "rgba(239,68,68,0.15)", {0.94,0.27,0.27,0.15})
+
+    -- Sort bids descending, asks ascending by price
+    local sortedBids = {}
+    for i = 1, #bids do sortedBids[i] = bids[i] end
+    table.sort(sortedBids, function(a, b) return a.price > b.price end)
+
+    local sortedAsks = {}
+    for i = 1, #asks do sortedAsks[i] = asks[i] end
+    table.sort(sortedAsks, function(a, b) return a.price < b.price end)
+
+    -- Find price range and cumulative max
+    local priceMin = math.huge
+    local priceMax = -math.huge
+    for i = 1, #sortedBids do
+      if sortedBids[i].price < priceMin then priceMin = sortedBids[i].price end
+      if sortedBids[i].price > priceMax then priceMax = sortedBids[i].price end
+    end
+    for i = 1, #sortedAsks do
+      if sortedAsks[i].price < priceMin then priceMin = sortedAsks[i].price end
+      if sortedAsks[i].price > priceMax then priceMax = sortedAsks[i].price end
+    end
+    if priceMin >= priceMax then priceMin = 0; priceMax = 1 end
+    local priceRange = priceMax - priceMin
+    local padding = priceRange * 0.05
+    priceMin = priceMin - padding
+    priceMax = priceMax + padding
+    priceRange = priceMax - priceMin
+
+    -- Build cumulative volumes
+    local bidCum = {}
+    local cumVol = 0
+    for i = 1, #sortedBids do
+      cumVol = cumVol + sortedBids[i].size
+      bidCum[i] = { price = sortedBids[i].price, cumVol = cumVol }
+    end
+
+    local askCum = {}
+    cumVol = 0
+    for i = 1, #sortedAsks do
+      cumVol = cumVol + sortedAsks[i].size
+      askCum[i] = { price = sortedAsks[i].price, cumVol = cumVol }
+    end
+
+    local maxCumVol = 1
+    if #bidCum > 0 and bidCum[#bidCum].cumVol > maxCumVol then maxCumVol = bidCum[#bidCum].cumVol end
+    if #askCum > 0 and askCum[#askCum].cumVol > maxCumVol then maxCumVol = askCum[#askCum].cumVol end
+
+    -- Helper: price → x, cumVol → y
+    local function priceToX(p) return x + ((p - priceMin) / priceRange) * width end
+    local function volToY(v) return y + height - (v / maxCumVol) * height end
+
+    -- Draw bid area (right to left = highest bid → lowest)
+    if #bidCum >= 1 then
+      local poly = {}
+      -- Start at baseline at the highest bid price
+      table.insert(poly, priceToX(bidCum[1].price))
+      table.insert(poly, y + height)
+      for i = 1, #bidCum do
+        table.insert(poly, priceToX(bidCum[i].price))
+        table.insert(poly, volToY(bidCum[i].cumVol))
+      end
+      -- Close back to baseline
+      table.insert(poly, priceToX(bidCum[#bidCum].price))
+      table.insert(poly, y + height)
+
+      if #poly >= 6 then
+        love.graphics.setColor(bidFill[1], bidFill[2], bidFill[3], bidFill[4])
+        pcall(love.graphics.polygon, "fill", poly)
+      end
+
+      -- Bid line
+      local pts = {}
+      for i = 1, #bidCum do
+        table.insert(pts, priceToX(bidCum[i].price))
+        table.insert(pts, volToY(bidCum[i].cumVol))
+      end
+      if #pts >= 4 then
+        love.graphics.setColor(bidClr[1], bidClr[2], bidClr[3], bidClr[4])
+        love.graphics.setLineWidth(2)
+        love.graphics.line(pts)
+      end
+    end
+
+    -- Draw ask area (left to right = lowest ask → highest)
+    if #askCum >= 1 then
+      local poly = {}
+      table.insert(poly, priceToX(askCum[1].price))
+      table.insert(poly, y + height)
+      for i = 1, #askCum do
+        table.insert(poly, priceToX(askCum[i].price))
+        table.insert(poly, volToY(askCum[i].cumVol))
+      end
+      table.insert(poly, priceToX(askCum[#askCum].price))
+      table.insert(poly, y + height)
+
+      if #poly >= 6 then
+        love.graphics.setColor(askFill[1], askFill[2], askFill[3], askFill[4])
+        pcall(love.graphics.polygon, "fill", poly)
+      end
+
+      local pts = {}
+      for i = 1, #askCum do
+        table.insert(pts, priceToX(askCum[i].price))
+        table.insert(pts, volToY(askCum[i].cumVol))
+      end
+      if #pts >= 4 then
+        love.graphics.setColor(askClr[1], askClr[2], askClr[3], askClr[4])
+        love.graphics.setLineWidth(2)
+        love.graphics.line(pts)
+      end
+    end
+
+    -- Midpoint line
+    if #bidCum > 0 and #askCum > 0 then
+      local midPrice = (bidCum[1].price + askCum[1].price) / 2
+      local midX = priceToX(midPrice)
+      love.graphics.setColor(0.6, 0.7, 0.8, 0.4)
+      love.graphics.setLineWidth(1)
+      love.graphics.line(midX, y, midX, y + height)
     end
   end
   
