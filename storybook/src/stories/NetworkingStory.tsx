@@ -22,6 +22,8 @@ const C = {
   tor: '#f472b6',
   server: '#34d399',
   rss: '#fb923c',
+  wgKernel: '#6366f1',
+  wgUser: '#10b981',
 };
 
 // ── Static code blocks (hoisted — never recreated) ──────
@@ -30,7 +32,8 @@ const INSTALL_CODE = `import { useFetch, useWebSocket, usePeerServer } from '@re
 import { useScrape } from '@reactjit/core'
 import { useServer, useStaticServer, useLibrary } from '@reactjit/server'
 import { useRSSFeed, useRSSAggregate } from '@reactjit/rss'
-import { useWebhook, sendWebhook } from '@reactjit/webhooks'`;
+import { useWebhook, sendWebhook } from '@reactjit/webhooks'
+import { useWireGuard, usePeerTunnel } from '@reactjit/wireguard'`;
 
 const FETCH_CODE = `// Universal fetch — returns { data, loading, error }
 const { data, loading, error } = useFetch<User[]>(
@@ -203,6 +206,39 @@ const PROXY_CODE = `// HTTP requests through proxies (Lua-side, zero JS overhead
 //   url = 'https://api.example.com',
 //   proxy = { host='127.0.0.1', port=9050, type='socks5' }
 // })`;
+
+const WG_PEER_TUNNEL_CODE = `// Userspace encrypted P2P — no root, no system deps
+const tunnel = usePeerTunnel({
+  privateKey: myKey,
+  stunServer: 'stun.l.google.com',  // NAT traversal
+})
+
+// After signaling exchange (WebSocket, QR, manual):
+tunnel.addPeer(theirPublicKey, '1.2.3.4:9000')
+
+// Send encrypted data (XChaCha20-Poly1305)
+tunnel.send(theirPublicKey, 'hello')
+tunnel.broadcast(JSON.stringify({ type: 'sync', state }))
+
+// tunnel.lastMessage = { publicKey, data }
+// tunnel.peers = [{ publicKey, endpoint, state }]`;
+
+const WG_KERNEL_CODE = `// Real kernel WireGuard — keys never in process memory
+const wg = useWireGuard('wg-rjit0')
+
+const keys = await wg.generateKeys()  // via wg genkey
+await wg.up({
+  privateKey: keys.privateKey,
+  listenPort: 51820,
+  address: '10.0.0.1/24',
+  peers: [{
+    publicKey: peerKey,
+    endpoint: '1.2.3.4:51820',
+    allowedIPs: '10.0.0.2/32',
+    keepalive: 25,
+  }],
+})
+// wg.status — live stats, wg.down() — tear down`;
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -391,7 +427,7 @@ export function NetworkingStory() {
             {'Every network primitive as a one-liner React hook.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Fetch JSON, open WebSockets, host servers, scrape pages, subscribe to RSS feeds, route through Tor, verify webhooks, and plug into Spotify, GitHub, TMDB, CoinGecko, NASA, and Philips Hue — all from declarative hooks backed by non-blocking Lua I/O. Zero socket code. Zero callback wiring.'}
+            {'Fetch JSON, open WebSockets, host servers, scrape pages, subscribe to RSS, route through Tor, create encrypted P2P tunnels (userspace or real WireGuard), verify webhooks, and plug into Spotify, GitHub, TMDB, CoinGecko, NASA, and Philips Hue — all from declarative hooks backed by non-blocking Lua I/O.'}
           </Text>
         </Box>
 
@@ -595,7 +631,80 @@ export function NetworkingStory() {
 
         <Divider />
 
-        {/* ── Band 8: RSS — code | text ── */}
+        {/* ── Band 8: ENCRYPTED P2P — text | code ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="lock">{'ENCRYPTED P2P (USERSPACE)'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Encrypted peer-to-peer data channels over UDP. X25519 key agreement + XChaCha20-Poly1305 AEAD — the same crypto primitives WireGuard uses. STUN resolves your public endpoint for NAT traversal. No root, no system deps, works everywhere Love2D runs.'}
+            </Text>
+            <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.wgUser }} />
+              <Text style={{ color: C.wgUser, fontSize: 9, fontWeight: 'bold' }}>{'Tier 2'}</Text>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'Keys in process memory — protects against network observers, not local attackers.'}</Text>
+            </Box>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={WG_PEER_TUNNEL_CODE} />
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 9: KERNEL WIREGUARD — code | text ── */}
+        <Box style={{
+          flexDirection: 'row',
+          paddingLeft: 28,
+          paddingRight: 28,
+          paddingTop: 20,
+          paddingBottom: 20,
+          gap: 24,
+          alignItems: 'center',
+        }}>
+          <CodeBlock language="tsx" fontSize={9} code={WG_KERNEL_CODE} />
+          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            <SectionLabel icon="shield">{'WIREGUARD (KERNEL)'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Real kernel WireGuard tunnel via the wg CLI. Creates a wg0 interface with OS-level routing. Keys generated by wg genkey go straight from CLI to kernel — never in Lua or JS process memory. Requires wireguard-tools and sudo.'}
+            </Text>
+            <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.wgKernel }} />
+              <Text style={{ color: C.wgKernel, fontSize: 9, fontWeight: 'bold' }}>{'Tier 1'}</Text>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'Kernel trust boundary — protects against local + network attackers.'}</Text>
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* ── Callout: WireGuard tiers ── */}
+        <Box style={{
+          backgroundColor: 'rgba(16, 185, 129, 0.08)',
+          borderLeftWidth: 3,
+          borderColor: C.wgUser,
+          paddingLeft: 25,
+          paddingRight: 28,
+          paddingTop: 14,
+          paddingBottom: 14,
+          flexDirection: 'row',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <Image src="lock" style={{ width: 12, height: 12 }} tintColor={C.wgUser} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'Both tiers use X25519 keys and the same wire encryption. The difference is where the trust boundary sits. Tier 2 (usePeerTunnel) is zero-config encrypted messaging. Tier 1 (useWireGuard) is a real VPN with kernel isolation. We ship both so you decide — not us. See the WireGuard story for the full threat model comparison.'}
+          </Text>
+        </Box>
+
+        <Divider />
+
+        {/* ── Band 10: RSS — code | text ── */}
         <Box style={{
           flexDirection: 'row',
           paddingLeft: 28,
