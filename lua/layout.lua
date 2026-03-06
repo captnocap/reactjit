@@ -1145,9 +1145,11 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   local gap     = ru(s.gap, isRow and innerW or innerH) or 0
   local justify = normalizeAlign(s.justifyContent or "start")
   local align   = s.alignItems or "stretch"
-  local wrap    = s.flexWrap == "wrap"
-
-  local mainSize  = isRow and innerW or innerH
+  -- Rows auto-wrap by default. Columns never wrap unless explicitly set.
+  -- mainSize for a row uses pw as fallback so auto-sized rows still have a
+  -- real constraint to wrap against (pw is always known from the parent pass).
+  local wrap    = s.flexWrap == "wrap" or (isRow and s.flexWrap ~= "nowrap")
+  local mainSize  = isRow and (innerW or pw or 0) or innerH
 
   -- Debug: print sizing info for debugLayout nodes
   if node.props and node.props.debugLayout then
@@ -1394,7 +1396,14 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- Split children into flex lines
   -- ====================================================================
   -- Each line is a list of indices into allChildren (visible only).
-  -- When flexWrap is "nowrap" (default), all visible children go on one line.
+  -- Rows wrap by default. Exception: if any child has flexGrow > 0 this is
+  -- a structural layout row (sidebar+content, nav+spacer, etc.) — suppress
+  -- auto-wrap so it stays single-line.
+  if wrap and isRow and s.flexWrap == nil then
+    for _, idx in ipairs(visibleIndices) do
+      if (childInfos[idx].grow or 0) > 0 then wrap = false; break end
+    end
+  end
 
   local lines = {}
 
