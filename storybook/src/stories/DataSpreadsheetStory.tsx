@@ -1,15 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { Box, CodeBlock, Pressable, ScrollView, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Spreadsheet, evaluateSpreadsheet } from '../../../packages/data/src';
+import { Spreadsheet, columnIndexToLabel, evaluateSpreadsheet } from '../../../packages/data/src';
 import type { SpreadsheetCellMap } from '../../../packages/data/src';
 
 const INSTALL_CODE = `import { Spreadsheet } from '@reactjit/data'
 
 <Spreadsheet
-  rows={14}
-  cols={8}
-  initialCells={cells}
+  rows={60}
+  cols={16}
+  cells={cells}
+  columnWidths={widths}
+  onColumnWidthsChange={setWidths}
+  viewportHeight={440}
 />`;
 
 const EXAMPLE_FORMULAS = `=SUM(B2:B5)
@@ -18,6 +21,20 @@ const EXAMPLE_FORMULAS = `=SUM(B2:B5)
 =REMAP(B2, 0, 100, 0, 10)
 =CLAMP(E2, 0, 100)
 =IF(E2 >= 90, "A", "B")`;
+
+interface ScalePreset {
+  id: string;
+  label: string;
+  rows: number;
+  cols: number;
+  viewportHeight: number;
+}
+
+const SCALE_PRESETS: ScalePreset[] = [
+  { id: 'compact', label: 'Compact', rows: 14, cols: 8, viewportHeight: 380 },
+  { id: 'ops', label: 'Ops Grid', rows: 48, cols: 16, viewportHeight: 430 },
+  { id: 'massive', label: 'Massive', rows: 140, cols: 28, viewportHeight: 500 },
+];
 
 const LOGISTICS_PRESET: SpreadsheetCellMap = {
   A1: 'Route',
@@ -97,6 +114,35 @@ const LAB_PRESET: SpreadsheetCellMap = {
   F6: '=ROUND(AVG(F2:F4), 1)',
 };
 
+function createColumnWidths(cols: number): number[] {
+  return Array.from({ length: cols }, (_, colIdx) => {
+    if (colIdx === 0) return 180;
+    if (colIdx <= 4) return 128;
+    return 112;
+  });
+}
+
+function ensureScaleCells(seed: SpreadsheetCellMap, rows: number, cols: number): SpreadsheetCellMap {
+  const next = { ...seed };
+
+  for (let colIdx = 0; colIdx < cols; colIdx += 1) {
+    const address = `${columnIndexToLabel(colIdx)}1`;
+    if (!next[address]) {
+      next[address] = colIdx === 0 ? 'Record' : `Metric ${colIdx}`;
+    }
+  }
+
+  const syntheticRows = Math.min(rows, 72);
+  for (let row = 2; row <= syntheticRows; row += 1) {
+    if (cols > 0 && !next[`A${row}`]) next[`A${row}`] = `R-${row - 1}`;
+    if (cols > 1 && !next[`B${row}`]) next[`B${row}`] = String((row * 13) % 97);
+    if (cols > 2 && !next[`C${row}`]) next[`C${row}`] = `=ROUND(REMAP(B${row}, 0, 100, 0, 1), 3)`;
+    if (cols > 3 && !next[`D${row}`]) next[`D${row}`] = `=IF(C${row} >= 0.7, "ok", "watch")`;
+  }
+
+  return next;
+}
+
 function StatCard({ label, value, tone }: { label: string; value: string; tone: string }) {
   const c = useThemeColors();
   return (
@@ -120,7 +166,11 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone: 
 
 export function DataSpreadsheetStory() {
   const c = useThemeColors();
-  const [cells, setCells] = useState<SpreadsheetCellMap>(LOGISTICS_PRESET);
+  const [scalePreset, setScalePreset] = useState<ScalePreset>(SCALE_PRESETS[0]);
+  const [columnWidths, setColumnWidths] = useState<number[]>(() => createColumnWidths(SCALE_PRESETS[0].cols));
+  const [cells, setCells] = useState<SpreadsheetCellMap>(() =>
+    ensureScaleCells(LOGISTICS_PRESET, SCALE_PRESETS[0].rows, SCALE_PRESETS[0].cols),
+  );
 
   const summary = useMemo(() => {
     const formulaCount = Object.values(cells).filter((v) => v.trim().startsWith('=')).length;
@@ -144,14 +194,15 @@ export function DataSpreadsheetStory() {
         </Box>
 
         <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          <StatCard label="Formula Cells" value={String(summary.formulaCount)} tone="#38bdf8" />
-          <StatCard label="CONVERT Calls" value={String(summary.conversionCount)} tone="#22c55e" />
-          <StatCard label="Math Calls" value={String(summary.mathCount)} tone="#f59e0b" />
-          <StatCard label="Evaluation Errors" value={String(summary.errorCount)} tone={summary.errorCount > 0 ? '#ef4444' : '#22c55e'} />
+          <StatCard label="Formula Cells" value={String(summary.formulaCount)} tone={c.primary} />
+          <StatCard label="CONVERT Calls" value={String(summary.conversionCount)} tone={c.success} />
+          <StatCard label="Math Calls" value={String(summary.mathCount)} tone={c.warning} />
+          <StatCard label="Evaluation Errors" value={String(summary.errorCount)} tone={summary.errorCount > 0 ? c.error : c.success} />
+          <StatCard label="Grid Size" value={`${scalePreset.rows} x ${scalePreset.cols}`} tone={c.accent} />
         </Box>
 
-        <Box style={{ flexDirection: 'row', gap: 10 }}>
-          <Pressable onPress={() => setCells(LOGISTICS_PRESET)}>
+        <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+          <Pressable onPress={() => setCells(ensureScaleCells(LOGISTICS_PRESET, scalePreset.rows, scalePreset.cols))}>
             <Box style={{
               borderRadius: 6,
               borderWidth: 1,
@@ -166,7 +217,7 @@ export function DataSpreadsheetStory() {
             </Box>
           </Pressable>
 
-          <Pressable onPress={() => setCells(LAB_PRESET)}>
+          <Pressable onPress={() => setCells(ensureScaleCells(LAB_PRESET, scalePreset.rows, scalePreset.cols))}>
             <Box style={{
               borderRadius: 6,
               borderWidth: 1,
@@ -180,11 +231,70 @@ export function DataSpreadsheetStory() {
               <Text style={{ fontSize: 10, color: c.text }}>{'Load Lab Preset'}</Text>
             </Box>
           </Pressable>
+
+          <Pressable onPress={() => setColumnWidths(createColumnWidths(scalePreset.cols))}>
+            <Box style={{
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: c.border,
+              backgroundColor: c.surface,
+              paddingLeft: 10,
+              paddingRight: 10,
+              paddingTop: 6,
+              paddingBottom: 6,
+            }}>
+              <Text style={{ fontSize: 10, color: c.text }}>{'Reset Column Widths'}</Text>
+            </Box>
+          </Pressable>
+        </Box>
+
+        <Box style={{ gap: 8 }}>
+          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Scale Presets'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {SCALE_PRESETS.map((preset) => (
+              <Pressable
+                key={preset.id}
+                onPress={() => {
+                  setScalePreset(preset);
+                  setColumnWidths(createColumnWidths(preset.cols));
+                  setCells((prev) => ensureScaleCells(prev, preset.rows, preset.cols));
+                }}
+              >
+                <Box style={{
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: scalePreset.id === preset.id ? c.primary : c.border,
+                  backgroundColor: scalePreset.id === preset.id ? c.bgAlt : c.surface,
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  paddingTop: 6,
+                  paddingBottom: 6,
+                }}>
+                  <Text style={{ fontSize: 10, color: c.text }}>
+                    {`${preset.label} ${preset.rows}x${preset.cols}`}
+                  </Text>
+                </Box>
+              </Pressable>
+            ))}
+          </Box>
+          <Text style={{ fontSize: 9, color: c.textDim }}>
+            {'Drag any header separator to resize columns. Shift + wheel or drag in the grid to pan horizontally.'}
+          </Text>
         </Box>
 
         <Box style={{ gap: 8 }}>
           <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Live Sheet'}</Text>
-          <Spreadsheet rows={14} cols={8} cells={cells} onCellsChange={setCells} />
+          <Spreadsheet
+            rows={scalePreset.rows}
+            cols={scalePreset.cols}
+            cells={cells}
+            onCellsChange={setCells}
+            columnWidths={columnWidths}
+            onColumnWidthsChange={setColumnWidths}
+            minColumnWidth={72}
+            maxColumnWidth={420}
+            viewportHeight={scalePreset.viewportHeight}
+          />
         </Box>
 
         <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'start' }}>
