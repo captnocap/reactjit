@@ -16,6 +16,7 @@ local min = math.min
 local sqrt = math.sqrt
 local floor = math.floor
 local random = math.random
+local upper = string.upper
 local insert = table.insert
 local remove = table.remove
 
@@ -609,6 +610,50 @@ function M.synthetic_append(candles, volatility, maxCount)
 end
 
 -- ============================================================================
+-- Quote state helpers
+-- ============================================================================
+
+function M.quotes_push_price(quotes, symbol, price, source, timestamp)
+  local out = {}
+  for key, q in pairs(quotes or {}) do
+    local k = upper(tostring(key or ""))
+    local qq = q or {}
+    out[k] = {
+      symbol = upper(tostring(qq.symbol or k)),
+      price = num(qq.price, 0),
+      change24h = num(qq.change24h, 0),
+      volume24h = num(qq.volume24h, 0),
+      high24h = num(qq.high24h, 0),
+      low24h = num(qq.low24h, 0),
+      timestamp = num(qq.timestamp, 0),
+      source = tostring(qq.source or "manual"),
+    }
+  end
+
+  local sym = upper(tostring(symbol or ""))
+  local prev = out[sym] or {
+    symbol = sym,
+    change24h = 0,
+    volume24h = 0,
+    high24h = 0,
+    low24h = 0,
+  }
+
+  out[sym] = {
+    symbol = sym,
+    price = num(price, prev.price or 0),
+    change24h = num(prev.change24h, 0),
+    volume24h = num(prev.volume24h, 0),
+    high24h = num(prev.high24h, 0),
+    low24h = num(prev.low24h, 0),
+    timestamp = num(timestamp, 0),
+    source = tostring(source or "manual"),
+  }
+
+  return out
+end
+
+-- ============================================================================
 -- RPC handlers
 -- ============================================================================
 
@@ -653,6 +698,16 @@ handlers["finance:synthetic_append"] = function(args)
     args and args.candles or {},
     args and args.volatility or nil,
     args and args.maxCount or nil
+  )
+end
+
+handlers["finance:quotes_push_price"] = function(args)
+  return M.quotes_push_price(
+    args and args.quotes or {},
+    args and args.symbol or nil,
+    args and args.price or nil,
+    args and args.source or nil,
+    args and args.timestamp or nil
   )
 end
 
