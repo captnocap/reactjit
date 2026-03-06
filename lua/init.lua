@@ -1863,6 +1863,15 @@ function ReactJIT.init(config)
     startupLog("[reactjit] Math module loaded")
   end
 
+  -- Load finance utilities module (technical analysis indicators)
+  local finOk, finMod = pcall(require, "lua.finance")
+  if finOk and finMod then
+    for method, handler in pairs(finMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    startupLog("[reactjit] Finance module loaded")
+  end
+
   -- Load general utilities module (IDs, strings, time, deep equality, safe JSON)
   local utilsOk, utilsMod = pcall(require, "lua.utils")
   if utilsOk and utilsMod then

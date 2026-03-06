@@ -2,10 +2,10 @@
  * React hooks for finance — all one-liners that wire indicators to state.
  */
 
-import { useMemo, useState, useCallback } from 'react';
-import { useWebSocket } from '@reactjit/core';
-import type { OHLCV, Holding, PortfolioSnapshot, Timeframe, BollingerBand, MACDPoint, StochPoint, IndicatorPoint, PatternSignal } from './types';
-import { sma, ema, rsi, macd, bollingerBands, vwap, atr, detectPatterns, pivotPoints, stochastic, obv } from './indicators';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { useWebSocket, useLoveRPC } from '@reactjit/core';
+import type { OHLCV, Holding, PortfolioSnapshot, BollingerBand, MACDPoint, StochPoint, IndicatorPoint, PatternSignal } from './types';
+import { pivotPoints } from './indicators';
 import { portfolioSnapshot, holdingPnL, sharpeRatio, maxDrawdown, equityToReturns } from './portfolio';
 
 // ── Technical Analysis ───────────────────────────────────
@@ -26,26 +26,147 @@ export interface TechnicalAnalysis {
   patterns: PatternSignal[];
 }
 
-/** Compute all standard indicators for a candle series. Memoized. */
-export function useTechnicalAnalysis(candles: OHLCV[]): TechnicalAnalysis {
-  return useMemo(() => {
-    const closes = candles.map(c => c.close);
-    return {
-      sma20: sma(closes, 20),
-      sma50: sma(closes, 50),
-      ema12: ema(closes, 12),
-      ema26: ema(closes, 26),
-      rsi14: rsi(closes, 14),
-      macd: macd(closes),
-      bollinger: bollingerBands(closes),
-      vwap: vwap(candles),
-      atr14: atr(candles),
-      obv: obv(candles),
-      stochastic: stochastic(candles),
-      pivots: pivotPoints(candles),
-      patterns: detectPatterns(candles),
+type NullableNumber = number | null | undefined;
+
+interface TechnicalAnalysisRPC {
+  sma20?: NullableNumber[];
+  sma50?: NullableNumber[];
+  ema12?: NullableNumber[];
+  ema26?: NullableNumber[];
+  rsi14?: NullableNumber[];
+  macd?: Array<{
+    time?: NullableNumber;
+    macd?: NullableNumber;
+    signal?: NullableNumber;
+    histogram?: NullableNumber;
+  }>;
+  bollinger?: Array<{
+    time?: NullableNumber;
+    upper?: NullableNumber;
+    middle?: NullableNumber;
+    lower?: NullableNumber;
+  }>;
+  vwap?: Array<{ time?: NullableNumber; value?: NullableNumber }>;
+  atr14?: Array<{ time?: NullableNumber; value?: NullableNumber }>;
+  obv?: Array<{ time?: NullableNumber; value?: NullableNumber }>;
+  stochastic?: Array<{ time?: NullableNumber; k?: NullableNumber; d?: NullableNumber }>;
+  pivots?: {
+    pivot?: NullableNumber;
+    r1?: NullableNumber;
+    r2?: NullableNumber;
+    r3?: NullableNumber;
+    s1?: NullableNumber;
+    s2?: NullableNumber;
+    s3?: NullableNumber;
+  } | null;
+  patterns?: PatternSignal[];
+}
+
+function asNumberOrNaN(value: NullableNumber): number {
+  return typeof value === 'number' ? value : NaN;
+}
+
+function normalizeTechnicalAnalysis(raw: TechnicalAnalysisRPC | null | undefined, candles: OHLCV[]): TechnicalAnalysis {
+  const len = candles.length;
+  const numberSeries = (values?: NullableNumber[]): number[] => {
+    const out = new Array<number>(len);
+    for (let i = 0; i < len; i++) out[i] = asNumberOrNaN(values?.[i]);
+    return out;
+  };
+
+  const macdSeries: MACDPoint[] = new Array(len);
+  for (let i = 0; i < len; i++) {
+    const p = raw?.macd?.[i];
+    macdSeries[i] = {
+      time: typeof p?.time === 'number' ? p.time : i,
+      macd: asNumberOrNaN(p?.macd),
+      signal: asNumberOrNaN(p?.signal),
+      histogram: asNumberOrNaN(p?.histogram),
     };
-  }, [candles]);
+  }
+
+  const bollingerSeries: BollingerBand[] = new Array(len);
+  for (let i = 0; i < len; i++) {
+    const p = raw?.bollinger?.[i];
+    bollingerSeries[i] = {
+      time: typeof p?.time === 'number' ? p.time : i,
+      upper: asNumberOrNaN(p?.upper),
+      middle: asNumberOrNaN(p?.middle),
+      lower: asNumberOrNaN(p?.lower),
+    };
+  }
+
+  const toIndicatorSeries = (values?: Array<{ time?: NullableNumber; value?: NullableNumber }>): IndicatorPoint[] => {
+    const out: IndicatorPoint[] = new Array(len);
+    for (let i = 0; i < len; i++) {
+      const p = values?.[i];
+      out[i] = {
+        time: typeof p?.time === 'number' ? p.time : (candles[i]?.time ?? i),
+        value: asNumberOrNaN(p?.value),
+      };
+    }
+    return out;
+  };
+
+  const stochasticSeries: StochPoint[] = new Array(len);
+  for (let i = 0; i < len; i++) {
+    const p = raw?.stochastic?.[i];
+    stochasticSeries[i] = {
+      time: typeof p?.time === 'number' ? p.time : (candles[i]?.time ?? i),
+      k: asNumberOrNaN(p?.k),
+      d: asNumberOrNaN(p?.d),
+    };
+  }
+
+  const pivots = raw?.pivots
+    ? {
+        pivot: asNumberOrNaN(raw.pivots.pivot),
+        r1: asNumberOrNaN(raw.pivots.r1),
+        r2: asNumberOrNaN(raw.pivots.r2),
+        r3: asNumberOrNaN(raw.pivots.r3),
+        s1: asNumberOrNaN(raw.pivots.s1),
+        s2: asNumberOrNaN(raw.pivots.s2),
+        s3: asNumberOrNaN(raw.pivots.s3),
+      }
+    : null;
+
+  return {
+    sma20: numberSeries(raw?.sma20),
+    sma50: numberSeries(raw?.sma50),
+    ema12: numberSeries(raw?.ema12),
+    ema26: numberSeries(raw?.ema26),
+    rsi14: numberSeries(raw?.rsi14),
+    macd: macdSeries,
+    bollinger: bollingerSeries,
+    vwap: toIndicatorSeries(raw?.vwap),
+    atr14: toIndicatorSeries(raw?.atr14),
+    obv: toIndicatorSeries(raw?.obv),
+    stochastic: stochasticSeries,
+    pivots,
+    patterns: Array.isArray(raw?.patterns) ? (raw.patterns as PatternSignal[]) : [],
+  };
+}
+
+/** Compute all standard indicators for a candle series in Lua. */
+export function useTechnicalAnalysis(candles: OHLCV[]): TechnicalAnalysis {
+  const rpc = useLoveRPC<TechnicalAnalysisRPC>('finance:technical_analysis');
+  const requestIdRef = useRef(0);
+  const [value, setValue] = useState<TechnicalAnalysis>(() => normalizeTechnicalAnalysis(undefined, candles));
+
+  useEffect(() => {
+    const requestId = ++requestIdRef.current;
+    rpc({ candles })
+      .then(result => {
+        if (requestIdRef.current !== requestId) return;
+        setValue(normalizeTechnicalAnalysis(result, candles));
+      })
+      .catch(() => {
+        if (requestIdRef.current !== requestId) return;
+        setValue(normalizeTechnicalAnalysis(undefined, candles));
+      });
+  }, [rpc, candles]);
+
+  return value;
 }
 
 // ── Portfolio ────────────────────────────────────────────
