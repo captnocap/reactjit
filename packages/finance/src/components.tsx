@@ -2,8 +2,8 @@
  * Finance display components — all one-liners wiring data to layout.
  */
 
-import React, { useMemo } from 'react';
-import { Box, Text, Sparkline, CandlestickChart, LineChart, BarChart, OrderBook } from '@reactjit/core';
+import React from 'react';
+import { Box, Text, Sparkline, OrderBook } from '@reactjit/core';
 import type { Style } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import type { OHLCV, Holding, PortfolioSnapshot, BookLevel, IndicatorPoint, BollingerBand, MACDPoint } from './types';
@@ -270,22 +270,18 @@ export interface MACDPanelProps {
 
 /** MACD histogram + signal line visualization */
 export function MACDPanel({ points, height = 80, style }: MACDPanelProps) {
-  // Filter to valid points only
-  const valid = useMemo(() => points.filter(p => !isNaN(p.histogram)), [points]);
-  const histData = useMemo(() =>
-    valid.map((p, i) => ({
-      label: i % 10 === 0 ? String(i) : '',
-      value: Math.abs(p.histogram) + 0.01,
-      color: p.histogram >= 0 ? '#22c55e' : '#ef4444',
-    })),
-  [valid]);
-
-  return (
-    <Box style={{ gap: 4, ...style }}>
-      <Text style={{ color: '#94a3b8', fontSize: 10 }}>MACD</Text>
-      <BarChart data={histData} height={height} gap={1} showLabels={false} interactive={false} />
-    </Box>
-  );
+  return React.createElement('MACDPanel', {
+    points,
+    chartHeight: height,
+    textColor: '#94a3b8',
+    positiveColor: '#22c55e',
+    negativeColor: '#ef4444',
+    style: {
+      width: '100%',
+      height: height + 16,
+      ...style,
+    },
+  });
 }
 
 // ── Indicator Legend ──────────────────────────────────────
