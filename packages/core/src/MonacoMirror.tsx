@@ -27,6 +27,12 @@ function normalizePath(input: string): string {
   return input.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/').trim();
 }
 
+function dirnamePath(input: string): string {
+  const parts = splitPath(normalizePath(input));
+  if (parts.length <= 1) return '';
+  return parts.slice(0, -1).join('/');
+}
+
 function uniquePaths(input: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -37,6 +43,21 @@ function uniquePaths(input: string[]): string[] {
     out.push(normalized);
   }
   return out;
+}
+
+function buildFallbackExplorerPaths(primaryFilePath: string): string[] {
+  const normalized = normalizePath(primaryFilePath);
+  const dir = dirnamePath(normalized);
+  const segments = splitPath(normalized);
+  const sourceRoot = segments[0] === 'src' ? 'src' : (segments.length > 1 ? segments[0] : '');
+
+  return uniquePaths([
+    normalized,
+    dir ? `${dir}/index.ts` : '',
+    sourceRoot && sourceRoot !== dir ? `${sourceRoot}/index.ts` : '',
+    'package.json',
+    'tsconfig.json',
+  ]);
 }
 
 type ExplorerTreeNode = {
@@ -294,19 +315,11 @@ export function MonacoMirror({
     : Math.max(10, Math.min(minimapTrackHeightPx, Math.round((minimapViewportRows / minimapRowCount) * minimapTrackHeightPx)));
 
   const candidateExplorerPaths = useMemo(() => {
-    const fallbackDir = breadcrumbs.slice(0, -1).join('/');
-    const baseName = fileName || 'App.tsx';
-    const fallback = [
-      `${fallbackDir}/${baseName}`,
-      `${fallbackDir}/index.ts`,
-      `${fallbackDir}/components/EditorPane.tsx`,
-      `${fallbackDir}/components/ExplorerTree.tsx`,
-      `${fallbackDir}/hooks/useEditorState.ts`,
-      'package.json',
-      'tsconfig.json',
-    ];
-    return uniquePaths([...(explorerFiles || []), ...fallback, activeFilePath]);
-  }, [activeFilePath, breadcrumbs, explorerFiles, fileName]);
+    const sourcePaths = explorerFiles && explorerFiles.length > 0
+      ? explorerFiles
+      : buildFallbackExplorerPaths(filePath);
+    return uniquePaths([...sourcePaths, filePath, activeFilePath]);
+  }, [activeFilePath, explorerFiles, filePath]);
 
   const explorerTree = useMemo(() => buildExplorerTree(candidateExplorerPaths), [candidateExplorerPaths]);
   const folderPaths = useMemo(() => collectFolderPaths(explorerTree), [explorerTree]);
@@ -383,6 +396,18 @@ export function MonacoMirror({
     });
   }, []);
 
+  const handleToggleSidebarPanel = useCallback(() => {
+    if (!widthCanShowSidebar) return;
+    setPanelPreferenceTouched(true);
+    setSidebarOpen((open) => !open);
+  }, [widthCanShowSidebar]);
+
+  const handleToggleMinimapPanel = useCallback(() => {
+    if (!widthCanShowMinimap) return;
+    setPanelPreferenceTouched(true);
+    setMinimapOpen((open) => !open);
+  }, [widthCanShowMinimap]);
+
   const handleCollapseAll = useCallback(() => {
     const next: Record<string, boolean> = {};
     for (const path of folderPaths) next[path] = true;
@@ -400,32 +425,73 @@ export function MonacoMirror({
       const isFolder = node.kind === 'folder';
       const isCollapsed = isFolder ? (collapsedFolders[node.path] ?? false) : false;
       const isSelected = !isFolder && node.path === activeFilePath;
-      const leftPad = 2 + depth * 10;
+      const isActiveBranch = isFolder && activeFolderAncestors.includes(node.path);
+      const rowIndent = 2 + depth * 8;
+      const guideOffset = Math.max(3, rowIndent - 4);
 
       return (
-        <Box key={node.path}>
+        <Box key={node.path} style={{ position: 'relative' }}>
+          {depth > 0 && (
+            <Box
+              style={{
+                position: 'absolute',
+                left: guideOffset,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                backgroundColor: isActiveBranch ? '#335f7d' : '#2f3133',
+              }}
+            />
+          )}
           <Pressable
             onPress={() => (isFolder ? toggleFolder(node.path) : handleFileSelect(node.path))}
             style={({ hovered }) => ({
-              backgroundColor: isSelected ? '#37373d' : (hovered ? '#2a2d2e' : 'transparent'),
-              borderRadius: 3,
-              paddingLeft: leftPad,
-              paddingRight: 3,
-              paddingTop: 3,
-              paddingBottom: 3,
+              backgroundColor: isSelected ? '#094771' : (hovered ? '#2a2d2e' : 'transparent'),
+              borderLeftWidth: isSelected ? 2 : 0,
+              borderColor: isSelected ? '#56b6ff' : 'transparent',
+              borderRadius: 2,
+              minWidth: 0,
             })}
           >
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 0 }}>
-              {isFolder && (
-                <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                  {isCollapsed ? '+' : '-'}
-                </Text>
-              )}
-              {!isFolder && <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{' '}</Text>}
+            <Box
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                minWidth: 0,
+                paddingLeft: rowIndent,
+                paddingRight: 2,
+                paddingTop: 2,
+                paddingBottom: 2,
+                gap: 2,
+              }}
+            >
+              <Box style={{ width: 8, flexShrink: 0, alignItems: 'center' }}>
+                {isFolder ? (
+                  <Text
+                    style={{
+                      color: isActiveBranch ? '#b8d8f0' : '#8a8a8a',
+                      fontSize: 8,
+                      fontFamily: 'monospace',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {isCollapsed ? '>' : 'v'}
+                  </Text>
+                ) : (
+                  <Box
+                    style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: 4,
+                      backgroundColor: isSelected ? '#56b6ff' : '#3c3c3c',
+                    }}
+                  />
+                )}
+              </Box>
               <Box style={{ flexGrow: 1, minWidth: 0 }}>
                 <Text
                   style={{
-                    color: isSelected ? '#ffffff' : '#c5c5c5',
+                    color: isSelected ? '#ffffff' : (isActiveBranch ? '#d3e6f7' : '#c5c5c5'),
                     fontSize: 9,
                     fontFamily: 'monospace',
                     whiteSpace: 'nowrap',
@@ -435,16 +501,6 @@ export function MonacoMirror({
                   {node.name}
                 </Text>
               </Box>
-              <Text
-                style={{
-                  color: isSelected ? '#56b6ff' : 'transparent',
-                  fontSize: 8,
-                  fontFamily: 'monospace',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {'|'}
-              </Text>
             </Box>
           </Pressable>
           {isFolder && !isCollapsed && node.children && renderExplorerNodes(node.children, depth + 1)}
@@ -500,11 +556,7 @@ export function MonacoMirror({
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 8, paddingBottom: 5 }}>
             {showSidebar && (
               <Pressable
-                onPress={() => {
-                  if (!widthCanShowSidebar) return;
-                  setPanelPreferenceTouched(true);
-                  setSidebarOpen((open) => !open);
-                }}
+                onPress={handleToggleSidebarPanel}
                 style={({ hovered }) => ({
                   backgroundColor: !widthCanShowSidebar
                     ? '#2b2b2b'
@@ -523,11 +575,7 @@ export function MonacoMirror({
             )}
             {showMinimap && (
               <Pressable
-                onPress={() => {
-                  if (!widthCanShowMinimap) return;
-                  setPanelPreferenceTouched(true);
-                  setMinimapOpen((open) => !open);
-                }}
+                onPress={handleToggleMinimapPanel}
                 style={({ hovered }) => ({
                   backgroundColor: !widthCanShowMinimap
                     ? '#2b2b2b'
@@ -809,6 +857,44 @@ export function MonacoMirror({
             </Text>
           )}
           <Box style={{ flexGrow: 1 }} />
+          {showSidebar && (
+            <Pressable
+              onPress={handleToggleSidebarPanel}
+              style={({ hovered }) => ({
+                backgroundColor: !widthCanShowSidebar
+                  ? '#0369a1'
+                  : sidebarOpen
+                    ? '#035888'
+                    : (hovered ? '#1187c9' : '#0b72ad'),
+                borderRadius: 3,
+                paddingLeft: 6,
+                paddingRight: 6,
+                paddingTop: 2,
+                paddingBottom: 2,
+              })}
+            >
+              <Text style={{ color: widthCanShowSidebar ? '#ffffff' : '#b4d9eb', fontSize: compact ? 7 : 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'EX'}</Text>
+            </Pressable>
+          )}
+          {showMinimap && (
+            <Pressable
+              onPress={handleToggleMinimapPanel}
+              style={({ hovered }) => ({
+                backgroundColor: !widthCanShowMinimap
+                  ? '#0369a1'
+                  : minimapOpen
+                    ? '#035888'
+                    : (hovered ? '#1187c9' : '#0b72ad'),
+                borderRadius: 3,
+                paddingLeft: 6,
+                paddingRight: 6,
+                paddingTop: 2,
+                paddingBottom: 2,
+              })}
+            >
+              <Text style={{ color: widthCanShowMinimap ? '#ffffff' : '#b4d9eb', fontSize: compact ? 7 : 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'MAP'}</Text>
+            </Pressable>
+          )}
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`Ln ${lineCount}`}</Text>
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`${charCount} chars`}</Text>
         </Box>
