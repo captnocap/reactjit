@@ -93,6 +93,7 @@ export type {
   TickerItem,
   TickerSymbolProps,
   TickerTapeProps,
+  TickerTapeSelectEvent,
   HoldingRowProps,
   PortfolioCardProps,
   OrderBookPanelProps,

@@ -387,6 +387,12 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onSlidingEnd');
   });
 
+  // ── TickerTape events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('tickertape:select', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onItemPress');
+  });
+
   // ── OrderBook events (Lua-owned, target-only) ─────────
 
   bridge.subscribe('orderbook:select', (event: LoveEvent) => {

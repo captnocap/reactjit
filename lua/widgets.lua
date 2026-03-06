@@ -46,6 +46,7 @@ function Widgets.init(deps)
     { type = "StepSequencer", mod = "lua.step_sequencer",  stateKey = "_stepsequencer", dragField = "isDragging" },
     { type = "XYPad",         mod = "lua.xypad",           stateKey = "_xypad",         dragField = "isDragging" },
     { type = "PitchWheel",    mod = "lua.pitchwheel",      stateKey = "_pitchwheel",    dragField = "isDragging" },
+    { type = "TickerTape",    mod = "lua.tickertape",      stateKey = "_tickertape",    dragField = "isDragging" },
     { type = "OrderBook",     mod = "lua.orderbook" },
   }
 

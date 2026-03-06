@@ -3,7 +3,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Box, Text, ScrollView, Sparkline, CandlestickChart, LineChart, BarChart, OrderBook } from '@reactjit/core';
+import { Box, Text, Sparkline, CandlestickChart, LineChart, BarChart, OrderBook } from '@reactjit/core';
 import type { Style } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import type { OHLCV, Holding, PortfolioSnapshot, BookLevel, IndicatorPoint, BollingerBand, MACDPoint } from './types';
@@ -74,14 +74,23 @@ export interface TickerTapeProps {
   gap?: number;
   /** Height of the tape row. Default 24. */
   height?: number;
+  /** Optional callback for symbol clicks in the Lua-owned tape. */
+  onItemPress?: (event: TickerTapeSelectEvent) => void;
   style?: Style;
+}
+
+export interface TickerTapeSelectEvent {
+  symbol: string;
+  price: number;
+  change: number;
+  index: number;
 }
 
 /**
  * Horizontal scrolling ticker row.
  *
- * Uses a horizontal ScrollView so items never clip or compress.
- * Each item is a TickerSymbol at its natural width.
+ * Renders through a Lua-owned host widget for low-latency scrolling.
+ * Drag horizontally to scrub through symbols when content overflows.
  *
  * ```tsx
  * <TickerTape items={[
@@ -90,33 +99,26 @@ export interface TickerTapeProps {
  * ]} />
  * ```
  */
-export function TickerTape({ items, gap = 20, height = 24, style }: TickerTapeProps) {
+export function TickerTape({ items, gap = 20, height = 24, onItemPress, style }: TickerTapeProps) {
   const c = useThemeColors();
-  return (
-    <ScrollView
-      horizontal
-      showScrollIndicator={false}
-      style={{
-        height,
-        backgroundColor: c.bg,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        ...style,
-      }}
-      contentContainerStyle={{
-        flexDirection: 'row',
-        gap,
-        paddingLeft: 8,
-        paddingRight: 8,
-        alignItems: 'center',
-        height,
-      }}
-    >
-      {items.map(item => (
-        <TickerSymbol key={item.symbol} item={item} />
-      ))}
-    </ScrollView>
-  );
+  return React.createElement('TickerTape', {
+    items,
+    gap,
+    height,
+    textColor: c.text,
+    bgColor: c.bg,
+    borderColor: c.border,
+    upColor: '#22c55e',
+    downColor: '#ef4444',
+    onItemPress: onItemPress
+      ? (e: any) => onItemPress(e?.value as TickerTapeSelectEvent)
+      : undefined,
+    style: {
+      width: '100%',
+      height,
+      ...style,
+    },
+  });
 }
 
 // ── Holding Row ──────────────────────────────────────────

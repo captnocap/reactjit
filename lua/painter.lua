@@ -59,6 +59,7 @@ local PianoKeyboardModule = nil  -- Lazy-loaded to avoid circular deps
 local StepSequencerModule = nil  -- Lazy-loaded to avoid circular deps
 local XYPadModule = nil
 local PitchWheelModule = nil
+local TickerTapeModule = nil
 local OrderBookModule = nil
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
@@ -1686,6 +1687,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       PitchWheelModule = require("lua.pitchwheel")
     end
     PitchWheelModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "TickerTape" then
+    if not TickerTapeModule then
+      TickerTapeModule = require("lua.tickertape")
+    end
+    TickerTapeModule.draw(node, effectiveOpacity)
 
   elseif not isHidden and node.type == "OrderBook" then
     if not OrderBookModule then
