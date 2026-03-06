@@ -68,6 +68,7 @@ import { ChemistryStory } from './ChemistryStory';
 import { GalleryStory } from './GalleryStory';
 import { HookGalleryStory } from './HookGalleryStory';
 import { AnimationStory } from './AnimationStory';
+import { ClassifierStory } from './ClassifierStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -86,6 +87,7 @@ export const stories: StoryDef[] = [
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
   { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
   { id: 'animation', title: 'Animation', section: 'Core', component: AnimationStory },
+  { id: 'classifier', title: 'Classifier', section: 'Core', component: ClassifierStory },
 
   // Packages
   { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
