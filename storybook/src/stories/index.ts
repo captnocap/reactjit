@@ -65,6 +65,7 @@ import { AIStory } from './AIStory';
 import { FinanceStory } from './FinanceStory';
 import { ChemistryStory } from './ChemistryStory';
 import { GalleryStory } from './GalleryStory';
+import { AnimationStory } from './AnimationStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -81,6 +82,7 @@ export const stories: StoryDef[] = [
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
   { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
+  { id: 'animation', title: 'Animation', section: 'Core', component: AnimationStory },
 
   // Packages
   { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
