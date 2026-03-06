@@ -61,6 +61,7 @@ local XYPadModule = nil
 local PitchWheelModule = nil
 local TickerTapeModule = nil
 local OrderBookModule = nil
+local RSIGaugeModule = nil
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -1699,6 +1700,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       OrderBookModule = require("lua.orderbook")
     end
     OrderBookModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "RSIGauge" then
+    if not RSIGaugeModule then
+      RSIGaugeModule = require("lua.rsigauge")
+    end
+    RSIGaugeModule.draw(node, effectiveOpacity)
 
   elseif not isHidden then
     -- Generic visual capability dispatch: any registered capability with

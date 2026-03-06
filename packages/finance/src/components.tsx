@@ -245,22 +245,19 @@ export interface RSIGaugeProps {
 /** Compact RSI indicator with overbought/oversold zones */
 export function RSIGauge({ value, style }: RSIGaugeProps) {
   const c = useThemeColors();
-  const zone = value >= 70 ? 'Overbought' : value <= 30 ? 'Oversold' : 'Neutral';
-  const color = value >= 70 ? '#ef4444' : value <= 30 ? '#22c55e' : c.text;
-  const pct = Math.max(0, Math.min(100, value));
-
-  return (
-    <Box style={{ gap: 4, ...style }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>RSI(14)</Text>
-        <Text style={{ color, fontSize: 11, fontWeight: 'bold' }}>{value.toFixed(1)}</Text>
-      </Box>
-      <Box style={{ height: 6, backgroundColor: c.border, borderRadius: 3, overflow: 'hidden' }}>
-        <Box style={{ width: `${pct}%`, height: 6, backgroundColor: color, borderRadius: 3 }} />
-      </Box>
-      <Text style={{ color, fontSize: 9 }}>{zone}</Text>
-    </Box>
-  );
+  return React.createElement('RSIGauge', {
+    value,
+    textColor: c.text,
+    mutedColor: c.muted,
+    barBgColor: c.border,
+    overboughtColor: '#ef4444',
+    oversoldColor: '#22c55e',
+    style: {
+      width: '100%',
+      height: 42,
+      ...style,
+    },
+  });
 }
 
 // ── MACD Panel ───────────────────────────────────────────
