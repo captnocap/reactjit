@@ -9,12 +9,14 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, CandlestickChart, BarChart, Switch } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, CandlestickChart, DepthChart, BarChart, Switch } from '../../../packages/core/src';
+import type { ChartOverlay } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   useTechnicalAnalysis,
   usePortfolio,
   useSyntheticCandles,
+  useSecurePortfolio,
   formatCurrency,
   formatPercent,
   formatCompact,
@@ -138,6 +140,61 @@ const { pnl, pnlPercent } = holdingPnL(h)
 const sr = sharpeRatio(returns, 0.02)
 const dd = maxDrawdown(equityCurve)`;
 
+const OVERLAY_CODE = `// Chart overlays — draw MA/EMA/Bollinger on candles
+<CandlestickChart
+  data={candles}
+  height={280}
+  overlays={[
+    { values: ta.sma20, color: '#3b82f6', lineWidth: 1.5 },
+    { values: ta.sma50, color: '#f59e0b', lineWidth: 1.5 },
+    { // Bollinger Band (fill between upper/lower)
+      values: ta.bollinger.map(b => b.middle),
+      upper: ta.bollinger.map(b => b.upper),
+      lower: ta.bollinger.map(b => b.lower),
+      color: '#a78bfa',
+      fillColor: 'rgba(167,139,250,0.08)',
+    },
+  ]}
+/>`;
+
+const DEPTH_CODE = `import { DepthChart } from '@reactjit/core'
+
+<DepthChart
+  bids={orderBook.bids}
+  asks={orderBook.asks}
+  height={160}
+  bidColor="#22c55e"
+  askColor="#ef4444"
+  bidFillColor="rgba(34,197,94,0.15)"
+  askFillColor="rgba(239,68,68,0.15)"
+/>`;
+
+const SECURE_CODE = `import { useSecurePortfolio } from '@reactjit/finance'
+
+const {
+  holdings, snapshot, locked,
+  upsertHolding, removeHolding,
+  updatePrice, lock, unlock,
+} = useSecurePortfolio({
+  password: 'my-secret',
+  // Optional: plug in @reactjit/crypto
+  // encrypt: crypto.encrypt,
+  // decrypt: crypto.decrypt,
+})`;
+
+const FEED_CODE = `import { usePriceFeed, useOHLCVHistory } from '@reactjit/finance'
+
+const { quotes, all, getQuote, pushPrice } = usePriceFeed({
+  symbols: ['BTC', 'ETH', 'SOL'],
+  pollInterval: 30000, // CoinGecko polling
+  wsEnabled: true,     // Binance WebSocket
+})
+
+// OHLCV history from CoinGecko
+const { candles } = useOHLCVHistory({
+  symbol: 'BTC', days: 30,
+})`;
+
 // ── Synthetic order book ─────────────────────────────────
 
 function makeBook(lastPrice: number, seed: number): { bids: BookLevel[]; asks: BookLevel[] } {
@@ -210,12 +267,13 @@ const INDICATORS = [
   { label: 'Patterns', desc: 'Doji, hammer, engulfing, double top/bottom', color: C.pink },
 ];
 
-// ── Live Demo: Candlestick Chart ─────────────────────────
+// ── Live Demo: Candlestick Chart with Overlays ──────────
 
 function CandlestickDemo() {
   const c = useThemeColors();
   const { candles, append } = useSyntheticCandles({ count: 60, volatility: 2.5, startPrice: 150 });
   const ta = useTechnicalAnalysis(candles);
+  const [showBB, setShowBB] = useState(true);
 
   useLuaInterval(1100, () => { append(); });
 
@@ -230,14 +288,38 @@ function CandlestickDemo() {
 
   const ticker = useMemo(() => makeTicker(candles), [candles]);
 
+  // Build overlays for the Lua chart renderer
+  const overlays = useMemo((): ChartOverlay[] => {
+    const ov: ChartOverlay[] = [
+      { values: ta.sma20, color: '#3b82f6', lineWidth: 1.5 },
+      { values: ta.sma50, color: '#f59e0b', lineWidth: 1.5, style: 'dashed' },
+    ];
+    if (showBB) {
+      ov.push({
+        values: ta.bollinger.map(b => b.middle),
+        upper: ta.bollinger.map(b => b.upper),
+        lower: ta.bollinger.map(b => b.lower),
+        color: '#a78bfa',
+        fillColor: 'rgba(167,139,250,0.08)',
+        lineWidth: 1,
+        opacity: 0.7,
+      });
+    }
+    return ov;
+  }, [ta.sma20, ta.sma50, ta.bollinger, showBB]);
+
   const legendItems = useMemo(() => {
     const sma20 = ta.sma20.filter(v => !isNaN(v));
     const sma50 = ta.sma50.filter(v => !isNaN(v));
     const items: Array<{ label: string; color: string; value?: number }> = [];
     if (sma20.length > 0) items.push({ label: 'SMA 20', color: '#3b82f6', value: sma20[sma20.length - 1] });
     if (sma50.length > 0) items.push({ label: 'SMA 50', color: '#f59e0b', value: sma50[sma50.length - 1] });
+    if (showBB) {
+      const bb = ta.bollinger.filter(b => !isNaN(b.upper));
+      if (bb.length > 0) items.push({ label: 'BB', color: '#a78bfa', value: bb[bb.length - 1].upper - bb[bb.length - 1].lower });
+    }
     return items;
-  }, [ta.sma20, ta.sma50]);
+  }, [ta.sma20, ta.sma50, ta.bollinger, showBB]);
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
@@ -245,10 +327,86 @@ function CandlestickDemo() {
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
         <Text style={{ fontSize: 11, color: up ? C.green : C.red }}>{formatPercent((delta / (prev.close || 1)) * 100)}</Text>
-        <Text style={{ fontSize: 9, color: c.muted }}>Live synthetic data</Text>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontSize: 9, color: c.muted }}>BB</Text>
+          <Switch value={showBB} onValueChange={setShowBB} />
+        </Box>
       </Box>
       <IndicatorLegend items={legendItems} />
-      <CandlestickChart data={candleData} height={200} bullColor="#22c55e" bearColor="#ef4444" />
+      <CandlestickChart data={candleData} overlays={overlays} height={200} bullColor="#22c55e" bearColor="#ef4444" />
+    </Box>
+  );
+}
+
+// ── Live Demo: Depth Chart ───────────────────────────────
+
+function DepthChartDemo() {
+  const c = useThemeColors();
+  const { candles, append } = useSyntheticCandles({ count: 30, volatility: 1.5, startPrice: 100, seed: 55 });
+
+  useLuaInterval(1700, () => { append(); });
+
+  const last = candles[candles.length - 1];
+  const book = useMemo(() => makeBook(last.close, Math.floor(last.time * 7)), [last.close, last.time]);
+
+  return (
+    <Box style={{ gap: 6, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
+        <Text style={{ fontSize: 9, color: c.muted }}>Cumulative depth visualization</Text>
+      </Box>
+      <DepthChart bids={book.bids} asks={book.asks} height={140} />
+    </Box>
+  );
+}
+
+// ── Live Demo: Secure Portfolio ──────────────────────────
+
+function SecurePortfolioDemo() {
+  const c = useThemeColors();
+  const { holdings, snapshot, locked, upsertHolding, lock, unlock } = useSecurePortfolio({
+    namespace: 'finance_story_demo',
+    password: 'demo123',
+  });
+
+  // Seed demo data if empty
+  useLuaInterval(locked ? null : 3100, () => {
+    if (holdings.length === 0) {
+      for (const h of DEMO_HOLDINGS) upsertHolding(h);
+    }
+  });
+
+  if (locked) {
+    return (
+      <Box style={{ gap: 8, width: '100%', alignItems: 'center', paddingTop: 10 }}>
+        <Text style={{ color: C.red, fontSize: 12 }}>Portfolio Locked</Text>
+        <Pressable onPress={() => unlock('demo123')}>
+          {({ pressed }) => (
+            <Box style={{ backgroundColor: pressed ? C.accent : C.accentDim, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, borderRadius: 4 }}>
+              <Text style={{ color: pressed ? '#fff' : C.accent, fontSize: 10 }}>Unlock (demo123)</Text>
+            </Box>
+          )}
+        </Pressable>
+      </Box>
+    );
+  }
+
+  return (
+    <Box style={{ gap: 6, width: '100%' }}>
+      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>{formatCurrency(snapshot.totalValue)}</Text>
+        <Pressable onPress={lock}>
+          {({ pressed }) => (
+            <Box style={{ backgroundColor: pressed ? C.red : 'rgba(239,68,68,0.12)', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 3 }}>
+              <Text style={{ color: C.red, fontSize: 9 }}>Lock</Text>
+            </Box>
+          )}
+        </Pressable>
+      </Box>
+      <Text style={{ color: snapshot.pnl >= 0 ? C.green : C.red, fontSize: 10 }}>
+        {`P&L: ${formatCurrency(snapshot.pnl)} (${formatPercent(snapshot.pnlPercent)})`}
+      </Text>
+      <Text style={{ color: c.muted, fontSize: 9 }}>{`${holdings.length} holdings, encrypted at rest`}</Text>
     </Box>
   );
 }
@@ -738,7 +896,81 @@ export function FinanceStory() {
 
         <Divider />
 
-        {/* ── Callout: one-liner philosophy ── */}
+        {/* ── Band: text | code — CHART OVERLAYS ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="layers" accentColor={C.purple}>{'CHART OVERLAYS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Indicator lines rendered natively in Lua on top of candlestick charts. SMA, EMA as solid/dashed lines. Bollinger Bands as a filled region between upper and lower channels. All overlays share the candlestick price axis — no separate chart needed.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Toggle the BB switch above to see Bollinger Bands appear as a translucent band overlay. Each overlay supports: color, lineWidth, opacity, style (solid/dashed), and band mode (upper/lower/fillColor).'}
+            </Text>
+          </Half>
+          <Half>
+            <CodeBlock language="tsx" fontSize={9} code={OVERLAY_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Band: text + code | demo — DEPTH CHART ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="bar-chart-2" accentColor={C.teal}>{'DEPTH CHART'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Cumulative bid/ask depth chart rendered natively in Lua. Bids accumulate right-to-left (green), asks left-to-right (red). The midpoint line marks the current spread. Fully GPU-accelerated area fills.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Pass the same bid/ask arrays you use for OrderBookPanel. The chart auto-ranges to fit all price levels and normalizes cumulative volume.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={DEPTH_CODE} />
+          </Half>
+          <Half>
+            <DepthChartDemo />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Band: demo | text + code — ENCRYPTED STORAGE ── */}
+        <Band>
+          <Half>
+            <SecurePortfolioDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="lock" accentColor={C.orange}>{'ENCRYPTED STORAGE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'useSecurePortfolio() persists holdings to SQLite, encrypted at rest. Lock/unlock with a password. Plug in @reactjit/crypto\'s encrypt/decrypt for real cryptographic security, or use the built-in obfuscation for local dev.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Holdings are encrypted before write and decrypted on read. Price updates stay in memory (no disk I/O per tick). Only structural changes (add/remove holdings) trigger persistence.'}
+            </Text>
+            <CodeBlock language="tsx" fontSize={9} code={SECURE_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Band: text + code | — LIVE PRICE FEEDS ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="wifi" accentColor={C.green}>{'LIVE PRICE FEEDS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'usePriceFeed() aggregates CoinGecko REST polling with Binance WebSocket streams into a unified reactive price map. 50+ crypto symbols mapped automatically. useOHLCVHistory() fetches candlestick history from CoinGecko.'}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 9 }}>
+              {'Polling runs on Lua-side timers (useLuaInterval). WebSocket reconnects automatically. Manual pushPrice() for custom data sources. All quotes include: price, 24h change, volume, high, low, timestamp, and source tag.'}
+            </Text>
+          </Half>
+          <Half>
+            <CodeBlock language="tsx" fontSize={9} code={FEED_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Callout: full stack ── */}
         <Box style={{
           backgroundColor: C.callout,
           borderLeftWidth: 3,
@@ -753,7 +985,7 @@ export function FinanceStory() {
         }}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'One hook for all indicators. One hook for portfolio management. No API keys, no subscriptions, no network. Plug in your own OHLCV data source and everything just works.'}
+            {'Full stack: live feeds (CoinGecko + Binance WS) → OHLCV candles → 13 technical indicators → native chart overlays + depth chart → portfolio tracking with encrypted storage. One import, zero configuration.'}
           </Text>
         </Box>
 

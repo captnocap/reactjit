@@ -100,6 +100,9 @@ export {
 // GIF recorder (capture Love2D window as animated GIF via ffmpeg)
 export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
 
+// Video recorder (capture Love2D window as MP4/WebM via ffmpeg pipe)
+export { useRecorder, type RecorderOptions, type RecorderResult } from './useRecorder';
+
 // Icon registry (populated by @reactjit/icons on import)
 export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
 
@@ -263,7 +266,8 @@ export { Sparkline, type SparklineProps } from './Sparkline';
 export { HorizontalBarChart, type HorizontalBarChartProps, type HorizontalBarChartBar } from './HorizontalBarChart';
 export { StackedBarChart, type StackedBarChartProps, type StackedBarChartSeries } from './StackedBarChart';
 export { LineChart, type LineChartProps, type LineChartPoint } from './LineChart';
-export { CandlestickChart, type CandlestickChartProps, type CandlestickDataPoint } from './CandlestickChart';
+export { CandlestickChart, type CandlestickChartProps, type CandlestickDataPoint, type ChartOverlay } from './CandlestickChart';
+export { DepthChart, type DepthChartProps, type DepthLevel } from './DepthChart';
 export { AreaChart, type AreaChartProps } from './AreaChart';
 export { PieChart, type PieChartProps, type PieChartSegment } from './PieChart';
 export { RadarChart, type RadarChartProps, type RadarChartAxis } from './RadarChart';
@@ -341,10 +345,10 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess, Libretro } from './capabilities';
+export { Audio, TTS, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess, Libretro } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type {
-  NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
+  NativeProps, AudioProps, TTSProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
   BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps,
   CapabilitySchema,

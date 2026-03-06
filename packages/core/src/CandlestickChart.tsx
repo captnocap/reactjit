@@ -9,8 +9,27 @@ export interface CandlestickDataPoint {
     close: number;
 }
 
+/** Line overlay drawn on top of candlestick chart (MA, EMA, etc.) */
+export interface ChartOverlay {
+    /** Y-values aligned to candle indices. NaN values are skipped. */
+    values: number[];
+    color?: Color;
+    lineWidth?: number;
+    opacity?: number;
+    /** "solid" (default) or "dashed" */
+    style?: 'solid' | 'dashed';
+    /** For band overlays (Bollinger): upper band values */
+    upper?: number[];
+    /** For band overlays (Bollinger): lower band values */
+    lower?: number[];
+    /** Fill color between upper/lower bands */
+    fillColor?: Color;
+}
+
 export interface CandlestickChartProps {
     data: CandlestickDataPoint[];
+    /** Indicator line overlays (MA, EMA, Bollinger, etc.) */
+    overlays?: ChartOverlay[];
     width?: number;
     height?: number;
     bullColor?: Color; // Color for up candles

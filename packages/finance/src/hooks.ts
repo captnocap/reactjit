@@ -2,7 +2,8 @@
  * React hooks for finance — all one-liners that wire indicators to state.
  */
 
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { useWebSocket } from '@reactjit/core';
 import type { OHLCV, Holding, PortfolioSnapshot, Timeframe, BollingerBand, MACDPoint, StochPoint, IndicatorPoint, PatternSignal } from './types';
 import { sma, ema, rsi, macd, bollingerBands, vwap, atr, detectPatterns, pivotPoints, stochastic, obv } from './indicators';
 import { portfolioSnapshot, holdingPnL, sharpeRatio, maxDrawdown, equityToReturns } from './portfolio';
@@ -163,6 +164,42 @@ export function useSyntheticCandles(opts?: {
   const reset = useCallback(() => setCandles(generate(count)), [generate, count]);
 
   return { candles, append, reset };
+}
+
+// ── WalletConnect v2 Relay ──────────────────────────────
+
+/**
+ * Build a WalletConnect v2 relay URL.
+ * This opens the relay transport only; pairing/session encryption
+ * remains the responsibility of the WalletConnect protocol layer.
+ */
+export function walletConnectV2RelayUrl(
+  projectId: string,
+  auth?: string | null,
+  relayUrl: string = 'wss://relay.walletconnect.com',
+): string {
+  const params = new URLSearchParams({ projectId });
+  if (auth) params.set('auth', auth);
+  return `${relayUrl}?${params.toString()}`;
+}
+
+/**
+ * One-liner WebSocket connection to WalletConnect v2 relay.
+ *
+ * @example
+ * const wc = useWalletConnectV2(process.env.WALLETCONNECT_PROJECT_ID ?? null);
+ */
+export function useWalletConnectV2(
+  projectId: string | null,
+  auth?: string | null,
+  relayUrl: string = 'wss://relay.walletconnect.com',
+): ReturnType<typeof useWebSocket> {
+  const url = useMemo(() => {
+    if (!projectId) return null;
+    return walletConnectV2RelayUrl(projectId, auth, relayUrl);
+  }, [projectId, auth, relayUrl]);
+
+  return useWebSocket(url);
 }
 
 // ── Re-exports for convenience ───────────────────────────

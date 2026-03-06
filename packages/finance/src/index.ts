@@ -55,7 +55,27 @@ export {
   useTechnicalAnalysis,
   usePortfolio,
   useSyntheticCandles,
+  useWalletConnectV2,
+  walletConnectV2RelayUrl,
 } from './hooks';
+
+// ── Encrypted Storage ────────────────────────────────────
+export { useSecurePortfolio } from './storage';
+export type {
+  UseSecurePortfolioOptions,
+  SecurePortfolioResult,
+  EncryptedPortfolioStore,
+} from './storage';
+
+// ── Live Price Feeds ─────────────────────────────────────
+export { usePriceFeed, useOHLCVHistory } from './feeds';
+export type {
+  PriceQuote,
+  PriceFeedOptions,
+  PriceFeedResult,
+  OHLCVHistoryOptions,
+  OHLCVHistoryResult,
+} from './feeds';
 
 // ── Components ───────────────────────────────────────────
 export {
