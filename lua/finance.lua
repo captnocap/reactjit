@@ -423,6 +423,106 @@ function M.technical_analysis(candles)
 end
 
 -- ============================================================================
+-- Portfolio math
+-- ============================================================================
+
+local function normalize_holding(h)
+  h = h or {}
+  return {
+    symbol = tostring(h.symbol or ""),
+    quantity = num(h.quantity, 0),
+    avgCost = num(h.avgCost, 0),
+    currentPrice = num(h.currentPrice, 0),
+  }
+end
+
+local function normalize_holdings(holdings)
+  local out = {}
+  holdings = holdings or {}
+  for i = 1, #holdings do
+    out[i] = normalize_holding(holdings[i])
+  end
+  return out
+end
+
+function M.portfolio_snapshot(holdings)
+  local list = normalize_holdings(holdings)
+  local totalValue = 0
+  local totalCost = 0
+
+  for i = 1, #list do
+    local h = list[i]
+    totalValue = totalValue + h.quantity * h.currentPrice
+    totalCost = totalCost + h.quantity * h.avgCost
+  end
+
+  local pnl = totalValue - totalCost
+  local pnlPercent = (totalCost == 0) and 0 or (pnl / nz(totalCost))
+  local allocation = {}
+  for i = 1, #list do
+    local h = list[i]
+    allocation[i] = {
+      symbol = h.symbol,
+      weight = (totalValue == 0) and 0 or ((h.quantity * h.currentPrice) / nz(totalValue)),
+    }
+  end
+
+  return {
+    holdings = list,
+    totalValue = totalValue,
+    totalCost = totalCost,
+    pnl = pnl,
+    pnlPercent = pnlPercent * 100,
+    allocation = allocation,
+  }
+end
+
+function M.portfolio_update_price(holdings, symbol, price)
+  local list = normalize_holdings(holdings)
+  local target = tostring(symbol or "")
+  local nextPrice = num(price, 0)
+  for i = 1, #list do
+    if list[i].symbol == target then
+      list[i].currentPrice = nextPrice
+    end
+  end
+  return list
+end
+
+function M.portfolio_add_holding(holdings, incoming)
+  local list = normalize_holdings(holdings)
+  local h = normalize_holding(incoming)
+  if h.symbol == "" then return list end
+
+  for i = 1, #list do
+    local existing = list[i]
+    if existing.symbol == h.symbol then
+      local totalQty = existing.quantity + h.quantity
+      local totalCost = existing.quantity * existing.avgCost + h.quantity * h.avgCost
+      existing.quantity = totalQty
+      existing.avgCost = (totalQty == 0) and 0 or (totalCost / nz(totalQty))
+      existing.currentPrice = h.currentPrice
+      return list
+    end
+  end
+
+  insert(list, h)
+  return list
+end
+
+function M.portfolio_remove_holding(holdings, symbol)
+  local list = normalize_holdings(holdings)
+  local target = tostring(symbol or "")
+  local out = {}
+  for i = 1, #list do
+    if list[i].symbol ~= target then
+      insert(out, list[i])
+    end
+  end
+  return out
+end
+
+-- ============================================================================
 -- RPC handlers
 -- ============================================================================
 
@@ -430,6 +530,32 @@ local handlers = {}
 
 handlers["finance:technical_analysis"] = function(args)
   return M.technical_analysis(args and args.candles or {})
+end
+
+handlers["finance:portfolio_snapshot"] = function(args)
+  return M.portfolio_snapshot(args and args.holdings or {})
+end
+
+handlers["finance:portfolio_update_price"] = function(args)
+  return M.portfolio_update_price(
+    args and args.holdings or {},
+    args and args.symbol or nil,
+    args and args.price or nil
+  )
+end
+
+handlers["finance:portfolio_add_holding"] = function(args)
+  return M.portfolio_add_holding(
+    args and args.holdings or {},
+    args and args.holding or nil
+  )
+end
+
+handlers["finance:portfolio_remove_holding"] = function(args)
+  return M.portfolio_remove_holding(
+    args and args.holdings or {},
+    args and args.symbol or nil
+  )
 end
 
 function M.getHandlers()
