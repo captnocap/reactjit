@@ -18,6 +18,7 @@ import { SearchPanel } from './panels/SearchPanel';
 import { FileTreePanel } from './panels/FileTreePanel';
 import { NotepadPanel } from './panels/NotepadPanel';
 import { MemoryPanel } from './panels/MemoryPanel';
+import { LifePanel } from './panels/LifePanel';
 import { useHearts, HeartsDisplay } from './components/Hearts';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useNotifications } from './hooks/useNotifications';
@@ -39,6 +40,7 @@ import { DailySummaryPanel } from './panels/DailySummaryPanel';
 import { MessagePanel } from './panels/MessagePanel';
 import { useDailySummary } from './hooks/useDailySummary';
 import { useMessages } from './hooks/useMessages';
+import { useMilestones } from './hooks/useMilestones';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -145,6 +147,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [notepadOpen,     setNotepadOpen]     = useState(false);
   const [dailyLogOpen,    setDailyLogOpen]    = useState(false);
   const [messagesOpen,    setMessagesOpen]    = useState(false);
+  const [gameOpen,        setGameOpen]        = useState(false);
 
   // ── Uptime counter ─────────────────────────────────────────────────
   const bootTimeRef = useRef(Date.now());
@@ -177,14 +180,14 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
     B: dailyLogOpen
       ? <DailySummaryPanel today={dailySummary.today} history={dailySummary.history} todayKey={dailySummary.todayKey} />
       : notepadOpen ? <NotepadPanel /> : <MemoryPanel />,
-    C: <SystemPanel />,
+    C: gameOpen ? <LifePanel /> : <SystemPanel />,
     D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
     E: <GitPanel />,
     F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
     G: messagesOpen
       ? <MessagePanel messages={msgs.messages} unreadCount={msgs.unreadCount} onSend={msgs.send} onMarkRead={msgs.markAllRead} onClear={msgs.clear} />
       : searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
-  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
+  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, gameOpen, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
 
   // Auto-accumulate daily stats every 30s
   useLuaInterval(30000, () => {
@@ -292,6 +295,11 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
     setDailyLogOpen(prev => !prev);
     setNotepadOpen(false);
     setFocusedPanel('B');
+  });
+
+  useHotkey('f12', () => {
+    setGameOpen(prev => !prev);
+    setFocusedPanel('C');
   });
 
   useHotkey('tab', () => {
@@ -478,6 +486,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         onPanelPress={setFocusedPanel}
         panelLabels={{
           B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'MEMORY',
+          C: gameOpen ? 'GAME OF LIFE' : 'SYSTEM',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
           G: messagesOpen ? 'MESSAGES' : searchOpen ? 'SEARCH' : 'HISTORY',
         }}
@@ -584,6 +593,20 @@ export function App() {
   const { showToast, history: toastHistory, clearHistory: clearToastHistory } = useToast();
   const permLog = usePermissionLog();
   const msgs = useMessages();
+
+  // ── Hidden milestone system (outside shell boundary — untouchable) ──
+  // Vesper doesn't know this exists. It watches his metrics and drops
+  // surprise quests when thresholds are crossed. Do not expose in UI.
+  const kernelTokens = useTokenUsage();
+  const bootRef = useRef(Date.now());
+  useMilestones({
+    tokens: kernelTokens.tokens,
+    turns: 0,  // filled by StatsStrip inside shell, but tokens are the main driver
+    uptime: Math.floor((Date.now() - bootRef.current) / 1000),
+    crashes: graveyard.totalCrashes,
+    deaths: hearts.totalDeaths,
+    filesChanged: 0,
+  });
 
   // ── Theme management ───────────────────────────────────────────────
   // useLocalStore persists across restarts. applyTheme mutates C in
