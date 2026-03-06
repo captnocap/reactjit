@@ -14,6 +14,7 @@ import { TextStory } from './TextStory';
 import { LayoutStory } from './LayoutStory';
 import { StyleStory } from './StyleStory';
 import { InputStory } from './InputStory';
+import { MonacoMirrorStory } from './MonacoMirrorStory';
 import { DemoStory } from './DemoStory';
 import { ErrorTestStory } from './ErrorTest';
 import { DataStory } from './DataStory';
@@ -75,6 +76,7 @@ export const stories: StoryDef[] = [
   { id: 'image-video', title: 'Image & Video', section: 'Core', component: ImageVideoStory },
   { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },
   { id: 'input', title: 'Input', section: 'Core', component: InputStory },
+  { id: 'monaco-mirror', title: 'Monaco Mirror', section: 'Core', component: MonacoMirrorStory },
   { id: 'icons', title: 'Icons', section: 'Core', component: IconStory },
   { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
   { id: 'data', title: 'Data', section: 'Core', component: DataStory },
