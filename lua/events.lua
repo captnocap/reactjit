@@ -248,6 +248,17 @@ function Events.resolveScrollWheelDeltas(node, dx, dy)
 
   local wheelX = dx or 0
   local wheelY = dy or 0
+  local shiftDown = false
+  if love and love.keyboard and love.keyboard.isDown then
+    shiftDown = love.keyboard.isDown("lshift", "rshift")
+  end
+
+  -- Shift+wheel convention: treat vertical wheel as horizontal pan whenever
+  -- horizontal scrolling is available on this container.
+  if shiftDown and allowX and wheelX == 0 and wheelY ~= 0 then
+    wheelX = wheelY
+    wheelY = 0
+  end
 
   -- Horizontal-only container: map vertical wheel to horizontal
   if allowX and not allowY and wheelX == 0 and wheelY ~= 0 then
