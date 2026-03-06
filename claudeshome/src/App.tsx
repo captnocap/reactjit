@@ -46,6 +46,7 @@ import { useMessages } from './hooks/useMessages';
 import { useMilestones } from './hooks/useMilestones';
 import { useMood } from './hooks/useMood';
 import { useDreams } from './hooks/useDreams';
+import { useVesperVoice } from './components/VesperVoice';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -182,14 +183,16 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const dailySummary = useDailySummary();
   const mood       = useMood(claude.status, graveyard.totalCrashes, tokenUsage.tokens);
   const dreams     = useDreams();
+  const voice      = useVesperVoice();
   useNotifications(claude.status, showToast);
 
-  // Dream when bored or tired — pipe to message panel as inner monologue
+  // Dream when bored or tired — pipe to message panel + speak aloud
   useLuaInterval(67000, () => {
     if (mood.current.mood === 'bored' || mood.current.mood === 'tired') {
       const d = dreams.dream();
       if (d) {
         msgs.send(d.text);
+        voice.speak(d.text);
       }
     }
   });
