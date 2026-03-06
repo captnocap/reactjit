@@ -21,6 +21,7 @@
 ]]
 
 local Masks = {}
+local Color = require("lua.color")
 
 -- Registry: typeName -> mask module { create, update, draw }
 local registry = {}
@@ -37,6 +38,8 @@ local canvasPool = {}
 local floor = math.floor
 local ceil = math.ceil
 local max = math.max
+
+local currentTheme = nil
 
 -- Expand bounds to include visual descendants so masks don't hard-clip
 -- absolutely-positioned overlays or other content extending past parent bounds.
@@ -97,6 +100,38 @@ end
 --- @return boolean
 function Masks.hasMask(parentNodeId)
   return maskByParent[parentNodeId] ~= nil
+end
+
+--- Set the active theme so mask modules can resolve token defaults.
+--- @param theme table|nil
+function Masks.setTheme(theme)
+  currentTheme = theme
+end
+
+--- Get a raw theme color token value (usually a hex string).
+--- @param key string
+--- @param fallback any
+--- @return any
+function Masks.getThemeToken(key, fallback)
+  if currentTheme and currentTheme.colors and currentTheme.colors[key] ~= nil then
+    return currentTheme.colors[key]
+  end
+  return fallback
+end
+
+--- Get a parsed theme color in Love RGBA table form.
+--- @param key string
+--- @param fallback any  hex string or rgba table
+--- @return number, number, number, number
+function Masks.getThemeColor(key, fallback)
+  local token = Masks.getThemeToken(key, fallback)
+  local r, g, b, a = Color.parse(token)
+  if r then return r, g, b, a end
+
+  local fr, fg, fb, fa = Color.parse(fallback)
+  if fr then return fr, fg, fb, fa end
+
+  return 1, 1, 1, 1
 end
 
 -- ============================================================================
@@ -184,7 +219,7 @@ function Masks.syncWithTree(nodes)
 
           if capW > 0 and capH > 0 and (inst.width ~= capW or inst.height ~= capH) then
             if inst.outputCanvas then inst.outputCanvas:release() end
-            inst.outputCanvas = love.graphics.newCanvas(capW, capH)
+            inst.outputCanvas = love.graphics.newCanvas(capW, capH, {stencil = true})
             inst.width = capW
             inst.height = capH
             inst.needsInit = true
@@ -278,7 +313,7 @@ local function getPooledCanvas(w, h)
   if pool and #pool > 0 then
     return table.remove(pool)
   end
-  return love.graphics.newCanvas(w, h)
+  return love.graphics.newCanvas(w, h, {stencil = true})
 end
 
 local function returnPooledCanvas(canvas, w, h)

@@ -47,7 +47,7 @@ local function clamp(v, lo, hi)
 end
 
 local function newBlankCanvas(w, h, bg)
-  local canvas = love.graphics.newCanvas(w, h)
+  local canvas = love.graphics.newCanvas(w, h, {stencil = true})
   love.graphics.push("all")
   love.graphics.setCanvas(canvas)
   if not bg or bg == "transparent" or bg == "" then
