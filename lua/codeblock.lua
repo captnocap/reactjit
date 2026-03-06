@@ -351,6 +351,39 @@ local function getContentWidth(node)
   return maxW
 end
 
+--- Returns scrollbar geometry if content overflows, or nil.
+--- { trackX, trackY, trackW, barH, thumbX, thumbW, maxScroll, hitH }
+local function getScrollbarGeometry(node)
+  local c = node.computed
+  if not c then return nil end
+  local s = node.style or {}
+  local padding = s.padding or 10
+  local viewW = c.w - 2 * padding
+  local contentW = getContentWidth(node)
+  if contentW <= viewW then return nil end
+
+  local ss = getScrollState(node)
+  local scrollX = ss.scrollX or 0
+  local barH = 3
+  local barY = c.y + c.h - barH - 2
+  local trackW = c.w - 8
+  local trackX = c.x + 4
+  local ratio = viewW / contentW
+  local thumbW = math.max(20, trackW * ratio)
+  local maxScroll = contentW - viewW
+  local thumbX = trackX + (maxScroll > 0 and (scrollX / maxScroll) * (trackW - thumbW) or 0)
+  local hitH = 12 -- generous hit area above the thin bar
+
+  return {
+    trackX = trackX, trackY = barY, trackW = trackW,
+    barH = barH, thumbX = thumbX, thumbW = thumbW,
+    maxScroll = maxScroll, hitH = hitH,
+  }
+end
+
+-- Active scrollbar drag state (only one codeblock can be dragged at a time)
+local scrollDrag = nil -- { node, grabOffset }
+
 --- Handle mouse wheel on a CodeBlock. Returns true if consumed.
 function CodeBlock.handleWheel(node, x, y)
   local c = node.computed
@@ -408,6 +441,28 @@ function CodeBlock.handleMousePressed(node, mx, my, button)
   local c = node.computed
   if not c then return false end
 
+  -- Check scrollbar hit (before copy button since scrollbar is at bottom)
+  local geo = getScrollbarGeometry(node)
+  if geo then
+    local hitTop = geo.trackY - geo.hitH
+    if mx >= geo.trackX and mx <= geo.trackX + geo.trackW
+       and my >= hitTop and my <= geo.trackY + geo.barH then
+      -- Click on scrollbar area: if on thumb, grab it; otherwise jump
+      if mx >= geo.thumbX and mx <= geo.thumbX + geo.thumbW then
+        scrollDrag = { node = node, grabOffset = mx - geo.thumbX }
+      else
+        -- Click on track: jump thumb center to click position
+        local ss = getScrollState(node)
+        local thumbCenter = mx - geo.trackX - geo.thumbW / 2
+        local ratio = math.max(0, math.min(1, thumbCenter / (geo.trackW - geo.thumbW)))
+        ss.scrollX = ratio * geo.maxScroll
+        scrollDrag = { node = node, grabOffset = geo.thumbW / 2 }
+      end
+      return true
+    end
+  end
+
+  -- Check copy button
   local btnFont = getMeasure().getFont(9, nil, nil)
   local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
@@ -420,6 +475,36 @@ function CodeBlock.handleMousePressed(node, mx, my, button)
     return true
   end
   return false
+end
+
+function CodeBlock.handleMouseMoved(mx, my)
+  if not scrollDrag then return false end
+  local node = scrollDrag.node
+  -- Convert screen coords to content-space (account for scroll ancestors)
+  local ok, Events = pcall(require, "lua.events")
+  if ok and Events and Events.screenToContent then
+    mx, my = Events.screenToContent(node, mx, my)
+  end
+  local geo = getScrollbarGeometry(node)
+  if not geo then
+    scrollDrag = nil
+    return false
+  end
+  local ss = getScrollState(node)
+  local thumbPos = mx - scrollDrag.grabOffset - geo.trackX
+  local ratio = math.max(0, math.min(1, thumbPos / (geo.trackW - geo.thumbW)))
+  ss.scrollX = ratio * geo.maxScroll
+  return true
+end
+
+function CodeBlock.handleMouseReleased()
+  if not scrollDrag then return false end
+  scrollDrag = nil
+  return true
+end
+
+function CodeBlock.isDragging()
+  return scrollDrag ~= nil
 end
 
 function CodeBlock.update(dt)
@@ -586,28 +671,14 @@ function CodeBlock.render(node, c, effectiveOpacity)
   end
 
   -- Horizontal scrollbar indicator (only when content overflows)
-  local viewW = c.w - 2 * padding
-  local maxLineW = 0
-  for _, line in ipairs(lines) do
-    local w = font:getWidth(line)
-    if w > maxLineW then maxLineW = w end
-  end
-  if maxLineW > viewW then
-    local barH = 3
-    local barY = c.y + c.h - barH - 2
-    local trackW = c.w - 8
-    local trackX = c.x + 4
-    local ratio = viewW / maxLineW
-    local thumbW = math.max(20, trackW * ratio)
-    local maxScroll = maxLineW - viewW
-    local thumbX = trackX + (maxScroll > 0 and (scrollX / maxScroll) * (trackW - thumbW) or 0)
-
+  local geo = getScrollbarGeometry(node)
+  if geo then
     -- Track
     love.graphics.setColor(1, 1, 1, 0.06 * effectiveOpacity)
-    love.graphics.rectangle("fill", trackX, barY, trackW, barH, 1.5, 1.5)
+    love.graphics.rectangle("fill", geo.trackX, geo.trackY, geo.trackW, geo.barH, 1.5, 1.5)
     -- Thumb
     love.graphics.setColor(1, 1, 1, 0.25 * effectiveOpacity)
-    love.graphics.rectangle("fill", thumbX, barY, thumbW, barH, 1.5, 1.5)
+    love.graphics.rectangle("fill", geo.thumbX, geo.trackY, geo.thumbW, geo.barH, 1.5, 1.5)
   end
 
   -- Draw text selection highlight

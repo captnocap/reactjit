@@ -4096,6 +4096,8 @@ function ReactJIT.mousereleased(x, y, button)
   if M.inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if M.settingsEnabled and settings.mousereleased(x, y, button) then return end
   if M.themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
+  -- CodeBlock scrollbar drag release (before general scrollbar)
+  if M.codeblock and M.codeblock.handleMouseReleased and M.codeblock.handleMouseReleased() then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
 
@@ -4180,6 +4182,11 @@ function ReactJIT.mousemoved(x, y)
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
   if M.inspectorEnabled and devtools.mousemoved(x, y) then return end
+  -- CodeBlock scrollbar drag (before general scrollbar — takes priority when active)
+  if M.codeblock and M.codeblock.isDragging and M.codeblock.isDragging() then
+    M.codeblock.handleMouseMoved(x, y)
+    return
+  end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
   if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
