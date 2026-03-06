@@ -103,6 +103,8 @@ export function Spreadsheet({
   };
 
   const totalWidth = ROW_HEADER_WIDTH + cols * columnWidth;
+  const viewportRows = Math.max(6, Math.min(14, rows + 1));
+  const gridViewportHeight = viewportRows * rowHeight + 2;
 
   return (
     <Box style={{
@@ -172,7 +174,7 @@ export function Spreadsheet({
         </Box>
       )}
 
-      <ScrollView style={{ maxHeight: rows * rowHeight + 34 }}>
+      <ScrollView style={{ width: '100%', height: gridViewportHeight }}>
         <Box style={{ width: totalWidth }}>
           <Box style={{
             flexDirection: 'row',

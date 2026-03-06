@@ -340,7 +340,6 @@ export function evaluateSpreadsheet(inputCells: SpreadsheetCellMap, options: Spr
 
       for (const [name, fn] of Object.entries(functions)) {
         runtimeScope[name] = fn;
-        runtimeScope[name.toLowerCase()] = fn;
       }
 
       const keys = Object.keys(runtimeScope);
