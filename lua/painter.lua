@@ -39,6 +39,7 @@ local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
 local Log = require("lua.debug_log")
+local StrokeDash = require("lua.stroke_dash")
 
 -- Frame budget: max paintNode calls per paint pass.
 local _paintBudget = 100000
@@ -536,7 +537,7 @@ end
 --- @param c           table     Computed rect {x, y, w, h}
 --- @param paths       table     Array of polyline arrays, each [x0,y0,x1,y1,...]
 --- @param strokeWidth number    Line thickness before scaling (default 2)
-local function drawStrokePaths(c, paths, strokeWidth)
+local function drawStrokePaths(c, paths, strokeWidth, dasharray, dashoffset)
   local sx = c.w / 24
   local sy = c.h / 24
   local scale = math.min(sx, sy)
@@ -544,6 +545,7 @@ local function drawStrokePaths(c, paths, strokeWidth)
   -- Love build in this repo accepts only: none/miter/bevel.
   love.graphics.setLineJoin("bevel")
   love.graphics.setLineStyle("smooth")
+  local hasDash = dasharray and type(dasharray) == "table" and #dasharray >= 2
   for _, path in ipairs(paths) do
     if #path >= 4 then
       local scaled = {}
@@ -551,7 +553,21 @@ local function drawStrokePaths(c, paths, strokeWidth)
         scaled[#scaled + 1] = c.x + path[i] * sx
         scaled[#scaled + 1] = c.y + path[i + 1] * sy
       end
-      love.graphics.line(scaled)
+      if hasDash then
+        -- Scale dash values to match the path coordinate system
+        local scaledDash = {}
+        for i, v in ipairs(dasharray) do scaledDash[i] = v * scale end
+        local cumDist, totalLen, nPts = StrokeDash.polylineMetrics(scaled)
+        local dashes = StrokeDash.generateDashes(
+          scaled, cumDist, totalLen, nPts,
+          scaledDash, (dashoffset or 0) * scale
+        )
+        for _, coords in ipairs(dashes) do
+          love.graphics.line(coords)
+        end
+      else
+        love.graphics.line(scaled)
+      end
     end
   end
   love.graphics.setLineWidth(1)
@@ -965,7 +981,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
       end
       Painter.applyOpacity(effectiveOpacity)
-      drawStrokePaths(c, s.strokePaths, s.strokeWidth)
+      drawStrokePaths(c, s.strokePaths, s.strokeWidth, s.strokeDasharray, s.strokeDashoffset)
     end
 
     -- Border stroke
@@ -979,11 +995,30 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local hasPerSideBorder = (bwT > 0 or bwR > 0 or bwB > 0 or bwL > 0) and not hasUniformBorder
 
     if hasUniformBorder then
-      -- Fast path: uniform border via rectangle stroke
       Painter.setColor(s.borderColor or { 0.5, 0.5, 0.5, 1 })
       Painter.applyOpacity(effectiveOpacity)
       love.graphics.setLineWidth(s.borderWidth)
-      if isPerCorner then
+
+      if s.strokeDasharray and type(s.strokeDasharray) == "table" and #s.strokeDasharray >= 2 then
+        -- Dashed border: build perimeter, generate dash segments, draw
+        local r_tl = isPerCorner and tl or borderRadius
+        local r_tr = isPerCorner and tr or borderRadius
+        local r_br = isPerCorner and br or borderRadius
+        local r_bl = isPerCorner and bl or borderRadius
+        local pts, cumDist, totalLen, nPts = StrokeDash.rectPerimeter(
+          c.x, c.y, c.w, c.h, r_tl, r_tr, r_br, r_bl
+        )
+        local dashes = StrokeDash.generateDashes(
+          pts, cumDist, totalLen, nPts,
+          s.strokeDasharray, s.strokeDashoffset or 0
+        )
+        love.graphics.setLineJoin("bevel")
+        love.graphics.setLineStyle("smooth")
+        for _, coords in ipairs(dashes) do
+          love.graphics.line(coords)
+        end
+        love.graphics.setLineStyle("rough")
+      elseif isPerCorner then
         drawRoundedRect("line", c.x, c.y, c.w, c.h, tl, tr, bl, br)
       else
         love.graphics.rectangle("line", c.x, c.y, c.w, c.h, borderRadius, borderRadius)

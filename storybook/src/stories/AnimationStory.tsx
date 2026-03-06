@@ -44,6 +44,7 @@ const TABS: TabDef[] = [
   { id: 'springs', label: 'Springs', icon: 'zap' },
   { id: 'transitions', label: 'Transitions', icon: 'sliders' },
   { id: 'keyframes', label: 'Keyframes', icon: 'repeat' },
+  { id: 'strokes', label: 'Strokes', icon: 'pen-tool' },
   { id: 'easings', label: 'Easings', icon: 'trending-up' },
   { id: 'presets', label: 'Presets', icon: 'package' },
   { id: 'patterns', label: 'Patterns', icon: 'layers' },
@@ -549,6 +550,268 @@ function KeyframesTab() {
     playState: 'running', // or 'paused'
   },
 }} />`} />
+
+      </Box>
+    </ScrollView>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Tab: Strokes (SVG-style dash animations)
+// ═══════════════════════════════════════════════════════════
+
+function StrokesTab() {
+  const c = useThemeColors();
+  const [revealed, setRevealed] = useState(false);
+  const [spinnerSpeed, setSpinnerSpeed] = useState(1);
+
+  // Perimeter approximation for draw-on reveal (200x120 rounded rect, r=12)
+  // P ≈ 2*(w+h) - 4*(4-pi)*r ≈ 2*(200+120) - 4*0.858*12 ≈ 599
+  const perim = 600;
+
+  return (
+    <ScrollView style={{ width: '100%', height: '100%' }}>
+      <Box style={{ padding: 20, gap: 24 }}>
+        <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>{'Stroke Dash Animations'}</Text>
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'SVG-style strokeDasharray and strokeDashoffset — implemented natively in Lua. Animatable via transitions and keyframes.'}
+        </Text>
+
+        {/* Marching ants */}
+        <Box style={{ gap: 8 }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{'Marching Ants'}</Text>
+          <Text style={{ color: c.muted, fontSize: 9 }}>{'Animated dashoffset creates the classic marching ants selection border.'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 16 }}>
+            <Box style={{
+              width: 120, height: 80, borderRadius: 8,
+              borderWidth: 2, borderColor: A.accentBright,
+              strokeDasharray: [8, 8],
+              strokeDashoffset: 0,
+              justifyContent: 'center', alignItems: 'center',
+              animation: {
+                keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 16 } },
+                duration: 600, iterations: -1, easing: 'linear',
+              },
+            }}>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'selected'}</Text>
+            </Box>
+
+            <Box style={{
+              width: 120, height: 80, borderRadius: 0,
+              borderWidth: 2, borderColor: A.fire,
+              strokeDasharray: [12, 6],
+              strokeDashoffset: 0,
+              justifyContent: 'center', alignItems: 'center',
+              animation: {
+                keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 18 } },
+                duration: 400, iterations: -1, easing: 'linear',
+              },
+            }}>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'danger zone'}</Text>
+            </Box>
+
+            <Box style={{
+              width: 80, height: 80, borderRadius: 40,
+              borderWidth: 2, borderColor: A.emerald,
+              strokeDasharray: [6, 10],
+              strokeDashoffset: 0,
+              justifyContent: 'center', alignItems: 'center',
+              animation: {
+                keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 16 } },
+                duration: 800, iterations: -1, easing: 'linear',
+              },
+            }}>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{'orbit'}</Text>
+            </Box>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={`<Box style={{
+  borderWidth: 2, borderColor: '#8b5cf6', borderRadius: 8,
+  strokeDasharray: [8, 8],
+  animation: {
+    keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 16 } },
+    duration: 600, iterations: -1, easing: 'linear',
+  },
+}} />`} />
+        </Box>
+
+        {/* Draw-on reveal */}
+        <Box style={{ gap: 8 }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{'Draw-On Reveal'}</Text>
+          <Text style={{ color: c.muted, fontSize: 9 }}>
+            {'dasharray = [perimeter, perimeter]. Transition dashoffset from perimeter to 0. The border draws itself on.'}
+          </Text>
+          <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+            <Box style={{
+              width: 200, height: 120, borderRadius: 12,
+              borderWidth: 3, borderColor: A.cyan,
+              strokeDasharray: [perim, perim],
+              strokeDashoffset: revealed ? 0 : perim,
+              justifyContent: 'center', alignItems: 'center',
+              transition: { strokeDashoffset: { duration: 2000, easing: 'easeInOut' } },
+            }}>
+              <Text style={{ color: A.cyan, fontSize: 14, fontWeight: 'bold', opacity: revealed ? 1 : 0.2 }}>
+                {'Revealed'}
+              </Text>
+            </Box>
+            <Box style={{ gap: 8 }}>
+              <Pressable onPress={() => setRevealed(v => !v)}>
+                <Box style={{
+                  paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8,
+                  backgroundColor: revealed ? A.fire : A.emerald, borderRadius: 6,
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                    {revealed ? 'Reset' : 'Draw On'}
+                  </Text>
+                </Box>
+              </Pressable>
+              <Text style={{ color: c.muted, fontSize: 9 }}>
+                {'Uses transition on strokeDashoffset'}
+              </Text>
+            </Box>
+          </Box>
+          <CodeBlock language="tsx" fontSize={9} code={`// Draw-on reveal
+const perimeter = 600;
+<Box style={{
+  borderWidth: 3, borderColor: '#06b6d4',
+  strokeDasharray: [perimeter, perimeter],
+  strokeDashoffset: revealed ? 0 : perimeter,
+  transition: { strokeDashoffset: { duration: 2000, easing: 'easeInOut' } },
+}} />`} />
+        </Box>
+
+        {/* Spinner / loader */}
+        <Box style={{ gap: 8 }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{'Dash Spinners'}</Text>
+          <Text style={{ color: c.muted, fontSize: 9 }}>
+            {'Combine growing dasharray with rotating dashoffset for spinner effects.'}
+          </Text>
+          <Box style={{ flexDirection: 'row', gap: 24, alignItems: 'center' }}>
+            {/* Simple spinner */}
+            <Box style={{ alignItems: 'center', gap: 6 }}>
+              <Box style={{
+                width: 48, height: 48, borderRadius: 24,
+                borderWidth: 3, borderColor: A.accentBright,
+                strokeDasharray: [40, 110],
+                animation: {
+                  keyframes: {
+                    0: { strokeDashoffset: 0 },
+                    100: { strokeDashoffset: -150 },
+                  },
+                  duration: 1200 / spinnerSpeed, iterations: -1, easing: 'linear',
+                },
+              }} />
+              <Text style={{ color: c.muted, fontSize: 8 }}>{'simple'}</Text>
+            </Box>
+
+            {/* Growing spinner */}
+            <Box style={{ alignItems: 'center', gap: 6 }}>
+              <Box style={{
+                width: 48, height: 48, borderRadius: 24,
+                borderWidth: 3, borderColor: A.emerald,
+                strokeDasharray: [20, 130],
+                animation: {
+                  keyframes: {
+                    0: { strokeDasharray: [8, 142], strokeDashoffset: 0 },
+                    50: { strokeDasharray: [60, 90], strokeDashoffset: -40 },
+                    100: { strokeDasharray: [8, 142], strokeDashoffset: -150 },
+                  },
+                  duration: 2000 / spinnerSpeed, iterations: -1, easing: 'easeInOut',
+                },
+              }} />
+              <Text style={{ color: c.muted, fontSize: 8 }}>{'growing'}</Text>
+            </Box>
+
+            {/* Double ring */}
+            <Box style={{ alignItems: 'center', gap: 6 }}>
+              <Box style={{ width: 48, height: 48 }}>
+                <Box style={{
+                  position: 'absolute', left: 0, top: 0, width: 48, height: 48,
+                  borderRadius: 24, borderWidth: 2, borderColor: A.fire,
+                  strokeDasharray: [30, 120],
+                  animation: {
+                    keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: -150 } },
+                    duration: 1000 / spinnerSpeed, iterations: -1, easing: 'linear',
+                  },
+                }} />
+                <Box style={{
+                  position: 'absolute', left: 6, top: 6, width: 36, height: 36,
+                  borderRadius: 18, borderWidth: 2, borderColor: A.amber,
+                  strokeDasharray: [25, 88],
+                  animation: {
+                    keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 113 } },
+                    duration: 1400 / spinnerSpeed, iterations: -1, easing: 'linear',
+                  },
+                }} />
+              </Box>
+              <Text style={{ color: c.muted, fontSize: 8 }}>{'double'}</Text>
+            </Box>
+
+            {/* Speed control */}
+            <Box style={{ gap: 4 }}>
+              <Text style={{ color: c.muted, fontSize: 9 }}>{`Speed: ${spinnerSpeed}x`}</Text>
+              <Box style={{ flexDirection: 'row', gap: 4 }}>
+                {[0.5, 1, 2, 4].map(s => (
+                  <Pressable key={s} onPress={() => setSpinnerSpeed(s)}>
+                    <Box style={{
+                      paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
+                      backgroundColor: spinnerSpeed === s ? A.accentDim : c.surface,
+                      borderRadius: 4, borderWidth: 1,
+                      borderColor: spinnerSpeed === s ? A.accent : c.border,
+                    }}>
+                      <Text style={{ color: spinnerSpeed === s ? A.accentBright : c.muted, fontSize: 9 }}>
+                        {`${s}x`}
+                      </Text>
+                    </Box>
+                  </Pressable>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Casino lights */}
+        <Box style={{ gap: 8 }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{'Casino Lights'}</Text>
+          <Box style={{
+            width: '100%', height: 60, borderRadius: 10,
+            borderWidth: 4, borderColor: A.amber,
+            strokeDasharray: [4, 12],
+            justifyContent: 'center', alignItems: 'center',
+            backgroundColor: 'rgba(245,158,11,0.05)',
+            animation: {
+              keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 16 } },
+              duration: 300, iterations: -1, easing: 'linear',
+            },
+          }}>
+            <Text style={{ color: A.amber, fontSize: 16, fontWeight: 'bold', letterSpacing: 4 }}>
+              {'JACKPOT'}
+            </Text>
+          </Box>
+        </Box>
+
+        {/* Dashed patterns gallery */}
+        <Box style={{ gap: 8 }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{'Dash Patterns'}</Text>
+          <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+            {[
+              { label: '[4, 4]', arr: [4, 4], color: c.muted },
+              { label: '[12, 4]', arr: [12, 4], color: A.fire },
+              { label: '[8, 4, 2, 4]', arr: [8, 4, 2, 4], color: A.cyan },
+              { label: '[20, 5, 5, 5]', arr: [20, 5, 5, 5], color: A.emerald },
+              { label: '[2, 8]', arr: [2, 8], color: A.pink },
+              { label: '[15, 3, 3, 3, 3, 3]', arr: [15, 3, 3, 3, 3, 3], color: A.accentBright },
+            ].map(d => (
+              <Box key={d.label} style={{
+                width: 100, height: 60, borderRadius: 6,
+                borderWidth: 2, borderColor: d.color,
+                strokeDasharray: d.arr,
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+                <Text style={{ color: d.color, fontSize: 8 }}>{d.label}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
 
       </Box>
     </ScrollView>
@@ -1149,6 +1412,7 @@ export function AnimationStory() {
     springs: SpringsTab,
     transitions: TransitionsTab,
     keyframes: KeyframesTab,
+    strokes: StrokesTab,
     easings: EasingsTab,
     presets: PresetsTab,
     patterns: PatternsTab,

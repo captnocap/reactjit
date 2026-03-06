@@ -159,6 +159,11 @@ export interface Style {
   strokeWidth?: number;       // Line thickness (default 2)
   strokeColor?: Color;        // Defaults to `color` (inherits text color)
 
+  // Stroke dash animation (SVG-style dash patterns)
+  // Works on borders (borderWidth > 0) and strokePaths.
+  strokeDasharray?: number[];  // [dash, gap] or [dash, gap, dash, gap, ...]
+  strokeDashoffset?: number;   // Shifts the pattern start — animate for marching ants, draw-on, spinners
+
   // CSS Transitions (Lua-side: JS declares targets, Lua interpolates)
   // Per-property: transition: { backgroundColor: { duration: 300, easing: 'easeInOut' } }
   // Or all props:  transition: { all: { duration: 300 } }
@@ -772,6 +777,38 @@ export interface AudioProps {
 }
 
 /**
+ * Declarative text-to-speech via Kokoro TTS.
+ *
+ * @example
+ * <TTS text="Hello world" />
+ * <TTS text="Build complete" voice="af_heart" speed={1.2} onComplete={() => next()} />
+ * <TTS text={message} voice="am_adam" playing={shouldSpeak} volume={0.8} />
+ */
+export interface TTSProps {
+  /** Text to speak */
+  text?: string;
+  /** Voice name (default: af_heart). See kokoro-tts --help-voices for full list */
+  voice?: string;
+  /** Speech rate 0.5-2.0 (default: 1.0) */
+  speed?: number;
+  /** Speak when true (default: true) */
+  playing?: boolean;
+  /** Playback volume 0-1 (default: 1.0) */
+  volume?: number;
+  /** Language code (default: en-us) */
+  lang?: string;
+  /** Fires when TTS generation begins */
+  onStart?: (event: LoveEvent) => void;
+  /** Fires when wav file is ready (before playback) */
+  onGenerated?: (event: LoveEvent) => void;
+  /** Fires when playback finishes */
+  onComplete?: (event: LoveEvent) => void;
+  /** Fires on generation or playback failure */
+  onError?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
+/**
  * Declarative timer.
  *
  * @example
@@ -1060,6 +1097,52 @@ export interface SPIDeviceProps {
   speed?: number;
   mode?: number;
   bitsPerWord?: number;
+  key?: string | number;
+}
+
+// ── Game Server Capability ────────────────────────────────
+
+/**
+ * Declarative game server hosting.
+ *
+ * Supports Valve engines by generation (GoldSrc, Source, Source 2) and Minecraft.
+ * Config can be an inline object, a useLocalStore result, or a JSON file path.
+ *
+ * @example
+ * <GameServer type="source2" config={{ port: 27015, game: "cs2", map: "de_dust2" }} />
+ * <GameServer type="minecraft" config={{ port: 25565, difficulty: "normal" }} />
+ * <GameServer type="goldsrc" config={{ port: 27015, game: "cstrike", map: "de_dust2" }} />
+ */
+export interface GameServerProps {
+  /**
+   * Server engine type:
+   * - "goldsrc"   — HL1, CS 1.6, TFC, DoD (HLDS)
+   * - "source"    — CS:S, TF2, GMod, L4D2 (srcds)
+   * - "source2"   — CS2, Deadlock (cs2 dedicated)
+   * - "minecraft" — Java Edition (server.jar)
+   */
+  type: 'goldsrc' | 'source' | 'source2' | 'minecraft';
+  /**
+   * Server configuration.
+   * - string: path to a JSON config file
+   * - object: inline config (works with useLocalStore)
+   */
+  config: string | Record<string, unknown>;
+
+  // Lifecycle events
+  onReady?: (event: LoveEvent) => void;
+  onError?: (event: LoveEvent) => void;
+  onStopped?: (event: LoveEvent) => void;
+
+  // Player events
+  onPlayerJoin?: (event: LoveEvent) => void;
+  onPlayerLeave?: (event: LoveEvent) => void;
+  onPlayerMessage?: (event: LoveEvent) => void;
+
+  // Server events
+  onMapChange?: (event: LoveEvent) => void;
+  onLog?: (event: LoveEvent) => void;
+
   key?: string | number;
 }
 
