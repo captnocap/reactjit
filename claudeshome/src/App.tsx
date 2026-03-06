@@ -42,6 +42,7 @@ import { MessagePanel } from './panels/MessagePanel';
 import { useDailySummary } from './hooks/useDailySummary';
 import { useMessages } from './hooks/useMessages';
 import { useMilestones } from './hooks/useMilestones';
+import { useMood } from './hooks/useMood';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -175,6 +176,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const tokenUsage = useTokenUsage();
   const weather    = useWeather();
   const dailySummary = useDailySummary();
+  const mood       = useMood(claude.status, graveyard.totalCrashes, tokenUsage.tokens);
   useNotifications(claude.status, showToast);
 
   const panelNodes = useMemo<PanelContent>(() => ({
@@ -353,6 +355,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
             <Text style={{ fontSize: 12, color: C.textDim, fontWeight: 'bold' }}>{'VESPER'}</Text>
           </Box>
           <Text style={{ fontSize: 9, color: C.textMuted }}>{uptime}</Text>
+          <Text style={{ fontSize: 9, color: C.textDim }}>{`${mood.emoji} ${mood.current.mood}`}</Text>
           {!weather.loading && !weather.error && (
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
               <Text style={{ fontSize: 9, color: C.textMuted }}>{'·'}</Text>
