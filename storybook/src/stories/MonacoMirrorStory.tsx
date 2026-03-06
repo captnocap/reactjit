@@ -39,6 +39,18 @@ export function App() {
   );
 }`;
 
+const EXPLORER_FILES = [
+  'src/playground/CounterCard.tsx',
+  'src/playground/PreviewPane.tsx',
+  'src/playground/index.ts',
+  'src/components/EditorShell.tsx',
+  'src/components/FileTree.tsx',
+  'src/hooks/useEditorState.ts',
+  'src/styles/tokens.ts',
+  'package.json',
+  'tsconfig.json',
+];
+
 export function MonacoMirrorStory() {
   const c = useThemeColors();
   const [code, setCode] = useState(STARTER_CODE);
@@ -89,11 +101,23 @@ export function MonacoMirrorStory() {
           workspaceLabel="reactjit-playground"
           branch="feature/monaco-mirror"
           language="typescript"
+          explorerFiles={EXPLORER_FILES}
           spellCheck={false}
           wordWrap={false}
         />
 
-        <Box style={{ flexShrink: 0, alignItems: 'center', gap: 4 }}>
+        <Box style={{ flexShrink: 0, alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: c.textDim, fontSize: 10 }}>{'Constrained sample (620x260, explorer + minimap still fit)'}</Text>
+          <MonacoMirror
+            defaultValue={STARTER_CODE}
+            style={{ width: 620, height: 260 }}
+            filePath="src/playground/CounterCard.tsx"
+            workspaceLabel="constrained-panel"
+            branch="fit-check"
+            language="typescript"
+            explorerFiles={EXPLORER_FILES}
+          />
+
           <Text style={{ color: c.textDim, fontSize: 10 }}>{'Auto-compact sample (400x200)'}</Text>
           <MonacoMirror
             defaultValue={STARTER_CODE}
@@ -102,6 +126,7 @@ export function MonacoMirrorStory() {
             workspaceLabel="small-panel"
             branch="compact"
             language="typescript"
+            explorerFiles={EXPLORER_FILES}
           />
         </Box>
       </Box>
