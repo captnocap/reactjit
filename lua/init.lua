@@ -1729,6 +1729,27 @@ function ReactJIT.init(config)
       end
       startupLog("[reactjit] HTTP server loaded")
     end
+
+    -- Load peer tunnel (userspace encrypted P2P) — gated by network permit
+    local ptOk, ptMod = pcall(require, "lua.peer_tunnel")
+    if ptOk and ptMod then
+      M.peerTunnel = ptMod
+      M.peerTunnel.init()
+      for method, handler in pairs(M.peerTunnel.getHandlers()) do
+        rpcHandlers[method] = gated("network", handler)
+      end
+      startupLog("[reactjit] Peer tunnel (userspace P2P) loaded")
+    end
+
+    -- Load WireGuard manager (real kernel wg) — gated by network permit
+    local wgOk, wgMod = pcall(require, "lua.wireguard")
+    if wgOk and wgMod then
+      M.wireguard = wgMod
+      for method, handler in pairs(M.wireguard.getHandlers()) do
+        rpcHandlers[method] = gated("network", handler)
+      end
+      startupLog("[reactjit] WireGuard module loaded")
+    end
   end
 
   -- Load browse module — gated by browse permit
@@ -3072,6 +3093,14 @@ function ReactJIT.update(dt)
 
       evt.type = nil  -- remove type from payload
       pushEvent({ type = evtType, payload = evt })
+    end
+  end
+
+  -- 6b. Poll peer tunnel (userspace encrypted P2P) events
+  if M.peerTunnel then
+    local ptEvents = M.peerTunnel.poll()
+    for _, evt in ipairs(ptEvents) do
+      pushEvent({ type = "peer_tunnel", payload = evt })
     end
   end
 
@@ -5292,6 +5321,8 @@ function ReactJIT.reload()
   -- 2. Teardown
   M.bridge:destroy()
   M.bridge = nil  -- nil immediately so failed reload can't use dead context
+  if M.peerTunnel then M.peerTunnel.destroyAll() end
+  if M.wireguard then M.wireguard.destroyAll() end
   if M.network then M.network.destroy() end
   if M.http then M.http.destroy() end
   if M.browse then M.browse.destroy() end
@@ -5487,6 +5518,8 @@ function ReactJIT.quit()
   if M.dragdrop then M.dragdrop.cleanup() end
   if M.videos then M.videos.shutdown() end
   if M.tor then M.tor.stop() end
+  if M.peerTunnel then M.peerTunnel.destroyAll() end
+  if M.wireguard then M.wireguard.destroyAll() end
   if M.network then M.network.destroy() end
   if M.http then M.http.destroy() end
   if M.browse then M.browse.destroy() end

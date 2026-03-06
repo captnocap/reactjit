@@ -36,6 +36,7 @@ export const ALIAS_MAP = {
   math: '@reactjit/math',
   time: '@reactjit/time',
   privacy: '@reactjit/privacy',
+  wireguard: '@reactjit/wireguard',
 };
 
 /**

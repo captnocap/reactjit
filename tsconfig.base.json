@@ -35,7 +35,8 @@
       "@reactjit/time": ["./packages/time/src"],
       "@reactjit/convert": ["./packages/convert/src"],
       "@reactjit/privacy": ["./packages/privacy/src"],
-      "@reactjit/physics": ["./packages/physics/src"]
+      "@reactjit/physics": ["./packages/physics/src"],
+      "@reactjit/wireguard": ["./packages/wireguard/src"]
     }
   }
 }
