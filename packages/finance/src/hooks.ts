@@ -6,7 +6,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useWebSocket, useLoveRPC } from '@reactjit/core';
 import type { OHLCV, Holding, PortfolioSnapshot, BollingerBand, MACDPoint, StochPoint, IndicatorPoint, PatternSignal } from './types';
 import { pivotPoints } from './indicators';
-import { portfolioSnapshot, holdingPnL, sharpeRatio, maxDrawdown, equityToReturns } from './portfolio';
+import { holdingPnL, sharpeRatio, maxDrawdown, equityToReturns } from './portfolio';
 
 // ── Technical Analysis ───────────────────────────────────
 
@@ -64,6 +64,10 @@ interface TechnicalAnalysisRPC {
 
 function asNumberOrNaN(value: NullableNumber): number {
   return typeof value === 'number' ? value : NaN;
+}
+
+function asNumberOrZero(value: unknown): number {
+  return typeof value === 'number' ? value : 0;
 }
 
 function normalizeTechnicalAnalysis(raw: TechnicalAnalysisRPC | null | undefined, candles: OHLCV[]): TechnicalAnalysis {
@@ -147,6 +151,57 @@ function normalizeTechnicalAnalysis(raw: TechnicalAnalysisRPC | null | undefined
   };
 }
 
+function normalizeHolding(value: unknown): Holding {
+  const h = value as Partial<Holding> | null | undefined;
+  return {
+    symbol: typeof h?.symbol === 'string' ? h.symbol : '',
+    quantity: asNumberOrZero(h?.quantity),
+    avgCost: asNumberOrZero(h?.avgCost),
+    currentPrice: asNumberOrZero(h?.currentPrice),
+  };
+}
+
+function normalizeHoldings(values: unknown): Holding[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizeHolding);
+}
+
+function emptyPortfolioSnapshot(holdings: Holding[]): PortfolioSnapshot {
+  return {
+    holdings,
+    totalValue: 0,
+    totalCost: 0,
+    pnl: 0,
+    pnlPercent: 0,
+    allocation: [],
+  };
+}
+
+function normalizePortfolioSnapshot(snapshot: unknown, fallbackHoldings: Holding[]): PortfolioSnapshot {
+  const s = snapshot as {
+    holdings?: unknown;
+    totalValue?: unknown;
+    totalCost?: unknown;
+    pnl?: unknown;
+    pnlPercent?: unknown;
+    allocation?: Array<{ symbol?: unknown; weight?: unknown }>;
+  } | null;
+  const holdings = normalizeHoldings(s?.holdings ?? fallbackHoldings);
+  return {
+    holdings,
+    totalValue: asNumberOrZero(s?.totalValue),
+    totalCost: asNumberOrZero(s?.totalCost),
+    pnl: asNumberOrZero(s?.pnl),
+    pnlPercent: asNumberOrZero(s?.pnlPercent),
+    allocation: Array.isArray(s?.allocation)
+      ? s.allocation.map(a => ({
+          symbol: typeof a?.symbol === 'string' ? a.symbol : '',
+          weight: asNumberOrZero(a?.weight),
+        }))
+      : [],
+  };
+}
+
 /** Compute all standard indicators for a candle series in Lua. */
 export function useTechnicalAnalysis(candles: OHLCV[]): TechnicalAnalysis {
   const rpc = useLoveRPC<TechnicalAnalysisRPC>('finance:technical_analysis');
@@ -179,36 +234,61 @@ export function usePortfolio(initialHoldings: Holding[] = []): {
   addHolding: (h: Holding) => void;
   removeHolding: (symbol: string) => void;
 } {
-  const [holdings, setHoldings] = useState<Holding[]>(initialHoldings);
+  const snapshotRpc = useLoveRPC<PortfolioSnapshot>('finance:portfolio_snapshot');
+  const updatePriceRpc = useLoveRPC<Holding[]>('finance:portfolio_update_price');
+  const addHoldingRpc = useLoveRPC<Holding[]>('finance:portfolio_add_holding');
+  const removeHoldingRpc = useLoveRPC<Holding[]>('finance:portfolio_remove_holding');
 
-  const snapshot = useMemo(() => portfolioSnapshot(holdings), [holdings]);
+  const [holdings, setHoldings] = useState<Holding[]>(() => normalizeHoldings(initialHoldings));
+  const holdingsRef = useRef(holdings);
+  holdingsRef.current = holdings;
+
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshot>(() => emptyPortfolioSnapshot(holdings));
+  const updateSeqRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    snapshotRpc({ holdings })
+      .then(next => {
+        if (cancelled) return;
+        setSnapshot(normalizePortfolioSnapshot(next, holdings));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSnapshot(emptyPortfolioSnapshot(holdings));
+      });
+    return () => { cancelled = true; };
+  }, [snapshotRpc, holdings]);
 
   const updatePrice = useCallback((symbol: string, price: number) => {
-    setHoldings(prev => prev.map(h =>
-      h.symbol === symbol ? { ...h, currentPrice: price } : h
-    ));
-  }, []);
+    const requestId = ++updateSeqRef.current;
+    updatePriceRpc({ holdings: holdingsRef.current, symbol, price })
+      .then(next => {
+        if (updateSeqRef.current !== requestId) return;
+        setHoldings(normalizeHoldings(next));
+      })
+      .catch(() => {});
+  }, [updatePriceRpc]);
 
   const addHolding = useCallback((h: Holding) => {
-    setHoldings(prev => {
-      const existing = prev.find(x => x.symbol === h.symbol);
-      if (existing) {
-        const totalQty = existing.quantity + h.quantity;
-        const totalCost = existing.quantity * existing.avgCost + h.quantity * h.avgCost;
-        return prev.map(x => x.symbol === h.symbol ? {
-          ...x,
-          quantity: totalQty,
-          avgCost: totalQty === 0 ? 0 : totalCost / totalQty,
-          currentPrice: h.currentPrice,
-        } : x);
-      }
-      return [...prev, h];
-    });
-  }, []);
+    const requestId = ++updateSeqRef.current;
+    addHoldingRpc({ holdings: holdingsRef.current, holding: h })
+      .then(next => {
+        if (updateSeqRef.current !== requestId) return;
+        setHoldings(normalizeHoldings(next));
+      })
+      .catch(() => {});
+  }, [addHoldingRpc]);
 
   const removeHolding = useCallback((symbol: string) => {
-    setHoldings(prev => prev.filter(h => h.symbol !== symbol));
-  }, []);
+    const requestId = ++updateSeqRef.current;
+    removeHoldingRpc({ holdings: holdingsRef.current, symbol })
+      .then(next => {
+        if (updateSeqRef.current !== requestId) return;
+        setHoldings(normalizeHoldings(next));
+      })
+      .catch(() => {});
+  }, [removeHoldingRpc]);
 
   return { snapshot, holdings, updatePrice, addHolding, removeHolding };
 }
