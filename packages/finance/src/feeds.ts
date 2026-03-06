@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useFetch, useWebSocket, useLuaInterval } from '@reactjit/core';
+import { useFetch, useWebSocket, useLuaInterval, useLoveRPC } from '@reactjit/core';
 import type { OHLCV, Tick, OrderBook, BookLevel, Timeframe, TIMEFRAME_SECONDS } from './types';
 
 // ── Types ────────────────────────────────────────────────
@@ -128,6 +128,34 @@ interface BinanceTickerMsg {
   l: string; // 24h low
 }
 
+function asNumberOrZero(value: unknown): number {
+  return typeof value === 'number' ? value : 0;
+}
+
+function normalizePriceQuote(value: unknown, fallbackSymbol: string): PriceQuote {
+  const q = value as Partial<PriceQuote> | null | undefined;
+  return {
+    symbol: typeof q?.symbol === 'string' ? q.symbol : fallbackSymbol,
+    price: asNumberOrZero(q?.price),
+    change24h: asNumberOrZero(q?.change24h),
+    volume24h: asNumberOrZero(q?.volume24h),
+    high24h: asNumberOrZero(q?.high24h),
+    low24h: asNumberOrZero(q?.low24h),
+    timestamp: asNumberOrZero(q?.timestamp),
+    source: typeof q?.source === 'string' ? q.source : 'manual',
+  };
+}
+
+function normalizePriceQuotes(values: unknown): Record<string, PriceQuote> {
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return {};
+  const out: Record<string, PriceQuote> = {};
+  for (const [k, v] of Object.entries(values as Record<string, unknown>)) {
+    const key = k.toUpperCase();
+    out[key] = normalizePriceQuote(v, key);
+  }
+  return out;
+}
+
 function parseBinanceSymbol(s: string): string | null {
   // "BTCUSDT" → "BTC"
   if (s.endsWith('USDT')) return s.slice(0, -4);
@@ -148,7 +176,11 @@ export function usePriceFeed(opts: PriceFeedOptions): PriceFeedResult {
   } = opts;
 
   const [quotes, setQuotes] = useState<Record<string, PriceQuote>>({});
+  const quotesRef = useRef(quotes);
+  quotesRef.current = quotes;
   const [loading, setLoading] = useState(true);
+  const pushPriceRpc = useLoveRPC<Record<string, PriceQuote>>('finance:quotes_push_price');
+  const pushSeqRef = useRef(0);
   const symbolsKey = symbols.join(',');
 
   // CoinGecko REST polling
@@ -259,21 +291,30 @@ export function usePriceFeed(opts: PriceFeedOptions): PriceFeedResult {
 
   // Manual push
   const pushPrice = useCallback((symbol: string, price: number, source: string = 'manual') => {
-    setQuotes(prev => ({
-      ...prev,
-      [symbol.toUpperCase()]: {
-        ...prev[symbol.toUpperCase()],
-        symbol: symbol.toUpperCase(),
-        price,
-        timestamp: Date.now(),
-        source,
-        change24h: prev[symbol.toUpperCase()]?.change24h ?? 0,
-        volume24h: prev[symbol.toUpperCase()]?.volume24h ?? 0,
-        high24h: prev[symbol.toUpperCase()]?.high24h ?? 0,
-        low24h: prev[symbol.toUpperCase()]?.low24h ?? 0,
-      },
-    }));
-  }, []);
+    const key = symbol.toUpperCase();
+    const requestId = ++pushSeqRef.current;
+    const timestamp = Date.now();
+    const current = quotesRef.current[key];
+    pushPriceRpc({
+      quotes: current ? { [key]: current } : {},
+      symbol: key,
+      price,
+      source,
+      timestamp,
+    })
+      .then(next => {
+        if (pushSeqRef.current !== requestId) return;
+        const normalized = normalizePriceQuotes(next);
+        const quote = normalized[key];
+        if (!quote) return;
+        setQuotes(prev => {
+          const prevQuote = prev[key];
+          if (prevQuote && prevQuote.timestamp > quote.timestamp) return prev;
+          return { ...prev, [key]: quote };
+        });
+      })
+      .catch(() => {});
+  }, [pushPriceRpc]);
 
   const getQuote = useCallback((symbol: string) => {
     return quotes[symbol.toUpperCase()] ?? null;
