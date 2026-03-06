@@ -55,6 +55,7 @@ import { PhysicsStory } from './PhysicsStory';
 import { GeoScene3DStory } from './GeoScene3DStory';
 import { ThreeDStory } from './ThreeDStory';
 import { OverlayStory } from './OverlayStory';
+import { OverflowCompareStory } from './OverflowCompareStory';
 
 import { ImagingStory } from './ImagingStory';
 import { CaptureStory } from './CaptureStory';
@@ -65,11 +66,13 @@ import { AIStory } from './AIStory';
 import { FinanceStory } from './FinanceStory';
 import { ChemistryStory } from './ChemistryStory';
 import { GalleryStory } from './GalleryStory';
+import { HookGalleryStory } from './HookGalleryStory';
 import { AnimationStory } from './AnimationStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
   { id: 'gallery', title: 'Gallery', section: 'Core', component: GalleryStory },
+  { id: 'hook-gallery', title: 'Hook Gallery', section: 'Core', component: HookGalleryStory },
   { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
   { id: 'text', title: 'Text', section: 'Core', component: TextStory },
   { id: 'layout', title: 'Layout', section: 'Core', component: LayoutStory },
@@ -133,6 +136,7 @@ export const stories: StoryDef[] = [
   { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
+  { id: 'overflow-compare', title: 'Overflow Compare', section: 'Layouts', component: OverflowCompareStory },
   { id: 'overlay', title: 'Overlay', section: 'Core', component: OverlayStory },
   { id: 'creative-concepts', title: 'CreativeConcepts', section: 'Demos', component: CreativeConceptsStory },
   { id: 'ai', title: 'AI', section: 'Packages', component: AIStory },
