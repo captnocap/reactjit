@@ -55,8 +55,13 @@ import { ThreeDStory } from './ThreeDStory';
 import { OverlayStory } from './OverlayStory';
 
 import { ImagingStory } from './ImagingStory';
+import CaptureStory from './CaptureStory';
+import RecordingStressStory from './RecordingStressStory';
 
 import { CreativeConceptsStory } from './CreativeConceptsStory';
+import { AIStory } from './AIStory';
+import { FinanceStory } from './FinanceStory';
+import { ChemistryStory } from './ChemistryStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -98,6 +103,7 @@ export const stories: StoryDef[] = [
   { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
 
   { id: 'imaging', title: 'Imaging', section: 'Packages', component: ImagingStory },
+  { id: 'capture', title: 'Capture', section: 'Packages', component: CaptureStory },
 
 
   // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
@@ -106,6 +112,7 @@ export const stories: StoryDef[] = [
   // Stress Test
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },
   { id: 'syntax-stress', title: 'Syntax Stress', section: 'Stress Test', component: SyntaxStressStory },
+  { id: 'recording-stress', title: 'Recording Stress', section: 'Stress Test', component: RecordingStressStory },
 
   // Dev
   { id: 'tsl-boids', title: 'TSL Boids', section: 'Dev', component: TslBoidsStory },
@@ -120,4 +127,7 @@ export const stories: StoryDef[] = [
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
   { id: 'overlay', title: 'Overlay', section: 'Core', component: OverlayStory },
   { id: 'creative-concepts', title: 'CreativeConcepts', section: 'Demos', component: CreativeConceptsStory },
+  { id: 'ai', title: 'AI', section: 'Packages', component: AIStory },
+  { id: 'finance', title: 'Finance', section: 'Packages', component: FinanceStory },
+  { id: 'chemistry', title: 'Chemistry', section: 'Packages', component: ChemistryStory },
 ];

@@ -37,7 +37,9 @@
       "@reactjit/privacy": ["./packages/privacy/src"],
       "@reactjit/physics": ["./packages/physics/src"],
       "@reactjit/wireguard": ["./packages/wireguard/src"],
-      "@reactjit/imaging": ["./packages/imaging/src"]
+      "@reactjit/imaging": ["./packages/imaging/src"],
+      "@reactjit/finance": ["./packages/finance/src"],
+      "@reactjit/chemistry": ["./packages/chemistry/src"]
     }
   }
 }
