@@ -4790,6 +4790,14 @@ function ReactJIT.wheelmoved(x, y)
     return  -- no bridge traffic
   end
 
+  -- CodeBlock handles horizontal scroll entirely in Lua
+  if hit.type == "CodeBlock" and M.codeblock and M.codeblock.handleWheel then
+    if M.codeblock.handleWheel(hit, x, y) then
+      return  -- consumed by horizontal scroll
+    end
+    -- Not consumed → fall through to parent scroll container
+  end
+
   -- Map2D handles zoom via wheel entirely in Lua
   if hit.type == "Map2D" and M.mapmod then
     M.mapmod.handleWheel(hit, x, y)

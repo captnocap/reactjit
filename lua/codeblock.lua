@@ -320,6 +320,64 @@ local function getTokenizedLinesCached(node, code, langProp)
   return lines, langResolved, tokenLines
 end
 
+-- ============================================================================
+-- Horizontal scroll state
+-- ============================================================================
+
+local scrollStates = setmetatable({}, { __mode = "k" }) -- [node] = { scrollX = 0 }
+
+local function getScrollState(node)
+  local s = scrollStates[node]
+  if not s then
+    s = { scrollX = 0 }
+    scrollStates[node] = s
+  end
+  return s
+end
+
+--- Returns the maximum content width for a code block (widest line + padding).
+local function getContentWidth(node)
+  local props = node.props or {}
+  local code = extractCode(node)
+  local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
+  local entry = getNodeEntry(node)
+  local lines = ensureLines(entry, code)
+  local font = getMeasure().getFont(fontSize, nil, nil)
+  local maxW = 0
+  for _, line in ipairs(lines) do
+    local w = font:getWidth(line)
+    if w > maxW then maxW = w end
+  end
+  return maxW
+end
+
+--- Handle mouse wheel on a CodeBlock. Returns true if consumed.
+function CodeBlock.handleWheel(node, x, y)
+  local c = node.computed
+  if not c then return false end
+  local s = node.style or {}
+  local padding = s.padding or 10
+  local viewW = c.w - 2 * padding
+  local contentW = getContentWidth(node)
+
+  -- Only consume if content actually overflows
+  if contentW <= viewW then return false end
+
+  local ss = getScrollState(node)
+  local scrollSpeed = 40
+
+  -- Use horizontal wheel directly, or shift redirects vertical to horizontal
+  local dx = x
+  if dx == 0 and y ~= 0 and love.keyboard.isDown("lshift", "rshift") then
+    dx = -y  -- shift+scroll → horizontal pan
+  end
+  if dx == 0 then return false end
+
+  local maxScroll = math.max(0, contentW - viewW)
+  ss.scrollX = math.max(0, math.min(maxScroll, ss.scrollX + dx * scrollSpeed))
+  return true
+end
+
 local copyStates = setmetatable({}, { __mode = "k" })  -- [node] = { copied = false, timer = 0 }
 
 local function getCopyState(node)
@@ -511,20 +569,49 @@ function CodeBlock.render(node, c, effectiveOpacity)
     yOffset = math.floor((innerHeight - contentHeight) / 2)
   end
 
+  -- Horizontal scroll offset
+  local ss = getScrollState(node)
+  local scrollX = ss.scrollX or 0
+
   -- Render each line with token-based syntax highlighting
   for i, line in ipairs(lines) do
-    local y = c.y + padding + yOffset + (i - 1) * lineHeight
+    local ly = c.y + padding + yOffset + (i - 1) * lineHeight
     local tokens = tokenLines[i] or Syntax.tokenizeLine(line, lang)
-    local x = c.x + padding
+    local lx = c.x + padding - scrollX
     for _, tok in ipairs(tokens) do
       setColorWithOpacity(tok.color, effectiveOpacity)
-      love.graphics.print(tok.text, x, y)
-      x = x + font:getWidth(tok.text)
+      love.graphics.print(tok.text, lx, ly)
+      lx = lx + font:getWidth(tok.text)
     end
   end
 
+  -- Horizontal scrollbar indicator (only when content overflows)
+  local viewW = c.w - 2 * padding
+  local maxLineW = 0
+  for _, line in ipairs(lines) do
+    local w = font:getWidth(line)
+    if w > maxLineW then maxLineW = w end
+  end
+  if maxLineW > viewW then
+    local barH = 3
+    local barY = c.y + c.h - barH - 2
+    local trackW = c.w - 8
+    local trackX = c.x + 4
+    local ratio = viewW / maxLineW
+    local thumbW = math.max(20, trackW * ratio)
+    local maxScroll = maxLineW - viewW
+    local thumbX = trackX + (maxScroll > 0 and (scrollX / maxScroll) * (trackW - thumbW) or 0)
+
+    -- Track
+    love.graphics.setColor(1, 1, 1, 0.06 * effectiveOpacity)
+    love.graphics.rectangle("fill", trackX, barY, trackW, barH, 1.5, 1.5)
+    -- Thumb
+    love.graphics.setColor(1, 1, 1, 0.25 * effectiveOpacity)
+    love.graphics.rectangle("fill", thumbX, barY, thumbW, barH, 1.5, 1.5)
+  end
+
   -- Draw text selection highlight
-  CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
+  CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset, scrollX)
 
   -- Restore previous scissor state
   if psx then
@@ -601,7 +688,8 @@ function CodeBlock.screenToPos(node, mx, my)
   line = math.max(1, math.min(line, #lines))
 
   local lineText = lines[line] or ""
-  local relX = sx - c.x - padding
+  local ss = getScrollState(node)
+  local relX = sx - c.x - padding + (ss.scrollX or 0)
   local col = 0
   local bytePos = 1
   local len = #lineText
@@ -628,7 +716,7 @@ end
 
 --- Draw selection highlight rectangles for this CodeBlock.
 --- Called during render, inside the scissor region.
-function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
+function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset, scrollX)
   -- Lazy-require to avoid circular dependency at load time
   local ok, TextSelection = pcall(require, "lua.textselection")
   if not ok or not TextSelection then return end
@@ -690,9 +778,10 @@ function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effe
   love.graphics.setColor(0.22, 0.35, 0.55, 0.55 * effectiveOpacity)
 
   yOffset = yOffset or 0
+  scrollX = scrollX or 0
   for i = startLine, endLine do
     local lineText = lines[i] or ""
-    local x0 = c.x + padding
+    local x0 = c.x + padding - scrollX
     local y0 = c.y + padding + yOffset + (i - 1) * lineHeight
 
     local lsx, lex
