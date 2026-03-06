@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Row } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Row, Input, useBreakpoint, useWindowDimensions } from '../../../packages/core/src';
 import { tw } from '../../../packages/core/src/tw';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
@@ -170,6 +170,43 @@ const SYNC_CODE = `# Source-of-truth architecture
 # The storybook reads from source directly via symlinks.
 # Never edit cli/runtime/ or project/lua/ — they're disposable.`;
 
+const RESPONSIVE_CODE = `import { useBreakpoint, useWindowDimensions } from '@reactjit/core'
+
+// useBreakpoint() — returns 'sm' | 'md' | 'lg' | 'xl'
+const bp = useBreakpoint();
+
+// Thresholds (min-width):
+//   sm:    0px   (mobile)
+//   md:  640px   (tablet)
+//   lg: 1024px   (desktop)
+//   xl: 1440px   (wide)
+
+// Pattern: derive a compact flag and branch styles
+const compact = bp === 'sm';
+<Band style={{
+  flexDirection: compact ? 'column' : 'row',
+  padding: compact ? 8 : 24,
+  gap: compact ? 12 : 24,
+}}>
+  <Half />   {/* full-width when stacked */}
+  <Half />
+</Band>
+
+// Raw dimensions when you need pixel math
+const { width, height } = useWindowDimensions();`;
+
+const RESPONSIVE_SCAFFOLD_CODE = `// All Layout2 scaffolds are responsive out of the box:
+//
+// Band     → row on md+, column on sm
+// Half     → 50/50 on md+, full-width on sm
+// HeroBand → reduced padding on sm
+// CalloutBand → column layout on sm
+// StoryPage   → tighter padding on sm
+// StorySection → smaller border-radius + gaps on sm
+//
+// Storybook sidebar collapses to a hamburger overlay on sm.
+// No extra work needed — just use the scaffolds.`;
+
 // ── Static data arrays ──────────────────────────────────
 
 const ELEMENT_MAP = [
@@ -225,6 +262,341 @@ const LINT_RULES = [
 const COLOR_FAMILIES = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose'] as const;
 
 const COLOR_SHADES = ['300', '500', '700', '900'] as const;
+
+// ── HTML Playground ──────────────────────────────────────
+
+const VOID_TAGS = new Set(['img', 'input', 'br', 'hr', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source', 'track', 'wbr']);
+
+const PG_DEFAULT = `<div class="p-6 bg-gray-900 rounded-xl gap-4">
+  <div class="flex-row items-center gap-4">
+    <div class="w-14 h-14 bg-blue-500 rounded-full items-center justify-center">
+      <span class="text-white font-bold text-xl">JD</span>
+    </div>
+    <div class="gap-1">
+      <h2 class="text-white text-xl font-bold">Jane Doe</h2>
+      <span class="text-gray-400 text-sm">Engineer · ReactJIT</span>
+    </div>
+  </div>
+  <p class="text-gray-300 text-sm">Drop any HTML with Tailwind here — renders natively, no browser.</p>
+  <div class="flex-row gap-3">
+    <button class="px-4 py-2 bg-blue-500 rounded-lg items-center">
+      <span class="text-white text-sm font-bold">Follow</span>
+    </button>
+    <button class="px-4 py-2 bg-gray-700 rounded-lg items-center">
+      <span class="text-white text-sm font-bold">Message</span>
+    </button>
+  </div>
+</div>`;
+
+const PG_PRESETS = [
+  { label: 'Profile', html: PG_DEFAULT },
+  { label: 'Dashboard', html: `<div class="p-5 bg-gray-900 rounded-xl gap-4">
+  <h2 class="text-white text-lg font-bold">Analytics</h2>
+  <div class="flex-row gap-3">
+    <div class="flex-1 p-4 bg-blue-500/20 rounded-lg gap-1">
+      <span class="text-blue-300 text-xs">Revenue</span>
+      <h3 class="text-white text-2xl font-bold">$42,891</h3>
+      <span class="text-green-400 text-xs">+12.5%</span>
+    </div>
+    <div class="flex-1 p-4 bg-purple-500/20 rounded-lg gap-1">
+      <span class="text-purple-300 text-xs">Users</span>
+      <h3 class="text-white text-2xl font-bold">8,547</h3>
+      <span class="text-green-400 text-xs">+8.2%</span>
+    </div>
+    <div class="flex-1 p-4 bg-emerald-500/20 rounded-lg gap-1">
+      <span class="text-emerald-300 text-xs">Uptime</span>
+      <h3 class="text-white text-2xl font-bold">99.9%</h3>
+      <span class="text-gray-400 text-xs">30 days</span>
+    </div>
+  </div>
+</div>` },
+  { label: 'Pricing', html: `<div class="p-6 bg-gray-900 rounded-xl gap-4 items-center">
+  <div class="bg-blue-500/20 px-3 py-1 rounded-full">
+    <span class="text-blue-300 text-xs font-bold">MOST POPULAR</span>
+  </div>
+  <h2 class="text-white text-2xl font-bold">Pro Plan</h2>
+  <div class="flex-row items-end gap-1">
+    <h1 class="text-white text-4xl font-bold">$29</h1>
+    <span class="text-gray-400 text-sm">/month</span>
+  </div>
+  <div class="gap-2 w-full">
+    <div class="flex-row gap-2 items-center">
+      <span class="text-green-400 text-sm">✓</span>
+      <span class="text-gray-300 text-sm">Unlimited projects</span>
+    </div>
+    <div class="flex-row gap-2 items-center">
+      <span class="text-green-400 text-sm">✓</span>
+      <span class="text-gray-300 text-sm">Priority support</span>
+    </div>
+    <div class="flex-row gap-2 items-center">
+      <span class="text-green-400 text-sm">✓</span>
+      <span class="text-gray-300 text-sm">Custom domains</span>
+    </div>
+  </div>
+  <button class="px-6 py-3 bg-blue-500 rounded-lg items-center">
+    <span class="text-white font-bold">Get Started</span>
+  </button>
+</div>` },
+  { label: 'Alert', html: `<div class="p-4 bg-red-500/20 rounded-lg gap-3">
+  <div class="flex-row items-center gap-2">
+    <span class="text-red-400 font-bold text-lg">⚠</span>
+    <h4 class="text-red-300 font-bold">Critical Error</h4>
+  </div>
+  <p class="text-red-200 text-sm">Database connection lost. Your data is safe but the service is temporarily unavailable.</p>
+  <div class="flex-row gap-2">
+    <button class="px-3 py-1 bg-red-500 rounded">
+      <span class="text-white text-xs font-bold">Retry</span>
+    </button>
+    <button class="px-3 py-1 bg-gray-700 rounded">
+      <span class="text-white text-xs">Dismiss</span>
+    </button>
+  </div>
+</div>` },
+] as const;
+
+interface HNode {
+  type: 'element' | 'text';
+  tag?: string;
+  attrs?: Record<string, string>;
+  children: HNode[];
+  text?: string;
+}
+
+function parseInlineCSS(css: string): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const decl of css.split(';')) {
+    const colon = decl.indexOf(':');
+    if (colon < 0) continue;
+    const prop = decl.slice(0, colon).trim();
+    const val = decl.slice(colon + 1).trim();
+    if (!prop || !val) continue;
+    const camel = prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
+    const num = parseFloat(val);
+    out[camel] = !isNaN(num) && val.trim() === String(num) ? num : val;
+  }
+  return out;
+}
+
+function parseHTMLToNodes(raw: string): HNode[] {
+  const html = raw.trim();
+  let i = 0;
+  const len = html.length;
+  function skipWS() { while (i < len && /\s/.test(html[i])) i++; }
+  function parseTagName(): string {
+    const s = i; while (i < len && /[a-zA-Z0-9\-]/.test(html[i])) i++;
+    return html.slice(s, i).toLowerCase();
+  }
+  function parseAttrName(): string {
+    const s = i; while (i < len && /[a-zA-Z0-9\-:_.]/.test(html[i])) i++;
+    return html.slice(s, i);
+  }
+  function parseAttrVal(): string {
+    const q = html[i];
+    if (q === '"' || q === "'") {
+      i++; const s = i;
+      while (i < len && html[i] !== q) i++;
+      const v = html.slice(s, i); i++; return v;
+    }
+    const s = i; while (i < len && !/[\s>\/]/.test(html[i])) i++;
+    return html.slice(s, i);
+  }
+  function parseAttrs(): Record<string, string> {
+    const attrs: Record<string, string> = {};
+    while (i < len) {
+      skipWS();
+      if (html[i] === '>' || (html[i] === '/' && html[i + 1] === '>')) break;
+      const name = parseAttrName();
+      if (!name) { i++; continue; }
+      skipWS();
+      if (html[i] === '=') { i++; skipWS(); attrs[name] = parseAttrVal(); }
+      else attrs[name] = '';
+    }
+    return attrs;
+  }
+  function parseChildren(): HNode[] {
+    const nodes: HNode[] = [];
+    while (i < len) {
+      if (html[i] !== '<') {
+        const s = i; while (i < len && html[i] !== '<') i++;
+        const text = html.slice(s, i).trim();
+        if (text) nodes.push({ type: 'text', text, children: [] });
+        continue;
+      }
+      if (html[i + 1] === '/') break;
+      if (html[i + 1] === '!') { while (i < len && html[i] !== '>') i++; i++; continue; }
+      i++;
+      const tag = parseTagName();
+      const attrs = parseAttrs();
+      let selfClose = false;
+      if (html[i] === '/') { i++; selfClose = true; }
+      if (html[i] === '>') i++;
+      const node: HNode = { type: 'element', tag, attrs, children: [] };
+      if (!selfClose && !VOID_TAGS.has(tag)) {
+        node.children = parseChildren();
+        if (i < len && html[i] === '<' && html[i + 1] === '/') {
+          i += 2; while (i < len && html[i] !== '>') i++; if (i < len) i++;
+        }
+      }
+      nodes.push(node);
+    }
+    return nodes;
+  }
+  return parseChildren();
+}
+
+function renderHNode(node: HNode, key: string): React.ReactNode {
+  if (node.type === 'text') {
+    return React.createElement('span', { key }, node.text);
+  }
+  const tag = node.tag!;
+  const attrs = node.attrs ?? {};
+  const props: Record<string, unknown> = { key };
+  const cl = attrs.class ?? attrs.className;
+  if (cl) props.className = cl;
+  if (attrs.style) props.style = parseInlineCSS(attrs.style);
+  if (attrs.src) props.src = attrs.src;
+  if (attrs.placeholder) props.placeholder = attrs.placeholder;
+  if (attrs.href) props.onPress = () => {};
+  const ch = node.children.map((c, idx) => renderHNode(c, `${key}.${idx}`));
+  return React.createElement(tag as never, props, ...ch);
+}
+
+function HtmlPlayground() {
+  const c = useThemeColors();
+  const [html, setHtml] = useState(PG_DEFAULT);
+  const [activePreset, setActivePreset] = useState(0);
+  const nodes = useMemo(() => {
+    try { return parseHTMLToNodes(html); }
+    catch { return null; }
+  }, [html]);
+
+  return (
+    <Box style={{
+      width: '100%',
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: C.compat + '66',
+      overflow: 'hidden',
+      backgroundColor: c.bgElevated,
+    }}>
+      {/* Title bar */}
+      <Box style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingLeft: 14,
+        paddingRight: 14,
+        paddingTop: 9,
+        paddingBottom: 9,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        backgroundColor: c.bg,
+      }}>
+        <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' }} />
+        <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#eab308' }} />
+        <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e' }} />
+        <Box style={{ width: 1, height: 14, backgroundColor: c.border, marginLeft: 4, marginRight: 4 }} />
+        <Text style={{ color: C.compat, fontSize: 10, fontWeight: 'bold' }}>{'LIVE HTML + TAILWIND PLAYGROUND'}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 8 }}>{'renders inside Love2D — no browser'}</Text>
+      </Box>
+      {/* Preset tabs */}
+      <Box style={{
+        flexDirection: 'row',
+        backgroundColor: c.bg,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+      }}>
+        {PG_PRESETS.map((p, idx) => (
+          <Pressable key={p.label} onPress={() => { setActivePreset(idx); setHtml(p.html); }}>
+            <Box style={{
+              paddingLeft: 14,
+              paddingRight: 14,
+              paddingTop: 8,
+              paddingBottom: 8,
+              borderBottomWidth: 2,
+              borderColor: activePreset === idx ? C.compat : 'transparent',
+              backgroundColor: activePreset === idx ? C.compat + '18' : 'transparent',
+            }}>
+              <Text style={{
+                color: activePreset === idx ? C.compat : c.muted,
+                fontSize: 9,
+                fontWeight: activePreset === idx ? 'bold' : 'normal',
+              }}>{p.label}</Text>
+            </Box>
+          </Pressable>
+        ))}
+        <Box style={{ flexGrow: 1 }} />
+        <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
+          <Text style={{ color: c.muted, fontSize: 8, fontFamily: 'monospace' }}>{'HTML + Tailwind → ReactJIT'}</Text>
+        </Box>
+      </Box>
+      {/* Editor + Preview */}
+      <Box style={{ flexDirection: 'row', minHeight: 300 }}>
+        {/* Left: HTML editor */}
+        <Box style={{ flexGrow: 1, flexBasis: 0, borderRightWidth: 1, borderColor: c.border }}>
+          <Box style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 6,
+            paddingBottom: 6,
+            borderBottomWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.bgElevated,
+            gap: 6,
+          }}>
+            <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.compat + '88' }} />
+            <Text style={{ color: c.muted, fontSize: 8 }}>{'HTML INPUT'}</Text>
+          </Box>
+          <Input
+            multiline
+            submitOnEnter={false}
+            value={html}
+            onChangeText={setHtml}
+            style={{
+              flexGrow: 1,
+              backgroundColor: c.bg,
+              padding: 10,
+              fontSize: 9,
+              fontFamily: 'monospace',
+              color: c.text,
+            }}
+          />
+        </Box>
+        {/* Right: live preview */}
+        <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+          <Box style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingTop: 6,
+            paddingBottom: 6,
+            borderBottomWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.bgElevated,
+            gap: 6,
+          }}>
+            <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e88' }} />
+            <Text style={{ color: c.muted, fontSize: 8 }}>{'LIVE PREVIEW'}</Text>
+            <Box style={{ flexGrow: 1 }} />
+            <Text style={{ color: '#22c55e', fontSize: 8 }}>{'● rendering'}</Text>
+          </Box>
+          <ScrollView style={{ flexGrow: 1 }}>
+            <Box style={{ padding: 16, flexGrow: 1 }}>
+              {nodes
+                ? nodes.map((n, idx) => renderHNode(n, String(idx)))
+                : <Text style={{ color: C.danger, fontSize: 9 }}>{'parse error — check your HTML'}</Text>
+              }
+            </Box>
+          </ScrollView>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
 
 // ── Live Demos ──────────────────────────────────────────
 
@@ -803,6 +1175,103 @@ function PipelineFlowDemo() {
   );
 }
 
+function ResponsiveDemo() {
+  const c = useThemeColors();
+  const bp = useBreakpoint();
+  const { width, height } = useWindowDimensions();
+  const compact = bp === 'sm';
+
+  const bpData = [
+    { label: 'sm', min: 0, active: bp === 'sm' },
+    { label: 'md', min: 640, active: bp === 'md' },
+    { label: 'lg', min: 1024, active: bp === 'lg' },
+    { label: 'xl', min: 1440, active: bp === 'xl' },
+  ];
+
+  return (
+    <Box style={{ width: '100%', gap: 10 }}>
+      {/* Current viewport readout */}
+      <Box style={{
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 8,
+        padding: 10,
+        flexDirection: compact ? 'column' : 'row',
+        gap: compact ? 6 : 16,
+        alignItems: compact ? 'flex-start' : 'center',
+      }}>
+        <Text style={{ color: C.accent, fontSize: 11, fontWeight: 'bold' }}>
+          {`viewport: ${width} × ${height}`}
+        </Text>
+        <Text style={{ color: c.text, fontSize: 11 }}>
+          {`breakpoint: ${bp}`}
+        </Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>
+          {'Resize the window to see transitions'}
+        </Text>
+      </Box>
+
+      {/* Breakpoint indicator bar */}
+      <Box style={{ width: '100%', flexDirection: 'row', gap: 4 }}>
+        {bpData.map(b => (
+          <Box key={b.label} style={{
+            flexGrow: 1,
+            flexBasis: 0,
+            backgroundColor: b.active ? C.accent : c.surface,
+            borderRadius: 4,
+            paddingTop: 6,
+            paddingBottom: 6,
+            alignItems: 'center',
+          }}>
+            <Text style={{ color: b.active ? '#000' : c.textDim, fontSize: 10, fontWeight: 'bold' }}>
+              {b.label}
+            </Text>
+            <Text style={{ color: b.active ? '#000' : c.muted, fontSize: 8 }}>
+              {`≥ ${b.min}px`}
+            </Text>
+          </Box>
+        ))}
+      </Box>
+
+      {/* Live row/column switch demo */}
+      <Box style={{
+        width: '100%',
+        backgroundColor: c.bgElevated,
+        borderRadius: 8,
+        padding: 10,
+        gap: 6,
+      }}>
+        <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+          {'LIVE LAYOUT SWITCH'}
+        </Text>
+        <Box style={{
+          flexDirection: compact ? 'column' : 'row',
+          gap: 8,
+          width: '100%',
+        }}>
+          {['Panel A', 'Panel B', 'Panel C'].map(label => (
+            <Box key={label} style={{
+              flexGrow: 1,
+              flexBasis: 0,
+              backgroundColor: c.surface,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: c.border,
+              padding: 10,
+              alignItems: 'center',
+            }}>
+              <Text style={{ color: c.text, fontSize: 10 }}>{label}</Text>
+              <Text style={{ color: c.muted, fontSize: 8 }}>
+                {compact ? 'stacked' : 'side-by-side'}
+              </Text>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 // ── CompatibilityStory ──────────────────────────────────
 
 export function CompatibilityStory() {
@@ -857,6 +1326,11 @@ export function CompatibilityStory() {
             {'Paste React+Tailwind verbatim and it renders. HTML elements remap to primitives. Tailwind classes become style objects. Converter CLI batch-transforms codebases. Dedicated migrators handle Flutter, SwiftUI, Tkinter, PyQt6, and Blessed. The build pipeline handles linting, bundling, cross-compilation, and runtime syncing.'}
           </Text>
         </HeroBand>
+
+        {/* ── HTML Playground ── */}
+        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 4 }}>
+          <HtmlPlayground />
+        </Box>
 
         <Divider />
 
@@ -1069,6 +1543,23 @@ export function CompatibilityStory() {
           </Half>
         </Band>
 
+        <Divider />
+
+        {/* ── Band 10: RESPONSIVE BREAKPOINTS — code | demo ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="smartphone" accentColor={C.compat}>{'RESPONSIVE BREAKPOINTS'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'useBreakpoint() returns sm/md/lg/xl based on viewport width. useWindowDimensions() gives raw pixels. All Layout2 scaffolds (Band, Half, HeroBand, CalloutBand) and the storybook sidebar respond automatically — row layouts stack to columns on sm, padding tightens, and the sidebar collapses to a hamburger overlay.'}
+            </Text>
+            <CodeBlock language="typescript" fontSize={9} code={RESPONSIVE_CODE} style={{ width: '100%' }} />
+          </Half>
+          <Half>
+            <ResponsiveDemo />
+            <CodeBlock language="bash" fontSize={9} code={RESPONSIVE_SCAFFOLD_CODE} style={{ width: '100%' }} />
+          </Half>
+        </Band>
+
         {/* ── Footer padding ── */}
         <Box style={{ height: 24 }} />
 
@@ -1092,7 +1583,7 @@ export function CompatibilityStory() {
         </Text>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 9 }}>
-          {'tw() · HTML compat · rjit convert · rjit migrate · rjit build'}
+          {'tw() · HTML compat · rjit convert · rjit migrate · rjit build · responsive'}
         </Text>
       </Box>
     </Box>
