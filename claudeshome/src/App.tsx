@@ -22,6 +22,7 @@ import { LifePanel } from './panels/LifePanel';
 import { PomodoroPanel } from './panels/PomodoroPanel';
 import { HackerNewsPanel } from './panels/HackerNewsPanel';
 import { Magic8BallPanel } from './panels/Magic8BallPanel';
+import { NESPanel } from './panels/NESPanel';
 import { useHearts, HeartsDisplay } from './components/Hearts';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useNotifications } from './hooks/useNotifications';
@@ -155,6 +156,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [messagesOpen,    setMessagesOpen]    = useState(false);
   const [panelCMode,      setPanelCMode]      = useState<'system' | 'life' | 'pomodoro' | '8ball'>('system');
   const [newsOpen,        setNewsOpen]        = useState(false);
+  const [nesOpen,         setNesOpen]         = useState(false);
 
   // ── Uptime counter ─────────────────────────────────────────────────
   const bootTimeRef = useRef(Date.now());
@@ -205,13 +207,13 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
       : panelCMode === 'pomodoro' ? <PomodoroPanel />
       : panelCMode === '8ball' ? <Magic8BallPanel />
       : <SystemPanel />,
-    D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
+    D: nesOpen ? <NESPanel /> : <FleetPanel onActiveCountChange={onActiveCountChange} />,
     E: newsOpen ? <HackerNewsPanel /> : <GitPanel />,
     F: fileTreeOpen ? <FileTreePanel /> : <DiffPanel />,
     G: messagesOpen
       ? <MessagePanel messages={msgs.messages} unreadCount={msgs.unreadCount} onSend={msgs.send} onMarkRead={msgs.markAllRead} onClear={msgs.clear} />
       : searchOpen ? <SearchPanel /> : <ChatHistoryPanel />,
-  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, newsOpen, panelCMode, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
+  }), [onActiveCountChange, notepadOpen, fileTreeOpen, searchOpen, dailyLogOpen, messagesOpen, newsOpen, nesOpen, panelCMode, dailySummary.today, dailySummary.history, dailySummary.todayKey, msgs.messages, msgs.unreadCount, msgs.send, msgs.markAllRead, msgs.clear]);
 
   // Auto-accumulate daily stats every 30s
   useLuaInterval(30000, () => {
@@ -488,6 +490,14 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
           }}>
             <Text style={{ fontSize: 10, color: C.approve }}>{'± commit'}</Text>
           </Pressable>
+          <Pressable onPress={() => { setNesOpen(prev => !prev); setFocusedPanel('D'); }} style={{
+            paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
+            borderWidth: 1, borderRadius: 4,
+            borderColor: nesOpen ? '#e44' + '66' : C.border,
+            backgroundColor: nesOpen ? '#e44' + '11' : 'transparent',
+          }}>
+            <Text style={{ fontSize: 10, color: nesOpen ? '#e44' : C.textMuted }}>{'NES'}</Text>
+          </Pressable>
           <Pressable onPress={() => setNewsOpen(prev => !prev)} style={{
             paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
             borderWidth: 1, borderRadius: 4,
@@ -525,6 +535,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         panelLabels={{
           B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'MEMORY',
           C: panelCMode === 'life' ? 'GAME OF LIFE' : panelCMode === 'pomodoro' ? 'POMODORO' : panelCMode === '8ball' ? 'MAGIC 8-BALL' : 'SYSTEM',
+          D: nesOpen ? 'NES' : 'FLEET',
           E: newsOpen ? 'HACKER NEWS' : 'GIT',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
           G: messagesOpen ? 'MESSAGES' : searchOpen ? 'SEARCH' : 'HISTORY',
