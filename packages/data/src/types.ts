@@ -41,6 +41,7 @@ export interface SpreadsheetProps {
   maxVisibleRows?: number;
   selectedAddress?: string;
   onSelectedAddressChange?: (address: string) => void;
+  autoScrollToSelection?: boolean;
   showStatusBar?: boolean;
   style?: Style;
   headerStyle?: Style;

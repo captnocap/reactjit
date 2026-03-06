@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Input,
+  type LayoutEvent,
   type LoveEvent,
   Pressable,
   Text,
@@ -98,6 +99,7 @@ export function Spreadsheet({
   maxVisibleRows = 14,
   selectedAddress: selectedAddressProp,
   onSelectedAddressChange,
+  autoScrollToSelection = true,
   showStatusBar = true,
   style,
   headerStyle,
@@ -169,6 +171,10 @@ export function Spreadsheet({
   const [internalSelectedAddress, setInternalSelectedAddress] = useState('A1');
   const selectedKey = normalizeCellAddress(selectionControlled ? (selectedAddressProp as string) : internalSelectedAddress);
   const selectedLocation = parseCellAddress(selectedKey) ?? { col: 0, row: 0 };
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const [programmaticScroll, setProgrammaticScroll] = useState<{ x: number; y: number } | null>(null);
+  const scrollReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const internalSelectionChangeRef = useRef(false);
   const [formulaInput, setFormulaInput] = useState(liveCells[selectedKey] ?? '');
 
   useEffect(() => {
@@ -201,10 +207,29 @@ export function Spreadsheet({
 
   const selectAddress = (address: string) => {
     const normalized = normalizeCellAddress(address);
+    internalSelectionChangeRef.current = true;
     if (!selectionControlled) setInternalSelectedAddress(normalized);
     onSelectedAddressChange?.(normalized);
     setFormulaInput(liveCells[normalized] ?? '');
   };
+
+  const queueProgrammaticScroll = (x: number, y: number) => {
+    setProgrammaticScroll({ x, y });
+    if (typeof setTimeout !== 'function') return;
+    if (scrollReleaseTimerRef.current && typeof clearTimeout === 'function') {
+      clearTimeout(scrollReleaseTimerRef.current);
+    }
+    scrollReleaseTimerRef.current = setTimeout(() => {
+      setProgrammaticScroll(null);
+      scrollReleaseTimerRef.current = null;
+    }, 48);
+  };
+
+  useEffect(() => () => {
+    if (scrollReleaseTimerRef.current && typeof clearTimeout === 'function') {
+      clearTimeout(scrollReleaseTimerRef.current);
+    }
+  }, []);
 
   const commitColumnWidths = (nextWidths: number[]) => {
     const normalized = normalizeColumnWidths(
@@ -252,6 +277,46 @@ export function Spreadsheet({
   const resolvedMaxRows = Math.max(resolvedMinRows, maxVisibleRows);
   const viewportRows = Math.max(resolvedMinRows, Math.min(resolvedMaxRows, rows + 1));
   const gridViewportHeight = viewportHeight ?? viewportRows * rowHeight + 2;
+  const totalHeight = (rows + 1) * rowHeight;
+
+  useEffect(() => {
+    const fromInternalSelection = internalSelectionChangeRef.current;
+    internalSelectionChangeRef.current = false;
+    if (!selectionControlled || !autoScrollToSelection || fromInternalSelection) return;
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
+
+    let cellLeft = ROW_HEADER_WIDTH;
+    for (let colIdx = 0; colIdx < selectedLocation.col; colIdx += 1) {
+      cellLeft += liveColumnWidths[colIdx] ?? columnWidth;
+    }
+    const cellWidth = liveColumnWidths[selectedLocation.col] ?? columnWidth;
+    const cellTop = rowHeight + selectedLocation.row * rowHeight;
+
+    const targetX = clamp(
+      cellLeft - Math.max(0, (viewportSize.width - cellWidth) / 2),
+      0,
+      Math.max(0, totalWidth - viewportSize.width),
+    );
+    const targetY = clamp(
+      cellTop - Math.max(0, (viewportSize.height - rowHeight) / 2),
+      0,
+      Math.max(0, totalHeight - viewportSize.height),
+    );
+    queueProgrammaticScroll(targetX, targetY);
+  }, [
+    selectionControlled,
+    autoScrollToSelection,
+    selectedKey,
+    selectedLocation.col,
+    selectedLocation.row,
+    viewportSize.width,
+    viewportSize.height,
+    liveColumnWidths,
+    columnWidth,
+    rowHeight,
+    totalWidth,
+    totalHeight,
+  ]);
 
   return (
     <Box style={{
@@ -326,7 +391,18 @@ export function Spreadsheet({
         </Box>
       )}
 
-      <Box style={{ width: '100%', height: gridViewportHeight, overflow: 'scroll' }}>
+      <Box
+        onLayout={(event: LayoutEvent) => {
+          if (event.width === viewportSize.width && event.height === viewportSize.height) return;
+          setViewportSize({ width: event.width, height: event.height });
+        }}
+        style={{
+          width: '100%',
+          height: gridViewportHeight,
+          overflow: 'scroll',
+          ...(programmaticScroll ? { scrollX: programmaticScroll.x, scrollY: programmaticScroll.y } : {}),
+        }}
+      >
         <Box style={{ width: totalWidth }}>
           <Box style={{
             flexDirection: 'row',

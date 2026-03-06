@@ -12,6 +12,9 @@ const INSTALL_CODE = `import { Spreadsheet } from '@reactjit/data'
   cells={cells}
   columnWidths={widths}
   onColumnWidthsChange={setWidths}
+  selectedAddress={activeCell}
+  onSelectedAddressChange={setActiveCell}
+  autoScrollToSelection
   viewportHeight={440}
   showStatusBar
 />`;
@@ -37,6 +40,10 @@ const SCALE_PRESETS: ScalePreset[] = [
   { id: 'massive', label: 'Massive', rows: 140, cols: 28, viewportHeight: 500 },
 ];
 const FOCUS_CELLS = ['B2', 'C2', 'F2', 'B7', 'C10', 'D10'];
+const MINI_SIZE = { width: 330, height: 235 };
+const MEDIUM_SIZE = { width: 560, height: 300 };
+const MINI_VIEWPORT_HEIGHT = 170;
+const MEDIUM_VIEWPORT_HEIGHT = 210;
 
 const LOGISTICS_PRESET: SpreadsheetCellMap = {
   A1: 'Route',
@@ -330,6 +337,7 @@ export function DataSpreadsheetStory() {
             onCellsChange={setCells}
             selectedAddress={selectedAddress}
             onSelectedAddressChange={setSelectedAddress}
+            autoScrollToSelection
             columnWidths={columnWidths}
             onColumnWidthsChange={setColumnWidths}
             minColumnWidth={72}
@@ -337,6 +345,63 @@ export function DataSpreadsheetStory() {
             viewportHeight={scalePreset.viewportHeight}
             showStatusBar
           />
+        </Box>
+
+        <Box style={{ gap: 8 }}>
+          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Embed Sizes: Mini + Medium'}</Text>
+          <Text style={{ fontSize: 9, color: c.textDim }}>
+            {'Same dataset, same formulas, same jump behavior. These are constrained component containers, not full-screen views.'}
+          </Text>
+          <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+            <Box style={{
+              width: MINI_SIZE.width,
+              maxWidth: '100%',
+              height: MINI_SIZE.height,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: c.border,
+              overflow: 'hidden',
+            }}>
+              <Spreadsheet
+                rows={12}
+                cols={8}
+                cells={cells}
+                selectedAddress={selectedAddress}
+                onSelectedAddressChange={setSelectedAddress}
+                autoScrollToSelection
+                columnWidths={columnWidths.slice(0, 8)}
+                viewportHeight={MINI_VIEWPORT_HEIGHT}
+                minVisibleRows={4}
+                maxVisibleRows={8}
+                showFormulaBar={false}
+                showStatusBar
+              />
+            </Box>
+
+            <Box style={{
+              width: MEDIUM_SIZE.width,
+              maxWidth: '100%',
+              height: MEDIUM_SIZE.height,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: c.border,
+              overflow: 'hidden',
+            }}>
+              <Spreadsheet
+                rows={20}
+                cols={12}
+                cells={cells}
+                selectedAddress={selectedAddress}
+                onSelectedAddressChange={setSelectedAddress}
+                autoScrollToSelection
+                columnWidths={columnWidths.slice(0, 12)}
+                viewportHeight={MEDIUM_VIEWPORT_HEIGHT}
+                minVisibleRows={6}
+                maxVisibleRows={12}
+                showStatusBar
+              />
+            </Box>
+          </Box>
         </Box>
 
         <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'start' }}>
