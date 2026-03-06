@@ -47,7 +47,9 @@ local function clamp(v, lo, hi)
 end
 
 local function newBlankCanvas(w, h, bg)
-  local canvas = love.graphics.newCanvas(w, h, {stencil = true})
+  -- Some Love builds reject `stencil` during canvas allocation; request it only
+  -- when binding the canvas as a render target.
+  local canvas = love.graphics.newCanvas(w, h)
   love.graphics.push("all")
   love.graphics.setCanvas(canvas)
   if not bg or bg == "transparent" or bg == "" then

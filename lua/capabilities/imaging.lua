@@ -567,9 +567,10 @@ end
 --- Each shape is drawn white (selected) on a black background.
 --- mode: "replace" draws all shapes fresh; future modes (add/subtract/intersect)
 ---       will accept a baseMaskId to modify an existing mask.
-local function rasterizeSelectionShapes(shapes, width, height, mode, baseMaskId)
+local function rasterizeSelectionShapes(shapes, width, height, mode, baseMaskId, featherRadius)
   width  = math.max(1, math.floor(tonumber(width)  or 1))
   height = math.max(1, math.floor(tonumber(height) or 1))
+  featherRadius = math.max(0, tonumber(featherRadius) or 0)
 
   local canvas = love.graphics.newCanvas(width, height)
   love.graphics.push("all")
@@ -637,7 +638,22 @@ local function rasterizeSelectionShapes(shapes, width, height, mode, baseMaskId)
   end
 
   love.graphics.pop()
-  return canvas
+  if featherRadius <= 0 then
+    return canvas
+  end
+
+  local pipeline = Imaging.fromCanvas(canvas)
+  pipeline:op("gaussian_blur", { radius = featherRadius })
+  local ok, blurred = pcall(function()
+    return pipeline:apply()
+  end)
+  if not ok or not blurred then
+    return canvas
+  end
+  if blurred ~= canvas then
+    releaseCanvas(canvas)
+  end
+  return blurred
 end
 
 Capabilities.register("Imaging", {
@@ -920,9 +936,10 @@ local handlers = {
     local width  = tonumber(args.width)  or 260
     local height = tonumber(args.height) or 180
     local mode   = args.mode or "replace"
+    local featherRadius = tonumber(args.featherRadius) or 0
     local baseMaskId = args.baseMaskId
 
-    local ok, result = pcall(rasterizeSelectionShapes, shapes, width, height, mode, baseMaskId)
+    local ok, result = pcall(rasterizeSelectionShapes, shapes, width, height, mode, baseMaskId, featherRadius)
     if not ok or not result then
       return { ok = false, error = tostring(result) }
     end

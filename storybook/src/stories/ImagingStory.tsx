@@ -119,7 +119,7 @@ const { apply } = useImaging();
 addShape({ type: 'rect', x: 0, y: 0, width: 130, height: 180 });
 
 // 2. Rasterize to an in-memory mask (returns a maskId handle)
-const maskId = await rasterize(260, 180);
+const maskId = await rasterize(260, 180, undefined, { featherRadius: 12 });
 
 // 3. Apply ops only inside the selected region
 await apply({
@@ -884,10 +884,18 @@ const SELECTION_OPS: SelectionOp[] = [
   { label: 'Edge',       ops: [{ op: 'edge_detect', method: 'sobel' }] },
 ];
 
+const SELECTION_FEATHERS = [
+  { label: 'Hard', radius: 0 },
+  { label: '4px', radius: 4 },
+  { label: '10px', radius: 10 },
+  { label: '18px', radius: 18 },
+];
+
 function SelectionDemo() {
   const c = useThemeColors();
   const [shapeIdx, setShapeIdx] = useState(0);
   const [opIdx, setOpIdx]       = useState(0);
+  const [featherIdx, setFeatherIdx] = useState(0);
   const [resultSrc, setResultSrc] = useState('');
   const [status, setStatus]     = useState('pick a shape + op then press Apply');
   const [busy, setBusy]         = useState(false);
@@ -902,10 +910,11 @@ function SelectionDemo() {
 
     const shapeEntry = SELECTION_SHAPES[shapeIdx];
     const opEntry    = SELECTION_OPS[opIdx];
+    const feather    = SELECTION_FEATHERS[featherIdx];
 
     let maskId: string | null = null;
     if (shapeEntry.shape) {
-      maskId = await rasterize(260, 180, [shapeEntry.shape]);
+      maskId = await rasterize(260, 180, [shapeEntry.shape], { featherRadius: feather.radius });
       if (!maskId) {
         setStatus('rasterize failed');
         setBusy(false);
@@ -926,7 +935,7 @@ function SelectionDemo() {
 
     if (result?.ok) {
       setResultSrc(output);
-      setStatus(`${shapeEntry.label} \u2192 ${opEntry.label}`);
+      setStatus(`${shapeEntry.label} -> ${opEntry.label} (${feather.label})`);
     } else {
       setStatus(result?.error || 'apply failed');
     }
@@ -939,6 +948,7 @@ function SelectionDemo() {
         <Tag text="selection" color={C.selection} />
         <Tag text="rasterize" color={C.selection} />
         <Tag text="maskId" color={C.selection} />
+        <Tag text="feather" color={C.selection} />
       </Box>
 
       {resultSrc ? (
@@ -950,11 +960,22 @@ function SelectionDemo() {
       )}
 
       <Label label="status" value={status} color={C.selection} />
+      <Label
+        label="edge"
+        value={shapeIdx === (SELECTION_SHAPES.length - 1) ? 'full frame' : `${SELECTION_FEATHERS[featherIdx].radius}px feather`}
+      />
 
       <Text style={{ fontSize: 9, color: c.textDim }}>{'Shape'}</Text>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {SELECTION_SHAPES.map((s, i) => (
           <ActionBtn key={s.label} label={s.label} color={C.selection} active={i === shapeIdx} onPress={() => setShapeIdx(i)} />
+        ))}
+      </Box>
+
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'Feather'}</Text>
+      <Box style={DEMO_ACTION_ROW_STYLE}>
+        {SELECTION_FEATHERS.map((entry, i) => (
+          <ActionBtn key={entry.label} label={entry.label} color={C.selection} active={i === featherIdx} onPress={() => setFeatherIdx(i)} />
         ))}
       </Box>
 
@@ -1130,6 +1151,7 @@ function FeatureCatalog() {
     { label: 'emboss', desc: 'Directional relief. Angle controls light direction.', color: C.filter },
     { label: 'pixelize', desc: 'Mosaic effect — sample from block centers.', color: C.filter },
     { label: 'blend (16 modes)', desc: 'Multiply, screen, overlay, dodge, burn, difference, hue, etc.', color: C.blend },
+    { label: 'selection feather', desc: 'Soft-edge grayscale masks for GIMP-style localized edits.', color: C.selection },
   ];
   return (
     <>
@@ -1350,7 +1372,7 @@ export function ImagingStory() {
           <Half>
             <SectionLabel icon="crop" accentColor={C.accent}>{'SELECTION LAB'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Pick a shape (rect left-half, center oval, right third) and an operation, then press Apply. The selection is rasterized to a grayscale mask canvas in Lua memory — no file I/O. imaging:apply composites the processed result with the original using the mask as a weight: mix(original, processed, mask.r). The mask handle is released when done.'}
+              {'Pick a shape, feather radius, and operation, then press Apply. The selection is rasterized to a grayscale mask canvas in Lua memory, optionally blurred for soft edges, and reused as a weight map: mix(original, processed, mask.r). This pushes the package closer to GIMP-style localized edits instead of only hard-edged marquee cuts.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={SELECTION_CODE} />
           </Half>

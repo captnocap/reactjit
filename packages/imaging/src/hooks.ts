@@ -8,6 +8,7 @@ import type {
   ImagingComposeResult,
   ImagingSelectionState,
   ImagingSelectionShape,
+  ImagingSelectionRasterizeOptions,
   ImagingSelectionRasterizeResult,
   ImagingToolState,
   UseImagingResult,
@@ -209,6 +210,7 @@ export function useImagingSelection(initial?: ImagingSelectionState) {
     width: number,
     height: number,
     shapesOverride?: ImagingSelectionShape[],
+    options?: ImagingSelectionRasterizeOptions,
   ): Promise<string | null> => {
     if (!bridge) return null;
     const toRasterize = shapesOverride ?? shapes;
@@ -221,6 +223,7 @@ export function useImagingSelection(initial?: ImagingSelectionState) {
           width,
           height,
           mode: selection.mode,
+          featherRadius: options?.featherRadius,
           baseMaskId: activeMaskId ?? undefined,
         },
       );
