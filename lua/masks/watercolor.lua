@@ -56,7 +56,7 @@ function Watercolor.draw(state, w, h, source)
   -- This creates the look of paint bleeding into wet paper
   local bleedRadius = bleed * 4 * effectMix
   local passes = max(1, floor(3 + bleed * 5))
-  local bleedAlpha = 0.03 * effectMix * bleed
+  local bleedAlpha = 0.15 * effectMix * bleed
 
   love.graphics.setBlendMode("alpha")
   for i = 1, passes do
@@ -71,7 +71,7 @@ function Watercolor.draw(state, w, h, source)
   -- Wet-on-wet: larger, softer bleed passes
   if wetness > 0.01 then
     local wetRadius = wetness * 8 * effectMix
-    local wetAlpha = 0.015 * effectMix * wetness
+    local wetAlpha = 0.08 * effectMix * wetness
     for i = 1, 3 do
       local angle = (i / 3) * math.pi * 2 + t * 0.05 + 1.0
       local dist = wetRadius * noise(i * 4.1, t * 0.2)
@@ -83,7 +83,7 @@ function Watercolor.draw(state, w, h, source)
   -- Paper texture: noise-based stipple overlay
   if paper > 0.01 then
     local texScale = 4
-    local texAlpha = paper * 0.04 * effectMix
+    local texAlpha = paper * 0.15 * effectMix
 
     -- Dark speckles (paper grain)
     for y = 0, h - 1, texScale do
@@ -113,7 +113,7 @@ function Watercolor.draw(state, w, h, source)
   end
 
   -- Edge darkening (watercolor pool effect at edges)
-  local edgeAlpha = bleed * 0.02 * effectMix
+  local edgeAlpha = bleed * 0.15 * effectMix
   local bandSize = floor(max(2, w * 0.03 * bleed))
   for i = 0, bandSize do
     local prog = 1 - i / max(1, bandSize)

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, formatUptime, formatMemory, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useWindowDimensions, formatUptime, formatMemory, useLuaInterval } from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -324,6 +324,7 @@ export function TradingPerfLabStory() {
   const [runtimePerf, setRuntimePerf] = useState<PerfStats>({});
   const getPerf = useLoveRPC<PerfStats>('dev:perf');
   const sysInfo = useSystemInfo(4000);
+  const { width: viewportWidth } = useWindowDimensions();
   const engineRef = useRef<EngineRefState>(makeEngine(symbolCount, depth));
   const rngRef = useRef<{ v: number }>({ v: (Date.now() ^ 0x9e3779b9) | 0 });
   const effectiveTargetEvents = Math.round(targetEvents * simScale);
@@ -518,6 +519,7 @@ export function TradingPerfLabStory() {
   const shellBg = '#050b16';
   const panelBg = '#0b1322';
   const panelBorder = '#1d2c45';
+  const compact = viewportWidth > 0 && viewportWidth < 1280;
   const outerPad = 10;
   const frameGap = 8;
   const panelPad = 8;

@@ -6,7 +6,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
@@ -113,6 +113,21 @@ const TYPESET_FORMULAS: { label: string; tex: string }[] = [
   { label: 'Binomial theorem', tex: '(x+y)^n = \\sum_{k=0}^{n} \\binom{n}{k} x^k y^{n-k}' },
   { label: 'Gradient', tex: '\\nabla f = \\frac{\\partial f}{\\partial x} \\hat{x} + \\frac{\\partial f}{\\partial y} \\hat{y}' },
   { label: 'Pythagorean theorem', tex: 'a^2 + b^2 = c^2' },
+];
+
+const FEATURE_LIST = [
+  { label: 'Vec2', desc: 'add, sub, mul, dot, cross, normalize, lerp, rotate, fromAngle', color: C.vec },
+  { label: 'Vec3', desc: 'cross, reflect, slerp, up/forward/right + all Vec2 ops', color: C.vec },
+  { label: 'Vec4', desc: '4D arithmetic, normalize, lerp, clamp (colors, homogeneous)', color: C.vec },
+  { label: 'Mat4', desc: 'multiply, invert, lookAt, perspective, ortho, decompose, fromQuat', color: C.mat },
+  { label: 'Quat', desc: 'slerp, fromAxisAngle, fromEuler, toEuler, toMat4, rotateVec3', color: C.quat },
+  { label: 'BBox2/3', desc: 'fromPoints, contains, intersects, union, intersection, expand', color: C.geo },
+  { label: 'Interpolation', desc: 'lerp, smoothstep, smootherstep, remap, clamp, wrap, damp, pingPong', color: C.interp },
+  { label: 'useNoiseField', desc: 'Perlin noise grid via Lua FFI', color: C.noise },
+  { label: 'useFFT', desc: 'Cooley-Tukey radix-2 via Lua', color: C.fft },
+  { label: 'useBezier', desc: 'De Casteljau curve evaluation via Lua', color: C.bezier },
+  { label: 'useMathPool', desc: 'Batch N bridge ops into one call per frame', color: C.pool },
+  { label: '<Math />', desc: 'LaTeX typesetting: fractions, roots, scripts, Greek, matrices, operators', color: C.accent },
 ];
 
 // ── Helpers ──────────────────────────────────────────────
@@ -358,20 +373,36 @@ function NoiseFieldDemo() {
   const [seed, setSeed] = useState(42);
   const [scale, setScale] = useState(0.1);
   const SIZE = 24;
-  const field = useNoiseField({ width: SIZE, height: SIZE, scale, seed, octaves: 4 });
+  const noiseConfig = useMemo(
+    () => ({ width: SIZE, height: SIZE, scale, seed, octaves: 4 }),
+    [SIZE, scale, seed],
+  );
+  const field = useNoiseField(noiseConfig);
+  const rows = useMemo(() => {
+    if (!field) return null;
+    const next: string[][] = [];
+    for (let row = 0; row < SIZE; row++) {
+      const rowColors: string[] = [];
+      for (let col = 0; col < SIZE; col++) {
+        const v = field[row * SIZE + col] ?? 0;
+        const brightness = Math.floor(clamp(v, 0, 1) * 255);
+        const hex = brightness.toString(16).padStart(2, '0');
+        rowColors.push(`#${hex}${hex}${hex}`);
+      }
+      next.push(rowColors);
+    }
+    return next;
+  }, [field, SIZE]);
 
   return (
     <Box style={{ gap: 8 }}>
-      {field ? (
+      {rows ? (
         <Box style={{ gap: 0 }}>
-          {Array.from({ length: SIZE }, (_, row) => (
+          {rows.map((colors, row) => (
             <Box key={row} style={{ flexDirection: 'row', gap: 0 }}>
-              {Array.from({ length: SIZE }, (_, col) => {
-                const v = field[row * SIZE + col] ?? 0;
-                const brightness = Math.floor(clamp(v, 0, 1) * 255);
-                const hex = brightness.toString(16).padStart(2, '0');
-                return <Box key={col} style={{ width: 12, height: 12, backgroundColor: `#${hex}${hex}${hex}` }} />;
-              })}
+              {colors.map((color, col) => (
+                <Box key={col} style={{ width: 12, height: 12, backgroundColor: color }} />
+              ))}
             </Box>
           ))}
         </Box>
@@ -406,6 +437,18 @@ function FFTDemo() {
 
   const spectrum = useFFT(samples);
   const halfN = N / 2;
+  const spectrumSlice = useMemo(() => {
+    if (!spectrum) return null;
+    return spectrum.slice(0, halfN);
+  }, [spectrum, halfN]);
+  const maxSpectrum = useMemo(() => {
+    if (!spectrumSlice || spectrumSlice.length === 0) return 0;
+    let max = spectrumSlice[0];
+    for (let i = 1; i < spectrumSlice.length; i++) {
+      if (spectrumSlice[i] > max) max = spectrumSlice[i];
+    }
+    return max;
+  }, [spectrumSlice]);
 
   return (
     <Box style={{ gap: 8 }}>
@@ -420,13 +463,12 @@ function FFTDemo() {
           ))}
         </Box>
       </Box>
-      {spectrum ? (
+      {spectrumSlice ? (
         <Box style={{ gap: 2 }}>
           <Text style={{ color: c.textDim, fontSize: 8 }}>Magnitude spectrum</Text>
           <Box style={{ flexDirection: 'row', gap: 0, height: 40, alignItems: 'end' }}>
-            {spectrum.slice(0, halfN).map((v, i) => {
-              const maxV = Math.max(...spectrum.slice(0, halfN));
-              const h = maxV > 0 ? Math.max(1, (v / maxV) * 38) : 1;
+            {spectrumSlice.map((v, i) => {
+              const h = maxSpectrum > 0 ? Math.max(1, (v / maxSpectrum) * 38) : 1;
               return <Box key={i} style={{ width: 6, height: h, backgroundColor: C.fft + '66', borderRadius: 1 }} />;
             })}
           </Box>
@@ -447,8 +489,11 @@ function FFTDemo() {
 function BezierDemo() {
   const c = useThemeColors();
   const [cy, setCy] = useState(150);
-  const controlPoints: Vec2T[] = [[0, 0], [80, cy], [220, 300 - cy], [300, 150]];
-  const curve = useBezier({ points: controlPoints as [number, number][], segments: 32 });
+  const controlPoints = useMemo<[number, number][]>(
+    () => [[0, 0], [80, cy], [220, 300 - cy], [300, 150]],
+    [cy],
+  );
+  const curve = useBezier({ points: controlPoints, segments: 32 });
 
   return (
     <Box style={{ gap: 8 }}>
@@ -482,24 +527,10 @@ function BezierDemo() {
 
 function FeatureCatalog() {
   const c = useThemeColors();
-  const features = [
-    { label: 'Vec2', desc: 'add, sub, mul, dot, cross, normalize, lerp, rotate, fromAngle', color: C.vec },
-    { label: 'Vec3', desc: 'cross, reflect, slerp, up/forward/right + all Vec2 ops', color: C.vec },
-    { label: 'Vec4', desc: '4D arithmetic, normalize, lerp, clamp (colors, homogeneous)', color: C.vec },
-    { label: 'Mat4', desc: 'multiply, invert, lookAt, perspective, ortho, decompose, fromQuat', color: C.mat },
-    { label: 'Quat', desc: 'slerp, fromAxisAngle, fromEuler, toEuler, toMat4, rotateVec3', color: C.quat },
-    { label: 'BBox2/3', desc: 'fromPoints, contains, intersects, union, intersection, expand', color: C.geo },
-    { label: 'Interpolation', desc: 'lerp, smoothstep, smootherstep, remap, clamp, wrap, damp, pingPong', color: C.interp },
-    { label: 'useNoiseField', desc: 'Perlin noise grid via Lua FFI', color: C.noise },
-    { label: 'useFFT', desc: 'Cooley-Tukey radix-2 via Lua', color: C.fft },
-    { label: 'useBezier', desc: 'De Casteljau curve evaluation via Lua', color: C.bezier },
-    { label: 'useMathPool', desc: 'Batch N bridge ops into one call per frame', color: C.pool },
-    { label: '<Math />', desc: 'LaTeX typesetting: fractions, roots, scripts, Greek, matrices, operators', color: C.accent },
-  ];
 
   return (
     <>
-      {features.map(f => (
+      {FEATURE_LIST.map(f => (
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
           <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 100 }}>{f.label}</Text>

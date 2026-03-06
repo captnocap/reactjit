@@ -22,11 +22,16 @@ export interface BarChartProps {
 }
 
 export function BarChart({ style, width, height, ...rest }: BarChartProps) {
+  const tooltip = rest.interactive && rest.data.length > 0
+    ? { content: rest.data.map(d => `${d.label}:\t${d.value}`).join('\n'), layout: 'table' as const }
+    : undefined;
+
   return React.createElement('Chart2D', {
     chartType: 'bar',
     ...rest,
     width,
     height,
+    tooltip,
     style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
   });
 }

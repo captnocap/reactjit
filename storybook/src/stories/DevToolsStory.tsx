@@ -453,7 +453,7 @@ export function DevToolsStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'built-in'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'The developer experience stack'}</Text>
+        <Text style={{ color: c.muted, fontSize: 10 }}>{'the only way I could get some of you to look'}</Text>
       </Box>
 
       {/* Content */}

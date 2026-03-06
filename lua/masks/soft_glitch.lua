@@ -82,7 +82,7 @@ function SoftGlitch.draw(state, w, h, source)
 
     if math.abs(offsetX) > 0.5 then
       love.graphics.setScissor(0, by, w, bh)
-      love.graphics.setColor(1, 1, 1, 0.15 * effectMix)
+      love.graphics.setColor(1, 1, 1, 0.4 * effectMix)
       love.graphics.draw(source, offsetX, 0)
       love.graphics.setScissor()
     end
@@ -92,9 +92,9 @@ function SoftGlitch.draw(state, w, h, source)
   if fringe > 0.01 then
     local fringeAmt = fringe * effectMix
     love.graphics.setBlendMode("add")
-    love.graphics.setColor(1, 0.2, 0.1, 0.015 * fringeAmt)
+    love.graphics.setColor(1, 0.2, 0.1, 0.1 * fringeAmt)
     love.graphics.draw(source, -fringeAmt, 0)
-    love.graphics.setColor(0.1, 0.2, 1, 0.012 * fringeAmt)
+    love.graphics.setColor(0.1, 0.2, 1, 0.08 * fringeAmt)
     love.graphics.draw(source, fringeAmt, 0)
     love.graphics.setBlendMode("alpha")
   end
@@ -103,7 +103,7 @@ function SoftGlitch.draw(state, w, h, source)
   local lineCount = floor(drift * 3 * effectMix)
   for i = 1, lineCount do
     local ly = floor(noise(i * 5.3, t * 3) * h)
-    local alpha = 0.03 * effectMix * noise(i * 2.1, t * 6)
+    local alpha = 0.15 * effectMix * noise(i * 2.1, t * 6)
     love.graphics.setColor(1, 1, 1, alpha)
     love.graphics.rectangle("fill", 0, ly, w, 1)
   end
@@ -112,7 +112,7 @@ function SoftGlitch.draw(state, w, h, source)
   local flicker = noise(t * 4, 17.3)
   if flicker > 0.7 then
     love.graphics.setBlendMode("add")
-    love.graphics.setColor(1, 1, 1, (flicker - 0.7) * 0.03 * effectMix)
+    love.graphics.setColor(1, 1, 1, (flicker - 0.7) * 0.15 * effectMix)
     love.graphics.rectangle("fill", 0, 0, w, h)
     love.graphics.setBlendMode("alpha")
   end

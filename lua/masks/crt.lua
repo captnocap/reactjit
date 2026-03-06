@@ -61,7 +61,7 @@ function CRT.draw(state, w, h, source)
 
   -- RGB phosphor ghosting (subtle additive fringing).
   if rgbShift > 0.01 then
-    local ghostAlpha = (0.02 + scanIntensity * 0.03) * state.flicker * effectMix
+    local ghostAlpha = (0.08 + scanIntensity * 0.15) * state.flicker * effectMix
     love.graphics.setBlendMode("add")
     love.graphics.setColor(1, 0.18, 0.18, ghostAlpha)
     love.graphics.draw(source, -rgbShift, 0)
@@ -73,7 +73,7 @@ function CRT.draw(state, w, h, source)
   -- Scanlines (light modulation only; no hard occlusion).
   local spacing = 2
   local scrollOffset = (t * 15) % (spacing * 2)
-  local scanAlpha = (0.012 + scanIntensity * 0.08) * effectMix
+  local scanAlpha = (0.05 + scanIntensity * 0.25) * effectMix
   love.graphics.setColor(0, 0, 0, scanAlpha)
   for y = scrollOffset, h, spacing * 2 do
     local yy = floor(y)
@@ -84,7 +84,7 @@ function CRT.draw(state, w, h, source)
 
   -- Phosphor dot grid texture.
   local dotSpacing = 3
-  local dotAlpha = scanIntensity * 0.016 * effectMix
+  local dotAlpha = scanIntensity * 0.1 * effectMix
   if dotAlpha > 0.004 then
     love.graphics.setColor(0, 0, 0, dotAlpha)
     for gx = 0, w, dotSpacing do
@@ -98,14 +98,14 @@ function CRT.draw(state, w, h, source)
   local barY = ((t * 45) % (h + 60)) - 30
   local barH = 8 + sin(t * 2.3) * 4
   love.graphics.setBlendMode("add")
-  love.graphics.setColor(0.85, 0.95, 1, max(0, (0.012 + sin(t * 1.7) * 0.008) * effectMix))
+  love.graphics.setColor(0.85, 0.95, 1, max(0, (0.05 + sin(t * 1.7) * 0.03) * effectMix))
   love.graphics.rectangle("fill", 0, barY, w, max(2, floor(barH)))
   love.graphics.setBlendMode("alpha")
 
   -- Soft edge haze (non-blocking). Intentionally no corner circles.
   local bandH = floor(h * 0.08 * vignetteStr)
   for i = 0, bandH do
-    local alpha = (1 - i / max(1, bandH)) * vignetteStr * 0.035 * effectMix
+    local alpha = (1 - i / max(1, bandH)) * vignetteStr * 0.35 * effectMix
     love.graphics.setColor(0, 0, 0, alpha)
     love.graphics.rectangle("fill", 0, i, w, 1)
     love.graphics.rectangle("fill", 0, h - 1 - i, w, 1)
@@ -113,7 +113,7 @@ function CRT.draw(state, w, h, source)
 
   local bandW = floor(w * 0.06 * vignetteStr)
   for i = 0, bandW do
-    local alpha = (1 - i / max(1, bandW)) * vignetteStr * 0.024 * effectMix
+    local alpha = (1 - i / max(1, bandW)) * vignetteStr * 0.24 * effectMix
     love.graphics.setColor(0, 0, 0, alpha)
     love.graphics.rectangle("fill", i, 0, 1, h)
     love.graphics.rectangle("fill", w - 1 - i, 0, 1, h)
@@ -121,7 +121,7 @@ function CRT.draw(state, w, h, source)
 
   -- Curvature shading: very subtle edge compression look.
   if curvature > 0 then
-    local edgeDarken = curvature * 0.04 * effectMix
+    local edgeDarken = curvature * 0.3 * effectMix
     for y = 0, floor(h * 0.03 * curvature) do
       local prog = 1 - y / max(1, floor(h * 0.03 * curvature))
       love.graphics.setColor(0, 0, 0, prog * edgeDarken)
@@ -132,7 +132,7 @@ function CRT.draw(state, w, h, source)
 
   -- Subtle phosphor tint bloom.
   love.graphics.setBlendMode("add")
-  love.graphics.setColor(0.08, 0.2, 0.08, 0.012 * state.flicker * effectMix)
+  love.graphics.setColor(0.08, 0.2, 0.08, 0.05 * state.flicker * effectMix)
   love.graphics.rectangle("fill", 0, 0, w, h)
   love.graphics.setBlendMode("alpha")
 end

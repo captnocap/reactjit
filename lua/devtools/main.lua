@@ -1251,6 +1251,28 @@ local function drawStatusBar(statusY, screenW)
   x = x + font:getWidth("Nodes ")
   love.graphics.setColor(TAB_TEXT_ACT)
   love.graphics.print(tostring(perf.nodeCount), x, textY)
+  x = x + font:getWidth(tostring(perf.nodeCount)) + pad * 2
+
+  -- RSS
+  local rssMB = nil
+  do
+    local f = io.open("/proc/self/statm", "r")
+    if f then
+      local line = f:read("*l")
+      f:close()
+      if line then
+        local _, rss = line:match("(%d+)%s+(%d+)")
+        if rss then rssMB = tonumber(rss) * 4 / 1024 end
+      end
+    end
+  end
+  if rssMB then
+    love.graphics.setColor(STATUS_TEXT)
+    love.graphics.print("RSS ", x, textY)
+    x = x + font:getWidth("RSS ")
+    love.graphics.setColor(TAB_TEXT_ACT)
+    love.graphics.print(string.format("%.0f MB", rssMB), x, textY)
+  end
 
   -- Window size (right-aligned)
   local winW, winH = love.graphics.getDimensions()

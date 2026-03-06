@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from './primitives';
-import type { Style, Color } from './types';
+import { useThemeColorsOptional } from './context';
+import type { Style } from './types';
 
 export interface TableColumn<T = any> {
   key: string;
@@ -21,13 +22,6 @@ export interface TableProps<T = any> {
   cellStyle?: Style;
   style?: Style;
 }
-
-const BORDER_COLOR = '#334155';
-const HEADER_BG = '#1e293b';
-const ROW_BG = '#0f172a';
-const ROW_ALT_BG = '#1e293b';
-const HEADER_TEXT = '#e2e8f0';
-const CELL_TEXT = '#cbd5e1';
 
 function alignToTextAlign(align?: 'left' | 'center' | 'right'): 'left' | 'center' | 'right' {
   if (align === 'center') return 'center';
@@ -52,6 +46,16 @@ export function Table<T extends Record<string, any>>({
   cellStyle,
   style,
 }: TableProps<T>) {
+  const theme = useThemeColorsOptional();
+  const colors = {
+    border: theme?.border ?? '#334155',
+    headerBg: theme?.surface ?? '#1e293b',
+    rowBg: theme?.bg ?? '#0f172a',
+    rowAltBg: theme?.bgAlt ?? '#1e293b',
+    headerText: theme?.text ?? '#e2e8f0',
+    cellText: theme?.textSecondary ?? '#cbd5e1',
+  };
+
   const border = borderless ? 0 : 1;
   const hasFlexibleColumns = columns.some(col => !col.width);
 
@@ -59,7 +63,7 @@ export function Table<T extends Record<string, any>>({
     <Box style={{
       alignSelf: hasFlexibleColumns ? undefined : 'flex-start',
       borderWidth: border,
-      borderColor: BORDER_COLOR,
+      borderColor: colors.border,
       borderRadius: 6,
       overflow: 'hidden',
       ...style,
@@ -68,23 +72,23 @@ export function Table<T extends Record<string, any>>({
       <Box style={{
         flexDirection: 'row',
         width: hasFlexibleColumns ? '100%' : undefined,
-        backgroundColor: HEADER_BG,
+        backgroundColor: colors.headerBg,
         borderBottomWidth: border,
-        borderColor: BORDER_COLOR,
+        borderColor: colors.border,
         ...headerStyle,
       }}>
         {columns.map((col, ci) => (
           <Box key={col.key} style={{
             width: col.width,
             flexGrow: col.width ? 0 : 1,
-            flexShrink: col.width ? 0 : 1,
+            flexShrink: 0,
             padding: 8,
             justifyContent: 'center',
             borderRightWidth: ci < columns.length - 1 ? border : 0,
-            borderColor: BORDER_COLOR,
+            borderColor: colors.border,
             ...cellStyle,
           }}>
-            <Text style={{ color: HEADER_TEXT, fontSize: 11, fontWeight: 'bold', width: '100%', textAlign: alignToTextAlign(col.align) }} numberOfLines={1}>
+            <Text style={{ color: colors.headerText, fontSize: 11, fontWeight: 'bold', textAlign: alignToTextAlign(col.align), whiteSpace: 'nowrap' }}>
               {col.title}
             </Text>
           </Box>
@@ -94,7 +98,7 @@ export function Table<T extends Record<string, any>>({
       {/* Data rows */}
       {data.map((row, ri) => {
         const key = getRowKey(row, ri, rowKey);
-        const bg = striped && ri % 2 === 1 ? ROW_ALT_BG : ROW_BG;
+        const bg = striped && ri % 2 === 1 ? colors.rowAltBg : colors.rowBg;
 
         return (
           <Box key={key} style={{
@@ -102,14 +106,14 @@ export function Table<T extends Record<string, any>>({
             width: hasFlexibleColumns ? '100%' : undefined,
             backgroundColor: bg,
             borderBottomWidth: ri < data.length - 1 ? border : 0,
-            borderColor: BORDER_COLOR,
+            borderColor: colors.border,
             ...rowStyle,
           }}>
             {columns.map((col, ci) => {
               const value = row[col.key];
               const content = col.render
                 ? col.render(value, row, ri)
-                : <Text style={{ color: CELL_TEXT, fontSize: 11, width: '100%', textAlign: alignToTextAlign(col.align) }} numberOfLines={1}>{String(value ?? '')}</Text>;
+                : <Text style={{ color: colors.cellText, fontSize: 11, width: '100%', textAlign: alignToTextAlign(col.align) }} numberOfLines={1}>{String(value ?? '')}</Text>;
 
               return (
                 <Box key={col.key} style={{
@@ -119,7 +123,7 @@ export function Table<T extends Record<string, any>>({
                   padding: 8,
                   justifyContent: 'center',
                   borderRightWidth: ci < columns.length - 1 ? border : 0,
-                  borderColor: BORDER_COLOR,
+                  borderColor: colors.border,
                   ...cellStyle,
                 }}>
                   {content}

@@ -1,983 +1,602 @@
+/**
+ * Masks — Layout3 tabbed showcase for all 15 post-processing mask components.
+ *
+ * Masks overlay existing content as foreground post-processing. The preview
+ * shows the active mask applied over a generative effect background + UI card,
+ * so you can see exactly what each mask does to real content.
+ */
+
 import React, { useState } from 'react';
 import {
-  Box,
-  Text,
-  Pressable,
-  Tabs,
-  Slider,
-  ScrollView,
-  BarChart,
-  ProgressBar,
-  Sparkline,
-  Divider,
-  Badge,
-  Scanlines,
-  CRT,
-  VHS,
-  Dither,
-  Ascii,
-  LumaMesh,
-  OpticalFlow,
-  DataMosh,
-  FeedbackLoop,
-  HardGlitch,
-  SoftGlitch,
-  Stretch,
-  FishEye,
-  Tile,
-  Watercolor,
-  Spirograph,
-  Constellation,
-  Voronoi,
-  Mycelium,
-  Rings,
-  FlowParticles,
-  TextEffect,
-  useLuaInterval,
+  Box, Text, Image, Pressable, ScrollView, CodeBlock, TextInput,
+  Scanlines, CRT, VHS, Dither, Ascii,
+  LumaMesh, OpticalFlow, DataMosh, FeedbackLoop,
+  HardGlitch, SoftGlitch, Stretch, FishEye, Tile, Watercolor,
 } from '../../../packages/core/src';
-import type { Tab } from '../../../packages/core/src';
-import type { ThemeColors } from '../../../packages/theme/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
-type EffectMode = 'normal' | 'infinite' | 'reactive';
+// ── Palette ──────────────────────────────────────────────
 
-const effectLibrary = [
-  { id: 'none', name: 'None', Component: null },
-  { id: 'spirograph', name: 'Spirograph', Component: Spirograph },
-  { id: 'constellation', name: 'Constellation', Component: Constellation },
-  { id: 'voronoi', name: 'Voronoi', Component: Voronoi },
-  { id: 'mycelium', name: 'Mycelium', Component: Mycelium },
-  { id: 'rings', name: 'Rings', Component: Rings },
-  { id: 'flow', name: 'FlowParticles', Component: FlowParticles },
-] as const;
-type EffectId = (typeof effectLibrary)[number]['id'];
-
-const maskLibrary = [
-  { id: 'none', name: 'None', Component: null },
-  { id: 'scanlines', name: 'Scanlines', Component: Scanlines },
-  { id: 'crt', name: 'CRT', Component: CRT },
-  { id: 'vhs', name: 'VHS', Component: VHS },
-  { id: 'dither', name: 'Dither', Component: Dither },
-  { id: 'ascii', name: 'Ascii', Component: Ascii },
-  { id: 'lumamesh', name: 'LumaMesh', Component: LumaMesh },
-  { id: 'opticalflow', name: 'OpticalFlow', Component: OpticalFlow },
-  { id: 'datamosh', name: 'DataMosh', Component: DataMosh },
-  { id: 'feedback', name: 'FeedbackLoop', Component: FeedbackLoop },
-  { id: 'hardglitch', name: 'HardGlitch', Component: HardGlitch },
-  { id: 'softglitch', name: 'SoftGlitch', Component: SoftGlitch },
-  { id: 'stretch', name: 'Stretch', Component: Stretch },
-  { id: 'fisheye', name: 'FishEye', Component: FishEye },
-  { id: 'tile', name: 'Tile', Component: Tile },
-  { id: 'watercolor', name: 'Watercolor', Component: Watercolor },
-] as const;
-type MaskId = (typeof maskLibrary)[number]['id'];
-
-const effectLookup = Object.fromEntries(effectLibrary.map(item => [item.id, item])) as Record<EffectId, (typeof effectLibrary)[number]>;
-const maskLookup = Object.fromEntries(maskLibrary.map(item => [item.id, item])) as Record<MaskId, (typeof maskLibrary)[number]>;
-
-const surfaceIds = ['header', 'revenue', 'users', 'errors', 'latency', 'chart', 'targets', 'services'] as const;
-type SurfaceId = (typeof surfaceIds)[number];
-
-interface SurfaceMapping {
-  effectId: EffectId;
-  maskId: MaskId;
-  speed: number;
-  intensity: number;
-  overlay: number;
-  mode?: EffectMode;
-}
-
-type SurfaceMap = Record<SurfaceId, SurfaceMapping>;
-
-const profileDefs = [
-  { id: 'balanced', label: 'Balanced', description: 'Organized map with subtle masks and readable cards.' },
-  { id: 'retro', label: 'Retro Stack', description: 'Heavy CRT and VHS treatment across the full dashboard.' },
-  { id: 'studio', label: 'Studio', description: 'Mostly clean cards with targeted effect accents.' },
-  { id: 'random', label: 'Randomized', description: 'One-click randomized mapping for fast combination sweeps.' },
-] as const;
-type ProfileId = (typeof profileDefs)[number]['id'];
-
-const organizedMappings: Record<Exclude<ProfileId, 'random'>, SurfaceMap> = {
-  balanced: {
-    header: { effectId: 'constellation', maskId: 'scanlines', speed: 0.45, intensity: 0.2, overlay: 0.76 },
-    revenue: { effectId: 'rings', maskId: 'none', speed: 0.62, intensity: 0.2, overlay: 0.8 },
-    users: { effectId: 'flow', maskId: 'dither', speed: 0.55, intensity: 0.3, overlay: 0.72 },
-    errors: { effectId: 'voronoi', maskId: 'crt', speed: 0.5, intensity: 0.26, overlay: 0.74 },
-    latency: { effectId: 'mycelium', maskId: 'scanlines', speed: 0.58, intensity: 0.24, overlay: 0.74 },
-    chart: { effectId: 'spirograph', maskId: 'none', speed: 0.75, intensity: 0.3, overlay: 0.82, mode: 'infinite' },
-    targets: { effectId: 'constellation', maskId: 'ascii', speed: 0.5, intensity: 0.22, overlay: 0.7 },
-    services: { effectId: 'voronoi', maskId: 'scanlines', speed: 0.48, intensity: 0.24, overlay: 0.74 },
-  },
-  retro: {
-    header: { effectId: 'spirograph', maskId: 'crt', speed: 0.7, intensity: 0.45, overlay: 0.68 },
-    revenue: { effectId: 'rings', maskId: 'vhs', speed: 0.7, intensity: 0.48, overlay: 0.66 },
-    users: { effectId: 'constellation', maskId: 'scanlines', speed: 0.58, intensity: 0.5, overlay: 0.64 },
-    errors: { effectId: 'voronoi', maskId: 'vhs', speed: 0.65, intensity: 0.52, overlay: 0.62 },
-    latency: { effectId: 'mycelium', maskId: 'crt', speed: 0.6, intensity: 0.5, overlay: 0.66 },
-    chart: { effectId: 'flow', maskId: 'crt', speed: 0.82, intensity: 0.44, overlay: 0.64, mode: 'infinite' },
-    targets: { effectId: 'spirograph', maskId: 'ascii', speed: 0.72, intensity: 0.42, overlay: 0.62 },
-    services: { effectId: 'voronoi', maskId: 'dither', speed: 0.58, intensity: 0.42, overlay: 0.64 },
-  },
-  studio: {
-    header: { effectId: 'none', maskId: 'scanlines', speed: 0.36, intensity: 0.16, overlay: 0.92 },
-    revenue: { effectId: 'rings', maskId: 'none', speed: 0.42, intensity: 0.2, overlay: 0.9 },
-    users: { effectId: 'none', maskId: 'none', speed: 0.42, intensity: 0.2, overlay: 0.93 },
-    errors: { effectId: 'mycelium', maskId: 'dither', speed: 0.44, intensity: 0.22, overlay: 0.86 },
-    latency: { effectId: 'constellation', maskId: 'none', speed: 0.46, intensity: 0.2, overlay: 0.88 },
-    chart: { effectId: 'spirograph', maskId: 'scanlines', speed: 0.6, intensity: 0.2, overlay: 0.86 },
-    targets: { effectId: 'flow', maskId: 'none', speed: 0.52, intensity: 0.2, overlay: 0.88 },
-    services: { effectId: 'voronoi', maskId: 'none', speed: 0.44, intensity: 0.2, overlay: 0.9 },
-  },
+const C = {
+  accent: '#8b5cf6',
+  accentDim: 'rgba(139, 92, 246, 0.12)',
+  selected: 'rgba(139, 92, 246, 0.2)',
 };
 
-const randomEffectChoices: EffectId[] = ['spirograph', 'constellation', 'voronoi', 'mycelium', 'rings', 'flow', 'none'];
-const randomMaskChoices: MaskId[] = ['scanlines', 'crt', 'vhs', 'dither', 'ascii', 'lumamesh', 'opticalflow', 'datamosh', 'feedback', 'hardglitch', 'softglitch', 'stretch', 'fisheye', 'tile', 'watercolor', 'none'];
+// ── Prop definitions ─────────────────────────────────────
 
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
-}
+type PropKind = 'bool' | 'num' | 'enum';
 
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
-function randInt(min: number, max: number): number {
-  return Math.round(rand(min, max));
-}
-
-function pickOne<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-function makeRandomSurfaceMap(): SurfaceMap {
-  const next = {} as SurfaceMap;
-  for (const id of surfaceIds) {
-    next[id] = {
-      effectId: pickOne(randomEffectChoices),
-      maskId: pickOne(randomMaskChoices),
-      speed: rand(0.4, 1.7),
-      intensity: rand(0.18, 0.9),
-      overlay: rand(0.58, 0.9),
-      mode: Math.random() > 0.72 ? 'infinite' : 'normal',
-    };
-  }
-  return next;
-}
-
-function formatCompact(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(Math.round(n));
-}
-
-function jitter(base: number, span: number, min: number, max: number): number {
-  return clamp(base + (Math.random() - 0.45) * span, min, max);
-}
-
-function jitterSeries(base: number[], variance: number): number[] {
-  return base.map(v => Math.max(1, Math.round(v + (Math.random() - 0.5) * variance)));
-}
-
-function generateRevenueBars() {
-  return [
-    { label: 'Mon', value: randInt(18, 38) },
-    { label: 'Tue', value: randInt(24, 46) },
-    { label: 'Wed', value: randInt(21, 41) },
-    { label: 'Thu', value: randInt(30, 54) },
-    { label: 'Fri', value: randInt(35, 58) },
-    { label: 'Sat', value: randInt(25, 44) },
-    { label: 'Sun', value: randInt(20, 40) },
-  ];
-}
-
-interface TargetMetric {
-  label: string;
-  value: number;
-  tone: 'success' | 'info' | 'warning' | 'accent';
-}
-
-function generateTargets(): TargetMetric[] {
-  return [
-    { label: 'Availability', value: rand(0.93, 0.99), tone: 'success' },
-    { label: 'SLA Budget', value: rand(0.55, 0.88), tone: 'info' },
-    { label: 'Backlog Burn', value: rand(0.35, 0.76), tone: 'warning' },
-    { label: 'Deploy Rate', value: rand(0.48, 0.82), tone: 'accent' },
-  ];
-}
-
-type ServiceState = 'healthy' | 'watch' | 'incident';
-
-interface ServiceMetric {
+interface PropDef {
   name: string;
-  state: ServiceState;
-  load: number;
-  latency: number;
-  errors: number;
+  kind: PropKind;
+  icon: string;
+  defaultVal: any;
+  step?: number;
+  min?: number;
+  max?: number;
+  options?: string[];
 }
 
-function generateServices(): ServiceMetric[] {
-  return [
-    {
-      name: 'Auth API',
-      state: Math.random() > 0.85 ? 'watch' : 'healthy',
-      load: rand(0.42, 0.88),
-      latency: randInt(70, 210),
-      errors: randInt(0, 9),
-    },
-    {
-      name: 'Realtime Bus',
-      state: Math.random() > 0.86 ? 'incident' : 'healthy',
-      load: rand(0.5, 0.96),
-      latency: randInt(90, 260),
-      errors: randInt(0, 12),
-    },
-    {
-      name: 'Payments',
-      state: Math.random() > 0.88 ? 'watch' : 'healthy',
-      load: rand(0.3, 0.78),
-      latency: randInt(80, 220),
-      errors: randInt(0, 10),
-    },
-    {
-      name: 'Search',
-      state: Math.random() > 0.9 ? 'incident' : 'healthy',
-      load: rand(0.35, 0.82),
-      latency: randInt(65, 190),
-      errors: randInt(0, 8),
-    },
-  ];
+const BASE_PROPS: PropDef[] = [
+  { name: 'mask', kind: 'bool', icon: 'layers', defaultVal: true },
+  { name: 'speed', kind: 'num', icon: 'fast-forward', defaultVal: 1, step: 0.1, min: 0, max: 5 },
+  { name: 'intensity', kind: 'num', icon: 'sliders', defaultVal: 0.5, step: 0.05, min: 0, max: 1 },
+];
+
+
+// ── Tabs ─────────────────────────────────────────────────
+
+interface TabDef {
+  id: string;
+  label: string;
+  icon: string;
+  cat: string;
+  desc: string;
+  usage: string;
+  Component: React.ComponentType<any>;
+  extraProps: PropDef[];
 }
 
-function serviceBadgeVariant(state: ServiceState) {
-  if (state === 'healthy') return 'success' as const;
-  if (state === 'watch') return 'warning' as const;
-  return 'error' as const;
-}
+const TABS: TabDef[] = [
+  {
+    id: 'scanlines', label: 'Scanlines', icon: 'minus', cat: 'Retro',
+    Component: Scanlines,
+    desc: 'Horizontal scanline overlay for retro CRT display aesthetic.',
+    usage: '<Scanlines mask spacing={2} />',
+    extraProps: [
+      { name: 'spacing', kind: 'num', icon: 'maximize', defaultVal: 2, step: 1, min: 1, max: 8 },
+      { name: 'tint', kind: 'enum', icon: 'palette', defaultVal: '', options: ['', '#00ff00', '#ff6600', '#00ccff', '#ff00ff'] },
+    ],
+  },
+  {
+    id: 'crt', label: 'CRT', icon: 'monitor', cat: 'Retro',
+    Component: CRT,
+    desc: 'Full CRT monitor post-processing — scanlines, barrel distortion, RGB phosphor shift, vignette, flicker.',
+    usage: '<CRT mask curvature={0.3} />',
+    extraProps: [
+      { name: 'curvature', kind: 'num', icon: 'circle', defaultVal: 0.3, step: 0.05, min: 0, max: 1 },
+      { name: 'scanlineIntensity', kind: 'num', icon: 'minus', defaultVal: 0.25, step: 0.05, min: 0, max: 1 },
+      { name: 'rgbShift', kind: 'num', icon: 'droplet', defaultVal: 1.5, step: 0.5, min: 0, max: 8 },
+      { name: 'vignette', kind: 'num', icon: 'aperture', defaultVal: 0.4, step: 0.05, min: 0, max: 1 },
+      { name: 'flicker', kind: 'num', icon: 'zap', defaultVal: 0.03, step: 0.01, min: 0, max: 0.2 },
+    ],
+  },
+  {
+    id: 'vhs', label: 'VHS', icon: 'film', cat: 'Retro',
+    Component: VHS,
+    desc: 'VHS tape playback artifacts — tracking distortion, color bleed, noise, head switching.',
+    usage: '<VHS mask tracking={0.5} />',
+    extraProps: [
+      { name: 'tracking', kind: 'num', icon: 'activity', defaultVal: 0.3, step: 0.05, min: 0, max: 1 },
+      { name: 'noise', kind: 'num', icon: 'radio', defaultVal: 0.2, step: 0.05, min: 0, max: 1 },
+      { name: 'colorBleed', kind: 'num', icon: 'droplet', defaultVal: 2, step: 0.5, min: 0, max: 8 },
+    ],
+  },
+  {
+    id: 'dither', label: 'Dither', icon: 'grid', cat: 'Retro',
+    Component: Dither,
+    desc: 'Ordered Bayer-matrix dithering for retro pixel-art aesthetic with quantized color levels.',
+    usage: '<Dither mask levels={4} scale={2} />',
+    extraProps: [
+      { name: 'levels', kind: 'num', icon: 'sliders', defaultVal: 4, step: 1, min: 2, max: 8 },
+      { name: 'scale', kind: 'num', icon: 'maximize', defaultVal: 2, step: 1, min: 1, max: 6 },
+    ],
+  },
+  {
+    id: 'ascii', label: 'Ascii', icon: 'type', cat: 'Retro',
+    Component: Ascii,
+    desc: 'ASCII art conversion — maps brightness to characters for terminal aesthetic.',
+    usage: '<Ascii mask cellSize={6} colored />',
+    extraProps: [
+      { name: 'cellSize', kind: 'num', icon: 'hash', defaultVal: 8, step: 1, min: 3, max: 16 },
+      { name: 'opacity', kind: 'num', icon: 'eye', defaultVal: 0.6, step: 0.05, min: 0, max: 1 },
+      { name: 'colored', kind: 'bool', icon: 'palette', defaultVal: true },
+    ],
+  },
+  {
+    id: 'lumamesh', label: 'LumaMesh', icon: 'triangle', cat: 'Analysis',
+    Component: LumaMesh,
+    desc: 'Wireframe mesh displaced by brightness — luminance-driven terrain visualization.',
+    usage: '<LumaMesh mask gridSize={12} />',
+    extraProps: [
+      { name: 'gridSize', kind: 'num', icon: 'grid', defaultVal: 16, step: 2, min: 4, max: 32 },
+      { name: 'displacement', kind: 'num', icon: 'move', defaultVal: 30, step: 5, min: 0, max: 80 },
+      { name: 'lineWidth', kind: 'num', icon: 'minus', defaultVal: 1, step: 0.5, min: 0.5, max: 4 },
+      { name: 'colored', kind: 'bool', icon: 'palette', defaultVal: true },
+    ],
+  },
+  {
+    id: 'opticalflow', label: 'OpticalFlow', icon: 'wind', cat: 'Analysis',
+    Component: OpticalFlow,
+    desc: 'Motion trail / optical flow — accumulated frames with displacement and decay.',
+    usage: '<OpticalFlow mask decay={0.9} />',
+    extraProps: [
+      { name: 'decay', kind: 'num', icon: 'clock', defaultVal: 0.92, step: 0.01, min: 0.5, max: 0.99 },
+      { name: 'displacement', kind: 'num', icon: 'move', defaultVal: 3, step: 0.5, min: 0, max: 10 },
+      { name: 'colorShift', kind: 'bool', icon: 'droplet', defaultVal: true },
+    ],
+  },
+  {
+    id: 'datamosh', label: 'DataMosh', icon: 'hard-drive', cat: 'Glitch',
+    Component: DataMosh,
+    desc: 'Corrupted video codec look — frozen blocks and drift simulating I-frame loss.',
+    usage: '<DataMosh mask corruption={0.5} />',
+    extraProps: [
+      { name: 'blockSize', kind: 'num', icon: 'grid', defaultVal: 32, step: 4, min: 8, max: 64 },
+      { name: 'corruption', kind: 'num', icon: 'alert-triangle', defaultVal: 0.3, step: 0.05, min: 0, max: 1 },
+    ],
+  },
+  {
+    id: 'feedback', label: 'FeedbackLoop', icon: 'repeat', cat: 'Glitch',
+    Component: FeedbackLoop,
+    desc: 'Recursive self-sampling with zoom and rotation creating tunnel and spiral effects.',
+    usage: '<FeedbackLoop mask zoom={1.03} />',
+    extraProps: [
+      { name: 'zoom', kind: 'num', icon: 'zoom-in', defaultVal: 1.02, step: 0.005, min: 0.95, max: 1.1 },
+      { name: 'rotation', kind: 'num', icon: 'rotate-cw', defaultVal: 0.005, step: 0.002, min: 0, max: 0.05 },
+      { name: 'decay', kind: 'num', icon: 'clock', defaultVal: 0.94, step: 0.01, min: 0.5, max: 0.99 },
+      { name: 'hueShift', kind: 'bool', icon: 'palette', defaultVal: true },
+    ],
+  },
+  {
+    id: 'hardglitch', label: 'HardGlitch', icon: 'zap', cat: 'Glitch',
+    Component: HardGlitch,
+    desc: 'Aggressive digital glitch — block displacement, RGB splits, random fills, corruption.',
+    usage: '<HardGlitch mask chaos={0.7} />',
+    extraProps: [
+      { name: 'chaos', kind: 'num', icon: 'shuffle', defaultVal: 0.5, step: 0.05, min: 0, max: 1 },
+      { name: 'blockSize', kind: 'num', icon: 'grid', defaultVal: 40, step: 5, min: 10, max: 80 },
+      { name: 'rgbSplit', kind: 'num', icon: 'droplet', defaultVal: 6, step: 1, min: 0, max: 20 },
+    ],
+  },
+  {
+    id: 'softglitch', label: 'SoftGlitch', icon: 'feather', cat: 'Glitch',
+    Component: SoftGlitch,
+    desc: 'Subtle digital glitch — gentle horizontal drift, color fringing, micro-stutter.',
+    usage: '<SoftGlitch mask drift={0.3} />',
+    extraProps: [
+      { name: 'drift', kind: 'num', icon: 'arrow-right', defaultVal: 0.4, step: 0.05, min: 0, max: 1 },
+      { name: 'fringe', kind: 'num', icon: 'droplet', defaultVal: 1, step: 0.5, min: 0, max: 5 },
+      { name: 'bandHeight', kind: 'num', icon: 'minus', defaultVal: 20, step: 2, min: 4, max: 60 },
+    ],
+  },
+  {
+    id: 'stretch', label: 'Stretch', icon: 'move', cat: 'Distortion',
+    Component: Stretch,
+    desc: 'Pixel stretch / smear with noise-driven displacement of horizontal or vertical strips.',
+    usage: '<Stretch mask amount={0.6} />',
+    extraProps: [
+      { name: 'amount', kind: 'num', icon: 'sliders', defaultVal: 0.5, step: 0.05, min: 0, max: 1 },
+      { name: 'stripHeight', kind: 'num', icon: 'minus', defaultVal: 2, step: 1, min: 1, max: 10 },
+      { name: 'vertical', kind: 'bool', icon: 'rotate-cw', defaultVal: false },
+    ],
+  },
+  {
+    id: 'fisheye', label: 'FishEye', icon: 'aperture', cat: 'Distortion',
+    Component: FishEye,
+    desc: 'Fisheye / barrel distortion via GLSL shader. Negative strength for pincushion.',
+    usage: '<FishEye mask strength={0.6} />',
+    extraProps: [
+      { name: 'strength', kind: 'num', icon: 'maximize', defaultVal: 0.4, step: 0.1, min: -1, max: 2 },
+      { name: 'animated', kind: 'bool', icon: 'play', defaultVal: false },
+    ],
+  },
+  {
+    id: 'tile', label: 'Tile', icon: 'copy', cat: 'Distortion',
+    Component: Tile,
+    desc: 'Tiling / kaleidoscope — repeats source content in a grid, optionally mirrored.',
+    usage: '<Tile mask columns={4} rows={3} mirror />',
+    extraProps: [
+      { name: 'columns', kind: 'num', icon: 'grid', defaultVal: 3, step: 1, min: 1, max: 8 },
+      { name: 'rows', kind: 'num', icon: 'grid', defaultVal: 3, step: 1, min: 1, max: 8 },
+      { name: 'mirror', kind: 'bool', icon: 'copy', defaultVal: false },
+      { name: 'gap', kind: 'num', icon: 'maximize', defaultVal: 0, step: 1, min: 0, max: 8 },
+      { name: 'animated', kind: 'bool', icon: 'play', defaultVal: false },
+    ],
+  },
+  {
+    id: 'watercolor', label: 'Watercolor', icon: 'droplet', cat: 'Artistic',
+    Component: Watercolor,
+    desc: 'Painterly wash with soft edge bleeding, paper texture, and wet-on-wet color diffusion.',
+    usage: '<Watercolor mask bleed={0.6} />',
+    extraProps: [
+      { name: 'bleed', kind: 'num', icon: 'droplet', defaultVal: 0.5, step: 0.05, min: 0, max: 1 },
+      { name: 'paper', kind: 'num', icon: 'file', defaultVal: 0.3, step: 0.05, min: 0, max: 1 },
+      { name: 'wetness', kind: 'num', icon: 'cloud-rain', defaultVal: 0.4, step: 0.05, min: 0, max: 1 },
+    ],
+  },
+];
 
-function serviceColor(state: ServiceState, c: ThemeColors): string {
-  if (state === 'healthy') return c.success;
-  if (state === 'watch') return c.warning;
-  return c.error;
-}
+// ── Helpers ──────────────────────────────────────────────
 
-function toneColor(tone: TargetMetric['tone'], c: ThemeColors): string {
-  if (tone === 'success') return c.success;
-  if (tone === 'info') return c.info;
-  if (tone === 'warning') return c.warning;
-  return c.accent;
-}
-
-function describeMapping(mapping: SurfaceMapping): string {
-  const effectName = effectLookup[mapping.effectId].name;
-  const maskName = maskLookup[mapping.maskId].name;
-  if (effectName === 'None' && maskName === 'None') return 'clean';
-  if (effectName === 'None') return maskName;
-  if (maskName === 'None') return effectName;
-  return `${effectName} + ${maskName}`;
-}
-
-interface MappedSurfaceProps {
-  colors: ThemeColors;
-  mapping: SurfaceMapping;
-  speedScale: number;
-  intensityScale: number;
-  style?: Record<string, unknown>;
-  contentStyle?: Record<string, unknown>;
-  children: React.ReactNode;
-}
-
-function MappedSurface(props: MappedSurfaceProps) {
-  const { colors, mapping, speedScale, intensityScale, style, contentStyle, children } = props;
-  const effectDef = effectLookup[mapping.effectId];
-  const maskDef = maskLookup[mapping.maskId];
-  const EffectComponent = effectDef.Component;
-  const MaskComponent = maskDef.Component;
-
-  const speed = clamp(mapping.speed * speedScale, 0.1, 4);
-  const intensity = clamp(mapping.intensity * intensityScale, 0, 1);
-
-  const effectProps: Record<string, unknown> = { background: true, speed };
-  if (mapping.mode === 'infinite') effectProps.infinite = true;
-  if (mapping.mode === 'reactive') effectProps.reactive = true;
-
-  const maskProps: Record<string, unknown> = { mask: true, speed, intensity };
-  if (mapping.maskId === 'vhs') {
-    maskProps.tracking = clamp(intensity * 0.85 + 0.08, 0.08, 1);
-    maskProps.noise = clamp(intensity * 0.6, 0.05, 0.8);
-  }
-  if (mapping.maskId === 'ascii') {
-    maskProps.cellSize = Math.max(4, Math.round(11 - intensity * 6));
-    maskProps.opacity = clamp(0.35 + intensity * 0.55, 0.35, 0.95);
-  }
-  if (mapping.maskId === 'dither') {
-    maskProps.levels = Math.max(2, Math.round(8 - intensity * 5));
-    maskProps.scale = Math.max(1, Math.round(1 + intensity * 3));
-  }
-
-  return (
-    <Box style={{
-      position: 'relative',
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.bgElevated,
-      overflow: 'hidden',
-      ...style,
-    }}>
-      {EffectComponent && <EffectComponent {...effectProps} />}
-      <Box style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: '100%',
-        height: '100%',
-        backgroundColor: colors.bg,
-        opacity: clamp(mapping.overlay, 0, 0.96),
-      }} />
-      <Box style={{
-        position: 'relative',
-        width: '100%',
-        height: '100%',
-        ...contentStyle,
-      }}>
-        {children}
-      </Box>
-      {MaskComponent && <MaskComponent {...maskProps} />}
-    </Box>
-  );
-}
-
-function MasksDashboardDemo() {
-  const c = useThemeColors();
-  const [profileId, setProfileId] = useState<ProfileId>('balanced');
-  const [randomMap, setRandomMap] = useState<SurfaceMap>(() => makeRandomSurfaceMap());
-  const [speedScale, setSpeedScale] = useState(1.0);
-  const [intensityScale, setIntensityScale] = useState(0.85);
-  const [tick, setTick] = useState(0);
-
-  const [kpis, setKpis] = useState({
-    revenue: 62800,
-    users: 1420,
-    errors: 3,
-    latency: 146,
-    revDelta: 6.5,
-    userDelta: 11.2,
-    errDelta: -18.4,
-    latDelta: -4.7,
-  });
-
-  const [sparks, setSparks] = useState({
-    revenue: [28, 31, 30, 39, 42, 48, 52, 49, 57, 60, 58, 63],
-    users: [115, 132, 148, 156, 144, 169, 174, 188, 201, 220, 235, 244],
-    errors: [12, 10, 9, 11, 8, 7, 6, 9, 5, 4, 5, 3],
-    latency: [190, 182, 176, 168, 160, 172, 158, 149, 142, 138, 134, 128],
-  });
-
-  const [revenueBars, setRevenueBars] = useState(generateRevenueBars);
-  const [targets, setTargets] = useState(generateTargets);
-  const [services, setServices] = useState(generateServices);
-
-  useLuaInterval(2800, () => {
-    setTick(prev => prev + 1);
-    setRevenueBars(generateRevenueBars());
-
-    setKpis(prev => ({
-      revenue: Math.round(jitter(prev.revenue, 4200, 28000, 98000)),
-      users: Math.round(jitter(prev.users, 120, 800, 4200)),
-      errors: Math.round(jitter(prev.errors, 4, 0, 42)),
-      latency: Math.round(jitter(prev.latency, 28, 55, 300)),
-      revDelta: +jitter(prev.revDelta, 3.8, -12, 20).toFixed(1),
-      userDelta: +jitter(prev.userDelta, 2.7, -9, 22).toFixed(1),
-      errDelta: +jitter(prev.errDelta, 8, -90, 90).toFixed(1),
-      latDelta: +jitter(prev.latDelta, 5.2, -40, 35).toFixed(1),
-    }));
-
-    setSparks({
-      revenue: jitterSeries([28, 31, 30, 39, 42, 48, 52, 49, 57, 60, 58, 63], 10),
-      users: jitterSeries([115, 132, 148, 156, 144, 169, 174, 188, 201, 220, 235, 244], 24),
-      errors: jitterSeries([12, 10, 9, 11, 8, 7, 6, 9, 5, 4, 5, 3], 5),
-      latency: jitterSeries([190, 182, 176, 168, 160, 172, 158, 149, 142, 138, 134, 128], 22),
-    });
-
-    setTargets(prev => prev.map(metric => ({
-      ...metric,
-      value: jitter(metric.value, 0.07, 0.05, 0.99),
-    })));
-
-    setServices(generateServices());
-  });
-
-  const activeProfile = profileDefs.find(p => p.id === profileId) ?? profileDefs[0];
-  const activeMap = profileId === 'random' ? randomMap : organizedMappings[profileId];
-
-  const profileTabs: Tab[] = profileDefs.map(profile => ({ id: profile.id, label: profile.label }));
-
-  const kpiCards = [
-    { id: 'revenue', label: 'Revenue', value: `$${formatCompact(kpis.revenue)}`, delta: kpis.revDelta, spark: sparks.revenue, surface: 'revenue' as SurfaceId, color: c.success },
-    { id: 'users', label: 'Active Users', value: formatCompact(kpis.users), delta: kpis.userDelta, spark: sparks.users, surface: 'users' as SurfaceId, color: c.info },
-    { id: 'errors', label: 'Errors', value: String(kpis.errors), delta: kpis.errDelta, spark: sparks.errors, surface: 'errors' as SurfaceId, color: c.error },
-    { id: 'latency', label: 'Latency', value: `${kpis.latency}ms`, delta: kpis.latDelta, spark: sparks.latency, surface: 'latency' as SurfaceId, color: c.warning },
-  ];
-
-  const updateLabel = tick === 0 ? 'just now' : `${tick * 3}s ago`;
-  const summarySurfaces: { label: string; key: SurfaceId }[] = [
-    { label: 'Header', key: 'header' },
-    { label: 'Chart', key: 'chart' },
-    { label: 'Services', key: 'services' },
-  ];
-
-  return (
-    <Box style={{ width: '100%', height: '100%', gap: 6, minHeight: 0 }}>
-      <Box style={{
-        width: '100%',
-        gap: 6,
-        padding: 8,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bgElevated,
-        flexShrink: 0,
-      }}>
-        {/* rjit-ignore-next-line */}
-        <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
-          <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
-            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Mask Mapping Dashboard</Text>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
-              Click a top toggle to remap effects and masks across dashboard surfaces.
-            </Text>
-          </Box>
-          <Pressable
-            onPress={() => setRandomMap(makeRandomSurfaceMap())}
-            style={{
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 5,
-              paddingBottom: 5,
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: c.border,
-              backgroundColor: c.bgAlt,
-              opacity: profileId === 'random' ? 1 : 0.75,
-            }}
-          >
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Re-map</Text>
-          </Pressable>
-        </Box>
-
-        <Tabs
-          tabs={profileTabs}
-          activeId={profileId}
-          onSelect={(id) => {
-            const next = id as ProfileId;
-            setProfileId(next);
-            if (next === 'random') setRandomMap(makeRandomSurfaceMap());
-          }}
-          variant="pill"
-          style={{ padding: 3, gap: 3, flexWrap: 'wrap' }}
-        />
-
-        <Box style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
-          <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Global Speed</Text>
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
-              <Box style={{ flexGrow: 1 }}>
-                <Slider value={speedScale} min={0.5} max={1.8} onValueChange={setSpeedScale} />
-              </Box>
-              <Text style={{ color: c.text, fontSize: 10, width: 34 }}>{speedScale.toFixed(2)}</Text>
-            </Box>
-          </Box>
-          <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Global Intensity</Text>
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
-              <Box style={{ flexGrow: 1 }}>
-                <Slider value={intensityScale} min={0.3} max={1.3} onValueChange={setIntensityScale} />
-              </Box>
-              <Text style={{ color: c.text, fontSize: 10, width: 34 }}>{intensityScale.toFixed(2)}</Text>
-            </Box>
-          </Box>
-        </Box>
-
-        <Box style={{ flexDirection: 'row', width: '100%', gap: 6, flexWrap: 'wrap' }}>
-          {summarySurfaces.map((item) => (
-            <Box
-              key={item.key}
-              style={{
-                paddingLeft: 8,
-                paddingRight: 8,
-                paddingTop: 3,
-                paddingBottom: 3,
-                borderRadius: 6,
-                borderWidth: 1,
-                borderColor: c.border,
-                backgroundColor: c.bgAlt,
-              }}
-            >
-              <Text style={{ color: c.textDim, fontSize: 9 }}>
-                {`${item.label}: ${describeMapping(activeMap[item.key])}`}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-
-      <ScrollView style={{ width: '100%', flexGrow: 1, minHeight: 0 }}>
-        <Box style={{ gap: 8, paddingBottom: 6 }}>
-          <MappedSurface
-            colors={c}
-            mapping={activeMap.header}
-            speedScale={speedScale}
-            intensityScale={intensityScale}
-            style={{ width: '100%', height: 78 }}
-            contentStyle={{
-              paddingLeft: 12,
-              paddingRight: 12,
-              paddingTop: 10,
-              paddingBottom: 10,
-              justifyContent: 'space-between',
-            }}
-          >
-            <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>Operations Dashboard</Text>
-              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Badge label={activeProfile.label} variant="info" />
-                <Text style={{ color: c.textDim, fontSize: 10 }}>{`Updated ${updateLabel}`}</Text>
-              </Box>
-            </Box>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>{activeProfile.description}</Text>
-          </MappedSurface>
-
-          <Box style={{ flexDirection: 'row', width: '100%', gap: 8 }}>
-            {kpiCards.map((card) => (
-              <MappedSurface
-                key={card.id}
-                colors={c}
-                mapping={activeMap[card.surface]}
-                speedScale={speedScale}
-                intensityScale={intensityScale}
-                style={{ flexGrow: 1, flexBasis: 0, minHeight: 94 }}
-                contentStyle={{
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 9,
-                  paddingBottom: 9,
-                  justifyContent: 'space-between',
-                  gap: 4,
-                }}
-              >
-                <Text style={{ color: c.textSecondary, fontSize: 10 }}>{card.label}</Text>
-                <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box style={{ gap: 2 }}>
-                    <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>{card.value}</Text>
-                    <Text style={{ color: card.delta >= 0 ? c.success : c.error, fontSize: 10, fontWeight: 'normal' }}>
-                      {`${card.delta >= 0 ? '+' : ''}${card.delta.toFixed(1)}%`}
-                    </Text>
-                  </Box>
-                  <Sparkline data={card.spark} width={64} height={22} color={card.color} />
-                </Box>
-              </MappedSurface>
-            ))}
-          </Box>
-
-          <Box style={{ flexDirection: 'row', width: '100%', gap: 8 }}>
-            <MappedSurface
-              colors={c}
-              mapping={activeMap.chart}
-              speedScale={speedScale}
-              intensityScale={intensityScale}
-              style={{ flexGrow: 1, minHeight: 210 }}
-              contentStyle={{
-                paddingLeft: 12,
-                paddingRight: 12,
-                paddingTop: 12,
-                paddingBottom: 12,
-                gap: 8,
-              }}
-            >
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Weekly Throughput</Text>
-              <BarChart data={revenueBars} height={134} showValues color={c.primary} />
-            </MappedSurface>
-
-            <MappedSurface
-              colors={c}
-              mapping={activeMap.targets}
-              speedScale={speedScale}
-              intensityScale={intensityScale}
-              style={{ width: 220, minHeight: 210 }}
-              contentStyle={{
-                paddingLeft: 12,
-                paddingRight: 12,
-                paddingTop: 12,
-                paddingBottom: 12,
-                gap: 8,
-              }}
-            >
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Target Tracking</Text>
-              {targets.map((metric) => (
-                <Box key={metric.label} style={{ gap: 3 }}>
-                  <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
-                    <Text style={{ color: c.textSecondary, fontSize: 10 }}>{metric.label}</Text>
-                    <Text style={{ color: c.text, fontSize: 10, fontWeight: 'normal' }}>
-                      {`${Math.round(metric.value * 100)}%`}
-                    </Text>
-                  </Box>
-                  <ProgressBar value={metric.value} color={toneColor(metric.tone, c)} height={6} animated />
-                </Box>
-              ))}
-            </MappedSurface>
-          </Box>
-
-          <MappedSurface
-            colors={c}
-            mapping={activeMap.services}
-            speedScale={speedScale}
-            intensityScale={intensityScale}
-            style={{ width: '100%', minHeight: 196 }}
-            contentStyle={{
-              paddingLeft: 12,
-              paddingRight: 12,
-              paddingTop: 12,
-              paddingBottom: 12,
-              gap: 8,
-            }}
-          >
-            <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>Service Health</Text>
-              <Text style={{ color: c.textSecondary, fontSize: 10 }}>{`${services.length} services`}</Text>
-            </Box>
-            <Divider color={c.border} />
-            {services.map((service) => (
-              <Box key={service.name} style={{ gap: 3 }}>
-                <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ color: c.text, fontSize: 11, fontWeight: 'normal' }}>{service.name}</Text>
-                    <Badge label={service.state} variant={serviceBadgeVariant(service.state)} />
-                  </Box>
-                  <Text style={{ color: c.textSecondary, fontSize: 10 }}>{`${service.latency}ms`}</Text>
-                </Box>
-                <ProgressBar value={service.load} color={serviceColor(service.state, c)} height={5} animated />
-                <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
-                  <Text style={{ color: c.textDim, fontSize: 9 }}>{`Load ${Math.round(service.load * 100)}%`}</Text>
-                  <Text style={{ color: c.textDim, fontSize: 9 }}>{`${service.errors} errors/min`}</Text>
-                </Box>
-              </Box>
-            ))}
-          </MappedSurface>
-        </Box>
-      </ScrollView>
-    </Box>
-  );
-}
-
-const legacyMasks = [
-  { name: 'Scanlines', Component: Scanlines },
-  { name: 'CRT', Component: CRT },
-  { name: 'VHS', Component: VHS },
-  { name: 'Dither', Component: Dither },
-  { name: 'Ascii', Component: Ascii },
-  { name: 'LumaMesh', Component: LumaMesh },
-  { name: 'OpticalFlow', Component: OpticalFlow },
-  { name: 'DataMosh', Component: DataMosh },
-  { name: 'FeedbackLoop', Component: FeedbackLoop },
-  { name: 'HardGlitch', Component: HardGlitch },
-  { name: 'SoftGlitch', Component: SoftGlitch },
-  { name: 'Stretch', Component: Stretch },
-  { name: 'FishEye', Component: FishEye },
-  { name: 'Tile', Component: Tile },
-  { name: 'Watercolor', Component: Watercolor },
-] as const;
-
-const legacyBackgrounds = [
-  { name: 'None', Component: null },
-  { name: 'Spirograph', Component: Spirograph },
-  { name: 'Constellation', Component: Constellation },
-  { name: 'Voronoi', Component: Voronoi },
-  { name: 'Mycelium', Component: Mycelium },
-  { name: 'Rings', Component: Rings },
-  { name: 'FlowParticles', Component: FlowParticles },
-] as const;
-
-function LegacyMasksLab() {
-  const c = useThemeColors();
-  const [maskIdx, setMaskIdx] = useState(0);
-  const [bgIdx, setBgIdx] = useState(1);
-  const [intensity, setIntensity] = useState(0.5);
-  const [speed, setSpeed] = useState(1.0);
-
-  const selectedMask = legacyMasks[maskIdx];
-  const MaskComponent = selectedMask.Component;
-  const selectedBg = legacyBackgrounds[bgIdx];
-  const BgComponent = selectedBg.Component;
-
-  const maskTabs: Tab[] = legacyMasks.map((m, i) => ({ id: String(i), label: m.name }));
-  const bgTabs: Tab[] = legacyBackgrounds.map((b, i) => ({ id: String(i), label: b.name }));
-
-  return (
-    <Box style={{ width: '100%', height: '100%', padding: 6, gap: 6, minHeight: 0, overflow: 'hidden' }}>
-      <Box style={{
-        width: '100%',
-        gap: 5,
-        padding: 8,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bgElevated,
-        flexShrink: 0,
-      }}>
-        {/* rjit-ignore-next-line */}
-        <Box style={{ flexDirection: 'row', alignItems: 'start', width: '100%', gap: 10 }}>
-          <Box style={{ flexGrow: 1, minWidth: 0, gap: 2 }}>
-            <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Masks Legacy Lab</Text>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
-              Original playground retained while the dashboard mapping demo is being validated.
-            </Text>
-          </Box>
-        </Box>
-
-        <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Mask</Text>
-          <Tabs
-            tabs={maskTabs}
-            activeId={String(maskIdx)}
-            onSelect={(id) => setMaskIdx(Number(id))}
-            variant="pill"
-            style={{ padding: 3, gap: 3 }}
-          />
-        </Box>
-
-        <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Background Effect</Text>
-          <Tabs
-            tabs={bgTabs}
-            activeId={String(bgIdx)}
-            onSelect={(id) => setBgIdx(Number(id))}
-            variant="pill"
-            style={{ flexWrap: 'wrap', padding: 3, gap: 3 }}
-          />
-        </Box>
-
-        <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-          <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Intensity</Text>
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
-              <Box style={{ flexGrow: 1 }}>
-                <Slider value={intensity} min={0} max={1} onValueChange={setIntensity} />
-              </Box>
-              <Text style={{ color: c.text, fontSize: 10, width: 30 }}>{intensity.toFixed(2)}</Text>
-            </Box>
-          </Box>
-          <Box style={{ flexGrow: 1, gap: 2 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>Speed</Text>
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
-              <Box style={{ flexGrow: 1 }}>
-                <Slider value={speed} min={0.1} max={3} onValueChange={setSpeed} />
-              </Box>
-              <Text style={{ color: c.text, fontSize: 10, width: 30 }}>{speed.toFixed(1)}</Text>
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-
-      <Box style={{ flexDirection: 'row', gap: 6, flexGrow: 1, minHeight: 0 }}>
-        <Box style={{ flexGrow: 1, flexBasis: 0, gap: 4, minHeight: 0 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
-            {`${selectedMask.name} Mask`}
-          </Text>
-          <Box style={{
-            flexGrow: 1,
-            minHeight: 0,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: c.border,
-            overflow: 'hidden',
-          }}>
-            {BgComponent && <BgComponent background speed={speed * 0.7} />}
-            <Box style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: '100%',
-              height: '100%',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <Box style={{
-                padding: 16,
-                borderRadius: 10,
-                backgroundColor: c.bg,
-                borderWidth: 1,
-                borderColor: c.border,
-                alignItems: 'center',
-                gap: 6,
-              }}>
-                <Text style={{ color: c.text, fontSize: 22, fontWeight: 'normal' }}>
-                  {selectedMask.name}
-                </Text>
-                <Text style={{ color: c.textSecondary, fontSize: 11 }}>
-                  Post-processing mask active
-                </Text>
-              </Box>
-            </Box>
-            <MaskComponent mask intensity={intensity} speed={speed} />
-          </Box>
-        </Box>
-
-        <Box style={{ width: 240, gap: 4, minHeight: 0 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'normal' }}>
-            Full Compositing Stack
-          </Text>
-
-          <Box style={{
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            overflow: 'hidden',
-            flexGrow: 1,
-            minHeight: 0,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-            <Spirograph background speed={0.6} />
-            <Box style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: c.bg,
-              opacity: 0.25,
-            }} />
-            <Box style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: '100%',
-              height: '100%',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 6,
-            }}>
-              <TextEffect
-                type="neon"
-                text="REACTJIT"
-                style={{ width: 200, height: 50 }}
-              />
-              <Box style={{
-                paddingLeft: 10,
-                paddingRight: 10,
-                paddingTop: 4,
-                paddingBottom: 4,
-                borderRadius: 6,
-                backgroundColor: c.bgAlt,
-                borderWidth: 1,
-                borderColor: c.border,
-              }}>
-                <Text style={{ color: c.text, fontSize: 9, fontWeight: 'normal' }}>
-                  BG + Text FX + Mask
-                </Text>
-              </Box>
-            </Box>
-            <MaskComponent mask intensity={intensity * 0.7} speed={speed} />
-          </Box>
-
-          <Box style={{
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            overflow: 'hidden',
-            height: 120,
-            flexShrink: 0,
-          }}>
-            <Constellation background speed={0.8} />
-            <Box style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: '100%',
-              height: '100%',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
-                Constellation + CRT
-              </Text>
-            </Box>
-            <CRT mask intensity={intensity * 0.6} speed={speed} />
-          </Box>
-
-          <Box style={{
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            overflow: 'hidden',
-            height: 100,
-            flexShrink: 0,
-          }}>
-            <Voronoi background speed={0.5} />
-            <Box style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: c.bg,
-              opacity: 0.3,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <TextEffect
-                type="typewriter"
-                text="PLAY"
-                style={{ width: 120, height: 36 }}
-                speed={0.8}
-              />
-            </Box>
-            <VHS mask tracking={intensity * 0.8} speed={speed} />
-          </Box>
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
-type MasksView = 'dashboard' | 'legacy';
+// ── MasksStory ───────────────────────────────────────────
 
 export function MasksStory() {
   const c = useThemeColors();
-  const [view, setView] = useState<MasksView>('dashboard');
+  const [activeId, setActiveId] = useState(TABS[0].id);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [propOverrides, setPropOverrides] = useState<Record<string, any>>({});
+  const [editingProp, setEditingProp] = useState<string | null>(null);
+  const tab = TABS.find(it => it.id === activeId) || TABS[0];
+  const MaskComp = tab.Component;
 
-  const viewTabs: Tab[] = [
-    { id: 'dashboard', label: 'Dashboard Mapping' },
-    { id: 'legacy', label: 'Legacy Lab' },
-  ];
+  // All props for this tab: extra + base
+  const allProps = [...tab.extraProps, ...BASE_PROPS];
+
+  // Resolved values
+  const resolved: Record<string, any> = {};
+  for (const p of allProps) {
+    resolved[p.name] = propOverrides[p.name] !== undefined ? propOverrides[p.name] : p.defaultVal;
+  }
+
+  // Build mask props (skip false bools, zero nums, empty strings)
+  const maskProps: Record<string, any> = {};
+  for (const p of allProps) {
+    const v = resolved[p.name];
+    if (p.kind === 'bool' && v) maskProps[p.name] = true;
+    else if (p.kind === 'num') maskProps[p.name] = v;
+    else if (p.kind === 'enum' && v !== '') maskProps[p.name] = v;
+  }
+
+  const setVal = (name: string, val: any) => {
+    setPropOverrides(prev => ({ ...prev, [name]: val }));
+  };
+
+  const switchTab = (id: string) => {
+    setActiveId(id);
+    setPropOverrides({});
+    setEditingProp(null);
+  };
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 6, gap: 6, minHeight: 0, overflow: 'hidden' }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+
+      {/* ── Header ── */}
       <Box style={{
-        width: '100%',
-        gap: 4,
-        padding: 8,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bgElevated,
         flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 14,
       }}>
-        <Text style={{ color: c.text, fontSize: 15, fontWeight: 'normal' }}>Masks</Text>
-        <Text style={{ color: c.textSecondary, fontSize: 10 }}>
-          Dashboard-style mapping demo is first-class. Legacy lab remains for side-by-side comparison.
+        <Image src="layers" style={{ width: 18, height: 18 }} tintColor={C.accent} />
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+          {'Masks'}
         </Text>
-        <Tabs
-          tabs={viewTabs}
-          activeId={view}
-          onSelect={(id) => setView(id as MasksView)}
-          variant="pill"
-          style={{ padding: 3, gap: 3 }}
-        />
+        <Box style={{
+          backgroundColor: C.accentDim,
+          borderRadius: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 3,
+          paddingBottom: 3,
+        }}>
+          <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
+        </Box>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 10 }}>
+          {'15 post-processing masks — overlay on any content'}
+        </Text>
       </Box>
 
-      <Box style={{ flexGrow: 1, minHeight: 0 }}>
-        {view === 'dashboard' ? <MasksDashboardDemo /> : <LegacyMasksLab />}
+      {/* ── Subtitle bar — two rows: title+snippet / description ── */}
+      <Box style={{
+        flexShrink: 0,
+        height: 46,
+        overflow: 'hidden',
+        backgroundColor: c.bgElevated,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 5,
+        paddingBottom: 5,
+        gap: 2,
+      }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={C.accent} />
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{tab.label}</Text>
+          <Box style={{
+            backgroundColor: c.surface, borderRadius: 3,
+            paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1,
+          }}>
+            <Text style={{ color: c.muted, fontSize: 8 }}>{tab.cat}</Text>
+          </Box>
+          <Box style={{ flexGrow: 1 }} />
+          <CodeBlock language="tsx" fontSize={8} code={tab.usage} />
+        </Box>
+        <Text style={{ color: c.muted, fontSize: 9 }} numberOfLines={1}>{tab.desc}</Text>
       </Box>
+
+      {/* ── Middle section: preview + command center share remaining space ── */}
+      <Box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+
+      {/* ── Preview — before (clean) vs after (masked) ── */}
+      <Box style={{ flexGrow: 1, flexDirection: 'row', borderBottomWidth: 1, borderColor: c.border, minHeight: 0 }}>
+
+        {/* Left: BEFORE — clean content, no mask */}
+        <Box style={{ flexGrow: 1, flexBasis: 0, overflow: 'hidden', backgroundColor: '#ffffff' }}>
+          <Box style={{
+            position: 'absolute', left: 0, top: 0, width: '100%', height: '100%',
+            justifyContent: 'center', alignItems: 'center', gap: 14,
+          }}>
+            <Text style={{ color: '#111', fontSize: 24, fontWeight: 'bold' }}>{tab.label}</Text>
+            <Box style={{ flexDirection: 'row', gap: 8 }}>
+              {[C.accent, '#3b82f6', '#10b981', '#f59e0b'].map(col => (
+                <Box key={col} style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: col }} />
+              ))}
+            </Box>
+            <Box style={{ width: 160, gap: 5 }}>
+              <Box style={{ width: '100%', height: 6, borderRadius: 3, backgroundColor: '#e5e7eb' }}>
+                <Box style={{ width: '65%', height: 6, borderRadius: 3, backgroundColor: C.accent }} />
+              </Box>
+              <Box style={{ width: '100%', height: 6, borderRadius: 3, backgroundColor: '#e5e7eb' }}>
+                <Box style={{ width: '40%', height: 6, borderRadius: 3, backgroundColor: '#3b82f6' }} />
+              </Box>
+              <Box style={{ width: '100%', height: 6, borderRadius: 3, backgroundColor: '#e5e7eb' }}>
+                <Box style={{ width: '80%', height: 6, borderRadius: 3, backgroundColor: '#10b981' }} />
+              </Box>
+            </Box>
+            <Text style={{ color: '#999', fontSize: 9 }}>{'BEFORE'}</Text>
+          </Box>
+        </Box>
+
+        {/* Divider */}
+        <Box style={{ width: 1, flexShrink: 0, backgroundColor: c.border }} />
+
+        {/* Right: AFTER — same content with mask applied */}
+        <Box style={{ flexGrow: 1, flexBasis: 0, overflow: 'hidden', backgroundColor: '#ffffff' }}>
+          <Box style={{
+            position: 'absolute', left: 0, top: 0, width: '100%', height: '100%',
+            justifyContent: 'center', alignItems: 'center', gap: 14,
+          }}>
+            <Text style={{ color: '#111', fontSize: 24, fontWeight: 'bold' }}>{tab.label}</Text>
+            <Box style={{ flexDirection: 'row', gap: 8 }}>
+              {[C.accent, '#3b82f6', '#10b981', '#f59e0b'].map(col => (
+                <Box key={col} style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: col }} />
+              ))}
+            </Box>
+            <Box style={{ width: 160, gap: 5 }}>
+              <Box style={{ width: '100%', height: 6, borderRadius: 3, backgroundColor: '#e5e7eb' }}>
+                <Box style={{ width: '65%', height: 6, borderRadius: 3, backgroundColor: C.accent }} />
+              </Box>
+              <Box style={{ width: '100%', height: 6, borderRadius: 3, backgroundColor: '#e5e7eb' }}>
+                <Box style={{ width: '40%', height: 6, borderRadius: 3, backgroundColor: '#3b82f6' }} />
+              </Box>
+              <Box style={{ width: '100%', height: 6, borderRadius: 3, backgroundColor: '#e5e7eb' }}>
+                <Box style={{ width: '80%', height: 6, borderRadius: 3, backgroundColor: '#10b981' }} />
+              </Box>
+            </Box>
+            <Text style={{ color: '#999', fontSize: 9 }}>{'AFTER'}</Text>
+          </Box>
+          <MaskComp {...maskProps} />
+        </Box>
+
+      </Box>
+
+      {/* ── Command center — live-editable props ── */}
+      <Box style={{
+        flexShrink: 0,
+        borderBottomWidth: 1,
+        borderColor: c.border,
+        backgroundColor: c.bgElevated,
+        paddingLeft: 12,
+        paddingRight: 12,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 4,
+      }}>
+        {/* Props row */}
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {allProps.map(p => {
+            const val = resolved[p.name];
+            if (p.kind === 'bool') {
+              return (
+                <Pressable key={p.name} onPress={() => setVal(p.name, !val)}>
+                  <Box style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                    paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
+                    borderRadius: 4, borderWidth: 1,
+                    borderColor: val ? C.accent : c.border,
+                    backgroundColor: val ? C.accentDim : c.surface,
+                  }}>
+                    <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={val ? C.accent : c.muted} />
+                    <Text style={{ color: val ? C.accent : c.muted, fontSize: 9 }}>{p.name}</Text>
+                    <Text style={{ color: val ? C.accent : c.muted, fontSize: 8 }}>{val ? '\u25CF' : '\u25CB'}</Text>
+                  </Box>
+                </Pressable>
+              );
+            }
+            if (p.kind === 'enum') {
+              const opts = p.options || [];
+              const idx = opts.indexOf(val);
+              const next = opts[(idx + 1) % opts.length];
+              const display = val === '' ? 'none' : val;
+              return (
+                <Pressable key={p.name} onPress={() => setVal(p.name, next)}>
+                  <Box style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                    paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
+                    borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+                  }}>
+                    <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={c.muted} />
+                    <Text style={{ color: c.muted, fontSize: 9 }}>{p.name}</Text>
+                    <Text style={{ color: C.accent, fontSize: 9 }}>{display}</Text>
+                  </Box>
+                </Pressable>
+              );
+            }
+            // num
+            const step = p.step || 0.1;
+            const clamp = (v: number) => {
+              let r = Math.round(v * 1000) / 1000;
+              if (p.min !== undefined) r = Math.max(p.min, r);
+              if (p.max !== undefined) r = Math.min(p.max, r);
+              return r;
+            };
+            const isEditing = editingProp === p.name;
+            return (
+              <Box key={p.name} style={{
+                flexDirection: 'row', alignItems: 'center', gap: 2,
+                paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2,
+                borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+              }}>
+                <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={c.muted} />
+                <Text style={{ color: c.muted, fontSize: 9, marginRight: 2 }}>{p.name}</Text>
+                <Pressable onPress={() => setVal(p.name, clamp(val - step))}>
+                  <Box style={{
+                    width: 14, height: 14, borderRadius: 3,
+                    backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center',
+                  }}>
+                    <Text style={{ color: c.muted, fontSize: 10 }}>{'\u2212'}</Text>
+                  </Box>
+                </Pressable>
+                {isEditing ? (
+                  <TextInput
+                    style={{
+                      width: 40, fontSize: 9, color: c.text,
+                      paddingLeft: 2, paddingRight: 2, paddingTop: 1, paddingBottom: 1,
+                      backgroundColor: c.bg, borderRadius: 2,
+                    }}
+                    value={String(val)}
+                    autoFocus
+                    onSubmit={(text: string) => {
+                      const n = parseFloat(text);
+                      if (Number.isFinite(n)) setVal(p.name, clamp(n));
+                      setEditingProp(null);
+                    }}
+                    onBlur={() => setEditingProp(null)}
+                  />
+                ) : (
+                  <Pressable onPress={() => setEditingProp(p.name)}>
+                    <Text style={{ color: c.text, fontSize: 9, minWidth: 28 }}>
+                      {step >= 1 ? String(val) : val.toFixed(step < 0.01 ? 3 : 2)}
+                    </Text>
+                  </Pressable>
+                )}
+                <Pressable onPress={() => setVal(p.name, clamp(val + step))}>
+                  <Box style={{
+                    width: 14, height: 14, borderRadius: 3,
+                    backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center',
+                  }}>
+                    <Text style={{ color: c.muted, fontSize: 10 }}>{'+'}</Text>
+                  </Box>
+                </Pressable>
+              </Box>
+            );
+          })}
+
+        </Box>
+      </Box>
+
+      </Box>{/* end middle section */}
+
+      {/* ── Tab bar ── */}
+      <ScrollView style={{
+        height: 86,
+        flexShrink: 0,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        backgroundColor: c.bgElevated,
+      }}>
+          <Box style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            paddingLeft: 8,
+            paddingRight: 8,
+            paddingTop: 8,
+            paddingBottom: 8,
+            gap: 8,
+          }}>
+            {TABS.map(comp => {
+              const active = comp.id === activeId;
+              const hovered = comp.id === hoveredId;
+              return (
+                <Pressable
+                  key={comp.id}
+                  onPress={() => switchTab(comp.id)}
+                  onHoverIn={() => setHoveredId(comp.id)}
+                  onHoverOut={() => setHoveredId(null)}
+                >
+                  <Box style={{
+                    width: 50,
+                    height: 50,
+                    backgroundColor: active ? C.selected : hovered ? C.accentDim : c.surface,
+                    borderRadius: 6,
+                    borderWidth: active ? 2 : hovered ? 2 : 1,
+                    borderColor: active ? C.accent : hovered ? C.accent : c.border,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}>
+                    <Image src={comp.icon} style={{ width: 16, height: 16 }} tintColor={active || hovered ? C.accent : c.muted} />
+                    <Text style={{
+                      color: active || hovered ? c.text : c.muted,
+                      fontSize: 7,
+                    }}>
+                      {comp.label}
+                    </Text>
+                  </Box>
+                </Pressable>
+              );
+            })}
+          </Box>
+      </ScrollView>
+
+      {/* ── Footer ── */}
+      <Box style={{
+        flexShrink: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.bgElevated,
+        borderTopWidth: 1,
+        borderColor: c.border,
+        paddingLeft: 20,
+        paddingRight: 20,
+        paddingTop: 6,
+        paddingBottom: 6,
+        gap: 12,
+      }}>
+        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src="layers" style={{ width: 12, height: 12 }} tintColor={c.muted} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'Masks'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
+        <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={c.text} />
+        <Text style={{ color: c.text, fontSize: 9 }}>{tab.label}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
+      </Box>
+
     </Box>
   );
 }

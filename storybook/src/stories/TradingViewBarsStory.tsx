@@ -77,7 +77,10 @@ function TradingBars2D({
   maxPrice: number;
 }) {
   const range = Math.max(0.0001, maxPrice - minPrice);
-  const maxVolume = Math.max(1, ...candles.map((c) => c.volume));
+  let maxVolume = 1;
+  for (let i = 0; i < candles.length; i += 1) {
+    if (candles[i].volume > maxVolume) maxVolume = candles[i].volume;
+  }
 
   const priceBars = candles.map((c, i) => ({
     label: i % 8 === 0 ? c.label : '',
@@ -239,8 +242,17 @@ export function TradingViewBarsStory() {
   });
 
   const { minPrice, maxPrice, last, prev } = useMemo(() => {
-    const min = Math.min(...candles.map((c) => c.low));
-    const max = Math.max(...candles.map((c) => c.high));
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < candles.length; i += 1) {
+      const candle = candles[i];
+      if (candle.low < min) min = candle.low;
+      if (candle.high > max) max = candle.high;
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      min = 0;
+      max = 1;
+    }
     const padding = (max - min) * 0.1;
     const current = candles[candles.length - 1];
     const previous = candles[candles.length - 2] || current;

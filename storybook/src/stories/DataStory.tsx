@@ -223,6 +223,7 @@ const previewCardStyle = {
   borderColor: 'rgba(255,255,255,0.06)',
   padding: 10,
   alignItems: 'center' as const,
+  overflow: 'hidden' as const,
 };
 
 function PreviewSection({ label, children }: { label: string; children: React.ReactNode }) {
@@ -291,7 +292,7 @@ function DataPreview() {
       </PreviewSection>
 
       <PreviewSection label="HORIZONTAL BAR">
-        <HorizontalBarChart data={DEMO_HBAR_DATA} width={360} showValues interactive />
+        <HorizontalBarChart data={DEMO_HBAR_DATA} width={300} showValues interactive />
       </PreviewSection>
 
       <PreviewSection label="STACKED BAR">

@@ -89,7 +89,7 @@ function LumaMesh.draw(state, w, h, source)
       if col < cols - 1 then
         local v2 = grid[row][col + 1]
         local avg = (v.brightness + v2.brightness) * 0.5
-        local alpha = (0.1 + avg * 0.6) * effectMix
+        local alpha = (0.4 + avg * 0.8) * effectMix
 
         if colored then
           local cr = (v.r + v2.r) * 0.5
@@ -106,7 +106,7 @@ function LumaMesh.draw(state, w, h, source)
       if row < rows - 1 then
         local v2 = grid[row + 1][col]
         local avg = (v.brightness + v2.brightness) * 0.5
-        local alpha = (0.1 + avg * 0.6) * effectMix
+        local alpha = (0.4 + avg * 0.8) * effectMix
 
         if colored then
           local cr = (v.r + v2.r) * 0.5

@@ -105,6 +105,9 @@ parseDuration("1h30m")               // 5400000
 isToday(Date.now())                  // true
 addDays(Date.now(), -1)              // yesterday's timestamp`;
 
+const STOPWATCH_OPTIONS = { tickRate: 50 };
+const COUNTDOWN_OPTIONS = { tickRate: 50 };
+
 // ── Helpers ──────────────────────────────────────────────
 
 function Divider() {
@@ -152,7 +155,7 @@ function WorldClockDemo() {
 
 function StopwatchDemo() {
   const c = useThemeColors();
-  const sw = useStopwatch({ tickRate: 50 });
+  const sw = useStopwatch(STOPWATCH_OPTIONS);
 
   return (
     <Box style={{ gap: 10 }}>
@@ -180,7 +183,7 @@ function StopwatchDemo() {
 
 function CountdownDemo() {
   const c = useThemeColors();
-  const cd = useCountdown(15_000, { tickRate: 50 });
+  const cd = useCountdown(15_000, COUNTDOWN_OPTIONS);
   const barColor = cd.complete ? C.green : cd.remaining < 3000 ? C.red : C.blue;
 
   return (

@@ -8,6 +8,7 @@
 import React, { createContext, useContext } from 'react';
 import { useThemeColorsOptional } from './context';
 import { useScaledStyle } from './ScaleContext';
+import { Native } from './Native';
 import type { BoxProps, ColProps, TextProps, ImageProps, RenderProps, DevToolsEmbedProps, FocusGroupProps, Style, Color } from './types';
 import { lookupIcon } from './iconRegistry';
 import { useBreakpoint, resolveSpan, spanToFlexBasis, RESPONSIVE_DEFAULTS } from './useBreakpoint';
@@ -330,9 +331,10 @@ export function Image(props: ImageProps) {
 }
 
 // ── Render (external capture) ─────────────────────────
+// Routes through Native for automatic memo isolation.
 
 export function Render(props: RenderProps) {
-  const { source, fps, resolution, interactive, muted, objectFit, vmMemory, vmCpus, onClick, onReady, onError, onFrame, w, h, radius, style } = props;
+  const { w, h, radius, style, ...rest } = props;
   const base: Style = {};
   if (w !== undefined) base.width = w;
   if (h !== undefined) base.height = h;
@@ -342,15 +344,11 @@ export function Render(props: RenderProps) {
     : style;
   const scaledStyle = useScaledStyle(resolvedStyle);
 
-  return React.createElement('Render', {
-    source, fps, resolution, interactive, muted, objectFit,
-    vmMemory, vmCpus,
-    style: scaledStyle,
-    onClick, onReady, onError, onFrame,
-  });
+  return <Native type="Render" {...rest} style={scaledStyle} />;
 }
 
 // ── DevToolsEmbed (live F12 panel in the React tree) ──
+// Routes through Native for automatic memo isolation.
 
 export function DevToolsEmbed(props: DevToolsEmbedProps) {
   const { w, h, style } = props;
@@ -362,7 +360,7 @@ export function DevToolsEmbed(props: DevToolsEmbedProps) {
     : style;
   const scaledStyle = useScaledStyle(resolvedStyle);
 
-  return React.createElement('DevToolsEmbed', { style: scaledStyle });
+  return <Native type="DevToolsEmbed" style={scaledStyle} />;
 }
 
 // ── FocusGroup ────────────────────────────────────────

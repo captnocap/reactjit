@@ -385,6 +385,9 @@ function Masks.loadAll()
     "fish_eye",
     "tile",
     "watercolor",
+    "pixel_sort",
+    "slit_scan",
+    "halftone",
   }
   for _, name in ipairs(maskFiles) do
     local ok, err = pcall(require, "lua.masks." .. name)

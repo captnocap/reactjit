@@ -155,7 +155,7 @@ function DataMosh.draw(state, w, h, source)
   -- Occasional color channel artifacts
   if corruption > 0.2 then
     love.graphics.setBlendMode("add")
-    local ghostAlpha = corruption * 0.04 * effectMix
+    local ghostAlpha = corruption * 0.2 * effectMix
     love.graphics.setColor(1, 0, 0, ghostAlpha)
     love.graphics.draw(state.refCanvas, -2, 0)
     love.graphics.setColor(0, 0, 1, ghostAlpha)

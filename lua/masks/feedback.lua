@@ -108,9 +108,9 @@ function Feedback.draw(state, w, h, source)
     local r = 0.5 + sin(phase) * 0.3
     local g = 0.5 + sin(phase + 2.094) * 0.3
     local b = 0.5 + sin(phase + 4.189) * 0.3
-    love.graphics.setColor(r, g, b, 0.2 * effectMix)
+    love.graphics.setColor(r, g, b, 0.6 * effectMix)
   else
-    love.graphics.setColor(1, 1, 1, 0.2 * effectMix)
+    love.graphics.setColor(1, 1, 1, 0.6 * effectMix)
   end
   love.graphics.draw(state.feedCanvas, 0, 0)
   love.graphics.setBlendMode("alpha")

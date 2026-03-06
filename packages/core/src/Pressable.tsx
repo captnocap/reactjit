@@ -196,8 +196,8 @@ export function Pressable({
 
     return {
       baseStyle: (style as Style) || {},
-      hoverOverlay: undefined,
-      activeOverlay: undefined,
+      hoverOverlay: { opacity: 0.85 },
+      activeOverlay: { opacity: 0.65 },
     };
   }, [style, isStyleFunction]);
 

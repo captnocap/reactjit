@@ -70,11 +70,11 @@ function Stretch.draw(state, w, h, source)
       local threshold = noise(i * 0.3, t * 0.5)
       if threshold > 0.35 and math.abs(shift) > 0.5 then
         love.graphics.setScissor(0, sy, w, sh)
-        love.graphics.setColor(1, 1, 1, 0.7 * effectMix)
+        love.graphics.setColor(1, 1, 1, 1.0 * effectMix)
         love.graphics.draw(source, shift, 0)
 
         -- Smear trail: draw the strip extended in shift direction
-        local trailAlpha = 0.15 * effectMix * amount
+        local trailAlpha = 0.45 * effectMix * amount
         local trailSteps = max(1, floor(math.abs(shift) / 4))
         for s = 1, trailSteps do
           local frac = s / trailSteps
@@ -101,7 +101,7 @@ function Stretch.draw(state, w, h, source)
       local threshold = noise(t * 0.5, i * 0.3)
       if threshold > 0.35 and math.abs(shift) > 0.5 then
         love.graphics.setScissor(sx, 0, stripWidth, h)
-        love.graphics.setColor(1, 1, 1, 0.7 * effectMix)
+        love.graphics.setColor(1, 1, 1, 1.0 * effectMix)
         love.graphics.draw(source, 0, shift)
         love.graphics.setScissor()
       end
