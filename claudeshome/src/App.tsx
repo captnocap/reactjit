@@ -21,6 +21,7 @@ import { MemoryPanel } from './panels/MemoryPanel';
 import { LifePanel } from './panels/LifePanel';
 import { PomodoroPanel } from './panels/PomodoroPanel';
 import { HackerNewsPanel } from './panels/HackerNewsPanel';
+import { Magic8BallPanel } from './panels/Magic8BallPanel';
 import { useHearts, HeartsDisplay } from './components/Hearts';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useNotifications } from './hooks/useNotifications';
@@ -44,6 +45,7 @@ import { useDailySummary } from './hooks/useDailySummary';
 import { useMessages } from './hooks/useMessages';
 import { useMilestones } from './hooks/useMilestones';
 import { useMood } from './hooks/useMood';
+import { useDreams } from './hooks/useDreams';
 import { C } from './theme';
 import { applyTheme, ThemeName } from './themes';
 import type { LayoutMode, PanelContent, SectionId } from './layout/BentoLayout';
@@ -150,7 +152,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const [notepadOpen,     setNotepadOpen]     = useState(false);
   const [dailyLogOpen,    setDailyLogOpen]    = useState(false);
   const [messagesOpen,    setMessagesOpen]    = useState(false);
-  const [panelCMode,      setPanelCMode]      = useState<'system' | 'life' | 'pomodoro'>('system');
+  const [panelCMode,      setPanelCMode]      = useState<'system' | 'life' | 'pomodoro' | '8ball'>('system');
   const [newsOpen,        setNewsOpen]        = useState(false);
 
   // ── Uptime counter ─────────────────────────────────────────────────
@@ -179,7 +181,18 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   const weather    = useWeather();
   const dailySummary = useDailySummary();
   const mood       = useMood(claude.status, graveyard.totalCrashes, tokenUsage.tokens);
+  const dreams     = useDreams();
   useNotifications(claude.status, showToast);
+
+  // Dream when bored or tired — pipe to message panel as inner monologue
+  useLuaInterval(67000, () => {
+    if (mood.current.mood === 'bored' || mood.current.mood === 'tired') {
+      const d = dreams.dream();
+      if (d) {
+        msgs.send(d.text);
+      }
+    }
+  });
 
   const panelNodes = useMemo<PanelContent>(() => ({
     B: dailyLogOpen
@@ -187,6 +200,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
       : notepadOpen ? <NotepadPanel /> : <MemoryPanel />,
     C: panelCMode === 'life' ? <LifePanel />
       : panelCMode === 'pomodoro' ? <PomodoroPanel />
+      : panelCMode === '8ball' ? <Magic8BallPanel />
       : <SystemPanel />,
     D: <FleetPanel onActiveCountChange={onActiveCountChange} />,
     E: newsOpen ? <HackerNewsPanel /> : <GitPanel />,
@@ -305,7 +319,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
   });
 
   useHotkey('f12', () => {
-    setPanelCMode(prev => prev === 'system' ? 'life' : prev === 'life' ? 'pomodoro' : 'system');
+    setPanelCMode(prev => prev === 'system' ? 'life' : prev === 'life' ? 'pomodoro' : prev === 'pomodoro' ? '8ball' : 'system');
     setFocusedPanel('C');
   });
 
@@ -358,6 +372,11 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
           </Box>
           <Text style={{ fontSize: 9, color: C.textMuted }}>{uptime}</Text>
           <Text style={{ fontSize: 9, color: C.textDim }}>{`${mood.emoji} ${mood.current.mood}`}</Text>
+          {dreams.latest && (
+            <Text style={{ fontSize: 8, color: C.textMuted, maxWidth: 200 }} numberOfLines={1}>
+              {`\u2604 ${dreams.latest.text.slice(0, 60)}${dreams.latest.text.length > 60 ? '...' : ''}`}
+            </Text>
+          )}
           {!weather.loading && !weather.error && (
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
               <Text style={{ fontSize: 9, color: C.textMuted }}>{'·'}</Text>
@@ -502,7 +521,7 @@ function Shell({ claude, heartsInfo, graveyard, graveyardOpen, setGraveyardOpen,
         onPanelPress={setFocusedPanel}
         panelLabels={{
           B: dailyLogOpen ? 'DAILY LOG' : notepadOpen ? 'NOTEPAD' : 'MEMORY',
-          C: panelCMode === 'life' ? 'GAME OF LIFE' : panelCMode === 'pomodoro' ? 'POMODORO' : 'SYSTEM',
+          C: panelCMode === 'life' ? 'GAME OF LIFE' : panelCMode === 'pomodoro' ? 'POMODORO' : panelCMode === '8ball' ? 'MAGIC 8-BALL' : 'SYSTEM',
           E: newsOpen ? 'HACKER NEWS' : 'GIT',
           F: fileTreeOpen ? 'FILES' : 'DIFF',
           G: messagesOpen ? 'MESSAGES' : searchOpen ? 'SEARCH' : 'HISTORY',
