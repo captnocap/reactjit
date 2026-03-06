@@ -7,8 +7,7 @@ import { Box, Text, Sparkline, OrderBook } from '@reactjit/core';
 import type { Style } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import type { OHLCV, Holding, PortfolioSnapshot, BookLevel, IndicatorPoint, BollingerBand, MACDPoint } from './types';
-import { formatCurrency, formatPercent, formatPrice } from './format';
-import { holdingPnL } from './portfolio';
+import { formatPercent, formatPrice } from './format';
 
 // ── Ticker Symbol ───────────────────────────────────────
 
@@ -132,27 +131,19 @@ export interface HoldingRowProps {
 /** Single portfolio holding row with P&L */
 export function HoldingRow({ holding, currency = '$', style }: HoldingRowProps) {
   const c = useThemeColors();
-  const { pnl, pnlPercent, marketValue } = holdingPnL(holding);
-  const up = pnl >= 0;
-  const pnlColor = up ? '#22c55e' : '#ef4444';
-
-  return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%', paddingTop: 6, paddingBottom: 6, ...style }}>
-      <Box style={{ width: 50 }}>
-        <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{holding.symbol}</Text>
-      </Box>
-      <Box style={{ flexGrow: 1, gap: 1 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{`${holding.quantity} @ ${formatCurrency(holding.avgCost, { currency })}`}</Text>
-      </Box>
-      <Box style={{ alignItems: 'flex-end', gap: 1 }}>
-        <Text style={{ color: c.text, fontSize: 12 }}>{formatCurrency(marketValue, { currency })}</Text>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
-          <Text style={{ color: pnlColor, fontSize: 10 }}>{formatCurrency(pnl, { currency })}</Text>
-          <Text style={{ color: pnlColor, fontSize: 10 }}>{`(${formatPercent(pnlPercent)})`}</Text>
-        </Box>
-      </Box>
-    </Box>
-  );
+  return React.createElement('HoldingRow', {
+    holding,
+    currency,
+    textColor: c.text,
+    mutedColor: c.muted,
+    gainColor: '#22c55e',
+    lossColor: '#ef4444',
+    style: {
+      width: '100%',
+      height: 28,
+      ...style,
+    },
+  });
 }
 
 // ── Portfolio Card ───────────────────────────────────────
@@ -166,43 +157,23 @@ export interface PortfolioCardProps {
 /** Portfolio summary card with total value, P&L, and allocation */
 export function PortfolioCard({ snapshot, currency = '$', style }: PortfolioCardProps) {
   const c = useThemeColors();
-  const up = snapshot.pnl >= 0;
-  const pnlColor = up ? '#22c55e' : '#ef4444';
-
-  return (
-    <Box style={{ gap: 10, padding: 12, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, ...style }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: c.muted, fontSize: 11 }}>Portfolio Value</Text>
-        <Text style={{ color: c.text, fontSize: 18, fontWeight: 'bold' }}>{formatCurrency(snapshot.totalValue, { currency })}</Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 12 }}>
-        <Box style={{ gap: 1 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>P&L</Text>
-          <Text style={{ color: pnlColor, fontSize: 13, fontWeight: 'bold' }}>{formatCurrency(snapshot.pnl, { currency })}</Text>
-        </Box>
-        <Box style={{ gap: 1 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>Return</Text>
-          <Text style={{ color: pnlColor, fontSize: 13, fontWeight: 'bold' }}>{formatPercent(snapshot.pnlPercent)}</Text>
-        </Box>
-        <Box style={{ gap: 1 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>Cost Basis</Text>
-          <Text style={{ color: c.text, fontSize: 13 }}>{formatCurrency(snapshot.totalCost, { currency })}</Text>
-        </Box>
-      </Box>
-      {snapshot.holdings.length > 0 && (
-        <Box style={{ gap: 0 }}>
-          {snapshot.holdings.map((h, i) => (
-            <HoldingRow
-              key={h.symbol}
-              holding={h}
-              currency={currency}
-              style={{ borderTopWidth: i > 0 ? 1 : 0, borderColor: c.border }}
-            />
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
+  const holdingsCount = snapshot.holdings.length;
+  const estHeight = 58 + holdingsCount * 28 + (holdingsCount > 0 ? 8 : 0);
+  return React.createElement('PortfolioCard', {
+    snapshot,
+    currency,
+    textColor: c.text,
+    mutedColor: c.muted,
+    surfaceColor: c.surface,
+    borderColor: c.border,
+    gainColor: '#22c55e',
+    lossColor: '#ef4444',
+    style: {
+      width: '100%',
+      height: estHeight,
+      ...style,
+    },
+  });
 }
 
 // ── Order Book Panel ─────────────────────────────────────
