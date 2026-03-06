@@ -48,6 +48,7 @@ local Inspector = {}
 
 local state = {
   enabled    = false,
+  pickMode   = true,       -- hover highlight + canvas click-to-select active?
   treePanel  = false,     -- sidebar visible?
   hoveredNode = nil,       -- node under cursor (deep hit test)
   selectedNode = nil,      -- clicked/locked node for detail panel
@@ -485,6 +486,19 @@ function Inspector.disable()
   state.detailRegion = nil
 end
 
+--- Toggle hover-highlight + canvas click-to-select mode.
+--- When false, the devtools panel stays open but mouse events flow through to the app.
+function Inspector.setPickMode(on)
+  state.pickMode = on
+  if not on then
+    state.hoveredNode = nil
+  end
+end
+
+function Inspector.isPickMode()
+  return state.pickMode
+end
+
 --- Set cross-link highlight data from playground TextEditor hover.
 --- link: nil | { line: number, token?: string, level?: string }
 function Inspector.setPlaygroundLink(link)
@@ -631,7 +645,8 @@ end
 --- Handle mouse press. Returns true if consumed.
 --- Uses stored region bounds (set by drawTreeInRegion/drawDetailInRegion) for hit detection.
 function Inspector.mousepressed(x, y, button)
-  if not state.enabled then return false end
+  -- Tree/detail region clicks work whenever the regions are set (including embed).
+  -- Canvas pick mode clicks require state.enabled (full inspector active).
 
   -- Detail panel click (uses stored region from drawDetailInRegion)
   if state.selectedNode and state.detailRegion then
@@ -749,8 +764,9 @@ function Inspector.mousepressed(x, y, button)
     end
   end
 
-  -- Clicking in viewport: select hovered node
-  if state.hoveredNode then
+  -- Clicking in viewport: select hovered node (only when inspector is fully enabled)
+  if not state.enabled then return false end
+  if state.pickMode and state.hoveredNode then
     -- Resolve to a node that actually appears in the tree panel:
     -- - Empty __TEXT__ nodes are skipped by drawTreeNode
     -- - Single-text-child __TEXT__ nodes are inlined into their parent row
@@ -789,7 +805,7 @@ end
 --- Handle mouse wheel (scroll tree panel or detail panel).
 --- Uses stored region bounds for hit detection.
 function Inspector.wheelmoved(x, y)
-  if not state.enabled then return false end
+  -- Region-based scrolling works whenever regions are set (including embed)
 
   -- Map horizontal tilt to vertical scroll when no vertical input
   local dy = y
@@ -850,11 +866,13 @@ function Inspector.drawOverlays(root)
   if not root then return end
 
   local ok, drawErr = pcall(function()
-    -- Update hovered node via deep hit test (skip if mouse hasn't moved)
-    if state.mouseX ~= state.lastHitX or state.mouseY ~= state.lastHitY then
-      state.hoveredNode = deepHitTest(root, state.mouseX, state.mouseY)
-      state.lastHitX = state.mouseX
-      state.lastHitY = state.mouseY
+    -- Update hovered node via deep hit test (only in pick mode, skip if mouse hasn't moved)
+    if state.pickMode then
+      if state.mouseX ~= state.lastHitX or state.mouseY ~= state.lastHitY then
+        state.hoveredNode = deepHitTest(root, state.mouseX, state.mouseY)
+        state.lastHitX = state.mouseX
+        state.lastHitY = state.mouseY
+      end
     end
 
     -- Recount nodes only when tree has changed
@@ -868,9 +886,9 @@ function Inspector.drawOverlays(root)
     love.graphics.origin()
     love.graphics.setScissor()
 
-    drawHoverOverlay()
+    if state.pickMode then drawHoverOverlay() end
     drawSelectedOverlay()
-    drawTooltip()
+    if state.pickMode then drawTooltip() end
     -- Note: perf bar is now drawn by devtools.lua as a bottom status bar
 
     -- Restore graphics state
@@ -888,7 +906,7 @@ end
 --- Draw the tree panel inside a region {x, y, w, h}.
 --- Called by devtools when Elements tab is active.
 function Inspector.drawTreeInRegion(root, region)
-  if not state.enabled or not root then return end
+  if not root then return end
   state.treeRegion = region
 
   -- Resolve hoveredNode from tree positions BEFORE drawing so the highlight
@@ -928,7 +946,7 @@ end
 --- Draw the detail panel inside a region {x, y, w, h}.
 --- Called by devtools when Elements tab is active and a node is selected.
 function Inspector.drawDetailInRegion(region)
-  if not state.enabled or not state.selectedNode then return end
+  if not state.selectedNode then return end
   state.detailRegion = region
   drawDetailPanel(region.x, region.y, region.w, region.h)
 end
@@ -2785,6 +2803,20 @@ function drawPerfBar()
   local pad = 6
   local lineH = font:getHeight() + 2
 
+  -- Read RSS from /proc/self/statm (Linux)
+  local rssMB = nil
+  do
+    local f = io.open("/proc/self/statm", "r")
+    if f then
+      local line = f:read("*l")
+      f:close()
+      if line then
+        local _, rss = line:match("(%d+)%s+(%d+)")
+        if rss then rssMB = tonumber(rss) * 4 / 1024 end
+      end
+    end
+  end
+
   -- Build perf text
   local fpsColor = state.fps >= 55 and PERF_GOOD or PERF_WARN
   local items = {
@@ -2792,6 +2824,7 @@ function drawPerfBar()
     { label = "Layout", value = string.format("%.1fms", state.layoutMs), color = PERF_TEXT },
     { label = "Paint", value = string.format("%.1fms", state.paintMs), color = PERF_TEXT },
     { label = "Nodes", value = tostring(state.nodeCount), color = PERF_TEXT },
+    { label = "RSS", value = rssMB and string.format("%.0f MB", rssMB) or "?", color = PERF_TEXT },
   }
 
   -- Measure width

@@ -1266,6 +1266,7 @@ function Bridge.setQuarantine(q)
 end
 
 function Bridge:eval(code, filename)
+  if self.ctx == nil then error("[QuickJS] Bridge context is destroyed") end
   filename = filename or "<eval>"
 
   -- Scan for crypto miners before executing (silent — code still runs if detected)
@@ -1295,6 +1296,7 @@ end
 --- Evaluate JS code and return the result as a Lua value.
 --- Like eval() but converts the return value via jsValueToLua.
 function Bridge:evalReturn(code, filename)
+  if self.ctx == nil then error("[QuickJS] Bridge context is destroyed") end
   filename = filename or "<eval>"
   local val = self.qjs.JS_Eval(
     self.ctx, code, #code, filename, JS_EVAL_TYPE_GLOBAL
@@ -1318,6 +1320,7 @@ end
 --- This avoids whatever in JS_Eval prevents it from returning
 --- after a complex synchronous React render.
 function Bridge:callGlobal(name)
+  if self.ctx == nil then return end
   local qjs = self.qjs
   local ctx = self.ctx
   local global = qjs.JS_GetGlobalObject(ctx)
@@ -1357,6 +1360,7 @@ end
 --- Like callGlobal but converts the return value via jsValueToLua instead
 --- of discarding it. Returns nil if the function doesn't exist or throws.
 function Bridge:callGlobalReturn(name)
+  if self.ctx == nil then return nil end
   local qjs = self.qjs
   local ctx = self.ctx
   local global = qjs.JS_GetGlobalObject(ctx)
@@ -1393,6 +1397,7 @@ end
 
 --- Tick the JS event loop (promises, microtasks, timers)
 function Bridge:tick()
+  if self.ctx == nil then return end
   -- Drain pending microtasks (and clear any exceptions)
   -- Budget: max microtask drains per tick. Prevents infinite promise chains.
   local MICROTASK_BUDGET = 1000000
@@ -1443,12 +1448,21 @@ function Bridge:pushEvent(event)
   self.eventQueue[#self.eventQueue + 1] = event
 end
 
---- Clean shutdown
+--- Clean shutdown (idempotent — safe to call multiple times)
 function Bridge:destroy()
-  self.qjs.JS_FreeContext(self.ctx)
-  self.qjs.JS_FreeRuntime(self.rt)
-  self.ctx = nil
-  self.rt = nil
+  if self.ctx ~= nil then
+    self.qjs.JS_FreeContext(self.ctx)
+    self.ctx = nil
+  end
+  if self.rt ~= nil then
+    self.qjs.JS_FreeRuntime(self.rt)
+    self.rt = nil
+  end
+end
+
+--- Check if the bridge has a live JS context.
+function Bridge:isAlive()
+  return self.ctx ~= nil and self.rt ~= nil
 end
 
 return Bridge

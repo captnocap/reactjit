@@ -28,6 +28,8 @@ local Log = require("lua.debug_log")
 
 local Measure = nil  -- Injected at init time via Layout.init()
 local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
+local LatexModule = nil      -- Lazy-loaded for Math (LaTeX) measurement
+local LatexModule = nil      -- Lazy-loaded for Math (LaTeX) measurement
 
 -- Frame budget: max layoutNode calls per layout pass.
 -- Empirical: 5,000-node tree ≈ 5,000 calls. 10,000 is generous headroom.
@@ -43,6 +45,11 @@ Layout._activeProfile = nil
 Layout._profileLastPass = nil
 Layout._profileTotals = nil
 Layout._profilePassSeq = 0
+
+--- Check if a dimension value is "fit-content" (or the shorthand "fit").
+local function isFitContent(v)
+  return v == "fit-content" or v == "fit"
+end
 
 local function profileNow()
   if love and love.timer and love.timer.getTime then
@@ -157,6 +164,8 @@ local SURFACE_TYPES = {
   VideoPlayer = true,
   Scene3D  = true,
   Emulator = true,
+  Render   = true,
+  Chart2D  = true,
 }
 
 --- Check if a node is a visual surface (eligible for proportional fallback).
@@ -193,7 +202,7 @@ end
 --- Returns nil when value is nil or unparseable.
 function Layout.resolveUnit(value, parentSize)
   if value == nil then return nil end
-  if value == "fit-content" then return nil end
+  if value == "fit-content" or value == "fit" then return nil end
   if type(value) == "number" then return value end
   if type(value) ~= "string" then return nil end
 
@@ -359,6 +368,26 @@ local function resolveLetterSpacing(node)
   return nil
 end
 
+--- Resolve text wrapping mode for a text node.
+--- Supports CSS-like whiteSpace:'nowrap' and textWrap:'nowrap' aliases.
+local function resolveTextNoWrap(node)
+  local s = node.style or {}
+  local wrap = s.textWrap
+  local ws = s.whiteSpace
+  if wrap == "nowrap" or ws == "nowrap" then return true end
+  if wrap == "wrap" or ws == "normal" then return false end
+
+  if node.type == "__TEXT__" and node.parent then
+    local ps = node.parent.style or {}
+    local pWrap = ps.textWrap
+    local pWs = ps.whiteSpace
+    if pWrap == "nowrap" or pWs == "nowrap" then return true end
+    if pWrap == "wrap" or pWs == "normal" then return false end
+  end
+
+  return false
+end
+
 --- Get the numberOfLines for a text node, checking node props
 --- and walking up to parent Text node if this is a __TEXT__ child.
 --- Returns nil when not set.
@@ -393,8 +422,9 @@ local function measureTextNode(node, availW)
   if lineHeight then lineHeight = math.floor(lineHeight * ts) end
   local letterSpacing = resolveLetterSpacing(node)
   local numberOfLines = resolveNumberOfLines(node)
+  local noWrap = resolveTextNoWrap(node)
 
-  local result = Measure.measureText(text, fontSize, availW, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight)
+  local result = Measure.measureText(text, fontSize, availW, fontFamily, lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
   return result.width, result.height
 end
 
@@ -549,6 +579,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
       if lineHeight then lineHeight = math.floor(lineHeight * ts) end
       local letterSpacing = resolveLetterSpacing(node)
       local numberOfLines = resolveNumberOfLines(node)
+      local noWrap = resolveTextNoWrap(node)
 
       -- When measuring height (not isRow), use pw as wrap constraint so
       -- multi-line text produces the correct wrapped height instead of
@@ -562,7 +593,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
         if wrapWidth < 0 then wrapWidth = nil end
       end
       local result = Measure.measureText(text, fontSize, wrapWidth, fontFamily,
-                                        lineHeight, letterSpacing, numberOfLines, fontWeight)
+                                        lineHeight, letterSpacing, numberOfLines, fontWeight, noWrap)
       return (isRow and result.width or result.height) + padMain
     end
     return padMain  -- Empty text
@@ -584,12 +615,25 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     if not CodeBlockModule then
       CodeBlockModule = require("lua.codeblock")
     end
-    local measured = CodeBlockModule.measure(node, false)
+    local measured = CodeBlockModule.measure(node, isRow)
     if measured then
-      -- CodeBlock width is parent-constrained; reporting content width here
-      -- can create intrinsic/flex oscillation for long unwrapped lines.
       if isRow then
-        return padMain
+        return measured.width + padMain
+      end
+      return measured.height + padMain
+    end
+    return padMain
+  end
+
+  -- 2d. Math (LaTeX) nodes: intrinsic size from parsed expression
+  if node.type == "Math" then
+    if not LatexModule then
+      LatexModule = require("lua.latex")
+    end
+    local measured = LatexModule.measure(node, isRow)
+    if measured then
+      if isRow then
+        return measured.width + padMain
       end
       return measured.height + padMain
     end
@@ -646,32 +690,97 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     local totalGaps = math.max(0, visibleCount - 1) * gap
     return padMain + sum + totalGaps
   else
-    -- Cross axis: take max of children
-    local max = 0
+    -- Cross axis: take max of children (or sum of wrapped lines)
+    local wrapEnabled = s.flexWrap == "wrap"
+
+    -- Collect visible children with their main-axis and cross-axis sizes
+    local items = {}
     for _, child in ipairs(children) do
       local cs = child.style or {}
       if cs.display ~= "none" and cs.position ~= "absolute" then
-        -- Account for child margins along measurement axis
         local cmar = ru(cs.margin, isRow and pw or ph) or 0
         local marStart = isRow and (ru(cs.marginLeft, pw) or cmar)
                                 or (ru(cs.marginTop, ph) or cmar)
         local marEnd = isRow and (ru(cs.marginRight, pw) or cmar)
                               or (ru(cs.marginBottom, ph) or cmar)
 
-        -- Check explicit dimension first (mirrors main-axis branch).
-        -- Without this, percentage widths like "100%" are ignored and we
-        -- recurse into grandchildren, collapsing the cross-axis estimate.
         local explicitCross = isRow and ru(cs.width, pw) or ru(cs.height, ph)
-        local size
+        local crossSize
         if explicitCross then
-          size = explicitCross + marStart + marEnd
+          crossSize = explicitCross + marStart + marEnd
         else
-          size = estimateIntrinsicMain(child, isRow, childPw, ph) + marStart + marEnd
+          crossSize = estimateIntrinsicMain(child, isRow, childPw, ph) + marStart + marEnd
         end
-        if size > max then max = size end
+
+        if wrapEnabled then
+          -- Also need the main-axis size for line-breaking simulation
+          local explicitMainChild = isRow and ru(cs.height, ph) or ru(cs.width, pw)
+          local mainSize
+          if explicitMainChild then
+            mainSize = explicitMainChild
+          else
+            mainSize = estimateIntrinsicMain(child, not isRow, childPw, ph)
+          end
+          -- Add main-axis margins
+          local mainMarStart = isRow and (ru(cs.marginTop, ph) or (ru(cs.margin, ph) or 0))
+                                      or (ru(cs.marginLeft, pw) or (ru(cs.margin, pw) or 0))
+          local mainMarEnd = isRow and (ru(cs.marginBottom, ph) or (ru(cs.margin, ph) or 0))
+                                    or (ru(cs.marginRight, pw) or (ru(cs.margin, pw) or 0))
+          items[#items + 1] = { crossSize = crossSize, mainSize = mainSize + mainMarStart + mainMarEnd }
+        else
+          items[#items + 1] = { crossSize = crossSize }
+        end
       end
     end
-    return padMain + max
+
+    if wrapEnabled and #items > 0 then
+      -- Simulate line-breaking: split items into lines, sum line heights + gaps
+      local availMain = (isRow and (ph or 9999) or (pw or 9999)) - padMain
+      -- For a row measured for height: main axis of container is horizontal,
+      -- so available main = container inner width (pw - horizontal padding)
+      if containerIsRow and not isRow and pw then
+        availMain = childPw or pw
+      elseif not containerIsRow and isRow and ph then
+        availMain = ph - padStart - padEnd
+      end
+
+      local lineMax = 0   -- max cross-size on current line
+      local lineMain = 0  -- accumulated main-axis on current line
+      local totalCross = 0
+      local lineCount = 0
+      local itemsOnLine = 0
+
+      for _, item in ipairs(items) do
+        local gapBefore = (itemsOnLine > 0) and gap or 0
+        if itemsOnLine > 0 and (lineMain + gapBefore + item.mainSize) > availMain then
+          -- Wrap to new line
+          totalCross = totalCross + lineMax
+          lineCount = lineCount + 1
+          lineMax = item.crossSize
+          lineMain = item.mainSize
+          itemsOnLine = 1
+        else
+          lineMain = lineMain + gapBefore + item.mainSize
+          if item.crossSize > lineMax then lineMax = item.crossSize end
+          itemsOnLine = itemsOnLine + 1
+        end
+      end
+      -- Last line
+      if itemsOnLine > 0 then
+        totalCross = totalCross + lineMax
+        lineCount = lineCount + 1
+      end
+
+      local interLineGaps = math.max(0, lineCount - 1) * gap
+      return padMain + totalCross + interLineGaps
+    else
+      -- No wrap: just take the max cross-axis child
+      local max = 0
+      for _, item in ipairs(items) do
+        if item.crossSize > max then max = item.crossSize end
+      end
+      return padMain + max
+    end
   end
 end
 
@@ -791,8 +900,8 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- Own dimensions
   local explicitW = ru(s.width, pctW)
   local explicitH = ru(s.height, pctH)
-  local fitW = (s.width == "fit-content")
-  local fitH = (s.height == "fit-content")
+  local fitW = isFitContent(s.width)
+  local fitH = isFitContent(s.height)
 
   local w, h
   local wSource, hSource  -- provenance: why this dimension has its value
@@ -880,6 +989,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- wraps correctly inside the padding box.
   local isTextNode = (node.type == "Text" or node.type == "__TEXT__")
   local isCodeBlock = (node.type == "CodeBlock")
+  local isMath = (node.type == "Math")
   local isTextInput = (node.type == "TextInput")
 
   if isTextNode then
@@ -923,14 +1033,39 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
       if not CodeBlockModule then
         CodeBlockModule = require("lua.codeblock")
       end
-      local measured = CodeBlockModule.measure(node, false)
+      local measured = CodeBlockModule.measure(node, true)
       if measured then
-        -- CodeBlock never overrides width — it accepts the parent's width
-        -- and clips content with a scissor. Reporting content width (which
-        -- can be 1500px+ for long lines) causes layout oscillation when
-        -- the parent is narrower than the measured content.
-        if not explicitW and not parentAssignedW and not w then
-          w = math.max(50, measured.width + padL + padR)
+        if not explicitW then
+          local contentW = math.max(50, measured.width + padL + padR)
+          if parentAssignedW and w then
+            -- Shrink-wrap to content but never exceed parent bounds
+            w = math.min(contentW, w)
+          elseif not w then
+            w = contentW
+          end
+          wSource = "text"
+        end
+        if not explicitH and h == nil then
+          h = measured.height + padT + padB
+          hSource = "text"
+        end
+      end
+    end
+  elseif isMath then
+    -- Math (LaTeX) node: measure via latex.lua
+    if not explicitW or not explicitH then
+      if not LatexModule then
+        LatexModule = require("lua.latex")
+      end
+      local measured = LatexModule.measure(node, true)
+      if measured then
+        if not explicitW then
+          local contentW = math.max(20, measured.width + padL + padR)
+          if parentAssignedW and w then
+            w = math.min(contentW, w)
+          elseif not w then
+            w = contentW
+          end
           wSource = "text"
         end
         if not explicitH and h == nil then
@@ -1073,7 +1208,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
 
       -- For text children without explicit dimensions, measure intrinsic size
       if childIsText and (not cw or not ch) then
-        local childFitW = (cs.width == "fit-content")
+        local childFitW = isFitContent(cs.width)
 
         if childFitW then
           -- fit-content: measure unconstrained (natural single-line width)
@@ -1122,7 +1257,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
         local skipIntrinsicW = childIsScroll
         local skipIntrinsicH = childIsScroll
         if not cw and not skipIntrinsicW then
-          local estW = (cs.width == "fit-content") and nil or innerW
+          local estW = isFitContent(cs.width) and nil or innerW
           local _tIntrinsic = profileSectionStart("intrinsicEstimateMs")
           cw = estimateIntrinsicMain(child, true, estW, innerH)
           profileSectionEnd("intrinsicEstimateMs", _tIntrinsic)
@@ -1244,7 +1379,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
         mainMarginStart = mainMarginStart, mainMarginEnd = mainMarginEnd,
         isText = childIsText,
         explicitH = ru(cs.height, innerH),
-        fitContentH = (cs.height == "fit-content"),
+        fitContentH = isFitContent(cs.height),
         padL = cpadL, padR = cpadR, padT = cpadT, padB = cpadB,
         minW = cMinW, maxW = cMaxW, minH = cMinH, maxH = cMaxH,
         minContent = minContent,
@@ -1674,6 +1809,11 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
             child._flexW = cw_final
             profileCount("flexSignalTotal")
             profileCount("flexSignalAutoWidth")
+            if child.type == "CodeBlock" then
+              io.write(string.format("[LAYOUT-DEBUG] CodeBlock _flexW set: cw_final=%.1f intrinsicW=%.1f delta=%.1f id=%s\n",
+                cw_final, intrinsicW, cw_final - intrinsicW, tostring(child.id or "?")))
+              io.flush()
+            end
           end
         end
       else
@@ -1738,6 +1878,30 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
         if mainEnd > contentMainEnd then contentMainEnd = mainEnd end
         if crossEnd > contentCrossEnd then contentCrossEnd = crossEnd end
       end
+    end
+
+    -- Recompute line cross size from actual post-layout heights.
+    -- Pre-layout ci.h can be 0 for auto-sized children (e.g. wrapped
+    -- components whose height comes from their own children). After
+    -- layoutNode runs recursively, child.computed.h has the real value.
+    -- Also needed for non-wrap auto-height rows: flex-grown children may
+    -- be narrower than their estimated intrinsic width, causing descendant
+    -- wrap rows to produce taller content than the estimate predicted.
+    if wrap or h == nil then
+      local actualLineCross = 0
+      for _, idx in ipairs(line) do
+        local ci = childInfos[idx]
+        local child = allChildren[idx]
+        local cc = child.computed
+        local childCross
+        if isRow then
+          childCross = (cc and cc.h or ci.h or 0) + ci.marT + ci.marB
+        else
+          childCross = (cc and cc.w or ci.w or 0) + ci.marL + ci.marR
+        end
+        if childCross > actualLineCross then actualLineCross = childCross end
+      end
+      lineCrossSize = actualLineCross
     end
 
     -- Advance cross cursor past this line + inter-line gap

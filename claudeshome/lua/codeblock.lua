@@ -34,6 +34,104 @@ local debugStats = {
 }
 
 -- ============================================================================
+-- Churn detection — catch wrapper re-renders that feed new string identity
+-- ============================================================================
+
+local CHURN_WARN_THRESHOLD  = 10   -- identity changes/sec before warning
+local CHURN_KILL_THRESHOLD  = 30   -- identity changes/sec before kill switch
+local churnTracker = setmetatable({}, { __mode = "k" }) -- [node] = state
+
+local function getChurnState(node)
+  local cs = churnTracker[node]
+  if not cs then
+    cs = {
+      identityChanges = 0,    -- identity changes this window
+      contentChanges = 0,     -- actual content changes this window
+      windowStart = 0,        -- love.timer.getTime() at window start
+      rate = 0,               -- computed identity changes/sec
+      contentRate = 0,        -- computed content changes/sec
+      killed = false,         -- syntax highlighting disabled
+      warned = false,         -- warning already emitted this window
+      lastContentSig = nil,   -- length + prefix hash for content comparison
+    }
+    churnTracker[node] = cs
+  end
+  return cs
+end
+
+--- Cheap content signature: length .. ":" .. first 64 bytes.
+--- Same content = same sig, even if string pointer differs.
+local function contentSig(code)
+  local len = #code
+  if len <= 64 then return len .. ":" .. code end
+  return len .. ":" .. code:sub(1, 64)
+end
+
+--- Call on every render/measure to track prop identity churn.
+--- Returns true if syntax highlighting should be suppressed (kill switch active).
+local function checkChurn(node, code)
+  local cs = getChurnState(node)
+  local now = love.timer.getTime()
+
+  -- Reset window every second
+  if now - cs.windowStart >= 1.0 then
+    cs.rate = cs.identityChanges
+    cs.contentRate = cs.contentChanges
+    cs.identityChanges = 0
+    cs.contentChanges = 0
+    cs.windowStart = now
+    cs.warned = false
+    -- Recover from kill switch if churn stopped
+    if cs.killed and cs.rate < CHURN_WARN_THRESHOLD then
+      cs.killed = false
+      io.write("[CODEBLOCK] churn subsided — re-enabling syntax highlighting\n")
+      io.flush()
+    end
+  end
+
+  -- Fast path: same string pointer = no identity change, zero allocations.
+  -- Hoisted constants (the correct pattern) always hit this path.
+  if cs.lastCodePtr == code then
+    return cs.killed
+  end
+
+  -- Pointer changed — check if content actually changed (costs a contentSig allocation).
+  local sig = contentSig(code)
+  if cs.lastContentSig ~= nil then
+    cs.identityChanges = cs.identityChanges + 1
+    if sig ~= cs.lastContentSig then
+      cs.contentChanges = cs.contentChanges + 1
+    end
+  end
+  cs.lastCodePtr = code
+  cs.lastContentSig = sig
+
+  -- Warn on churn
+  if not cs.warned and cs.rate >= CHURN_WARN_THRESHOLD then
+    io.write(string.format(
+      "[CODEBLOCK WARNING] code prop identity changed %d/sec but content hash changed %d/sec. " ..
+      "Suspect wrapper re-rendering. Node: %s\n",
+      cs.rate, cs.contentRate, tostring(node.id or node)
+    ))
+    io.flush()
+    cs.warned = true
+  end
+
+  -- Kill switch
+  if not cs.killed and cs.rate >= CHURN_KILL_THRESHOLD and cs.contentRate == 0 then
+    cs.killed = true
+    io.write(string.format(
+      "[CODEBLOCK KILL SWITCH] syntax highlighting DISABLED — %d identity changes/sec, " ..
+      "0 content changes. Freezing token cache. Node: %s\n",
+      cs.rate, tostring(node.id or node)
+    ))
+    io.flush()
+  end
+
+  return cs.killed
+end
+
+-- ============================================================================
 -- Init
 -- ============================================================================
 
@@ -69,11 +167,49 @@ local function getNodeEntry(node)
   return entry
 end
 
+--- Extract code string from node: reads children Text nodes, falls back to props.code.
+--- Each Text child becomes one line.
+local function extractCode(node)
+  local children = node.children
+  if children and #children > 0 then
+    local lines = {}
+    for _, child in ipairs(children) do
+      if child.type == "Text" then
+        -- Text nodes have __TEXT__ children with .text
+        local textParts = {}
+        local textChildren = child.children
+        if textChildren then
+          for _, tc in ipairs(textChildren) do
+            if tc.type == "__TEXT__" and tc.text then
+              textParts[#textParts + 1] = tc.text
+            end
+          end
+        end
+        lines[#lines + 1] = table.concat(textParts)
+      elseif child.type == "__TEXT__" and child.text then
+        lines[#lines + 1] = child.text
+      end
+    end
+    if #lines > 0 then return table.concat(lines, "\n") end
+  end
+  return (node.props or {}).code or ""
+end
+
 local function ensureLines(entry, code)
-  if entry.lines and entry.code == code then
+  -- Fast path: same string pointer = same content, zero allocations.
+  -- Hoisted constants (the correct pattern) always hit this path.
+  if entry.lines and entry.codePtr == code then
     return entry.lines
   end
+  -- Slow path: content-based memoization (survives new string identity with same content).
+  local sig = contentSig(code)
+  if entry.lines and entry.codeSig == sig then
+    entry.codePtr = code  -- update pointer for future fast path
+    return entry.lines
+  end
+  entry.codePtr = code
   entry.code = code
+  entry.codeSig = sig
   entry.lines = splitLines(code)
   entry.langKey = nil
   entry.langResolved = nil
@@ -96,7 +232,7 @@ end
 
 function CodeBlock.measure(node, includeWidth)
   local props = node.props or {}
-  local code = props.code or ""
+  local code = extractCode(node)
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local entry = getNodeEntry(node)
   local lines = ensureLines(entry, code)
@@ -123,23 +259,49 @@ function CodeBlock.measure(node, includeWidth)
     end
   end
 
-  local maxWidth = 0
-  if needWidth then
-    maxWidth = m.width or 0
+  -- Reuse a cached result table to avoid per-call allocations.
+  -- The caller reads width/height immediately and doesn't hold a reference.
+  local result = entry._measureResult
+  if not result then
+    result = { width = 0, height = 0 }
+    entry._measureResult = result
   end
-
-  return { width = maxWidth, height = #lines * (m.lineHeight or 0) }
+  result.width = needWidth and (m.width or 0) or 0
+  result.height = #lines * (m.lineHeight or 0)
+  return result
 end
 
 local function getTokenizedLinesCached(node, code, langProp)
   local entry = getNodeEntry(node)
   local lines = ensureLines(entry, code)
+
+  -- Churn detection: track identity changes, engage kill switch if needed
+  local killed = checkChurn(node, code)
+
+  -- If kill switch active, return frozen cache or plain text
+  if killed and entry.tokenLines then
+    return lines, entry.langResolved or "plain", entry.tokenLines
+  end
+
   local langKey = langProp or "auto"
   if entry.tokenLines and entry.langKey == langKey then
     if debugStatsEnabled then
       debugStats.hits = debugStats.hits + 1
     end
     return lines, entry.langResolved, entry.tokenLines
+  end
+
+  -- If kill switch active but no cached tokens, use plain text (no tokenizer)
+  if killed then
+    local plainColor = Syntax.colors and Syntax.colors.text or {0.8, 0.8, 0.8, 1.0}
+    local tokenLines = {}
+    for i, line in ipairs(lines) do
+      tokenLines[i] = {{text = line, color = plainColor}}
+    end
+    entry.langKey = langKey
+    entry.langResolved = "plain"
+    entry.tokenLines = tokenLines
+    return lines, "plain", tokenLines
   end
 
   local langResolved = resolveLanguage(langProp, lines, code)
@@ -156,6 +318,97 @@ local function getTokenizedLinesCached(node, code, langProp)
   entry.langResolved = langResolved
   entry.tokenLines = tokenLines
   return lines, langResolved, tokenLines
+end
+
+-- ============================================================================
+-- Horizontal scroll state
+-- ============================================================================
+
+local scrollStates = setmetatable({}, { __mode = "k" }) -- [node] = { scrollX = 0 }
+
+local function getScrollState(node)
+  local s = scrollStates[node]
+  if not s then
+    s = { scrollX = 0 }
+    scrollStates[node] = s
+  end
+  return s
+end
+
+--- Returns the maximum content width for a code block (widest line + padding).
+local function getContentWidth(node)
+  local props = node.props or {}
+  local code = extractCode(node)
+  local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
+  local entry = getNodeEntry(node)
+  local lines = ensureLines(entry, code)
+  local font = getMeasure().getFont(fontSize, nil, nil)
+  local maxW = 0
+  for _, line in ipairs(lines) do
+    local w = font:getWidth(line)
+    if w > maxW then maxW = w end
+  end
+  return maxW
+end
+
+--- Returns scrollbar geometry if content overflows, or nil.
+--- { trackX, trackY, trackW, barH, thumbX, thumbW, maxScroll, hitH }
+local function getScrollbarGeometry(node)
+  local c = node.computed
+  if not c then return nil end
+  local s = node.style or {}
+  local padding = s.padding or 10
+  local viewW = c.w - 2 * padding
+  local contentW = getContentWidth(node)
+  if contentW <= viewW then return nil end
+
+  local ss = getScrollState(node)
+  local scrollX = ss.scrollX or 0
+  local barH = 3
+  local barY = c.y + c.h - barH - 2
+  local trackW = c.w - 8
+  local trackX = c.x + 4
+  local ratio = viewW / contentW
+  local thumbW = math.max(20, trackW * ratio)
+  local maxScroll = contentW - viewW
+  local thumbX = trackX + (maxScroll > 0 and (scrollX / maxScroll) * (trackW - thumbW) or 0)
+  local hitH = 12 -- generous hit area above the thin bar
+
+  return {
+    trackX = trackX, trackY = barY, trackW = trackW,
+    barH = barH, thumbX = thumbX, thumbW = thumbW,
+    maxScroll = maxScroll, hitH = hitH,
+  }
+end
+
+-- Active scrollbar drag state (only one codeblock can be dragged at a time)
+local scrollDrag = nil -- { node, grabOffset }
+
+--- Handle mouse wheel on a CodeBlock. Returns true if consumed.
+function CodeBlock.handleWheel(node, x, y)
+  local c = node.computed
+  if not c then return false end
+  local s = node.style or {}
+  local padding = s.padding or 10
+  local viewW = c.w - 2 * padding
+  local contentW = getContentWidth(node)
+
+  -- Only consume if content actually overflows
+  if contentW <= viewW then return false end
+
+  local ss = getScrollState(node)
+  local scrollSpeed = 40
+
+  -- Use horizontal wheel directly, or shift redirects vertical to horizontal
+  local dx = x
+  if dx == 0 and y ~= 0 and love.keyboard.isDown("lshift", "rshift") then
+    dx = -y  -- shift+scroll → horizontal pan
+  end
+  if dx == 0 then return false end
+
+  local maxScroll = math.max(0, contentW - viewW)
+  ss.scrollX = math.max(0, math.min(maxScroll, ss.scrollX + dx * scrollSpeed))
+  return true
 end
 
 local copyStates = setmetatable({}, { __mode = "k" })  -- [node] = { copied = false, timer = 0 }
@@ -188,11 +441,33 @@ function CodeBlock.handleMousePressed(node, mx, my, button)
   local c = node.computed
   if not c then return false end
 
+  -- Check scrollbar hit (before copy button since scrollbar is at bottom)
+  local geo = getScrollbarGeometry(node)
+  if geo then
+    local hitTop = geo.trackY - geo.hitH
+    if mx >= geo.trackX and mx <= geo.trackX + geo.trackW
+       and my >= hitTop and my <= geo.trackY + geo.barH then
+      -- Click on scrollbar area: if on thumb, grab it; otherwise jump
+      if mx >= geo.thumbX and mx <= geo.thumbX + geo.thumbW then
+        scrollDrag = { node = node, grabOffset = mx - geo.thumbX }
+      else
+        -- Click on track: jump thumb center to click position
+        local ss = getScrollState(node)
+        local thumbCenter = mx - geo.trackX - geo.thumbW / 2
+        local ratio = math.max(0, math.min(1, thumbCenter / (geo.trackW - geo.thumbW)))
+        ss.scrollX = ratio * geo.maxScroll
+        scrollDrag = { node = node, grabOffset = geo.thumbW / 2 }
+      end
+      return true
+    end
+  end
+
+  -- Check copy button
   local btnFont = getMeasure().getFont(9, nil, nil)
   local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
   if mx >= bx and mx <= bx + bw and my >= by and my <= by + bh then
-    local code = (node.props or {}).code or ""
+    local code = extractCode(node)
     pcall(function() love.system.setClipboardText(code) end)
     local cs = getCopyState(node)
     cs.copied = true
@@ -200,6 +475,36 @@ function CodeBlock.handleMousePressed(node, mx, my, button)
     return true
   end
   return false
+end
+
+function CodeBlock.handleMouseMoved(mx, my)
+  if not scrollDrag then return false end
+  local node = scrollDrag.node
+  -- Convert screen coords to content-space (account for scroll ancestors)
+  local ok, Events = pcall(require, "lua.events")
+  if ok and Events and Events.screenToContent then
+    mx, my = Events.screenToContent(node, mx, my)
+  end
+  local geo = getScrollbarGeometry(node)
+  if not geo then
+    scrollDrag = nil
+    return false
+  end
+  local ss = getScrollState(node)
+  local thumbPos = mx - scrollDrag.grabOffset - geo.trackX
+  local ratio = math.max(0, math.min(1, thumbPos / (geo.trackW - geo.thumbW)))
+  ss.scrollX = ratio * geo.maxScroll
+  return true
+end
+
+function CodeBlock.handleMouseReleased()
+  if not scrollDrag then return false end
+  scrollDrag = nil
+  return true
+end
+
+function CodeBlock.isDragging()
+  return scrollDrag ~= nil
 end
 
 function CodeBlock.update(dt)
@@ -222,33 +527,91 @@ function CodeBlock.update(dt)
         cacheEntries = cacheEntries + 1
       end
       local luaMemMB = collectgarbage("count") / 1024
+      -- Collect churn stats across all tracked nodes
+      local maxChurnRate, maxContentRate, killedCount = 0, 0, 0
+      for _, cs in pairs(churnTracker) do
+        if cs.rate > maxChurnRate then maxChurnRate = cs.rate end
+        if cs.contentRate > maxContentRate then maxContentRate = cs.contentRate end
+        if cs.killed then killedCount = killedCount + 1 end
+      end
       io.write(string.format(
-        "[CB-STATS] hits=%d misses=%d tokenLines=%d cacheEntries=%d luaMem=%.1fMB\n",
-        debugStats.hits, debugStats.misses, debugStats.tokenLinesBuilt, cacheEntries, luaMemMB
+        "[CB-STATS] hits=%d misses=%d tokenLines=%d cache=%d mem=%.1fMB | churn: id=%d/s content=%d/s killed=%d\n",
+        debugStats.hits, debugStats.misses, debugStats.tokenLinesBuilt,
+        cacheEntries, luaMemMB, maxChurnRate, maxContentRate, killedCount
       ))
       io.flush()
     end
   end
 end
 
+--- Return diagnostic stats for crash reports / panic snapshots.
+function CodeBlock.getDiagnostics()
+  local cacheEntries = 0
+  for _ in pairs(renderCache) do
+    cacheEntries = cacheEntries + 1
+  end
+  local maxChurnRate, maxContentRate, killedCount = 0, 0, 0
+  local worstNode = nil
+  for node, cs in pairs(churnTracker) do
+    if cs.rate > maxChurnRate then
+      maxChurnRate = cs.rate
+      worstNode = node
+    end
+    if cs.contentRate > maxContentRate then maxContentRate = cs.contentRate end
+    if cs.killed then killedCount = killedCount + 1 end
+  end
+  return {
+    cacheEntries = cacheEntries,
+    cacheHits = debugStats.hits,
+    cacheMisses = debugStats.misses,
+    tokenLinesBuilt = debugStats.tokenLinesBuilt,
+    churnIdentityRate = maxChurnRate,
+    churnContentRate = maxContentRate,
+    churnKilledNodes = killedCount,
+    churnWorstNode = worstNode and tostring(worstNode.id or worstNode) or nil,
+    luaMemMB = collectgarbage("count") / 1024,
+  }
+end
+
 -- ============================================================================
 -- Rendering
 -- ============================================================================
 
+-- Pre-computed color tables (allocated once, reused every frame)
+local DEFAULT_BG_COLOR    = Color.toTable("#0d1117")
+local DEFAULT_BORDER_COLOR = Color.toTable("#1e293b")
+local BTN_BG_NORMAL       = Color.toTable("#1e293b")
+local BTN_BG_COPIED       = Color.toTable("#1a3a2a")
+local BTN_TEXT_NORMAL      = Color.toTable("#64748b")
+local BTN_TEXT_COPIED      = Color.toTable("#4ade80")
+
+-- Per-node color cache (weak-keyed, avoids Color.toTable per-frame for string bg/border)
+local colorCache = setmetatable({}, { __mode = "k" }) -- [node] = { bgStr, bg, borderStr, border }
+
+local function getCachedColor(node, colorStr, field)
+  local cc = colorCache[node]
+  if not cc then cc = {}; colorCache[node] = cc end
+  if cc[field .. "Str"] == colorStr then return cc[field] end
+  local tbl = Color.toTable(colorStr)
+  cc[field .. "Str"] = colorStr
+  cc[field] = tbl
+  return tbl
+end
+
 function CodeBlock.render(node, c, effectiveOpacity)
   local props = node.props or {}
-  local code = props.code or ""
+  local code = extractCode(node)
   local lang
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
 
-  -- Background
+  -- Background (zero allocations for default or cached string colors)
   local bgColor = s.backgroundColor
   if type(bgColor) == "string" then
-    bgColor = Color.toTable(bgColor)
+    bgColor = getCachedColor(node, bgColor, "bg")
   elseif type(bgColor) ~= "table" then
-    bgColor = Color.toTable("#0d1117")
+    bgColor = DEFAULT_BG_COLOR
   end
   setColorWithOpacity(bgColor, effectiveOpacity)
   local br = s.borderRadius or 4
@@ -258,9 +621,9 @@ function CodeBlock.render(node, c, effectiveOpacity)
   if s.borderWidth and s.borderWidth > 0 then
     local borderColor = s.borderColor
     if type(borderColor) == "string" then
-      borderColor = Color.toTable(borderColor)
+      borderColor = getCachedColor(node, borderColor, "border")
     elseif type(borderColor) ~= "table" then
-      borderColor = Color.toTable("#1e293b")
+      borderColor = DEFAULT_BORDER_COLOR
     end
     setColorWithOpacity(borderColor, effectiveOpacity)
     love.graphics.setLineWidth(s.borderWidth)
@@ -276,8 +639,8 @@ function CodeBlock.render(node, c, effectiveOpacity)
   love.graphics.setFont(font)
   local lineHeight = font:getHeight()
 
-  -- Scissor to code area
-  local prevScissor = {love.graphics.getScissor()}
+  -- Scissor to code area (avoid table allocation — use 4 locals instead)
+  local psx, psy, psw, psh = love.graphics.getScissor()
   local sx, sy = love.graphics.transformPoint(c.x, c.y)
   local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
   local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
@@ -291,24 +654,39 @@ function CodeBlock.render(node, c, effectiveOpacity)
     yOffset = math.floor((innerHeight - contentHeight) / 2)
   end
 
+  -- Horizontal scroll offset
+  local ss = getScrollState(node)
+  local scrollX = ss.scrollX or 0
+
   -- Render each line with token-based syntax highlighting
   for i, line in ipairs(lines) do
-    local y = c.y + padding + yOffset + (i - 1) * lineHeight
+    local ly = c.y + padding + yOffset + (i - 1) * lineHeight
     local tokens = tokenLines[i] or Syntax.tokenizeLine(line, lang)
-    local x = c.x + padding
+    local lx = c.x + padding - scrollX
     for _, tok in ipairs(tokens) do
       setColorWithOpacity(tok.color, effectiveOpacity)
-      love.graphics.print(tok.text, x, y)
-      x = x + font:getWidth(tok.text)
+      love.graphics.print(tok.text, lx, ly)
+      lx = lx + font:getWidth(tok.text)
     end
   end
 
+  -- Horizontal scrollbar indicator (only when content overflows)
+  local geo = getScrollbarGeometry(node)
+  if geo then
+    -- Track
+    love.graphics.setColor(1, 1, 1, 0.06 * effectiveOpacity)
+    love.graphics.rectangle("fill", geo.trackX, geo.trackY, geo.trackW, geo.barH, 1.5, 1.5)
+    -- Thumb
+    love.graphics.setColor(1, 1, 1, 0.25 * effectiveOpacity)
+    love.graphics.rectangle("fill", geo.thumbX, geo.trackY, geo.thumbW, geo.barH, 1.5, 1.5)
+  end
+
   -- Draw text selection highlight
-  CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
+  CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset, scrollX)
 
   -- Restore previous scissor state
-  if prevScissor[1] then
-    love.graphics.setScissor(prevScissor[1], prevScissor[2], prevScissor[3], prevScissor[4])
+  if psx then
+    love.graphics.setScissor(psx, psy, psw, psh)
   else
     love.graphics.setScissor()
   end
@@ -321,11 +699,11 @@ function CodeBlock.render(node, c, effectiveOpacity)
     local btnFont = getMeasure().getFont(9, nil, nil)
     local bx, by, bw, bh = getCopyButtonRect(c, btnFont)
 
-    local btnBg = cs.copied and Color.toTable("#1a3a2a") or Color.toTable("#1e293b")
+    local btnBg = cs.copied and BTN_BG_COPIED or BTN_BG_NORMAL
     setColorWithOpacity(btnBg, effectiveOpacity)
     love.graphics.rectangle("fill", bx, by, bw, bh, 3, 3)
 
-    local btnColor = cs.copied and Color.toTable("#4ade80") or Color.toTable("#64748b")
+    local btnColor = cs.copied and BTN_TEXT_COPIED or BTN_TEXT_NORMAL
     setColorWithOpacity(btnColor, effectiveOpacity)
     love.graphics.setFont(btnFont)
     local label = cs.copied and "Copied!" or "Copy"
@@ -341,7 +719,7 @@ end
 --- Used by textselection.lua to extract selected text.
 function CodeBlock.getLines(node)
   local props = node.props or {}
-  local code = props.code or ""
+  local code = extractCode(node)
   local fontSize = getMeasure().scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
@@ -381,7 +759,8 @@ function CodeBlock.screenToPos(node, mx, my)
   line = math.max(1, math.min(line, #lines))
 
   local lineText = lines[line] or ""
-  local relX = sx - c.x - padding
+  local ss = getScrollState(node)
+  local relX = sx - c.x - padding + (ss.scrollX or 0)
   local col = 0
   local bytePos = 1
   local len = #lineText
@@ -408,7 +787,7 @@ end
 
 --- Draw selection highlight rectangles for this CodeBlock.
 --- Called during render, inside the scissor region.
-function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset)
+function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effectiveOpacity, yOffset, scrollX)
   -- Lazy-require to avoid circular dependency at load time
   local ok, TextSelection = pcall(require, "lua.textselection")
   if not ok or not TextSelection then return end
@@ -470,9 +849,10 @@ function CodeBlock.drawHighlight(node, c, padding, lines, font, lineHeight, effe
   love.graphics.setColor(0.22, 0.35, 0.55, 0.55 * effectiveOpacity)
 
   yOffset = yOffset or 0
+  scrollX = scrollX or 0
   for i = startLine, endLine do
     local lineText = lines[i] or ""
-    local x0 = c.x + padding
+    local x0 = c.x + padding - scrollX
     local y0 = c.y + padding + yOffset + (i - 1) * lineHeight
 
     local lsx, lex

@@ -40,6 +40,12 @@ export function createLove2DApp(): Love2DAppHandle {
     const { setCryptoBridge } = require('@reactjit/crypto');
     setCryptoBridge(bridge);
   } catch (_) { /* @reactjit/crypto not installed */ }
+
+  // Privacy is optional — wire it up if installed, skip silently if not
+  try {
+    const { setPrivacyBridge } = require('@reactjit/privacy');
+    setPrivacyBridge(bridge);
+  } catch (_) { /* @reactjit/privacy not installed */ }
   const root = createRoot();
 
   // Enable state preservation BEFORE any component renders.

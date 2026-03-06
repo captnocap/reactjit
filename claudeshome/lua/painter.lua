@@ -28,9 +28,11 @@ local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
 local MapModule = nil     -- Injected at init time via Painter.init()
+local GeoScene3DModule = nil -- Injected at init time via Painter.init()
 local ChartModule = nil   -- Lazy-loaded to avoid circular deps
 local GameModule = nil    -- Injected at init time via Painter.init()
 local EmulatorModule = nil -- Injected at init time via Painter.init()
+local RenderSourceModule = nil -- Injected at init time via Painter.init()
 local EffectsModule = nil  -- Injected at init time via Painter.init()
 local MasksModule = nil    -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
@@ -44,6 +46,7 @@ local _paintCount = 0
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
+local LatexModule = nil       -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local SliderModule = nil     -- Lazy-loaded to avoid circular deps
 local FaderModule = nil      -- Lazy-loaded to avoid circular deps
@@ -90,8 +93,10 @@ function Painter.init(config)
   Videos = config.videos
   Scene3DModule = config.scene3d
   MapModule = config.map
+  GeoScene3DModule = config.geoscene3d
   GameModule = config.game
   EmulatorModule = config.emulator
+  RenderSourceModule = config.render_source
   EffectsModule = config.effects
   MasksModule = config.masks
   getFont = Measure.getFont
@@ -272,6 +277,18 @@ drawLineNormal = function(font, text, x, y, align, maxWidth)
   love.graphics.printf(text, x, y, maxWidth, align)
 end
 
+--- Render a single line without wrapping. maxWidth is used only for alignment.
+local function drawLineNoWrap(font, text, x, y, align, maxWidth)
+  local textW = font:getWidth(text)
+  local drawX = x
+  if align == "center" then
+    drawX = x + (maxWidth - textW) / 2
+  elseif align == "right" then
+    drawX = x + maxWidth - textW
+  end
+  love.graphics.print(text, drawX, y)
+end
+
 -- ============================================================================
 -- Resolve text style properties (inheriting from parent Text for __TEXT__)
 -- ============================================================================
@@ -318,6 +335,21 @@ local function resolveTextOverflow(node)
     if ps.textOverflow then return ps.textOverflow end
   end
   return nil
+end
+
+--- Resolve text wrapping mode. Supports whiteSpace/textWrap aliases.
+local function resolveTextNoWrap(node)
+  local s = node.style or {}
+  if s.textWrap == "nowrap" or s.whiteSpace == "nowrap" then return true end
+  if s.textWrap == "wrap" or s.whiteSpace == "normal" then return false end
+
+  if node.type == "__TEXT__" and node.parent then
+    local ps = node.parent.style or {}
+    if ps.textWrap == "nowrap" or ps.whiteSpace == "nowrap" then return true end
+    if ps.textWrap == "wrap" or ps.whiteSpace == "normal" then return false end
+  end
+
+  return false
 end
 
 --- Resolve numberOfLines, inheriting from parent Text node for __TEXT__ children.
@@ -783,6 +815,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- not by the 2D painter. Skip them entirely.
   if MapModule and MapModule.isMapChildType(node.type) then return end
 
+  -- GeoScene3D child nodes are rendered by geoscene3d.lua.
+  if GeoScene3DModule and GeoScene3DModule.isGeoChildType(node.type) then return end
+
   inheritedOpacity = inheritedOpacity or 1
   stencilDepth = stencilDepth or 0
 
@@ -1039,6 +1074,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local lineHeight = resolveLineHeight(node)
     local letterSpacing = resolveLetterSpacing(node)
     local textOverflow = resolveTextOverflow(node)
+    local noWrap = resolveTextNoWrap(node)
     local numberOfLines = resolveNumberOfLines(node)
     local textDecorationLine = s.textDecorationLine
 
@@ -1062,6 +1098,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local text = node.text or (node.props and node.props.children) or ""
     if type(text) == "table" then text = table.concat(text) end
     text = tostring(text)
+    if noWrap then
+      text = text:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\n", " ")
+    end
 
     -- Resolve textAlign (inherit from parent Text for __TEXT__ children)
     local align = s.textAlign
@@ -1073,11 +1112,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local hasLetterSpacing = letterSpacing and letterSpacing ~= 0
 
     -- Determine rendering strategy:
-    -- 1. If numberOfLines is set or textOverflow is "ellipsis", we need line control
+    -- 1. If numberOfLines is set, textOverflow is "ellipsis", or noWrap is set, we need line control
     -- 2. If lineHeight is custom, we must render line-by-line
     -- 3. If letterSpacing is set, we must render character-by-character
     -- 4. Otherwise, use love.graphics.printf (fastest path)
-    local needsLineControl = numberOfLines or textOverflow == "ellipsis"
+    local needsLineControl = numberOfLines or textOverflow == "ellipsis" or noWrap
     local needsManualRendering = hasCustomLineHeight or hasLetterSpacing or needsLineControl
 
     -- Text shadow: draw text first with offset and shadow color
@@ -1105,7 +1144,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         end
       else
         local effectiveLineH = lineHeight or font:getHeight()
-        if textOverflow == "ellipsis" and not numberOfLines then
+        if noWrap then
+          local oneLine = text
+          if textOverflow == "ellipsis" then
+            oneLine = Painter.truncateWithEllipsis(font, oneLine, c.w, letterSpacing)
+          end
+          if hasLetterSpacing then
+            drawLineWithSpacing(font, oneLine, c.x + sox, c.y + soy, letterSpacing, align, c.w)
+          else
+            drawLineNoWrap(font, oneLine, c.x + sox, c.y + soy, align, c.w)
+          end
+        elseif textOverflow == "ellipsis" and not numberOfLines then
           local truncated = Painter.truncateWithEllipsis(font, text, c.w, letterSpacing)
           if hasLetterSpacing then
             drawLineWithSpacing(font, truncated, c.x + sox, c.y + soy, letterSpacing, align, c.w)
@@ -1146,8 +1195,20 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       -- Manual rendering path: get wrapped/truncated lines, draw each
       local effectiveLineH = lineHeight or font:getHeight()
 
+      if noWrap then
+        local oneLine = text
+        if textOverflow == "ellipsis" then
+          oneLine = Painter.truncateWithEllipsis(font, oneLine, c.w, letterSpacing)
+        end
+        if hasLetterSpacing then
+          drawLineWithSpacing(font, oneLine, c.x, c.y, letterSpacing, align, c.w)
+          if isBold then drawLineWithSpacing(font, oneLine, c.x + 0.8, c.y, letterSpacing, align, c.w) end
+        else
+          drawLineNoWrap(font, oneLine, c.x, c.y, align, c.w)
+          if isBold then drawLineNoWrap(font, oneLine, c.x + 0.8, c.y, align, c.w) end
+        end
       -- Single-line ellipsis (textOverflow = "ellipsis", no numberOfLines)
-      if textOverflow == "ellipsis" and not numberOfLines then
+      elseif textOverflow == "ellipsis" and not numberOfLines then
         local truncated = Painter.truncateWithEllipsis(font, text, c.w, letterSpacing)
         if hasLetterSpacing then
           drawLineWithSpacing(font, truncated, c.x, c.y, letterSpacing, align, c.w)
@@ -1403,6 +1464,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       CodeBlockModule.render(node, c, effectiveOpacity)
     end
 
+  elseif not isHidden and node.type == "Math" then
+    -- Lua-owned LaTeX math: delegate rendering entirely to latex.lua
+    if not LatexModule then
+      LatexModule = require("lua.latex")
+    end
+    local c = node.computed
+    if c and c.w > 0 and c.h > 0 then
+      LatexModule.render(node, c, effectiveOpacity)
+    end
+
   elseif not isHidden and node.type == "Scene3D" then
     -- 3D viewport: draw the pre-rendered Canvas from scene3d.lua
     if Scene3DModule then
@@ -1417,6 +1488,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     -- Map viewport: draw the pre-rendered Canvas from map.lua
     if MapModule then
       local canvas = MapModule.get(node.id)
+      if canvas then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(canvas, c.x, c.y)
+      end
+    end
+
+  elseif not isHidden and node.type == "GeoScene3D" then
+    -- 3D geo viewport: draw the pre-rendered Canvas from geoscene3d.lua
+    if GeoScene3DModule then
+      local canvas = GeoScene3DModule.get(node.id)
       if canvas then
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
         love.graphics.draw(canvas, c.x, c.y)
@@ -1452,6 +1533,76 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         local scaleY = (c.h or 240) / 240
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
         love.graphics.draw(canvas, c.x, c.y, 0, scaleX, scaleY)
+      end
+    end
+
+  elseif not isHidden and node.type == "Render" then
+    -- External capture source: draw the live Image from render_source.lua
+    if RenderSourceModule then
+      local img = RenderSourceModule.get(node.id)
+      if img then
+        local objectFit = s.objectFit or (node.props and node.props.objectFit) or "contain"
+        local srcW, srcH = img:getWidth(), img:getHeight()
+        local scaleX, scaleY, drawX, drawY
+
+        if objectFit == "contain" then
+          local scale = math.min(c.w / srcW, c.h / srcH)
+          scaleX = scale
+          scaleY = scale
+          local drawW = srcW * scale
+          local drawH = srcH * scale
+          drawX = c.x + (c.w - drawW) / 2
+          drawY = c.y + (c.h - drawH) / 2
+        elseif objectFit == "cover" then
+          local scale = math.max(c.w / srcW, c.h / srcH)
+          scaleX = scale
+          scaleY = scale
+          local drawW = srcW * scale
+          local drawH = srcH * scale
+          drawX = c.x + (c.w - drawW) / 2
+          drawY = c.y + (c.h - drawH) / 2
+        else
+          -- "fill" (default)
+          scaleX = c.w / srcW
+          scaleY = c.h / srcH
+          drawX = c.x
+          drawY = c.y
+        end
+
+        -- Apply borderRadius clipping if needed
+        local renderStencil = borderRadius > 0
+        if renderStencil then
+          local stencilValue = stencilDepth + 1
+          love.graphics.stencil(function()
+            love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
+          end, "replace", stencilValue, stencilDepth > 0)
+          love.graphics.setStencilTest("greater", stencilDepth)
+        end
+
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(img, drawX, drawY, 0, scaleX, scaleY)
+
+        if renderStencil then
+          if stencilDepth > 0 then
+            love.graphics.setStencilTest("greater", stencilDepth - 1)
+          else
+            love.graphics.setStencilTest()
+          end
+        end
+      else
+        -- No frame yet: draw placeholder
+        love.graphics.setColor(0.1, 0.1, 0.15, effectiveOpacity)
+        love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
+        if getFont then
+          local font = getFont(14)
+          if font then
+            love.graphics.setFont(font)
+            love.graphics.setColor(0.5, 0.5, 0.6, effectiveOpacity)
+            local status = RenderSourceModule.getStatus(node.id) or "connecting"
+            local label = "Capture: " .. status
+            love.graphics.printf(label, c.x, c.y + c.h / 2 - 7, c.w, "center")
+          end
+        end
       end
     end
 

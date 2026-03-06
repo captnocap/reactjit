@@ -20,9 +20,12 @@ export interface CandlestickChartProps {
     style?: Style;
 }
 
-export function CandlestickChart(props: CandlestickChartProps) {
+export function CandlestickChart({ style, width, height, ...rest }: CandlestickChartProps) {
     return React.createElement('Chart2D', {
         chartType: 'candlestick',
-        ...props
+        ...rest,
+        width,
+        height,
+        style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
     });
 }

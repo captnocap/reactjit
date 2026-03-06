@@ -21,10 +21,17 @@ export interface BarChartProps {
   onBarPress?: (index: number, bar: BarChartBar) => void;
 }
 
-export function BarChart(props: BarChartProps) {
-  // Use a native 'Chart2D' element to securely offload all looping/box layout to Lua
+export function BarChart({ style, width, height, ...rest }: BarChartProps) {
+  const tooltip = rest.interactive && rest.data.length > 0
+    ? { content: rest.data.map(d => `${d.label}:\t${d.value}`).join('\n'), layout: 'table' as const }
+    : undefined;
+
   return React.createElement('Chart2D', {
     chartType: 'bar',
-    ...props
+    ...rest,
+    width,
+    height,
+    tooltip,
+    style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
   });
 }

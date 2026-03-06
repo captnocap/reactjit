@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Box, Text } from './primitives';
+import React, { useMemo } from 'react';
+import { Box } from './primitives';
 import type { Style, Color } from './types';
 
 export interface RadarChartAxis {
@@ -26,8 +26,6 @@ export function RadarChart({
   interactive = false,
   style,
 }: RadarChartProps) {
-  const [hovered, setHovered] = useState(false);
-
   const cx = size / 2;
   const cy = size / 2;
   const radius = size / 2 - 2; // 2px margin so rings aren't clipped
@@ -54,10 +52,13 @@ export function RadarChart({
     [vertices],
   );
 
+  const tooltipContent = interactive && axes.length > 0
+    ? axes.map((axis, i) => `${axis.label}:\t${data[i]} (${Math.round(normalized[i] * 100)}%)`).join('\n')
+    : undefined;
+
   return (
     <Box
-      onPointerEnter={interactive ? () => setHovered(true) : undefined}
-      onPointerLeave={interactive ? () => setHovered(false) : undefined}
+      tooltip={tooltipContent ? { content: tooltipContent, layout: 'table' } : undefined}
       style={{ position: 'relative', width: size, height: size, ...style }}
     >
       {/* Grid rings at 25 / 50 / 75 / 100% */}
@@ -114,43 +115,6 @@ export function RadarChart({
             opacity: 0.6,
           }}
         />
-      )}
-
-      {/* Tooltip */}
-      {interactive && hovered && (
-        <Box style={{
-          position: 'absolute',
-          top: 0,
-          left: '100%',
-          marginLeft: 8,
-          zIndex: 10,
-        }}>
-          <Box style={{
-            backgroundColor: [0.03, 0.03, 0.05, 0.92],
-            borderRadius: 4,
-            paddingTop: 5,
-            paddingBottom: 5,
-            paddingLeft: 10,
-            paddingRight: 10,
-            borderWidth: 1,
-            borderColor: '#40405a',
-            gap: 3,
-          }}>
-            {axes.map((axis, i) => (
-              <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                <Text style={{ color: '#61a6fa', fontSize: 10 }}>
-                  {`${axis.label}:`}
-                </Text>
-                <Text style={{ color: '#e1e4f0', fontSize: 10, fontWeight: 'bold' }}>
-                  {`${data[i]}`}
-                </Text>
-                <Text style={{ color: '#8892a6', fontSize: 9 }}>
-                  {`(${Math.round(normalized[i] * 100)}%)`}
-                </Text>
-              </Box>
-            ))}
-          </Box>
-        </Box>
       )}
     </Box>
   );

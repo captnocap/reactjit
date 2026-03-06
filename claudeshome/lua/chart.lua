@@ -15,9 +15,15 @@ function Chart.draw(props, x, y, width, height)
   local len = #data
   if len == 0 then return end
   
-  -- Prevent drawing outside the box
+  -- Prevent drawing outside the box.
+  -- Use transformPoint so scissor is correct inside scroll containers
+  -- (setScissor operates in screen space, not content space).
   love.graphics.push("all")
-  love.graphics.setScissor(x, y, width, height)
+  local psx, psy, psw, psh = love.graphics.getScissor()
+  local sx, sy = love.graphics.transformPoint(x, y)
+  local sx2, sy2 = love.graphics.transformPoint(x + width, y + height)
+  local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
+  love.graphics.intersectScissor(sx, sy, sw, sh)
   
   if props.chartType == "bar" then
     local gap = props.gap or 8
@@ -30,9 +36,8 @@ function Chart.draw(props, x, y, width, height)
     for i=1, len do
       local val = data[i].value
       local bh = math.max(1, (val / maxValue) * height)
-      local c = data[i].color or props.color or "#3b82f6"
-      local rgba = ColorUtils.parse(c)
-      love.graphics.setColor(rgba[1], rgba[2], rgba[3], rgba[4] or 1)
+      local clr = data[i].color or props.color or "#3b82f6"
+      ColorUtils.set(clr)
       love.graphics.rectangle("fill", cx, y + height - bh, barWidth, bh)
       cx = cx + barWidth + gap
     end
@@ -59,9 +64,7 @@ function Chart.draw(props, x, y, width, height)
       table.insert(points, py)
     end
     
-    local c = props.color or "#3b82f6"
-    local rgba = ColorUtils.parse(c)
-    love.graphics.setColor(rgba[1], rgba[2], rgba[3], rgba[4] or 1)
+    ColorUtils.set(props.color or "#3b82f6")
     
     if len >= 2 then
       love.graphics.setLineWidth(2)
@@ -80,8 +83,7 @@ function Chart.draw(props, x, y, width, height)
     
     for i=1, len do
       local slice = (data[i].value / total) * math.pi * 2
-      local rgba = ColorUtils.parse(data[i].color or "#ffffff")
-      love.graphics.setColor(rgba[1], rgba[2], rgba[3], rgba[4] or 1)
+      ColorUtils.set(data[i].color or "#ffffff")
       love.graphics.arc("fill", cx, cy, radius, startAngle, startAngle + slice)
       startAngle = startAngle + slice
     end
@@ -99,33 +101,30 @@ function Chart.draw(props, x, y, width, height)
     local gap = 4
     local candleWidth = math.max(1, (width - (gap * (len - 1))) / len)
     local cx = x
-    local bullColor = ColorUtils.parse(props.bullColor or "#22c55e")
-    local bearColor = ColorUtils.parse(props.bearColor or "#ef4444")
-    local wickColor = ColorUtils.parse(props.wickColor or "#94a3b8")
-    
+    local bullClr = ColorUtils.toTable(props.bullColor or "#22c55e", {0,0.77,0.35,1})
+    local bearClr = ColorUtils.toTable(props.bearColor or "#ef4444", {0.94,0.27,0.27,1})
+    local wickClr = ColorUtils.toTable(props.wickColor or "#94a3b8", {0.58,0.64,0.72,1})
+
     for i=1, len do
       local d = data[i]
       local wx = cx + (candleWidth / 2)
-      
+
       -- Wick
       local topY = y + height - (((d.high - minLow) / range) * height)
       local botY = y + height - (((d.low - minLow) / range) * height)
-      love.graphics.setColor(wickColor[1], wickColor[2], wickColor[3], wickColor[4] or 1)
+      love.graphics.setColor(wickClr[1], wickClr[2], wickClr[3], wickClr[4])
       love.graphics.setLineWidth(1)
       love.graphics.line(wx, topY, wx, botY)
-      
+
       -- Body
       local isBull = d.close >= d.open
       local bodyTopY = y + height - (((math.max(d.open, d.close) - minLow) / range) * height)
       local bodyBotY = y + height - (((math.min(d.open, d.close) - minLow) / range) * height)
       local bodyHeight = math.max(1, bodyBotY - bodyTopY)
-      
-      if isBull then
-        love.graphics.setColor(bullColor[1], bullColor[2], bullColor[3], bullColor[4] or 1)
-      else
-        love.graphics.setColor(bearColor[1], bearColor[2], bearColor[3], bearColor[4] or 1)
-      end
-      
+
+      local bc = isBull and bullClr or bearClr
+      love.graphics.setColor(bc[1], bc[2], bc[3], bc[4])
+
       love.graphics.rectangle("fill", cx, bodyTopY, candleWidth, bodyHeight)
       cx = cx + candleWidth + gap
     end

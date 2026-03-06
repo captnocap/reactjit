@@ -27,6 +27,7 @@
 ]]
 
 local socket = require("socket")
+local processRegistry = require("lua.process_registry")
 
 local Tor = {}
 
@@ -182,6 +183,7 @@ function Tor.start(opts)
   if pf then
     torPid = pf:read("*l")
     pf:close()
+    processRegistry.register(torPid)
   end
 
   if _G._reactjit_verbose then
@@ -246,6 +248,7 @@ function Tor.stop()
 
   io.write("[tor] Stopping Tor (PID: " .. torPid .. ")...\n"); io.flush()
   os.execute("kill " .. torPid .. " 2>/dev/null")
+  processRegistry.unregister(torPid)
   torPid = nil
   hostname = nil
   socksPort = nil

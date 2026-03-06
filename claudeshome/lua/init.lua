@@ -48,10 +48,12 @@ local M = {
   videos   = nil,
   scene3d  = nil,
   mapmod   = nil,
+  geoscene3d = nil,
   gamemod  = nil,
   emumod   = nil,
   effectsmod = nil,
   masksmod   = nil,
+  rendersource = nil,
   videoplayer = nil,
   focus    = require("lua.focus"),
   texteditor = nil,
@@ -111,6 +113,11 @@ local cartReader  = M.cartReader
 
 -- Mouse position tracking (for tooltip timer advancement in update loop)
 local lastMouseX, lastMouseY = 0, 0
+
+-- Heartbeat: write a timestamp file every ~60 frames so the watchdog can
+-- detect frozen processes (alive but unresponsive — flat memory, no frames).
+local heartbeatCounter = 0
+local heartbeatPath    = nil  -- set in init() after PID is known
 
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
@@ -264,7 +271,7 @@ end
 --- Push an event to the bridge (handles mode differences).
 --- In native mode bridge:pushEvent() is used; in canvas mode bridge.emit() is used.
 local function pushEvent(evt)
-  Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(evt.payload and evt.payload.targetId or "-"))
+  Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(type(evt.payload) == "table" and evt.payload.targetId or "-"))
   if mode == "native" then
     M.bridge:pushEvent(evt)
   elseif mode == "canvas" or mode == "wasm" then
@@ -437,6 +444,7 @@ local function loadThemes()
     if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
     if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
     tooltips.setTheme(M.currentTheme)
+    if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -626,6 +634,17 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Set up heartbeat file path for freeze detection
+  do
+    local ffi_ok, ffi = pcall(require, "ffi")
+    if ffi_ok and ffi.os == "Linux" then
+      pcall(ffi.cdef, "int getpid(void);")
+      local pid = tostring(ffi.C.getpid())
+      local tmp = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+      heartbeatPath = tmp .. "/reactjit_heartbeat_" .. pid
+    end
+  end
+
   basePath = resolveBasePath()
 
   -- Load cartridge manifest and mint capability permits.
@@ -654,6 +673,15 @@ function ReactJIT.init(config)
   -- Enable key repeat so held keys fire keypressed repeatedly
   -- (needed for text scale Ctrl+=/-, TextEditor backspace/arrows, etc.)
   love.keyboard.setKeyRepeat(true)
+
+  -- Allow clicks that bring the window into focus to also pass through as
+  -- input events. Without this, clicking an unfocused window requires two
+  -- clicks: one to focus, one to actually interact.
+  pcall(function()
+    local ffi = require("ffi")
+    pcall(ffi.cdef, 'int SDL_SetHint(const char *name, const char *value);')
+    ffi.C.SDL_SetHint("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
+  end)
 
   -- Inspector/console can be disabled for production builds
   M.inspectorEnabled = config.inspector ~= false
@@ -690,6 +718,7 @@ function ReactJIT.init(config)
           if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
           if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
           tooltips.setTheme(M.currentTheme)
+          if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -736,12 +765,15 @@ function ReactJIT.init(config)
     M.scene3d.init()
     M.mapmod = require("lua.map")
     M.mapmod.init()
+    M.geoscene3d = require("lua.geoscene3d")
+    M.geoscene3d.init()
     M.emumod = require("lua.emulator")
     M.emumod.init()
     M.effectsmod = require("lua.effects")
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.rendersource = require("lua.render_source")
 
     M.tree    = require("lua.tree")
     M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
@@ -752,7 +784,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -818,11 +850,14 @@ function ReactJIT.init(config)
     -- map/browse/docstore/websocket/wsserver: stripped from WASM builds (use goto / PUC 5.1 incompatible)
     local ok_map, map_ = pcall(require, "lua.map")
     if ok_map then M.mapmod = map_; M.mapmod.init() end
+    local ok_geo3d, geo3d_ = pcall(require, "lua.geoscene3d")
+    if ok_geo3d then M.geoscene3d = geo3d_; M.geoscene3d.init() end
     -- emulator: SKIPPED (FFI)
     M.effectsmod = require("lua.effects")
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    -- render_source: SKIPPED in WASM (requires FFmpeg + v4l2)
 
     M.tree    = require("lua.tree")
     M.tree.init({ images = M.images, videos = nil, animate = M.animate, scene3d = M.scene3d })
@@ -833,7 +868,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod, render_source = nil })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -900,12 +935,15 @@ function ReactJIT.init(config)
     M.scene3d.init()
     M.mapmod = require("lua.map")
     M.mapmod.init()
+    M.geoscene3d = require("lua.geoscene3d")
+    M.geoscene3d.init()
     M.emumod = require("lua.emulator")
     M.emumod.init()
     M.effectsmod = require("lua.effects")
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.rendersource = require("lua.render_source")
 
     M.tree    = require("lua.tree")
     M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
@@ -916,7 +954,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -1154,6 +1192,30 @@ function ReactJIT.init(config)
     if args and args.id then luaTimers[args.id] = nil end
   end
 
+  -- ── Lua-side frame interval timer service ───────────────────────────
+  -- Like timer:create but counts frames instead of elapsed time.
+  -- JS calls timer:frame:create with { every = N, event = "..." }
+  -- and gets an event pushed every N frames.
+
+  local luaFrameTimers = {}     -- id -> { every, count, event, payload }
+  local luaFrameTimerNextId = 0
+
+  rpcHandlers["timer:frame:create"] = function(args)
+    luaFrameTimerNextId = luaFrameTimerNextId + 1
+    local id = luaFrameTimerNextId
+    luaFrameTimers[id] = {
+      every   = math.max(1, math.floor(args.every or 1)),
+      count   = 0,
+      event   = args.event or ("timer:frame:" .. id),
+      payload = args.payload,
+    }
+    return { id = id }
+  end
+
+  rpcHandlers["timer:frame:cancel"] = function(args)
+    if args and args.id then luaFrameTimers[args.id] = nil end
+  end
+
   -- Tick all lua timers. Called from ReactJIT.update(dt).
   M._tickLuaTimers = function(dt)
     for id, t in pairs(luaTimers) do
@@ -1163,6 +1225,150 @@ function ReactJIT.init(config)
         pushEvent({ type = t.event, payload = t.payload or { timerId = id } })
       end
     end
+    -- Frame-based timers: increment count each frame, fire every N
+    for id, ft in pairs(luaFrameTimers) do
+      ft.count = ft.count + 1
+      if ft.count >= ft.every then
+        ft.count = 0
+        pushEvent({ type = ft.event, payload = ft.payload or { timerId = id } })
+      end
+    end
+  end
+
+  -- ── @reactjit/time — stopwatches, countdowns, wall clock ──────────────
+  -- time:now              → { epoch, mono, localStr, utcStr }
+  -- time:stopwatch:*      → create / control / destroy per-component stopwatches
+  -- time:countdown:*      → create / control / destroy per-component countdowns
+
+  local luaStopwatches = {}
+  local luaSwNextId    = 0
+  local luaCountdowns  = {}
+  local luaCdNextId    = 0
+
+  rpcHandlers["time:now"] = function()
+    local mono = love.timer.getTime()
+    return {
+      epoch    = os.time() * 1000,           -- Unix ms (integer-second precision)
+      mono     = mono,                        -- seconds since Love2D start (float)
+      localStr = os.date("%Y-%m-%dT%H:%M:%S"),
+      utcStr   = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    }
+  end
+
+  rpcHandlers["time:stopwatch:create"] = function(args)
+    luaSwNextId = luaSwNextId + 1
+    local id    = luaSwNextId
+    local event = "time:sw:" .. id
+    luaStopwatches[id] = {
+      elapsed   = 0,
+      running   = args and args.running == true,
+      tickRate  = (args and args.tickRate or 100) / 1000,
+      tickAccum = 0,
+      event     = event,
+    }
+    return { id = id, event = event }
+  end
+
+  rpcHandlers["time:stopwatch:control"] = function(args)
+    local sw = args and luaStopwatches[args.id]
+    if not sw then return { error = "not found" } end
+    local action = args.action
+    if     action == "start"   then sw.running = true
+    elseif action == "stop"    then sw.running = false
+    elseif action == "reset"   then sw.elapsed = 0; sw.tickAccum = 0
+    elseif action == "restart" then sw.elapsed = 0; sw.tickAccum = 0; sw.running = true
+    end
+    return { elapsed = sw.elapsed * 1000, running = sw.running }
+  end
+
+  rpcHandlers["time:stopwatch:destroy"] = function(args)
+    if args and args.id then luaStopwatches[args.id] = nil end
+  end
+
+  rpcHandlers["time:countdown:create"] = function(args)
+    luaCdNextId = luaCdNextId + 1
+    local id    = luaCdNextId
+    local dur   = (args and args.duration or 60000) / 1000
+    local event = "time:cd:" .. id
+    luaCountdowns[id] = {
+      duration  = dur,
+      remaining = dur,
+      running   = args and args.running == true,
+      complete  = false,
+      tickRate  = (args and args.tickRate or 100) / 1000,
+      tickAccum = 0,
+      event     = event,
+    }
+    return { id = id, event = event }
+  end
+
+  rpcHandlers["time:countdown:control"] = function(args)
+    local cd = args and luaCountdowns[args.id]
+    if not cd then return { error = "not found" } end
+    local action = args.action
+    if     action == "start"   then cd.running = true;  cd.complete = false
+    elseif action == "stop"    then cd.running = false
+    elseif action == "reset"   then cd.remaining = cd.duration; cd.tickAccum = 0; cd.complete = false
+    elseif action == "restart" then cd.remaining = cd.duration; cd.tickAccum = 0; cd.complete = false; cd.running = true
+    end
+    return { remaining = cd.remaining * 1000, running = cd.running }
+  end
+
+  rpcHandlers["time:countdown:destroy"] = function(args)
+    if args and args.id then luaCountdowns[args.id] = nil end
+  end
+
+  M._tickLuaTime = function(dt)
+    for _, sw in pairs(luaStopwatches) do
+      if sw.running then
+        sw.elapsed   = sw.elapsed   + dt
+        sw.tickAccum = sw.tickAccum + dt
+        while sw.tickAccum >= sw.tickRate do
+          sw.tickAccum = sw.tickAccum - sw.tickRate
+          pushEvent({ type = sw.event, payload = { elapsed = sw.elapsed * 1000, running = true } })
+        end
+      end
+    end
+    for _, cd in pairs(luaCountdowns) do
+      if cd.running and not cd.complete then
+        cd.remaining = cd.remaining - dt
+        cd.tickAccum = cd.tickAccum + dt
+        if cd.remaining <= 0 then
+          cd.remaining = 0
+          cd.running   = false
+          cd.complete  = true
+          pushEvent({ type = cd.event, payload = { remaining = 0, complete = true } })
+        else
+          while cd.tickAccum >= cd.tickRate do
+            cd.tickAccum = cd.tickAccum - cd.tickRate
+            pushEvent({ type = cd.event, payload = { remaining = cd.remaining * 1000, complete = false } })
+          end
+        end
+      end
+    end
+  end
+
+  -- ── State toggle (for useIFTTT) ──────────────────────────────────────
+  -- Reads the current value from the shared state table, flips it, pushes
+  -- a state:<key> event so useLoveState subscribers pick it up.
+
+  local sharedState = {}   -- key -> value (shadow of bridge.setState)
+
+  -- Intercept state:update commands to keep the shadow in sync.
+  -- Called from the command drain loop below.
+  M._handleStateUpdate = function(key, value)
+    sharedState[key] = value
+    pushEvent({ type = "state:" .. key, payload = value })
+  end
+
+  rpcHandlers["state:toggle"] = function(args)
+    if not args or not args.key then return { error = "missing key" } end
+    local key = args.key
+    local cur = sharedState[key]
+    local next = not cur  -- nil → true, false → true, true → false
+    sharedState[key] = next
+    pushEvent({ type = "state:" .. key, payload = next })
+    return { key = key, value = next }
   end
 
   -- App-wide text search RPC handlers
@@ -1366,6 +1572,18 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register privacy RPC handlers — libraries lazy-load on first invocation
+  do
+    local pok, privmod = pcall(require, "lua.privacy")
+    if pok then
+      for method, handler in pairs(privmod.getHandlers()) do
+        rpcHandlers[method] = gated("privacy", handler)
+      end
+    else
+      startupLog("[reactjit] privacy module not loaded: " .. tostring(privmod))
+    end
+  end
+
   -- Register clipboard RPC handlers — gated by clipboard permit
   if isRendering() then
     rpcHandlers["clipboard:read"] = gated("clipboard", function()
@@ -1426,6 +1644,7 @@ function ReactJIT.init(config)
   if wmOk and wmMod then
     wmMod.init()  -- auto-detects Love2D backend
     wmMod.registerMain()
+    wmMod.restoreGeometry()
     startupLog("[reactjit] Window manager loaded (backend=" .. tostring(wmMod.getBackend()) .. ")")
 
     -- Helper: resolve window entry from optional windowId (defaults to main)
@@ -1499,6 +1718,13 @@ function ReactJIT.init(config)
     end
     -- Wire capabilities into events.lua for visual capability hit testing
     if M.events then M.events.setCapabilitiesModule(capMod) end
+    -- Register physics RPC handlers (force/impulse/torque from React hooks)
+    local physMod = package.loaded["lua.capabilities.physics"]
+    if physMod and type(physMod) == "table" and physMod.getHandlers then
+      for method, handler in pairs(physMod.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
     startupLog("[reactjit] Capabilities registry loaded")
   end
 
@@ -1511,6 +1737,27 @@ function ReactJIT.init(config)
         rpcHandlers[method] = gated("network", handler)
       end
       startupLog("[reactjit] HTTP server loaded")
+    end
+
+    -- Load peer tunnel (userspace encrypted P2P) — gated by network permit
+    local ptOk, ptMod = pcall(require, "lua.peer_tunnel")
+    if ptOk and ptMod then
+      M.peerTunnel = ptMod
+      M.peerTunnel.init()
+      for method, handler in pairs(M.peerTunnel.getHandlers()) do
+        rpcHandlers[method] = gated("network", handler)
+      end
+      startupLog("[reactjit] Peer tunnel (userspace P2P) loaded")
+    end
+
+    -- Load WireGuard manager (real kernel wg) — gated by network permit
+    local wgOk, wgMod = pcall(require, "lua.wireguard")
+    if wgOk and wgMod then
+      M.wireguard = wgMod
+      for method, handler in pairs(M.wireguard.getHandlers()) do
+        rpcHandlers[method] = gated("network", handler)
+      end
+      startupLog("[reactjit] WireGuard module loaded")
     end
   end
 
@@ -1596,7 +1843,7 @@ function ReactJIT.init(config)
   if isRendering() and M.inspectorEnabled then
     console.init({ bridge = M.bridge, tree = M.tree, inspector = inspector })
     inspector.setConsole(console)
-    devtools.init({ inspector = inspector, console = console, tree = M.tree, bridge = M.bridge, pushEvent = pushEvent })
+    devtools.init({ inspector = inspector, console = console, tree = M.tree, bridge = M.bridge, pushEvent = pushEvent, theme = M.currentTheme })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
@@ -1607,6 +1854,38 @@ function ReactJIT.init(config)
     })
   end
 
+  -- Overlay mode (env var trigger) — rjit overlay --------------------------------
+  if os.getenv("REACTJIT_OVERLAY") == "1" then
+    local overlayOk, overlayMod = pcall(require, "lua.overlay")
+    if overlayOk then
+      M.overlay = overlayMod
+      M.overlay.init({
+        hotkey  = os.getenv("REACTJIT_OVERLAY_HOTKEY") or "f6",
+        opacity = tonumber(os.getenv("REACTJIT_OVERLAY_OPACITY")) or 0.9,
+        mode    = os.getenv("REACTJIT_OVERLAY_MODE") or "passthrough",
+        shm     = os.getenv("REACTJIT_OVERLAY_SHM") == "1",
+      })
+      rpcHandlers["overlay:state"] = function()
+        return M.overlay.getState()
+      end
+      rpcHandlers["overlay:setMode"] = function(args)
+        return { ok = M.overlay.setMode(args.mode) }
+      end
+      rpcHandlers["overlay:setOpacity"] = function(args)
+        M.overlay.setOpacity(args.opacity)
+        return { opacity = M.overlay.opacity }
+      end
+      rpcHandlers["overlay:toggle"] = function()
+        return { mode = M.overlay.toggle() }
+      end
+      local label = M.overlay.shmMode and "shm" or "window"
+      startupLog("[reactjit] Overlay mode enabled (" .. label .. ", hotkey=" .. (M.overlay.hotkey) .. ")")
+    else
+      io.write("[reactjit] WARNING: overlay module failed to load: " .. tostring(overlayMod) .. "\n")
+      io.flush()
+    end
+  end
+
   -- Test mode (RJIT_TEST=1) — rjit test ----------------------------------------
   if os.getenv("RJIT_TEST") == "1" and M.bridge then
     local shimPath = os.getenv("RJIT_TEST_SHIM")
@@ -1615,7 +1894,10 @@ function ReactJIT.init(config)
       local f = io.open(shimPath, "r")
       if f then
         local src = f:read("*a"); f:close()
-        pcall(function() M.bridge:eval(src, "<test-shim>") end)
+        local shimOk, shimErr = pcall(function() M.bridge:eval(src, "<test-shim>") end)
+        if not shimOk then
+          io.write("[rjit test] shim eval error: " .. tostring(shimErr) .. "\n"); io.flush()
+        end
       end
     end
     if specPath then
@@ -1789,6 +2071,18 @@ end
 --- Call once per frame from love.update(dt).
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
+  -- Heartbeat: touch file every ~60 frames so watchdog can detect freezes
+  if heartbeatPath then
+    heartbeatCounter = heartbeatCounter + 1
+    if heartbeatCounter >= 60 then
+      heartbeatCounter = 0
+      -- Atomic write: temp file + rename avoids watchdog reading a truncated file
+      local tmp = heartbeatPath .. ".tmp"
+      local hf = io.open(tmp, "w")
+      if hf then hf:write(tostring(os.time())); hf:close(); os.rename(tmp, heartbeatPath) end
+    end
+  end
+
   -- Crash recovery mode: skip everything except HMR polling.
   -- The app is dead but we keep watching for a fixed bundle.
   if crashRecoveryMode then
@@ -1834,6 +2128,7 @@ function ReactJIT.update(dt)
     -- 3. Tick Lua-side transitions, animations, and interval timers (before layout)
     if M.animate then M.animate.tick(dt) end
     if M._tickLuaTimers then M._tickLuaTimers(dt) end
+    if M._tickLuaTime   then M._tickLuaTime(dt)   end
 
     -- 4. Relayout if tree changed
     if M.tree.isDirty() then
@@ -1973,6 +2268,7 @@ function ReactJIT.update(dt)
 
   -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
   if M._tickLuaTimers then M._tickLuaTimers(dt) end
+  if M._tickLuaTime   then M._tickLuaTime(dt)   end
 
   -- 2. Tell JS to process any pending input events
   local ok, err = pcall(function() M.bridge:callGlobal("_pollAndDispatchEvents") end)
@@ -2002,6 +2298,7 @@ function ReactJIT.update(dt)
            or t == "ws:connect" or t == "ws:send" or t == "ws:close"
            or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop"
            or t == "theme:set"
+           or t == "state:update"
            or t == "settings:registry" or t == "settings:keys:set" then
           hasSpecial = true
           break
@@ -2495,8 +2792,16 @@ function ReactJIT.update(dt)
             if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
             if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
             tooltips.setTheme(M.currentTheme)
+            if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
             if M.tree then M.tree.markDirty() end
             if M.themeMenuEnabled then themeMenu.setCurrentTheme(name, M.currentTheme) end
+          end
+
+        elseif type(cmd) == "table" and cmd.type == "state:update" then
+          -- Shared state update — keep shadow in sync for state:toggle
+          local payload = cmd.payload
+          if payload and payload.key then
+            M._handleStateUpdate(payload.key, payload.value)
           end
 
         elseif type(cmd) == "table" and cmd.type == "settings:registry" then
@@ -2800,6 +3105,14 @@ function ReactJIT.update(dt)
     end
   end
 
+  -- 6b. Poll peer tunnel (userspace encrypted P2P) events
+  if M.peerTunnel then
+    local ptEvents = M.peerTunnel.poll()
+    for _, evt in ipairs(ptEvents) do
+      pushEvent({ type = "peer_tunnel", payload = evt })
+    end
+  end
+
   -- 7. Poll HTTP servers and deliver incoming request events to JS
   if M.httpserver then
     local httpEvents = M.httpserver.pollAll()
@@ -2849,6 +3162,12 @@ function ReactJIT.update(dt)
     M.mapmod.renderAll()
   end
 
+  -- 8c3. Sync 3D geo scenes with tree, then render to off-screen Canvases
+  if M.geoscene3d then
+    M.geoscene3d.syncWithTree(M.tree.getNodes())
+    M.geoscene3d.renderAll(dt)
+  end
+
   -- 8d. Sync game modules with tree, update game logic, render to off-screen Canvases
   if M.gamemod then
     M.gamemod.syncWithTree(M.tree.getNodes())
@@ -2861,6 +3180,13 @@ function ReactJIT.update(dt)
     M.emumod.syncWithTree(M.tree.getNodes())
     M.emumod.updateAll(dt, pushEvent)
     M.emumod.renderAll()
+  end
+
+  -- 8d2b. Sync external capture feeds with tree, read frames, render to off-screen Canvases
+  if M.rendersource then
+    M.rendersource.syncWithTree(M.tree.getNodes())
+    M.rendersource.updateAll()
+    M.rendersource.renderAll()
   end
 
   -- 8d3. Sync generative effects with tree, update animations, render to off-screen Canvases
@@ -3137,14 +3463,20 @@ end
 --- Call once per frame from love.draw().
 --- Paints the retained UI tree (native and canvas modes).
 function ReactJIT.draw()
-  if not isRendering() then return end
-
-  -- Crash recovery mode: full-screen BSOD
+  -- Crash recovery mode: full-screen BSOD — BEFORE isRendering() check.
+  -- If init() crashed, mode is nil and isRendering() is false, but we still
+  -- need to show the BSOD with reboot controls instead of a black screen.
   if crashRecoveryMode then
     errors.drawBSOD()
     if M.gif then M.gif.captureIfReady() end
     return
   end
+
+  if not isRendering() then return end
+
+  -- SHM overlay mode: redirect all rendering to the overlay FBO
+  local overlayShmActive = M.overlay and M.overlay.shmMode
+  if overlayShmActive then M.overlay.beginFrame() end
 
   -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
   -- mpv can dirty this during mpv_render_context_create or render calls.
@@ -3175,6 +3507,7 @@ function ReactJIT.draw()
         devtools.recordFrame(perfSnap.layoutMs, perfSnap.paintMs)
       end
     end
+
     if not ok then
       -- Paint failure corrupts the graphics state (transform stack, stencil depth,
       -- active canvases). Reset EVERYTHING so Love2D can present safely and so the
@@ -3273,6 +3606,9 @@ function ReactJIT.draw()
 
   -- Error overlay renders on top of everything, using raw Love2D calls
   errors.draw()
+
+  -- SHM overlay mode: flush FBO to shared memory, back to default target
+  if overlayShmActive then M.overlay.endFrame() end
 
   -- Screenshot capture (last thing in draw — captures the final framebuffer)
   if M.screenshot then M.screenshot.captureIfReady() end
@@ -3483,7 +3819,7 @@ end
 -- ============================================================================
 
 --- Safely dispatch a Love2D callback through ReactJIT.
---- Records the event in the trail, then pcall-wraps the dispatch.
+--- Records the event in the trail, then xpcall-wraps the dispatch.
 --- On error, enters crashRecoveryMode (same as update() errors).
 --- @param method string  The ReactJIT method name (e.g. "mousepressed")
 --- @param ...    any     Arguments to pass through
@@ -3525,15 +3861,21 @@ function ReactJIT.safeCall(method, ...)
   local fn = ReactJIT[method]
   if not fn then return end
 
-  local ok, err = pcall(fn, ...)
+  local ok, trace = xpcall(function()
+    return fn(unpack(args))
+  end, function(err)
+    return debug.traceback(tostring(err), 2)
+  end)
   if not ok then
     crashRecoveryMode = true
-    local trace = debug.traceback(tostring(err), 2)
+    trace = tostring(trace or "")
+    local message = trace:match("^[^\n]+") or trace
+    if message == "" then message = "unknown error" end
     eventTrail.freeze()
     io.write("[reactjit] CRASH in " .. method .. ": entering recovery mode.\n"); io.flush()
     errors.push({
       source = "lua",
-      message = tostring(err),
+      message = message,
       stack = trace,
       context = "love." .. method .. " (safeCall)",
       trail = eventTrail.getTrail(),
@@ -3691,11 +4033,14 @@ function ReactJIT.mousepressed(x, y, button)
       local cx, cy = M.events.screenToContent(hit, x, y)
       M.textinput.handleMousePressed(hit, cx, cy, button)
     elseif hit.type == "CodeBlock" then
-      -- Clicked a CodeBlock: check copy button
+      -- Clicked a CodeBlock: check scrollbar / copy button
       -- Convert screen coords to content-space (account for scroll ancestors)
       if M.codeblock and M.codeblock.handleMousePressed then
         local cx, cy = M.events.screenToContent(hit, x, y)
-        M.codeblock.handleMousePressed(hit, cx, cy, button)
+        if M.codeblock.handleMousePressed(hit, cx, cy, button) then
+          -- Scrollbar or copy button consumed the click — skip text selection
+          return
+        end
       end
     elseif hit.type == "VideoPlayer" then
       -- Clicked a VideoPlayer: handle internally in Lua
@@ -3763,6 +4108,8 @@ function ReactJIT.mousereleased(x, y, button)
   if M.inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if M.settingsEnabled and settings.mousereleased(x, y, button) then return end
   if M.themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
+  -- CodeBlock scrollbar drag release (before general scrollbar)
+  if M.codeblock and M.codeblock.handleMouseReleased and M.codeblock.handleMouseReleased() then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
 
@@ -3847,6 +4194,11 @@ function ReactJIT.mousemoved(x, y)
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
   if M.inspectorEnabled and devtools.mousemoved(x, y) then return end
+  -- CodeBlock scrollbar drag (before general scrollbar — takes priority when active)
+  if M.codeblock and M.codeblock.isDragging and M.codeblock.isDragging() then
+    M.codeblock.handleMouseMoved(x, y)
+    return
+  end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
   if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
@@ -3984,6 +4336,20 @@ function ReactJIT.resize(w, h)
   if M.bridge then
     pushEvent({ type = "viewport", payload = { width = w, height = h } })
   end
+  -- Update mainWin dimensions + persist geometry on resize
+  local wmOk, wmMod = pcall(require, "lua.window_manager")
+  if wmOk and wmMod then
+    local mainWin = wmMod.getMain()
+    if mainWin then wmMod.handleResize(mainWin) end
+    wmMod.saveGeometry()
+  end
+end
+
+--- Call from love.handlers.windowmoved(x, y, sdlWindowId).
+--- Persists window geometry so crashes don't lose position.
+function ReactJIT.windowmoved(x, y)
+  local wmOk, wmMod = pcall(require, "lua.window_manager")
+  if wmOk and wmMod then wmMod.handleMoved(x, y) end
 end
 
 --- Call from love.focus(hasFocus).
@@ -4065,6 +4431,7 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
+  if M.overlay and M.overlay.keypressed(key) then return end
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
   if M.themeMenuEnabled and themeMenu.keypressed(key) then return end
@@ -4440,6 +4807,14 @@ function ReactJIT.wheelmoved(x, y)
   if hit.type == "TextEditor" then
     M.texteditor.handleWheel(hit, x, y)
     return  -- no bridge traffic
+  end
+
+  -- CodeBlock handles horizontal scroll entirely in Lua
+  if hit.type == "CodeBlock" and M.codeblock and M.codeblock.handleWheel then
+    if M.codeblock.handleWheel(hit, x, y) then
+      return  -- consumed by horizontal scroll
+    end
+    -- Not consumed → fall through to parent scroll container
   end
 
   -- Map2D handles zoom via wheel entirely in Lua
@@ -4972,6 +5347,9 @@ function ReactJIT.reload()
 
   -- 2. Teardown
   M.bridge:destroy()
+  M.bridge = nil  -- nil immediately so failed reload can't use dead context
+  if M.peerTunnel then M.peerTunnel.destroyAll() end
+  if M.wireguard then M.wireguard.destroyAll() end
   if M.network then M.network.destroy() end
   if M.http then M.http.destroy() end
   if M.browse then M.browse.destroy() end
@@ -4979,48 +5357,57 @@ function ReactJIT.reload()
   M.torHostnameEmitted = false  -- Re-emit tor:ready to new JS context
   if M.images then M.images.clearCache() end
   if M.videos then M.videos.clearCache() end
+  if M.rendersource then M.rendersource.clearAll() end
   if M.animate then M.animate.clear() end
 
-  -- 2b. Re-require Lua modules if any .lua files changed on disk
+  -- 2b. Re-require Lua modules if any .lua files changed on disk.
+  -- Wrapped in pcall so a bad module doesn't prevent bridge recreation (step 3).
+  -- If this fails, we still get a new bridge + fresh bundle; the bad module
+  -- will error again on the NEXT reload after the developer fixes it.
   if luaHmrDirty then
     io.write("[reactjit] Lua HMR: re-requiring core modules...\n"); io.flush()
-    M.measure    = require("lua.measure")
-    M.measure.init()
-    M.tree       = require("lua.tree")
-    M.layout     = require("lua.layout")
-    M.layout.init({ measure = M.measure })
-    M.painter    = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod })
-    M.events     = require("lua.events")
-    M.events.setTreeModule(M.tree)
-    M.texteditor = require("lua.texteditor")
-    M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
-    M.textinput  = require("lua.textinput")
-    M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
-    M.codeblock  = require("lua.codeblock")
-    M.codeblock.init({ measure = M.measure })
-    M.widgets    = require("lua.widgets")
-    M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
-    M.textselection = require("lua.textselection")
-    M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
-    focus = require("lua.focus")
-    focus.init(M.tree, pushEvent)
-    M.focus = focus
-    -- Re-require devtools stack
-    errors    = require("lua.errors")
-    M.errors  = errors
-    inspector = require("lua.inspector")
-    M.inspector = inspector
-    console   = require("lua.console")
-    M.console = console
-    devtools  = require("lua.devtools")
-    M.devtools = devtools
-    if M.videoplayer then
-      M.videoplayer = require("lua.videoplayer")
-      M.videoplayer.init({ measure = M.measure, videos = M.videos })
+    local reqOk, reqErr = pcall(function()
+      M.measure    = require("lua.measure")
+      M.measure.init()
+      M.tree       = require("lua.tree")
+      M.layout     = require("lua.layout")
+      M.layout.init({ measure = M.measure })
+      M.painter    = require("lua.painter")
+      M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+      M.events     = require("lua.events")
+      M.events.setTreeModule(M.tree)
+      M.texteditor = require("lua.texteditor")
+      M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
+      M.textinput  = require("lua.textinput")
+      M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+      M.codeblock  = require("lua.codeblock")
+      M.codeblock.init({ measure = M.measure })
+      M.widgets    = require("lua.widgets")
+      M.widgets.init({ measure = M.measure, screenToContent = M.events.screenToContent })
+      M.textselection = require("lua.textselection")
+      M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
+      focus = require("lua.focus")
+      focus.init(M.tree, pushEvent)
+      M.focus = focus
+      -- Re-require devtools stack
+      errors    = require("lua.errors")
+      M.errors  = errors
+      inspector = require("lua.inspector")
+      M.inspector = inspector
+      console   = require("lua.console")
+      M.console = console
+      devtools  = require("lua.devtools")
+      M.devtools = devtools
+      if M.videoplayer then
+        M.videoplayer = require("lua.videoplayer")
+        M.videoplayer.init({ measure = M.measure, videos = M.videos })
+      end
+      M.events.setWidgetsModule(M.widgets)
+      io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
+    end)
+    if not reqOk then
+      io.write("[reactjit] Lua HMR: re-require failed (continuing with old modules): " .. tostring(reqErr) .. "\n"); io.flush()
     end
-    M.events.setWidgetsModule(M.widgets)
-    io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
   end
 
   M.tree.init({ images = M.images, videos = M.videos, animate = M.animate, scene3d = M.scene3d })
@@ -5133,13 +5520,33 @@ end
 --- Call from love.quit().
 --- Cleans up the bridge and releases resources.
 function ReactJIT.quit()
+  -- Save window geometry before shutdown so next launch restores position+size
+  local wmOk2, wmMod2 = pcall(require, "lua.window_manager")
+  if wmOk2 and wmMod2 then
+    local mainWin = wmMod2.getMain()
+    if mainWin then wmMod2.handleResize(mainWin) end
+    wmMod2.saveGeometry()
+  end
+
+  -- Write clean-exit marker so the watchdog knows this wasn't a crash.
+  -- If the process segfaults, this file won't exist → watchdog spawns crash reporter.
+  local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+  local f = io.open(tmpDir .. "/reactjit_clean_exit", "w")
+  if f then f:write(tostring(os.time())); f:close() end
+
+  -- Clean up heartbeat file
+  if heartbeatPath then os.remove(heartbeatPath) end
+
   -- Clean up devtools pop-out window
   if M.inspectorEnabled and devtools.isPoppedOut() then
     devtools.dockBack()
   end
+  if M.overlay and M.overlay.shmMode then M.overlay.shutdown() end
   if M.dragdrop then M.dragdrop.cleanup() end
   if M.videos then M.videos.shutdown() end
   if M.tor then M.tor.stop() end
+  if M.peerTunnel then M.peerTunnel.destroyAll() end
+  if M.wireguard then M.wireguard.destroyAll() end
   if M.network then M.network.destroy() end
   if M.http then M.http.destroy() end
   if M.browse then M.browse.destroy() end
@@ -5148,6 +5555,10 @@ function ReactJIT.quit()
   end
   -- canvas mode uses bridge_fs which has no destroy method
   M.bridge = nil
+
+  -- Kill any remaining child processes (belt-and-suspenders with individual stop() calls above)
+  local regOk, reg = pcall(require, "lua.process_registry")
+  if regOk then reg.killAll() end
 end
 
 --- Return the active bridge instance.
@@ -5226,6 +5637,23 @@ end
 --- Check if we are in crash recovery mode.
 function ReactJIT.isCrashRecovery()
   return crashRecoveryMode
+end
+
+--- Enter crash recovery mode from outside init.lua (e.g. love.load failure).
+--- Shows the BSOD with reboot/HMR controls instead of a black screen.
+--- @param errMsg string  The error message
+--- @param context string  Where it happened (e.g. "love.load (init failed)")
+function ReactJIT.enterCrashRecovery(errMsg, context)
+  crashRecoveryMode = true
+  io.write("[reactjit] CRASH: entering recovery mode. Error: " .. tostring(errMsg) .. "\n"); io.flush()
+  io.write("[reactjit] Watching for fixed bundle — save your code to trigger reload.\n"); io.flush()
+  pcall(eventTrail.freeze)
+  errors.push({
+    source = "lua",
+    message = tostring(errMsg),
+    context = context or "unknown",
+    trail = pcall(eventTrail.getTrail) and eventTrail.getTrail() or nil,
+  })
 end
 
 --- Get the event trail module reference (for errors.lua BSOD rendering).

@@ -11,6 +11,8 @@ export type {
   VideoProps,
   VideoPlayerProps,
   VideoTimeEvent,
+  RenderProps,
+  DevToolsEmbedProps,
   ScrollEvent,
   ScrollViewProps,
   ScrollViewRef,
@@ -63,6 +65,9 @@ export {
   type Overlay,
 } from './hooks';
 
+// Overlay mode (game overlay — transparent, always-on-top, input passthrough)
+export { useOverlay, type OverlayState, type OverlayMode } from './overlay';
+
 // Breakpoint / responsive grid
 export {
   useBreakpoint,
@@ -99,7 +104,7 @@ export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from 
 export { registerIcon, registerIcons, lookupIcon } from './iconRegistry';
 
 // Primitives
-export { Box, Row, Col, Text, Image, FocusGroup } from './primitives';
+export { Box, Row, Col, Text, Image, Render, DevToolsEmbed, FocusGroup } from './primitives';
 
 // Typography
 export { Typography } from './Typography';
@@ -207,6 +212,10 @@ export { TextEditor } from './TextEditor';
 // CodeBlock (Lua-owned code renderer)
 export { CodeBlock } from './CodeBlock';
 export type { CodeBlockProps } from './CodeBlock';
+
+// Math (Lua-owned LaTeX typesetting)
+export { Math } from './Math';
+export type { MathProps } from './Math';
 
 // ContextMenu (Lua-owned right-click menu)
 export { ContextMenu } from './ContextMenu';
@@ -332,12 +341,12 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess } from './capabilities';
+export { Audio, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess, Libretro } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type {
   NativeProps, AudioProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps, ImageSelectProps, ImageProcessProps,
+  BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps,
   CapabilitySchema,
   TooltipProp, TooltipConfig,
 } from './types';
@@ -364,7 +373,11 @@ export {
 // Post-processing masks (foreground overlays)
 export {
   Scanlines, CRT, VHS, Dither, Ascii,
+  LumaMesh, OpticalFlow, DataMosh, FeedbackLoop,
+  HardGlitch, SoftGlitch, Stretch, FishEye, Tile, Watercolor,
   type MaskProps, type ScanlinesProps, type CRTProps, type VHSProps, type DitherProps, type AsciiProps,
+  type LumaMeshProps, type OpticalFlowProps, type DataMoshProps, type FeedbackLoopProps,
+  type HardGlitchProps, type SoftGlitchProps, type StretchProps, type FishEyeProps, type TileProps, type WatercolorProps,
 } from './masks';
 
 // Cartridge Inspector
@@ -381,6 +394,17 @@ export {
   type FleetQuestion,
   type FleetResult,
 } from './useFleet';
+
+// IFTTT (declarative trigger → action wiring)
+export { useIFTTT } from './useIFTTT';
+
+// Event bus (in-memory pub/sub between React components)
+export { useEventBus, useEvent, useEventState, useEmit, useEventChannel } from './useEvents';
+export type { EventBus } from './useEvents';
+
+// Web scraping (CSS selector extraction from fetched HTML)
+export { useScrape } from './useScrape';
+export type { ScrapeElement, PickTarget, PickMap } from './useScrape';
 
 // Utilities (Lua-backed: IDs, strings, time, deep equality, safe JSON)
 export {

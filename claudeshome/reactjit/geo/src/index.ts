@@ -1,29 +1,68 @@
-// @reactjit/geo — Declarative mapping system with offline tiles and 3D views
+// @reactjit/geo — Declarative mapping (react-leaflet API, Lua rendering)
 
-export { Map } from './Map';
+// Components
+export { MapContainer } from './MapContainer';
 export { TileLayer } from './TileLayer';
 export { Marker } from './Marker';
+export { Popup } from './Popup';
+export { Tooltip } from './Tooltip';
 export { Polyline } from './Polyline';
 export { Polygon } from './Polygon';
+export { Circle } from './Circle';
+export { CircleMarker } from './CircleMarker';
+export { Rectangle } from './Rectangle';
 export { GeoJSON } from './GeoJSON';
+export { LayerGroup } from './LayerGroup';
+export { FeatureGroup } from './FeatureGroup';
+export { Pane } from './Pane';
+export { ImageOverlay } from './ImageOverlay';
+export { ZoomControl } from './ZoomControl';
+export { ScaleControl } from './ScaleControl';
+export { AttributionControl } from './AttributionControl';
+export { LayersControl } from './LayersControl';
 
-export { useMap, useMapView, useTileCache, useProjection, MapContext } from './hooks';
+// Hooks
+export {
+  useMap,
+  useMapEvent,
+  useMapEvents,
+  useMapView,
+  useTileCache,
+  useProjection,
+  MapContext,
+} from './hooks';
 
+// Types
 export type {
-  LatLng,
-  TileSourceType,
-  MarkerAnchor,
+  LatLngTuple,
+  LatLngLiteral,
+  LatLngExpression,
+  LatLngBoundsExpression,
+  ControlPosition,
+  PathOptions,
+  LeafletMouseEvent,
   MapViewState,
-  MapBounds,
-  MapClickEvent,
-  MapViewChangeEvent,
-  MapProps,
+  MapEventHandlerFnMap,
+  MapContainerProps,
   TileLayerProps,
   MarkerProps,
+  PopupProps,
+  TooltipProps,
   PolylineProps,
   PolygonProps,
-  GeoJSONFeatureStyle,
+  CircleProps,
+  CircleMarkerProps,
+  RectangleProps,
   GeoJSONProps,
+  LayerGroupProps,
+  FeatureGroupProps,
+  PaneProps,
+  ImageOverlayProps,
+  ZoomControlProps,
+  ScaleControlProps,
+  AttributionControlProps,
+  LayersControlProps,
+  ControlledLayerProps,
   FlyToOptions,
   MapHandle,
   DownloadRegionOptions,

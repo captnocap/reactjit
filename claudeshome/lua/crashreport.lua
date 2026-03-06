@@ -62,6 +62,24 @@ function CrashReport.spawn(err, context)
     trail = trailMod.format() or ""
   end
 
+  -- Build reboot command: re-launch love with the same source directory
+  local rebootCmd, rebootCwd
+  pcall(function()
+    local src = love.filesystem.getSource()
+    if src and src ~= "" then
+      rebootCmd = string.format("love %q", src)
+      rebootCwd = src
+    end
+  end)
+
+  -- Get our PID so the crash reporter can detect when we die
+  local pid
+  pcall(function()
+    local ffi = require("ffi")
+    ffi.cdef("int getpid(void);")  -- safe to re-declare
+    pid = tonumber(ffi.C.getpid())
+  end)
+
   local crashData = {
     error = tostring(err),
     context = context or "unknown",
@@ -83,6 +101,9 @@ function CrashReport.spawn(err, context)
     if crashData.luaMemMB then f:write(string.format("  luaMemMB = %.1f,\n", crashData.luaMemMB)) end
     if crashData.rssMB then f:write(string.format("  rssMB = %.1f,\n", crashData.rssMB)) end
     f:write("  hasLuaSnapshot = true,\n")
+    if rebootCmd then f:write(string.format("  rebootCmd = %q,\n", rebootCmd)) end
+    if rebootCwd then f:write(string.format("  rebootCwd = %q,\n", rebootCwd)) end
+    if pid then f:write(string.format("  parentPid = %d,\n", pid)) end
     f:write("}\n")
     f:close()
   end

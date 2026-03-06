@@ -174,12 +174,16 @@ function Slider.draw(node, effectiveOpacity)
     love.graphics.rectangle("fill", trackX, trackY, fillW, trackHeight, trackRadius, trackRadius)
   end
 
-  -- Draw thumb
-  local thumbX = snapHalf(trackX + fillW)
-  local thumbY = snapHalf(c.y + c.h / 2)
-  local thumbRadius = thumbSize / 2
+  -- Draw thumb (bar, same as fader)
+  local thumbW = thumbSize
+  local thumbH = trackHeight * 3
+  local thumbX = snapHalf(trackX + fillW) - thumbW / 2
+  local thumbY = snapHalf(c.y + c.h / 2) - thumbH / 2
   local cr, cg, cb, ca = parseColor(p.thumbColor)
-  drawSoftCircle(thumbX, thumbY, thumbRadius, cr, cg, cb, ca, opacity)
+  love.graphics.setColor(cr, cg, cb, ca * opacity)
+  love.graphics.rectangle("fill", thumbX, thumbY, thumbW, thumbH, 2, 2)
+  love.graphics.setColor(0.4, 0.4, 0.4, opacity)
+  love.graphics.rectangle("line", thumbX, thumbY, thumbW, thumbH, 2, 2)
 end
 
 -- ============================================================================

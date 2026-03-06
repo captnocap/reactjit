@@ -8,11 +8,13 @@
     REACTJIT_NOTIF_TITLE     Notification title (bold)
     REACTJIT_NOTIF_BODY      Notification body text
     REACTJIT_NOTIF_DURATION  Duration in seconds before auto-dismiss (default 5)
-    REACTJIT_NOTIF_X         Window X position
-    REACTJIT_NOTIF_Y         Window Y position
+    REACTJIT_NOTIF_X         Window X position (display-relative)
+    REACTJIT_NOTIF_Y         Window Y position (display-relative)
     REACTJIT_NOTIF_WIDTH     Window width (default 380)
     REACTJIT_NOTIF_HEIGHT    Window height (default 100)
     REACTJIT_NOTIF_ACCENT    Accent color hex (default "4C9EFF")
+    REACTJIT_NOTIF_DISPLAY   Display index (1-based, Love2D convention)
+    REACTJIT_NOTIF_REFOCUS   X11 window ID to refocus after spawn
 
   No IPC, no tree, no layout engine. Just Love2D drawing primitives.
 ]]
@@ -23,12 +25,14 @@ local ffi = require("ffi")
 -- Config from env vars
 -- ============================================================================
 
-local title    = os.getenv("REACTJIT_NOTIF_TITLE") or "Notification"
-local body     = os.getenv("REACTJIT_NOTIF_BODY") or ""
-local duration = tonumber(os.getenv("REACTJIT_NOTIF_DURATION")) or 5
-local posX     = tonumber(os.getenv("REACTJIT_NOTIF_X"))
-local posY     = tonumber(os.getenv("REACTJIT_NOTIF_Y"))
-local accentHex = os.getenv("REACTJIT_NOTIF_ACCENT") or "4C9EFF"
+local title      = os.getenv("REACTJIT_NOTIF_TITLE") or "Notification"
+local body       = os.getenv("REACTJIT_NOTIF_BODY") or ""
+local duration   = tonumber(os.getenv("REACTJIT_NOTIF_DURATION")) or 5
+local posX       = tonumber(os.getenv("REACTJIT_NOTIF_X"))
+local posY       = tonumber(os.getenv("REACTJIT_NOTIF_Y"))
+local display    = tonumber(os.getenv("REACTJIT_NOTIF_DISPLAY"))
+local accentHex  = os.getenv("REACTJIT_NOTIF_ACCENT") or "4C9EFF"
+local refocusWin = os.getenv("REACTJIT_NOTIF_REFOCUS") or ""
 
 -- Parse hex color
 local function hexToRGB(hex)
@@ -57,15 +61,51 @@ local titleFont
 local bodyFont
 
 -- ============================================================================
+-- X11: prevent focus stealing
+-- ============================================================================
+
+local function setupX11NoFocus()
+  -- Find our own X11 window ID via xdotool
+  pcall(ffi.cdef, "int getpid(void);")
+  local ok, pid = pcall(function() return ffi.C.getpid() end)
+  if not ok then return end
+
+  local h = io.popen("xdotool search --pid " .. pid .. " 2>/dev/null")
+  local xwinId
+  if h then xwinId = h:read("*l"); h:close() end
+  if not xwinId or xwinId == "" then return end
+
+  -- Set window type to NOTIFICATION — tells the WM this is a transient overlay,
+  -- not an app window. Most WMs won't give it keyboard focus on click.
+  os.execute("xprop -id " .. xwinId ..
+    " -f _NET_WM_WINDOW_TYPE 32a" ..
+    " -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_NOTIFICATION" ..
+    " 2>/dev/null")
+
+  -- Skip taskbar + pager + stay above
+  os.execute("xprop -id " .. xwinId ..
+    " -f _NET_WM_STATE 32a" ..
+    " -set _NET_WM_STATE _NET_WM_STATE_ABOVE,_NET_WM_STATE_SKIP_TASKBAR,_NET_WM_STATE_SKIP_PAGER" ..
+    " 2>/dev/null")
+end
+
+local function refocusPreviousWindow()
+  if refocusWin == "" then return end
+  -- Refocus the window that was active before we spawned.
+  -- Backgrounded so we don't block love.load.
+  os.execute("xdotool windowactivate " .. refocusWin .. " 2>/dev/null &")
+end
+
+-- ============================================================================
 -- love.load
 -- ============================================================================
 
 function love.load()
   fadeOutStart = duration - fadeOutTime
 
-  -- Position the window
+  -- Position the window on the correct display
   if posX and posY then
-    love.window.setPosition(posX, posY)
+    love.window.setPosition(posX, posY, display or 1)
   end
 
   -- Always on top via SDL2 FFI
@@ -81,10 +121,16 @@ function love.load()
     end
   end)
 
+  -- Set X11 window type to NOTIFICATION + skip taskbar/pager
+  setupX11NoFocus()
+
+  -- Immediately return focus to the window that was active before us
+  refocusPreviousWindow()
+
   -- Transparent background
   love.graphics.setBackgroundColor(0, 0, 0, 0)
 
-  -- Load fonts (use Love2D default font at different sizes)
+  -- Load fonts (cached once, never per-frame)
   titleFont = love.graphics.newFont(14)
   bodyFont  = love.graphics.newFont(12)
 end
@@ -98,7 +144,7 @@ function love.update(dt)
 
   elapsed = elapsed + dt
 
-  -- Compute alpha: fade in → hold → fade out
+  -- Compute alpha: fade in -> hold -> fade out
   if elapsed < fadeInTime then
     alpha = elapsed / fadeInTime
   elseif elapsed < fadeOutStart then
@@ -119,56 +165,46 @@ end
 -- love.draw
 -- ============================================================================
 
-local function roundedRect(x, y, w, h, r)
-  love.graphics.rectangle("fill", x + r, y, w - 2 * r, h)
-  love.graphics.rectangle("fill", x, y + r, w, h - 2 * r)
-  love.graphics.circle("fill", x + r, y + r, r)
-  love.graphics.circle("fill", x + w - r, y + r, r)
-  love.graphics.circle("fill", x + r, y + h - r, r)
-  love.graphics.circle("fill", x + w - r, y + h - r, r)
-end
-
 function love.draw()
   local w = love.graphics.getWidth()
   local h = love.graphics.getHeight()
-  local radius = 12
-  local accentWidth = 4
-  local pad = 16
+  local r = 10
+  local bar = 3
+  local pad = 14
+  local inset = 8  -- accent bar inset from top/bottom
 
   -- Background
-  love.graphics.setColor(0.08, 0.08, 0.10, alpha * 0.95)
-  roundedRect(0, 0, w, h, radius)
+  love.graphics.setColor(0.09, 0.09, 0.11, alpha * 0.96)
+  love.graphics.rectangle("fill", 0, 0, w, h, r, r)
 
-  -- Accent stripe on left
+  -- Accent bar — thin vertical stripe inside the left edge, rounded caps
   love.graphics.setColor(accentR, accentG, accentB, alpha)
-  roundedRect(0, 0, accentWidth + radius, h, radius)
-  -- Clean up the right side of the accent (sharp edge)
-  love.graphics.setColor(0.08, 0.08, 0.10, alpha * 0.95)
-  love.graphics.rectangle("fill", accentWidth, radius, radius, h - 2 * radius)
+  love.graphics.rectangle("fill", 6, inset, bar, h - inset * 2, 2, 2)
 
-  -- Border (subtle)
-  love.graphics.setColor(0.25, 0.25, 0.30, alpha * 0.6)
+  -- Border
+  love.graphics.setColor(0.22, 0.22, 0.27, alpha * 0.5)
   love.graphics.setLineWidth(1)
-  love.graphics.rectangle("line", 0.5, 0.5, w - 1, h - 1, radius, radius)
+  love.graphics.rectangle("line", 0.5, 0.5, w - 1, h - 1, r, r)
 
   -- Title
+  local textX = 16
   love.graphics.setFont(titleFont)
   love.graphics.setColor(1, 1, 1, alpha)
-  love.graphics.print(title, accentWidth + pad, pad)
+  love.graphics.print(title, textX, pad)
 
   -- Body
   if body and body ~= "" then
     love.graphics.setFont(bodyFont)
-    love.graphics.setColor(0.7, 0.7, 0.75, alpha)
-    love.graphics.printf(body, accentWidth + pad, pad + 22, w - accentWidth - pad * 2)
+    love.graphics.setColor(0.65, 0.65, 0.70, alpha)
+    love.graphics.printf(body, textX, pad + 24, w - textX - pad)
   end
 
-  -- Dismiss hint (bottom-right)
+  -- Dismiss hint (bottom-right, very subtle)
   love.graphics.setFont(bodyFont)
-  love.graphics.setColor(0.4, 0.4, 0.45, alpha * 0.6)
+  love.graphics.setColor(0.35, 0.35, 0.40, alpha * 0.4)
   local hint = "click to dismiss"
   local hintW = bodyFont:getWidth(hint)
-  love.graphics.print(hint, w - hintW - pad, h - 20)
+  love.graphics.print(hint, w - hintW - pad, h - 22)
 end
 
 -- ============================================================================

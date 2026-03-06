@@ -32,6 +32,47 @@ local treeDirty    = true
 local connected    = false
 local shuttingDown = false  -- true when parent sent "quit" (clean exit, no onClose)
 
+-- Notification mode state (enabled by REACTJIT_WINDOW_NOTIFICATION=1)
+local isNotification = os.getenv("REACTJIT_WINDOW_NOTIFICATION") == "1"
+local notifDuration  = tonumber(os.getenv("REACTJIT_WINDOW_NOTIF_DURATION")) or 5
+local notifAccentHex = os.getenv("REACTJIT_WINDOW_NOTIF_ACCENT") or "4C9EFF"
+local notifRefocusWin = os.getenv("REACTJIT_WINDOW_NOTIF_REFOCUS") or ""
+local notifElapsed   = 0
+local notifAlpha     = 0
+local notifFadeIn    = 0.15
+local notifFadeOut   = 0.4
+
+-- ============================================================================
+-- Notification mode: X11 no-focus + refocus helpers
+-- ============================================================================
+
+local function setupX11NoFocus()
+  local ffi = require("ffi")
+  pcall(ffi.cdef, "int getpid(void);")
+  local ok, pid = pcall(function() return ffi.C.getpid() end)
+  if not ok then return end
+
+  local h = io.popen("xdotool search --pid " .. pid .. " 2>/dev/null")
+  local xwinId
+  if h then xwinId = h:read("*l"); h:close() end
+  if not xwinId or xwinId == "" then return end
+
+  os.execute("xprop -id " .. xwinId ..
+    " -f _NET_WM_WINDOW_TYPE 32a" ..
+    " -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_NOTIFICATION" ..
+    " 2>/dev/null")
+
+  os.execute("xprop -id " .. xwinId ..
+    " -f _NET_WM_STATE 32a" ..
+    " -set _NET_WM_STATE _NET_WM_STATE_ABOVE,_NET_WM_STATE_SKIP_TASKBAR,_NET_WM_STATE_SKIP_PAGER" ..
+    " 2>/dev/null")
+end
+
+local function refocusPreviousWindow()
+  if notifRefocusWin == "" then return end
+  os.execute("xdotool windowactivate " .. notifRefocusWin .. " 2>/dev/null &")
+end
+
 -- ============================================================================
 -- love.load — connect to parent, receive initial subtree
 -- ============================================================================
@@ -47,7 +88,12 @@ function love.load()
   local envX = tonumber(os.getenv("REACTJIT_WINDOW_X"))
   local envY = tonumber(os.getenv("REACTJIT_WINDOW_Y"))
   if envX and envY then
-    love.window.setPosition(envX, envY)
+    local envDisplay = tonumber(os.getenv("REACTJIT_WINDOW_DISPLAY"))
+    if envDisplay and envDisplay > 0 then
+      love.window.setPosition(envX, envY, envDisplay)
+    else
+      love.window.setPosition(envX, envY)
+    end
   end
 
   -- Apply alwaysOnTop via SDL2 FFI
@@ -64,6 +110,12 @@ function love.load()
         ffi.C.SDL_SetWindowAlwaysOnTop(win, 1)
       end
     end)
+  end
+
+  -- Notification mode: prevent focus stealing + refocus previous window
+  if isNotification then
+    setupX11NoFocus()
+    refocusPreviousWindow()
   end
 
   -- Initialize modules (child has no images/videos/animations)
@@ -105,11 +157,45 @@ function love.load()
 end
 
 -- ============================================================================
+-- IPC helpers — must be defined before love.update which uses sendWindowEvent
+-- ============================================================================
+
+local function sendEvent(payload)
+  if not connected then return end
+  IPC.send(conn, { type = "event", payload = payload })
+end
+
+local function sendWindowEvent(handler, data)
+  if not connected then return end
+  IPC.send(conn, { type = "windowEvent", handler = handler, data = data })
+end
+
+-- ============================================================================
 -- love.update — poll for mutations, relayout
 -- ============================================================================
 
 function love.update(dt)
   if not connected then return end
+
+  -- Notification auto-dismiss timer
+  if isNotification then
+    notifElapsed = notifElapsed + dt
+    local fadeOutStart = notifDuration - notifFadeOut
+    if notifElapsed < notifFadeIn then
+      notifAlpha = notifElapsed / notifFadeIn
+    elseif notifElapsed < fadeOutStart then
+      notifAlpha = 1
+    elseif notifElapsed < notifDuration then
+      notifAlpha = 1 - (notifElapsed - fadeOutStart) / notifFadeOut
+    else
+      -- Duration expired — dismiss
+      shuttingDown = true
+      sendWindowEvent("onClose", {})
+      love.event.quit()
+      return
+    end
+    notifAlpha = math.max(0, math.min(1, notifAlpha))
+  end
 
   -- Poll for messages from parent
   local msgs, dead = IPC.poll(conn)
@@ -153,23 +239,27 @@ function love.draw()
   if root then
     Painter.paint(root)
   end
+
+  -- Notification mode: apply fade overlay
+  if isNotification and notifAlpha < 1 then
+    love.graphics.setColor(0, 0, 0, 1 - notifAlpha)
+    love.graphics.rectangle("fill", 0, 0, windowW, windowH)
+  end
 end
 
 -- ============================================================================
 -- Input events — hit test locally, send to parent
 -- ============================================================================
 
-local function sendEvent(payload)
-  if not connected then return end
-  IPC.send(conn, { type = "event", payload = payload })
-end
-
-local function sendWindowEvent(handler, data)
-  if not connected then return end
-  IPC.send(conn, { type = "windowEvent", handler = handler, data = data })
-end
-
 function love.mousepressed(x, y, button)
+  -- Notification mode: click anywhere to dismiss
+  if isNotification then
+    shuttingDown = true
+    sendWindowEvent("onClose", {})
+    love.event.quit()
+    return
+  end
+
   local root = Tree.getTree()
   if not root then return end
 

@@ -44,9 +44,13 @@ function Watchdog.launch(opts)
   os.remove(tmpDir .. "/reactjit_snapshot.lua")
   os.remove(tmpDir .. "/reactjit_panic.signal")
   os.remove(tmpDir .. "/reactjit_crisis.lua")
+  os.remove(tmpDir .. "/reactjit_clean_exit")
 
   -- Get our own PID via C call (not shell — shell gives the subprocess PID)
   local pid = tostring(ffi.C.getpid())
+
+  -- Clean stale heartbeat from previous run
+  os.remove(tmpDir .. "/reactjit_heartbeat_" .. pid)
 
   -- Find watchdog.sh relative to this module
   local scriptPath

@@ -174,6 +174,17 @@ local function blobToImage(blob)
   return nil
 end
 
+--- Convert raw tile blob to love.ImageData (for pixel-level access, e.g. terrain-RGB decoding)
+local function blobToImageData(blob)
+  if not blob or #blob == 0 then return nil end
+  local ok, result = pcall(function()
+    local fileData = love.filesystem.newFileData(blob, "tile.png")
+    return love.image.newImageData(fileData)
+  end)
+  if ok then return result end
+  return nil
+end
+
 -- ============================================================================
 -- Cache handle (one per map instance)
 -- ============================================================================
@@ -348,6 +359,43 @@ function TileCache.getTile(handle, sourceName, z, x, y)
   end
 
   return nil  -- not yet available
+end
+
+--- Get a tile as raw ImageData (not a GPU texture) for pixel-level access.
+--- Used by terrain elevation decoding which reads RGB values per pixel.
+--- Uses the same caching tiers as getTile but returns ImageData instead of Image.
+--- @param handle table  Cache handle
+--- @param sourceName string  Source name
+--- @param z number  Zoom level
+--- @param x number  Tile X
+--- @param y number  Tile Y
+--- @return love.ImageData|nil  The tile image data, or nil if not yet available
+function TileCache.getTileImageData(handle, sourceName, z, x, y)
+  local key = tileKey(sourceName, z, x, y) .. ":imgdata"
+
+  -- Check a simple memory cache for ImageData objects
+  if not handle.imageDataCache then handle.imageDataCache = {} end
+  if handle.imageDataCache[key] then return handle.imageDataCache[key] end
+
+  -- Try SQLite
+  if handle.db then
+    local tmsY = xyzToTmsY(y, z)
+    local row = handle.db:queryOne(
+      "SELECT tile_data FROM tiles WHERE source = ? AND zoom_level = ? AND tile_column = ? AND tile_row = ?",
+      sourceName, z, x, tmsY
+    )
+    if row and row.tile_data then
+      local imgData = blobToImageData(row.tile_data)
+      if imgData then
+        handle.imageDataCache[key] = imgData
+        return imgData
+      end
+    end
+  end
+
+  -- Trigger a fetch via getTile (which handles async HTTP)
+  TileCache.getTile(handle, sourceName, z, x, y)
+  return nil
 end
 
 --- Poll for completed tile fetches. Call once per frame.

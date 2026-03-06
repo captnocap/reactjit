@@ -1,105 +1,245 @@
-// @reactjit/geo — Type definitions for the mapping system
+// @reactjit/geo — Type definitions (react-leaflet compatible)
 
-export type LatLng = [number, number]; // [latitude, longitude]
+// -- Coordinate types ---------------------------------------------------
 
-export type TileSourceType = 'raster' | 'vector';
+export type LatLngTuple = [number, number]; // [latitude, longitude]
 
-export type MarkerAnchor =
-  | 'center'
-  | 'top-center'
-  | 'bottom-center'
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right';
+export type LatLngLiteral = { lat: number; lng: number };
+
+export type LatLngExpression = LatLngTuple | LatLngLiteral;
+
+export type LatLngBoundsExpression =
+  | [LatLngExpression, LatLngExpression]
+  | { southWest: LatLngExpression; northEast: LatLngExpression };
+
+// -- Control positions --------------------------------------------------
+
+export type ControlPosition =
+  | 'topleft'
+  | 'topright'
+  | 'bottomleft'
+  | 'bottomright';
+
+// -- Path options (shared by vector layers) -----------------------------
+
+export interface PathOptions {
+  color?: string;
+  weight?: number;
+  opacity?: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  dashArray?: number[];
+  fill?: boolean;
+  stroke?: boolean;
+}
+
+// -- Event types --------------------------------------------------------
+
+export interface LeafletMouseEvent {
+  latlng: LatLngTuple;
+  pixel: [number, number];
+}
 
 export interface MapViewState {
-  center: LatLng;
+  center: LatLngTuple;
   zoom: number;
   bearing: number;
   pitch: number;
 }
 
-export interface MapBounds {
-  sw: LatLng;
-  ne: LatLng;
-}
+export type MapEventHandlerFnMap = {
+  click?: (event: LeafletMouseEvent) => void;
+  dblclick?: (event: LeafletMouseEvent) => void;
+  mousedown?: (event: LeafletMouseEvent) => void;
+  mouseup?: (event: LeafletMouseEvent) => void;
+  mousemove?: (event: LeafletMouseEvent) => void;
+  contextmenu?: (event: LeafletMouseEvent) => void;
+  zoom?: () => void;
+  zoomstart?: () => void;
+  zoomend?: () => void;
+  move?: () => void;
+  movestart?: () => void;
+  moveend?: () => void;
+  drag?: () => void;
+  dragstart?: () => void;
+  dragend?: (event: { latlng: LatLngTuple }) => void;
+  popupopen?: () => void;
+  popupclose?: () => void;
+  tooltipopen?: () => void;
+  tooltipclose?: () => void;
+};
 
-export interface MapClickEvent {
-  latlng: LatLng;
-  pixel: [number, number];
-}
+// -- Component props ----------------------------------------------------
 
-export interface MapViewChangeEvent extends MapViewState {}
-
-export interface MapProps {
-  center?: LatLng;
+export interface MapContainerProps {
+  center?: LatLngExpression;
   zoom?: number;
   bearing?: number;
   pitch?: number;
   minZoom?: number;
   maxZoom?: number;
+  maxBounds?: LatLngBoundsExpression;
+  scrollWheelZoom?: boolean;
+  dragging?: boolean;
+  zoomControl?: boolean;
+  doubleClickZoom?: boolean;
+  attributionControl?: boolean;
   projection?: string;
   style?: Record<string, any>;
-  onViewChange?: (event: MapViewChangeEvent) => void;
-  onClick?: (event: MapClickEvent) => void;
-  onLongPress?: (event: MapClickEvent) => void;
+  whenReady?: () => void;
   children?: React.ReactNode;
 }
 
 export interface TileLayerProps {
-  source?: string;
-  urlTemplate?: string;
-  type?: TileSourceType;
-  minZoom?: number;
-  maxZoom?: number;
-  tileSize?: number;
-  opacity?: number;
+  url: string;
   attribution?: string;
+  maxZoom?: number;
+  minZoom?: number;
+  opacity?: number;
+  tileSize?: number;
+  zIndex?: number;
+  subdomains?: string | string[];
   headers?: Record<string, string>;
+  eventHandlers?: MapEventHandlerFnMap;
 }
 
 export interface MarkerProps {
-  position: LatLng;
-  anchor?: MarkerAnchor;
+  position: LatLngExpression;
+  icon?: string;
   draggable?: boolean;
-  onDragEnd?: (event: { latlng: LatLng }) => void;
-  onClick?: () => void;
+  opacity?: number;
+  zIndexOffset?: number;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
+}
+
+export interface PopupProps {
+  position?: LatLngExpression;
+  maxWidth?: number;
+  minWidth?: number;
+  closeButton?: boolean;
+  autoClose?: boolean;
+  closeOnClick?: boolean;
+  closeOnEscapeKey?: boolean;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
+}
+
+export interface TooltipProps {
+  position?: LatLngExpression;
+  direction?: 'right' | 'left' | 'top' | 'bottom' | 'center' | 'auto';
+  permanent?: boolean;
+  sticky?: boolean;
+  opacity?: number;
+  eventHandlers?: MapEventHandlerFnMap;
   children?: React.ReactNode;
 }
 
 export interface PolylineProps {
-  positions: LatLng[];
-  color?: string;
-  width?: number;
-  dashArray?: number[];
-  animated?: boolean;
-  arrowheads?: boolean;
+  positions: LatLngExpression[] | LatLngExpression[][];
+  pathOptions?: PathOptions;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
 }
 
 export interface PolygonProps {
-  positions: LatLng[];
-  fillColor?: string;
-  strokeColor?: string;
-  strokeWidth?: number;
-  extrude?: number;
+  positions: LatLngExpression[] | LatLngExpression[][] | LatLngExpression[][][];
+  pathOptions?: PathOptions;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
 }
 
-export interface GeoJSONFeatureStyle {
-  fillColor?: string;
-  strokeColor?: string;
-  strokeWidth?: number;
-  extrude?: number;
+export interface CircleProps {
+  center: LatLngExpression;
+  radius: number;
+  pathOptions?: PathOptions;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
+}
+
+export interface CircleMarkerProps {
+  center: LatLngExpression;
+  radius?: number;
+  pathOptions?: PathOptions;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
+}
+
+export interface RectangleProps {
+  bounds: LatLngBoundsExpression;
+  pathOptions?: PathOptions;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
 }
 
 export interface GeoJSONProps {
-  data: any; // GeoJSON FeatureCollection or Feature
-  style?: (feature: any) => GeoJSONFeatureStyle;
-  onFeatureClick?: (feature: any) => void;
+  data: any;
+  style?: PathOptions | ((feature: any) => PathOptions);
+  filter?: (feature: any) => boolean;
+  onEachFeature?: (feature: any, nodeId: string) => void;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
 }
 
+export interface LayerGroupProps {
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
+}
+
+export interface FeatureGroupProps {
+  pathOptions?: PathOptions;
+  eventHandlers?: MapEventHandlerFnMap;
+  children?: React.ReactNode;
+}
+
+export interface PaneProps {
+  name: string;
+  zIndex?: number;
+  children?: React.ReactNode;
+}
+
+export interface ImageOverlayProps {
+  url: string;
+  bounds: LatLngBoundsExpression;
+  opacity?: number;
+  zIndex?: number;
+  eventHandlers?: MapEventHandlerFnMap;
+}
+
+export interface ZoomControlProps {
+  position?: ControlPosition;
+  zoomInText?: string;
+  zoomOutText?: string;
+}
+
+export interface ScaleControlProps {
+  position?: ControlPosition;
+  maxWidth?: number;
+  metric?: boolean;
+  imperial?: boolean;
+}
+
+export interface AttributionControlProps {
+  position?: ControlPosition;
+  prefix?: string | false;
+}
+
+export interface LayersControlProps {
+  position?: ControlPosition;
+  collapsed?: boolean;
+  children?: React.ReactNode;
+}
+
+export interface ControlledLayerProps {
+  checked?: boolean;
+  name: string;
+  children: React.ReactNode;
+}
+
+// -- Imperative handles -------------------------------------------------
+
 export interface FlyToOptions {
-  center?: LatLng;
+  center?: LatLngExpression;
   zoom?: number;
   bearing?: number;
   pitch?: number;
@@ -108,12 +248,15 @@ export interface FlyToOptions {
 }
 
 export interface MapHandle {
-  panTo: (latlng: LatLng, opts?: { animate?: boolean; duration?: number }) => void;
+  panTo: (latlng: LatLngExpression, opts?: { animate?: boolean; duration?: number }) => void;
   zoomTo: (zoom: number, opts?: { animate?: boolean; duration?: number }) => void;
-  fitBounds: (bounds: [LatLng, LatLng], opts?: { animate?: boolean }) => void;
+  fitBounds: (bounds: LatLngBoundsExpression, opts?: { animate?: boolean }) => void;
   setPitch: (pitch: number) => void;
   setBearing: (bearing: number) => void;
   flyTo: (opts: FlyToOptions) => void;
+  getCenter: () => LatLngTuple;
+  getZoom: () => number;
+  getBounds: () => LatLngBoundsExpression;
 }
 
 export interface DownloadRegionOptions {
@@ -139,7 +282,7 @@ export interface CacheStats {
 }
 
 export interface TileCacheHandle {
-  downloadRegion: (bounds: MapBounds, opts?: DownloadRegionOptions) => Promise<string>;
+  downloadRegion: (bounds: LatLngBoundsExpression, opts?: DownloadRegionOptions) => Promise<string>;
   getProgress: (regionId: string) => Promise<DownloadProgress | null>;
   stats: () => Promise<CacheStats>;
 }

@@ -56,8 +56,8 @@ function Dither.draw(state, w, h, source)
   -- Overlay Bayer stipple: alternating subtle dark/light micro-cells.
   local step = scale
   local invLevels = 1 / max(1, levels)
-  local darkStrength = 0.02 + intensity * 0.1
-  local lightStrength = 0.01 + intensity * 0.05
+  local darkStrength = 0.2 + intensity * 0.4
+  local lightStrength = 0.1 + intensity * 0.25
 
   for y = 0, h - 1, step do
     for x = 0, w - 1, step do
@@ -79,7 +79,7 @@ function Dither.draw(state, w, h, source)
 
   -- Optional pixel-grid accent for larger cell sizes.
   if scale >= 3 then
-    local gridAlpha = intensity * 0.025
+    local gridAlpha = intensity * 0.15
     love.graphics.setColor(0, 0, 0, gridAlpha)
     for x = 0, w, step do
       love.graphics.rectangle("fill", x, 0, 1, h)

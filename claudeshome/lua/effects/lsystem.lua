@@ -153,18 +153,20 @@ function LSystem.update(state, dt, props, w, h, mouse)
 
     for i = 1, tipsToGrow do
       local tip = state.activeTips[i]
-      if tip and tip.depth < MAX_DEPTH then
+      if tip then
         local centroid = (sin(t * 0.3) + 1) * 0.5
         local baseAngle = 0.18 + (1 - centroid) * 0.45 + high * 0.12
-        local branchLength = max(2.2, state.baseLength * (0.9 ^ (tip.depth - 1)) * (0.55 + amp * 0.85))
+        
+        local effDepth = (tip.depth - 1) % MAX_DEPTH + 1
+        local branchLength = max(2.2, state.baseLength * (0.9 ^ (effDepth - 1)) * (0.55 + amp * 0.85))
         local branchHue = (state.hue + tip.depth * 0.05) % 1
         local asymmetry = (high - bass) * 0.25
         local energy = bass * 0.45 + mid * 0.35 + amp * 0.5
 
         local branchCount = 1
-        if energy > 0.42 and tip.depth < MAX_DEPTH - 1 then branchCount = 2 end
-        if (isBeat or bass > 0.72) and tip.depth < 4 then branchCount = 3 end
-        if tip.depth > 6 then branchCount = 1 end
+        if energy > 0.42 and effDepth < MAX_DEPTH - 1 then branchCount = 2 end
+        if (isBeat or bass > 0.72) and effDepth < 4 then branchCount = 3 end
+        if effDepth > 6 then branchCount = 1 end
 
         for b = 1, branchCount do
           local newAngle
@@ -179,6 +181,9 @@ function LSystem.update(state, dt, props, w, h, mouse)
           local endX = tip.x + cos(newAngle) * branchLength
           local endY = tip.y + sin(newAngle) * branchLength
           local newThickness = max(0.35, tip.thickness * (0.62 + random() * 0.08))
+          if effDepth == 1 and tip.depth > 1 then
+            newThickness = max(newThickness, 1.5)
+          end
 
           table.insert(state.branches, {
             x1 = tip.x, y1 = tip.y,
@@ -189,15 +194,13 @@ function LSystem.update(state, dt, props, w, h, mouse)
             isLeaf = false,
           })
 
-          if #state.activeTips + #newTips < MAX_TIPS then
-            table.insert(newTips, {
-              x = endX, y = endY,
-              angle = newAngle,
-              depth = tip.depth + 1,
-              length = branchLength,
-              thickness = newThickness,
-            })
-          end
+          table.insert(newTips, {
+            x = endX, y = endY,
+            angle = newAngle,
+            depth = tip.depth + 1,
+            length = branchLength,
+            thickness = newThickness,
+          })
         end
       end
     end
