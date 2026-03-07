@@ -41,6 +41,7 @@
     "validate:story-centering": "node scripts/validate-story-centering.mjs",
     "validate:story-titles": "node scripts/validate-story-title-alignment.mjs",
     "test:router": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/router/test/router.test.mjs",
+    "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/storage/test/format.test.mjs",
     "poly:fetch": "node scripts/poly-pizza-fetch.mjs"
   },
   "dependencies": {
