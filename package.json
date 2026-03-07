@@ -41,6 +41,7 @@
     "validate:story-centering": "node scripts/validate-story-centering.mjs",
     "validate:story-titles": "node scripts/validate-story-title-alignment.mjs",
     "test:ai-stream": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/ai/test/stream.test.mjs",
+    "test:core": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/test/tw-roundtrip.test.mjs",
     "test:router": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/router/test/router.test.mjs",
     "test:storage-query": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/storage/test/query.test.mjs",
     "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/storage/test/format.test.mjs",
