@@ -42,11 +42,13 @@ describe('router matching semantics', () => {
   });
 
   it('supports optional parameters when omitted or present', () => {
-    assert.deepEqual(matchRoute('/reports/:year?', '/reports'), {
+    const withoutYear = matchRoute('/reports/:year?', '/reports');
+    assert.deepEqual(withoutYear, {
       matched: true,
       params: {},
       path: '/reports/:year?',
     });
+    assert.equal(Object.hasOwn(withoutYear.params, 'year'), false);
 
     assert.deepEqual(matchRoute('/reports/:year?', '/reports/2026'), {
       matched: true,
@@ -62,11 +64,13 @@ describe('router matching semantics', () => {
       path: '/files/*',
     });
 
-    assert.deepEqual(matchRoute('/files/*', '/files'), {
+    const withoutRemainder = matchRoute('/files/*', '/files');
+    assert.deepEqual(withoutRemainder, {
       matched: true,
       params: {},
       path: '/files/*',
     });
+    assert.equal(Object.hasOwn(withoutRemainder.params, '$rest'), false);
   });
 
   it('ranks static routes ahead of dynamic, optional, and wildcard routes', () => {
@@ -110,6 +114,29 @@ describe('memory history semantics', () => {
     });
     assert.equal(locationToString(location), '/users/42?tab=activity#recent');
     assert.equal(locationToString(parsePath('')), '/');
+  });
+
+  it('treats everything after # as hash content, even if it contains a query-like suffix', () => {
+    assert.deepEqual(parsePath('/users/42#recent?tab=activity'), {
+      pathname: '/users/42',
+      search: '',
+      hash: '#recent?tab=activity',
+    });
+  });
+
+  it('reconstructs locations from explicit pathname, search, and hash fields', () => {
+    assert.equal(
+      locationToString({ pathname: '/users/42', search: '?tab=activity', hash: '#recent' }),
+      '/users/42?tab=activity#recent',
+    );
+    assert.equal(
+      locationToString({ pathname: '/users/42', search: '?tab=activity', hash: '' }),
+      '/users/42?tab=activity',
+    );
+    assert.equal(
+      locationToString({ pathname: '/users/42', search: '', hash: '#recent' }),
+      '/users/42#recent',
+    );
   });
 
   it('starts from the requested initial entry', () => {
