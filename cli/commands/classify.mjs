@@ -16,6 +16,7 @@
 import { readFileSync, readdirSync, existsSync, writeFileSync, statSync } from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import { createRequire } from 'node:module';
+import { createInterface } from 'node:readline';
 
 // ── Primitives the classifier system supports ────────────────
 
@@ -555,6 +556,74 @@ function walkJsx(node, sourceFile, filePath, ts, groups) {
   }
 
   ts.forEachChild(node, child => walkJsx(child, sourceFile, filePath, ts, groups));
+}
+
+// ── Element scanning (for pick mode) ────────────────────────
+
+/**
+ * Scan all JSX elements individually (not grouped by signature).
+ * Only includes elements with fully static styles (no spread, no dynamic keys).
+ */
+function scanElements(dir, ts) {
+  const files = findTsxFiles(dir);
+  const elements = [];
+
+  for (const filePath of files) {
+    const source = readFileSync(filePath, 'utf-8');
+    const sf = ts.createSourceFile(
+      filePath, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TSX,
+    );
+
+    function visit(node) {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const element = ts.isJsxElement(node) ? node.openingElement : node;
+        const tagName = getTagName(element, ts);
+        const primitive = tagName ? TAG_TO_PRIMITIVE[tagName] : null;
+
+        if (primitive) {
+          let styleStatics = {};
+          let dynamicKeys = [];
+          let hasSpread = false;
+
+          const attrs = element.attributes;
+          if (attrs) {
+            for (const attr of attrs.properties) {
+              if (!ts.isJsxAttribute(attr)) continue;
+              if (!attr.name || attr.name.text !== 'style') continue;
+              const init = attr.initializer;
+              if (init && ts.isJsxExpression(init) && init.expression &&
+                  ts.isObjectLiteralExpression(init.expression)) {
+                const extracted = extractStyleProps(init.expression, ts);
+                styleStatics = extracted.statics;
+                dynamicKeys = extracted.dynamicKeys;
+                hasSpread = extracted.hasSpread;
+              }
+            }
+          }
+
+          // Only include fully static elements (migratable)
+          if (!hasSpread && dynamicKeys.length === 0) {
+            const jsxProps = extractJsxProps(element, ts);
+            const propCount = Object.keys(styleStatics).length + Object.keys(jsxProps).length;
+            if (propCount > 0) {
+              const pos = ts.getLineAndCharacterOfPosition(sf, element.getStart(sf));
+              elements.push({
+                primitive,
+                styleStatics,
+                jsxProps,
+                file: filePath,
+                line: pos.line + 1,
+              });
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(sf);
+  }
+
+  return { elements, fileCount: files.length };
 }
 
 // ── Output generation ────────────────────────────────────────
@@ -1190,6 +1259,442 @@ async function migrateCommand(args, ts) {
   console.log(`\n  Total: ${totalReplacements} inline styles → classifier references across ${touchedFiles.length} files.\n`);
 }
 
+// ── Pick mode helpers ─────────────────────────────────────────
+
+/**
+ * Format a compact trait summary for displaying a full style pattern.
+ */
+function formatTraits(styleStatics, jsxProps) {
+  const parts = [];
+  const s = styleStatics;
+  if (s.backgroundColor) {
+    const bg = String(s.backgroundColor);
+    if (bg.includes('Elevated')) parts.push('bgElevated');
+    else if (bg.includes('surface')) parts.push('surface');
+    else if (bg.includes('bg')) parts.push('bg');
+    else parts.push(`bg:${bg.slice(0, 15)}`);
+  }
+  if (s.borderRadius) parts.push(`r:${s.borderRadius}`);
+  if (s.padding) parts.push(`p:${s.padding}`);
+  else if (s.paddingLeft) parts.push(`pl:${s.paddingLeft}`);
+  if (s.gap) parts.push(`gap:${s.gap}`);
+  if (s.flexGrow) parts.push('grow');
+  if (s.flexBasis === 0) parts.push('basis:0');
+  if (s.flexShrink === 0) parts.push('shrink:0');
+  if (s.width) parts.push(`w:${s.width}`);
+  if (s.height != null) parts.push(`h:${s.height}`);
+  if (s.borderBottomWidth) parts.push('borderBot');
+  if (s.borderTopWidth) parts.push('borderTop');
+  if (s.borderLeftWidth) parts.push('borderLeft');
+  if (s.fontSize) parts.push(`${s.fontSize}px`);
+  if (s.fontWeight === 'bold' || jsxProps.bold) parts.push('bold');
+  if (s.color) {
+    const c = String(s.color);
+    if (c.includes('textDim') || c.includes('muted')) parts.push('muted');
+    else if (c.includes('text')) parts.push('text');
+    else if (c.includes('accent')) parts.push('accent');
+    else parts.push(`color:${c.slice(0, 12)}`);
+  }
+  if (s.alignItems) parts.push(`align:${s.alignItems}`);
+  if (s.justifyContent) parts.push(`justify:${s.justifyContent}`);
+  const covered = new Set(['backgroundColor', 'borderRadius', 'padding', 'paddingLeft',
+    'paddingRight', 'paddingTop', 'paddingBottom', 'gap', 'flexGrow', 'flexBasis',
+    'flexShrink', 'width', 'height', 'borderBottomWidth', 'borderTopWidth',
+    'borderLeftWidth', 'color', 'fontSize', 'fontWeight', 'borderColor',
+    'alignItems', 'justifyContent']);
+  for (const k of Object.keys(s)) {
+    if (!covered.has(k)) parts.push(`${k}:${JSON.stringify(s[k]).slice(0, 10)}`);
+  }
+  for (const [k, v] of Object.entries(jsxProps)) {
+    if (k !== 'bold') parts.push(`${k}:${JSON.stringify(v).slice(0, 10)}`);
+  }
+  return parts.join(', ');
+}
+
+/**
+ * Generate a classifier entry string for a picked pattern.
+ */
+function generatePickEntry(p) {
+  const { name, primitive, styleStatics, jsxProps, matches } = p;
+  const parts = [`type: '${primitive}'`];
+
+  if (primitive === 'Text') {
+    const remaining = { ...styleStatics };
+    if (remaining.fontSize != null) { parts.push(`size: ${remaining.fontSize}`); delete remaining.fontSize; }
+    if (remaining.fontWeight === 'bold') { parts.push(`bold: true`); delete remaining.fontWeight; }
+    if (remaining.color != null) { parts.push(`color: ${formatValue(remaining.color)}`); delete remaining.color; }
+    for (const [k, v] of Object.entries(jsxProps)) {
+      if (k !== 'size' && k !== 'bold' && k !== 'color') parts.push(`${k}: ${formatValue(v)}`);
+    }
+    const remKeys = Object.keys(remaining);
+    if (remKeys.length > 0) {
+      const styleParts = remKeys.map(k => `${k}: ${formatValue(remaining[k])}`);
+      parts.push(`style: { ${styleParts.join(', ')} }`);
+    }
+  } else {
+    for (const [k, v] of Object.entries(jsxProps)) {
+      parts.push(`${k}: ${formatValue(v)}`);
+    }
+    const styleKeys = Object.keys(styleStatics);
+    if (styleKeys.length > 0) {
+      const styleParts = styleKeys.map(k => `${k}: ${formatValue(styleStatics[k])}`);
+      if (styleParts.length <= 3) {
+        parts.push(`style: { ${styleParts.join(', ')} }`);
+      } else {
+        parts.push(`style: {\n      ${styleParts.join(',\n      ')},\n    }`);
+      }
+    }
+  }
+
+  return `  // ${matches.length} occurrences\n  ${name}: { ${parts.join(', ')} },`;
+}
+
+/**
+ * Append new classifier entries to an existing .cls.ts file.
+ * Inserts before the final `});` that closes the classifier() call.
+ */
+function appendEntries(clsPath, entries) {
+  const source = readFileSync(clsPath, 'utf-8');
+  const lastClose = source.lastIndexOf('});');
+  if (lastClose === -1) {
+    console.error('  Could not find closing }); in .cls.ts file.');
+    process.exit(1);
+  }
+  const before = source.slice(0, lastClose);
+  const after = source.slice(lastClose);
+  const insert = '\n' + entries.join('\n\n') + '\n';
+  writeFileSync(clsPath, before + insert + after, 'utf-8');
+}
+
+// ── Pick command ──────────────────────────────────────────────
+
+async function pickCommand(args, ts) {
+  const cwd = process.cwd();
+  let scanDir = join(cwd, 'src');
+  let clsPath = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--dir') { scanDir = join(cwd, args[++i]); continue; }
+    if (args[i] === '--cls') { clsPath = args[++i]; continue; }
+    if (args[i] === '--help' || args[i] === '-h') {
+      console.log(`
+  rjit classify pick — Interactive pattern picker
+
+  Usage:
+    rjit classify pick                    Scan src/ interactively
+    rjit classify pick --dir ./stories    Scan a specific directory
+    rjit classify pick --cls my.cls.ts    Append to a specific .cls.ts file
+
+  Flow:
+    1. Pick a primitive (Box, Text, Row, ...)
+    2. Pick style properties to filter by
+    3. Pick a value combination
+    4. See exact patterns + file locations
+    5. Name each pattern
+    6. Writes to .cls.ts and auto-migrates inline styles
+
+  Type 'q' at any prompt to quit early.
+`);
+      return;
+    }
+  }
+
+  if (!existsSync(scanDir)) {
+    console.error(`  Directory not found: ${scanDir}`);
+    process.exit(1);
+  }
+
+  console.log(`\n  Scanning ${relative(cwd, scanDir) || '.'}/ ...`);
+  const { elements, fileCount } = scanElements(scanDir, ts);
+  console.log(`  Found ${elements.length} classifiable elements across ${fileCount} files.\n`);
+
+  if (elements.length === 0) {
+    console.log('  Nothing to classify.\n');
+    return;
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let stdinClosed = false;
+  rl.on('close', () => { stdinClosed = true; });
+  const ask = (q) => new Promise(resolve => {
+    if (stdinClosed) { resolve(''); return; }
+    rl.question(q, answer => resolve(answer.trim()));
+    rl.once('close', () => resolve(''));
+  });
+
+  const pending = [];
+
+  try {
+    while (true) {
+      // ── Step 1: Pick primitive ──────────────────────────
+      const primCounts = {};
+      for (const el of elements) primCounts[el.primitive] = (primCounts[el.primitive] || 0) + 1;
+      const prims = Object.entries(primCounts).sort((a, b) => b[1] - a[1]);
+
+      console.log('  Primitives:');
+      for (let i = 0; i < prims.length; i++) {
+        console.log(`    ${String(i + 1).padStart(3)}. ${prims[i][0].padEnd(14)} (${prims[i][1]})`);
+      }
+
+      const primInput = await ask('\n  Primitive: ');
+      if (!primInput || primInput === 'q') break;
+      const primIdx = parseInt(primInput, 10) - 1;
+      if (isNaN(primIdx) || primIdx < 0 || primIdx >= prims.length) {
+        console.log('  Invalid.\n');
+        continue;
+      }
+      const prim = prims[primIdx][0];
+      const primEls = elements.filter(el => el.primitive === prim);
+
+      // ── Step 2: Pick filter keys ───────────────────────
+      const keyCounts = {};
+      for (const el of primEls) {
+        for (const k of Object.keys(el.styleStatics)) keyCounts[k] = (keyCounts[k] || 0) + 1;
+        for (const k of Object.keys(el.jsxProps)) keyCounts[`prop:${k}`] = (keyCounts[`prop:${k}`] || 0) + 1;
+      }
+
+      const keys = Object.entries(keyCounts).sort((a, b) => b[1] - a[1]);
+      if (keys.length === 0) {
+        console.log(`\n  No static properties on ${prim}.\n`);
+        continue;
+      }
+
+      console.log(`\n  Properties on ${prim} (${primEls.length} elements):`);
+      for (let i = 0; i < keys.length; i++) {
+        const label = keys[i][0].startsWith('prop:') ? keys[i][0].slice(5) + ' (jsx)' : keys[i][0];
+        console.log(`    ${String(i + 1).padStart(3)}. ${label.padEnd(28)} (${keys[i][1]})`);
+      }
+
+      const keyInput = await ask('\n  Filter by (comma-sep): ');
+      if (!keyInput || keyInput === 'q') break;
+      const selectedKeys = keyInput.split(',')
+        .map(s => parseInt(s.trim(), 10) - 1)
+        .filter(i => i >= 0 && i < keys.length)
+        .map(i => keys[i][0]);
+      if (selectedKeys.length === 0) {
+        console.log('  Invalid.\n');
+        continue;
+      }
+
+      // ── Step 3: Filter + group by value combo ──────────
+      const matching = primEls.filter(el =>
+        selectedKeys.every(k =>
+          k.startsWith('prop:')
+            ? el.jsxProps[k.slice(5)] !== undefined
+            : el.styleStatics[k] !== undefined
+        )
+      );
+
+      if (matching.length === 0) {
+        console.log('  No elements match all selected properties.\n');
+        continue;
+      }
+
+      const combos = new Map();
+      for (const el of matching) {
+        const key = selectedKeys
+          .map(k => k.startsWith('prop:')
+            ? JSON.stringify(el.jsxProps[k.slice(5)])
+            : JSON.stringify(el.styleStatics[k]))
+          .join('|');
+        if (!combos.has(key)) combos.set(key, { values: {}, elements: [] });
+        const c = combos.get(key);
+        for (const k of selectedKeys) {
+          const clean = k.startsWith('prop:') ? k.slice(5) : k;
+          c.values[clean] = k.startsWith('prop:') ? el.jsxProps[k.slice(5)] : el.styleStatics[k];
+        }
+        c.elements.push(el);
+      }
+
+      const comboList = [...combos.values()].sort((a, b) => b.elements.length - a.elements.length);
+
+      console.log(`\n  Value combinations (${comboList.length}):`);
+      for (let i = 0; i < comboList.length; i++) {
+        const c = comboList[i];
+        const vs = Object.entries(c.values)
+          .map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : v}`)
+          .join(', ');
+        console.log(`    ${String(i + 1).padStart(3)}. ${vs}  (${c.elements.length} matches)`);
+      }
+
+      const comboInput = await ask('\n  Value combo: ');
+      if (!comboInput || comboInput === 'q') break;
+      const comboIdx = parseInt(comboInput, 10) - 1;
+      if (isNaN(comboIdx) || comboIdx < 0 || comboIdx >= comboList.length) {
+        console.log('  Invalid.\n');
+        continue;
+      }
+      const chosen = comboList[comboIdx];
+
+      // ── Step 4: Sub-group by full signature ────────────
+      // Migration requires exact signature match, so show full patterns.
+      const subs = new Map();
+      for (const el of chosen.elements) {
+        const sig = makeSignature(el.primitive, el.styleStatics, el.jsxProps);
+        if (!subs.has(sig)) subs.set(sig, {
+          styleStatics: { ...el.styleStatics },
+          jsxProps: { ...el.jsxProps },
+          elements: [],
+        });
+        subs.get(sig).elements.push(el);
+      }
+
+      const subList = [...subs.values()].sort((a, b) => b.elements.length - a.elements.length);
+
+      let toClassify = [];
+
+      if (subList.length === 1) {
+        // Single full pattern — proceed directly
+        toClassify = [subList[0]];
+      } else {
+        console.log(`\n  ${subList.length} distinct full patterns within selection:`);
+        for (let i = 0; i < subList.length; i++) {
+          const s = subList[i];
+          const traits = formatTraits(s.styleStatics, s.jsxProps);
+          const fCount = new Set(s.elements.map(e => e.file)).size;
+          console.log(`    ${String(i + 1).padStart(3)}. ${traits}`);
+          console.log(`         ${s.elements.length} matches, ${fCount} files`);
+        }
+
+        const subInput = await ask('\n  Classify which? (comma-sep, or "all"): ');
+        if (!subInput || subInput === 'q') break;
+
+        if (subInput === 'all') {
+          toClassify = subList;
+        } else {
+          const subIdxs = subInput.split(',').map(s => parseInt(s.trim(), 10) - 1);
+          toClassify = subIdxs
+            .filter(i => i >= 0 && i < subList.length)
+            .map(i => subList[i]);
+        }
+      }
+
+      if (toClassify.length === 0) {
+        console.log('  Nothing selected.\n');
+        continue;
+      }
+
+      // ── Step 5: Name each pattern ──────────────────────
+      for (const sub of toClassify) {
+        console.log(`\n  Pattern (${sub.elements.length} matches):`);
+        console.log(`    type: '${prim}'`);
+        const sEntries = Object.entries(sub.styleStatics);
+        if (sEntries.length > 0) {
+          console.log(`    style:`);
+          for (const [k, v] of sEntries) {
+            console.log(`      ${k}: ${typeof v === 'string' ? `'${v}'` : v}`);
+          }
+        }
+        for (const [k, v] of Object.entries(sub.jsxProps)) {
+          console.log(`    ${k}: ${typeof v === 'string' ? `'${v}'` : v}`);
+        }
+
+        console.log(`  Locations:`);
+        for (const el of sub.elements.slice(0, 10)) {
+          console.log(`    ${relative(cwd, el.file)}:${el.line}`);
+        }
+        if (sub.elements.length > 10) {
+          console.log(`    ... and ${sub.elements.length - 10} more`);
+        }
+
+        const suggested = suggestName(prim, sub.styleStatics, sub.jsxProps, '')
+          .replace(/%/g, 'Pct').replace(/[^A-Za-z0-9]/g, '');
+        const nameInput = await ask(`\n  Name [${suggested}]: `);
+        const name = nameInput || suggested;
+
+        if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) {
+          console.log('  Must be PascalCase (e.g., MyPanel). Skipped.');
+          continue;
+        }
+
+        pending.push({
+          name,
+          primitive: prim,
+          styleStatics: sub.styleStatics,
+          jsxProps: sub.jsxProps,
+          matches: sub.elements,
+        });
+
+        console.log(`  + ${name} (${prim}, ${sub.elements.length} matches)`);
+      }
+
+      const again = await ask('\n  Pick another? (y/N): ');
+      if (again.toLowerCase() !== 'y') break;
+    }
+
+    // ── Summary + confirm ──────────────────────────────────
+    if (pending.length === 0) {
+      console.log('\n  Nothing to write.\n');
+      return;
+    }
+
+    console.log('\n  Pending classifiers:');
+    for (const p of pending) {
+      console.log(`    ${p.name.padEnd(24)} ${p.primitive.padEnd(12)} ${p.matches.length} matches`);
+    }
+
+    const confirm = await ask('\n  Write to .cls.ts and migrate? (Y/n): ');
+    if (confirm.toLowerCase() === 'n') {
+      console.log('  Aborted.\n');
+      return;
+    }
+
+    // ── Find or create .cls.ts ───────────────────────────
+    if (!clsPath) {
+      const { cls } = findRenameTargets(scanDir);
+      clsPath = cls.length > 0 ? cls[0] : join(scanDir, 'app.cls.ts');
+    }
+
+    const entries = pending.map(p => generatePickEntry(p));
+
+    if (existsSync(clsPath)) {
+      appendEntries(clsPath, entries);
+    } else {
+      const content = [
+        `import { classifier } from '@reactjit/core';`,
+        ``,
+        `classifier({`,
+        ...entries,
+        `});`,
+        ``,
+      ].join('\n');
+      writeFileSync(clsPath, content, 'utf-8');
+    }
+
+    console.log(`\n  Written ${pending.length} classifiers to ${relative(cwd, clsPath)}`);
+
+    // ── Auto-migrate ─────────────────────────────────────
+    const { bySig } = parseClsFile(clsPath, ts);
+    const { tsx } = findRenameTargets(scanDir);
+    let totalReplacements = 0;
+    const touchedFiles = [];
+
+    for (const filePath of tsx) {
+      const source = readFileSync(filePath, 'utf-8');
+      const aliases = findClassifierAliases(source);
+      const clsAlias = aliases.size > 0 ? [...aliases][0] : 'S';
+      const { changed, count } = migrateFile(filePath, bySig, clsAlias, ts);
+      if (changed) {
+        totalReplacements += count;
+        touchedFiles.push({ file: relative(cwd, filePath), count });
+      }
+    }
+
+    if (touchedFiles.length > 0) {
+      console.log(`  Migrated ${totalReplacements} inline styles across ${touchedFiles.length} files:`);
+      for (const { file, count } of touchedFiles.sort((a, b) => b.count - a.count)) {
+        console.log(`    ${file.padEnd(55)} ${count}`);
+      }
+    } else {
+      console.log('  No inline styles matched for migration (may already be migrated).');
+    }
+
+    console.log('');
+  } finally {
+    rl.close();
+  }
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 export async function classifyCommand(args) {
@@ -1210,6 +1715,10 @@ export async function classifyCommand(args) {
 
   if (args[0] === 'migrate') {
     return migrateCommand(args.slice(1), ts);
+  }
+
+  if (args[0] === 'pick') {
+    return pickCommand(args.slice(1), ts);
   }
 
   // Parse args

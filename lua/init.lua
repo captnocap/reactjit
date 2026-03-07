@@ -1138,6 +1138,16 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register data (spreadsheet evaluator) RPC handlers
+  do
+    local dataOk, dataMod = pcall(require, "lua.capabilities.data")
+    if dataOk then
+      for method, handler in pairs(dataMod.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
@@ -2005,6 +2015,7 @@ function ReactJIT.init(config)
     rpcHandlers["test:key"]        = function(a) return tr.key(a) end
     rpcHandlers["test:wait"]       = function(a) return tr.wait(a) end
     rpcHandlers["test:screenshot"] = function(a) return tr.screenshot(a) end
+    rpcHandlers["test:snap"]       = function(a) return tr.screenshot_region(a) end
     rpcHandlers["test:audit"]      = function(a) return tr.audit(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0

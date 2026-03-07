@@ -50,7 +50,10 @@ local function matchesQuery(node, queryType, queryProps)
   -- Match props
   if queryProps then
     for k, v in pairs(queryProps) do
-      if not node.props or node.props[k] ~= v then
+      if k == "children" then
+        -- React strips children from props; match against text content instead
+        if nodeText(node) ~= v then return false end
+      elseif not node.props or node.props[k] ~= v then
         return false
       end
     end
@@ -145,6 +148,35 @@ function Testrunner.screenshot(args)
   local path = (args and args.path) or "test-screenshot.png"
   love.graphics.captureScreenshot(function(imageData)
     local fileData = imageData:encode("png")
+    local f = io.open(path, "wb")
+    if f then
+      f:write(fileData:getString())
+      f:close()
+    end
+  end)
+  return {}
+end
+
+--- Capture a cropped region of the current frame to a PNG file.
+--- args: { x, y, w, h, path, padding? }
+function Testrunner.screenshot_region(args)
+  local pad  = args.padding or 4
+  local x    = math.max(0, math.floor(args.x - pad))
+  local y    = math.max(0, math.floor(args.y - pad))
+  local w    = math.floor(args.w + pad * 2)
+  local h    = math.floor(args.h + pad * 2)
+  local path = args.path or "test-region.png"
+
+  love.graphics.captureScreenshot(function(imageData)
+    -- Clamp to source bounds
+    local srcW, srcH = imageData:getDimensions()
+    if x + w > srcW then w = srcW - x end
+    if y + h > srcH then h = srcH - y end
+    if w <= 0 or h <= 0 then return end
+
+    local cropped = love.image.newImageData(w, h)
+    cropped:paste(imageData, 0, 0, x, y, w, h)
+    local fileData = cropped:encode("png")
     local f = io.open(path, "wb")
     if f then
       f:write(fileData:getString())

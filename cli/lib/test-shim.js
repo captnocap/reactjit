@@ -25,7 +25,7 @@
 
   Locator.prototype._resolve = async function () {
     var results = await bridge.rpc('test:query', this._q);
-    if (!results || results.length === 0) {
+    if (!results || !results[0]) {
       throw new Error('Element not found: ' + JSON.stringify(this._q));
     }
     return results[0];
@@ -104,6 +104,23 @@
     },
     screenshot: function (path) {
       return bridge.rpc('test:screenshot', { path: path });
+    },
+    // Crop-screenshot a specific element. Resolves the locator, gets its rect,
+    // and captures just that region (plus optional padding).
+    //
+    // Usage:
+    //   await page.snap(page.find('Box', { testId: 'sidebar' }), '/tmp/sidebar.png');
+    //   await page.snap(page.find('Text', { testId: 'title' }), '/tmp/title.png', { padding: 10 });
+    snap: async function (locator, path, options) {
+      var el = await locator._resolve();
+      return bridge.rpc('test:snap', {
+        x: el.x,
+        y: el.y,
+        w: el.w,
+        h: el.h,
+        path: path || '/tmp/rjit-snap.png',
+        padding: (options && options.padding) || 4,
+      });
     },
     // Explicitly wait N frames (default 1). Useful after animations.
     wait: function (frames) {
