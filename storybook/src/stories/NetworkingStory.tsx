@@ -488,7 +488,7 @@ export function NetworkingStory() {
               {'Networking spans multiple packages. Core hooks (useFetch, useWebSocket, useScrape) live in @reactjit/core. Server, RSS, and webhooks are separate packages.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
 
         <Divider />
@@ -503,7 +503,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={FETCH_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={FETCH_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="cloud">{'FETCH'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -530,7 +530,7 @@ export function NetworkingStory() {
               {'Persistent WebSocket connection with automatic reconnect. The Lua side handles the RFC 6455 handshake, frame parsing, and keepalive. React just sees status, send, and lastMessage. Supports .onion URLs via SOCKS5 tunneling.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={WEBSOCKET_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WEBSOCKET_CODE} />
         </Box>
 
         <Divider />
@@ -545,7 +545,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={PEER_SERVER_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={PEER_SERVER_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="wifi">{'PEER SERVER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -613,7 +613,7 @@ export function NetworkingStory() {
               </Box>
             </Box>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={GAME_SERVER_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={GAME_SERVER_CODE} />
         </Box>
 
         <Divider />
@@ -628,7 +628,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={GAME_SERVER_HOOKS_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={GAME_SERVER_HOOKS_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="terminal">{'SERVER MANAGEMENT'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -697,7 +697,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={SERVER_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={SERVER_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="hard-drive">{'HTTP SERVER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -730,7 +730,7 @@ export function NetworkingStory() {
               {'Requires tor binary in PATH or bundled. Hidden service directory lives at ~/.cache/reactjit-tor/.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={TOR_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={TOR_CODE} />
         </Box>
 
         <Divider />
@@ -779,7 +779,7 @@ export function NetworkingStory() {
               <Text style={{ color: c.muted, fontSize: 9 }}>{'Keys in process memory. Protects against network observers, not local attackers.'}</Text>
             </Box>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={WG_PEER_TUNNEL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WG_PEER_TUNNEL_CODE} />
         </Box>
 
         <Divider />
@@ -794,7 +794,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={WG_KERNEL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WG_KERNEL_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="shield">{'WIREGUARD (KERNEL)'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -843,7 +843,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={RSS_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={RSS_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="globe">{'RSS FEEDS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -870,7 +870,7 @@ export function NetworkingStory() {
               {'Receive and send webhooks with HMAC-SHA256 signing and timing-safe verification. useWebhook spins up a listener on a port. sendWebhook fires outbound hooks with automatic signature headers.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={WEBHOOK_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WEBHOOK_CODE} />
         </Box>
 
         <Divider />
@@ -885,7 +885,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={PROXY_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={PROXY_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="shield">{'PROXY SUPPORT'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -931,7 +931,7 @@ export function NetworkingStory() {
               {'Now-playing, top tracks, and top artists from Spotify or Last.fm. NowPlayingCard shows live progress. TrackRow and ArtistRow for ranked lists with playcount badges. All data comes from one hook call.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={SPOTIFY_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={SPOTIFY_CODE} />
         </Box>
 
         <Divider />
@@ -946,7 +946,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={MEDIA_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={MEDIA_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="film">{'MEDIA — TMDB / TRAKT'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -973,7 +973,7 @@ export function NetworkingStory() {
               {'Live coin market data with price, 24h change, and optional sparkline chart. CoinTickerRow renders a compact row with green/red change indicator. Sparkline data comes from CoinGecko\'s 7-day price history.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={CRYPTO_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={CRYPTO_CODE} />
         </Box>
 
         <Divider />
@@ -988,7 +988,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={GITHUB_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={GITHUB_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="github">{'GITHUB'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -1015,7 +1015,7 @@ export function NetworkingStory() {
               {'Astronomy Picture of the Day. The zero-config <APOD /> component uses a built-in demo key. APODCard renders full-width image with title, date, explanation, and copyright.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={NASA_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={NASA_CODE} />
         </Box>
 
         <Divider />
@@ -1030,7 +1030,7 @@ export function NetworkingStory() {
           gap: 24,
           alignItems: 'center',
         }}>
-          <CodeBlock language="tsx" fontSize={9} code={HUE_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={HUE_CODE} />
           <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
             <SectionLabel icon="sun">{'SMART HOME — PHILIPS HUE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>

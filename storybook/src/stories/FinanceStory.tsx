@@ -705,7 +705,7 @@ export function FinanceStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -724,7 +724,7 @@ export function FinanceStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'TickerTape scrolls market data. CandlestickChart renders bull/bear candles with configurable colors. IndicatorLegend shows overlay values.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TA_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={TA_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -740,7 +740,7 @@ export function FinanceStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'RSIGauge and MACDPanel are ready-made components — pass the indicator values and they handle the visualization. Or use the raw indicator arrays for custom rendering.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={INDICATORS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={INDICATORS_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <RSIMACDDemo />
@@ -783,7 +783,7 @@ export function FinanceStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Pure functions available: portfolioSnapshot, holdingPnL, sharpeRatio, maxDrawdown, equityToReturns. Use them outside React if you prefer.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PORTFOLIO_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={PORTFOLIO_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -820,7 +820,7 @@ export function FinanceStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'pivotPoints() computes classic S1-S3 / R1-R3 support and resistance levels from the last candle.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PATTERN_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={PATTERN_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -833,7 +833,7 @@ export function FinanceStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Seven formatting functions for currencies, percentages, compact numbers, adaptive price decimals, volume, and basis points. All pure, all synchronous.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={FORMAT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={FORMAT_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <FormatDemo />
@@ -872,7 +872,7 @@ export function FinanceStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={COMPONENTS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={COMPONENTS_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -881,7 +881,7 @@ export function FinanceStory() {
         {/* ── Band 9: code | text — PORTFOLIO MATH ── */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={PORTFOLIO_MATH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={PORTFOLIO_MATH_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="calculator" accentColor={C.accent}>{'PORTFOLIO MATH'}</SectionLabel>
@@ -908,7 +908,7 @@ export function FinanceStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={OVERLAY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={OVERLAY_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -924,7 +924,7 @@ export function FinanceStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Pass the same bid/ask arrays you use for OrderBookPanel. The chart auto-ranges to fit all price levels and normalizes cumulative volume.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={DEPTH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={DEPTH_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <DepthChartDemo />
@@ -946,7 +946,7 @@ export function FinanceStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Holdings are encrypted before write and decrypted on read. Price updates stay in memory (no disk I/O per tick). Only structural changes (add/remove holdings) trigger persistence.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SECURE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={SECURE_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -964,7 +964,7 @@ export function FinanceStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={FEED_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={FEED_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 

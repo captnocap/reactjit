@@ -520,7 +520,7 @@ export function DevToolsStory() {
         {/* Band 4: HMR — code | text */}
         <Band>
           <Half>
-            <CodeBlock language="lua" fontSize={8} code={HMR_CODE} />
+            <CodeBlock language="lua" fontSize={8} code={HMR_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="zap" accentColor={C.green}>{'HOT MODULE REPLACEMENT'}</SectionLabel>
@@ -548,7 +548,7 @@ export function DevToolsStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Unlike useLocalStore (SQLite-backed, survives app restarts), useHotState lives purely in memory. It survives HMR but NOT app restarts. Use it for ephemeral UI state: sidebar open, scroll position, selected tab.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={8} code={HOT_STATE_CODE} />
+            <CodeBlock language="tsx" fontSize={8} code={HOT_STATE_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -557,7 +557,7 @@ export function DevToolsStory() {
         {/* Band 6: preserveState — code | text */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={8} code={PRESERVE_STATE_CODE} />
+            <CodeBlock language="tsx" fontSize={8} code={PRESERVE_STATE_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="shield" accentColor={C.yellow}>{'AUTO STATE PRESERVATION'}</SectionLabel>
@@ -611,7 +611,7 @@ export function DevToolsStory() {
         {/* Band 9: GIF RECORDER — code | text */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={GIF_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={GIF_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="video" accentColor={C.red}>{'GIF RECORDER'}</SectionLabel>
@@ -635,7 +635,7 @@ export function DevToolsStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="bash" fontSize={9} code={SCREENSHOT_CODE} />
+            <CodeBlock language="bash" fontSize={9} code={SCREENSHOT_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -644,7 +644,7 @@ export function DevToolsStory() {
         {/* Band 11: DEBUG CHANNELS — code | text */}
         <Band>
           <Half>
-            <CodeBlock language="lua" fontSize={8} code={DEBUG_CHANNELS_CODE} />
+            <CodeBlock language="lua" fontSize={8} code={DEBUG_CHANNELS_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="filter" accentColor={C.teal}>{'DEBUG LOG CHANNELS'}</SectionLabel>
@@ -668,7 +668,7 @@ export function DevToolsStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="lua" fontSize={8} code={EVENT_TRAIL_CODE} />
+            <CodeBlock language="lua" fontSize={8} code={EVENT_TRAIL_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -677,7 +677,7 @@ export function DevToolsStory() {
         {/* Band 13: WATCHDOG — code | text */}
         <Band>
           <Half>
-            <CodeBlock language="bash" fontSize={8} code={WATCHDOG_CODE} />
+            <CodeBlock language="bash" fontSize={8} code={WATCHDOG_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="shield" accentColor={C.red}>{'MEMORY WATCHDOG'}</SectionLabel>
@@ -704,7 +704,7 @@ export function DevToolsStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={8} code={TEST_RUNNER_CODE} />
+            <CodeBlock language="tsx" fontSize={8} code={TEST_RUNNER_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 

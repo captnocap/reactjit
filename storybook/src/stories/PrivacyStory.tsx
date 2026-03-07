@@ -670,7 +670,7 @@ export function PrivacyStory() {
               {'usePrivacy() returns all operations namespaced by domain. Individual functions can also be imported directly.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
 
         <Divider />
@@ -683,7 +683,7 @@ export function PrivacyStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Lua pattern scanner. Finds emails, phone numbers, SSNs, IPv4/v6, and credit cards with match boundaries for surgical redaction. All logic in LuaJIT — zero JS compute.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PII_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PII_CODE} />
           </Box>
         </Box>
 
@@ -696,7 +696,7 @@ export function PrivacyStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Split a secret into N shares where any K can reconstruct it. Fewer than K shares reveal zero information. Bordered shares are the 3 used for recovery.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SHAMIR_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SHAMIR_CODE} />
           </Box>
           <ShamirDemo />
         </Box>
@@ -744,7 +744,7 @@ export function PrivacyStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Noise-NK secure channel: ephemeral X25519 DH with HKDF-derived session keys. Bidirectional encrypted messaging with replay protection built in.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={NOISE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={NOISE_CODE} />
           </Box>
           <NoiseDemo />
         </Box>
@@ -780,7 +780,7 @@ export function PrivacyStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Password-protected keyring files. Generate, store, rotate, and revoke Ed25519/X25519 keys. Persists across close/reopen.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={KEYRING_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={KEYRING_CODE} />
           </Box>
         </Box>
 
@@ -807,7 +807,7 @@ export function PrivacyStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Hide data in plain sight. Whitespace steganography encodes binary as zero-width Unicode between visible carrier text. Image steganography uses LSB encoding via Love2D ImageData.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={STEG_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={STEG_CODE} />
           </Box>
         </Box>
 
@@ -820,7 +820,7 @@ export function PrivacyStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Tamper-evident append-only log using HMAC-SHA256 hash chains. Each entry links to the previous. verifyAudit() walks the chain and detects any modification.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={AUDIT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={AUDIT_CODE} />
           </Box>
           <AuditDemo />
         </Box>

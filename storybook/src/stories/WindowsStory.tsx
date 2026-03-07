@@ -460,7 +460,7 @@ export function WindowsStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Wrap any subtree in <Window> and it renders in a separate OS window. The component stays in the same React tree \u2014 props, state, and callbacks flow naturally. No IPC boilerplate.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={WINDOW_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WINDOW_CODE} />
           </Half>
         </Band>
 
@@ -469,7 +469,7 @@ export function WindowsStory() {
         {/* Band 2: WINDOW PROPS — code | text */}
         <Band>
           <Half>
-            <CodeBlock language="lua" fontSize={9} code={WINDOW_PROPS_CODE} />
+            <CodeBlock language="lua" fontSize={9} style={{ width: '100%' }} code={WINDOW_PROPS_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="settings" accentColor={C.accent}>{'WINDOW PROPS'}</SectionLabel>
@@ -498,7 +498,7 @@ export function WindowsStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'<Notification> spawns a real OS notification window \u2014 not a DOM overlay, not a toast inside the app. It is a separate window with its own accent color, title, body, and auto-dismiss timer.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={NOTIFICATION_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={NOTIFICATION_CODE} />
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Stack multiple notifications and they arrange themselves. Each one is a real Love2D child process, same as <Window>.'}
             </Text>
@@ -545,7 +545,7 @@ export function WindowsStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'HMR keeps polling. Save your code and the app reloads automatically. Reboot, Copy, and Quit buttons are always clickable \u2014 the bottom bar renders outside the content pcall.'}
             </Text>
-            <CodeBlock language="lua" fontSize={8} code={RECOVERY_CODE} />
+            <CodeBlock language="lua" fontSize={8} style={{ width: '100%' }} code={RECOVERY_CODE} />
           </Half>
           <Half>
             <BSODPreview />
@@ -581,7 +581,7 @@ export function WindowsStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="lua" fontSize={8} code={CRASH_LAYERS_CODE} />
+            <CodeBlock language="lua" fontSize={8} style={{ width: '100%' }} code={CRASH_LAYERS_CODE} />
           </Half>
         </Band>
 

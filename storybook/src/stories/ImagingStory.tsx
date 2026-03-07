@@ -1231,7 +1231,7 @@ export function ImagingStory() {
               {'The Lua library (lua/imaging/) works standalone \u2014 no React needed. Import @reactjit/imaging for hooks, or use <Native type="Imaging"> for inline visual processing.'}
             </Text>
           </Half>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Band>
 
         <Divider />
@@ -1246,7 +1246,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'12 per-pixel operations, all as GLSL fragment shaders. Each runs in microseconds even on large images. Click the presets to see them applied live to the landscape photo.'}
             </Text>
-            <CodeBlock language="lua" fontSize={9} code={COLOR_OPS_CODE} />
+            <CodeBlock language="lua" fontSize={9} style={{ width: '100%' }} code={COLOR_OPS_CODE} />
           </Half>
         </Band>
 
@@ -1259,7 +1259,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'7 spatial filters. Gaussian blur uses two-pass separable convolution \u2014 O(n) per pixel instead of O(n\u00b2). Sharpen is unsharp mask: amplify the difference from a blurred copy. Edge detection uses Sobel or Laplacian convolution kernels.'}
             </Text>
-            <CodeBlock language="lua" fontSize={9} code={FILTER_OPS_CODE} />
+            <CodeBlock language="lua" fontSize={9} style={{ width: '100%' }} code={FILTER_OPS_CODE} />
           </Half>
           <Half>
             <FilterDemo />
@@ -1288,7 +1288,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Chain multiple operations for creative effects. Vintage = desaturate + colorize + contrast boost. Neon Edge = edge detect + invert + hue shift. Thermal = desaturate + gradient map. Each preset demonstrates real multi-op pipelines.'}
             </Text>
-            <CodeBlock language="lua" fontSize={9} code={PIPELINE_CODE} />
+            <CodeBlock language="lua" fontSize={9} style={{ width: '100%' }} code={PIPELINE_CODE} />
           </Half>
         </Band>
 
@@ -1301,7 +1301,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Omit the src prop to get a procedural test pattern with color bars, grayscale gradient, and HSV hue sweep. Useful for verifying color operations \u2014 levels, curves, channel mixer, and gradient map are immediately visible on known input.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={REACT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={REACT_CODE} />
           </Half>
           <Half>
             <PatternDemo />
@@ -1317,14 +1317,14 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'16 Photoshop/GIMP-standard blend modes in a single parameterized GLSL shader. Composites two canvases with configurable opacity. Pass a Canvas or Image as the layer argument.'}
             </Text>
-            <CodeBlock language="lua" fontSize={9} code={BLEND_CODE} />
+            <CodeBlock language="lua" fontSize={9} style={{ width: '100%' }} code={BLEND_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="cpu" accentColor={C.accent}>{'HYBRID COMPUTE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Every operation has a GPU path (GLSL shader) and can have a CPU path (ImageData). GPU runs by default. Register custom operations with Imaging.registerOp() \u2014 provide gpu, cpu, or both.'}
             </Text>
-            <CodeBlock language="lua" fontSize={9} code={CUSTOM_CODE} />
+            <CodeBlock language="lua" fontSize={9} style={{ width: '100%' }} code={CUSTOM_CODE} />
           </Half>
         </Band>
 
@@ -1340,7 +1340,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Early non-destructive composition pass: stack layers, set per-layer blend and opacity, then compose through imaging:compose. This section also dogfoods undo/redo history snapshots.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={LAYER_GRAPH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={LAYER_GRAPH_CODE} />
           </Half>
         </Band>
 
@@ -1353,7 +1353,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Per-layer transform pass in compose: crop source pixels, define pivot, then scale and rotate before blend. This stays non-destructive and works with undo/redo snapshots.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TRANSFORM_GRAPH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TRANSFORM_GRAPH_CODE} />
           </Half>
           <Half>
             <LayerTransformDemo />
@@ -1374,7 +1374,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Pick a shape, feather radius, and operation, then press Apply. The selection is rasterized to a grayscale mask canvas in Lua memory, optionally blurred for soft edges, and reused as a weight map: mix(original, processed, mask.r). This pushes the package closer to GIMP-style localized edits instead of only hard-edged marquee cuts.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SELECTION_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SELECTION_CODE} />
           </Half>
         </Band>
 
@@ -1387,7 +1387,7 @@ export function ImagingStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'A mutable Love2D Canvas owned by a capability. React declares it with <Native type="DrawCanvas">; useDrawCanvas() hook sends strokes, erases, and fills via bridge RPCs. All rendering happens on the GPU side — only coordinates cross the bridge. The live canvas can also be composed as a layer via drawCanvasId in the imaging layer graph.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={DRAW_CANVAS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={DRAW_CANVAS_CODE} />
           </Half>
           <Half>
             <DrawCanvasDemo />

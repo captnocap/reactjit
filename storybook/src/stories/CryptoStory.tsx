@@ -484,7 +484,7 @@ export function CryptoStory() {
             </C.StoryBody>
           </C.StoryHalf>
           <C.StoryHalf>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
         </C.StoryBand>
 
@@ -503,7 +503,7 @@ export function CryptoStory() {
             <C.StoryCap>
               {'All hashing is async — the call crosses the bridge to Lua, which calls into C, then returns the digest. No JS crypto at all.'}
             </C.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} code={HASH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={HASH_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
         </C.StoryBand>
 
@@ -519,7 +519,7 @@ export function CryptoStory() {
             <C.StoryCap>
               {'Supports AES-256-GCM (if hardware AES-NI is available), scrypt, and PBKDF2 via options. Defaults are chosen for security, not compatibility.'}
             </C.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} code={ENCRYPT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={ENCRYPT_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
           <C.StoryHalf>
             <EncryptDemo />
@@ -551,7 +551,7 @@ export function CryptoStory() {
             <C.StoryCap>
               {'verifyDetached() is also available for cases where the signature is separate from the message.'}
             </C.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} code={SIGN_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={SIGN_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
         </C.StoryBand>
 
@@ -567,7 +567,7 @@ export function CryptoStory() {
             <C.StoryCap>
               {'Use the shared secret as input to a symmetric cipher (XChaCha20) or KDF. The shared secret never travels over the wire.'}
             </C.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} code={DH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={DH_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
           <C.StoryHalf>
             <DHDemo />
@@ -589,7 +589,7 @@ export function CryptoStory() {
             <C.StoryCap>
               {'All backed by libsodium\'s randombytes_buf — the same CSPRNG that powers the encryption and signing primitives.'}
             </C.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} code={TOKEN_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={TOKEN_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
         </C.StoryBand>
 
@@ -604,7 +604,7 @@ export function CryptoStory() {
             </C.StoryBody>
           </C.StoryHalf>
           <C.StoryHalf>
-            <CodeBlock language="tsx" fontSize={9} code={ENCODING_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={ENCODING_CODE} style={{ width: '100%' }} />
           </C.StoryHalf>
         </C.StoryBand>
 

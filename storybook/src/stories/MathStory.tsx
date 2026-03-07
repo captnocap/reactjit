@@ -208,7 +208,7 @@ function VectorDemo() {
   }, [math, angle]);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         <Tag text="Vec2" color={C.vec} />
         <Tag text="Vec3" color={C.vec} />
@@ -257,7 +257,7 @@ function MatrixDemo() {
   }, [math, rx]);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       <Tag text="Mat4" color={C.mat} />
       <Label label="rotateX" value={`${(rx * 180 / Math.PI).toFixed(1)}\u00B0`} color={C.mat} />
       {r && <>
@@ -298,7 +298,7 @@ function QuaternionDemo() {
   const clampT = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       <Tag text="Quat" color={C.quat} />
       <Label label="slerp t" value={t.toFixed(2)} color={C.quat} />
       {r && <>
@@ -406,7 +406,7 @@ function GeometryDemo() {
   }, [math, px]);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       <Label label="BBox A" value={'[0,0] \u2192 [4,4]'} />
       <Label label="BBox B" value={`[${px},1] \u2192 [${px + 3},5]`} color={C.geo} />
       {r && <>
@@ -467,7 +467,7 @@ function NoiseFieldDemo() {
   }, [math, seed, scale]);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       {rows ? (
         <Box style={{ gap: 0 }}>
           {rows.map((colors, row) => (
@@ -542,7 +542,7 @@ function FFTDemo() {
           <Box style={{ flexDirection: 'row', gap: 0, height: 40, alignItems: 'end' }}>
             {spectrumSlice.map((v, i) => {
               const h = maxSpectrum > 0 ? Math.max(1, (v / maxSpectrum) * 38) : 1;
-              return <Box key={i} style={{ width: 6, height: h, backgroundColor: C.fft + '66', borderRadius: 1 }} />;
+              return <Box key={i} style={{ flexGrow: 1, height: h, backgroundColor: C.fft + '66', borderRadius: 1 }} />;
             })}
           </Box>
         </Box>
@@ -691,7 +691,7 @@ export function MathStory() {
               {'One hook, one RPC endpoint. Pass { op, ...args } for a single call, or { batch: [...] } for multiple ops in one bridge round-trip.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
 
         <Divider />
@@ -706,7 +706,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Vec2, Vec3, Vec4 as arrays. All operations run in LuaJIT — add, sub, mul, dot, cross, normalize, lerp, smoothstep, rotate, fromAngle, reflect, slerp.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={VECTOR_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={VECTOR_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -719,7 +719,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'4\u00D74 matrix as 16-element array. Multiply, invert, transpose, decompose into translation + rotation + scale. Includes lookAt, perspective, and ortho projection builders.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MATRIX_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={MATRIX_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
             <MatrixDemo />
@@ -738,7 +738,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'[x, y, z, w] array. Slerp for smooth rotation interpolation without gimbal lock. Convert to/from Euler angles, axis-angle, and Mat4.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={QUAT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={QUAT_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -751,7 +751,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Scalar easing and mapping. lerp, smoothstep (Hermite cubic), smootherstep (Perlin quintic), damp, remap, clamp, wrap, pingPong, moveTowards, smoothDamp.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={INTERP_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={INTERP_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
             <InterpolationDemo />
@@ -770,7 +770,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'BBox2 and BBox3 axis-aligned bounding boxes. Point-to-segment distance, circle-point containment, circle-rect intersection, line-line intersection.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={GEOMETRY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={GEOMETRY_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -804,7 +804,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Perlin noise via LuaJIT. Noise field returns a flat grid of values for terrain, textures, and procedural generation. Configurable seed, scale, octaves, lacunarity, and persistence.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={NOISE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={NOISE_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
             <NoiseFieldDemo />
@@ -823,7 +823,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Cooley-Tukey radix-2 FFT via Lua. Pass time-domain samples, get back magnitude spectrum.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={FFT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={FFT_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -836,7 +836,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'De Casteljau curve evaluation via Lua. Pass control points and segment count, get back evaluated points along the curve.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={BEZIER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={BEZIER_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
             <BezierDemo />
@@ -853,7 +853,7 @@ export function MathStory() {
               {'Batch multiple math operations into a single bridge call. Pass { batch: [...] } instead of { op: ... }. All ops execute in Lua and return as an array.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={POOL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={POOL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
 
         <Divider />
@@ -885,7 +885,7 @@ export function MathStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'One-liner LaTeX math rendering. Supports fractions, roots, superscripts, subscripts, Greek letters, big operators, matrices, accents, and delimiters.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TYPESET_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={TYPESET_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
             <MathBlock tex={'E = mc^2'} fontSize={24} color={c.text} />

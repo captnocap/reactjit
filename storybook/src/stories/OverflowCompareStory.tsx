@@ -24,6 +24,7 @@ const CARD_COUNT = 7;
 function CardRow({ wrap, scaleToFit }: { wrap?: boolean; scaleToFit?: boolean }) {
   const c = useThemeColors();
   return (
+    // rjit-ignore-next-line
     <Box style={{
       flexDirection: 'row',
       gap: CARD_GAP,

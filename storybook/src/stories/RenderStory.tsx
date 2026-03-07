@@ -445,7 +445,7 @@ export function RenderStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
           </Half>
         </Band>
 
@@ -464,7 +464,7 @@ export function RenderStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'The XShm fast path maps the X11 framebuffer directly into Love2D texture memory. No pixel copies, no format conversion.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SCREEN_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SCREEN_CODE} />
           </Half>
         </Band>
 
@@ -480,10 +480,10 @@ export function RenderStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Uses the same FFmpeg pipeline as HDMI but auto-negotiates resolution with the camera driver.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={WEBCAM_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WEBCAM_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center' }}>
+            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
               <Tag text="cam:0" color={C.webcam} />
               <Box style={{
                 width: 200, height: 130, borderRadius: 6,
@@ -504,7 +504,7 @@ export function RenderStory() {
         {/* ── HDMI: code | text ── */}
         <Band>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center' }}>
+            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
               <Tag text="hdmi:0" color={C.hdmi} />
               <Box style={{
                 width: 200, height: 130, borderRadius: 6,
@@ -523,7 +523,7 @@ export function RenderStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'HDMI capture card input. Uses the same v4l2 pipeline as webcam but targets capture card devices. Pass "hdmi:N" for device index. Supports 1080p60 and 4K30 depending on hardware.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={HDMI_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={HDMI_CODE} />
           </Half>
         </Band>
 
@@ -539,7 +539,7 @@ export function RenderStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Capture a specific window by its title. Uses X11 window matching — pass "window:Title" where Title is a substring of the target window name. Great for embedding other apps inside your ReactJIT layout.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={WINDOW_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WINDOW_CODE} />
           </Half>
         </Band>
 
@@ -565,10 +565,10 @@ export function RenderStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'VMs default to interactive=true. Mouse clicks and keyboard input are forwarded via VNC protocol with zero additional latency.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={VM_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={VM_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center' }}>
+            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
               <Box style={{ flexDirection: 'row', gap: 6 }}>
                 <Tag text="QEMU" color={C.vm} />
                 <Tag text="KVM" color={C.vm} />
@@ -607,7 +607,7 @@ export function RenderStory() {
         {/* ── Virtual Display: code | text ── */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={DISPLAY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={DISPLAY_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="airplay">{'VIRTUAL DISPLAY'}</SectionLabel>
@@ -632,10 +632,10 @@ export function RenderStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Input forwarding coordinates are transformed from the Render element bounds to the source resolution — clicks land exactly where you expect regardless of objectFit scaling.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={INTERACTIVE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INTERACTIVE_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center' }}>
+            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
               <Tag text="interactive" color={C.interactive} />
               <Box style={{
                 width: 200, height: 120, borderRadius: 6,
@@ -677,7 +677,7 @@ export function RenderStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Cores run at their native framerate via a time accumulator. Pixel format conversion (XRGB8888, RGB565, 0RGB1555) happens in a tight LuaJIT loop. Audio streams through a QueueableSource. Gamepads work out of the box.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={LIBRETRO_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={LIBRETRO_CODE} />
             <Text style={{ color: c.muted, fontSize: 9, marginTop: 4 }}>
               {'Controls: Arrows=D-Pad, Z/X=A/B, A/S=X/Y, Enter=Start, RShift=Select, Q/W=L/R. F5=Save, F9=Load, F6=Reset. Gamepads mapped automatically.'}
             </Text>
@@ -695,7 +695,7 @@ export function RenderStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={EVENTS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={EVENTS_CODE} />
           </Half>
         </Band>
 

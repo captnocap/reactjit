@@ -204,7 +204,7 @@ function FallingBodiesDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Tag text="PhysicsWorld" color={C.world} />
         <Tag text="RigidBody" color={C.body} />
@@ -309,7 +309,7 @@ function ChainDemo() {
   const linkIds = Array.from({ length: LINKS }, (_, i) => `chain-link-${i}`);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Tag text="DistanceJoint" color={C.joint} />
         <Tag text="chain" color={C.joint} />
@@ -367,7 +367,7 @@ function SensorDemo() {
   const [hitCount, setHitCount] = useState(0);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center' }}>
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
       <Tag text="Sensor" color={C.sensor} />
 
       <PhysicsWorld gravity={[0, 300]} debug style={{ width: 260, height: 160, backgroundColor: '#330000', borderRadius: 6, overflow: 'hidden' }}>
@@ -571,7 +571,7 @@ export function PhysicsStory() {
               {'Components for the world, bodies, shapes, joints, and sensors. Hooks for applying forces from React. Everything runs in Lua \u2014 React just declares the layout.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
 
         <Divider />
@@ -586,7 +586,7 @@ export function PhysicsStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Wrap everything in <PhysicsWorld>. Static bodies are immovable (ground, walls, platforms). Dynamic bodies fall with gravity and collide. The debug prop draws green wireframes for all collision shapes. MouseJoint enables click-drag on any dynamic body.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={WORLD_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WORLD_CODE} />
           </Box>
         </Box>
 
@@ -600,14 +600,14 @@ export function PhysicsStory() {
               {'Three body types: dynamic (moves with physics), static (immovable), kinematic (script-driven). Enable bullet for fast-moving objects that might tunnel through thin walls. fixedRotation prevents spinning. gravityScale lets individual bodies float or fall faster.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={BODY_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={BODY_CODE} />
         </Box>
 
         <Divider />
 
         {/* ── Collider shapes: code | text ── */}
         <Box style={BAND_STYLE}>
-          <CodeBlock language="tsx" fontSize={9} code={COLLIDER_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={COLLIDER_CODE} />
           <Box style={HALF}>
             <SectionLabel icon="layers">{'COLLIDER SHAPES'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -649,7 +649,7 @@ export function PhysicsStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Six joint types connect bodies together. DistanceJoint acts as a spring \u2014 chain N of them for rope. RevoluteJoint makes hinges (doors, ragdoll limbs). WeldJoint glues bodies (set stiffness > 0 for breakable). MouseJoint enables drag interaction. All joints reference bodies by node ID.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={JOINT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={JOINT_CODE} />
           </Box>
         </Box>
 
@@ -662,7 +662,7 @@ export function PhysicsStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Sensors detect overlap without pushing bodies away. Use them for trigger zones (enter zone \u2192 open door), pickup items (overlap \u2192 collect), or damage areas. Fires onCollide/onCollideEnd events with the other body\u2019s ID.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SENSOR_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SENSOR_CODE} />
           </Box>
           <Box style={HALF}>
             <SensorDemo />
@@ -679,7 +679,7 @@ export function PhysicsStory() {
               {'Apply forces from React via RPC. useForce applies continuously (good for thrust, wind). useImpulse fires once (jump, explosion knockback). useTorque spins bodies. All resolve to physics:applyForce / physics:applyImpulse / physics:applyTorque RPCs that mutate the Box2D body directly.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={HOOKS_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={HOOKS_CODE} />
         </Box>
 
         <Divider />

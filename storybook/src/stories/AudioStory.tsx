@@ -1104,7 +1104,7 @@ export function AudioStory() {
             </Text>
           </Box>
           <Box style={{ ...halfStyle }}>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
           </Box>
         </Box>
 
@@ -1123,7 +1123,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Options: topologyOnly skips high-frequency param updates. maxFps caps state updates for dashboards.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={RACK_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={RACK_CODE} />
           </Box>
         </Box>
 
@@ -1139,7 +1139,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Params are validated against the module definition. Invalid values are clamped or rejected by Lua.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MODULE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MODULE_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <ModuleParamDemo />
@@ -1182,7 +1182,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'useClockEvent(fn) subscribes to tick events for custom logic (e.g., visual beat indicators, external sync).'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={CLOCK_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CLOCK_CODE} />
           </Box>
         </Box>
 
@@ -1198,7 +1198,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Driven by a clock module wired to clock_in. Rising edge detection advances the step. Pattern state is serialized to the bridge for live UI editing.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SEQ_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SEQ_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SequencerDemo />
@@ -1222,8 +1222,8 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'useRecorder() records from a microphone directly into a sampler slot. List devices, start/stop recording, monitor duration. No file management — audio goes straight into the slot buffer.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SAMPLER_CODE} />
-            <CodeBlock language="tsx" fontSize={9} code={RECORDER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SAMPLER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={RECORDER_CODE} />
           </Box>
         </Box>
 
@@ -1239,7 +1239,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'useMIDINote(fn) and useMIDICC(fn) subscribe to raw events for custom handling. Built-in CC mappings: CC1 = FM amount, CC7 = volume, CC10 = pan, CC74 = filter cutoff.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MIDI_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MIDI_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <MIDIDemo />
@@ -1255,7 +1255,7 @@ export function AudioStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Knob is a 270-degree rotary with drag control. Fader is a vertical channel slider. PitchWheel springs back to center on release. All rendering and hit testing runs in Lua — drag a knob and it responds in the same frame.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={KNOB_FADER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={KNOB_FADER_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <KnobFaderDemo />
@@ -1295,7 +1295,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Both support custom colors, sizes, and disabled state. PadButton shows active state for sequencer step feedback.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PAD_XY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PAD_XY_CODE} />
           </Box>
         </Box>
 
@@ -1308,7 +1308,7 @@ export function AudioStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'TransportBar bundles play/stop/record buttons with BPM display, position readout, and LED indicators. StepSequencer is an interactive grid — click to toggle steps, drag to paint. Both are pure UI controls that pair with the audio hooks.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SEQ_TRANSPORT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SEQ_TRANSPORT_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <TransportSeqDemo />
@@ -1330,7 +1330,7 @@ export function AudioStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Fully customizable: key dimensions, colors via palette prop, note labels. Wire onKeyDown/onKeyUp to useMIDI or a polysynth module.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PIANO_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PIANO_CODE} />
           </Box>
         </Box>
 
@@ -1385,14 +1385,14 @@ export function AudioStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The polysynth module is an all-in-one instrument — oscillator + ADSR + polyphonic voice management in a single module. No manual patching needed. Keyboard keys map to notes (z=C3, a=C4, k=C5).'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={POLYSYNTH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={POLYSYNTH_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="git-merge">{'PATCH EXAMPLE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Classic subtractive synth: oscillator through filter, envelope-controlled amplifier, LFO modulating filter cutoff, delay for ambience. This is the modular equivalent of the polysynth — more control, more wiring.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PATCH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PATCH_CODE} />
           </Box>
         </Box>
 

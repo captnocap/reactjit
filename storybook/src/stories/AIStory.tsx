@@ -785,7 +785,7 @@ export function AIStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
           </Half>
         </Band>
 
@@ -804,7 +804,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Messages are updated in-place during streaming — no flicker, no rebatching. System prompt injection, partial updates, and cancellation via AbortController.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={CHAT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CHAT_CODE} />
           </Half>
         </Band>
 
@@ -820,7 +820,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'All tool calls in a single response execute concurrently via Promise.all. Results are formatted as tool-role messages and appended to history before the next LLM call.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TOOLS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TOOLS_CODE} />
           </Half>
           <Half>
             <AgenticLoopDemo />
@@ -842,7 +842,7 @@ export function AIStory() {
         {/* ── Band 4: code | text — AGENTIC LOOP INTERNALS ── */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={AGENTIC_LOOP_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={AGENTIC_LOOP_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="repeat" accentColor={C.accent}>{'LOOP INTERNALS'}</SectionLabel>
@@ -870,7 +870,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Each provider implements formatRequest(), parseResponse(), parseStreamChunk(), and formatToolResult(). Streaming format differences (Anthropic events vs OpenAI deltas) are abstracted away.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PROVIDER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PROVIDER_CODE} />
           </Half>
         </Band>
 
@@ -886,7 +886,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'startStream() uses globalThis.fetchStream — the Lua bridge handles HTTP for both Love2D and WASM targets. SSEParser handles \\n\\n and \\r\\n\\r\\n delimiters, multi-line data fields, and comment lines.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SSE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SSE_CODE} />
           </Half>
           <Half>
             <StreamingPipelineDemo />
@@ -907,7 +907,7 @@ export function AIStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={COMPLETION_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={COMPLETION_CODE} />
           </Half>
         </Band>
 
@@ -916,7 +916,7 @@ export function AIStory() {
         {/* ── Band 8: code | text — CONTEXT PROVIDER ── */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={CONTEXT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CONTEXT_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'AIProvider CONTEXT'}</SectionLabel>
@@ -954,7 +954,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Returns ToolDefinition[] that plug directly into useChat\'s tools array. MCPClient handles the protocol — connect, list tools, call tool, close.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MCP_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MCP_CODE} />
           </Half>
         </Band>
 
@@ -970,7 +970,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'estimateToolTokens() calculates token budget per tool definition. estimateToolBudget() sums all tools and reports context window usage percentage.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MCP_TRANSPORTS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MCP_TRANSPORTS_CODE} />
           </Half>
           <Half>
             <Box style={{ gap: 6, width: '100%' }}>
@@ -1008,7 +1008,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Connects via globalThis.browseRequest to a Lua worker thread. Default port 7331. Page text truncated to 8000 chars, links to 50 for LLM context efficiency.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={BROWSER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={BROWSER_CODE} />
           </Half>
         </Band>
 
@@ -1024,7 +1024,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'The AI sees page content as structured text (title, text, links[], forms[]) — not raw HTML. This keeps token usage efficient while giving the model enough context to navigate.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={BROWSER_TOOLS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={BROWSER_TOOLS_CODE} />
           </Half>
           <Half>
             <Box style={{ gap: 6, width: '100%' }}>
@@ -1066,7 +1066,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'AIConversationSidebar manages multiple conversations with search. AIMessageWithActions adds copy, delete, and regenerate to each message bubble.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={COMPONENTS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={COMPONENTS_CODE} />
           </Half>
         </Band>
 
@@ -1082,7 +1082,7 @@ export function AIStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'All templates accept ChatOptions — they call useChat() internally. Customize via props: title, placeholder, accentColor, renderMessage, callbacks for sidebar events.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TEMPLATES_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TEMPLATES_CODE} />
           </Half>
           <Half>
             <TemplateTierDemo />
@@ -1094,7 +1094,7 @@ export function AIStory() {
         {/* ── Band 15: code | text — API KEYS ── */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={API_KEYS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={API_KEYS_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="key" accentColor={C.accent}>{'API KEY MANAGEMENT'}</SectionLabel>

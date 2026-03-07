@@ -225,7 +225,7 @@ function LocalStoreDemo() {
   const [text, setText] = useLocalStore('demo:note', '');
 
   return (
-    <Box style={{ gap: 10 }}>
+    <Box style={{ gap: 10, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{'Persists to SQLite — reload the app and values stay'}</Text>
 
       <Box style={{ gap: 4 }}>
@@ -273,7 +273,7 @@ function HotStateDemo() {
   const tabs = ['Home', 'Settings', 'Profile'];
 
   return (
-    <Box style={{ gap: 10 }}>
+    <Box style={{ gap: 10, width: '100%' }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{'Survives HMR — edit code and tab stays selected'}</Text>
 
       <Box style={{ gap: 4 }}>
@@ -315,7 +315,7 @@ function SearchDemo() {
   const results = useSearch(SEARCH_ITEMS, query, SEARCH_DEMO_OPTIONS);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -447,7 +447,7 @@ export function StorageStory() {
             </Text>
             <TierOverview />
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
 
         <Divider />
@@ -465,7 +465,7 @@ export function StorageStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Backed by lua/localstore.lua — a key-value table in localstore.db. The hook loads the initial value on mount via RPC, then debounces writes. Survives full app restart.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={LOCALSTORE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={LOCALSTORE_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -481,7 +481,7 @@ export function StorageStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Use for ephemeral UI state: active tab, sidebar open/closed, scroll position. Lost on full restart — upgrade to useLocalStore when you need true persistence.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={HOTSTATE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={HOTSTATE_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <HotStateDemo />
@@ -521,11 +521,11 @@ export function StorageStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Documents get auto-generated _id fields. Queries support gt, gte, lt, lte, ne, like, and contains operators. Results are plain Lua tables.'}
             </Text>
-            <CodeBlock language="lua" fontSize={9} code={DOCSTORE_CODE} />
+            <CodeBlock language="lua" fontSize={9} code={DOCSTORE_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <Text style={{ color: c.muted, fontSize: 9, marginBottom: 4 }}>{'Query operators:'}</Text>
-            <CodeBlock language="lua" fontSize={9} code={QUERY_CODE} />
+            <CodeBlock language="lua" fontSize={9} code={QUERY_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -533,7 +533,7 @@ export function StorageStory() {
 
         {/* ── Band 5: code | text — SQLite FFI ── */}
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <CodeBlock language="lua" fontSize={9} code={SQLITE_CODE} />
+          <CodeBlock language="lua" fontSize={9} code={SQLITE_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="terminal">{'SQLITE FFI'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -575,14 +575,14 @@ export function StorageStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Define a Zod-inspired schema, get a typed CRUD handle with create, get, update, delete, list. Includes reactive hooks: useQuery and useListQuery for auto-refetching.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={CRUD_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={CRUD_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="check-circle">{'SCHEMA VALIDATION'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The z builder supports string, number, boolean, object, array, optional, nullable, and default. parse() throws, safeParse() returns a result object.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SCHEMA_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={SCHEMA_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -600,14 +600,14 @@ export function StorageStory() {
               {'All adapters implement the same interface: get, set, delete, list. Custom adapters just need those four methods.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={ADAPTER_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={ADAPTER_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
 
         <Divider />
 
         {/* ── Band 8: code | text — MIGRATIONS ── */}
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
-          <CodeBlock language="tsx" fontSize={9} code={MIGRATION_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={MIGRATION_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="git-merge">{'MIGRATIONS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
@@ -631,7 +631,7 @@ export function StorageStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useSearch filters in-memory arrays by substring match. useFuzzySearch adds scoring and ranking. Both auto-detect searchable fields (strings and numbers, skipping ids and URLs).'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SEARCH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={SEARCH_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
 
@@ -644,7 +644,7 @@ export function StorageStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useSearchHistory persists recent queries to SQLite via useLocalStore. useSearchHighlight splits text into matched/unmatched parts for rendering highlighted results.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SEARCH_HISTORY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={SEARCH_HISTORY_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="command">{'COMMAND SEARCH'}</SectionLabel>
