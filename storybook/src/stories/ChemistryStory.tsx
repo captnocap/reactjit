@@ -333,7 +333,7 @@ function MoleculesDemo() {
           {results.map(r => (
             <Pressable key={r.formula} onPress={() => { setFormula(r.formula); setSearch(''); }}>
               <Box style={{ flexDirection: 'row', gap: 6, padding: 4, backgroundColor: c.surface, borderRadius: 4 }}>
-                <Text style={{ fontSize: 10, color: P.accent, fontWeight: 'bold' }}>{r.formula}</Text>
+                <ChemFormula formula={r.formula} fontSize={10} color={P.accent} />
                 <Text style={{ fontSize: 10, color: c.muted }}>{r.name}</Text>
               </Box>
             </Pressable>
@@ -352,7 +352,7 @@ function MoleculesDemo() {
               backgroundColor: formula === f ? P.accent : c.surface,
             }}
           >
-            <Text style={{ fontSize: 9, color: formula === f ? '#000' : c.text }}>{f}</Text>
+            <ChemFormula formula={f} fontSize={9} color={formula === f ? '#000' : c.text} />
           </Pressable>
         ))}
       </Box>
@@ -400,7 +400,7 @@ function ReactionsDemo() {
             onPress={() => setEquations(prev => prev.includes(eq) ? prev : [eq, ...prev])}
             style={{ paddingTop: 2, paddingBottom: 2, paddingLeft: 6, paddingRight: 6, borderRadius: 3, backgroundColor: c.surface }}
           >
-            <Text style={{ fontSize: 8, color: c.muted }}>{eq}</Text>
+            <ChemEquation equation={eq} fontSize={8} color={c.muted} />
           </Pressable>
         ))}
       </Box>
@@ -447,15 +447,14 @@ function ReagentsDemo() {
         </Box>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+      <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', width: '100%', justifyContent: 'center' }}>
         {REAGENT_TYPES.map(r => (
           <Box key={r} style={{ alignItems: 'center', gap: 4 }}>
             <ReagentTest
               type={r}
               sample={compound}
-              speed={1.5}
               onReactionComplete={(e) => setLastResult(`${r}: ${(e as any).description}`)}
-              style={{ width: 80, height: 100 }}
+              style={{ width: 104, height: 148 }}
             />
           </Box>
         ))}
@@ -485,7 +484,7 @@ function ReagentsDemo() {
         </Box>
         <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 3 }}>
           <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{REAGENT_INFO[infoReagent].name}</Text>
-          <Text style={{ fontSize: 9, color: P.teal }}>{REAGENT_INFO[infoReagent].formula}</Text>
+          <ChemFormula formula={REAGENT_INFO[infoReagent].formula} fontSize={9} color={P.teal} />
           <Text style={{ fontSize: 9, color: c.muted }}>{REAGENT_INFO[infoReagent].description}</Text>
         </Box>
       </Box>
@@ -537,7 +536,7 @@ function SpectraDemo() {
               backgroundColor: compound === cmp ? P.accent : c.surface,
             }}
           >
-            <Text style={{ fontSize: 9, color: compound === cmp ? '#000' : c.text }}>{cmp}</Text>
+            <ChemFormula formula={cmp} fontSize={9} color={compound === cmp ? '#000' : c.text} />
           </Pressable>
         ))}
       </Box>
@@ -618,7 +617,7 @@ function PubChemDemo() {
             {data.molecularFormula && (
               <Box style={{ gap: 1 }}>
                 <Text style={{ fontSize: 8, color: c.muted }}>{'Formula'}</Text>
-                <Text style={{ fontSize: 11, color: P.blue }}>{data.molecularFormula}</Text>
+                <ChemFormula formula={data.molecularFormula} fontSize={11} color={P.blue} />
               </Box>
             )}
             {data.molecularWeight && (
@@ -672,7 +671,10 @@ function ToolsDemo() {
           onChangeText={setFormula}
           style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, fontSize: 11, color: c.text }}
         />
-        <Text style={{ fontSize: 14, color: P.accent }}>{`${mm} g/mol`}</Text>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <ChemFormula formula={formula} fontSize={14} color={P.accent} />
+          <Text style={{ fontSize: 14, color: P.accent }}>{`= ${mm} g/mol`}</Text>
+        </Box>
         <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {Object.entries(composition).map(([sym, pct]) => (
             <Text key={sym} style={{ fontSize: 10, color: c.muted }}>{`${sym}: ${pct}%`}</Text>
@@ -681,7 +683,10 @@ function ToolsDemo() {
       </Box>
 
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{`Mass (g) of ${formula}`}</Text>
+        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <Text style={{ fontSize: 9, color: c.muted }}>{'Mass (g) of'}</Text>
+          <ChemFormula formula={formula} fontSize={9} color={c.muted} />
+        </Box>
         <TextInput
           placeholder="18"
           value={mass}

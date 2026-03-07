@@ -48,6 +48,11 @@ export const REAGENT_INFO: Record<ReagentType, { name: string; formula: string; 
   'gallic-acid': { name: 'Gallic Acid', formula: 'C7H6O5 + H2SO4', color: '#8B0000', description: 'Gallic acid + sulfuric acid. Tests for alkaloids and glycosides.' },
 };
 
+function realisticReactionTimeMs(timeMs: number): number {
+  const scaled = timeMs * 3 + 4000;
+  return Math.max(10000, Math.round(scaled / 500) * 500);
+}
+
 // -- Color reaction databases -------------------------------------------------
 // Each reagent has a lookup table: compound → color change sequence
 
@@ -128,6 +133,12 @@ const REAGENT_DATABASES: Record<ReagentType, Record<string, ColorReaction>> = {
   froehde: FROEHDE_REACTIONS,
   'gallic-acid': {},
 };
+
+for (const db of Object.values(REAGENT_DATABASES)) {
+  for (const reaction of Object.values(db)) {
+    reaction.timeMs = realisticReactionTimeMs(reaction.timeMs);
+  }
+}
 
 // -- Functional group explanations --------------------------------------------
 
