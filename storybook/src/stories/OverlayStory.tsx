@@ -550,7 +550,7 @@ export function OverlayStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
           </Half>
         </Band>
 
@@ -568,7 +568,7 @@ export function OverlayStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Returns current overlay state and control methods. Polls the Lua overlay module via RPC. When overlay mode is not active (no REACTJIT_OVERLAY env var), enabled is false and controls are no-ops.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={HOOK_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={HOOK_CODE} />
           </Half>
         </Band>
 
@@ -594,7 +594,7 @@ export function OverlayStory() {
               ))}
             </Box>
             <ModeCycleDiagram />
-            <CodeBlock language="tsx" fontSize={9} code={MODES_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MODES_CODE} />
           </Half>
           <Half>
             <ModeTriplePreview />
@@ -646,7 +646,7 @@ export function OverlayStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="bash" fontSize={9} code={WINDOW_CODE} />
+            <CodeBlock language="bash" fontSize={9} style={{ width: '100%' }} code={WINDOW_CODE} />
           </Half>
         </Band>
 
@@ -655,7 +655,7 @@ export function OverlayStory() {
         {/* ── Attach mode CLI: code | text ── */}
         <Band>
           <Half>
-            <CodeBlock language="bash" fontSize={9} code={ATTACH_CODE} />
+            <CodeBlock language="bash" fontSize={9} style={{ width: '100%' }} code={ATTACH_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="hard-drive">{'ATTACH MODE (CLI)'}</SectionLabel>
@@ -682,7 +682,7 @@ export function OverlayStory() {
             <InteractivePreview />
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={HUD_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={HUD_CODE} />
           </Half>
         </Band>
 
@@ -691,7 +691,7 @@ export function OverlayStory() {
         {/* ── SHM protocol: code | text ── */}
         <Band>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={SHM_PROTOCOL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SHM_PROTOCOL_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="database">{'SHM PROTOCOL'}</SectionLabel>

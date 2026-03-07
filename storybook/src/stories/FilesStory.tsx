@@ -473,7 +473,7 @@ export function FilesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Mouse position uses SDL_GetGlobalMouseState for accuracy during OS drag operations, not love.mouse.getPosition() which is stale during drags.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={FILE_DROP_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={FILE_DROP_CODE} />
           </Half>
         </Band>
 
@@ -490,7 +490,7 @@ export function FilesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Preview mode walks up the node tree — set it once on a parent and all children inherit it. Binary files get filePreviewError="preview_binary_file" instead of garbage text.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={FILE_DROP_PREVIEW_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={FILE_DROP_PREVIEW_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="folder">{'DIRECTORY DROP'}</SectionLabel>
@@ -498,13 +498,13 @@ export function FilesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Drop entire folders with onDirectoryDrop. The event contains the directory path — combine with useMediaLibrary to scan its contents.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={DIR_DROP_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={DIR_DROP_CODE} />
             <SectionLabel icon="move">{'DRAG ENTER / LEAVE'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Hover with intent'}</Text>
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Visual feedback during drag hover. onFileDragEnter fires when a file enters the node bounds, onFileDragLeave when it exits.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={DRAG_EVENTS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={DRAG_EVENTS_CODE} />
           </Half>
         </Band>
 
@@ -549,7 +549,7 @@ export function FilesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'formatSize() converts raw bytes to human-readable strings (B, KB, MB, GB, TB). Both are pure utility functions — no hooks, no state, no side effects.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={CLASSIFY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CLASSIFY_CODE} />
           </Half>
           <Half>
             <ClassifierDemo />
@@ -570,7 +570,7 @@ export function FilesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'useMediaStats() returns just the counts without loading all file objects. useMediaIndex() goes deeper — it peeks inside archive files via libarchive to find media buried in RAR/ZIP/7z.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MEDIA_LIB_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MEDIA_LIB_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="search">{'DEEP INDEX'}</SectionLabel>
@@ -578,7 +578,7 @@ export function FilesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useMediaIndex() is the archive walker. It scans a directory AND looks inside every archive file it finds. The result is a flat list where each item has a source field: "filesystem" or "archive".'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MEDIA_INDEX_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MEDIA_INDEX_CODE} />
           </Half>
         </Band>
 
@@ -595,7 +595,7 @@ export function FilesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Archive features degrade gracefully — if libarchive is not installed, hooks return empty results instead of crashing.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={ARCHIVE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={ARCHIVE_CODE} />
           </Half>
           <Half>
             <ArchiveFormatsCatalog />
@@ -615,7 +615,7 @@ export function FilesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'ImageGallery renders a grid of thumbnails. Click any image to open it in a non-invasive modal overlay — page layout stays intact. Configure columns, gap, and thumbnail height.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={GALLERY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={GALLERY_CODE} />
           </Half>
         </Band>
 

@@ -1001,7 +1001,7 @@ export function ChemistryStory() {
             </Text>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -1028,7 +1028,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useElement() returns the full Element record by atomic number or symbol. Mass, category, phase, electron configuration, shells, CPK color, melting/boiling points, density, electronegativity — everything.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={ELEMENT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={ELEMENT_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -1041,7 +1041,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'35+ common compounds with name, IUPAC, geometry, polarity, and bond data. MoleculeCard renders a detail view for any formula. searchCompounds() finds compounds by name, formula, or IUPAC name.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MOLECULE_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={MOLECULE_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <MoleculesDemo />
@@ -1063,7 +1063,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Type any unbalanced equation — use -> or => or = as the arrow. ReactionView renders the balanced equation with coefficients, reaction type, and enthalpy when available.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={REACTION_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={REACTION_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -1100,7 +1100,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'SpectrumView renders peaks, axes, and labels. PhaseDiagram renders pressure-temperature plots with solid/liquid/gas regions, triple point, and critical point.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={SPECTRA_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={SPECTRA_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SpectraDemo />
@@ -1140,7 +1140,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Each shell has a different tilt and rotation for the 3D perspective effect. Inner shells orbit faster. Electron count per shell uses actual shell occupancy data from IUPAC.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={BOHR_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={BOHR_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -1168,7 +1168,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Also includes fetchSynonyms, fetchDescription, and fetchHazards. All are plain async functions — call them on user action, not on render. Rate limit: 5 requests/second.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PUBCHEM_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={PUBCHEM_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <PubChemDemo />
@@ -1190,7 +1190,7 @@ export function ChemistryStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Chemistry-specific unit conversions (mol, M, amu, pH, spectroscopy wavelength/frequency) are auto-registered into @reactjit/convert on import.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TOOLS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={TOOLS_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 

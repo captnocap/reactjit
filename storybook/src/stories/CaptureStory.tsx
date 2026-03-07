@@ -277,7 +277,7 @@ export function CaptureStory() {
               </Box>
             </Box>
           </Half>
-          <CodeBlock language="lua" style={{ width: '100%' }}>{SCREENSHOT_CODE}</CodeBlock>
+          <CodeBlock language="lua" style={{ flexGrow: 1, flexBasis: 0 }}>{SCREENSHOT_CODE}</CodeBlock>
         </Band>
 
         <Divider />
@@ -291,14 +291,14 @@ export function CaptureStory() {
             </Text>
             <GifDemo />
           </Half>
-          <CodeBlock language="typescript" style={{ width: '100%' }}>{GIF_HOOK_CODE}</CodeBlock>
+          <CodeBlock language="typescript" style={{ flexGrow: 1, flexBasis: 0 }}>{GIF_HOOK_CODE}</CodeBlock>
         </Band>
 
         <Divider />
 
         {/* Video Recording */}
         <Band>
-          <CodeBlock language="typescript" style={{ width: '100%' }}>{VIDEO_HOOK_CODE}</CodeBlock>
+          <CodeBlock language="typescript" style={{ flexGrow: 1, flexBasis: 0 }}>{VIDEO_HOOK_CODE}</CodeBlock>
           <Half>
             <SectionLabel icon="video" accentColor={C.video}>{'VIDEO RECORDING'}</SectionLabel>
             <Text style={{ color: c.muted, fontSize: 12 }}>
@@ -330,7 +330,7 @@ export function CaptureStory() {
               </Box>
             </Box>
           </Half>
-          <CodeBlock language="lua" style={{ width: '100%' }}>{RPC_CODE}</CodeBlock>
+          <CodeBlock language="lua" style={{ flexGrow: 1, flexBasis: 0 }}>{RPC_CODE}</CodeBlock>
         </Band>
 
         <Divider />
@@ -338,7 +338,7 @@ export function CaptureStory() {
         {/* Performance callout */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
           <Text style={{ color: C.perf, fontSize: 11, fontWeight: '600' }}>{'Performance characteristics'}</Text>
-          <CodeBlock language="text" style={{ width: '100%' }}>{PERF_NOTES}</CodeBlock>
+          <CodeBlock language="text" style={{ flexGrow: 1, flexBasis: 0 }}>{PERF_NOTES}</CodeBlock>
         </CalloutBand>
 
       </Box>

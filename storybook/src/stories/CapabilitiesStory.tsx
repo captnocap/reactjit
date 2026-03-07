@@ -645,7 +645,7 @@ export function CapabilitiesStory() {
               {'Everything lives in @reactjit/core. Capabilities, events, and IFTTT are all part of the core package — no extra dependencies.'}
             </Text>
           </Half>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Band>
 
         <Divider />
@@ -663,7 +663,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'The pattern: React declares props → Lua capability module executes → events flow back as callbacks. No bridge-specific code needed.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TIMER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={TIMER_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -679,7 +679,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'The AI generates valid one-liner JSX from the schema alone — no docs needed. Schema is the contract: typed, bounded, defaulted props + named event callbacks.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={DISCOVERY_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={DISCOVERY_CODE} style={{ width: '100%' }} />
             <Text style={{ color: c.muted, fontSize: 9 }}>
               {'Visual capabilities render into the layout tree. Effect capabilities (audio, timers, agents) are invisible — they skip paint and layout entirely.'}
             </Text>
@@ -709,7 +709,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useEventBus creates an in-memory pub/sub channel. useEvent subscribes. useEmit creates a typed emitter. No prop drilling, no shared state.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={BUS_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={BUS_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <BasicBusDemo />
@@ -728,7 +728,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useEventState re-renders your component with the latest payload every time that channel fires. No manual state management — it tracks the most recent event for you.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={STATEFUL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={STATEFUL_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -741,7 +741,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Listen to all channels with \'*\' for logging or debugging. Or pass an array of channel names to handle multiple events with one handler.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={WILDCARD_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={WILDCARD_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <WildcardDemo />
@@ -771,7 +771,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'The simplest IFTTT rule: one key, one state change. Space bar toggles a boolean. No event listeners, no cleanup — useIFTTT handles the full lifecycle.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={IFTTT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={IFTTT_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -784,7 +784,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Stack rules to build keybinding systems. Four rules, four one-liners — number keys switch the active tool. Each useIFTTT is independent and composable.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TOOL_SWITCH_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={TOOL_SWITCH_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <ToolSwitcherDemo />
@@ -803,7 +803,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'Pass a function instead of a string. It fires on the false→true transition — edge detection, not polling. Tap +1 past 10 to see it fire. Reset drops below and re-arms.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={THRESHOLD_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={THRESHOLD_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -816,7 +816,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'useIFTTT returns { fired, fire }. fired tracks how many times the rule has triggered. fire() lets you invoke the action manually. Timer triggers tick on Lua-managed intervals — no setInterval needed.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={FIRE_COUNT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={FIRE_COUNT_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <FireCountDemo />
@@ -835,7 +835,7 @@ export function CapabilitiesStory() {
             <Text style={{ color: c.text, fontSize: 10 }}>
               {'All three systems compose. IFTTT wires keyboard triggers to bus events. The event bus distributes them. Components react. This is the full pipeline: input → intent → distribution → UI.'}
             </Text>
-            <CodeBlock language="tsx" fontSize={9} code={COMBO_CODE} />
+            <CodeBlock language="tsx" fontSize={9} code={COMBO_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
 
@@ -879,7 +879,7 @@ export function CapabilitiesStory() {
               {'The target user is someone who knows their domain but not bridges or RPCs. Everything is a one-liner. Audio, timers, notifications, custom capabilities — if it takes more than one line, wrap it until it doesn\'t.'}
             </Text>
           </Half>
-          <CodeBlock language="tsx" fontSize={9} code={ONELINER_CODE} />
+          <CodeBlock language="tsx" fontSize={9} code={ONELINER_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Band>
 
       </ScrollView>

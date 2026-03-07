@@ -460,11 +460,11 @@ export function DataStory() {
                 <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
                   {'BEHAVIOR'}
                 </Text>
-                <Box style={{ gap: 4 }}>
+                <Box style={{ gap: 4, width: '100%' }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                      <Image src="chevron-right" style={{ width: 8, height: 8 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10 }}>{note}</Text>
+                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                      <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
+                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
                     </Box>
                   ))}
                 </Box>
