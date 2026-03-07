@@ -25,6 +25,10 @@
 local Capabilities = require("lua.capabilities")
 local ColorUtils = require("lua.color")
 
+local BASE_COLOR = {0.96, 0.96, 0.86, 1}
+local LOOP_HOLD_MS = 2000
+local TIMELINE_SLICES = 36
+
 -- ============================================================================
 -- Color reaction databases
 -- Each: compound -> { final, description, timeMs, intermediates[] }
@@ -93,6 +97,36 @@ local REAGENT_DBS = {
 -- Color interpolation (RGBA lerp)
 -- ============================================================================
 
+local function cloneColor(color)
+  return { color[1], color[2], color[3], color[4] or 1 }
+end
+
+local function realisticTimeMs(timeMs)
+  local scaled = timeMs * 3 + 4000
+  local rounded = math.floor((scaled + 250) / 500) * 500
+  return math.max(10000, rounded)
+end
+
+for _, db in pairs(REAGENT_DBS) do
+  for _, reaction in pairs(db) do
+    reaction.timeMs = realisticTimeMs(reaction.timeMs)
+  end
+end
+
+local function fallbackReaction(sample)
+  return {
+    final = cloneColor(BASE_COLOR),
+    desc = sample and sample ~= "" and "No documented reaction" or "Awaiting sample",
+    timeMs = 10000,
+    inters = { cloneColor(BASE_COLOR) },
+  }
+end
+
+local function lookupReaction(reagentType, sample)
+  local db = REAGENT_DBS[reagentType]
+  return (db and db[sample]) or fallbackReaction(sample)
+end
+
 local function lerpColor(a, b, t)
   return {
     a[1] + (b[1] - a[1]) * t,
@@ -116,6 +150,49 @@ local function getAnimColor(inters, progress)
   return lerpColor(a, b, frac)
 end
 
+local function startColorForReaction(reaction)
+  if reaction and reaction.inters and #reaction.inters > 0 then
+    return cloneColor(reaction.inters[1])
+  end
+  return cloneColor(BASE_COLOR)
+end
+
+local function formatSeconds(ms)
+  return string.format("%.0f", math.max(0, ms) / 1000)
+end
+
+local function drawTimelineBar(x, y, w, h, inters, progress, opacity)
+  love.graphics.setColor(0.08, 0.08, 0.08, 0.35 * opacity)
+  love.graphics.rectangle("fill", x, y, w, h, h / 2, h / 2)
+
+  local slices = math.max(8, TIMELINE_SLICES)
+  local sliceW = w / slices
+  for i = 0, slices - 1 do
+    local t = i / math.max(1, slices - 1)
+    local col = getAnimColor(inters, t)
+    love.graphics.setColor(col[1], col[2], col[3], col[4] * opacity)
+    love.graphics.rectangle("fill", x + i * sliceW, y, sliceW + 1, h)
+  end
+
+  love.graphics.setColor(1, 1, 1, 0.9 * opacity)
+  local markerX = x + math.max(0, math.min(1, progress)) * w
+  love.graphics.rectangle("fill", markerX - 1, y - 2, 2, h + 4, 1, 1)
+
+  love.graphics.setColor(0.85, 0.85, 0.85, 0.8 * opacity)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", x, y, w, h, h / 2, h / 2)
+end
+
+local function resetReactionState(state, props)
+  state.elapsed = 0
+  state.started = false
+  state.completed = false
+  state.reaction = lookupReaction(props.type, props.sample)
+  state.currentColor = startColorForReaction(state.reaction)
+  state.prevType = props.type
+  state.prevSample = props.sample
+end
+
 -- ============================================================================
 -- Capability registration
 -- ============================================================================
@@ -133,31 +210,15 @@ Capabilities.register("ReagentTest", {
   events = { "onReactionStart", "onReactionComplete" },
 
   create = function(nodeId, props)
-    local db = REAGENT_DBS[props.type]
-    local reaction = db and db[props.sample] or nil
-    return {
-      elapsed = 0,
-      started = false,
-      completed = false,
-      currentColor = {0.96, 0.96, 0.86, 1}, -- baseline beige
-      reaction = reaction,
-      prevType = props.type,
-      prevSample = props.sample,
-    }
+    local state = {}
+    resetReactionState(state, props)
+    return state
   end,
 
   update = function(nodeId, props, prev, state)
     -- Reset animation when reagent or sample changes
     if props.type ~= state.prevType or props.sample ~= state.prevSample then
-      state.elapsed = 0
-      state.started = false
-      state.completed = false
-      state.currentColor = {0.96, 0.96, 0.86, 1}
-      state.prevType = props.type
-      state.prevSample = props.sample
-
-      local db = REAGENT_DBS[props.type]
-      state.reaction = db and db[props.sample] or nil
+      resetReactionState(state, props)
     end
   end,
 
@@ -165,11 +226,10 @@ Capabilities.register("ReagentTest", {
 
   tick = function(nodeId, state, dt, pushEvent, props)
     local rxn = state.reaction
-    if not rxn then return end
-    if state.completed then return end
-
     local speed = props.speed or 1.0
     local animated = props.animated ~= false
+    local durationMs = rxn.timeMs or 10000
+    local cycleMs = durationMs + LOOP_HOLD_MS
 
     -- Fire start event
     if not state.started and pushEvent then
@@ -184,10 +244,19 @@ Capabilities.register("ReagentTest", {
     if animated then
       state.elapsed = state.elapsed + dt * speed * 1000
     else
-      state.elapsed = rxn.timeMs
+      state.elapsed = durationMs
     end
 
-    local progress = math.min(state.elapsed / rxn.timeMs, 1.0)
+    if state.elapsed >= cycleMs then
+      state.elapsed = 0
+      state.started = false
+      state.completed = false
+      state.currentColor = startColorForReaction(rxn)
+      return
+    end
+
+    local reactionElapsed = math.min(state.elapsed, durationMs)
+    local progress = math.min(reactionElapsed / durationMs, 1.0)
     state.currentColor = getAnimColor(rxn.inters, progress)
 
     -- Fire complete event
@@ -217,9 +286,26 @@ Capabilities.register("ReagentTest", {
     if not state then return end
     state = state.state
 
+    local props = node.props or {}
+    local rxn = state.reaction or fallbackReaction(props.sample)
+    local durationMs = rxn.timeMs or 10000
+    local reactionElapsed = math.min(state.elapsed or 0, durationMs)
+    local progress = math.min(reactionElapsed / durationMs, 1.0)
+
     local x, y, w, h = c.x, c.y, c.w, c.h
-    local cx, cy = x + w / 2, y + h / 2
-    local radius = math.min(w, h) / 2 - 4
+    local cx = x + w / 2
+    local label = (props.type or ""):upper()
+    local labelTop = y + 4
+    local labelH = label ~= "" and 12 or 0
+    local barH = math.max(7, math.floor(h * 0.08))
+    local barInset = math.max(8, math.floor(w * 0.12))
+    local barW = math.max(12, w - barInset * 2)
+    local barY = y + h - barH - 8
+    local wellTop = labelTop + labelH + 6
+    local wellBottom = barY - 8
+    local availableH = math.max(20, wellBottom - wellTop)
+    local radius = math.max(10, math.min((w - barInset * 2) / 2, availableH / 2) - 2)
+    local cy = wellTop + availableH / 2
 
     -- Well shadow
     love.graphics.setColor(0, 0, 0, 0.3 * opacity)
@@ -241,19 +327,28 @@ Capabilities.register("ReagentTest", {
       love.graphics.circle("fill", cx, cy, radius * 0.4)
     end
 
+    -- Timer pill
+    local timerText = string.format("%s / %ss", formatSeconds(reactionElapsed), formatSeconds(durationMs))
+    local timerW = math.min(w - 12, 72)
+    love.graphics.setColor(0.05, 0.05, 0.05, 0.55 * opacity)
+    love.graphics.rectangle("fill", cx - timerW / 2, cy - 8, timerW, 16, 8, 8)
+    love.graphics.setColor(1, 1, 1, 0.95 * opacity)
+    love.graphics.printf(timerText, cx - timerW / 2, cy - 5, timerW, "center")
+
     -- Well rim
     love.graphics.setColor(0.6, 0.6, 0.58, opacity)
     love.graphics.setLineWidth(2)
     love.graphics.circle("line", cx, cy, radius)
 
-    -- Label below
-    local props = node.props or {}
-    local label = (props.type or ""):upper()
+    -- Timeline bar: drop color on the left, mature gradient on the right.
+    drawTimelineBar(x + barInset, barY, barW, barH, rxn.inters or { cloneColor(BASE_COLOR) }, progress, opacity)
+
+    -- Label above
     if label ~= "" then
       love.graphics.setColor(0.7, 0.7, 0.7, opacity)
       local font = love.graphics.getFont()
       local tw = font:getWidth(label)
-      love.graphics.print(label, cx - tw / 2, y + h - 14)
+      love.graphics.print(label, cx - tw / 2, labelTop)
     end
   end,
 })
