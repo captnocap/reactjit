@@ -225,7 +225,7 @@ function LocalStoreDemo() {
   const [text, setText] = useLocalStore('demo:note', '');
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <Box style={{ gap: 10 }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{'Persists to SQLite — reload the app and values stay'}</Text>
 
       <Box style={{ gap: 4 }}>
@@ -273,7 +273,7 @@ function HotStateDemo() {
   const tabs = ['Home', 'Settings', 'Profile'];
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <Box style={{ gap: 10 }}>
       <Text style={{ fontSize: 9, color: c.muted }}>{'Survives HMR — edit code and tab stays selected'}</Text>
 
       <Box style={{ gap: 4 }}>
@@ -315,7 +315,7 @@ function SearchDemo() {
   const results = useSearch(SEARCH_ITEMS, query, SEARCH_DEMO_OPTIONS);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <Box style={{ gap: 8 }}>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -326,7 +326,7 @@ function SearchDemo() {
         {results.map(item => (
           <Box key={item.name} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.blue }} />
-            <Text style={{ fontSize: 10, color: c.text, flexShrink: 0 }}>{item.name}</Text>
+            <Text style={{ fontSize: 10, color: c.text }}>{item.name}</Text>
             <Text style={{ fontSize: 9, color: c.muted }}>{item.role}</Text>
           </Box>
         ))}
@@ -343,12 +343,12 @@ function SearchDemo() {
 function TierOverview() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 4, width: '100%' }}>
+    <Box style={{ gap: 4 }}>
       {TIERS.map(t => (
         <Box key={t.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, flexShrink: 0 }}>{t.label}</Text>
-          <Text style={{ fontSize: 8, color: t.color, flexShrink: 0 }}>{t.persist}</Text>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.color }} />
+          <Text style={{ fontSize: 9, color: c.text }}>{t.label}</Text>
+          <Text style={{ fontSize: 8, color: t.color }}>{t.persist}</Text>
           <Text style={{ fontSize: 8, color: c.muted }}>{`survives ${t.survives}`}</Text>
         </Box>
       ))}
@@ -361,11 +361,11 @@ function TierOverview() {
 function AdapterList() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 4, width: '100%' }}>
+    <Box style={{ gap: 4 }}>
       {ADAPTERS.map(a => (
         <Box key={a.name} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, flexShrink: 0 }}>{a.name}</Text>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color }} />
+          <Text style={{ fontSize: 9, color: c.text }}>{a.name}</Text>
           <Text style={{ fontSize: 8, color: c.muted }}>{a.target}</Text>
         </Box>
       ))}
