@@ -1,64 +1,114 @@
-// ── Types ──
-export type {
-  SecureHandle,
-  ProtectMode,
-  HKDFOptions,
-  ShamirShare,
-  FileEncryptOptions,
-  EnvelopeEncrypted,
-  HashAlgorithm,
-  IntegrityReport,
-  GPGKey,
-  GPGVerifyResult,
-  KeyringHandle,
-  KeyGenOptions,
-  KeyEntry,
-  IsolatedCredential,
-  PIIType,
-  PIIMatch,
-  RedactOptions,
-  MaskOptions,
-  FileMetadata,
-  NoiseSessionId,
-  NoiseHandshake,
-  StegResult,
-  EncryptedStoreOptions,
-  EncryptedStore,
-  RetentionPolicy,
-  ConsentRecord,
-  ErasureReport,
-  RetentionReport,
-  AuditEntry,
-  AuditVerifyResult,
-  AlgorithmStrength,
-  AlgorithmAssessment,
-  ValidationResult,
-  TorStatus,
-  PrivacyAPI,
+import { useMemo } from 'react';
+import { rpc } from './rpc';
+import type {
+  PrivacyAPI, GPGKey, KeyEntry, ShamirShare, PIIMatch,
+  FileMetadata, HKDFOptions,
 } from './types';
 
-// ── Bridge ──
+export type { PrivacyAPI } from './types';
 export { setPrivacyBridge } from './rpc';
 
-// ── Master Hook ──
-export { usePrivacy } from './hooks';
-
-// ── Individual Modules ──
-export { gpgEncrypt, gpgDecrypt, gpgSign, gpgVerify, gpgListKeys, gpgImportKey, gpgExportKey } from './gpg';
-export { encryptFile, decryptFile, envelopeEncrypt, envelopeDecrypt } from './file-encrypt';
-export { hashFile, hashDirectory, verifyManifest } from './integrity';
-export { createKeyring, openKeyring, closeKeyring, generateKey, listKeys, getKey, rotateKey, revokeKey, exportPublic } from './keyring';
-export { shamirSplit, shamirCombine } from './shamir';
-export { hkdfDerive } from './hkdf';
-export { secureAlloc, secureRead, secureFree, secureProtect } from './secure-memory';
-export { detectPII, redactPII, maskValue, redactLog, tokenize } from './sanitize';
-export { secureDelete } from './secure-delete';
-export { anonymousId, pseudonym, isolatedCredential } from './identity';
-export { torStatus } from './tor';
-export { noiseInitiate, noiseRespond, noiseSend, noiseReceive, noiseClose } from './noise';
-export { stegEmbedImage, stegExtractImage, stegEmbedWhitespace, stegExtractWhitespace } from './steganography';
-export { createEncryptedStore } from './secure-store';
-export { stripMetadata, readMetadata, sanitizeFilename, normalizeTimestamp } from './metadata';
-export { setRetention, recordConsent, checkConsent, revokeConsent, rightToErasure, enforceRetention } from './policy';
-export { createAuditLog, appendAudit, verifyAudit, auditEntries } from './audit';
-export { validateConfig, checkAlgorithmStrength, RECOMMENDED_DEFAULTS } from './safety';
+export const usePrivacy = (): PrivacyAPI => useMemo((): PrivacyAPI => ({
+  gpg: {
+    encrypt:   (t, k)        => rpc<{ciphertext:string}>('privacy:gpg:encrypt', {plaintext:t, recipientKeyId:k}).then((r:any) => r.ciphertext),
+    decrypt:   (c)           => rpc<{plaintext:string}>('privacy:gpg:decrypt', {ciphertext:c}).then((r:any) => r.plaintext),
+    sign:      (m, k)        => rpc<{signed:string}>('privacy:gpg:sign', {message:m, keyId:k}).then((r:any) => r.signed),
+    verify:    (s)           => rpc('privacy:gpg:verify', {signed:s}),
+    listKeys:  ()            => rpc<{keys:GPGKey[]}>('privacy:gpg:listKeys').then((r:any) => r.keys),
+    importKey: (k)           => rpc('privacy:gpg:importKey', {armoredKey:k}),
+    exportKey: (k)           => rpc<{key:string}>('privacy:gpg:exportKey', {keyId:k}).then((r:any) => r.key),
+  },
+  file: {
+    encrypt:      (p, o, pw, opts) => rpc('privacy:file:encrypt', {path:p, outputPath:o, password:pw, algorithm:opts?.algorithm}),
+    decrypt:      (p, o, pw)       => rpc('privacy:file:decrypt', {path:p, outputPath:o, password:pw}),
+    secureDelete: (p, passes)      => rpc('privacy:file:secureDelete', {path:p, passes}),
+  },
+  envelope: {
+    encrypt: (d, k) => rpc('privacy:envelope:encrypt', {data:d, kek:k}),
+    decrypt: (e, k) => rpc<{data:string}>('privacy:envelope:decrypt', {envelope:e, kek:k}).then((r:any) => r.data),
+  },
+  integrity: {
+    hashFile:       (p, alg)  => rpc<{hash:string}>('privacy:integrity:hashFile', {path:p, algorithm:alg}).then((r:any) => r.hash),
+    hashDirectory:  (p, opts) => rpc<{manifest:Record<string,string>}>('privacy:integrity:hashDirectory', {path:p, ...opts}).then((r:any) => r.manifest),
+    verifyManifest: (p, m)    => rpc('privacy:integrity:verifyManifest', {path:p, manifest:m}),
+  },
+  keyring: {
+    create:       (p, pw)       => rpc<{handle:string}>('privacy:keyring:create', {path:p, masterPassword:pw}).then((r:any) => r.handle),
+    open:         (p, pw)       => rpc<{handle:string}>('privacy:keyring:open', {path:p, masterPassword:pw}).then((r:any) => r.handle),
+    close:        (h)           => rpc('privacy:keyring:close', {handle:h}),
+    generateKey:  (h, opts)     => rpc<{key:KeyEntry}>('privacy:keyring:generateKey', {handle:h, opts}).then((r:any) => r.key),
+    listKeys:     (h)           => rpc<{keys:KeyEntry[]}>('privacy:keyring:listKeys', {handle:h}).then((r:any) => r.keys),
+    getKey:       (h, id)       => rpc<{key:KeyEntry|null}>('privacy:keyring:getKey', {handle:h, keyId:id}).then((r:any) => r.key),
+    rotateKey:    (h, id, why)  => rpc<{key:KeyEntry}>('privacy:keyring:rotateKey', {handle:h, keyId:id, reason:why}).then((r:any) => r.key),
+    revokeKey:    (h, id, why)  => rpc('privacy:keyring:revokeKey', {handle:h, keyId:id, reason:why}),
+    exportPublic: (h, id)       => rpc<{publicKey:string}>('privacy:keyring:exportPublic', {handle:h, keyId:id}).then((r:any) => r.publicKey),
+  },
+  shamir: {
+    split:   (s, n, k)  => rpc<{shares:ShamirShare[]}>('privacy:shamir:split', {secret:s, n, k}).then((r:any) => r.shares),
+    combine: (shares)   => rpc<{secret:string}>('privacy:shamir:combine', {shares}).then((r:any) => r.secret),
+  },
+  hkdf: {
+    derive: (ikm, opts) => rpc<{key:string}>('privacy:hkdf:derive', {ikm, ...(opts as HKDFOptions)}).then((r:any) => r.key),
+  },
+  secureMem: {
+    alloc:   (d)    => rpc<{handle:number}>('privacy:secmem:alloc', {dataHex:d}).then((r:any) => r.handle),
+    read:    (h)    => rpc<{hex:string}>('privacy:secmem:read', {handle:h}).then((r:any) => r.hex),
+    free:    (h)    => rpc('privacy:secmem:free', {handle:h}),
+    protect: (h, m) => rpc('privacy:secmem:protect', {handle:h, mode:m}),
+  },
+  sanitize: {
+    detectPII: (t)       => rpc<PIIMatch[]>('privacy:sanitize:detectPII', {text:t}),
+    redactPII: (t, opts) => rpc<string>('privacy:sanitize:redactPII', {text:t, ...opts}),
+    maskValue: (v, opts) => rpc<string>('privacy:sanitize:maskValue', {value:v, ...opts}),
+    redactLog: (l)       => rpc<string>('privacy:sanitize:redactLog', {logLine:l}),
+    tokenize:  (v, s)    => rpc<{hex:string}>('privacy:sanitize:tokenize', {value:v, salt:s}).then((r:any) => r.hex),
+  },
+  identity: {
+    anonymousId:        (d, seed) => rpc<{id:string}>('privacy:identity:anonymousId', {domain:d, seed}).then((r:any) => r.id),
+    pseudonym:          (m, c)    => rpc<{pseudonym:string}>('privacy:identity:pseudonym', {masterSecret:m, context:c}).then((r:any) => r.pseudonym),
+    isolatedCredential: (d)       => rpc('privacy:identity:isolatedCredential', {domain:d}),
+  },
+  tor: {
+    status: () => rpc('tor:status'),
+  },
+  noise: {
+    initiate: (k)      => rpc('privacy:noise:initiate', {remotePublicKey:k}),
+    respond:  (k, m)   => rpc('privacy:noise:respond', {staticPrivateKey:k, handshakeMessage:m}),
+    send:     (id, t)  => rpc<{ciphertext:string}>('privacy:noise:send', {sessionId:id, plaintext:t}).then((r:any) => r.ciphertext),
+    receive:  (id, c)  => rpc<{plaintext:string}>('privacy:noise:receive', {sessionId:id, ciphertext:c}).then((r:any) => r.plaintext),
+    close:    (id)     => rpc('privacy:noise:close', {sessionId:id}),
+  },
+  steg: {
+    embedImage:       (ip, d, op) => rpc('privacy:steg:embedImage', {imagePath:ip, data:d, outputPath:op}),
+    extractImage:     (ip)        => rpc<{data:string}>('privacy:steg:extractImage', {imagePath:ip}).then((r:any) => r.data),
+    embedWhitespace:  (c, s)      => rpc<string>('privacy:steg:embedWhitespace', {carrier:c, secret:s}),
+    extractWhitespace:(t)         => rpc<string>('privacy:steg:extractWhitespace', {text:t}),
+  },
+  store: {
+    create: (opts) => rpc('privacy:store:create', opts),
+  },
+  metadata: {
+    strip:              (p, o) => rpc('privacy:meta:strip', {path:p, outputPath:o}),
+    read:               (p)    => rpc<{metadata:FileMetadata}>('privacy:meta:read', {path:p}).then((r:any) => r.metadata),
+    sanitizeFilename:   (n)    => rpc<string>('privacy:meta:sanitizeFilename', {name:n}),
+    normalizeTimestamp: (d)    => rpc<string>('privacy:meta:normalizeTimestamp', {date: typeof d === 'string' ? d : (d as Date).toISOString()}),
+  },
+  policy: {
+    setRetention:     (p)       => rpc('privacy:policy:setRetention', {policy:p}),
+    recordConsent:    (u, p, g) => rpc('privacy:policy:recordConsent', {userId:u, purpose:p, granted:g}),
+    checkConsent:     (u, p)    => rpc<{granted:boolean}>('privacy:policy:checkConsent', {userId:u, purpose:p}).then((r:any) => r.granted),
+    revokeConsent:    (u, p)    => rpc('privacy:policy:revokeConsent', {userId:u, purpose:p}),
+    rightToErasure:   (u)       => rpc('privacy:policy:rightToErasure', {userId:u}),
+    enforceRetention: ()        => rpc('privacy:policy:enforceRetention'),
+  },
+  audit: {
+    create:  (key)   => rpc('privacy:audit:create', {key}),
+    append:  (e, d)  => rpc('privacy:audit:append', {event:e, data:d}),
+    verify:  ()      => rpc('privacy:audit:verify'),
+    entries: (opts)  => rpc('privacy:audit:entries', opts),
+  },
+  safety: {
+    validateConfig:        (c) => rpc('privacy:safety:validateConfig', {config:c}),
+    checkAlgorithmStrength:(a) => rpc('privacy:safety:checkAlgorithmStrength', {algorithm:a}),
+  },
+}), []);

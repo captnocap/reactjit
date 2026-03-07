@@ -1,22 +1,14 @@
 /**
- * Conversions — Layout2 zigzag documentation for @reactjit/convert.
+ * Conversions — @reactjit/convert — Layout2 zigzag documentation.
  *
- * Live demos calling real package functions. All code strings and style
- * objects are static-hoisted outside the component to prevent 60fps
- * identity churn in CodeBlock / Lua tokenizer.
+ * All conversions run through the Lua backend via useConvert().
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock } from '../../../packages/core/src';
+import { useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import {
-  convert, listCategories, listUnits, registrySize,
-  hexToRgb, rgbToHex, rgbToHsl,
-  textToBase64, base64ToText,
-  textToHex, textToUrlEncoded, textToHtmlEntities,
-  decimalToBinary, decimalToOctal, decimalToHexNum,
-} from '../../../packages/convert/src';
-import type { RGB, HSL } from '../../../packages/convert/src';
+import { useConvert } from '../../../packages/convert/src';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -31,71 +23,70 @@ const C = {
   numbers: '#66bb6a',
 };
 
-// ── Static code strings (hoisted) ────────────────────────
+// ── Static code strings ───────────────────────────────────
 
-const INSTALL_CODE = `import {
-  convert, hexToRgb, rgbToHex,
-  textToBase64, decimalToBinary,
-  useConvert, useUnitConvert,
-} from '@reactjit/convert'`;
+const INSTALL_CODE = `import { useConvert } from '@reactjit/convert'
 
-const COLOR_CODE = `const rgb = hexToRgb('#ff6b35')
+const convert = useConvert()
+const { result } = await convert({ from: 'mi', to: 'km', value: 5 })`;
+
+const COLOR_CODE = `const convert = useConvert()
+
+const { result: rgb } = await convert({ from: 'hex', to: 'rgb', value: '#ff6b35' })
 // { r: 255, g: 107, b: 53 }
 
-const hex = rgbToHex({ r: 255, g: 107, b: 53 })
-// '#ff6b35'
-
-const hsl = rgbToHsl({ r: 255, g: 107, b: 53 })
+const { result: hsl } = await convert({ from: 'rgb', to: 'hsl', value: rgb })
 // { h: 16, s: 1.0, l: 0.6 }`;
 
-const UNIT_CODE = `convert(5, 'mi').to('km')     // 8.047
-convert(72, 'f').to('c')      // 22.22
-convert(1, 'gal').to('l')     // 3.7854
-convert(180, 'deg').to('rad') // 3.14159`;
+const UNIT_CODE = `const convert = useConvert()
 
-const ENCODING_CODE = `textToBase64('Hello, ReactJIT!')
-// 'SGVsbG8sIFJlYWN0SklUIQ=='
+await convert({ from: 'mi',  to: 'km',  value: 5   })  // 8.047
+await convert({ from: 'f',   to: 'c',   value: 72  })  // 22.22
+await convert({ from: 'gal', to: 'l',   value: 1   })  // 3.7854
+await convert({ from: 'deg', to: 'rad', value: 180 })  // 3.14159`;
 
-base64ToText('SGVsbG8=')  // 'Hello'
-textToHex('ABC')           // '414243'
-textToUrlEncoded('a b&c')  // 'a%20b%26c'
-textToHtmlEntities('<br>') // '&lt;br&gt;'`;
+const ENCODING_CODE = `const convert = useConvert()
 
-const NUMBER_CODE = `decimalToBinary(255)  // '11111111'
-decimalToOctal(255)   // '377'
-decimalToHexNum(255)  // 'ff'
+await convert({ from: 'text',   to: 'base64', value: 'Hello!'  })
+// 'SGVsbG8h'
 
-// Via fluent API:
-convert(255, 'decimal').to('binary')
-convert(255, 'decimal').to('hex-num')`;
+await convert({ from: 'text',   to: 'url',    value: 'a b&c'   })
+// 'a%20b%26c'
 
-const FLUENT_CODE = `// Fluent API — convert(value, from?).to(target)
-convert(5, 'mi').to('km')        // 8.047
-convert('#ff0000').to('rgb')     // { r:255, g:0, b:0 }
-convert('Hello').to('base64')    // 'SGVsbG8='
-convert(255, 'decimal').to('hex-num') // 'ff'`;
+await convert({ from: 'text',   to: 'html',   value: '<br>'    })
+// '&lt;br&gt;'`;
 
-const REGISTRY_CODE = `// Extend with custom converters
-import { register, registerBidi } from '@reactjit/convert'
+const NUMBER_CODE = `const convert = useConvert()
 
-register('celsius', 'rømer', (c) => c * 21/40 + 7.5, 'temperature')
-registerBidi('foo', 'bar', fooToBar, barToFoo, 'custom')`;
+await convert({ from: 'decimal', to: 'binary',  value: 255 })  // '11111111'
+await convert({ from: 'decimal', to: 'octal',   value: 255 })  // '377'
+await convert({ from: 'decimal', to: 'hex-num', value: 255 })  // 'ff'`;
 
-// ── Band layout helpers ─────────────────────────────────
+const FLUENT_CODE = `// One hook, every conversion
+const convert = useConvert()
+
+const { result } = await convert({ from: 'mi',      to: 'km',      value: 5   })
+const { result } = await convert({ from: 'hex',     to: 'rgb',     value: '#ff0000' })
+const { result } = await convert({ from: 'text',    to: 'base64',  value: 'Hello' })
+const { result } = await convert({ from: 'decimal', to: 'hex-num', value: 255 })`;
+
+// ── Band layout helpers ────────────────────────────────────
 
 const BAND = {
   flexDirection: 'row' as const,
-  paddingLeft: 28,
-  paddingRight: 28,
-  paddingTop: 20,
-  paddingBottom: 20,
+  paddingLeft: 28, paddingRight: 28,
+  paddingTop: 20,  paddingBottom: 20,
   gap: 24,
   alignItems: 'center' as const,
 };
 
-const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const, justifyContent: 'center' as const };
+const HALF = {
+  flexGrow: 1, flexBasis: 0, gap: 8,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+};
 
-// ── Helpers ──────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────
 
 function Divider() {
   const c = useThemeColors();
@@ -122,32 +113,50 @@ function Tag({ text, tagColor }: { text: string; tagColor: string }) {
   );
 }
 
-// ── Color Demo ───────────────────────────────────────────
+// ── Color Demo ────────────────────────────────────────────
 
 const COLOR_PRESETS = ['#ff6b35', '#4fc3f7', '#66bb6a', '#ab47bc', '#ffa726', '#ec4899'];
 
 function ColorDemo() {
   const c = useThemeColors();
+  const convert = useConvert();
   const [hex, setHex] = useState('#ff6b35');
+  const [rgb, setRgb] = useState<any>(null);
+  const [hsl, setHsl] = useState<any>(null);
+  const [roundtrip, setRoundtrip] = useState('');
 
-  const rgb = useMemo(() => hexToRgb(hex), [hex]);
-  const hsl = useMemo(() => rgbToHsl(rgb), [rgb]);
-  const roundtrip = useMemo(() => rgbToHex(rgb), [rgb]);
+  useEffect(() => {
+    convert({ from: 'hex', to: 'rgb', value: hex })
+      .then(({ result: r }) => {
+        setRgb(r);
+        return Promise.all([
+          convert({ from: 'rgb', to: 'hsl', value: r }),
+          convert({ from: 'rgb', to: 'hex', value: r }),
+        ]);
+      })
+      .then(([{ result: h }, { result: rt }]) => {
+        setHsl(h);
+        setRoundtrip(rt);
+      })
+      .catch(() => {});
+  }, [hex]);
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'hex -> rgb -> hsl (pure math, zero runtime)'}</Text>
+      <Text style={{ fontSize: 9, color: c.textDim }}>{'hex -> rgb -> hsl (Lua math, zero JS compute)'}</Text>
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Box style={{ width: 24, height: 24, borderRadius: 4, backgroundColor: hex }} />
         <Text style={{ fontSize: 10, color: c.text }}>{hex}</Text>
       </Box>
 
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: C.color }}>{`RGB: { r: ${rgb.r}, g: ${rgb.g}, b: ${rgb.b} }`}</Text>
-        <Text style={{ fontSize: 10, color: C.color }}>{`HSL: { h: ${hsl.h.toFixed(0)}\u00B0, s: ${(hsl.s * 100).toFixed(0)}%, l: ${(hsl.l * 100).toFixed(0)}% }`}</Text>
-        <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: ${roundtrip} ${roundtrip.toLowerCase() === hex.toLowerCase() ? '\u2713' : '\u2717'}`}</Text>
-      </Box>
+      {rgb && hsl && (
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 10, color: C.color }}>{`RGB: { r: ${rgb.r}, g: ${rgb.g}, b: ${rgb.b} }`}</Text>
+          <Text style={{ fontSize: 10, color: C.color }}>{`HSL: { h: ${hsl.h.toFixed(0)}\u00B0, s: ${(hsl.s * 100).toFixed(0)}%, l: ${(hsl.l * 100).toFixed(0)}% }`}</Text>
+          <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: ${roundtrip} ${roundtrip.toLowerCase() === hex.toLowerCase() ? '\u2713' : '\u2717'}`}</Text>
+        </Box>
+      )}
 
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         {COLOR_PRESETS.map(col => (
@@ -163,29 +172,37 @@ function ColorDemo() {
   );
 }
 
-// ── Unit Demo ────────────────────────────────────────────
+// ── Unit Demo ─────────────────────────────────────────────
 
 function UnitDemo() {
   const c = useThemeColors();
+  const convert = useConvert();
   const [miles, setMiles] = useState(5);
+  const [results, setResults] = useState<any>(null);
 
-  const km = useMemo(() => convert(miles, 'mi').to('km') as number, [miles]);
-  const ft = useMemo(() => convert(miles, 'mi').to('ft') as number, [miles]);
-  const tempC = useMemo(() => convert(72, 'f').to('c') as number, []);
-  const liters = useMemo(() => convert(1, 'gal').to('l') as number, []);
-  const radians = useMemo(() => convert(180, 'deg').to('rad') as number, []);
+  useEffect(() => {
+    Promise.all([
+      convert({ from: 'mi',  to: 'km',  value: miles }),
+      convert({ from: 'mi',  to: 'ft',  value: miles }),
+      convert({ from: 'f',   to: 'c',   value: 72 }),
+      convert({ from: 'gal', to: 'l',   value: 1 }),
+      convert({ from: 'deg', to: 'rad', value: 180 }),
+    ]).then(rs => setResults(rs.map((r: any) => r.result))).catch(() => {});
+  }, [miles]);
 
   return (
     <Box style={{ gap: 8 }}>
       <Text style={{ fontSize: 9, color: c.textDim }}>{'Bidirectional registry \u2014 distance, temp, volume, angle'}</Text>
 
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${km.toFixed(3)} km`}</Text>
-        <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${ft.toFixed(0)} ft`}</Text>
-        <Text style={{ fontSize: 10, color: C.units }}>{`72\u00B0F -> ${tempC.toFixed(2)}\u00B0C`}</Text>
-        <Text style={{ fontSize: 10, color: C.units }}>{`1 gal -> ${liters.toFixed(4)} L`}</Text>
-        <Text style={{ fontSize: 10, color: C.units }}>{`180\u00B0 -> ${radians.toFixed(6)} rad`}</Text>
-      </Box>
+      {results && (
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${results[0].toFixed(3)} km`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${results[1].toFixed(0)} ft`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`72\u00B0F -> ${results[2].toFixed(2)}\u00B0C`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`1 gal -> ${results[3].toFixed(4)} L`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`180\u00B0 -> ${results[4].toFixed(6)} rad`}</Text>
+        </Box>
+      )}
 
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable onPress={() => setMiles(m => Math.max(1, m - 1))}>
@@ -203,59 +220,77 @@ function UnitDemo() {
   );
 }
 
-// ── Encoding Demo ────────────────────────────────────────
+// ── Encoding Demo ─────────────────────────────────────────
 
 const ENC_INPUT = 'Hello, ReactJIT!';
 const HTML_INPUT = '<script>alert("xss")</script>';
 
 function EncodingDemo() {
   const c = useThemeColors();
+  const convert = useConvert();
+  const [enc, setEnc] = useState<any>(null);
 
-  const b64 = useMemo(() => textToBase64(ENC_INPUT), []);
-  const roundtrip = useMemo(() => base64ToText(b64), [b64]);
-  const hexEnc = useMemo(() => textToHex('ABC'), []);
-  const urlEnc = useMemo(() => textToUrlEncoded(ENC_INPUT), []);
-  const htmlEnc = useMemo(() => textToHtmlEntities(HTML_INPUT), []);
+  useEffect(() => {
+    Promise.all([
+      convert({ from: 'text', to: 'base64',  value: ENC_INPUT }),
+      convert({ from: 'text', to: 'hex-enc', value: 'ABC' }),
+      convert({ from: 'text', to: 'url',     value: ENC_INPUT }),
+      convert({ from: 'text', to: 'html',    value: HTML_INPUT }),
+    ]).then(rs => {
+      const b64 = rs[0].result;
+      convert({ from: 'base64', to: 'text', value: b64 }).then(({ result: rt }) => {
+        setEnc({ b64, hex: rs[1].result, url: rs[2].result, html: rs[3].result, roundtrip: rt });
+      });
+    }).catch(() => {});
+  }, []);
 
   return (
     <Box style={{ gap: 8 }}>
       <Text style={{ fontSize: 9, color: c.textDim }}>{'text <-> base64, hex, url, html entities'}</Text>
-
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: c.textSecondary }}>{`Input: "${ENC_INPUT}"`}</Text>
-        <Text style={{ fontSize: 10, color: C.encoding }}>{`Base64: ${b64}`}</Text>
-        <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: "${roundtrip}" \u2713`}</Text>
-      </Box>
-
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: C.encoding }}>{`"ABC" -> hex: ${hexEnc}`}</Text>
-        <Text style={{ fontSize: 10, color: C.encoding }}>{`URL: ${urlEnc}`}</Text>
-        <Text style={{ fontSize: 10, color: C.encoding }}>{`HTML: ${htmlEnc}`}</Text>
-      </Box>
+      {enc && (
+        <>
+          <Box style={{ gap: 2 }}>
+            <Text style={{ fontSize: 10, color: c.textSecondary }}>{`Input: "${ENC_INPUT}"`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`Base64: ${enc.b64}`}</Text>
+            <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: "${enc.roundtrip}" \u2713`}</Text>
+          </Box>
+          <Box style={{ gap: 2 }}>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`"ABC" -> hex: ${enc.hex}`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`URL: ${enc.url}`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`HTML: ${enc.html}`}</Text>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }
 
-// ── Number Base Demo ─────────────────────────────────────
+// ── Number Base Demo ──────────────────────────────────────
 
 function NumberBaseDemo() {
   const c = useThemeColors();
+  const convert = useConvert();
   const [num, setNum] = useState(255);
+  const [bases, setBases] = useState<any>(null);
 
-  const bin = useMemo(() => decimalToBinary(num), [num]);
-  const oct = useMemo(() => decimalToOctal(num), [num]);
-  const hex = useMemo(() => decimalToHexNum(num), [num]);
+  useEffect(() => {
+    Promise.all([
+      convert({ from: 'decimal', to: 'binary',  value: num }),
+      convert({ from: 'decimal', to: 'octal',   value: num }),
+      convert({ from: 'decimal', to: 'hex-num', value: num }),
+    ]).then(rs => setBases(rs.map((r: any) => r.result))).catch(() => {});
+  }, [num]);
 
   return (
     <Box style={{ gap: 8 }}>
       <Text style={{ fontSize: 9, color: c.textDim }}>{'decimal <-> binary, octal, hex'}</Text>
-
-      <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> binary: ${bin}`}</Text>
-        <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> octal:  ${oct}`}</Text>
-        <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> hex:    ${hex}`}</Text>
-      </Box>
-
+      {bases && (
+        <Box style={{ gap: 2 }}>
+          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> binary: ${bases[0]}`}</Text>
+          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> octal:  ${bases[1]}`}</Text>
+          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> hex:    ${bases[2]}`}</Text>
+        </Box>
+      )}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable onPress={() => setNum(n => Math.max(0, n - 16))}>
           <Box style={{ backgroundColor: C.numbers + '33', paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
@@ -272,12 +307,12 @@ function NumberBaseDemo() {
   );
 }
 
-// ── Pipeline Diagram ─────────────────────────────────────
+// ── Pipeline Demo ─────────────────────────────────────────
 
 const PIPELINE_PRESETS = [
-  { value: 5, from: 'mi', to: 'km', category: 'length' },
-  { value: 72, from: 'f', to: 'c', category: 'temperature' },
-  { value: 1, from: 'gal', to: 'l', category: 'volume' },
+  { value: 5,   from: 'mi',  to: 'km',  category: 'length' },
+  { value: 72,  from: 'f',   to: 'c',   category: 'temperature' },
+  { value: 1,   from: 'gal', to: 'l',   category: 'volume' },
   { value: 180, from: 'deg', to: 'rad', category: 'angle' },
 ] as const;
 
@@ -304,29 +339,38 @@ function PipelineStage({ label, value, color, bg }: { label: string; value: stri
 
 function PipelineDemo() {
   const c = useThemeColors();
+  const convert = useConvert();
   const [idx, setIdx] = useState(0);
+  const [result, setResult] = useState<string | null>(null);
+
   const preset = PIPELINE_PRESETS[idx];
 
-  const result = useMemo(() => convert(preset.value, preset.from).to(preset.to), [idx]);
-  const formatted = typeof result === 'number' ? result.toFixed(4) : String(result);
+  useEffect(() => {
+    setResult(null);
+    convert({ from: preset.from, to: preset.to, value: preset.value })
+      .then(({ result: r }) => {
+        setResult(typeof r === 'number' ? r.toFixed(4) : String(r));
+      })
+      .catch(() => {});
+  }, [idx]);
 
   return (
     <Box style={{ gap: 10 }}>
       <Box style={{ alignItems: 'center', gap: 0 }}>
         <PipelineStage label="input" value={`${preset.value}`} color={c.text} bg={c.surface1 || c.bgElevated} />
         <PipelineArrow color={C.accent} />
-        <PipelineStage label="fluent call" value={`convert(${preset.value}, '${preset.from}')`} color={C.accent} bg={C.accentDim} />
+        <PipelineStage label="rpc call" value={`{ from: '${preset.from}', to: '${preset.to}' }`} color={C.accent} bg={C.accentDim} />
         <PipelineArrow color={C.accent} />
-        <PipelineStage label="registry lookup" value={`${preset.category}: ${preset.from} -> ${preset.to}`} color={c.text} bg={c.surface1 || c.bgElevated} />
+        <PipelineStage label="lua registry" value={`${preset.category}: ${preset.from} -> ${preset.to}`} color={c.text} bg={c.surface1 || c.bgElevated} />
         <PipelineArrow color={C.accent} />
-        <PipelineStage label="result" value={`${formatted} ${preset.to}`} color={C.accent} bg={C.accentDim} />
+        <PipelineStage label="result" value={result !== null ? `${result} ${preset.to}` : '…'} color={C.accent} bg={C.accentDim} />
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
         {PIPELINE_PRESETS.map((p, i) => (
           <Pressable key={i} onPress={() => setIdx(i)}>
             <Box style={{
-              backgroundColor: i === idx ? C.accent : c.surface1 || c.bgElevated,
+              backgroundColor: i === idx ? C.accent : (c.surface1 || c.bgElevated),
               borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
             }}>
               <Text style={{ fontSize: 8, color: i === idx ? '#1e1e2e' : c.muted }}>
@@ -340,26 +384,39 @@ function PipelineDemo() {
   );
 }
 
-// ── Registry Catalog ─────────────────────────────────────
+// ── Registry Catalog ──────────────────────────────────────
 
 const CAT_COLORS: Record<string, string> = {
   length: '#4fc3f7', weight: '#66bb6a', temperature: '#ff7043',
   volume: '#ab47bc', speed: '#ffa726', area: '#ec4899',
   time: '#06b6d4', data: '#8b5cf6', pressure: '#ef4444',
   energy: '#f59e0b', angle: '#14b8a6', color: '#ab47bc',
-  encoding: '#ff7043', 'number-base': '#66bb6a', currency: '#ffa726',
+  encoding: '#ff7043', 'number-base': '#66bb6a',
 };
 
 function RegistryCatalog() {
   const c = useThemeColors();
-  const categories = useMemo(() => listCategories(), []);
-  const total = useMemo(() => registrySize(), []);
+  const getCategories = useLoveRPC<string[]>('convert:categories');
+  const getUnits      = useLoveRPC<string[]>('convert:units');
+  const getSize       = useLoveRPC<number>('convert:size');
+  const [catalog, setCatalog] = useState<{ cat: string; units: string[] }[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
+
+  useEffect(() => {
+    Promise.all([getCategories({}), getSize({})]).then(([cats, size]) => {
+      setTotal(size);
+      return Promise.all((cats as string[]).map((cat: string) =>
+        getUnits({ category: cat }).then((units: string[]) => ({ cat, units }))
+      ));
+    }).then(rows => setCatalog(rows)).catch(() => {});
+  }, []);
 
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{`${total} converters across ${categories.length} categories`}</Text>
-      {categories.map(cat => {
-        const units = listUnits(cat);
+      {total !== null && (
+        <Text style={{ fontSize: 9, color: c.textDim }}>{`${total} converters across ${catalog.length} categories`}</Text>
+      )}
+      {catalog.map(({ cat, units }) => {
         const catColor = CAT_COLORS[cat] || c.text;
         return (
           <Box key={cat} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -373,7 +430,7 @@ function RegistryCatalog() {
   );
 }
 
-// ── ConversionsStory ─────────────────────────────────────
+// ── ConversionsStory ──────────────────────────────────────
 
 export function ConversionsStory() {
   const c = useThemeColors();
@@ -381,85 +438,54 @@ export function ConversionsStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
 
-      {/* ── Header ── */}
       <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
+        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
+        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
+        paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14,
       }}>
         <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
-          {'Convert'}
-        </Text>
-        <Box style={{
-          backgroundColor: C.accentDim,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Convert'}</Text>
+        <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/convert'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
-          {'Unit, color, encoding & number-base conversions'}
-        </Text>
+        <Text style={{ color: c.muted, fontSize: 10 }}>{'Lua-backed unit, color, encoding & number-base conversions'}</Text>
       </Box>
 
-      {/* ── Scrollable body ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero ── */}
-        <Box style={{
-          borderLeftWidth: 3,
-          borderColor: C.accent,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 24,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <Box style={{ borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 25, paddingRight: 28, paddingTop: 24, paddingBottom: 24, gap: 8 }}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
-            {'Convert between units, color formats, encodings, and number bases.'}
+            {'All conversion math runs in Lua. React side: one hook.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Pure-JS direct converters for zero-overhead transforms, plus a bidirectional registry for extensible unit conversion via the fluent convert(value, from).to(target) API.'}
+            {'useConvert() returns an async RPC caller. Pass { from, to, value } — Lua handles every transform: units, colors, encodings, number bases.'}
           </Text>
         </Box>
 
         <Divider />
 
-        {/* ── Band 1: Install — text | code ── */}
+        {/* ── Band 1: Install ── */}
         <Box style={BAND}>
           <Box style={HALF}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Import what you need. Direct converters (hexToRgb, textToBase64) are pure JS. Hooks (useConvert, useUnitConvert) wrap the registry for reactive use.'}
+              {'One hook for everything. No registry to import, no helper functions. The Lua backend handles all conversions.'}
             </Text>
           </Box>
-          <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
 
         <Divider />
 
-        {/* ── Band 2: Color — demo | text + code (zigzag) ── */}
+        {/* ── Band 2: Color ── */}
         <Box style={BAND}>
-          <Box style={HALF}>
-            <ColorDemo />
-          </Box>
+          <Box style={HALF}><ColorDemo /></Box>
           <Box style={HALF}>
             <SectionLabel icon="palette">{'COLOR SPACES'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Hex, RGB, HSL, HSV, and CSS named colors. All conversions are pure math \u2014 no bridge, no async. Click a swatch to see live conversion.'}
+              {'Hex, RGB, HSL, HSV, named colors. Pure Lua math — no JS compute, no bridge overhead beyond the RPC call.'}
             </Text>
             <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
               <Tag text="hex" tagColor={C.color} />
@@ -468,18 +494,18 @@ export function ConversionsStory() {
               <Tag text="hsv" tagColor={C.color} />
               <Tag text="named" tagColor={C.color} />
             </Box>
-            <CodeBlock language="tsx" fontSize={9} code={COLOR_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={COLOR_CODE} />
           </Box>
         </Box>
 
         <Divider />
 
-        {/* ── Band 3: Units — text + code | demo ── */}
+        {/* ── Band 3: Units ── */}
         <Box style={BAND}>
           <Box style={HALF}>
             <SectionLabel icon="gauge">{'UNIT CONVERSION'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Distance, weight, temperature, volume, speed, area, time, data, pressure, energy, and angle. All via the fluent API or useUnitConvert hook.'}
+              {'Distance, weight, temperature, volume, speed, area, time, data, pressure, energy, angle — all registered in Lua.'}
             </Text>
             <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
               <Tag text="length" tagColor={C.units} />
@@ -489,24 +515,20 @@ export function ConversionsStory() {
               <Tag text="pressure" tagColor={C.units} />
               <Tag text="angle" tagColor={C.units} />
             </Box>
-            <CodeBlock language="tsx" fontSize={9} code={UNIT_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={UNIT_CODE} />
           </Box>
-          <Box style={HALF}>
-            <UnitDemo />
-          </Box>
+          <Box style={HALF}><UnitDemo /></Box>
         </Box>
 
         <Divider />
 
-        {/* ── Band 4: Encoding — demo | text + code (zigzag) ── */}
+        {/* ── Band 4: Encoding ── */}
         <Box style={BAND}>
-          <Box style={HALF}>
-            <EncodingDemo />
-          </Box>
+          <Box style={HALF}><EncodingDemo /></Box>
           <Box style={HALF}>
             <SectionLabel icon="type">{'TEXT ENCODING'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Base64, hex, URL percent-encoding, and HTML entity escaping. Manual implementations for QuickJS (no btoa/encodeURIComponent). All round-trip safe.'}
+              {'Base64 via love.data.encode, hex, URL percent-encoding, HTML entity escaping — all in Lua.'}
             </Text>
             <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
               <Tag text="base64" tagColor={C.encoding} />
@@ -514,18 +536,18 @@ export function ConversionsStory() {
               <Tag text="url" tagColor={C.encoding} />
               <Tag text="html" tagColor={C.encoding} />
             </Box>
-            <CodeBlock language="tsx" fontSize={9} code={ENCODING_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={ENCODING_CODE} />
           </Box>
         </Box>
 
         <Divider />
 
-        {/* ── Band 5: Number bases — text + code | demo ── */}
+        {/* ── Band 5: Number bases ── */}
         <Box style={BAND}>
           <Box style={HALF}>
             <SectionLabel icon="binary">{'NUMBER BASES'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Decimal, binary, octal, hex \u2014 all 12 cross-conversions registered. Step through values with the buttons to see live base transforms.'}
+              {'Decimal, binary, octal, hex — all 12 cross-conversions. Lua string.format and tonumber(s, base) do the work.'}
             </Text>
             <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
               <Tag text="decimal" tagColor={C.numbers} />
@@ -533,108 +555,73 @@ export function ConversionsStory() {
               <Tag text="octal" tagColor={C.numbers} />
               <Tag text="hex" tagColor={C.numbers} />
             </Box>
-            <CodeBlock language="tsx" fontSize={9} code={NUMBER_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={NUMBER_CODE} />
           </Box>
-          <Box style={HALF}>
-            <NumberBaseDemo />
-          </Box>
+          <Box style={HALF}><NumberBaseDemo /></Box>
         </Box>
 
         <Divider />
 
         {/* ── Callout ── */}
         <Box style={{
-          backgroundColor: C.callout,
-          borderLeftWidth: 3,
-          borderColor: C.calloutBorder,
-          paddingLeft: 25,
-          paddingRight: 28,
-          paddingTop: 14,
-          paddingBottom: 14,
-          flexDirection: 'row',
-          gap: 8,
-          alignItems: 'center',
+          backgroundColor: C.callout, borderLeftWidth: 3, borderColor: C.calloutBorder,
+          paddingLeft: 25, paddingRight: 28, paddingTop: 14, paddingBottom: 14,
+          flexDirection: 'row', gap: 8, alignItems: 'center',
         }}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'All direct converters are pure JS with zero runtime overhead. The registry is extensible \u2014 register() and registerBidi() let you add custom converters at any time.'}
+            {'Zero JS compute. Every conversion runs in LuaJIT. React never touches the math — it just reads { result }.'}
           </Text>
         </Box>
 
         <Divider />
 
-        {/* ── Band 6: Fluent API — code | text (zigzag) ── */}
+        {/* ── Band 6: Fluent API ── */}
         <Box style={BAND}>
-          <CodeBlock language="tsx" fontSize={9} code={FLUENT_CODE} />
+          <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={FLUENT_CODE} />
           <Box style={HALF}>
-            <SectionLabel icon="code">{'FLUENT API'}</SectionLabel>
+            <SectionLabel icon="code">{'ONE HOOK'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'convert(value, from?).to(target) \u2014 one function for everything. Auto-detects hex strings and text. Chain .canConvertTo() to check availability before converting.'}
+              {'useConvert() is the entire API. No helpers, no registry imports, no type gymnastics. One RPC call, one result.'}
             </Text>
           </Box>
         </Box>
 
         <Divider />
 
-        {/* ── Band 7: Pipeline — diagram | text ── */}
+        {/* ── Band 7: Pipeline ── */}
         <Box style={BAND}>
-          <Box style={HALF}>
-            <PipelineDemo />
-          </Box>
+          <Box style={HALF}><PipelineDemo /></Box>
           <Box style={HALF}>
             <SectionLabel icon="git-merge">{'PIPELINE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Every convert() call follows the same path: input value enters the fluent API, the registry finds the matching converter by source -> target pair, and the converter function produces the result. Click a preset to trace different conversions.'}
+              {'Every conversion follows the same path: React fires an RPC call, Lua looks up the converter by from->to key, runs the transform, returns { result }. Click a preset to trace different conversions.'}
             </Text>
             <Text style={{ color: c.muted, fontSize: 9 }}>
-              {'Direct converters (hexToRgb, textToBase64) skip the registry and call the transform function directly \u2014 same result, zero lookup overhead.'}
+              {'The result field is nil on error — check for { error } to handle unknown unit pairs gracefully.'}
             </Text>
           </Box>
         </Box>
 
         <Divider />
 
-        {/* ── Band 8: Registry catalog — text | catalog ── */}
-        <Box style={BAND}>
+        {/* ── Band 8: Registry ── */}
+        <Box style={{ ...BAND, paddingBottom: 24 }}>
           <Box style={HALF}>
             <SectionLabel icon="layers">{'REGISTRY'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'All registered converters and their categories. Use listCategories(), listUnits(cat), and registrySize() to introspect the registry at runtime.'}
+              {'All registered converters live in Lua. Use convert:categories, convert:units, and convert:size RPCs to introspect at runtime.'}
             </Text>
           </Box>
-          <Box style={HALF}>
-            <RegistryCatalog />
-          </Box>
-        </Box>
-
-        <Divider />
-
-        {/* ── Band 8: Extensibility — code | text (zigzag) ── */}
-        <Box style={{ ...BAND, paddingBottom: 24 }}>
-          <CodeBlock language="tsx" fontSize={9} code={REGISTRY_CODE} />
-          <Box style={HALF}>
-            <SectionLabel icon="settings">{'EXTENSIBILITY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Add your own converters with register() for one-way or registerBidi() for bidirectional. They integrate into the fluent API and hooks automatically.'}
-            </Text>
-          </Box>
+          <Box style={HALF}><RegistryCatalog /></Box>
         </Box>
 
       </ScrollView>
 
-      {/* ── Footer ── */}
       <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
+        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
+        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
+        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
       }}>
         <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
         <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
@@ -642,7 +629,7 @@ export function ConversionsStory() {
         <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
         <Text style={{ color: c.text, fontSize: 9 }}>{'Convert'}</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v1.0.0 — Lua backend'}</Text>
       </Box>
 
     </Box>

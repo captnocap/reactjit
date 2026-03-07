@@ -1,22 +1,14 @@
 /**
  * Math — Package documentation page (Layout2 zigzag narrative).
  *
- * Live demos for vectors, matrices, quaternions, interpolation, geometry,
- * noise, FFT, and bezier. Pure TS for lightweight ops, Lua-backed for heavy compute.
+ * All math runs in Lua via useMath(). Demos call math:call RPC.
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import {
-  Vec2, Vec3, Mat4, Quat,
-  lerp, smoothstep, smootherstep, remap, clamp, pingPong, inverseLerp, wrap,
-  BBox2,
-  distancePointToSegment, circleContainsPoint, lineIntersection,
-  useNoiseField, useFFT, useBezier,
-} from '../../../packages/math/src';
-import type { Vec2 as Vec2T, Vec3 as Vec3T, BBox2 as BBox2T } from '../../../packages/math/src';
+import { useMath } from '../../../packages/math/src';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -36,71 +28,70 @@ const C = {
   pool: '#ef5350',
 };
 
-// ── Static code blocks (hoisted — never recreated) ──────
+// ── Static code blocks (hoisted) ─────────────────────────
 
-const INSTALL_CODE = `import { Vec2, Vec3, Vec4, Mat4, Quat } from '@reactjit/math'
-import { lerp, smoothstep, clamp, remap } from '@reactjit/math'
-import { BBox2, circleContainsPoint } from '@reactjit/math'
-import { useNoiseField, useFFT, useBezier } from '@reactjit/math'`;
+const INSTALL_CODE = `import { useMath } from '@reactjit/math'
 
-const VECTOR_CODE = `const a: Vec2 = [3, 1]
-const b = Vec2.fromAngle(angle)
-const sum = Vec2.add(a, Vec2.scale(b, 2))
-const d = Vec2.dot(Vec2.normalize(a), b)
-// Also: Vec3.cross, Vec3.reflect, Vec3.slerp, Vec4`;
+const math = useMath()
+const result = await math({ op: 'vec2.add', a: [1, 2], b: [3, 4] })
+// Batch: await math({ batch: [{ op: 'vec2.add', a, b }, ...] })`;
 
-const MATRIX_CODE = `const m = Mat4.rotateX(Mat4.identity(), angle)
-const p = Mat4.transformPoint(m, [1, 0, 0])
-const det = Mat4.determinant(m)
+const VECTOR_CODE = `const math = useMath()
+const b = await math({ op: 'vec2.fromAngle', radians: angle })
+const sum = await math({ op: 'vec2.add', a: [3, 1], b: scaled })
+const d = await math({ op: 'vec2.dot', a: normA, b })
+// Also: vec3.cross, vec3.reflect, vec3.slerp, vec4`;
+
+const MATRIX_CODE = `const m = await math({ op: 'mat4.rotateX', m: identity, radians: angle })
+const p = await math({ op: 'mat4.transformPoint', m, v: [1, 0, 0] })
+const det = await math({ op: 'mat4.determinant', m })
 // lookAt, perspective, ortho, decompose, fromQuat`;
 
-const QUAT_CODE = `const q = Quat.fromAxisAngle([0, 1, 0], Math.PI / 2)
-const interpolated = Quat.slerp(Quat.identity(), q, t)
-const euler = Quat.toEuler(interpolated)
-const rotated = Quat.rotateVec3(q, [1, 0, 0])`;
+const QUAT_CODE = `const q = await math({ op: 'quat.fromAxisAngle', axis: [0,1,0], radians: Math.PI/2 })
+const interp = await math({ op: 'quat.slerp', a: identity, b: q, t })
+const euler = await math({ op: 'quat.toEuler', q: interp })
+const rotated = await math({ op: 'quat.rotateVec3', q, v: [1,0,0] })`;
 
-const INTERP_CODE = `lerp(0, 100, 0.5)          // 50
-smoothstep(0, 1, 0.5)      // 0.5 (Hermite cubic)
-smootherstep(0, 1, 0.5)    // 0.5 (Perlin quintic)
-remap(0.5, 0, 1, 100, 200) // 150
-clamp(150, 0, 100)         // 100
-pingPong(2.7, 1)           // 0.7`;
+const INTERP_CODE = `await math({ op: 'interp.lerp', a: 0, b: 100, t: 0.5 })       // 50
+await math({ op: 'interp.smoothstep', edge0: 0, edge1: 1, x: 0.5 }) // 0.5
+await math({ op: 'interp.remap', value: 0.5, inMin: 0, inMax: 1, outMin: 100, outMax: 200 })
+await math({ op: 'interp.clamp', value: 150, min: 0, max: 100 })     // 100`;
 
-const GEOMETRY_CODE = `const hit = BBox2.intersects(boxA, boxB)
-const overlap = BBox2.intersection(boxA, boxB)
-const dist = distancePointToSegment(point, segA, segB)
-const inside = circleContainsPoint(center, radius, point)
-const cross = lineIntersection(a1, a2, b1, b2)`;
+const GEOMETRY_CODE = `await math({ op: 'geo.bbox2_intersects', a: boxA, b: boxB })
+await math({ op: 'geo.bbox2_intersection', a: boxA, b: boxB })
+await math({ op: 'geo.distancePointToSegment', point, a: segA, b: segB })
+await math({ op: 'geo.circleContainsPoint', center, radius, point })
+await math({ op: 'geo.lineIntersection', a1, a2, b1, b2 })`;
 
-const NOISE_CODE = `const field = useNoiseField({
-  width: 24, height: 24,
+const NOISE_CODE = `const math = useMath()
+const field = await math({
+  op: 'noisefield', width: 24, height: 24,
   scale: 0.1, seed: 42, octaves: 4,
-})
-// Returns number[] | null (flat grid, Perlin via Lua FFI)`;
+})  // Returns number[] (flat grid, Perlin via LuaJIT)`;
 
-const FFT_CODE = `const samples = Array.from({ length: 64 }, (_, i) =>
-  Math.sin(i * freq * 2 * Math.PI / 64)
-)
-const spectrum = useFFT(samples)
-// Returns magnitude[] | null (Cooley-Tukey radix-2)`;
+const FFT_CODE = `const spectrum = await math({
+  op: 'fft', samples: mySamples,
+})  // Returns magnitude[] (Cooley-Tukey radix-2)`;
 
-const BEZIER_CODE = `const curve = useBezier({
+const BEZIER_CODE = `const curve = await math({
+  op: 'bezier',
   points: [[0,0], [100,200], [200,50], [300,150]],
   segments: 32,
-})
-// Returns Vec2[] | null (De Casteljau evaluation)`;
+})  // Returns [x,y][] (De Casteljau evaluation)`;
 
-const POOL_CODE = `const pool = useMathPool()
-const id = pool.enqueue('noise2d', { x: 1, y: 2, seed: 42 })
-pool.flush()  // batches all enqueued ops into one bridge call
-const result = pool.result(id)`;
+const POOL_CODE = `const math = useMath()
+const results = await math({
+  batch: [
+    { op: 'noise2d', x: 1, y: 2, seed: 42 },
+    { op: 'vec2.add', a: [1,2], b: [3,4] },
+    { op: 'interp.lerp', a: 0, b: 100, t: 0.5 },
+  ]
+})  // results[0], results[1], results[2]`;
 
 const TYPESET_CODE = `import { Math } from '@reactjit/core'
 
 <Math tex="E = mc^2" />
-<Math tex="\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}" fontSize={20} />
-<Math tex="\\sum_{n=1}^{\\infty} \\frac{1}{n^2}" />
-<Math tex="\\int_0^1 x^2 \\, dx = \\frac{1}{3}" />`;
+<Math tex="\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}" fontSize={20} />`;
 
 const TYPESET_FORMULAS: { label: string; tex: string }[] = [
   { label: "Euler's identity", tex: 'e^{i\\pi} + 1 = 0' },
@@ -123,10 +114,10 @@ const FEATURE_LIST = [
   { label: 'Quat', desc: 'slerp, fromAxisAngle, fromEuler, toEuler, toMat4, rotateVec3', color: C.quat },
   { label: 'BBox2/3', desc: 'fromPoints, contains, intersects, union, intersection, expand', color: C.geo },
   { label: 'Interpolation', desc: 'lerp, smoothstep, smootherstep, remap, clamp, wrap, damp, pingPong', color: C.interp },
-  { label: 'useNoiseField', desc: 'Perlin noise grid via Lua FFI', color: C.noise },
-  { label: 'useFFT', desc: 'Cooley-Tukey radix-2 via Lua', color: C.fft },
-  { label: 'useBezier', desc: 'De Casteljau curve evaluation via Lua', color: C.bezier },
-  { label: 'useMathPool', desc: 'Batch N bridge ops into one call per frame', color: C.pool },
+  { label: 'Noise', desc: 'Perlin noise grid via LuaJIT', color: C.noise },
+  { label: 'FFT', desc: 'Cooley-Tukey radix-2 via Lua', color: C.fft },
+  { label: 'Bezier', desc: 'De Casteljau curve evaluation via Lua', color: C.bezier },
+  { label: 'Batch', desc: 'N ops in one bridge call via { batch: [...] }', color: C.pool },
   { label: '<Math />', desc: 'LaTeX typesetting: fractions, roots, scripts, Greek, matrices, operators', color: C.accent },
 ];
 
@@ -191,18 +182,30 @@ const BAND_STYLE = {
 
 const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const, justifyContent: 'center' as const };
 
-// ── Vec2 Demo ───────────────────────────────────────────
+// ── Vec2 Demo (Lua-backed) ──────────────────────────────
 
 function VectorDemo() {
   const c = useThemeColors();
+  const math = useMath();
   const [angle, setAngle] = useState(0);
+  const [r, setR] = useState<any>(null);
 
-  const a: Vec2T = [3, 1];
-  const b: Vec2T = Vec2.fromAngle(angle);
-  const sum = Vec2.add(a, Vec2.scale(b, 2));
-  const d = Vec2.dot(Vec2.normalize(a), b);
-  const cross = Vec2.cross(a, b);
-  const dist = Vec2.distance(a, sum);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const b = await math({ op: 'vec2.fromAngle', radians: angle });
+      const scaled = await math({ op: 'vec2.scale', v: b, s: 2 });
+      const res = await math({ batch: [
+        { op: 'vec2.add', a: [3, 1], b: scaled },
+        { op: 'vec2.dot', a: await math({ op: 'vec2.normalize', v: [3, 1] }), b },
+        { op: 'vec2.cross', a: [3, 1], b },
+      ] });
+      const sum = res[0];
+      const dist = await math({ op: 'vec2.distance', a: [3, 1], b: sum });
+      if (!cancelled) setR({ b, sum, dot: res[1], cross: res[2], dist });
+    })();
+    return () => { cancelled = true; };
+  }, [math, angle]);
 
   return (
     <Box style={{ gap: 8 }}>
@@ -211,14 +214,14 @@ function VectorDemo() {
         <Tag text="Vec3" color={C.vec} />
         <Tag text="Vec4" color={C.vec} />
       </Box>
-
-      <Label label="a" value={`[${a[0]}, ${a[1]}]`} />
-      <Label label="b = fromAngle" value={`[${b[0].toFixed(3)}, ${b[1].toFixed(3)}]`} color={C.vec} />
-      <Label label="a + 2b" value={`[${sum[0].toFixed(3)}, ${sum[1].toFixed(3)}]`} color={C.vec} />
-      <Label label="dot(norm(a), b)" value={d.toFixed(4)} />
-      <Label label="cross(a, b)" value={cross.toFixed(4)} />
-      <Label label="distance(a, a+2b)" value={dist.toFixed(4)} />
-
+      <Label label="a" value={'[3, 1]'} />
+      {r && <>
+        <Label label="b = fromAngle" value={`[${r.b[0].toFixed(3)}, ${r.b[1].toFixed(3)}]`} color={C.vec} />
+        <Label label="a + 2b" value={`[${r.sum[0].toFixed(3)}, ${r.sum[1].toFixed(3)}]`} color={C.vec} />
+        <Label label="dot(norm(a), b)" value={r.dot.toFixed(4)} />
+        <Label label="cross(a, b)" value={r.cross.toFixed(4)} />
+        <Label label="distance(a, a+2b)" value={r.dist.toFixed(4)} />
+      </>}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label={'\u2190 Rotate'} color={C.vec} onPress={() => setAngle(p => p - 0.3)} />
         <ActionBtn label={'Rotate \u2192'} color={C.vec} onPress={() => setAngle(p => p + 0.3)} />
@@ -230,25 +233,38 @@ function VectorDemo() {
   );
 }
 
-// ── Mat4 Demo ───────────────────────────────────────────
+// ── Mat4 Demo (Lua-backed) ──────────────────────────────
 
 function MatrixDemo() {
   const c = useThemeColors();
+  const math = useMath();
   const [rx, setRx] = useState(0);
+  const [r, setR] = useState<any>(null);
 
-  const m = Mat4.rotateX(Mat4.identity(), rx);
-  const point: Vec3T = [1, 0, 0];
-  const transformed = Mat4.transformPoint(m, point);
-  const det = Mat4.determinant(m);
-  const decomposed = Mat4.decompose(m);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const identity = await math({ op: 'mat4.identity' });
+      const m = await math({ op: 'mat4.rotateX', m: identity, radians: rx });
+      const res = await math({ batch: [
+        { op: 'mat4.transformPoint', m, v: [1, 0, 0] },
+        { op: 'mat4.determinant', m },
+        { op: 'mat4.decompose', m },
+      ] });
+      if (!cancelled) setR({ transformed: res[0], det: res[1], decomposed: res[2] });
+    })();
+    return () => { cancelled = true; };
+  }, [math, rx]);
 
   return (
     <Box style={{ gap: 8 }}>
       <Tag text="Mat4" color={C.mat} />
       <Label label="rotateX" value={`${(rx * 180 / Math.PI).toFixed(1)}\u00B0`} color={C.mat} />
-      <Label label="transform([1,0,0])" value={`[${transformed[0].toFixed(3)}, ${transformed[1].toFixed(3)}, ${transformed[2].toFixed(3)}]`} color={C.mat} />
-      <Label label="determinant" value={det.toFixed(6)} />
-      <Label label="decompose.scale" value={`[${decomposed.scale.map(v => v.toFixed(2)).join(', ')}]`} />
+      {r && <>
+        <Label label="transform([1,0,0])" value={`[${r.transformed[0].toFixed(3)}, ${r.transformed[1].toFixed(3)}, ${r.transformed[2].toFixed(3)}]`} color={C.mat} />
+        <Label label="determinant" value={r.det.toFixed(6)} />
+        <Label label="decompose.scale" value={`[${r.decomposed.scale.map((v: number) => v.toFixed(2)).join(', ')}]`} />
+      </>}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label={`Rotate +12\u00B0`} color={C.mat} onPress={() => setRx(p => p + Math.PI / 15)} />
         <ActionBtn label="Reset" color={c.textDim} onPress={() => setRx(0)} />
@@ -257,107 +273,160 @@ function MatrixDemo() {
   );
 }
 
-// ── Quaternion Demo ─────────────────────────────────────
+// ── Quaternion Demo (Lua-backed) ────────────────────────
 
 function QuaternionDemo() {
+  const math = useMath();
   const [t, setT] = useState(0);
+  const [r, setR] = useState<any>(null);
 
-  const q1 = Quat.identity();
-  const q2 = Quat.fromAxisAngle([0, 1, 0], Math.PI / 2);
-  const interpolated = Quat.slerp(q1, q2, t);
-  const euler = Quat.toEuler(interpolated);
-  const rotated = Quat.rotateVec3(interpolated, [1, 0, 0]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const q2 = await math({ op: 'quat.fromAxisAngle', axis: [0, 1, 0], radians: Math.PI / 2 });
+      const q1 = await math({ op: 'quat.identity' });
+      const interpolated = await math({ op: 'quat.slerp', a: q1, b: q2, t });
+      const res = await math({ batch: [
+        { op: 'quat.toEuler', q: interpolated },
+        { op: 'quat.rotateVec3', q: interpolated, v: [1, 0, 0] },
+      ] });
+      if (!cancelled) setR({ euler: res[0], rotated: res[1] });
+    })();
+    return () => { cancelled = true; };
+  }, [math, t]);
+
+  const clampT = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
 
   return (
     <Box style={{ gap: 8 }}>
       <Tag text="Quat" color={C.quat} />
       <Label label="slerp t" value={t.toFixed(2)} color={C.quat} />
-      <Label label="euler (deg)" value={`[${euler.map(v => (v * 180 / Math.PI).toFixed(1)).join(', ')}]`} />
-      <Label label="rotateVec3([1,0,0])" value={`[${rotated.map(v => v.toFixed(3)).join(', ')}]`} color={C.quat} />
+      {r && <>
+        <Label label="euler (deg)" value={`[${r.euler.map((v: number) => (v * 180 / Math.PI).toFixed(1)).join(', ')}]`} />
+        <Label label="rotateVec3([1,0,0])" value={`[${r.rotated.map((v: number) => v.toFixed(3)).join(', ')}]`} color={C.quat} />
+      </>}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
-        <ActionBtn label={'\u2190 t'} color={C.quat} onPress={() => setT(p => clamp(p - 0.1, 0, 1))} />
-        <ActionBtn label={'t \u2192'} color={C.quat} onPress={() => setT(p => clamp(p + 0.1, 0, 1))} />
+        <ActionBtn label={'\u2190 t'} color={C.quat} onPress={() => setT(p => clampT(p - 0.1))} />
+        <ActionBtn label={'t \u2192'} color={C.quat} onPress={() => setT(p => clampT(p + 0.1))} />
       </Box>
     </Box>
   );
 }
 
-// ── Interpolation Demo ──────────────────────────────────
+// ── Interpolation Demo (Lua-backed) ─────────────────────
 
 const INTERP_STEPS = 32;
 
 function InterpolationDemo() {
   const c = useThemeColors();
+  const math = useMath();
+  const [curves, setCurves] = useState<{ name: string; values: number[]; color: string }[] | null>(null);
+  const [extras, setExtras] = useState<any>(null);
 
-  const curves = useMemo(() => {
-    const sets: [string, (t: number) => number, string][] = [
-      ['lerp', t => lerp(0, 1, t), '#4fc3f7'],
-      ['smoothstep', t => smoothstep(0, 1, t), '#66bb6a'],
-      ['smootherstep', t => smootherstep(0, 1, t), '#ffa726'],
-      ['damp(5)', t => 1 - Math.exp(-5 * t), '#ef5350'],
-    ];
-    return sets.map(([name, fn, color]) => {
-      const values: number[] = [];
-      for (let i = 0; i <= INTERP_STEPS; i++) values.push(fn(i / INTERP_STEPS));
-      return { name, values, color };
-    });
-  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const batch: any[] = [];
+      const names = ['lerp', 'smoothstep', 'smootherstep', 'damp(5)'];
+      const colors = ['#4fc3f7', '#66bb6a', '#ffa726', '#ef5350'];
+      for (let n = 0; n < 4; n++) {
+        for (let i = 0; i <= INTERP_STEPS; i++) {
+          const t = i / INTERP_STEPS;
+          if (n === 0) batch.push({ op: 'interp.lerp', a: 0, b: 1, t });
+          else if (n === 1) batch.push({ op: 'interp.smoothstep', edge0: 0, edge1: 1, x: t });
+          else if (n === 2) batch.push({ op: 'interp.smootherstep', edge0: 0, edge1: 1, x: t });
+          else batch.push({ op: 'interp.damp', a: 0, b: 1, smoothing: 5, dt: t });
+        }
+      }
+      batch.push({ op: 'interp.pingPong', value: 2.7, length: 1 });
+      batch.push({ op: 'interp.remap', value: 0.5, inMin: 0, inMax: 1, outMin: 100, outMax: 200 });
+      batch.push({ op: 'interp.inverseLerp', a: 10, b: 20, value: 15 });
+      batch.push({ op: 'interp.wrap', value: 370, min: 0, max: 360 });
+      const res = await math({ batch });
+      if (cancelled) return;
+      const perCurve = INTERP_STEPS + 1;
+      const out = names.map((name, n) => ({
+        name,
+        color: colors[n],
+        values: res.slice(n * perCurve, (n + 1) * perCurve) as number[],
+      }));
+      setCurves(out);
+      const base = 4 * perCurve;
+      setExtras({ pingPong: res[base], remap: res[base + 1], inverseLerp: res[base + 2], wrap: res[base + 3] });
+    })();
+    return () => { cancelled = true; };
+  }, [math]);
 
   return (
-    <Box style={{ gap: 8 }}>
-      {curves.map(curve => (
+    <Box style={{ gap: 8, width: '100%' }}>
+      {curves ? curves.map(curve => (
         <Box key={curve.name} style={{ gap: 4 }}>
           <Text style={{ color: curve.color, fontSize: 8, fontFamily: 'monospace' }}>{curve.name}</Text>
           <Box style={{ flexDirection: 'row', gap: 1, height: 40, alignItems: 'end' }}>
             {curve.values.map((v, i) => (
-              <Box key={i} style={{ width: 16, height: Math.max(1, v * 38), backgroundColor: curve.color + '66', borderRadius: 1 }} />
+              <Box key={i} style={{ flexGrow: 1, height: Math.max(1, v * 38), backgroundColor: curve.color + '66', borderRadius: 1 }} />
             ))}
           </Box>
         </Box>
-      ))}
-      <Label label="pingPong(2.7, 1)" value={pingPong(2.7, 1).toFixed(3)} />
-      <Label label="remap(0.5, 0, 1, 100, 200)" value={remap(0.5, 0, 1, 100, 200).toFixed(1)} />
-      <Label label="inverseLerp(10, 20, 15)" value={inverseLerp(10, 20, 15).toFixed(2)} />
-      <Label label="wrap(370, 0, 360)" value={wrap(370, 0, 360).toFixed(1)} />
+      )) : <Text style={{ fontSize: 10, color: c.textDim }}>Computing curves...</Text>}
+      {extras && <>
+        <Label label="pingPong(2.7, 1)" value={extras.pingPong.toFixed(3)} />
+        <Label label="remap(0.5, 0, 1, 100, 200)" value={extras.remap.toFixed(1)} />
+        <Label label="inverseLerp(10, 20, 15)" value={extras.inverseLerp.toFixed(2)} />
+        <Label label="wrap(370, 0, 360)" value={extras.wrap.toFixed(1)} />
+      </>}
     </Box>
   );
 }
 
-// ── Geometry Demo ───────────────────────────────────────
+// ── Geometry Demo (Lua-backed) ──────────────────────────
 
 function GeometryDemo() {
   const c = useThemeColors();
+  const math = useMath();
   const [px, setPx] = useState(3);
+  const [r, setR] = useState<any>(null);
 
-  const boxA: BBox2T = { min: [0, 0], max: [4, 4] };
-  const boxB: BBox2T = { min: [px, 1], max: [px + 3, 5] };
-  const intersects = BBox2.intersects(boxA, boxB);
-  const overlap = BBox2.intersection(boxA, boxB);
-  const union = BBox2.union(boxA, boxB);
-  const segDist = distancePointToSegment([px, 3], [0, 0], [4, 4]);
-  const inCircle = circleContainsPoint([2, 2], 3, [px, 3]);
-  const lineHit = lineIntersection([0, 0], [4, 4], [0, 4], [4, 0]);
+  useEffect(() => {
+    let cancelled = false;
+    const boxA = { min: [0, 0], max: [4, 4] };
+    const boxB = { min: [px, 1], max: [px + 3, 5] };
+    (async () => {
+      const res = await math({ batch: [
+        { op: 'geo.bbox2_intersects', a: boxA, b: boxB },
+        { op: 'geo.bbox2_intersection', a: boxA, b: boxB },
+        { op: 'geo.bbox2_union', a: boxA, b: boxB },
+        { op: 'geo.distancePointToSegment', point: [px, 3], a: [0, 0], b: [4, 4] },
+        { op: 'geo.circleContainsPoint', center: [2, 2], radius: 3, point: [px, 3] },
+        { op: 'geo.lineIntersection', a1: [0, 0], a2: [4, 4], b1: [0, 4], b2: [4, 0] },
+      ] });
+      if (!cancelled) setR({ intersects: res[0], overlap: res[1], union: res[2], segDist: res[3], inCircle: res[4], lineHit: res[5] });
+    })();
+    return () => { cancelled = true; };
+  }, [math, px]);
 
   return (
     <Box style={{ gap: 8 }}>
       <Label label="BBox A" value={'[0,0] \u2192 [4,4]'} />
       <Label label="BBox B" value={`[${px},1] \u2192 [${px + 3},5]`} color={C.geo} />
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: intersects ? C.geo : C.pool }} />
-        <Text style={{ fontSize: 9, color: intersects ? C.geo : C.pool }}>
-          {intersects ? 'Intersects' : 'No intersection'}
-        </Text>
-      </Box>
-      {overlap && <Label label="overlap" value={`[${overlap.min[0]},${overlap.min[1]}] \u2192 [${overlap.max[0]},${overlap.max[1]}]`} />}
-      <Label label="union" value={`[${union.min[0]},${union.min[1]}] \u2192 [${union.max[0]},${union.max[1]}]`} />
-      <Label label="dist to segment" value={segDist.toFixed(3)} />
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: inCircle ? C.geo : C.pool }} />
-        <Text style={{ fontSize: 9, color: inCircle ? C.geo : C.pool }}>
-          {inCircle ? 'Inside circle(r=3)' : 'Outside circle(r=3)'}
-        </Text>
-      </Box>
-      {lineHit && <Label label="line \u2229" value={`[${lineHit[0].toFixed(1)}, ${lineHit[1].toFixed(1)}]`} />}
+      {r && <>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: r.intersects ? C.geo : C.pool }} />
+          <Text style={{ fontSize: 9, color: r.intersects ? C.geo : C.pool }}>
+            {r.intersects ? 'Intersects' : 'No intersection'}
+          </Text>
+        </Box>
+        {r.overlap && <Label label="overlap" value={`[${r.overlap.min[0]},${r.overlap.min[1]}] \u2192 [${r.overlap.max[0]},${r.overlap.max[1]}]`} />}
+        <Label label="union" value={`[${r.union.min[0]},${r.union.min[1]}] \u2192 [${r.union.max[0]},${r.union.max[1]}]`} />
+        <Label label="dist to segment" value={r.segDist.toFixed(3)} />
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: r.inCircle ? C.geo : C.pool }} />
+          <Text style={{ fontSize: 9, color: r.inCircle ? C.geo : C.pool }}>
+            {r.inCircle ? 'Inside circle(r=3)' : 'Outside circle(r=3)'}
+          </Text>
+        </Box>
+        {r.lineHit && <Label label="line \u2229" value={`[${r.lineHit[0].toFixed(1)}, ${r.lineHit[1].toFixed(1)}]`} />}
+      </>}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label={'\u2190 Move B'} color={C.geo} onPress={() => setPx(p => p - 1)} />
         <ActionBtn label={'Move B \u2192'} color={C.geo} onPress={() => setPx(p => p + 1)} />
@@ -370,29 +439,32 @@ function GeometryDemo() {
 
 function NoiseFieldDemo() {
   const c = useThemeColors();
+  const math = useMath();
   const [seed, setSeed] = useState(42);
   const [scale, setScale] = useState(0.1);
   const SIZE = 24;
-  const noiseConfig = useMemo(
-    () => ({ width: SIZE, height: SIZE, scale, seed, octaves: 4 }),
-    [SIZE, scale, seed],
-  );
-  const field = useNoiseField(noiseConfig);
-  const rows = useMemo(() => {
-    if (!field) return null;
-    const next: string[][] = [];
-    for (let row = 0; row < SIZE; row++) {
-      const rowColors: string[] = [];
-      for (let col = 0; col < SIZE; col++) {
-        const v = field[row * SIZE + col] ?? 0;
-        const brightness = Math.floor(clamp(v, 0, 1) * 255);
-        const hex = brightness.toString(16).padStart(2, '0');
-        rowColors.push(`#${hex}${hex}${hex}`);
+  const [rows, setRows] = useState<string[][] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const field = await math({ op: 'noisefield', width: SIZE, height: SIZE, scale, seed, octaves: 4 });
+      if (cancelled || !field) return;
+      const next: string[][] = [];
+      for (let row = 0; row < SIZE; row++) {
+        const rowColors: string[] = [];
+        for (let col = 0; col < SIZE; col++) {
+          const v = field[row * SIZE + col] ?? 0;
+          const brightness = Math.floor(Math.max(0, Math.min(1, v)) * 255);
+          const hex = brightness.toString(16).padStart(2, '0');
+          rowColors.push(`#${hex}${hex}${hex}`);
+        }
+        next.push(rowColors);
       }
-      next.push(rowColors);
-    }
-    return next;
-  }, [field, SIZE]);
+      setRows(next);
+    })();
+    return () => { cancelled = true; };
+  }, [math, seed, scale]);
 
   return (
     <Box style={{ gap: 8 }}>
@@ -420,10 +492,11 @@ function NoiseFieldDemo() {
   );
 }
 
-// ── FFT Demo (Lua-backed) ──────────────────────────────
+// ── FFT Demo (Lua-backed) ───────────────────────────────
 
 function FFTDemo() {
   const c = useThemeColors();
+  const math = useMath();
   const [freq, setFreq] = useState(4);
   const N = 64;
 
@@ -435,23 +508,23 @@ function FFTDemo() {
     return s;
   }, [freq]);
 
-  const spectrum = useFFT(samples);
+  const [spectrum, setSpectrum] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await math({ op: 'fft', samples });
+      if (!cancelled && result) setSpectrum(result);
+    })();
+    return () => { cancelled = true; };
+  }, [math, samples]);
+
   const halfN = N / 2;
-  const spectrumSlice = useMemo(() => {
-    if (!spectrum) return null;
-    return spectrum.slice(0, halfN);
-  }, [spectrum, halfN]);
-  const maxSpectrum = useMemo(() => {
-    if (!spectrumSlice || spectrumSlice.length === 0) return 0;
-    let max = spectrumSlice[0];
-    for (let i = 1; i < spectrumSlice.length; i++) {
-      if (spectrumSlice[i] > max) max = spectrumSlice[i];
-    }
-    return max;
-  }, [spectrumSlice]);
+  const spectrumSlice = spectrum ? spectrum.slice(0, halfN) : null;
+  const maxSpectrum = spectrumSlice ? Math.max(...spectrumSlice) : 0;
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       <Text style={{ color: c.textSecondary, fontSize: 9 }}>
         {`sin(${freq}x) + 0.5\u00B7sin(${freq * 3}x)  \u2014  ${N} samples`}
       </Text>
@@ -459,7 +532,7 @@ function FFTDemo() {
         <Text style={{ color: c.textDim, fontSize: 8 }}>Waveform</Text>
         <Box style={{ flexDirection: 'row', gap: 0, height: 32, alignItems: 'center' }}>
           {samples.map((v, i) => (
-            <Box key={i} style={{ width: 4, height: Math.max(1, Math.abs(v) * 14), backgroundColor: C.fft + '88', borderRadius: 1 }} />
+            <Box key={i} style={{ flexGrow: 1, height: Math.max(1, Math.abs(v) * 14), backgroundColor: C.fft + '88', borderRadius: 1 }} />
           ))}
         </Box>
       </Box>
@@ -488,15 +561,22 @@ function FFTDemo() {
 
 function BezierDemo() {
   const c = useThemeColors();
+  const math = useMath();
   const [cy, setCy] = useState(150);
-  const controlPoints = useMemo<[number, number][]>(
-    () => [[0, 0], [80, cy], [220, 300 - cy], [300, 150]],
-    [cy],
-  );
-  const curve = useBezier({ points: controlPoints, segments: 32 });
+  const controlPoints: [number, number][] = useMemo(() => [[0, 0], [80, cy], [220, 300 - cy], [300, 150]], [cy]);
+  const [curve, setCurve] = useState<[number, number][] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await math({ op: 'bezier', points: controlPoints, segments: 32 });
+      if (!cancelled && result) setCurve(result);
+    })();
+    return () => { cancelled = true; };
+  }, [math, controlPoints]);
 
   return (
-    <Box style={{ gap: 8 }}>
+    <Box style={{ gap: 8, width: '100%' }}>
       {controlPoints.map((p, i) => (
         <Label key={i} label={`P${i}`} value={`[${p[0]}, ${p[1]}]`} color={i === 1 || i === 2 ? C.bezier : undefined} />
       ))}
@@ -506,7 +586,7 @@ function BezierDemo() {
           <Box style={{ flexDirection: 'row', gap: 1, height: 40, alignItems: 'end' }}>
             {curve.map((p, i) => {
               const h = Math.max(1, (p[1] / 300) * 38);
-              return <Box key={i} style={{ width: 8, height: h, backgroundColor: C.bezier + '66', borderRadius: 1 }} />;
+              return <Box key={i} style={{ flexGrow: 1, height: h, backgroundColor: C.bezier + '66', borderRadius: 1 }} />;
             })}
           </Box>
         </Box>
@@ -521,13 +601,10 @@ function BezierDemo() {
   );
 }
 
-// ── Typesetting Bands (zigzag like every other section) ──
-
 // ── Feature Catalog ─────────────────────────────────────
 
 function FeatureCatalog() {
   const c = useThemeColors();
-
   return (
     <>
       {FEATURE_LIST.map(f => (
@@ -579,7 +656,7 @@ export function MathStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ color: c.muted, fontSize: 10 }}>
-          {"Dubs, check 'em"}
+          {"All math in Lua. One hook."}
         </Text>
       </Box>
 
@@ -597,10 +674,10 @@ export function MathStory() {
           gap: 8,
         }}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
-            {'Pure TS math for lightweight ops. Lua-backed hooks for heavy compute.'}
+            {'All math runs in Lua via LuaJIT. React gets one hook: useMath().'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Immutable tuple types for vectors, matrices, and quaternions with zero allocation overhead. Perlin noise, FFT, and bezier evaluation run on Lua via bridge hooks for O(n) workloads.'}
+            {'Vectors, matrices, quaternions, interpolation, geometry, noise, FFT, and bezier — all computed by LuaJIT and accessed through a single math:call RPC. Batch multiple ops in one bridge round-trip.'}
           </Text>
         </Box>
 
@@ -611,7 +688,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Pure TS exports (Vec2, Mat4, lerp, etc.) have zero dependencies. Lua-backed hooks (useNoiseField, useFFT, useBezier) require the bridge.'}
+              {'One hook, one RPC endpoint. Pass { op, ...args } for a single call, or { batch: [...] } for multiple ops in one bridge round-trip.'}
             </Text>
           </Box>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
@@ -627,7 +704,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="code">{'VECTORS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Vec2, Vec3, Vec4 as immutable tuples. All operations return new tuples \u2014 no mutation, no classes, no GC pressure from object headers. Includes add, sub, mul, dot, cross, normalize, lerp, smoothstep, rotate, fromAngle, reflect, slerp.'}
+              {'Vec2, Vec3, Vec4 as arrays. All operations run in LuaJIT — add, sub, mul, dot, cross, normalize, lerp, smoothstep, rotate, fromAngle, reflect, slerp.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={VECTOR_CODE} />
           </Box>
@@ -640,7 +717,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="layers">{'MATRICES'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'4\u00D74 matrix as a 16-element tuple. Multiply, invert, transpose, decompose into translation + rotation + scale. Includes lookAt, perspective, and ortho projection builders for 3D camera setups.'}
+              {'4\u00D74 matrix as 16-element array. Multiply, invert, transpose, decompose into translation + rotation + scale. Includes lookAt, perspective, and ortho projection builders.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={MATRIX_CODE} />
           </Box>
@@ -659,7 +736,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="zap">{'QUATERNIONS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'[x, y, z, w] tuple. Slerp for smooth rotation interpolation without gimbal lock. Convert to/from Euler angles, axis-angle, and Mat4. Rotate Vec3 directly without building a matrix.'}
+              {'[x, y, z, w] array. Slerp for smooth rotation interpolation without gimbal lock. Convert to/from Euler angles, axis-angle, and Mat4.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={QUAT_CODE} />
           </Box>
@@ -672,7 +749,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="sliders">{'INTERPOLATION'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Scalar easing and mapping functions. lerp, smoothstep (Hermite cubic, C1), smootherstep (Perlin quintic, C2), damp (frame-rate independent exponential), remap, clamp, wrap, pingPong, moveTowards, smoothDamp (spring-damper).'}
+              {'Scalar easing and mapping. lerp, smoothstep (Hermite cubic), smootherstep (Perlin quintic), damp, remap, clamp, wrap, pingPong, moveTowards, smoothDamp.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={INTERP_CODE} />
           </Box>
@@ -691,7 +768,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="globe">{'GEOMETRY'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'BBox2 and BBox3 axis-aligned bounding boxes with fromPoints, contains, intersects, union, intersection, expand. Point-to-segment distance, circle-point containment, circle-rect intersection, and line-line intersection.'}
+              {'BBox2 and BBox3 axis-aligned bounding boxes. Point-to-segment distance, circle-point containment, circle-rect intersection, line-line intersection.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={GEOMETRY_CODE} />
           </Box>
@@ -714,7 +791,7 @@ export function MathStory() {
         }}>
           <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
           <Text style={{ color: c.text, fontSize: 10 }}>
-            {'Pure TS ops (vectors, matrices, interpolation) run in QuickJS with zero bridge overhead. Lua-backed hooks (noise, FFT, bezier) cross the bridge once per call \u2014 use useMathPool to batch multiple ops into a single bridge round-trip.'}
+            {'Everything runs in LuaJIT. The bridge is an in-process FFI call, not a network hop. Use batch mode to send multiple ops in a single round-trip when you need several results at once.'}
           </Text>
         </Box>
 
@@ -725,7 +802,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="gauge">{'NOISE'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Perlin noise via Lua FFI. useNoiseField returns a flat grid of values for terrain, textures, and procedural generation. Configurable seed, scale, octaves, lacunarity, and persistence.'}
+              {'Perlin noise via LuaJIT. Noise field returns a flat grid of values for terrain, textures, and procedural generation. Configurable seed, scale, octaves, lacunarity, and persistence.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={NOISE_CODE} />
           </Box>
@@ -742,9 +819,9 @@ export function MathStory() {
             <FFTDemo />
           </Box>
           <Box style={HALF}>
-            <SectionLabel icon="zap">{'FFT'}</SectionLabel>
+            <SectionLabel icon="zap">{'FFT ANALYSIS'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Cooley-Tukey radix-2 FFT via Lua. Pass time-domain samples, get back magnitude spectrum. Use for audio visualization, frequency analysis, or signal processing.'}
+              {'Cooley-Tukey radix-2 FFT via Lua. Pass time-domain samples, get back magnitude spectrum.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={FFT_CODE} />
           </Box>
@@ -757,7 +834,7 @@ export function MathStory() {
           <Box style={HALF}>
             <SectionLabel icon="code">{'BEZIER'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'De Casteljau curve evaluation via Lua. Pass control points and segment count, get back evaluated Vec2 points along the curve. Works with any number of control points.'}
+              {'De Casteljau curve evaluation via Lua. Pass control points and segment count, get back evaluated points along the curve.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={BEZIER_CODE} />
           </Box>
@@ -768,12 +845,12 @@ export function MathStory() {
 
         <Divider />
 
-        {/* ── Math Pool: text | code ── */}
+        {/* ── Batch: text | code ── */}
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
-            <SectionLabel icon="layers">{'MATH POOL'}</SectionLabel>
+            <SectionLabel icon="layers">{'BATCH'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Batch multiple Lua-backed math operations into a single bridge call per frame. Enqueue ops, flush once, read results. Eliminates per-op bridge overhead when running many noise/FFT/bezier calls simultaneously.'}
+              {'Batch multiple math operations into a single bridge call. Pass { batch: [...] } instead of { op: ... }. All ops execute in Lua and return as an array.'}
             </Text>
           </Box>
           <CodeBlock language="tsx" fontSize={9} code={POOL_CODE} />
@@ -795,7 +872,7 @@ export function MathStory() {
             {'LaTeX Typesetting'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Render real math notation with <Math tex="..." />. Parsed and typeset entirely in Lua \u2014 recursive descent parser, heuristic box layout, Latin Modern Math font. No browser, no KaTeX, no external dependencies.'}
+            {'Render real math notation with <Math tex="..." />. Parsed and typeset entirely in Lua \u2014 recursive descent parser, heuristic box layout, Latin Modern Math font.'}
           </Text>
         </Box>
 
@@ -838,7 +915,7 @@ export function MathStory() {
           <Box style={HALF}>
             <Tag text={TYPESET_FORMULAS[1].label} color={C.accent} />
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>
-              {'Solutions to ax\u00B2 + bx + c = 0. Nested fraction with square root \u2014 exercises the full layout pipeline.'}
+              {'Solutions to ax\u00B2 + bx + c = 0. Nested fraction with square root.'}
             </Text>
           </Box>
           <Box style={HALF}>
@@ -900,7 +977,7 @@ export function MathStory() {
           <Box style={HALF}>
             <Tag text={'More Formulas'} color={C.accent} />
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>
-              {'Accents (hat, vec), partial derivatives, binomial coefficients, and simple expressions all render correctly.'}
+              {'Accents (hat, vec), partial derivatives, binomial coefficients, and simple expressions.'}
             </Text>
           </Box>
           <Box style={HALF}>
@@ -946,7 +1023,7 @@ export function MathStory() {
         <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
         <Text style={{ color: c.text, fontSize: 9 }}>{'Math'}</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
+        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.2.0'}</Text>
       </Box>
 
     </Box>

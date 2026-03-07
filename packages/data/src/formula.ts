@@ -1,5 +1,12 @@
 import { convert } from '@reactjit/convert';
-import { clamp, lerp, remap, smoothstep, Vec2 } from '@reactjit/math';
+
+// Inlined trivial math — the real math library lives in Lua now.
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const remap = (v: number, iMin: number, iMax: number, oMin: number, oMax: number) => oMin + (oMax - oMin) * ((v - iMin) / (iMax - iMin));
+const smoothstep = (e0: number, e1: number, x: number) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const vec2dist = (a: [number, number], b: [number, number]) => { const dx = a[0] - b[0], dy = a[1] - b[1]; return Math.sqrt(dx * dx + dy * dy); };
+const vec2len = (v: [number, number]) => Math.sqrt(v[0] * v[0] + v[1] * v[1]);
 import type {
   SpreadsheetCellMap,
   SpreadsheetEvaluateOptions,
@@ -204,11 +211,11 @@ const BASE_FUNCTIONS: SpreadsheetFunctionMap = {
   SMOOTHSTEP: (edge0: unknown, edge1: unknown, x: unknown) =>
     smoothstep(toNumber(edge0) ?? 0, toNumber(edge1) ?? 1, toNumber(x) ?? 0),
   DIST2D: (x1: unknown, y1: unknown, x2: unknown, y2: unknown) =>
-    Vec2.distance(
+    vec2dist(
       [toNumber(x1) ?? 0, toNumber(y1) ?? 0],
       [toNumber(x2) ?? 0, toNumber(y2) ?? 0],
     ),
-  NORM2D: (x: unknown, y: unknown) => Vec2.length([toNumber(x) ?? 0, toNumber(y) ?? 0]),
+  NORM2D: (x: unknown, y: unknown) => vec2len([toNumber(x) ?? 0, toNumber(y) ?? 0]),
   CONVERT: (value: unknown, from: unknown, to: unknown) => {
     const fromUnit = String(from ?? '').trim();
     const toUnit = String(to ?? '').trim();

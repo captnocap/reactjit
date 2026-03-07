@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+## Self-Audit Protocol (MANDATORY)
+
+At the START of every context window, run `date +%H` via Bash. If the hour is >= 12 (past noon), read `didifuckup.md` in this repo root. Check if today's date is marked. If it is NOT marked, spawn a background agent to audit your own recent changes — grep for anything in `.ts`/`.tsx` files that isn't tree-diffing or structure declaration. That means: math, formatting, string manipulation, parsing, animation logic, timers, input handling, data transformation — any of that living in TypeScript is a fuckup. Log the results in `didifuckup.md` with today's date so the next context window knows the audit already ran. If today IS already marked, skip the audit and continue. React diffs trees and declares structure. That is ALL it does. Everything else is Lua. No exceptions. No excuses.
+
+---
+
 This is React stripped of browser magic and rendered as raw geometry.
 
 STOP MAKING INPUT-BASED BEHAVIORS HAVE ANY REASON TO SEE THE LIGHT OF DAY IN A JAVASCRIPT LIFECYCLE. REACT IS NOT GOOD AT INPUT. INFACT IT SUCKS REALLY BAD. REACT IS HERE TO DECLARE A LAYOUT AND SOME STATE MUTATIONS. OTHERWISE ITS JUST A PRETTY FACE FOR LUA TO DO ALL THE ACTUAL PROGRAMMING HERE. THATS WHY THE TYPESCRIPT SIDE LOOKS LIKE A BUNCH OF ONE LINERS. IF YOU ARE EFFECTIVELY NOT SETTING UP FOR A ONE LINER IN TSX YOU ARE PROBABLY WRONG.

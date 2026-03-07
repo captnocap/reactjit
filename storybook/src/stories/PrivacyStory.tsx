@@ -32,12 +32,17 @@ const C = {
 // ── Static code blocks (hoisted — never recreated) ──────
 
 const INSTALL_CODE = `import { usePrivacy } from '@reactjit/privacy'
-import { detectPII, redactPII, maskValue } from '@reactjit/privacy'`;
 
-const PII_CODE = `const matches = detectPII('Email: alice@acme.com SSN: 123-45-6789')
+const privacy = usePrivacy()
+// privacy.sanitize.detectPII / redactPII / maskValue
+// privacy.audit.create / append / verify
+// privacy.safety.checkAlgorithmStrength / validateConfig`;
+
+const PII_CODE = `const privacy = usePrivacy()
+const matches = await privacy.sanitize.detectPII('Email: alice@acme.com SSN: 123-45-6789')
 // [{type:'email', value:'alice@acme.com'}, {type:'ssn', ...}]
 
-const safe = redactPII(text, { mask: true })
+const safe = await privacy.sanitize.redactPII(text, { mask: true })
 // "Email: *****@*******.*** SSN: ***-**-****"`;
 
 const SHAMIR_CODE = `const shares = await privacy.shamir.split('deadbeef', 5, 3)
@@ -58,10 +63,11 @@ const STEG_CODE = `const hidden = stegEmbedWhitespace('This looks normal.', 'SEC
 // Visible text unchanged, zero-width chars injected between letters
 const recovered = stegExtractWhitespace(hidden)  // 'SECRET'`;
 
-const AUDIT_CODE = `createAuditLog('chain-key-hex')
-await appendAudit('user.login', { userId: 'alice' })
-await appendAudit('data.access', { table: 'users' })
-const { valid } = await verifyAudit()  // detects tampering`;
+const AUDIT_CODE = `const privacy = usePrivacy()
+await privacy.audit.create('chain-key-hex')
+await privacy.audit.append('user.login', { userId: 'alice' })
+await privacy.audit.append('data.access', { table: 'users' })
+const { valid } = await privacy.audit.verify()  // detects tampering`;
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -650,7 +656,7 @@ export function PrivacyStory() {
             {'Privacy toolkit: PII detection, Shamir secret sharing, Noise-NK channels, encrypted keyrings, steganography.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Three tiers: Lua FFI for C-speed crypto (libsodium, OpenSSL), shell-out for battle-tested tools (GPG, exiftool), and pure TypeScript for string operations (PII regex, policy, audit).'}
+            {'Two tiers: Lua FFI for all crypto and string operations (PII regex, policy, audit — via libsodium, OpenSSL), and shell-out for battle-tested tools (GPG, exiftool). TypeScript is a one-liner hook.'}
           </Text>
         </Box>
 
@@ -675,7 +681,7 @@ export function PrivacyStory() {
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="eye">{'PII DETECTION'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Pure TypeScript regex scanner. Finds emails, phone numbers, SSNs, IPv4/v6, and credit cards with match boundaries for surgical redaction.'}
+              {'Lua pattern scanner. Finds emails, phone numbers, SSNs, IPv4/v6, and credit cards with match boundaries for surgical redaction. All logic in LuaJIT — zero JS compute.'}
             </Text>
             <CodeBlock language="tsx" fontSize={9} code={PII_CODE} />
           </Box>
@@ -827,7 +833,7 @@ export function PrivacyStory() {
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="settings">{'ALGORITHM SAFETY'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Pure TypeScript strength checker. Rates algorithms as strong/acceptable/weak/broken with deprecation flags. Ships with RECOMMENDED_DEFAULTS for safe starting values.'}
+              {'Lua strength checker. Rates algorithms as strong/acceptable/weak/broken with deprecation flags. RECOMMENDED_DEFAULTS live in Lua — xchacha20 / argon2id / blake3 / 32-byte keys.'}
             </Text>
           </Box>
         </Box>

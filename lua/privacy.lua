@@ -1474,6 +1474,385 @@ end
 -- RPC Handlers
 -- ============================================================================
 
+-- ── Whitespace Steganography ──
+
+local ZWS  = "\xE2\x80\x8B"  -- U+200B ZERO WIDTH SPACE
+local ZWNJ = "\xE2\x80\x8C"  -- U+200C ZERO WIDTH NON-JOINER
+
+local function utf8_split(s)
+  local chars = {}
+  local i = 1
+  while i <= #s do
+    local b = string.byte(s, i)
+    local len
+    if     b < 0x80 then len = 1
+    elseif b < 0xE0 then len = 2
+    elseif b < 0xF0 then len = 3
+    else                  len = 4 end
+    chars[#chars + 1] = s:sub(i, i + len - 1)
+    i = i + len
+  end
+  return chars
+end
+
+function Privacy.stegEmbedWhitespace(carrier, secret)
+  local bits = {}
+  for i = 1, #secret do
+    local b = string.byte(secret, i)
+    for shift = 7, 0, -1 do
+      bits[#bits + 1] = bit.band(bit.rshift(b, shift), 1)
+    end
+  end
+  local chars  = utf8_split(carrier)
+  if #chars < 2 then return carrier end
+  local parts  = { chars[1] }
+  local bitIdx = 1
+  for i = 2, #chars do
+    while bitIdx <= #bits do
+      parts[#parts + 1] = bits[bitIdx] == 0 and ZWS or ZWNJ
+      bitIdx = bitIdx + 1
+    end
+    parts[#parts + 1] = chars[i]
+  end
+  return table.concat(parts)
+end
+
+function Privacy.stegExtractWhitespace(text)
+  local bits = {}
+  local i = 1
+  while i <= #text do
+    if i + 2 <= #text and text:sub(i, i + 2) == ZWS then
+      bits[#bits + 1] = 0
+      i = i + 3
+    elseif i + 2 <= #text and text:sub(i, i + 2) == ZWNJ then
+      bits[#bits + 1] = 1
+      i = i + 3
+    else
+      local b = string.byte(text, i)
+      if     b < 0x80 then i = i + 1
+      elseif b < 0xE0 then i = i + 2
+      elseif b < 0xF0 then i = i + 3
+      else                  i = i + 4 end
+    end
+  end
+  local result = {}
+  local j = 1
+  while j + 7 <= #bits do
+    local byte = 0
+    for k = 0, 7 do byte = byte + bits[j + k] * (2 ^ (7 - k)) end
+    result[#result + 1] = string.char(math.floor(byte))
+    j = j + 8
+  end
+  return table.concat(result)
+end
+
+-- ── PII Sanitize ──
+
+local PII_PATTERNS = {
+  email      = "[%w%.%+%-%_]+@[%w%.%-]+%.[%a][%a]+",
+  phone      = "%+?1?[%s%-%.]?%(?%d%d%d%)?[%s%-%.]?%d%d%d[%s%-%.]?%d%d%d%d",
+  ssn        = "%d%d%d%-?%d%d%-?%d%d%d%d",
+  ipv4       = "%d+%.%d+%.%d+%.%d+",
+  ipv6       = "[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?:[%x][%x]?[%x]?[%x]?",
+  creditCard = "%d%d%d%d[%-%s]?%d%d%d%d[%-%s]?%d%d%d%d[%-%s]?%d%d%d%d",
+}
+local PII_ORDER = { "email", "phone", "ssn", "ipv4", "ipv6", "creditCard" }
+
+local function isValidIPv4(s)
+  local a, b, c, d = s:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+  if not a then return false end
+  for _, v in ipairs({ tonumber(a), tonumber(b), tonumber(c), tonumber(d) }) do
+    if v > 255 then return false end
+  end
+  return true
+end
+
+local function findAllPII(text, piiType)
+  local pattern = PII_PATTERNS[piiType]
+  local matches = {}
+  local init    = 1
+  while true do
+    local s, e = text:find(pattern, init)
+    if not s then break end
+    local value = text:sub(s, e)
+    if piiType ~= "ipv4" or isValidIPv4(value) then
+      matches[#matches + 1] = { type = piiType, value = value, start = s - 1, ["end"] = e }
+    end
+    init = e + 1
+  end
+  return matches
+end
+
+function Privacy.detectPII(text)
+  local all = {}
+  for _, piiType in ipairs(PII_ORDER) do
+    for _, m in ipairs(findAllPII(text, piiType)) do all[#all + 1] = m end
+  end
+  table.sort(all, function(a, b) return a.start < b.start end)
+  return all
+end
+
+function Privacy.maskValue(value, opts)
+  local visibleEnd   = (opts and opts.visibleEnd)  or 4
+  local visibleStart = (opts and opts.visibleStart) or 0
+  local maskChar     = (opts and opts.maskChar)     or "*"
+  local maskLen      = math.max(0, #value - visibleStart - visibleEnd)
+  return value:sub(1, visibleStart) .. maskChar:rep(maskLen) .. value:sub(#value - visibleEnd + 1)
+end
+
+function Privacy.redactPII(text, opts)
+  local types = (opts and opts.types) or PII_ORDER
+  local matches = {}
+  for _, piiType in ipairs(types) do
+    for _, m in ipairs(findAllPII(text, piiType)) do matches[#matches + 1] = m end
+  end
+  table.sort(matches, function(a, b) return a.start > b.start end)
+  for _, m in ipairs(matches) do
+    local replacement
+    if opts and opts.mask then
+      replacement = Privacy.maskValue(m.value)
+    else
+      replacement = (opts and opts.replacement) or "[REDACTED]"
+    end
+    text = text:sub(1, m.start) .. replacement .. text:sub(m["end"] + 1)
+  end
+  return text
+end
+
+function Privacy.redactLog(logLine) return Privacy.redactPII(logLine) end
+
+function Privacy.sanitizeTokenize(value, salt)
+  ensureLoaded()
+  return Crypto.hmac_sha256(salt, value).hex
+end
+
+-- ── Audit Log ──
+
+local _audit = { chainKeyHex = "", entries = {}, initialized = false }
+
+local function serializeAuditData(data)
+  if data == nil then return "null" end
+  local t = type(data)
+  if t == "string"  then return '"' .. data:gsub('\\', '\\\\'):gsub('"', '\\"') .. '"' end
+  if t == "number"  then return tostring(data) end
+  if t == "boolean" then return data and "true" or "false" end
+  return '"[object]"'
+end
+
+function Privacy.auditCreate(key)
+  _audit.chainKeyHex = key
+  _audit.entries     = {}
+  _audit.initialized = true
+end
+
+function Privacy.auditAppend(event, data)
+  if not _audit.initialized then
+    error("Audit log not initialized. Call privacy:audit:create first.")
+  end
+  local index    = #_audit.entries
+  local prevHash = index > 0 and _audit.entries[index].hash or "0"
+  local timestamp = math.floor(os.time() * 1000)
+  local msg = string.format(
+    '%s{"index":%d,"timestamp":%d,"event":"%s","data":%s,"prevHash":"%s"}',
+    prevHash, index, timestamp, event:gsub('"', '\\"'), serializeAuditData(data), prevHash
+  )
+  local hash  = hmac_sha256_raw(hexToRaw(_audit.chainKeyHex), msg)
+  local entry = { index = index, timestamp = timestamp, event = event,
+                  data = data, hash = hash, prevHash = prevHash }
+  _audit.entries[#_audit.entries + 1] = entry
+  return entry
+end
+
+function Privacy.auditVerify()
+  if #_audit.entries == 0 then return { valid = true, entries = 0 } end
+  for i, e in ipairs(_audit.entries) do
+    local expectedPrev = i > 1 and _audit.entries[i - 1].hash or "0"
+    if e.prevHash ~= expectedPrev then
+      return { valid = false, entries = #_audit.entries, brokenAt = i - 1 }
+    end
+    local msg = string.format(
+      '%s{"index":%d,"timestamp":%d,"event":"%s","data":%s,"prevHash":"%s"}',
+      e.prevHash, e.index, e.timestamp, e.event:gsub('"', '\\"'), serializeAuditData(e.data), e.prevHash
+    )
+    if hmac_sha256_raw(hexToRaw(_audit.chainKeyHex), msg) ~= e.hash then
+      return { valid = false, entries = #_audit.entries, brokenAt = i - 1 }
+    end
+  end
+  return { valid = true, entries = #_audit.entries }
+end
+
+function Privacy.auditEntries(from, to)
+  from = (from or 0) + 1
+  to   = to or #_audit.entries
+  local result = {}
+  for i = from, to do
+    if _audit.entries[i] then result[#result + 1] = _audit.entries[i] end
+  end
+  return result
+end
+
+-- ── Policy / Consent ──
+
+local _policy = { retentionPolicies = {}, consentRecords = {} }
+
+function Privacy.policySetRetention(policy)
+  _policy.retentionPolicies[policy.category] = policy
+end
+
+function Privacy.policyRecordConsent(userId, purpose, granted)
+  _policy.consentRecords[#_policy.consentRecords + 1] = {
+    userId = userId, purpose = purpose, granted = granted,
+    timestamp = math.floor(os.time() * 1000),
+  }
+end
+
+function Privacy.policyCheckConsent(userId, purpose)
+  for i = #_policy.consentRecords, 1, -1 do
+    local r = _policy.consentRecords[i]
+    if r.userId == userId and r.purpose == purpose then return r.granted end
+  end
+  return false
+end
+
+function Privacy.policyRevokeConsent(userId, purpose)
+  local now = math.floor(os.time() * 1000)
+  if purpose then
+    _policy.consentRecords[#_policy.consentRecords + 1] = {
+      userId = userId, purpose = purpose, granted = false, timestamp = now
+    }
+  else
+    local purposes = {}
+    for _, r in ipairs(_policy.consentRecords) do
+      if r.userId == userId then purposes[r.purpose] = true end
+    end
+    for p in pairs(purposes) do
+      _policy.consentRecords[#_policy.consentRecords + 1] = {
+        userId = userId, purpose = p, granted = false, timestamp = now
+      }
+    end
+  end
+end
+
+function Privacy.policyRightToErasure(userId)
+  local found, deleted = 0, 0
+  local i = #_policy.consentRecords
+  while i >= 1 do
+    if _policy.consentRecords[i].userId == userId then
+      found   = found   + 1
+      deleted = deleted + 1
+      table.remove(_policy.consentRecords, i)
+    end
+    i = i - 1
+  end
+  return { userId = userId, recordsFound = found, recordsDeleted = deleted, categories = {} }
+end
+
+function Privacy.policyEnforceRetention()
+  return { expired = 0, deleted = 0, anonymized = 0, archived = 0, errors = {} }
+end
+
+-- ── Algorithm Safety ──
+
+local STRONG_ALGOS = {
+  ["xchacha20-poly1305"] = true, ["chacha20-poly1305"] = true, ["aes-256-gcm"] = true,
+  ["ed25519"] = true, ["x25519"] = true, ["sha256"] = true, ["sha512"] = true,
+  ["blake2b"] = true, ["blake3"] = true, ["argon2id"] = true,
+}
+local ACCEPTABLE_ALGOS = {
+  ["aes-128-gcm"] = true, ["sha384"] = true, ["scrypt"] = true,
+  ["pbkdf2"] = true, ["blake2s"] = true,
+}
+local WEAK_ALGOS = {
+  ["sha1"] = true, ["md5"] = true, ["des"] = true,
+  ["rc4"] = true, ["3des"] = true, ["rsa-1024"] = true,
+}
+local BROKEN_ALGOS = { ["md4"] = true, ["des-ecb"] = true, ["rc2"] = true, ["none"] = true }
+
+local RECOMMENDED_DEFAULTS = {
+  algorithm = "xchacha20-poly1305", kdf = "argon2id", hashAlgorithm = "sha256",
+  keySize = 32, nonceSize = 24, saltSize = 16, argon2Ops = 2, argon2Mem = 67108864,
+  scryptN = 131072, scryptR = 8, scryptP = 1, pbkdf2Iterations = 100000,
+}
+
+function Privacy.checkAlgorithmStrength(algorithm)
+  local lower = algorithm:lower()
+  local rec   = RECOMMENDED_DEFAULTS.algorithm
+  if BROKEN_ALGOS[lower] then
+    return { algorithm = algorithm, strength = "broken", deprecated = true,
+             recommendation = algorithm .. " is broken. Use " .. rec .. " instead." }
+  end
+  if WEAK_ALGOS[lower] then
+    return { algorithm = algorithm, strength = "weak", deprecated = true,
+             recommendation = algorithm .. " is weak. Migrate to " .. rec .. "." }
+  end
+  if ACCEPTABLE_ALGOS[lower] then
+    return { algorithm = algorithm, strength = "acceptable", deprecated = false }
+  end
+  if STRONG_ALGOS[lower] then
+    return { algorithm = algorithm, strength = "strong", deprecated = false }
+  end
+  return { algorithm = algorithm, strength = "weak", deprecated = false,
+           recommendation = 'Unknown algorithm "' .. algorithm .. '". Verify it meets current security standards.' }
+end
+
+function Privacy.validateConfig(config)
+  if type(config) ~= "table" then
+    return { valid = false, errors = { "Config must be a non-null object" }, warnings = {} }
+  end
+  local errors, warnings = {}, {}
+  if config.algorithm then
+    local a = Privacy.checkAlgorithmStrength(config.algorithm)
+    if     a.strength == "broken" then errors[#errors + 1]   = 'Algorithm "' .. config.algorithm .. '" is broken and must not be used.'
+    elseif a.strength == "weak"   then warnings[#warnings + 1] = 'Algorithm "' .. config.algorithm .. '" is weak. Consider upgrading.' end
+  end
+  if config.keySize ~= nil then
+    if type(config.keySize) ~= "number" or config.keySize < 16 then
+      errors[#errors + 1] = "Key size must be at least 16 bytes. Got " .. tostring(config.keySize) .. "."
+    elseif config.keySize < 32 then
+      warnings[#warnings + 1] = "Key size " .. config.keySize .. " is below recommended 32 bytes."
+    end
+  end
+  if config.nonceSize ~= nil and (type(config.nonceSize) ~= "number" or config.nonceSize < 8) then
+    errors[#errors + 1] = "Nonce size must be at least 8 bytes. Got " .. tostring(config.nonceSize) .. "."
+  end
+  if config.saltSize ~= nil then
+    if type(config.saltSize) ~= "number" or config.saltSize < 8 then
+      errors[#errors + 1] = "Salt size must be at least 8 bytes. Got " .. tostring(config.saltSize) .. "."
+    elseif config.saltSize < 16 then
+      warnings[#warnings + 1] = "Salt size " .. config.saltSize .. " is below recommended 16 bytes."
+    end
+  end
+  local iter = config.iterations or config.pbkdf2Iterations
+  if iter ~= nil then
+    if type(iter) ~= "number" or iter < 10000 then
+      errors[#errors + 1] = "Iterations must be at least 10000. Got " .. tostring(iter) .. "."
+    elseif iter < 100000 then
+      warnings[#warnings + 1] = "Iterations " .. iter .. " is below recommended 100000."
+    end
+  end
+  if config.argon2Ops ~= nil and (type(config.argon2Ops) ~= "number" or config.argon2Ops < 1) then
+    errors[#errors + 1] = "argon2Ops must be at least 1. Got " .. tostring(config.argon2Ops) .. "."
+  end
+  if config.argon2Mem ~= nil and (type(config.argon2Mem) ~= "number" or config.argon2Mem < 8192) then
+    errors[#errors + 1] = "argon2Mem must be at least 8192 bytes. Got " .. tostring(config.argon2Mem) .. "."
+  end
+  if config.scryptN ~= nil and (type(config.scryptN) ~= "number" or config.scryptN < 1024) then
+    errors[#errors + 1] = "scryptN must be at least 1024. Got " .. tostring(config.scryptN) .. "."
+  end
+  return { valid = #errors == 0, errors = errors, warnings = warnings }
+end
+
+-- ── Metadata extras ──
+
+function Privacy.sanitizeFilename(name)
+  name = name:gsub("%.%./", ""):gsub("%./", ""):gsub("%z", ""):gsub("[%c]", "")
+  return (name:match("^%s*(.-)%s*$") or "")
+end
+
+function Privacy.normalizeTimestamp(dateStr)
+  return (dateStr:gsub("%.%d+Z$", "Z"))
+end
+
 function Privacy.getHandlers()
   local handlers = {}
 
@@ -1793,6 +2172,144 @@ function Privacy.getHandlers()
   handlers["privacy:steg:extractImage"] = function(args)
     if not args or not args.imagePath then error("privacy:steg:extractImage requires 'imagePath'") end
     return { data = Privacy.stegExtractImage(args.imagePath) }
+  end
+
+  -- ── Whitespace Steganography ──
+  handlers["privacy:steg:embedWhitespace"] = function(args)
+    if not args or not args.carrier or not args.secret then
+      error("privacy:steg:embedWhitespace requires 'carrier' and 'secret'")
+    end
+    return Privacy.stegEmbedWhitespace(args.carrier, args.secret)
+  end
+
+  handlers["privacy:steg:extractWhitespace"] = function(args)
+    if not args or not args.text then
+      error("privacy:steg:extractWhitespace requires 'text'")
+    end
+    return Privacy.stegExtractWhitespace(args.text)
+  end
+
+  -- ── PII Sanitize ──
+  handlers["privacy:sanitize:detectPII"] = function(args)
+    if not args or not args.text then error("privacy:sanitize:detectPII requires 'text'") end
+    return Privacy.detectPII(args.text)
+  end
+
+  handlers["privacy:sanitize:redactPII"] = function(args)
+    if not args or not args.text then error("privacy:sanitize:redactPII requires 'text'") end
+    return Privacy.redactPII(args.text, args)
+  end
+
+  handlers["privacy:sanitize:maskValue"] = function(args)
+    if not args or not args.value then error("privacy:sanitize:maskValue requires 'value'") end
+    return Privacy.maskValue(args.value, args)
+  end
+
+  handlers["privacy:sanitize:redactLog"] = function(args)
+    if not args or not args.logLine then error("privacy:sanitize:redactLog requires 'logLine'") end
+    return Privacy.redactLog(args.logLine)
+  end
+
+  handlers["privacy:sanitize:tokenize"] = function(args)
+    ensureAll()
+    if not args or not args.value or not args.salt then
+      error("privacy:sanitize:tokenize requires 'value' and 'salt'")
+    end
+    return { hex = Privacy.sanitizeTokenize(args.value, args.salt) }
+  end
+
+  -- ── Audit Log ──
+  handlers["privacy:audit:create"] = function(args)
+    if not args or not args.key then error("privacy:audit:create requires 'key'") end
+    Privacy.auditCreate(args.key)
+    return { success = true }
+  end
+
+  handlers["privacy:audit:append"] = function(args)
+    ensureAll()
+    if not args or not args.event then error("privacy:audit:append requires 'event'") end
+    return Privacy.auditAppend(args.event, args.data)
+  end
+
+  handlers["privacy:audit:verify"] = function()
+    ensureAll()
+    return Privacy.auditVerify()
+  end
+
+  handlers["privacy:audit:entries"] = function(args)
+    return Privacy.auditEntries(args and args.from, args and args.to)
+  end
+
+  -- ── Policy / Consent ──
+  handlers["privacy:policy:setRetention"] = function(args)
+    if not args or not args.policy then error("privacy:policy:setRetention requires 'policy'") end
+    Privacy.policySetRetention(args.policy)
+    return { success = true }
+  end
+
+  handlers["privacy:policy:recordConsent"] = function(args)
+    if not args or not args.userId or not args.purpose then
+      error("privacy:policy:recordConsent requires 'userId' and 'purpose'")
+    end
+    Privacy.policyRecordConsent(args.userId, args.purpose, args.granted ~= false)
+    return { success = true }
+  end
+
+  handlers["privacy:policy:checkConsent"] = function(args)
+    if not args or not args.userId or not args.purpose then
+      error("privacy:policy:checkConsent requires 'userId' and 'purpose'")
+    end
+    return { granted = Privacy.policyCheckConsent(args.userId, args.purpose) }
+  end
+
+  handlers["privacy:policy:revokeConsent"] = function(args)
+    if not args or not args.userId then error("privacy:policy:revokeConsent requires 'userId'") end
+    Privacy.policyRevokeConsent(args.userId, args.purpose)
+    return { success = true }
+  end
+
+  handlers["privacy:policy:rightToErasure"] = function(args)
+    if not args or not args.userId then error("privacy:policy:rightToErasure requires 'userId'") end
+    return Privacy.policyRightToErasure(args.userId)
+  end
+
+  handlers["privacy:policy:enforceRetention"] = function()
+    return Privacy.policyEnforceRetention()
+  end
+
+  -- ── Algorithm Safety ──
+  handlers["privacy:safety:checkAlgorithmStrength"] = function(args)
+    if not args or not args.algorithm then
+      error("privacy:safety:checkAlgorithmStrength requires 'algorithm'")
+    end
+    return Privacy.checkAlgorithmStrength(args.algorithm)
+  end
+
+  handlers["privacy:safety:validateConfig"] = function(args)
+    if not args or not args.config then
+      error("privacy:safety:validateConfig requires 'config'")
+    end
+    return Privacy.validateConfig(args.config)
+  end
+
+  handlers["privacy:safety:recommendedDefaults"] = function()
+    return RECOMMENDED_DEFAULTS
+  end
+
+  -- ── Metadata extras ──
+  handlers["privacy:meta:sanitizeFilename"] = function(args)
+    if not args or not args.name then error("privacy:meta:sanitizeFilename requires 'name'") end
+    return Privacy.sanitizeFilename(args.name)
+  end
+
+  handlers["privacy:meta:normalizeTimestamp"] = function(args)
+    if not args or not args.date then error("privacy:meta:normalizeTimestamp requires 'date'") end
+    return Privacy.normalizeTimestamp(args.date)
+  end
+
+  -- ── Secure Store (stub — requires full Lua keyring-style implementation) ──
+  handlers["privacy:store:create"] = function(_args)
+    error("privacy:store:create: encrypted store not yet implemented in Lua runtime")
   end
 
   return handlers

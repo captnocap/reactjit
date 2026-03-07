@@ -285,10 +285,10 @@ export interface PrivacyAPI {
     protect(handle: SecureHandle, mode: ProtectMode): Promise<void>;
   };
   sanitize: {
-    detectPII(text: string): PIIMatch[];
-    redactPII(text: string, opts?: RedactOptions): string;
-    maskValue(value: string, opts?: MaskOptions): string;
-    redactLog(logLine: string): string;
+    detectPII(text: string): Promise<PIIMatch[]>;
+    redactPII(text: string, opts?: RedactOptions): Promise<string>;
+    maskValue(value: string, opts?: MaskOptions): Promise<string>;
+    redactLog(logLine: string): Promise<string>;
     tokenize(value: string, salt: string): Promise<string>;
   };
   identity: {
@@ -309,8 +309,8 @@ export interface PrivacyAPI {
   steg: {
     embedImage(imagePath: string, data: string, outputPath: string): Promise<StegResult>;
     extractImage(imagePath: string): Promise<string>;
-    embedWhitespace(carrier: string, secret: string): string;
-    extractWhitespace(text: string): string;
+    embedWhitespace(carrier: string, secret: string): Promise<string>;
+    extractWhitespace(text: string): Promise<string>;
   };
   store: {
     create<T>(opts: EncryptedStoreOptions): Promise<EncryptedStore<T>>;
@@ -318,8 +318,8 @@ export interface PrivacyAPI {
   metadata: {
     strip(path: string, outputPath?: string): Promise<void>;
     read(path: string): Promise<FileMetadata>;
-    sanitizeFilename(name: string): string;
-    normalizeTimestamp(date: Date | string): string;
+    sanitizeFilename(name: string): Promise<string>;
+    normalizeTimestamp(date: Date | string): Promise<string>;
   };
   policy: {
     setRetention(policy: RetentionPolicy): Promise<void>;
@@ -330,12 +330,13 @@ export interface PrivacyAPI {
     enforceRetention(): Promise<RetentionReport>;
   };
   audit: {
+    create(key: string): Promise<void>;
     append(event: string, data?: any): Promise<AuditEntry>;
     verify(): Promise<AuditVerifyResult>;
     entries(opts?: { from?: number; to?: number }): Promise<AuditEntry[]>;
   };
   safety: {
-    validateConfig(config: any): ValidationResult;
-    checkAlgorithmStrength(algorithm: string): AlgorithmAssessment;
+    validateConfig(config: any): Promise<ValidationResult>;
+    checkAlgorithmStrength(algorithm: string): Promise<AlgorithmAssessment>;
   };
 }
