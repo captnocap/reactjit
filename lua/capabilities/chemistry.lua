@@ -579,6 +579,153 @@ function M.getHandlers()
       end
       return result
     end,
+
+    -- ── chemistry:compute — all stoichiometry / util math in LuaJIT ───────────
+    ["chemistry:compute"] = function(args)
+      if not args or not args.method then return nil end
+      local method = args.method
+      local AVOGADRO = 6.02214076e23
+      local R_GAS    = 8.314
+
+      local function gcd(a, b)
+        a, b = math.abs(a), math.abs(b)
+        while b ~= 0 do a, b = b, a % b end
+        return a
+      end
+
+      if method == 'molarMass' then
+        return molarMass(args.formula or '')
+
+      elseif method == 'atomCount' then
+        local atoms = parseFormula(args.formula or '')
+        local n = 0
+        for _, a in ipairs(atoms) do n = n + a.count end
+        return n
+
+      elseif method == 'massComposition' then
+        local formula = args.formula or ''
+        local atoms = parseFormula(formula)
+        local total = molarMass(formula)
+        if total == 0 then return {} end
+        local result = {}
+        for _, a in ipairs(atoms) do
+          local e = BY_SYMBOL[a.symbol]
+          if e then
+            result[a.symbol] = math.floor((e.mass * a.count / total) * 10000 + 0.5) / 100
+          end
+        end
+        return result
+
+      elseif method == 'empiricalFormula' then
+        local formula = args.formula or ''
+        local atoms = parseFormula(formula)
+        if #atoms == 0 then return '' end
+        local d = atoms[1].count
+        for i = 2, #atoms do d = gcd(d, atoms[i].count) end
+        local parts = {}
+        for _, a in ipairs(atoms) do
+          local n = a.count / d
+          parts[#parts + 1] = a.symbol .. (n > 1 and tostring(math.floor(n)) or '')
+        end
+        return table.concat(parts)
+
+      elseif method == 'valenceElectrons' then
+        local e = type(args.key) == 'number' and ELEMENTS[args.key] or BY_SYMBOL[args.key or '']
+        if not e then return 0 end
+        return e.shells[#e.shells]
+
+      elseif method == 'electronegativityDiff' then
+        local e1 = BY_SYMBOL[args.symbol1 or '']
+        local e2 = BY_SYMBOL[args.symbol2 or '']
+        if not e1 or not e2 or not e1.electronegativity or not e2.electronegativity then return nil end
+        return math.abs(e1.electronegativity - e2.electronegativity)
+
+      elseif method == 'bondCharacter' then
+        local e1 = BY_SYMBOL[args.symbol1 or '']
+        local e2 = BY_SYMBOL[args.symbol2 or '']
+        if not e1 or not e2 or not e1.electronegativity or not e2.electronegativity then return nil end
+        local diff = math.abs(e1.electronegativity - e2.electronegativity)
+        if diff < 0.5 then return 'nonpolar-covalent'
+        elseif diff < 1.7 then return 'polar-covalent'
+        else return 'ionic' end
+
+      elseif method == 'oxidationStates' then
+        local OXIDATION = {
+          H={1,-1}, He={0}, Li={1}, Be={2}, B={3},
+          C={-4,-3,-2,-1,0,1,2,3,4}, N={-3,-2,-1,0,1,2,3,4,5},
+          O={-2,-1}, F={-1}, Ne={0}, Na={1}, Mg={2}, Al={3},
+          Si={-4,4}, P={-3,3,5}, S={-2,2,4,6}, Cl={-1,1,3,5,7}, Ar={0},
+          K={1}, Ca={2}, Fe={2,3}, Cu={1,2}, Zn={2}, Ag={1}, Au={1,3}, Pt={2,4},
+          Mn={2,3,4,7}, Cr={2,3,6}, Co={2,3}, Ni={2}, Ti={2,3,4}, V={2,3,4,5},
+          Sn={2,4}, Pb={2,4}, Hg={1,2}, Br={-1,1,3,5}, I={-1,1,3,5,7},
+        }
+        return OXIDATION[args.symbol or ''] or {}
+
+      elseif method == 'isotopeNotation' then
+        local e = BY_SYMBOL[args.symbol or '']
+        local sym = e and e.symbol or (args.symbol or '')
+        return tostring(args.massNumber or 0) .. sym
+
+      elseif method == 'massToMoles' then
+        local mm = molarMass(args.formula or '')
+        return mm > 0 and (args.mass or 0) / mm or 0
+
+      elseif method == 'molesToMass' then
+        return (args.moles or 0) * molarMass(args.formula or '')
+
+      elseif method == 'molesToParticles' then
+        return (args.moles or 0) * AVOGADRO
+
+      elseif method == 'particlesToMoles' then
+        return (args.particles or 0) / AVOGADRO
+
+      elseif method == 'massToParticles' then
+        local mm = molarMass(args.formula or '')
+        local moles_val = mm > 0 and (args.mass or 0) / mm or 0
+        return moles_val * AVOGADRO
+
+      elseif method == 'idealGasPressure' then
+        return (args.n or 0) * R_GAS * (args.T or 0) / (args.V or 1)
+
+      elseif method == 'idealGasVolume' then
+        return (args.n or 0) * R_GAS * (args.T or 0) / (args.P or 1)
+
+      elseif method == 'idealGasMoles' then
+        return (args.P or 0) * (args.V or 0) / (R_GAS * (args.T or 1))
+
+      elseif method == 'molarity' then
+        local liters = args.liters or 0
+        return liters > 0 and (args.moles or 0) / liters or 0
+
+      elseif method == 'dilution' then
+        local M2 = args.M2 or 0
+        return M2 > 0 and (args.M1 or 0) * (args.V1 or 0) / M2 or 0
+
+      elseif method == 'equilibrium' then
+        local kEq = args.kEq or 1
+        local shift = 'none'
+        local direction = 'equilibrium'
+        if args.changeTemp and args.deltaH then
+          shift = args.changeTemp > 0
+            and (args.deltaH > 0 and 'right' or 'left')
+            or  (args.deltaH > 0 and 'left'  or 'right')
+        end
+        if args.changePressure then
+          shift = args.changePressure > 0 and 'left' or 'right'
+        end
+        if kEq > 1 then direction = 'forward'
+        elseif kEq < 1 then direction = 'reverse' end
+        return {
+          kEq         = kEq,
+          direction   = direction,
+          shift       = shift,
+          temperature = (args.temperature or 298) + (args.changeTemp or 0),
+          pressure    = (args.pressure or 1) + (args.changePressure or 0),
+        }
+      end
+
+      return nil
+    end,
   }
 end
 

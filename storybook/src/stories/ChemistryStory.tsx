@@ -9,17 +9,15 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView,
   ReagentTest, SpectrumView, PhaseDiagram, BohrModel, StructureView,
   ChemFormula, ChemEquation, IsoNotation, ChemFig,
-  useElement, useMolecule, useReaction,
-  molarMass, massComposition,
+  useElement, useMolecule, useReaction, useChemCompute,
   COMPOUNDS, ELEMENTS, REAGENT_INFO,
-  massToMoles, molesToParticles,
   fetchCompound,
   CONSTANTS,
 } from '../../../packages/chemistry/src';
@@ -654,12 +652,27 @@ function ToolsDemo() {
   const c = useThemeColors();
   const [formula, setFormula] = useState('H2O');
   const [mass, setMass] = useState('18');
+  const compute = useChemCompute();
 
-  const mm = useMemo(() => molarMass(formula), [formula]);
-  const composition = useMemo(() => massComposition(formula), [formula]);
+  const [mm, setMm] = useState(0);
+  const [composition, setComposition] = useState<Record<string, number>>({});
+  const [moles, setMoles] = useState(0);
+  const [particles, setParticles] = useState(0);
+
   const massNum = parseFloat(mass) || 0;
-  const moles = useMemo(() => massToMoles(massNum, formula), [massNum, formula]);
-  const particles = useMemo(() => molesToParticles(moles), [moles]);
+
+  useEffect(() => {
+    compute({ method: 'molarMass', formula }).then(setMm).catch(() => {});
+    compute({ method: 'massComposition', formula }).then(setComposition).catch(() => {});
+  }, [formula]);
+
+  useEffect(() => {
+    compute({ method: 'massToMoles', mass: massNum, formula }).then(setMoles).catch(() => {});
+  }, [massNum, formula]);
+
+  useEffect(() => {
+    compute({ method: 'molesToParticles', moles }).then(setParticles).catch(() => {});
+  }, [moles]);
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>

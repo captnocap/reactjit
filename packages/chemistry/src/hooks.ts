@@ -1,10 +1,15 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useLoveRPC } from '@reactjit/core';
-import { getElement, ELEMENTS } from './elements';
 import type { Element, Molecule, Reaction, EquilibriumState } from './types';
 
 export function useElement(key: number | string): Element | undefined {
-  return useMemo(() => getElement(key), [key]);
+  const rpc = useLoveRPC<Element>('chemistry:element');
+  const [result, setResult] = useState<Element | undefined>(undefined);
+  useEffect(() => {
+    if (key === undefined || key === null || key === '') return;
+    rpc({ key }).then(setResult).catch(() => {});
+  }, [key]);
+  return result;
 }
 
 export function useMolecule(formulaOrName: string): Molecule | null {
@@ -34,33 +39,15 @@ export function useEquilibrium(opts: {
   deltaH?: number;
   changeTemp?: number;
   changePressure?: number;
-}): EquilibriumState {
-  const { kEq, temperature, pressure = 1, deltaH, changeTemp, changePressure } = opts;
-  return useMemo(() => {
-    let shift: EquilibriumState['shift'] = 'none';
-    let direction: EquilibriumState['direction'] = 'equilibrium';
-
-    if (changeTemp && deltaH) {
-      shift = changeTemp > 0
-        ? (deltaH > 0 ? 'right' : 'left')
-        : (deltaH > 0 ? 'left' : 'right');
-    }
-
-    if (changePressure) {
-      shift = changePressure > 0 ? 'left' : 'right';
-    }
-
-    if (kEq > 1) direction = 'forward';
-    else if (kEq < 1) direction = 'reverse';
-
-    return {
-      kEq,
-      direction,
-      shift,
-      temperature: temperature + (changeTemp ?? 0),
-      pressure: pressure + (changePressure ?? 0),
-    };
+}): EquilibriumState | null {
+  const compute = useLoveRPC<EquilibriumState>('chemistry:compute');
+  const [result, setResult] = useState<EquilibriumState | null>(null);
+  const { kEq, temperature, pressure, deltaH, changeTemp, changePressure } = opts;
+  useEffect(() => {
+    compute({ method: 'equilibrium', kEq, temperature, pressure, deltaH, changeTemp, changePressure })
+      .then(setResult).catch(() => {});
   }, [kEq, temperature, pressure, deltaH, changeTemp, changePressure]);
+  return result;
 }
 
 export function usePeriodicTableFilter(filter?: {
@@ -68,19 +55,11 @@ export function usePeriodicTableFilter(filter?: {
   phase?: Element['phase'];
   search?: string;
 }): { highlighted: number[] } {
-  return useMemo(() => {
-    if (!filter) return { highlighted: [] };
-    const { category, phase, search } = filter;
-    const highlighted: number[] = [];
-    for (const el of ELEMENTS) {
-      if (category && el.category !== category) continue;
-      if (phase && el.phase !== phase) continue;
-      if (search) {
-        const q = search.toLowerCase();
-        if (!el.name.toLowerCase().includes(q) && !el.symbol.toLowerCase().includes(q)) continue;
-      }
-      highlighted.push(el.number);
-    }
-    return { highlighted };
+  const rpc = useLoveRPC<Element[]>('chemistry:elements');
+  const [highlighted, setHighlighted] = useState<number[]>([]);
+  useEffect(() => {
+    if (!filter) { setHighlighted([]); return; }
+    rpc(filter).then(els => setHighlighted(els.map(e => e.number))).catch(() => {});
   }, [filter?.category, filter?.phase, filter?.search]);
+  return { highlighted };
 }

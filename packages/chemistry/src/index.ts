@@ -26,16 +26,7 @@ export { COMPOUNDS } from './molecules';
 export { ENTHALPIES } from './reactions';
 
 // -- Utilities ----------------------------------------------------------------
-export {
-  parseFormula, molarMass, atomCount, massComposition,
-  electronConfig, valenceElectrons,
-  electronegativityDiff, bondCharacter,
-  oxidationStates, isotopeNotation, empiricalFormula,
-  massToMoles, molesToMass, molesToParticles, particlesToMoles, massToParticles,
-  idealGasPressure, idealGasVolume, idealGasMoles,
-  molarity, dilution,
-  CONSTANTS,
-} from './utils';
+export { useChemCompute, CONSTANTS } from './utils';
 
 // -- React hooks --------------------------------------------------------------
 export { useElement, useMolecule, useReaction, useEquilibrium, usePeriodicTableFilter } from './hooks';
