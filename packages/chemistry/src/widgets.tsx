@@ -66,31 +66,56 @@ const TABLE_LAYOUT: number[][] = [
   [0, 0, 89,90,91,92,93,94,95,96,97,98,99,100,101,102,103, 0],
 ];
 
+const TABLE_COLUMNS = 18;
+const TILE_HEIGHT_RATIO = 36 / 32;
+
+// Precompute occupied cells so placement is purely geometric and does not depend
+// on flex row sizing or shrink behavior.
+const TABLE_CELLS = TABLE_LAYOUT.flatMap((row, rowIndex) => (
+  row.flatMap((atomicNumber, columnIndex) => (
+    atomicNumber === 0
+      ? []
+      : [{ atomicNumber, rowIndex, columnIndex }]
+  ))
+));
+
 export function PeriodicTable({
   onSelect,
   selected,
   tileSize = 40,
   style,
 }: PeriodicTableProps) {
-  const h = tileSize * 36 / 32;
-  const gap = Math.max(1, Math.round(tileSize / 20));
+  const tileWidth = tileSize;
+  const tileHeight = tileWidth * TILE_HEIGHT_RATIO;
+  const gap = Math.max(1, Math.round(tileWidth / 20));
+  const tableWidth = TABLE_COLUMNS * tileWidth + (TABLE_COLUMNS - 1) * gap;
+  const tableHeight = TABLE_LAYOUT.length * tileHeight + (TABLE_LAYOUT.length - 1) * gap;
 
   return (
-    <Box style={{ gap, ...style }}>
-      {TABLE_LAYOUT.map((row, ri) => (
-        <Box key={ri} style={{ flexDirection: 'row', gap }}>
-          {row.map((num, ci) => {
-            if (num === 0) return <Box key={ci} style={{ width: tileSize, height: h }} />;
-            return (
-              <ElementTile
-                key={num}
-                element={num}
-                size={tileSize}
-                selected={selected === num}
-                onPress={onSelect}
-              />
-            );
-          })}
+    <Box style={{
+      ...style,
+      width: tableWidth,
+      height: tableHeight,
+      position: 'relative',
+      flexShrink: 0,
+    }}>
+      {TABLE_CELLS.map(({ atomicNumber, rowIndex, columnIndex }) => (
+        <Box
+          key={atomicNumber}
+          style={{
+            position: 'absolute',
+            left: columnIndex * (tileWidth + gap),
+            top: rowIndex * (tileHeight + gap),
+            width: tileWidth,
+            height: tileHeight,
+          }}
+        >
+          <ElementTile
+            element={atomicNumber}
+            size={tileSize}
+            selected={selected === atomicNumber}
+            onPress={onSelect}
+          />
         </Box>
       ))}
     </Box>
@@ -112,7 +137,7 @@ export function ElementTile({ element, selected, flipped: controlledFlip, size =
 
   const bg = categoryColor(el, 'category');
   const s = size / 32;
-  const h = size * 36 / 32;
+  const h = size * TILE_HEIGHT_RATIO;
   const tiny = Math.max(2.5 * s, 6);
 
   const handlePress = () => {
