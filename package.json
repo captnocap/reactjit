@@ -47,6 +47,7 @@
     "test:router": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/router/test/router.test.mjs",
     "test:storage-query": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/storage/test/query.test.mjs",
     "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/storage/test/format.test.mjs",
+    "test:time-utils": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/time/test/utils.test.mjs",
     "poly:fetch": "node scripts/poly-pizza-fetch.mjs"
   },
   "dependencies": {
