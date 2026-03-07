@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, ScrollView, Text } from '../../../packages/core/src';
+import { Box, ScrollView, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 type ReachColumnProps = {
@@ -84,7 +84,7 @@ function SectionBlock({
         }}
       >
         <Text style={{ fontSize: 13, color: c.text, fontWeight: 'normal' }}>{title}</Text>
-        <Text style={{ fontSize: 10, color: c.textDim }}>{subtitle}</Text>
+        <S.StoryMuted>{subtitle}</S.StoryMuted>
       </Box>
       <Box
         style={{
@@ -126,7 +126,7 @@ function ReachColumn({ title, subtitle, color, rows }: ReachColumnProps) {
         }}
       >
         <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
-        <Text style={{ fontSize: 10, color: c.textDim }}>{subtitle}</Text>
+        <S.StoryMuted>{subtitle}</S.StoryMuted>
       </Box>
       <ScrollView style={{ flexGrow: 1 }}>
         <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 4 }}>
@@ -143,7 +143,7 @@ function ReachColumn({ title, subtitle, color, rows }: ReachColumnProps) {
                 paddingBottom: 6,
               }}
             >
-              <Text style={{ fontSize: 10, color: c.textDim }}>{`line ${String(i + 1).padStart(3, '0')}`}</Text>
+              <S.StoryMuted>{`line ${String(i + 1).padStart(3, '0')}`}</S.StoryMuted>
               <Text style={{ fontSize: 11, color: c.text }}>{line}</Text>
             </Box>
           ))}
@@ -179,7 +179,7 @@ function WideLane({ title, color, packets }: WideLaneProps) {
         }}
       >
         <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
-        <Text style={{ fontSize: 10, color: c.textDim }}>Vertical and horizontal pressure in one lane</Text>
+        <S.StoryMuted>Vertical and horizontal pressure in one lane</S.StoryMuted>
       </Box>
       <ScrollView style={{ flexGrow: 1 }}>
         <Box style={{ gap: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }}>
@@ -199,7 +199,7 @@ function WideLane({ title, color, packets }: WideLaneProps) {
                 gap: 3,
               }}
             >
-              <Text style={{ fontSize: 10, color: c.textDim }}>{`packet ${String(i + 1).padStart(2, '0')}`}</Text>
+              <S.StoryMuted>{`packet ${String(i + 1).padStart(2, '0')}`}</S.StoryMuted>
               <ScrollView horizontal style={{ width: '100%' }}>
                 <Box style={{ paddingRight: 12 }}>
                   <Text style={{ fontSize: 11, color: c.text }}>{packet}</Text>
@@ -246,7 +246,7 @@ function ClipProbePanel({
         }}
       >
         <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
-        <Text style={{ fontSize: 10, color: c.textDim }}>Rounded clipping with nested scroll and long labels</Text>
+        <S.StoryMuted>Rounded clipping with nested scroll and long labels</S.StoryMuted>
       </Box>
       <ScrollView style={{ flexGrow: 1 }}>
         <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 6 }}>
@@ -279,7 +279,7 @@ function ClipProbePanel({
                   gap: 2,
                 }}
               >
-                <Text style={{ fontSize: 10, color: c.textDim }}>{`probe ${String(i + 1).padStart(2, '0')}`}</Text>
+                <S.StoryMuted>{`probe ${String(i + 1).padStart(2, '0')}`}</S.StoryMuted>
                 <ScrollView horizontal style={{ width: '100%' }}>
                   <Box style={{ paddingRight: 12 }}>
                     <Text style={{ fontSize: 11, color: c.text }}>{row}</Text>
@@ -311,7 +311,7 @@ export function OverflowStressStory() {
   const clipRowsB = makePackets('clipB', 26);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
       <ScrollView style={{ width: '100%', height: '100%' }}>
         <Box
           style={{
@@ -385,6 +385,6 @@ export function OverflowStressStory() {
           </SectionBlock>
         </Box>
       </ScrollView>
-    </Box>
+    </S.StoryRoot>
   );
 }

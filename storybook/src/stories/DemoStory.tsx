@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { SettingsDemoStory } from './SettingsDemo';
 import { NeofetchDemoStory } from './NeofetchDemo';
@@ -147,9 +147,9 @@ function DemoCard({ demo, onSelect }: { demo: DemoDef; onSelect: (id: DemoId) =>
         <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
           {demo.name}
         </Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>
+        <S.StoryMuted>
           {demo.description}
-        </Text>
+        </S.StoryMuted>
       </Box>
     </Pressable>
   );
@@ -193,7 +193,7 @@ export function DemoStory() {
   const categoryColor = CATEGORY_COLORS[current.category] || c.textDim;
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
       <Box
         style={{
           height: 36,
@@ -243,6 +243,6 @@ export function DemoStory() {
           <SelectedComponent />
         </Box>
       </Box>
-    </Box>
+    </S.StoryRoot>
   );
 }

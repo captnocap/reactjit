@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView, TextInput } from '../../../packages/core/src';
+import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView, TextInput, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors, ThemeSwitcher, useTheme, themeNames, themes } from '../../../packages/theme/src';
 import { Icon } from '../../../packages/icons/src';
 import * as AllIcons from '../../../packages/icons/src/icons';
@@ -59,7 +59,7 @@ function styleTooltip(style: Record<string, any>): { content: string; layout: st
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -96,7 +96,7 @@ function ColorSwatch({ color, label }: { color: string; label: string }) {
         borderWidth: 1,
         borderColor: c.border,
       }} />
-      <Text style={{ color: c.muted, fontSize: 9 }}>{label}</Text>
+      <S.StoryCap>{label}</S.StoryCap>
     </Box>
   );
 }
@@ -451,7 +451,7 @@ export function StyleStory() {
   }, [processCode]);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1197,6 +1197,6 @@ export function StyleStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

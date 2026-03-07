@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Window, Notification } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Window, Notification, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -141,7 +141,7 @@ function WindowDemoControls({ showPanel, showLog, counter, events, onTogglePanel
   const c = useThemeColors();
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Click to spawn real OS windows. State syncs across all of them.'}</Text>
+      <S.StoryCap>{'Click to spawn real OS windows. State syncs across all of them.'}</S.StoryCap>
 
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         <Btn
@@ -157,7 +157,7 @@ function WindowDemoControls({ showPanel, showLog, counter, events, onTogglePanel
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 10, color: c.text }}>{'Shared counter:'}</Text>
+        <S.StoryBody>{'Shared counter:'}</S.StoryBody>
         <Btn label="-" onPress={onDecrement} color={C.peach} small />
         <Text style={{ fontSize: 12, color: C.accent, fontWeight: 'bold' }}>{String(counter)}</Text>
         <Btn label="+" onPress={onIncrement} color={C.green} small />
@@ -166,7 +166,7 @@ function WindowDemoControls({ showPanel, showLog, counter, events, onTogglePanel
       {events.length > 0 && (
         <Box style={{ backgroundColor: c.bg, borderRadius: 4, padding: 4, gap: 1 }}>
           {events.map((e, i) => (
-            <Text key={i} style={{ fontSize: 8, color: c.muted }}>{e}</Text>
+            <S.StoryTiny key={i}>{e}</S.StoryTiny>
           ))}
         </Box>
       )}
@@ -187,14 +187,14 @@ function NotificationDemoControls({ onFire, onFireAll, onFireRich }: { onFire: (
   const c = useThemeColors();
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Each button spawns a real OS notification window. They stack and auto-dismiss.'}</Text>
+      <S.StoryCap>{'Each button spawns a real OS notification window. They stack and auto-dismiss.'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         {NOTIF_PRESETS.map((n, i) => (
           <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Btn label={'Fire'} onPress={() => onFire(i)} color={n.accent} small />
-            <Text style={{ fontSize: 9, color: c.text }}>{n.title}</Text>
-            <Text style={{ fontSize: 8, color: c.muted }}>{n.body}</Text>
+            <S.StoryBreadcrumbActive>{n.title}</S.StoryBreadcrumbActive>
+            <S.StoryTiny>{n.body}</S.StoryTiny>
           </Box>
         ))}
       </Box>
@@ -204,9 +204,9 @@ function NotificationDemoControls({ onFire, onFireAll, onFireRich }: { onFire: (
         <Btn label="Fire Rich Notification" onPress={onFireRich} color={C.mauve} />
       </Box>
 
-      <Text style={{ fontSize: 8, color: c.muted }}>
+      <S.StoryTiny>
         {'Rich notifications render a full React tree in the notification window \u2014 not just text.'}
-      </Text>
+      </S.StoryTiny>
     </>
   );
 }
@@ -354,7 +354,7 @@ function CrashLayerCatalog() {
         <Box key={l.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: l.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 160, flexShrink: 0 }}>{l.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{l.desc}</Text>
+          <S.StoryCap>{l.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -409,7 +409,7 @@ export function WindowsStory() {
   }, []);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* Header */}
       <Box style={{
@@ -711,6 +711,6 @@ export function WindowsStory() {
       ))}
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

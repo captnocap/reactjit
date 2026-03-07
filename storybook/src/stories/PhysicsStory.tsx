@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PhysicsWorld,
@@ -112,17 +112,17 @@ const BODY_COLORS = ['#c0392b', '#2980b9', '#f39c12', '#27ae60', '#8e44ad', '#e6
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -139,7 +139,7 @@ function Label({ label, value, color }: { label: string; value: string; color?: 
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
+      <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
     </Box>
   );
@@ -352,9 +352,9 @@ function ChainDemo() {
       <Label label="joint type" value="DistanceJoint" color={C.joint} />
       <Label label="stiffness" value="6 Hz" />
       <Label label="damping" value="0.5" />
-      <Text style={{ fontSize: 9, color: c.textDim }}>
+      <S.StoryCap>
         {'Drag any link with the mouse to swing the chain'}
-      </Text>
+      </S.StoryCap>
     </Box>
   );
 }
@@ -435,9 +435,9 @@ function SensorDemo() {
         </Text>
       </Box>
       <Label label="trigger count" value={String(hitCount)} color={C.sensor} />
-      <Text style={{ fontSize: 9, color: c.textDim }}>
+      <S.StoryCap>
         {'Sensor detects overlap without pushing bodies away'}
-      </Text>
+      </S.StoryCap>
     </Box>
   );
 }
@@ -504,7 +504,7 @@ export function PhysicsStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -735,6 +735,6 @@ export function PhysicsStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

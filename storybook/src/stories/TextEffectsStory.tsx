@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, TextEffect, type TextEffectType } from '../../../packages/core/src';
+import { Box, Text, TextEffect, type TextEffectType, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StorySection } from './_shared/StoryScaffold';
 
@@ -80,9 +80,9 @@ export function TextEffectsStory({ index = 5 }: { index?: number } = {}) {
               typingSpeed={v.typingSpeed ?? 14}
               style={{ width: '100%', height: 84 }}
             />
-            <Text style={{ color: c.textDim, fontSize: 10 }}>
+            <S.StoryMuted>
               {v.id}
-            </Text>
+            </S.StoryMuted>
           </Box>
         ))}
       </Box>
@@ -117,9 +117,9 @@ export function TextEffectsStory({ index = 5 }: { index?: number } = {}) {
               typingSpeed={v.typingSpeed ?? 14}
               style={{ width: '100%', height: 96 }}
             />
-            <Text style={{ color: c.textDim, fontSize: 10 }}>
+            <S.StoryMuted>
               {v.id}
-            </Text>
+            </S.StoryMuted>
           </Box>
         ))}
       </Box>

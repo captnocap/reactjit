@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Image, ScrollView, Text, useBreakpoint } from '../../../../packages/core/src';
+import { Box, Image, ScrollView, Text, useBreakpoint, classifiers as S} from '../../../../packages/core/src';
 import { useThemeColors } from '../../../../packages/theme/src';
 
 export const STORY_MAX_WIDTH = 760;
@@ -79,7 +79,7 @@ export function StorySection({
 /** Full-width 1px separator between bands. */
 export function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 /** Icon + uppercase label used as a section header inside a Half. */
@@ -87,10 +87,10 @@ export function SectionLabel({ icon, children, accentColor }: { icon: string; ch
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={accentColor ?? c.muted} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={accentColor ?? c.muted} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }

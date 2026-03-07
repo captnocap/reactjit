@@ -18,8 +18,7 @@ import {
   Slider, Switch, Checkbox, Radio, RadioGroup, Select,
   BarChart, LineChart, PieChart, RadarChart, CandlestickChart, OrderBook,
   ImageGallery, ContextMenu, Math as MathTex,
-  MessageList, ActionBar, FlatList,
-} from '../../../packages/core/src';
+  MessageList, ActionBar, FlatList, classifiers as S} from '../../../packages/core/src';
 import { ElementTile, ElementCard, PeriodicTable, MoleculeCard, ElectronShell, ReactionView } from '../../../packages/chemistry/src';
 import { Knob, Fader, Meter, LEDIndicator, PadButton, StepSequencer, TransportBar, PianoKeyboard, XYPad, PitchWheel } from '../../../packages/controls/src';
 import { TickerSymbol, TickerTape, PortfolioCard, RSIGauge, MACDPanel } from '../../../packages/finance/src';
@@ -906,7 +905,7 @@ export function ThumbContextMenu({ c }: { c: ThemeColors }) {
 export function ThumbMath({ c }: { c: ThemeColors }) {
   return (
     <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ color: c.text, fontSize: 9 }}>{'E=mc²'}</Text>
+      <S.StoryBreadcrumbActive>{'E=mc²'}</S.StoryBreadcrumbActive>
     </Box>
   );
 }
@@ -1063,7 +1062,7 @@ export function PreviewTabs({ c }: { c: ThemeColors }) {
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
       <Box style={{ width: 320, gap: 16 }}>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Underline variant'}</Text>
+          <S.StoryMuted>{'Underline variant'}</S.StoryMuted>
           <Tabs
             tabs={[{ id: 'overview', label: 'Overview' }, { id: 'api', label: 'API' }, { id: 'examples', label: 'Examples' }]}
             activeId={underlineTab}
@@ -1071,7 +1070,7 @@ export function PreviewTabs({ c }: { c: ThemeColors }) {
           />
         </Box>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Pill variant'}</Text>
+          <S.StoryMuted>{'Pill variant'}</S.StoryMuted>
           <Tabs
             tabs={[{ id: 'all', label: 'All' }, { id: 'active', label: 'Active' }, { id: 'archived', label: 'Archived' }]}
             activeId={pillTab}
@@ -1157,7 +1156,7 @@ export function PreviewProgressBar({ c }: { c: ThemeColors }) {
           { label: 'Errors', value: 0.12, color: '#ef4444' },
         ].map(({ label, value, color }) => (
           <Box key={label} style={{ gap: 4 }}>
-            <Text style={{ color: c.muted, fontSize: 10 }}>{label}</Text>
+            <S.StoryMuted>{label}</S.StoryMuted>
             <ProgressBar value={value} color={color} height={8} />
           </Box>
         ))}
@@ -1315,15 +1314,15 @@ export function PreviewMeter({ c }: { c: ThemeColors }) {
       <Box style={{ flexDirection: 'row', gap: 24, alignItems: 'end' }}>
         <Box style={{ alignItems: 'center', gap: 6 }}>
           <Meter value={0.72} peak={0.85} orientation="vertical" height={140} />
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'L'}</Text>
+          <S.StoryMuted>{'L'}</S.StoryMuted>
         </Box>
         <Box style={{ alignItems: 'center', gap: 6 }}>
           <Meter value={0.58} peak={0.7} orientation="vertical" height={140} />
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'R'}</Text>
+          <S.StoryMuted>{'R'}</S.StoryMuted>
         </Box>
       </Box>
       <Box style={{ width: 300, gap: 8 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Horizontal'}</Text>
+        <S.StoryMuted>{'Horizontal'}</S.StoryMuted>
         <Meter value={0.65} orientation="horizontal" width={280} />
       </Box>
     </Box>
@@ -1352,15 +1351,15 @@ export function PreviewClock({ c }: { c: ThemeColors }) {
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
       <Box style={{ alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Time only'}</Text>
+        <S.StoryMuted>{'Time only'}</S.StoryMuted>
         <Clock format="time" />
       </Box>
       <Box style={{ alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Date + time'}</Text>
+        <S.StoryMuted>{'Date + time'}</S.StoryMuted>
         <Clock format="datetime" />
       </Box>
       <Box style={{ alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Date only'}</Text>
+        <S.StoryMuted>{'Date only'}</S.StoryMuted>
         <Clock format="date" />
       </Box>
     </Box>
@@ -1371,11 +1370,11 @@ export function PreviewStopwatch({ c }: { c: ThemeColors }) {
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
       <Box style={{ alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'With controls + milliseconds'}</Text>
+        <S.StoryMuted>{'With controls + milliseconds'}</S.StoryMuted>
         <Stopwatch showMs controls />
       </Box>
       <Box style={{ alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Auto-start, no controls'}</Text>
+        <S.StoryMuted>{'Auto-start, no controls'}</S.StoryMuted>
         <Stopwatch autoStart controls={false} showMs />
       </Box>
     </Box>
@@ -1392,15 +1391,15 @@ export function PreviewSlider({ c }: { c: ThemeColors }) {
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
       <Box style={{ width: 300, gap: 16 }}>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Volume'}</Text>
+          <S.StoryMuted>{'Volume'}</S.StoryMuted>
           <Slider value={v1} onChange={setV1} color="#3b82f6" />
         </Box>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Brightness'}</Text>
+          <S.StoryMuted>{'Brightness'}</S.StoryMuted>
           <Slider value={v2} onChange={setV2} color="#f59e0b" />
         </Box>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Saturation'}</Text>
+          <S.StoryMuted>{'Saturation'}</S.StoryMuted>
           <Slider value={v3} onChange={setV3} color="#10b981" />
         </Box>
       </Box>
@@ -1602,12 +1601,12 @@ export function PreviewLED({ c }: { c: ThemeColors }) {
           <Pressable key={led.label} onPress={() => led.set(!led.on)}>
             <Box style={{ alignItems: 'center', gap: 8 }}>
               <LEDIndicator on={led.on} color={led.color} />
-              <Text style={{ color: c.muted, fontSize: 10 }}>{led.label}</Text>
+              <S.StoryMuted>{led.label}</S.StoryMuted>
             </Box>
           </Pressable>
         ))}
       </Box>
-      <Text style={{ color: c.muted, fontSize: 9 }}>{'Click to toggle'}</Text>
+      <S.StoryCap>{'Click to toggle'}</S.StoryCap>
     </Box>
   );
 }
@@ -1696,7 +1695,7 @@ export function PreviewXYPad({ c }: { c: ThemeColors }) {
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
       <XYPad x={x} y={y} onChange={({ x: nx, y: ny }: { x: number; y: number }) => { setX(nx); setY(ny); }} size={200} color="#8b5cf6" />
-      <Text style={{ color: c.muted, fontSize: 10 }}>{`X: ${x.toFixed(2)}  Y: ${y.toFixed(2)}`}</Text>
+      <S.StoryMuted>{`X: ${x.toFixed(2)}  Y: ${y.toFixed(2)}`}</S.StoryMuted>
     </Box>
   );
 }
@@ -1707,11 +1706,11 @@ export function PreviewPitchWheel({ c }: { c: ThemeColors }) {
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
       <Box style={{ flexDirection: 'row', gap: 32, alignItems: 'center' }}>
         <Box style={{ alignItems: 'center', gap: 8 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Spring return'}</Text>
+          <S.StoryMuted>{'Spring return'}</S.StoryMuted>
           <PitchWheel value={val} onChange={setVal} springReturn height={140} />
         </Box>
         <Box style={{ alignItems: 'center', gap: 8 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Free'}</Text>
+          <S.StoryMuted>{'Free'}</S.StoryMuted>
           <PitchWheel value={0.3} onChange={() => {}} height={140} />
         </Box>
       </Box>
@@ -1801,15 +1800,15 @@ export function PreviewRSIGauge({ c }: { c: ThemeColors }) {
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
       <Box style={{ gap: 16 }}>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Overbought (RSI 78)'}</Text>
+          <S.StoryMuted>{'Overbought (RSI 78)'}</S.StoryMuted>
           <RSIGauge value={78} width={300} />
         </Box>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Neutral (RSI 52)'}</Text>
+          <S.StoryMuted>{'Neutral (RSI 52)'}</S.StoryMuted>
           <RSIGauge value={52} width={300} />
         </Box>
         <Box style={{ gap: 4 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'Oversold (RSI 22)'}</Text>
+          <S.StoryMuted>{'Oversold (RSI 22)'}</S.StoryMuted>
           <RSIGauge value={22} width={300} />
         </Box>
       </Box>
@@ -1841,7 +1840,7 @@ export function PreviewCountdown({ c }: { c: ThemeColors }) {
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
       <Box style={{ alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'60 second countdown'}</Text>
+        <S.StoryMuted>{'60 second countdown'}</S.StoryMuted>
         <Countdown duration={60000} controls showMs />
       </Box>
     </Box>
@@ -2020,7 +2019,7 @@ export function PreviewFlatList({ c }: { c: ThemeColors }) {
         renderItem={({ item }: { item: { id: string; label: string; desc: string } }) => (
           <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 1, borderColor: c.border }}>
             <Text style={{ color: c.text, fontSize: 12 }}>{item.label}</Text>
-            <Text style={{ color: c.muted, fontSize: 10 }}>{item.desc}</Text>
+            <S.StoryMuted>{item.desc}</S.StoryMuted>
           </Box>
         )}
         itemHeight={36}

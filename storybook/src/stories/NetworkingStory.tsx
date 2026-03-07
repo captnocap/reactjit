@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Input } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Input, classifiers as S} from '../../../packages/core/src';
 import { useScrape } from '../../../packages/core/src/useScrape';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -283,17 +283,17 @@ await wg.up({
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -413,7 +413,7 @@ export function NetworkingStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1064,6 +1064,6 @@ export function NetworkingStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

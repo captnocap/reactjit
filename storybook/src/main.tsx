@@ -14,6 +14,7 @@ import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
 import { setPrivacyBridge } from '../../packages/privacy/src/rpc';
 import { BridgeProvider, useBridge } from '../../packages/core/src/context';
+import { classifiers as S } from '../../packages/core/src';
 import '../../packages/icons/src'; // register icons so <Image src="icon-name" /> works
 import './stories/_shared/storybook.cls'; // register storybook classifiers
 // State preservation disabled — it patches React.useState globally which
@@ -157,7 +158,7 @@ function StoryErrorScreen({ message, stack }: { message: string; stack: string }
         {/* Stack trace */}
         {shortStack.length > 0 && (
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textDim, fontSize: 9 }}>{'Stack trace'}</Text>
+            <S.StoryCap>{'Stack trace'}</S.StoryCap>
             <Box style={{
               backgroundColor: c.bg,
               borderRadius: 6,
@@ -171,9 +172,9 @@ function StoryErrorScreen({ message, stack }: { message: string; stack: string }
         )}
 
         {/* Hint */}
-        <Text style={{ color: c.textDim, fontSize: 9 }}>
+        <S.StoryCap>
           {'Select a different story from the sidebar to recover.'}
-        </Text>
+        </S.StoryCap>
       </Box>
     </Box>
   );
@@ -307,7 +308,7 @@ function StorybookPanel() {
       {Array.from(groups.entries()).map(([section, list]) => (
         <Box key={section}>
           <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-            <Text style={{ color: c.textDim, fontSize: 9 }}>{String(section || '').toUpperCase()}</Text>
+            <S.StoryCap>{String(section || '').toUpperCase()}</S.StoryCap>
           </Box>
           {list.map(s => {
             const idx = stories.indexOf(s);

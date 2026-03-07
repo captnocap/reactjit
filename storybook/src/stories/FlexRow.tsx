@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
@@ -48,9 +48,9 @@ export function FlexRowStory() {
   return (
     <StoryPage>
         <StorySection index={1} title="Row layout (`justifyContent`)">
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
+          <S.StoryMuted>
             Row boxes need explicit width for `justifyContent` to distribute children.
-          </Text>
+          </S.StoryMuted>
           {(['start', 'center', 'end', 'space-between', 'space-around'] as const).map(justify => (
             <Box key={justify} style={{ gap: 4 }}>
               <Text style={{ color: c.textSecondary, fontSize: 10 }}>{`justify: ${justify}`}</Text>
@@ -329,8 +329,8 @@ export function FlexRowStory() {
                 <Text style={{ color: '#fff', fontSize: 10 }}>{toggled ? '160' : '0'}</Text>
               </Box>
               <Box style={{ padding: 8, backgroundColor: c.bgElevated, borderRadius: 4, gap: 2 }}>
-                <Text style={{ color: c.textDim, fontSize: 10 }}>{`translateX: ${toggled ? 160 : 0}px`}</Text>
-                <Text style={{ color: c.textDim, fontSize: 10 }}>{`scale: ${toggled ? '1.20' : '1.00'}`}</Text>
+                <S.StoryMuted>{`translateX: ${toggled ? 160 : 0}px`}</S.StoryMuted>
+                <S.StoryMuted>{`scale: ${toggled ? '1.20' : '1.00'}`}</S.StoryMuted>
               </Box>
             </Box>
           </Box>

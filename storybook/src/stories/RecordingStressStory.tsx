@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Box, Text, Pressable, ScrollView, useLoveRPC, useRecorder, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Pressable, ScrollView, useLoveRPC, useRecorder, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -167,7 +167,7 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
     }}>
       {boxes}
       <Box style={{ position: 'absolute', right: 4, bottom: 4 }}>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${count} boxes`}</Text>
+        <S.StoryCap>{`${count} boxes`}</S.StoryCap>
       </Box>
     </Box>
   );

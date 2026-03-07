@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, Emulator } from '../../../packages/core/src';
+import { Box, Text, Pressable, Emulator, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 /**
@@ -61,9 +61,9 @@ export default function EmulatorStory() {
         </Pressable>
 
         <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 8, gap: 2 }}>
-          <Text style={{ fontSize: 9, color: c.textDim }}>
+          <S.StoryCap>
             Arrows=D-pad  Z=A  X=B  Enter=Start  Shift=Select
-          </Text>
+          </S.StoryCap>
         </Box>
       </Box>
     </Box>

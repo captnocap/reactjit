@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input } from '../../../packages/core/src';
+import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { HOOKS, getThumb } from './HookDemos';
 
@@ -83,7 +83,7 @@ export function HookGalleryStory() {
   }, [activeCat, searchQuery]);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -258,6 +258,6 @@ export function HookGalleryStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{`${filtered.indexOf(hook) + 1} of ${filtered.length}`}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

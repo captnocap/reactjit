@@ -14,8 +14,7 @@ import {
   useAnimation, useSpring, Easing,
   parallel, sequence, stagger, loop,
   usePulse, useCountUp, useTypewriter, useShake, useEntrance, useBounce, useRepeat,
-  type EasingFunction,
-} from '../../../packages/core/src';
+  type EasingFunction, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -283,7 +282,7 @@ function SpringDemo() {
 
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Three springs race to the same target with different stiffness/damping.'}</Text>
+      <S.StoryCap>{'Three springs race to the same target with different stiffness/damping.'}</S.StoryCap>
 
       <Pressable onPress={next}>
         <Box style={{
@@ -301,7 +300,7 @@ function SpringDemo() {
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: sp.color }} />
               <Text style={{ color: c.text, fontSize: 9, width: 90 }}>{sp.label}</Text>
-              <Text style={{ color: c.muted, fontSize: 9 }}>{String(Math.round(val))}</Text>
+              <S.StoryCap>{String(Math.round(val))}</S.StoryCap>
             </Box>
             <Box style={{ height: 14, backgroundColor: c.bg, borderRadius: 3, overflow: 'hidden' }}>
               <Box style={{
@@ -326,7 +325,7 @@ function SpringCounterDemo() {
 
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'useSpring smoothly interpolates to any numeric target.'}</Text>
+      <S.StoryCap>{'useSpring smoothly interpolates to any numeric target.'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Pressable onPress={() => setCount(n => n + 100)}>
           <Box style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 5, paddingBottom: 5, backgroundColor: C.emerald, borderRadius: 4 }}>
@@ -340,7 +339,7 @@ function SpringCounterDemo() {
         </Pressable>
         <Pressable onPress={() => setCount(0)}>
           <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: c.surface, borderRadius: 4 }}>
-            <Text style={{ color: c.muted, fontSize: 10 }}>{'reset'}</Text>
+            <S.StoryMuted>{'reset'}</S.StoryMuted>
           </Box>
         </Pressable>
         <Text style={{ color: c.text, fontSize: 28, fontWeight: 'bold' }}>{String(Math.round(springCount))}</Text>
@@ -377,7 +376,7 @@ function TransitionDemo() {
   const c = useThemeColors();
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Lua interpolates color, scale, shadow, opacity. Zero JS re-renders during animation.'}</Text>
+      <S.StoryCap>{'Lua interpolates color, scale, shadow, opacity. Zero JS re-renders during animation.'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         <HoverCard label="Fire" color={C.fire} />
         <HoverCard label="Amber" color={C.amber} />
@@ -400,7 +399,7 @@ function KeyframeDemo() {
   return (
     <>
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'Lua-driven. Zero bridge traffic.'}</Text>
+        <S.StoryCap>{'Lua-driven. Zero bridge traffic.'}</S.StoryCap>
         <Pressable onPress={() => setPaused(p => !p)}>
           <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, backgroundColor: paused ? C.fire : C.emerald, borderRadius: 3 }}>
             <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>{paused ? 'PAUSED' : 'PLAYING'}</Text>
@@ -418,7 +417,7 @@ function KeyframeDemo() {
           }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{'\u2726'}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'Spin'}</Text>
+          <S.StoryTiny>{'Spin'}</S.StoryTiny>
         </Box>
         {/* Pulse */}
         <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -429,7 +428,7 @@ function KeyframeDemo() {
           }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{'\u2726'}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'Pulse'}</Text>
+          <S.StoryTiny>{'Pulse'}</S.StoryTiny>
         </Box>
         {/* Bounce */}
         <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -440,7 +439,7 @@ function KeyframeDemo() {
           }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{'\u2726'}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'Bounce'}</Text>
+          <S.StoryTiny>{'Bounce'}</S.StoryTiny>
         </Box>
         {/* Shake */}
         <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -451,7 +450,7 @@ function KeyframeDemo() {
           }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{'\u2726'}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'Shake'}</Text>
+          <S.StoryTiny>{'Shake'}</S.StoryTiny>
         </Box>
         {/* Glow */}
         <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -462,7 +461,7 @@ function KeyframeDemo() {
           }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{'\u2726'}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'Glow'}</Text>
+          <S.StoryTiny>{'Glow'}</S.StoryTiny>
         </Box>
         {/* Morph */}
         <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -473,7 +472,7 @@ function KeyframeDemo() {
           }}>
             <Text style={{ color: '#fff', fontSize: 12 }}>{'\u2726'}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'Morph'}</Text>
+          <S.StoryTiny>{'Morph'}</S.StoryTiny>
         </Box>
       </Box>
     </>
@@ -489,7 +488,7 @@ function StrokeDemo() {
 
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'SVG-style strokeDasharray + strokeDashoffset. Native Lua path rendering.'}</Text>
+      <S.StoryCap>{'SVG-style strokeDasharray + strokeDashoffset. Native Lua path rendering.'}</S.StoryCap>
 
       {/* Marching ants */}
       <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
@@ -498,14 +497,14 @@ function StrokeDemo() {
           strokeDasharray: [8, 8], justifyContent: 'center', alignItems: 'center',
           animation: { keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 16 } }, duration: 600, iterations: -1, easing: 'linear' },
         }}>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'selected'}</Text>
+          <S.StoryTiny>{'selected'}</S.StoryTiny>
         </Box>
         <Box style={{
           width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: C.emerald,
           strokeDasharray: [6, 10], justifyContent: 'center', alignItems: 'center',
           animation: { keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 16 } }, duration: 800, iterations: -1, easing: 'linear' },
         }}>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'orbit'}</Text>
+          <S.StoryTiny>{'orbit'}</S.StoryTiny>
         </Box>
         <Box style={{
           width: 56, height: 56, borderRadius: 10, borderWidth: 3, borderColor: C.amber,
@@ -538,7 +537,7 @@ function StrokeDemo() {
             animation: { keyframes: { 0: { strokeDashoffset: 0 }, 100: { strokeDashoffset: 76 } }, duration: 1400, iterations: -1, easing: 'linear' },
           }} />
         </Box>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'spinners'}</Text>
+        <S.StoryTiny>{'spinners'}</S.StoryTiny>
       </Box>
 
       {/* Draw-on reveal */}
@@ -583,7 +582,7 @@ function EasingDemo() {
   const c = useThemeColors();
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Each bar shows 0\u21921 with a different easing. All loop every 2 seconds.'}</Text>
+      <S.StoryCap>{'Each bar shows 0\u21921 with a different easing. All loop every 2 seconds.'}</S.StoryCap>
       <Box style={{ gap: 4 }}>
         {EASING_LIST.map(e => <EasingBar key={e.label} label={e.label} fn={e.fn} color={e.color} />)}
       </Box>
@@ -607,7 +606,7 @@ function PresetDemo() {
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Box style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.fire, opacity: pulse }} />
         <Box style={{ width: 28, height: 28, borderRadius: 4, backgroundColor: C.cyan, transform: { scaleX: 0.5 + pulse * 0.5, scaleY: 0.5 + pulse * 0.5 } }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`usePulse: ${pulse.toFixed(2)}`}</Text>
+        <S.StoryCap>{`usePulse: ${pulse.toFixed(2)}`}</S.StoryCap>
       </Box>
 
       {/* useCountUp */}
@@ -615,18 +614,18 @@ function PresetDemo() {
         <Text style={{ color: C.emerald, fontSize: 22, fontWeight: 'bold' }}>{String(Math.round(counted))}</Text>
         {[1000, 5000, 9999].map(t => (
           <Pressable key={t} onPress={() => setCountTarget(t)}>
-            <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: c.surface, borderRadius: 3 }}>
+            <S.StoryChip>
               <Text style={{ color: c.text, fontSize: 9 }}>{String(t)}</Text>
-            </Box>
+            </S.StoryChip>
           </Pressable>
         ))}
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'useCountUp'}</Text>
+        <S.StoryTiny>{'useCountUp'}</S.StoryTiny>
       </Box>
 
       {/* useTypewriter */}
       <Box style={{ backgroundColor: c.bg, borderRadius: 4, padding: 8 }}>
         {/* rjit-ignore-next-line */}
-        <Text style={{ color: c.text, fontSize: 10 }}>{typed}<Text style={{ color: C.accent, fontSize: 10 }}>{'|'}</Text></Text>
+        <S.StoryBody>{typed}<Text style={{ color: C.accent, fontSize: 10 }}>{'|'}</Text></S.StoryBody>
       </Box>
 
       {/* useShake */}
@@ -638,7 +637,7 @@ function PresetDemo() {
             </Box>
           </Pressable>
         </Box>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{`translateX: ${shakeX.toFixed(1)}`}</Text>
+        <S.StoryTiny>{`translateX: ${shakeX.toFixed(1)}`}</S.StoryTiny>
       </Box>
     </>
   );
@@ -657,7 +656,7 @@ function EntranceItem({ text, delay, color }: { text: string; delay: number; col
       paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5,
     }}>
       <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: color }} />
-      <Text style={{ color: c.text, fontSize: 9 }}>{text}</Text>
+      <S.StoryBreadcrumbActive>{text}</S.StoryBreadcrumbActive>
     </Box>
   );
 }
@@ -669,11 +668,11 @@ function EntranceDemo() {
   return (
     <>
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'useEntrance: staggered fade + slide'}</Text>
+        <S.StoryCap>{'useEntrance: staggered fade + slide'}</S.StoryCap>
         <Pressable onPress={() => { setShowList(false); setTimeout(() => setShowList(true), 50); }}>
-          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: c.surface, borderRadius: 3 }}>
+          <S.StoryChip>
             <Text style={{ color: c.text, fontSize: 8 }}>{'replay'}</Text>
-          </Box>
+          </S.StoryChip>
         </Pressable>
       </Box>
       {showList && (
@@ -735,7 +734,7 @@ function PatternDemo() {
   return (
     <>
       {/* Buttons */}
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Hover + press feedback with transitions.'}</Text>
+      <S.StoryCap>{'Hover + press feedback with transitions.'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         <AnimBtn label="Primary" color={C.accent} />
         <AnimBtn label="Danger" color={C.fire} />
@@ -745,7 +744,7 @@ function PatternDemo() {
       {/* Toggles */}
       <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <Toggle /><Toggle /><Toggle />
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'toggle switches'}</Text>
+        <S.StoryTiny>{'toggle switches'}</S.StoryTiny>
       </Box>
 
       {/* Loading dots */}
@@ -758,7 +757,7 @@ function PatternDemo() {
             }} />
           ))}
         </Box>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'staggered loading dots'}</Text>
+        <S.StoryTiny>{'staggered loading dots'}</S.StoryTiny>
       </Box>
 
       {/* Skeleton shimmer */}
@@ -769,7 +768,7 @@ function PatternDemo() {
             animation: { keyframes: { 0: { transform: { translateX: -35 } }, 100: { transform: { translateX: 100 } } }, duration: 1500, iterations: -1, easing: 'easeInOut' },
           }} />
         </Box>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'skeleton shimmer'}</Text>
+        <S.StoryTiny>{'skeleton shimmer'}</S.StoryTiny>
       </Box>
     </>
   );
@@ -836,7 +835,7 @@ function CardFlipDemo() {
     <>
       {/* Click to flip */}
       <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>{'Click to flip'}</Text>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Tap a card. Spring physics drives scaleX through cos(\u03C0) for a smooth 3D illusion. Tap again to flip back.'}</Text>
+      <S.StoryCap>{'Tap a card. Spring physics drives scaleX through cos(\u03C0) for a smooth 3D illusion. Tap again to flip back.'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
         {FLIP_CARD_FACES.map(f => (
           <ClickFlipCard key={f.front} front={f.front} back={f.back} color={f.color} />
@@ -845,7 +844,7 @@ function CardFlipDemo() {
 
       {/* Hover to flip */}
       <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold', marginTop: 8 }}>{'Hover to flip'}</Text>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'No click needed. Hover in to flip, hover out to reverse.'}</Text>
+      <S.StoryCap>{'No click needed. Hover in to flip, hover out to reverse.'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
         {FLIP_CARD_FACES.map(f => (
           <HoverFlipCard key={f.front} front={f.front} back={f.back} color={f.color} />
@@ -950,7 +949,7 @@ function ShatterButton({ label, baseColor, hueBase }: { label: string; baseColor
           </Box>
         </Pressable>
       </Box>
-      <Text style={{ color: c.muted, fontSize: 8 }}>{animating ? 'rebuilding...' : 'click me'}</Text>
+      <S.StoryTiny>{animating ? 'rebuilding...' : 'click me'}</S.StoryTiny>
     </Box>
   );
 }
@@ -959,9 +958,9 @@ function ShatterDemo() {
   const c = useThemeColors();
   return (
     <>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {'16 blocks per button. Spring overshoot = bounce on collapse, snap on rebuild. Per-block stagger delay creates crack propagation.'}
-      </Text>
+      </S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
         <ShatterButton label="Shatter Me" baseColor={C.accent} hueBase={258} />
         <ShatterButton label="Break Apart" baseColor={C.fire} hueBase={0} />
@@ -1294,7 +1293,7 @@ function EffectsDemo() {
             <TiltCard label="Hover" color={C.cyan} />
             <TiltCard label="Tilt" color={C.pink} />
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'skewX/skewY from entry point'}</Text>
+          <S.StoryTiny>{'skewX/skewY from entry point'}</S.StoryTiny>
         </Box>
       </Box>
     </>
@@ -1311,7 +1310,7 @@ function FeatureList() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color }} />
           <Text style={{ fontSize: 9, color: c.text, fontWeight: 'bold', width: 120 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </>
@@ -1324,7 +1323,7 @@ export function AnimationStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1604,6 +1603,6 @@ export function AnimationStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

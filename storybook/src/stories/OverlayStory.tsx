@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useOverlay } from '../../../packages/core/src/overlay';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
@@ -153,7 +153,7 @@ function OverlayStateDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Live overlay:state RPC (polls every 500ms)'}</Text>
+      <S.StoryCap>{'Live overlay:state RPC (polls every 500ms)'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         <StateRow label="enabled" value={String(overlay.enabled)} color={overlay.enabled ? C.passthrough : C.hidden} />
@@ -171,7 +171,7 @@ function OverlayStateDemo() {
       ) : (
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.hidden }} />
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Overlay not active (run rjit overlay to enable)'}</Text>
+          <S.StoryCap>{'Overlay not active (run rjit overlay to enable)'}</S.StoryCap>
         </Box>
       )}
     </Box>
@@ -197,7 +197,7 @@ function ModeCycleDiagram() {
   const c = useThemeColors();
   return (
     <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'F6 hotkey cycle'}</Text>
+      <S.StoryCap>{'F6 hotkey cycle'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <ModeBox label="passthrough" color={C.passthrough} />
         <Text style={{ fontSize: 12, color: c.muted }}>{'>'}</Text>
@@ -205,7 +205,7 @@ function ModeCycleDiagram() {
         <Text style={{ fontSize: 12, color: c.muted }}>{'>'}</Text>
         <ModeBox label="hidden" color={C.hidden} />
         <Text style={{ fontSize: 12, color: c.muted }}>{'>'}</Text>
-        <Text style={{ fontSize: 8, color: c.textDim }}>{'(repeat)'}</Text>
+        <S.StoryTiny>{'(repeat)'}</S.StoryTiny>
       </Box>
     </Box>
   );
@@ -221,7 +221,7 @@ function ModeBox({ label, color }: { label: string; color: string }) {
       paddingTop: 4, paddingBottom: 4,
       borderRadius: 4,
     }}>
-      <Text style={{ fontSize: 9, color }}>{label}</Text>
+      <S.StoryBtnSmText>{label}</S.StoryBtnSmText>
     </Box>
   );
 }
@@ -237,15 +237,15 @@ function TransportDiagram() {
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.window }} />
           <Text style={{ fontSize: 10, color: C.window, fontWeight: 'normal' }}>{'Transparent Window'}</Text>
-          <Text style={{ fontSize: 8, color: c.textDim }}>{'(default)'}</Text>
+          <S.StoryTiny>{'(default)'}</S.StoryTiny>
         </Box>
         <Box style={{
           backgroundColor: c.surface, borderRadius: 4, padding: 8, gap: 3,
           borderLeftWidth: 2, borderColor: C.window,
         }}>
-          <Text style={{ fontSize: 9, color: c.text }}>{'SDL2 borderless + always-on-top'}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'X11 XFixes empty region for input passthrough'}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Per-window opacity via SDL_SetWindowOpacity'}</Text>
+          <S.StoryBreadcrumbActive>{'SDL2 borderless + always-on-top'}</S.StoryBreadcrumbActive>
+          <S.StoryCap>{'X11 XFixes empty region for input passthrough'}</S.StoryCap>
+          <S.StoryCap>{'Per-window opacity via SDL_SetWindowOpacity'}</S.StoryCap>
         </Box>
       </Box>
 
@@ -254,16 +254,16 @@ function TransportDiagram() {
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.shm }} />
           <Text style={{ fontSize: 10, color: C.shm, fontWeight: 'normal' }}>{'Shared Memory'}</Text>
-          <Text style={{ fontSize: 8, color: c.textDim }}>{'--attach'}</Text>
+          <S.StoryTiny>{'--attach'}</S.StoryTiny>
         </Box>
         <Box style={{
           backgroundColor: c.surface, borderRadius: 4, padding: 8, gap: 3,
           borderLeftWidth: 2, borderColor: C.shm,
         }}>
-          <Text style={{ fontSize: 9, color: c.text }}>{'Love2D FBO render to POSIX shm'}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'LD_PRELOAD hook intercepts glXSwapBuffers'}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Composites RGBA pixels onto game framebuffer'}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'17-var GL state save/restore (battle-tested)'}</Text>
+          <S.StoryBreadcrumbActive>{'Love2D FBO render to POSIX shm'}</S.StoryBreadcrumbActive>
+          <S.StoryCap>{'LD_PRELOAD hook intercepts glXSwapBuffers'}</S.StoryCap>
+          <S.StoryCap>{'Composites RGBA pixels onto game framebuffer'}</S.StoryCap>
+          <S.StoryCap>{'17-var GL state save/restore (battle-tested)'}</S.StoryCap>
         </Box>
       </Box>
     </Box>
@@ -438,7 +438,7 @@ function SHMPipelinePreview() {
   const arrow = <Text style={{ fontSize: 10, color: c.muted, flexShrink: 0 }}>{'\u2192'}</Text>;
   return (
     <Box style={{ width: '100%', gap: 6 }}>
-      <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold', letterSpacing: 1 }}>{'SHM COMPOSITING PIPELINE'}</Text>
+      <S.StoryLabelText>{'SHM COMPOSITING PIPELINE'}</S.StoryLabelText>
       <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
         {renderStage(row1[0])}
         {arrow}
@@ -447,7 +447,7 @@ function SHMPipelinePreview() {
         {renderStage(row1[2])}
       </Box>
       <Box style={{ alignItems: 'center' }}>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'\u2193'}</Text>
+        <S.StoryMuted>{'\u2193'}</S.StoryMuted>
       </Box>
       <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
         {renderStage(row2[0])}
@@ -463,7 +463,7 @@ function ModeTriplePreview() {
   const c = useThemeColors();
   return (
     <Box style={{ width: '100%', gap: 6 }}>
-      <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold', letterSpacing: 1 }}>{'VISIBILITY MODES — LIVE PREVIEW'}</Text>
+      <S.StoryLabelText>{'VISIBILITY MODES — LIVE PREVIEW'}</S.StoryLabelText>
       <Box style={{ gap: 8 }}>
         <PassthroughPreview />
         <InteractivePreview />
@@ -489,7 +489,7 @@ export function OverlayStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -755,6 +755,6 @@ export function OverlayStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

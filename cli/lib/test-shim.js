@@ -79,6 +79,9 @@
   // ── AuditResult ──────────────────────────────────────────────────────────
   // Wraps the violations array from test:audit for ergonomic assertions.
   function AuditResult(violations) {
+    // Empty Lua tables serialize as {} (object) not [] (array) through the bridge.
+    // Normalize to array so .filter/.map always work.
+    if (!Array.isArray(violations)) violations = [];
     this.violations = violations;
     this.errors   = violations.filter(function (v) { return v.severity === 'error'; });
     this.warnings = violations.filter(function (v) { return v.severity === 'warning'; });

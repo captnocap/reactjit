@@ -11,8 +11,7 @@ import {
   Spirograph, Rings, FlowParticles, Mirror, Mandala, Cymatics,
   Constellation, Mycelium, Pipes, StainedGlass, Voronoi, Contours, Feedback, PixelSort,
   Terrain, Automata, Combustion, ReactionDiffusion, EdgeGravity, Orbits, Plotter, LSystem,
-  Sunburst,
-} from '../../../packages/core/src';
+  Sunburst, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -297,7 +296,7 @@ export function EffectsStory() {
   const audioProps = allProps.filter(p => p.group === 'audio');
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -710,6 +709,6 @@ export function EffectsStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

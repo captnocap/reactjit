@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useImagingComposer, useImagingHistory, useImaging, useImagingSelection, useDrawCanvas } from '../../../packages/imaging/src';
 import type { BlendMode, ImagingComposition, ImagingLayerCrop, ImagingLayerPivot, ImagingSelectionShape } from '../../../packages/imaging/src';
@@ -214,7 +214,7 @@ function Label({ label, value, color }: { label: string; value: string; color?: 
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
+      <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
     </Box>
   );
@@ -479,9 +479,9 @@ function PatternDemo() {
       <ImagingPreview ops={preset.ops} />
 
       <Label label="effect" value={preset.label} color={C.pattern} />
-      <Text style={{ fontSize: 9, color: c.textDim }}>
+      <S.StoryCap>
         {'Omit src to get a procedural test pattern — color bars, grayscale gradient, and HSV sweep'}
-      </Text>
+      </S.StoryCap>
 
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {PATTERN_PRESETS.map((p, i) => (
@@ -610,7 +610,7 @@ function LayerGraphDemo() {
         <ImagingPreview src={previewSrc} ops={[]} width={300} height={180} />
       ) : (
         <Box style={{ width: 300, height: 180, borderRadius: 6, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10, color: c.textDim }}>{'waiting for compose output'}</Text>
+          <S.StoryMuted>{'waiting for compose output'}</S.StoryMuted>
         </Box>
       )}
 
@@ -618,7 +618,7 @@ function LayerGraphDemo() {
       <Label label="state" value={`tone=${COMPOSE_TONES[state.toneIndex].label} overlay=${COMPOSE_OVERLAYS[state.overlayIndex].label} blend=${GRAPH_BLEND_MODES[state.blendIndex]}`} />
       {error ? <Label label="error" value={error} color="#f38ba8" /> : null}
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Tone'}</Text>
+      <S.StoryCap>{'Tone'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {COMPOSE_TONES.map((tone, i) => (
           <ActionBtn
@@ -631,7 +631,7 @@ function LayerGraphDemo() {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Overlay'}</Text>
+      <S.StoryCap>{'Overlay'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {COMPOSE_OVERLAYS.map((overlay, i) => (
           <ActionBtn
@@ -644,7 +644,7 @@ function LayerGraphDemo() {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Blend'}</Text>
+      <S.StoryCap>{'Blend'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {GRAPH_BLEND_MODES.map((mode, i) => (
           <ActionBtn
@@ -779,7 +779,7 @@ function LayerTransformDemo() {
         <ImagingPreview src={previewSrc} ops={[]} width={300} height={180} />
       ) : (
         <Box style={{ width: 300, height: 180, borderRadius: 6, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10, color: c.textDim }}>{'waiting for compose output'}</Text>
+          <S.StoryMuted>{'waiting for compose output'}</S.StoryMuted>
         </Box>
       )}
 
@@ -790,7 +790,7 @@ function LayerTransformDemo() {
       />
       {error ? <Label label="error" value={error} color="#f38ba8" /> : null}
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Scale'}</Text>
+      <S.StoryCap>{'Scale'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {TRANSFORM_SCALES.map((scale, i) => (
           <ActionBtn
@@ -803,7 +803,7 @@ function LayerTransformDemo() {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Rotation (deg)'}</Text>
+      <S.StoryCap>{'Rotation (deg)'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {TRANSFORM_ROTATIONS.map((rotation, i) => (
           <ActionBtn
@@ -816,7 +816,7 @@ function LayerTransformDemo() {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Pivot'}</Text>
+      <S.StoryCap>{'Pivot'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {TRANSFORM_PIVOTS.map((entry, i) => (
           <ActionBtn
@@ -829,7 +829,7 @@ function LayerTransformDemo() {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Crop'}</Text>
+      <S.StoryCap>{'Crop'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {TRANSFORM_CROPS.map((entry, i) => (
           <ActionBtn
@@ -842,7 +842,7 @@ function LayerTransformDemo() {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Blend'}</Text>
+      <S.StoryCap>{'Blend'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {TRANSFORM_BLENDS.map((mode, i) => (
           <ActionBtn
@@ -955,7 +955,7 @@ function SelectionDemo() {
         <ImagingPreview src={resultSrc} ops={[]} width={260} height={180} />
       ) : (
         <Box style={{ width: 260, height: 180, borderRadius: 6, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 10, color: c.textDim }}>{'press Apply to render'}</Text>
+          <S.StoryMuted>{'press Apply to render'}</S.StoryMuted>
         </Box>
       )}
 
@@ -965,21 +965,21 @@ function SelectionDemo() {
         value={shapeIdx === (SELECTION_SHAPES.length - 1) ? 'full frame' : `${SELECTION_FEATHERS[featherIdx].radius}px feather`}
       />
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Shape'}</Text>
+      <S.StoryCap>{'Shape'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {SELECTION_SHAPES.map((s, i) => (
           <ActionBtn key={s.label} label={s.label} color={C.selection} active={i === shapeIdx} onPress={() => setShapeIdx(i)} />
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Feather'}</Text>
+      <S.StoryCap>{'Feather'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {SELECTION_FEATHERS.map((entry, i) => (
           <ActionBtn key={entry.label} label={entry.label} color={C.selection} active={i === featherIdx} onPress={() => setFeatherIdx(i)} />
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Operation'}</Text>
+      <S.StoryCap>{'Operation'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {SELECTION_OPS.map((op, i) => (
           <ActionBtn key={op.label} label={op.label} color={C.selection} active={i === opIdx} onPress={() => setOpIdx(i)} />
@@ -1096,21 +1096,21 @@ function DrawCanvasDemo() {
       <Label label="status" value={status} color={C.canvas} />
       <Label label="canvasId" value={dc.canvasId} />
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Color'}</Text>
+      <S.StoryCap>{'Color'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {BRUSH_COLORS.map((col, i) => (
           <ActionBtn key={col.label} label={col.label} color={C.canvas} active={i === colorIdx} onPress={() => setColorIdx(i)} />
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Brush Size'}</Text>
+      <S.StoryCap>{'Brush Size'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {SIZE_OPTS.map(s => (
           <ActionBtn key={`${s}`} label={`${s}px`} color={C.canvas} active={s === brushSize} onPress={() => setBrushSize(s)} />
         ))}
       </Box>
 
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Stroke Presets'}</Text>
+      <S.StoryCap>{'Stroke Presets'}</S.StoryCap>
       <Box style={DEMO_ACTION_ROW_STYLE}>
         {STROKE_PRESETS.map(p => (
           <ActionBtn key={p.label} label={p.label} color={C.canvas} active={false} onPress={() => doPaint(p)} />
@@ -1172,7 +1172,7 @@ export function ImagingStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1433,6 +1433,6 @@ export function ImagingStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

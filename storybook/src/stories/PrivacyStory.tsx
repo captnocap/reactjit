@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -73,17 +73,17 @@ const { valid } = await privacy.audit.verify()  // detects tampering`;
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -117,7 +117,7 @@ function PIIDemo() {
 
   return (
     <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'detectPII() \u2192 finds + classifies:'}</Text>
+      <S.StoryCap>{'detectPII() \u2192 finds + classifies:'}</S.StoryCap>
 
       {detections.map(d => (
         <Box key={d.type} style={{
@@ -147,9 +147,9 @@ function PIIDemo() {
         borderRadius: 6,
         padding: 8,
       }}>
-        <Text style={{ fontSize: 10, color: c.muted }}>
+        <S.StoryMuted>
           {'*****@***.*** | ***-**** | ***-**-****'}
-        </Text>
+        </S.StoryMuted>
       </Box>
     </Box>
   );
@@ -174,7 +174,7 @@ function ShamirDemo() {
         }}>
           <Text style={{ fontSize: 10, color: C.accent }}>{'deadbeef'}</Text>
         </Box>
-        <Text style={{ fontSize: 8, color: c.muted }}>{'\u2192 split(5,3)'}</Text>
+        <S.StoryTiny>{'\u2192 split(5,3)'}</S.StoryTiny>
       </Box>
 
       {/* 5 shares — vertical list, compact */}
@@ -196,7 +196,7 @@ function ShamirDemo() {
               color: used[i] ? shareColors[i] : c.muted,
             }}>{`share ${i + 1}`}</Text>
             {used[i] && (
-              <Text style={{ fontSize: 8, color: c.muted }}>{'\u2713'}</Text>
+              <S.StoryTiny>{'\u2713'}</S.StoryTiny>
             )}
           </Box>
         ))}
@@ -204,7 +204,7 @@ function ShamirDemo() {
 
       {/* Recovered */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={{ fontSize: 8, color: c.muted }}>{'any 3 \u2192'}</Text>
+        <S.StoryTiny>{'any 3 \u2192'}</S.StoryTiny>
         <Box style={{
           width: 6,
           height: 6,
@@ -223,7 +223,7 @@ function ShamirDemo() {
         </Box>
       </Box>
 
-      <Text style={{ fontSize: 8, color: c.muted }}>{'GF(256) / 0x11B / gen 3'}</Text>
+      <S.StoryTiny>{'GF(256) / 0x11B / gen 3'}</S.StoryTiny>
     </Box>
   );
 }
@@ -274,16 +274,9 @@ function NoiseDemo() {
       {/* Features */}
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', paddingTop: 4 }}>
         {['forward secrecy', 'replay protection', 'HKDF session keys'].map(f => (
-          <Box key={f} style={{
-            backgroundColor: c.surface,
-            borderRadius: 3,
-            paddingLeft: 6,
-            paddingRight: 6,
-            paddingTop: 2,
-            paddingBottom: 2,
-          }}>
+          <S.StoryChip key={f}>
             <Text style={{ fontSize: 8, color: c.muted }}>{f}</Text>
-          </Box>
+          </S.StoryChip>
         ))}
       </Box>
     </Box>
@@ -310,8 +303,8 @@ function KeyringDemo() {
       }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Image src="lock" style={{ width: 10, height: 10 }} tintColor={C.accent} />
-          <Text style={{ fontSize: 10, color: c.text }}>{'keys.kr'}</Text>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'AEAD encrypted'}</Text>
+          <S.StoryBody>{'keys.kr'}</S.StoryBody>
+          <S.StoryTiny>{'AEAD encrypted'}</S.StoryTiny>
         </Box>
 
         {keys.map(k => (
@@ -342,9 +335,9 @@ function KeyringDemo() {
           </Box>
         ))}
       </Box>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {'generate \u2192 store \u2192 rotate \u2192 revoke \u2192 close/reopen'}
-      </Text>
+      </S.StoryCap>
     </Box>
   );
 }
@@ -368,7 +361,7 @@ function SecureMemoryDemo() {
         gap: 6,
         paddingBottom: 4,
       }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'handle: opaque int'}</Text>
+        <S.StoryCap>{'handle: opaque int'}</S.StoryCap>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 3,
@@ -379,7 +372,7 @@ function SecureMemoryDemo() {
         }}>
           <Text style={{ fontSize: 10, color: C.accent }}>{'#7'}</Text>
         </Box>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'(TS never sees raw bytes)'}</Text>
+        <S.StoryCap>{'(TS never sees raw bytes)'}</S.StoryCap>
       </Box>
 
       {stages.map((s, i) => (
@@ -391,7 +384,7 @@ function SecureMemoryDemo() {
         }}>
           <Text style={{ fontSize: 10, color: s.color }}>{s.icon}</Text>
           <Text style={{ fontSize: 10, color: s.color, width: 50 }}>{s.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{s.desc}</Text>
+          <S.StoryCap>{s.desc}</S.StoryCap>
           {i < stages.length - 1 && (
             <Text style={{ fontSize: 8, color: c.border }}>{''}</Text>
           )}
@@ -409,7 +402,7 @@ function StegDemo() {
   const bitCount = secret.length * 8;
 
   return (
-    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.StoryHalf>
       {/* Carrier text — looks innocent */}
       <Text style={{ fontSize: 9, color: c.muted }}>{'carrier text (visible):'}</Text>
       <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10 }}>
@@ -450,7 +443,7 @@ function StegDemo() {
           <Text style={{ fontSize: 12, color: C.mauve }}>{secret}</Text>
         </Box>
       </Box>
-    </Box>
+    </S.StoryHalf>
   );
 }
 
@@ -547,7 +540,7 @@ function EnvelopeDemo() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ gap: 8, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.StoryHalf>
       {/* Stacked layers — deepest = most nested */}
       <Box style={{
         backgroundColor: 'rgba(250,179,135,0.10)',
@@ -593,7 +586,7 @@ function EnvelopeDemo() {
       <Text style={{ fontSize: 8, color: c.muted }}>
         {'fresh DEK per encrypt \u2014 same plaintext never produces same ciphertext'}
       </Text>
-    </Box>
+    </S.StoryHalf>
   );
 }
 
@@ -603,7 +596,7 @@ export function PrivacyStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -863,6 +856,6 @@ export function PrivacyStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

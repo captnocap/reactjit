@@ -13,8 +13,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box, Text, Image, TextEditor, TextInput, CodeBlock, Pressable, ScrollView,
   Slider, Switch, Checkbox, RadioGroup, Radio, Select, Modal,
-  useHotkey, useClipboard,
-} from '../../../packages/core/src';
+  useHotkey, useClipboard, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
@@ -33,7 +32,7 @@ const SYN = {
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -166,7 +165,7 @@ function PressableDemo() {
         >
           <Text style={{ color: c.muted, fontSize: 11 }}>{'Disabled'}</Text>
         </Pressable>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`count: ${pressCount}`}</Text>
+        <S.StoryCap>{`count: ${pressCount}`}</S.StoryCap>
       </Box>
     </>
   );
@@ -186,7 +185,7 @@ function SliderDemo() {
           onValueChange={setSliderVal}
           activeTrackColor={c.primary}
         />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`value: ${sliderVal.toFixed(2)}`}</Text>
+        <S.StoryCap>{`value: ${sliderVal.toFixed(2)}`}</S.StoryCap>
       </Box>
     </>
   );
@@ -203,7 +202,7 @@ function SwitchCheckboxDemo() {
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center', justifyContent: 'center' }}>
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Switch value={switchOn} onValueChange={setSwitchOn} />
-          <Text style={{ color: c.text, fontSize: 10 }}>{switchOn ? 'ON' : 'OFF'}</Text>
+          <S.StoryBody>{switchOn ? 'ON' : 'OFF'}</S.StoryBody>
         </Box>
         <Checkbox
           value={checkVal}
@@ -255,9 +254,9 @@ function TextInputDemo() {
           style={{ width: 240 }}
           textStyle={{ fontSize: 12, color: c.text }}
         />
-        <Text style={{ color: c.muted, fontSize: 9 }}>
+        <S.StoryCap>
           {inputText ? `"${inputText}"` : '(empty)'}
-        </Text>
+        </S.StoryCap>
       </Box>
     </>
   );
@@ -322,7 +321,7 @@ function HotkeyClipboardDemo() {
     <>
       <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'HOTKEY + CLIPBOARD'}</Text>
       <Box style={{ alignItems: 'center', gap: 4 }}>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`Last hotkey: ${lastHotkey} (try Ctrl+Z or Esc)`}</Text>
+        <S.StoryCap>{`Last hotkey: ${lastHotkey} (try Ctrl+Z or Esc)`}</S.StoryCap>
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Pressable
             onPress={() => copy('Hello from Input!')}
@@ -333,7 +332,7 @@ function HotkeyClipboardDemo() {
               paddingTop: 4, paddingBottom: 4,
             })}
           >
-            <Text style={{ color: c.text, fontSize: 10 }}>{copied ? 'Copied!' : 'Copy'}</Text>
+            <S.StoryBody>{copied ? 'Copied!' : 'Copy'}</S.StoryBody>
           </Pressable>
           <Pressable
             onPress={async () => { const t = await paste(); setPastedText(t); }}
@@ -344,9 +343,9 @@ function HotkeyClipboardDemo() {
               paddingTop: 4, paddingBottom: 4,
             })}
           >
-            <Text style={{ color: c.text, fontSize: 10 }}>{'Paste'}</Text>
+            <S.StoryBody>{'Paste'}</S.StoryBody>
           </Pressable>
-          {pastedText ? <Text style={{ color: c.muted, fontSize: 9 }}>{`"${pastedText}"`}</Text> : null}
+          {pastedText ? <S.StoryCap>{`"${pastedText}"`}</S.StoryCap> : null}
         </Box>
       </Box>
     </>
@@ -386,7 +385,7 @@ export function InputStory() {
   }, [processCode]);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -598,6 +597,6 @@ export function InputStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

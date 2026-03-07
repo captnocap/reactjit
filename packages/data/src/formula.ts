@@ -1,5 +1,3 @@
-import { convert } from '@reactjit/convert';
-
 // Inlined trivial math — the real math library lives in Lua now.
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -216,18 +214,6 @@ const BASE_FUNCTIONS: SpreadsheetFunctionMap = {
       [toNumber(x2) ?? 0, toNumber(y2) ?? 0],
     ),
   NORM2D: (x: unknown, y: unknown) => vec2len([toNumber(x) ?? 0, toNumber(y) ?? 0]),
-  CONVERT: (value: unknown, from: unknown, to: unknown) => {
-    const fromUnit = String(from ?? '').trim();
-    const toUnit = String(to ?? '').trim();
-    if (fromUnit.length === 0 || toUnit.length === 0) {
-      throw new Error('CONVERT requires source and target units');
-    }
-    const converted = convert(value, fromUnit).to(toUnit);
-    if (converted && typeof (converted as Promise<unknown>).then === 'function') {
-      throw new Error('Async converters are not supported in spreadsheet formulas');
-    }
-    return converted;
-  },
 };
 
 export function createSpreadsheetFunctions(custom?: SpreadsheetFunctionMap): SpreadsheetFunctionMap {

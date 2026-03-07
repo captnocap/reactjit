@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Box, MonacoMirror, Text } from '../../../packages/core/src';
+import { Box, MonacoMirror, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const STARTER_CODE = `import React from 'react';
@@ -87,10 +87,10 @@ export function MonacoMirrorStory() {
           justifyContent: 'space-between',
         }}
       >
-        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>{'Monaco Mirror'}</Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>{`Last submit: ${lastSubmitChars} chars`}</Text>
+        <S.StoryHeadline>{'Monaco Mirror'}</S.StoryHeadline>
+        <S.StoryMuted>{`Last submit: ${lastSubmitChars} chars`}</S.StoryMuted>
       </Box>
-      <Text style={{ color: c.textDim, fontSize: 9 }}>{`Selected: ${selectedFile}`}</Text>
+      <S.StoryCap>{`Selected: ${selectedFile}`}</S.StoryCap>
 
       <Box style={{ flexGrow: 1, minHeight: 0, gap: 10 }}>
         <MonacoMirror
@@ -111,7 +111,7 @@ export function MonacoMirrorStory() {
         />
 
         <Box style={{ flexShrink: 0, alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>{'Constrained sample (620x260, explorer + minimap still fit)'}</Text>
+          <S.StoryMuted>{'Constrained sample (620x260, explorer + minimap still fit)'}</S.StoryMuted>
           <MonacoMirror
             defaultValue={STARTER_CODE}
             style={{ width: 620, height: 260 }}
@@ -122,7 +122,7 @@ export function MonacoMirrorStory() {
             explorerFiles={EXPLORER_FILES}
           />
 
-          <Text style={{ color: c.textDim, fontSize: 10 }}>{'Auto-compact sample (400x200)'}</Text>
+          <S.StoryMuted>{'Auto-compact sample (400x200)'}</S.StoryMuted>
           <MonacoMirror
             defaultValue={STARTER_CODE}
             style={{ width: 400, height: 200 }}

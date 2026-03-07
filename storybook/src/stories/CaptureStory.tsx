@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, ScrollView, Pressable, CodeBlock, useGifRecorder, useRecorder } from '../../../packages/core/src';
+import { Box, Text, ScrollView, Pressable, CodeBlock, useGifRecorder, useRecorder, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -138,7 +138,7 @@ function StatBox({ label, value }: { label: string; value: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ gap: 2 }}>
-      <Text style={{ color: c.muted, fontSize: 10 }}>{label}</Text>
+      <S.StoryMuted>{label}</S.StoryMuted>
       <Text style={{ color: c.text, fontSize: 14, fontWeight: '600' }}>{value}</Text>
     </Box>
   );
@@ -245,7 +245,7 @@ export function CaptureStory() {
         <HeroBand accentColor={C.accent}>
           <Box style={{ gap: 4 }}>
             <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Capture'}</Text>
+              <S.StoryTitle>{'Capture'}</S.StoryTitle>
               <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
                 <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
               </Box>

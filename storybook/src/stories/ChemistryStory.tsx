@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView,
@@ -292,7 +292,7 @@ function ElementDemo() {
               <Box key={row.k} style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
                 <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: row.color, marginTop: 3, flexShrink: 0 }} />
                 <Text style={{ fontSize: 9, color: c.muted, width: 90, flexShrink: 0 }}>{row.k}</Text>
-                <Text style={{ fontSize: 9, color: c.text }}>{row.v}</Text>
+                <S.StoryBreadcrumbActive>{row.v}</S.StoryBreadcrumbActive>
               </Box>
             ))}
           </Box>
@@ -334,7 +334,7 @@ function MoleculesDemo() {
             <Pressable key={r.formula} onPress={() => { setFormula(r.formula); setSearch(''); }}>
               <Box style={{ flexDirection: 'row', gap: 6, padding: 4, backgroundColor: c.surface, borderRadius: 4 }}>
                 <ChemFormula formula={r.formula} fontSize={10} color={P.accent} />
-                <Text style={{ fontSize: 10, color: c.muted }}>{r.name}</Text>
+                <S.StoryMuted>{r.name}</S.StoryMuted>
               </Box>
             </Pressable>
           ))}
@@ -424,12 +424,12 @@ function ReagentsDemo() {
 
   return (
     <Box style={{ gap: 10, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {'Color-change presumptive tests. Stack multiple reagents for higher confidence.'}
-      </Text>
+      </S.StoryCap>
 
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'Sample compound'}</Text>
+        <S.StoryCap>{'Sample compound'}</S.StoryCap>
         <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
           {REAGENT_COMPOUNDS.map(cmp => (
             <Pressable
@@ -461,9 +461,9 @@ function ReagentsDemo() {
       </Box>
 
       {lastResult !== '' && (
-        <Box style={{ backgroundColor: c.surface, borderRadius: 4, padding: 6 }}>
+        <S.StoryInputWell>
           <Text style={{ fontSize: 10, color: c.text }}>{lastResult}</Text>
-        </Box>
+        </S.StoryInputWell>
       )}
 
       <Box style={{ gap: 4 }}>
@@ -485,7 +485,7 @@ function ReagentsDemo() {
         <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 3 }}>
           <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{REAGENT_INFO[infoReagent].name}</Text>
           <ChemFormula formula={REAGENT_INFO[infoReagent].formula} fontSize={9} color={P.teal} />
-          <Text style={{ fontSize: 9, color: c.muted }}>{REAGENT_INFO[infoReagent].description}</Text>
+          <S.StoryCap>{REAGENT_INFO[infoReagent].description}</S.StoryCap>
         </Box>
       </Box>
     </Box>
@@ -552,9 +552,9 @@ function PhaseDiagramDemo() {
   const c = useThemeColors();
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {'Pressure-temperature phase diagrams with triple and critical points. Rendered by Lua at 60fps.'}
-      </Text>
+      </S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 12 }}>
         <Box style={{ flexGrow: 1 }}>
           <PhaseDiagram compound="H2O" style={{ height: 240 }} />
@@ -606,7 +606,7 @@ function PubChemDemo() {
           </Box>
         </Pressable>
       </Box>
-      {loading && <Text style={{ fontSize: 10, color: c.muted }}>{'Loading from PubChem...'}</Text>}
+      {loading && <S.StoryMuted>{'Loading from PubChem...'}</S.StoryMuted>}
       {error && <Text style={{ fontSize: 10, color: P.red }}>{error}</Text>}
       {data && (
         <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 4 }}>
@@ -616,31 +616,31 @@ function PubChemDemo() {
           <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             {data.molecularFormula && (
               <Box style={{ gap: 1 }}>
-                <Text style={{ fontSize: 8, color: c.muted }}>{'Formula'}</Text>
+                <S.StoryTiny>{'Formula'}</S.StoryTiny>
                 <ChemFormula formula={data.molecularFormula} fontSize={11} color={P.blue} />
               </Box>
             )}
             {data.molecularWeight && (
               <Box style={{ gap: 1 }}>
-                <Text style={{ fontSize: 8, color: c.muted }}>{'MW'}</Text>
+                <S.StoryTiny>{'MW'}</S.StoryTiny>
                 <Text style={{ fontSize: 11, color: P.teal }}>{`${data.molecularWeight} g/mol`}</Text>
               </Box>
             )}
             {data.canonicalSmiles && (
               <Box style={{ gap: 1 }}>
-                <Text style={{ fontSize: 8, color: c.muted }}>{'SMILES'}</Text>
-                <Text style={{ fontSize: 9, color: c.text }}>{data.canonicalSmiles}</Text>
+                <S.StoryTiny>{'SMILES'}</S.StoryTiny>
+                <S.StoryBreadcrumbActive>{data.canonicalSmiles}</S.StoryBreadcrumbActive>
               </Box>
             )}
             {data.xlogp !== undefined && (
               <Box style={{ gap: 1 }}>
-                <Text style={{ fontSize: 8, color: c.muted }}>{'XLogP'}</Text>
+                <S.StoryTiny>{'XLogP'}</S.StoryTiny>
                 <Text style={{ fontSize: 11, color: P.mauve }}>{`${data.xlogp}`}</Text>
               </Box>
             )}
           </Box>
           {data.inchiKey && (
-            <Text style={{ fontSize: 8, color: c.muted }}>{`InChIKey: ${data.inchiKey}`}</Text>
+            <S.StoryTiny>{`InChIKey: ${data.inchiKey}`}</S.StoryTiny>
           )}
         </Box>
       )}
@@ -664,7 +664,7 @@ function ToolsDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'Formula'}</Text>
+        <S.StoryCap>{'Formula'}</S.StoryCap>
         <TextInput
           placeholder="C6H12O6"
           value={formula}
@@ -677,14 +677,14 @@ function ToolsDemo() {
         </Box>
         <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {Object.entries(composition).map(([sym, pct]) => (
-            <Text key={sym} style={{ fontSize: 10, color: c.muted }}>{`${sym}: ${pct}%`}</Text>
+            <S.StoryMuted key={sym}>{`${sym}: ${pct}%`}</S.StoryMuted>
           ))}
         </Box>
       </Box>
 
       <Box style={{ gap: 4 }}>
         <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Mass (g) of'}</Text>
+          <S.StoryCap>{'Mass (g) of'}</S.StoryCap>
           <ChemFormula formula={formula} fontSize={9} color={c.muted} />
         </Box>
         <TextInput
@@ -695,11 +695,11 @@ function ToolsDemo() {
         />
         <Box style={{ flexDirection: 'row', gap: 16 }}>
           <Box style={{ gap: 1 }}>
-            <Text style={{ fontSize: 8, color: c.muted }}>{'Moles'}</Text>
+            <S.StoryTiny>{'Moles'}</S.StoryTiny>
             <Text style={{ fontSize: 12, color: P.blue }}>{moles.toFixed(6)}</Text>
           </Box>
           <Box style={{ gap: 1 }}>
-            <Text style={{ fontSize: 8, color: c.muted }}>{'Particles'}</Text>
+            <S.StoryTiny>{'Particles'}</S.StoryTiny>
             <Text style={{ fontSize: 12, color: P.teal }}>{particles.toExponential(4)}</Text>
           </Box>
         </Box>
@@ -718,7 +718,7 @@ function FeatureCatalog() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 150, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -770,7 +770,7 @@ function NotationDemo() {
 
       {/* Formulas */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'Formulas — \\ce{...}'}</Text>
+        <S.StoryMuted>{'Formulas — \\ce{...}'}</S.StoryMuted>
         <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {NOTATION_FORMULAS.map(({ label, f }) => (
             <Box key={f} style={{
@@ -781,7 +781,7 @@ function NotationDemo() {
               alignItems: 'center',
             }}>
               <ChemFormula formula={f} fontSize={15} color={c.text} />
-              <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
+              <S.StoryTiny>{label}</S.StoryTiny>
             </Box>
           ))}
         </Box>
@@ -789,7 +789,7 @@ function NotationDemo() {
 
       {/* Equations */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'Equations — arrows, state symbols, equilibrium'}</Text>
+        <S.StoryMuted>{'Equations — arrows, state symbols, equilibrium'}</S.StoryMuted>
         <Box style={{ gap: 6 }}>
           {NOTATION_EQUATIONS.map(eq => (
             <Box key={eq} style={{
@@ -805,7 +805,7 @@ function NotationDemo() {
 
       {/* Isotopes */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'Isotope notation — mass/atomic number'}</Text>
+        <S.StoryMuted>{'Isotope notation — mass/atomic number'}</S.StoryMuted>
         <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           {NOTATION_ISOTOPES.map(({ symbol, mass, atomic, label }) => (
             <Box key={label} style={{
@@ -816,7 +816,7 @@ function NotationDemo() {
               alignItems: 'center',
             }}>
               <IsoNotation symbol={symbol} mass={mass} atomic={atomic} fontSize={15} color={c.text} />
-              <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
+              <S.StoryTiny>{label}</S.StoryTiny>
             </Box>
           ))}
         </Box>
@@ -824,7 +824,7 @@ function NotationDemo() {
 
       {/* ChemFig linear */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'Structural formulas — \\chemfig{...} (linear chains)'}</Text>
+        <S.StoryMuted>{'Structural formulas — \\chemfig{...} (linear chains)'}</S.StoryMuted>
         <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           {NOTATION_STRUCTURES.map(({ label, f }) => (
             <Box key={f} style={{
@@ -835,7 +835,7 @@ function NotationDemo() {
               alignItems: 'center',
             }}>
               <ChemFig formula={f} fontSize={14} color={c.text} />
-              <Text style={{ fontSize: 8, color: c.muted }}>{label}</Text>
+              <S.StoryTiny>{label}</S.StoryTiny>
             </Box>
           ))}
         </Box>
@@ -853,10 +853,10 @@ function ConstantsReference() {
     <Box style={{ gap: 3, width: '100%' }}>
       {Object.entries(CONSTANTS).map(([name, value]) => (
         <Box key={name} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 9, color: c.muted }}>{name.replace(/_/g, ' ')}</Text>
-          <Text style={{ fontSize: 9, color: c.text }}>
+          <S.StoryCap>{name.replace(/_/g, ' ')}</S.StoryCap>
+          <S.StoryBreadcrumbActive>
             {typeof value === 'number' && value < 0.001 ? value.toExponential(6) : `${value}`}
-          </Text>
+          </S.StoryBreadcrumbActive>
         </Box>
       ))}
     </Box>
@@ -946,7 +946,7 @@ export function ChemistryStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1259,6 +1259,6 @@ export function ChemistryStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

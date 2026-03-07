@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo, useState, useRef, useCallback } from 'react';
-import { Box, Text, Pressable, useLocalStore } from '../../../packages/core/src';
+import { Box, Text, Pressable, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
 import { transformJSX } from './lib/jsx-transform';
@@ -224,9 +224,9 @@ function TemplateCard({
         <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>
           {template.name}
         </Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>
+        <S.StoryMuted>
           {template.description}
-        </Text>
+        </S.StoryMuted>
       </Box>
     </Pressable>
   );

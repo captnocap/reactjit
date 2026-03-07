@@ -11,8 +11,7 @@ import {
   Box, Text, Image, Pressable, ScrollView, CodeBlock, TextInput,
   Scanlines, CRT, VHS, Dither, Ascii,
   LumaMesh, OpticalFlow, DataMosh, FeedbackLoop,
-  HardGlitch, SoftGlitch, Stretch, FishEye, Tile, Watercolor,
-} from '../../../packages/core/src';
+  HardGlitch, SoftGlitch, Stretch, FishEye, Tile, Watercolor, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -284,7 +283,7 @@ export function MasksStory() {
   };
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -611,6 +610,6 @@ export function MasksStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }
