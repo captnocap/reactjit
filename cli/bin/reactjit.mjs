@@ -25,6 +25,7 @@ import { migratePyQt6Command } from '../commands/migrate-pyqt6.mjs';
 import { migrateFlutterCommand } from '../commands/migrate-flutter.mjs';
 import { testCommand } from '../commands/test.mjs';
 import { overlayCommand } from '../commands/overlay.mjs';
+import { classifyCommand } from '../commands/classify.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -93,6 +94,11 @@ const HELP = `
     rjit tsl --test               Run TSL transpiler test suite
     rjit test <spec.ts>           Run tests against a built app (rjit build first)
     rjit screenshot [--output]    Lint + build + headless screenshot
+    rjit classify                 Extract repeated style patterns → .cls.ts
+    rjit classify --output x.cls.ts  Write classifier sheet to file
+    rjit classify --min 3         Minimum occurrences (default: 2)
+    rjit classify --prefix App    Prefix names (default: auto-semantic)
+    rjit classify --dir ./stories Scan specific directory
     rjit diagnose                 Find ghost nodes (in tree, not painting)
     rjit search-index             Index all <Text> nodes for cold AppSearch
     rjit help                     Show this help message
@@ -145,6 +151,9 @@ switch (command) {
     break;
   case 'search-index':
     await searchIndexCommand(args);
+    break;
+  case 'classify':
+    await classifyCommand(args);
     break;
   case 'convert':
     runConvert(args);
