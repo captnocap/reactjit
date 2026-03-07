@@ -504,10 +504,6 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
 
   // ── Inset / Positioning ──
 
-  if (token.startsWith('inset-')) {
-    const v = neg(spacing(token.slice(6)));
-    return v !== undefined ? { top: v, right: v, bottom: v, left: v } : undefined;
-  }
   if (token.startsWith('inset-x-')) {
     const v = neg(spacing(token.slice(8)));
     return v !== undefined ? { left: v, right: v } : undefined;
@@ -515,6 +511,10 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
   if (token.startsWith('inset-y-')) {
     const v = neg(spacing(token.slice(8)));
     return v !== undefined ? { top: v, bottom: v } : undefined;
+  }
+  if (token.startsWith('inset-')) {
+    const v = neg(spacing(token.slice(6)));
+    return v !== undefined ? { top: v, right: v, bottom: v, left: v } : undefined;
   }
   if (token.startsWith('top-')) { const v = neg(spacing(token.slice(4))); return v !== undefined ? { top: v } : undefined; }
   if (token.startsWith('right-')) { const v = neg(spacing(token.slice(6))); return v !== undefined ? { right: v } : undefined; }
