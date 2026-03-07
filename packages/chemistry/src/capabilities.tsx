@@ -15,7 +15,9 @@ export interface ReagentTestProps {
 }
 
 export function ReagentTest(props: ReagentTestProps) {
-  return <Native type="ReagentTest" {...props} />;
+  // ReagentTest needs its own `type` prop for the reagent name, so it cannot
+  // use the generic <Native type="..."> wrapper without clobbering that prop.
+  return React.createElement('ReagentTest', props);
 }
 
 // -- SpectrumView (Lua capability: spectrum_view.lua) -------------------------
