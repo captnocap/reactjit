@@ -19,7 +19,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Image, Pressable, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, Pressable, ScrollView, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -365,7 +365,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
         <Box style={{ ...fill, backgroundColor: 'rgba(139, 92, 246, 0.05)' }}>
           <Box style={{ width: 280, height: 180, backgroundColor: c.surface, borderRadius: 16, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
             <Text style={{ color: c.muted, fontSize: 24, fontWeight: 'bold' }}>{'radius: 8'}</Text>
-            <Text style={{ color: c.muted, fontSize: 10 }}>{'Gaussian blur on children'}</Text>
+            <S.StoryMuted>{'Gaussian blur on children'}</S.StoryMuted>
           </Box>
         </Box>
       );
@@ -380,7 +380,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
         <Box style={{ ...fill }}>
           <Box style={{ width: 240, height: 160, backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
             <Text style={{ color: c.text, fontSize: 14 }}>{'Card with shadow'}</Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>{'offset: 4,4  blur: 8'}</Text>
+            <S.StoryCap>{'offset: 4,4  blur: 8'}</S.StoryCap>
           </Box>
         </Box>
       );
@@ -393,7 +393,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
         <Box style={{ ...fill }}>
           <Box style={{ width: 200, height: 200, backgroundColor: c.surface, borderRadius: 100, borderWidth: 2, borderColor: C.accent, justifyContent: 'center', alignItems: 'center' }}>
             <Image src="crop" style={{ width: 48, height: 48 }} tintColor={C.accent} />
-            <Text style={{ color: c.muted, fontSize: 9 }}>{'Circle mask'}</Text>
+            <S.StoryCap>{'Circle mask'}</S.StoryCap>
           </Box>
         </Box>
       );
@@ -401,7 +401,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
       return (
         <Box style={{ flexGrow: 1, backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color: c.muted, fontSize: 48, fontWeight: 'bold', opacity: 0.2 }}>{'NOISE'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'intensity: 0.15  scale: 2'}</Text>
+          <S.StoryMuted>{'intensity: 0.15  scale: 2'}</S.StoryMuted>
         </Box>
       );
     case 'pixelate':
@@ -419,7 +419,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
         <Box style={{ ...fill }}>
           <Image src={tab.icon} style={{ width: 48, height: 48 }} tintColor={C.accent} />
           <Text style={{ color: c.muted, fontSize: 12, fontWeight: 'bold' }}>{tab.label}</Text>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{tab.desc}</Text>
+          <S.StoryCap>{tab.desc}</S.StoryCap>
         </Box>
       );
   }
@@ -429,7 +429,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -445,7 +445,7 @@ export function Layout3Story() {
   const tab = TABS.find(it => it.id === activeId) || TABS[0];
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -624,6 +624,6 @@ export function Layout3Story() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

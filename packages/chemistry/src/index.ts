@@ -73,5 +73,4 @@ export {
 } from './pubchem';
 export type { PubChemCompound, PubChemSearchResult } from './pubchem';
 
-// -- Side effect: register chemistry conversions into @reactjit/convert -------
-import './conversions';
+// Chemistry-specific unit conversions are registered in lua/capabilities/convert.lua

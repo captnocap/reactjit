@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Slider, Pressable, Timer, useCapabilities, useLoveState } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Slider, Pressable, Timer, useCapabilities, useLoveState, classifiers as S} from '../../../packages/core/src';
 import { useEventBus, useEvent, useEventState, useEmit } from '../../../packages/core/src/useEvents';
 import type { EventBus } from '../../../packages/core/src/useEvents';
 import { useIFTTT } from '../../../packages/core/src/useIFTTT';
@@ -181,15 +181,15 @@ function TimerDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {`<Timer interval={${interval}} running={${running}} onTick={...} />`}
-      </Text>
+      </S.StoryCap>
 
       <Timer interval={interval} running={running} onTick={() => setCount(prev => prev + 1)} />
 
       <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontSize: 24, color: c.text, fontWeight: 'normal' }}>{String(count)}</Text>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'ticks'}</Text>
+        <S.StoryMuted>{'ticks'}</S.StoryMuted>
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
@@ -200,13 +200,13 @@ function TimerDemo() {
         </Pressable>
         <Pressable onPress={() => setCount(0)}>
           <Box style={{ backgroundColor: c.surface2, borderRadius: 6, padding: 6, paddingLeft: 12, paddingRight: 12 }}>
-            <Text style={{ fontSize: 10, color: c.text }}>{'Reset'}</Text>
+            <S.StoryBody>{'Reset'}</S.StoryBody>
           </Box>
         </Pressable>
       </Box>
 
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{`Interval: ${interval}ms`}</Text>
+        <S.StoryCap>{`Interval: ${interval}ms`}</S.StoryCap>
         <Slider
           value={interval}
           minimumValue={100}
@@ -230,7 +230,7 @@ function DiscoveryDemo() {
 
   return (
     <Box style={{ gap: 4, width: '100%' }}>
-      {loading && <Text style={{ fontSize: 10, color: c.muted }}>{'Loading schemas...'}</Text>}
+      {loading && <S.StoryMuted>{'Loading schemas...'}</S.StoryMuted>}
 
       {entries.map(([name, cap]) => {
         const propCount = Object.keys(cap.schema).length;
@@ -290,7 +290,7 @@ function BasicBusDemo() {
       </Box>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 3, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {log.length === 0 ? (
-          <Text style={{ fontSize: 9, color: c.muted }}>{'(click a button above)'}</Text>
+          <S.StoryCap>{'(click a button above)'}</S.StoryCap>
         ) : log.map((line, i) => (
           <Text key={i} style={{ fontSize: 9, color: C.teal }}>{line}</Text>
         ))}
@@ -308,7 +308,7 @@ function StatefulBusDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{"useEventState(bus, 'cart:add') — re-renders with latest payload"}</Text>
+      <S.StoryCap>{"useEventState(bus, 'cart:add') — re-renders with latest payload"}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
         {CART_ITEMS.map(item => (
           <Pressable key={item.name} onPress={() => bus.emit('cart:add', item)}>
@@ -319,9 +319,9 @@ function StatefulBusDemo() {
         ))}
       </Box>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 10, color: c.text }}>
+        <S.StoryBody>
           {lastItem ? `Last: ${lastItem.name} — $${lastItem.price.toFixed(2)}` : 'No items yet'}
-        </Text>
+        </S.StoryBody>
       </Box>
     </Box>
   );
@@ -338,7 +338,7 @@ function WildcardDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{"useEvent(bus, '*', ...) — wildcard catches all channels"}</Text>
+      <S.StoryCap>{"useEvent(bus, '*', ...) — wildcard catches all channels"}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
         <Pressable onPress={() => bus.emit('user:login', { name: 'Alice' })}>
           <Box style={{ backgroundColor: C.blue, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -353,7 +353,7 @@ function WildcardDemo() {
       </Box>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {log.length === 0 ? (
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting...'}</Text>
+          <S.StoryCap>{'Waiting...'}</S.StoryCap>
         ) : log.map((line, i) => (
           <Text key={i} style={{ fontSize: 9, color: C.yellow }}>{line}</Text>
         ))}
@@ -373,7 +373,7 @@ function MultiChannelDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{"useEvent(bus, ['deposit', 'withdrawal'], ...)"}</Text>
+      <S.StoryCap>{"useEvent(bus, ['deposit', 'withdrawal'], ...)"}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Pressable onPress={() => bus.emit('deposit', 10)}>
           <Box style={{ backgroundColor: C.green, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -401,12 +401,12 @@ function KeyToggleDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{"useIFTTT('key:space', () => setPaused(!paused))"}</Text>
+      <S.StoryCap>{"useIFTTT('key:space', () => setPaused(!paused))"}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: paused ? C.red : C.green }} />
         <Text style={{ fontSize: 12, color: c.text }}>{paused ? 'Paused' : 'Running'}</Text>
       </Box>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Press Space to toggle'}</Text>
+      <S.StoryCap>{'Press Space to toggle'}</S.StoryCap>
     </Box>
   );
 }
@@ -424,7 +424,7 @@ function ToolSwitcherDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{"4 rules, 4 one-liners"}</Text>
+      <S.StoryCap>{"4 rules, 4 one-liners"}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
         {TOOLS.map(t => (
           <Box key={t.key} style={{
@@ -453,7 +453,7 @@ function ThresholdDemo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{"useIFTTT(() => count >= 10, ...) — fires on false→true edge"}</Text>
+      <S.StoryCap>{"useIFTTT(() => count >= 10, ...) — fires on false→true edge"}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontSize: 20, color: c.text }}>{String(count)}</Text>
         <Pressable onPress={() => setCount(n => n + 1)}>
@@ -463,7 +463,7 @@ function ThresholdDemo() {
         </Pressable>
         <Pressable onPress={() => setCount(0)}>
           <Box style={{ backgroundColor: c.surface2, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
-            <Text style={{ fontSize: 10, color: c.text }}>{'Reset'}</Text>
+            <S.StoryBody>{'Reset'}</S.StoryBody>
           </Box>
         </Pressable>
       </Box>
@@ -488,7 +488,7 @@ function FireCountDemo() {
   return (
     <Box style={{ gap: 8, width: '100%' }}>
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{"const { fired, fire } = useIFTTT('key:f', 'log:F key pressed!')"}</Text>
+        <S.StoryCap>{"const { fired, fire } = useIFTTT('key:f', 'log:F key pressed!')"}</S.StoryCap>
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 12, color: c.text }}>{`Fired: ${fired}×`}</Text>
           <Pressable onPress={() => fire()}>
@@ -496,14 +496,14 @@ function FireCountDemo() {
               <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'Manual Fire'}</Text>
             </Box>
           </Pressable>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'(or press F)'}</Text>
+          <S.StoryCap>{'(or press F)'}</S.StoryCap>
         </Box>
       </Box>
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{"useIFTTT('timer:every:2000', () => setTicks(t => t + 1))"}</Text>
+        <S.StoryCap>{"useIFTTT('timer:every:2000', () => setTicks(t => t + 1))"}</S.StoryCap>
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 16, color: C.teal }}>{String(ticks)}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'ticks (every 2s)'}</Text>
+          <S.StoryCap>{'ticks (every 2s)'}</S.StoryCap>
         </Box>
       </Box>
     </Box>
@@ -527,10 +527,10 @@ function IFTTTEventsCombo() {
 
   return (
     <Box style={{ gap: 8, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Press J (jump), D (dash), R (reset)'}</Text>
+      <S.StoryCap>{'Press J (jump), D (dash), R (reset)'}</S.StoryCap>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {actions.length === 0 ? (
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for input...'}</Text>
+          <S.StoryCap>{'Waiting for input...'}</S.StoryCap>
         ) : (
           <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
             {actions.map((a, i) => (
@@ -558,7 +558,7 @@ function TriggerTable() {
         <Box key={t.trigger} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.color }} />
           <Text style={{ fontSize: 9, color: c.text, width: 140 }}>{t.trigger}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{t.desc}</Text>
+          <S.StoryCap>{t.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -573,7 +573,7 @@ function ActionTable() {
         <Box key={a.action} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color }} />
           <Text style={{ fontSize: 9, color: c.text, width: 160 }}>{a.action}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{a.desc}</Text>
+          <S.StoryCap>{a.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -586,7 +586,7 @@ export function CapabilitiesStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -907,6 +907,6 @@ export function CapabilitiesStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

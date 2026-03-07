@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input } from '../../../packages/core/src';
+import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { THUMBS, PREVIEWS } from './GalleryComponents';
 
@@ -494,7 +494,7 @@ const TABS: TabDef[] = [
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -525,7 +525,7 @@ export function GalleryStory() {
   const tabGridHeight = tabsExpanded ? 380 : 232;
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header row 1: Gallery title ── */}
       <Box style={{
@@ -727,6 +727,6 @@ export function GalleryStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

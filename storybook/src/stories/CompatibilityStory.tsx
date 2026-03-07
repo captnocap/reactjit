@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Row, Input, useBreakpoint, useWindowDimensions } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Row, Input, useBreakpoint, useWindowDimensions, classifiers as S} from '../../../packages/core/src';
 import { tw } from '../../../packages/core/src/tw';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
@@ -498,7 +498,7 @@ function HtmlPlayground() {
         <Box style={{ width: 1, height: 14, backgroundColor: c.border, marginLeft: 4, marginRight: 4 }} />
         <Text style={{ color: C.compat, fontSize: 10, fontWeight: 'bold' }}>{'LIVE HTML + TAILWIND PLAYGROUND'}</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'renders inside Love2D — no browser'}</Text>
+        <S.StoryTiny>{'renders inside Love2D — no browser'}</S.StoryTiny>
       </Box>
       {/* Preset tabs */}
       <Box style={{
@@ -548,7 +548,7 @@ function HtmlPlayground() {
             gap: 6,
           }}>
             <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.compat + '88' }} />
-            <Text style={{ color: c.muted, fontSize: 8 }}>{'HTML INPUT'}</Text>
+            <S.StoryTiny>{'HTML INPUT'}</S.StoryTiny>
           </Box>
           <Input
             multiline
@@ -580,7 +580,7 @@ function HtmlPlayground() {
             gap: 6,
           }}>
             <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e88' }} />
-            <Text style={{ color: c.muted, fontSize: 8 }}>{'LIVE PREVIEW'}</Text>
+            <S.StoryTiny>{'LIVE PREVIEW'}</S.StoryTiny>
             <Box style={{ flexGrow: 1 }} />
             <Text style={{ color: '#22c55e', fontSize: 8 }}>{'● rendering'}</Text>
           </Box>
@@ -633,7 +633,7 @@ function TailwindLiveDemo() {
         <Text style={{ color: C.compat, fontSize: 9, fontFamily: 'monospace' }}>{`tw("${input}")`}</Text>
       </Box>
       <Box style={{ height: 1, backgroundColor: c.border }} />
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Resolved style object:'}</Text>
+      <S.StoryTiny>{'Resolved style object:'}</S.StoryTiny>
       <Box style={{
         backgroundColor: c.bg,
         borderRadius: 4,
@@ -744,7 +744,7 @@ function ElementMapDemo() {
           <Box style={{ width: 180 }}>
             <Text style={{ color: C.danger, fontSize: 8, fontFamily: 'monospace' }}>{row.from}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{'→'}</Text>
+          <S.StoryTiny>{'→'}</S.StoryTiny>
           <Text style={{ color: C.pipeline, fontSize: 8, fontFamily: 'monospace', fontWeight: 'bold' }}>{row.to}</Text>
         </Box>
       ))}
@@ -882,7 +882,7 @@ function CopyPasteDemo() {
       gap: 8,
     }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'COPY-PASTE PROOF'}</Text>
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Real React+Tailwind JSX running in ReactJIT:'}</Text>
+      <S.StoryTiny>{'Real React+Tailwind JSX running in ReactJIT:'}</S.StoryTiny>
       <Box style={{ height: 1, backgroundColor: c.border }} />
       <div className="p-4 bg-gray-900 rounded-xl w-full">
         <div className="flex-row gap-4 items-center">
@@ -944,12 +944,12 @@ function MergePrecedenceDemo() {
       gap: 8,
     }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'MERGE PRECEDENCE'}</Text>
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Priority: className (tw) < shorthand props < style={}'}</Text>
+      <S.StoryTiny>{'Priority: className (tw) < shorthand props < style={}'}</S.StoryTiny>
       <Box style={{ height: 1, backgroundColor: c.border }} />
 
       {/* className < shorthand */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'className="p-8" + padding={4} → padding wins (4):'}</Text>
+        <S.StoryTiny>{'className="p-8" + padding={4} → padding wins (4):'}</S.StoryTiny>
         <Box className="p-8 bg-red-500 rounded-lg" padding={4} style={{ width: '100%', alignItems: 'center' }}>
           <Text style={{ color: '#fff', fontSize: 10 }}>{'padding=4 overrides className="p-8"'}</Text>
         </Box>
@@ -957,7 +957,7 @@ function MergePrecedenceDemo() {
 
       {/* className < style */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'className="bg-red-500" + style={{ bg: blue }} → blue wins:'}</Text>
+        <S.StoryTiny>{'className="bg-red-500" + style={{ bg: blue }} → blue wins:'}</S.StoryTiny>
         <Box className="bg-red-500 rounded-lg p-4" style={{ backgroundColor: C.blue, width: '100%', alignItems: 'center' }}>
           <Text style={{ color: '#fff', fontSize: 10 }}>{'style={{ bg: blue }} overrides bg-red-500'}</Text>
         </Box>
@@ -965,7 +965,7 @@ function MergePrecedenceDemo() {
 
       {/* Equivalence proof */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.muted, fontSize: 8 }}>{'Tailwind (left) vs native style (right) — identical output:'}</Text>
+        <S.StoryTiny>{'Tailwind (left) vs native style (right) — identical output:'}</S.StoryTiny>
         <Row gap={8} style={{ width: '100%' }}>
           <Box className="flex-1">
             <Box className="bg-indigo-600 rounded-lg p-3 flex-row items-center justify-between" style={{ width: '100%' }}>
@@ -1008,7 +1008,7 @@ function VisualEffectsDemo() {
       <Box style={{ height: 1, backgroundColor: c.border }} />
 
       {/* Shadows */}
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Shadows: shadow-sm through shadow-2xl'}</Text>
+      <S.StoryTiny>{'Shadows: shadow-sm through shadow-2xl'}</S.StoryTiny>
       <Box style={{ flexDirection: 'row', gap: 6, width: '100%' }}>
         {(['sm', 'md', 'lg', 'xl', '2xl'] as const).map(s => (
           <Box key={s} style={{
@@ -1021,7 +1021,7 @@ function VisualEffectsDemo() {
       </Box>
 
       {/* Transforms */}
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Transforms: rotate + scale'}</Text>
+      <S.StoryTiny>{'Transforms: rotate + scale'}</S.StoryTiny>
       <Box className="flex-row gap-6 items-center justify-center" style={{ width: '100%', paddingTop: 4, paddingBottom: 4 }}>
         <Box style={{ ...tw('bg-purple-500 rounded rotate-12'), width: 36, height: 36, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color: '#fff', fontSize: 7 }}>{'12°'}</Text>
@@ -1038,7 +1038,7 @@ function VisualEffectsDemo() {
       </Box>
 
       {/* Gradients */}
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Gradients: horizontal, vertical, diagonal'}</Text>
+      <S.StoryTiny>{'Gradients: horizontal, vertical, diagonal'}</S.StoryTiny>
       <Box style={{ gap: 4, width: '100%' }}>
         <Box style={{ ...tw('bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-3'), width: '100%' }}>
           <Text style={{ color: '#fff', fontSize: 9 }}>{'bg-gradient-to-r from-blue-500 to-purple-500'}</Text>
@@ -1052,7 +1052,7 @@ function VisualEffectsDemo() {
       </Box>
 
       {/* Opacity */}
-      <Text style={{ color: c.muted, fontSize: 8 }}>{'Opacity: 25%, 50%, 75%, 100%'}</Text>
+      <S.StoryTiny>{'Opacity: 25%, 50%, 75%, 100%'}</S.StoryTiny>
       <Box className="flex-row gap-3" style={{ width: '100%' }}>
         {([25, 50, 75, 100] as const).map(o => (
           <Box key={o} style={{
@@ -1124,7 +1124,7 @@ function LintRulesDemo() {
       {LINT_RULES.map((rule) => (
         <Box key={rule.rule} style={{ gap: 2 }}>
           <Text style={{ color: C.danger, fontSize: 8, fontFamily: 'monospace', fontWeight: 'bold' }}>{rule.rule}</Text>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{rule.desc}</Text>
+          <S.StoryTiny>{rule.desc}</S.StoryTiny>
         </Box>
       ))}
     </Box>
@@ -1168,7 +1168,7 @@ function PipelineFlowDemo() {
           <Box style={{ width: 50 }}>
             <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>{stage.label}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8 }}>{stage.desc}</Text>
+          <S.StoryTiny>{stage.desc}</S.StoryTiny>
         </Box>
       ))}
     </Box>
@@ -1206,9 +1206,9 @@ function ResponsiveDemo() {
         <Text style={{ color: c.text, fontSize: 11 }}>
           {`breakpoint: ${bp}`}
         </Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>
+        <S.StoryCap>
           {'Resize the window to see transitions'}
-        </Text>
+        </S.StoryCap>
       </Box>
 
       {/* Breakpoint indicator bar */}
@@ -1241,9 +1241,9 @@ function ResponsiveDemo() {
         padding: 10,
         gap: 6,
       }}>
-        <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        <S.StoryLabelText>
           {'LIVE LAYOUT SWITCH'}
-        </Text>
+        </S.StoryLabelText>
         <Box style={{
           flexDirection: compact ? 'column' : 'row',
           gap: 8,
@@ -1260,10 +1260,10 @@ function ResponsiveDemo() {
               padding: 10,
               alignItems: 'center',
             }}>
-              <Text style={{ color: c.text, fontSize: 10 }}>{label}</Text>
-              <Text style={{ color: c.muted, fontSize: 8 }}>
+              <S.StoryBody>{label}</S.StoryBody>
+              <S.StoryTiny>
                 {compact ? 'stacked' : 'side-by-side'}
-              </Text>
+              </S.StoryTiny>
             </Box>
           ))}
         </Box>
@@ -1278,7 +1278,7 @@ export function CompatibilityStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1586,6 +1586,6 @@ export function CompatibilityStory() {
           {'tw() · HTML compat · rjit convert · rjit migrate · rjit build · responsive'}
         </Text>
       </Box>
-    </Box>
+    </S.StoryRoot>
   );
 }

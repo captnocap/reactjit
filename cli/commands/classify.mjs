@@ -705,9 +705,499 @@ function generateReport(groups, fileCount) {
   return lines.join('\n');
 }
 
+// ── Rename command ────────────────────────────────────────────
+
+/**
+ * Find all .cls.ts and .tsx files under a directory.
+ */
+function findRenameTargets(dir) {
+  const results = { cls: [], tsx: [] };
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); }
+  catch { return results; }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+      const sub = findRenameTargets(full);
+      results.cls.push(...sub.cls);
+      results.tsx.push(...sub.tsx);
+    } else if (entry.isFile()) {
+      if (entry.name.endsWith('.cls.ts')) results.cls.push(full);
+      else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.cls.ts')) results.tsx.push(full);
+    }
+  }
+  return results;
+}
+
+/**
+ * Detect the local alias for `classifiers` in a file.
+ * Matches: `classifiers as C`, `classifiers as cls`, `const C = classifiers`, etc.
+ */
+function findClassifierAliases(source) {
+  const aliases = new Set();
+  // import { classifiers as X }
+  const importRe = /classifiers\s+as\s+(\w+)/g;
+  let m;
+  while ((m = importRe.exec(source))) aliases.add(m[1]);
+  // const X = classifiers
+  const constRe = /(?:const|let|var)\s+(\w+)\s*=\s*classifiers\b/g;
+  while ((m = constRe.exec(source))) aliases.add(m[1]);
+  // Direct usage without alias
+  if (/\bclassifiers\s*\./.test(source)) aliases.add('classifiers');
+  return aliases;
+}
+
+async function renameCommand(args) {
+  if (args.length < 2) {
+    console.error(`\n  Usage: rjit classify rename <OldName> <NewName>`);
+    console.error(`         rjit classify rename <OldName> <NewName> --dir ./stories\n`);
+    process.exit(1);
+  }
+
+  const oldName = args[0];
+  const newName = args[1];
+  const cwd = process.cwd();
+  let scanDir = join(cwd, 'src');
+
+  for (let i = 2; i < args.length; i++) {
+    if (args[i] === '--dir') { scanDir = join(cwd, args[++i]); continue; }
+  }
+
+  if (!existsSync(scanDir)) {
+    console.error(`  Directory not found: ${scanDir}`);
+    process.exit(1);
+  }
+
+  if (oldName === newName) {
+    console.log(`  Nothing to do — names are identical.`);
+    return;
+  }
+
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(newName)) {
+    console.error(`  New name must be PascalCase (e.g., PageTitle, DimCaption). Got: ${newName}`);
+    process.exit(1);
+  }
+
+  console.log(`\n  Renaming classifier: ${oldName} → ${newName}`);
+  console.log(`  Scanning ${relative(cwd, scanDir) || '.'}/ ...\n`);
+
+  const { cls, tsx } = findRenameTargets(scanDir);
+  let totalReplacements = 0;
+  const touchedFiles = [];
+
+  // 1. Rename definition key in .cls.ts files
+  for (const filePath of cls) {
+    const source = readFileSync(filePath, 'utf-8');
+    // Match the definition key: `  OldName: {` or `OldName:{`
+    const defRe = new RegExp(`(^|[\\s,{])${oldName}(\\s*:)`, 'gm');
+    if (!defRe.test(source)) continue;
+
+    const updated = source.replace(defRe, `$1${newName}$2`);
+    if (updated !== source) {
+      writeFileSync(filePath, updated, 'utf-8');
+      const count = (source.match(defRe) || []).length;
+      totalReplacements += count;
+      touchedFiles.push({ file: relative(cwd, filePath), count, type: 'def' });
+    }
+  }
+
+  // 2. Rename usages in .tsx files (and .cls.ts files for cross-references)
+  const allFiles = [...tsx, ...cls];
+  for (const filePath of allFiles) {
+    const source = readFileSync(filePath, 'utf-8');
+    const aliases = findClassifierAliases(source);
+    if (aliases.size === 0) continue;
+
+    let updated = source;
+    let count = 0;
+
+    for (const alias of aliases) {
+      // Match: <C.OldName, </C.OldName, C.OldName (in expressions)
+      // Use word boundary after name to avoid partial matches (e.g., StoryBody vs StoryBodyText)
+      const usageRe = new RegExp(`(${alias}\\.)${oldName}\\b`, 'g');
+      const matches = updated.match(usageRe);
+      if (matches) {
+        count += matches.length;
+        updated = updated.replace(usageRe, `$1${newName}`);
+      }
+    }
+
+    if (updated !== source) {
+      writeFileSync(filePath, updated, 'utf-8');
+      totalReplacements += count;
+      touchedFiles.push({ file: relative(cwd, filePath), count, type: 'usage' });
+    }
+  }
+
+  // Report
+  if (touchedFiles.length === 0) {
+    console.log(`  No occurrences of "${oldName}" found.\n`);
+    return;
+  }
+
+  console.log(`  ${'File'.padEnd(50)} ${'Type'.padEnd(6)} Hits`);
+  console.log(`  ${'─'.repeat(50)} ${'─'.repeat(6)} ${'─'.repeat(4)}`);
+  for (const { file, count, type } of touchedFiles) {
+    console.log(`  ${file.padEnd(50)} ${type.padEnd(6)} ${count}`);
+  }
+  console.log(`\n  Total: ${totalReplacements} replacements across ${touchedFiles.length} files.`);
+  console.log(`  ${oldName} → ${newName}\n`);
+}
+
+// ── Migrate command ───────────────────────────────────────────
+
+/**
+ * Parse a .cls.ts file and extract classifier definitions.
+ * Returns Map<signatureHash, { name, primitive, props }> for matching.
+ */
+function parseClsFile(clsPath, ts) {
+  const source = readFileSync(clsPath, 'utf-8');
+  const sf = ts.createSourceFile(clsPath, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
+
+  // Also extract any exported const objects (like SB palette) for color resolution
+  const exportedConsts = {};
+  sf.forEachChild(node => {
+    if (ts.isVariableStatement(node) &&
+        node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) {
+      for (const decl of node.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.initializer && ts.isObjectLiteralExpression(decl.initializer)) {
+          const obj = {};
+          for (const prop of decl.initializer.properties) {
+            if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+              const { value } = extractValue(prop.initializer, ts);
+              if (value !== null) obj[prop.name.text] = value;
+            }
+          }
+          exportedConsts[decl.name.text] = obj;
+        }
+      }
+    }
+  });
+
+  const classifiers = [];
+
+  // Find classifier({...}) call
+  function walk(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+        node.expression.text === 'classifier' && node.arguments.length === 1 &&
+        ts.isObjectLiteralExpression(node.arguments[0])) {
+      const obj = node.arguments[0];
+      for (const prop of obj.properties) {
+        if (!ts.isPropertyAssignment(prop)) continue;
+        const name = ts.isIdentifier(prop.name) ? prop.name.text
+                   : ts.isStringLiteral(prop.name) ? prop.name.text : null;
+        if (!name) continue;
+        if (!ts.isObjectLiteralExpression(prop.initializer)) continue;
+
+        // Extract classifier entry props
+        const entry = {};
+        for (const ep of prop.initializer.properties) {
+          if (!ts.isPropertyAssignment(ep) || !ts.isIdentifier(ep.name)) continue;
+          const key = ep.name.text;
+          if (key === 'style' && ts.isObjectLiteralExpression(ep.initializer)) {
+            entry.style = {};
+            for (const sp of ep.initializer.properties) {
+              if (!ts.isPropertyAssignment(sp) || !ts.isIdentifier(sp.name)) continue;
+              const { value } = extractValue(sp.initializer, ts);
+              // Handle SB.xxx references
+              if (value === null && ts.isPropertyAccessExpression(sp.initializer)) {
+                const objName = ts.isIdentifier(sp.initializer.expression) ? sp.initializer.expression.text : null;
+                const propName = sp.initializer.name.text;
+                if (objName && exportedConsts[objName] && exportedConsts[objName][propName] !== undefined) {
+                  entry.style[sp.name.text] = exportedConsts[objName][propName];
+                }
+              } else if (value !== null) {
+                entry.style[sp.name.text] = value;
+              }
+            }
+          } else {
+            const { value } = extractValue(ep.initializer, ts);
+            if (value === null && ts.isPropertyAccessExpression(ep.initializer)) {
+              const objName = ts.isIdentifier(ep.initializer.expression) ? ep.initializer.expression.text : null;
+              const propName = ep.initializer.name.text;
+              if (objName && exportedConsts[objName] && exportedConsts[objName][propName] !== undefined) {
+                entry[key] = exportedConsts[objName][propName];
+              }
+            } else if (value !== null) {
+              entry[key] = value;
+            }
+          }
+        }
+
+        const primitive = entry.type;
+        if (!primitive) continue;
+        delete entry.type;
+
+        // Build signature for matching
+        // For Text: size→fontSize, bold→fontWeight:'bold', color→color (in style)
+        const styleStatics = { ...(entry.style || {}) };
+        const jsxProps = {};
+        for (const [k, v] of Object.entries(entry)) {
+          if (k === 'style') continue;
+          if (k === 'use') continue;
+          if (primitive === 'Text') {
+            if (k === 'size') { styleStatics.fontSize = v; continue; }
+            if (k === 'bold' && v === true) { styleStatics.fontWeight = 'bold'; continue; }
+            if (k === 'color') { styleStatics.color = v; continue; }
+          }
+          jsxProps[k] = v;
+        }
+
+        const sig = makeSignature(primitive, styleStatics, jsxProps);
+        classifiers.push({ name, primitive, sig, styleStatics, jsxProps, entry });
+      }
+    }
+    ts.forEachChild(node, walk);
+  }
+  walk(sf);
+
+  // Build lookup by signature
+  const bySig = new Map();
+  for (const c of classifiers) {
+    if (!bySig.has(c.sig)) bySig.set(c.sig, c);
+  }
+
+  return { classifiers, bySig, exportedConsts };
+}
+
+/**
+ * Migrate a single TSX file: replace inline styles with classifier references.
+ */
+function migrateFile(filePath, bySig, clsAlias, ts) {
+  const source = readFileSync(filePath, 'utf-8');
+  const sf = ts.createSourceFile(filePath, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TSX);
+
+  const replacements = []; // { start, end, text }
+
+  function visitJsx(node) {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const element = ts.isJsxElement(node) ? node.openingElement : node;
+      const tagName = getTagName(element, ts);
+      const primitive = tagName ? TAG_TO_PRIMITIVE[tagName] : null;
+
+      if (primitive) {
+        // Extract style + jsx props to compute signature
+        let styleStatics = {};
+        let dynamicKeys = [];
+        let hasSpread = false;
+        let styleAttrStart = -1, styleAttrEnd = -1;
+
+        const attrs = element.attributes;
+        if (attrs) {
+          for (const attr of attrs.properties) {
+            if (ts.isSpreadAssignment?.(attr) || ts.isJsxSpreadAttribute?.(attr)) {
+              hasSpread = true;
+              continue;
+            }
+            if (!ts.isJsxAttribute(attr)) continue;
+            if (!attr.name || attr.name.text !== 'style') continue;
+            const init = attr.initializer;
+            if (init && ts.isJsxExpression(init) && init.expression &&
+                ts.isObjectLiteralExpression(init.expression)) {
+              const extracted = extractStyleProps(init.expression, ts);
+              styleStatics = extracted.statics;
+              dynamicKeys = extracted.dynamicKeys;
+              hasSpread = extracted.hasSpread;
+              styleAttrStart = attr.getStart(sf);
+              styleAttrEnd = attr.getEnd();
+            }
+          }
+        }
+
+        if (hasSpread || dynamicKeys.length > 0) {
+          // Can't fully migrate — has dynamic or spread props
+          ts.forEachChild(node, visitJsx);
+          return;
+        }
+
+        const jsxProps = extractJsxProps(element, ts);
+        const sig = makeSignature(primitive, styleStatics, jsxProps);
+        const match = bySig.get(sig);
+
+        if (match) {
+          // Found a classifier match! Build the replacement.
+          // We need to:
+          // 1. Replace <TagName with <C.ClassifierName
+          // 2. Remove the style attr (it's in the classifier)
+          // 3. Remove jsx props that are in the classifier
+          // 4. If it's a JsxElement, also replace </TagName> with </C.ClassifierName>
+
+          const cName = `${clsAlias}.${match.name}`;
+
+          // Collect which props to remove (they're in the classifier)
+          const removeProps = new Set(Object.keys(match.jsxProps));
+
+          // Build new attributes string — keep props NOT in the classifier
+          const keptAttrs = [];
+          if (attrs) {
+            for (const attr of attrs.properties) {
+              if (ts.isJsxSpreadAttribute?.(attr)) {
+                keptAttrs.push(source.slice(attr.getStart(sf), attr.getEnd()));
+                continue;
+              }
+              if (!ts.isJsxAttribute(attr)) continue;
+              if (!attr.name) continue;
+              const aName = attr.name.text;
+              if (aName === 'style') continue; // removed — it's in the classifier
+              if (removeProps.has(aName)) continue; // removed — it's in the classifier
+              keptAttrs.push(source.slice(attr.getStart(sf), attr.getEnd()));
+            }
+          }
+
+          const attrStr = keptAttrs.length > 0 ? ' ' + keptAttrs.join(' ') : '';
+
+          if (ts.isJsxSelfClosingElement(node)) {
+            // <Tag style={{...}} /> → <C.Name />
+            replacements.push({
+              start: node.getStart(sf),
+              end: node.getEnd(),
+              text: `<${cName}${attrStr} />`,
+            });
+          } else {
+            // <Tag style={{...}}>children</Tag> → <C.Name>children</C.Name>
+            const opening = node.openingElement;
+            const closing = node.closingElement;
+            const childrenSrc = source.slice(opening.getEnd(), closing.getStart(sf));
+
+            replacements.push({
+              start: node.getStart(sf),
+              end: node.getEnd(),
+              text: `<${cName}${attrStr}>${childrenSrc}</${cName}>`,
+            });
+          }
+
+          // Don't visit children of replaced nodes — they'll be carried along
+          return;
+        }
+      }
+    }
+    ts.forEachChild(node, visitJsx);
+  }
+
+  visitJsx(sf);
+
+  if (replacements.length === 0) return { changed: false, count: 0 };
+
+  // Apply replacements from end to start
+  replacements.sort((a, b) => b.start - a.start);
+  let result = source;
+  for (const r of replacements) {
+    result = result.slice(0, r.start) + r.text + result.slice(r.end);
+  }
+
+  // Always use 'S' as the classifier alias — never conflicts with palette 'C'
+  const alias = 'S';
+
+  // Rewrite all classifier refs we just wrote from clsAlias → S
+  if (clsAlias !== alias) {
+    result = result.replace(new RegExp(`<${clsAlias}\\.`, 'g'), `<${alias}.`)
+                   .replace(new RegExp(`</${clsAlias}\\.`, 'g'), `</${alias}.`);
+  }
+
+  // Also convert any pre-existing C.Story* refs (from before migration)
+  result = result.replace(/<C\.(Story\w+)/g, `<${alias}.$1`)
+                 .replace(/<\/C\.(Story\w+)/g, `</${alias}.$1`);
+
+  // Ensure classifiers import exists
+  if (!result.includes('classifiers')) {
+    const importMatch = result.match(/^import .+$/gm);
+    if (importMatch) {
+      const lastImport = importMatch[importMatch.length - 1];
+      const lastIdx = result.lastIndexOf(lastImport) + lastImport.length;
+      const coreImportRe = /import\s*\{([^}]+)\}\s*from\s*'[^']*core[^']*'/;
+      const coreMatch = result.match(coreImportRe);
+      if (coreMatch && !coreMatch[1].includes('classifiers')) {
+        const newImports = coreMatch[1].trimEnd().replace(/,\s*$/, '') + `, classifiers as ${alias}`;
+        result = result.replace(coreMatch[1], newImports);
+      } else if (!coreMatch) {
+        result = result.slice(0, lastIdx) + `\nimport { classifiers as ${alias} } from '@reactjit/core';` + result.slice(lastIdx);
+      }
+    }
+  } else {
+    // File already imports classifiers — rewrite its alias to S
+    result = result.replace(/classifiers as \w+/g, `classifiers as ${alias}`);
+    result = result.replace(/const \w+ = classifiers\b/g, `const ${alias} = classifiers`);
+  }
+
+  writeFileSync(filePath, result, 'utf-8');
+  return { changed: true, count: replacements.length };
+}
+
+async function migrateCommand(args, ts) {
+  const cwd = process.cwd();
+  let scanDir = join(cwd, 'src');
+  let clsPath = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--dir') { scanDir = join(cwd, args[++i]); continue; }
+    if (args[i] === '--cls') { clsPath = args[++i]; continue; }
+  }
+
+  if (!existsSync(scanDir)) {
+    console.error(`  Directory not found: ${scanDir}`);
+    process.exit(1);
+  }
+
+  // Find .cls.ts file
+  if (!clsPath) {
+    const { cls } = findRenameTargets(scanDir);
+    if (cls.length === 0) {
+      console.error(`  No .cls.ts file found in ${scanDir}. Run rjit classify first.`);
+      process.exit(1);
+    }
+    clsPath = cls[0];
+    if (cls.length > 1) {
+      console.log(`  Multiple .cls.ts files found, using: ${relative(cwd, clsPath)}`);
+    }
+  }
+
+  console.log(`\n  Migrating ${relative(cwd, scanDir) || '.'}/ using ${relative(cwd, clsPath)}`);
+
+  // Parse classifier definitions
+  const { bySig } = parseClsFile(clsPath, ts);
+  console.log(`  Loaded ${bySig.size} classifier signatures\n`);
+
+  // Find all TSX files (skip .cls.ts files)
+  const { tsx } = findRenameTargets(scanDir);
+
+  // Detect what alias files use for classifiers
+  let totalReplacements = 0;
+  const touchedFiles = [];
+
+  for (const filePath of tsx) {
+    const source = readFileSync(filePath, 'utf-8');
+    // Skip files that are already fully classified (no inline primitives with style)
+    const aliases = findClassifierAliases(source);
+    const clsAlias = aliases.size > 0 ? [...aliases][0] : 'C';
+
+    const { changed, count } = migrateFile(filePath, bySig, clsAlias, ts);
+    if (changed) {
+      totalReplacements += count;
+      touchedFiles.push({ file: relative(cwd, filePath), count });
+    }
+  }
+
+  if (touchedFiles.length === 0) {
+    console.log(`  No inline styles matched any classifier.\n`);
+    return;
+  }
+
+  console.log(`  ${'File'.padEnd(55)} Replacements`);
+  console.log(`  ${'─'.repeat(55)} ${'─'.repeat(12)}`);
+  for (const { file, count } of touchedFiles.sort((a, b) => b.count - a.count)) {
+    console.log(`  ${file.padEnd(55)} ${count}`);
+  }
+  console.log(`\n  Total: ${totalReplacements} inline styles → classifier references across ${touchedFiles.length} files.\n`);
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 export async function classifyCommand(args) {
+  // Route subcommands
+  if (args[0] === 'rename') {
+    return renameCommand(args.slice(1));
+  }
+
   const cwd = process.cwd();
   const _require = createRequire(import.meta.url);
   let ts;
@@ -718,8 +1208,12 @@ export async function classifyCommand(args) {
     process.exit(1);
   }
 
+  if (args[0] === 'migrate') {
+    return migrateCommand(args.slice(1), ts);
+  }
+
   // Parse args
-  let outputPath = null;
+  let outputPath = join(cwd, 'app.cls.ts');
   let minOccurrences = 2;
   let prefix = '';
   let scanDir = join(cwd, 'src');
@@ -751,18 +1245,19 @@ export async function classifyCommand(args) {
   }
   deduplicateNames(groups);
 
+  // Sanitize all names to valid JS identifiers
+  for (const group of groups) {
+    group.suggestedName = group.suggestedName.replace(/%/g, 'Pct').replace(/[^A-Za-z0-9]/g, '');
+  }
+
   // Print report
   console.log(generateReport(groups, fileCount));
 
-  // Write file if requested
-  if (outputPath) {
-    const content = generateClsFile(groups, prefix);
-    writeFileSync(outputPath, content, 'utf-8');
-    console.log(`  Written to: ${outputPath}`);
-    console.log(`  Import it at your app entry: import './${basename(outputPath).replace('.ts', '')}';`);
-  } else {
-    console.log(`  Run with --output <file.cls.ts> to generate the classifier sheet.`);
-  }
+  // Write file
+  const content = generateClsFile(groups, prefix);
+  writeFileSync(outputPath, content, 'utf-8');
+  console.log(`  Written to: ${outputPath}`);
+  console.log(`  Import it at your app entry: import './${basename(outputPath).replace('.ts', '')}';`);
 
   console.log('');
 }

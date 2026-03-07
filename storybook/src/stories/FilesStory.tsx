@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, ImageGallery } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, ImageGallery, classifiers as S} from '../../../packages/core/src';
 import type { LoveEvent } from '../../../packages/core/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
 import type { MediaType } from '../../../packages/media/src';
@@ -216,9 +216,9 @@ function FileDropDemo() {
         <Text style={{ fontSize: 11, color: dragOver ? C.accent : c.muted }}>
           {dragOver ? 'Release to drop' : 'Drag a file here from your OS'}
         </Text>
-        <Text style={{ fontSize: 8, color: c.muted }}>
+        <S.StoryTiny>
           {'preview mode — text files get their content read'}
-        </Text>
+        </S.StoryTiny>
       </Box>
 
       {lastDrop && (
@@ -230,19 +230,19 @@ function FileDropDemo() {
 
           <Box style={{ flexDirection: 'row', gap: 12 }}>
             <Box style={{ gap: 1 }}>
-              <Text style={{ fontSize: 8, color: c.muted }}>{'type'}</Text>
+              <S.StoryTiny>{'type'}</S.StoryTiny>
               <Text style={{ fontSize: 9, color: C.blue }}>{lastDrop.type}</Text>
             </Box>
             <Box style={{ gap: 1 }}>
-              <Text style={{ fontSize: 8, color: c.muted }}>{'extension'}</Text>
+              <S.StoryTiny>{'extension'}</S.StoryTiny>
               <Text style={{ fontSize: 9, color: C.teal }}>{`.${lastDrop.ext}`}</Text>
             </Box>
             <Box style={{ gap: 1 }}>
-              <Text style={{ fontSize: 8, color: c.muted }}>{'size'}</Text>
+              <S.StoryTiny>{'size'}</S.StoryTiny>
               <Text style={{ fontSize: 9, color: C.yellow }}>{formatSize(lastDrop.size)}</Text>
             </Box>
             <Box style={{ gap: 1 }}>
-              <Text style={{ fontSize: 8, color: c.muted }}>{'mode'}</Text>
+              <S.StoryTiny>{'mode'}</S.StoryTiny>
               <Text style={{ fontSize: 9, color: C.mauve }}>{lastDrop.mode}</Text>
             </Box>
           </Box>
@@ -251,7 +251,7 @@ function FileDropDemo() {
             <Box style={{ gap: 2 }}>
               <Text style={{ fontSize: 8, color: C.green }}>{'Preview (first 200 chars):'}</Text>
               <Box style={{ backgroundColor: c.bg, borderRadius: 4, padding: 6 }}>
-                <Text style={{ fontSize: 8, color: c.muted }}>{lastDrop.preview}</Text>
+                <S.StoryTiny>{lastDrop.preview}</S.StoryTiny>
               </Box>
             </Box>
           )}
@@ -286,7 +286,7 @@ function ClassifierDemo() {
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>Instant local classification by extension — no RPC needed</Text>
+      <S.StoryCap>Instant local classification by extension — no RPC needed</S.StoryCap>
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
         {testFiles.map(f => {
           const type = classifyFile(f);
@@ -313,7 +313,7 @@ function FormatSizeDemo() {
 
   return (
     <Box style={{ gap: 4, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>Human-readable byte formatting</Text>
+      <S.StoryCap>Human-readable byte formatting</S.StoryCap>
       <Box style={{ gap: 2 }}>
         {sizes.map(s => (
           <Box key={s} style={{ flexDirection: 'row', gap: 8 }}>
@@ -336,7 +336,7 @@ function EventFieldsCatalog() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 130, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -358,7 +358,7 @@ function ArchiveFormatsCatalog() {
           }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e', fontWeight: 'normal' }}>{f.ext}</Text>
           </Box>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -375,7 +375,7 @@ function FeatureCatalog() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 110, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -408,7 +408,7 @@ export function FilesStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -679,6 +679,6 @@ export function FilesStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useWindowDimensions, formatUptime, formatMemory, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useWindowDimensions, formatUptime, formatMemory, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -185,9 +185,9 @@ function LabeledSlider({
     <Box style={{ gap: 4 }}>
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={{ color: c.textSecondary, fontSize: 10 }}>{label}</Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>
+        <S.StoryMuted>
           {value.toFixed(step < 1 ? 1 : 0)}
-        </Text>
+        </S.StoryMuted>
       </Box>
       <Slider
         value={value}

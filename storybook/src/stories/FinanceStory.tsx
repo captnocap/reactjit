@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, CandlestickChart, DepthChart, BarChart, Switch } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, CandlestickChart, DepthChart, BarChart, Switch, classifiers as S} from '../../../packages/core/src';
 import type { ChartOverlay } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
@@ -328,7 +328,7 @@ function CandlestickDemo() {
         <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
         <Text style={{ fontSize: 11, color: up ? C.green : C.red }}>{formatPercent((delta / (prev.close || 1)) * 100)}</Text>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Text style={{ fontSize: 9, color: c.muted }}>BB</Text>
+          <S.StoryCap>BB</S.StoryCap>
           <Switch value={showBB} onValueChange={setShowBB} />
         </Box>
       </Box>
@@ -353,7 +353,7 @@ function DepthChartDemo() {
     <Box style={{ gap: 6, width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
-        <Text style={{ fontSize: 9, color: c.muted }}>Cumulative depth visualization</Text>
+        <S.StoryCap>Cumulative depth visualization</S.StoryCap>
       </Box>
       <DepthChart bids={book.bids} asks={book.asks} height={140} />
     </Box>
@@ -406,7 +406,7 @@ function SecurePortfolioDemo() {
       <Text style={{ color: snapshot.pnl >= 0 ? C.green : C.red, fontSize: 10 }}>
         {`P&L: ${formatCurrency(snapshot.pnl)} (${formatPercent(snapshot.pnlPercent)})`}
       </Text>
-      <Text style={{ color: c.muted, fontSize: 9 }}>{`${holdings.length} holdings, encrypted at rest`}</Text>
+      <S.StoryCap>{`${holdings.length} holdings, encrypted at rest`}</S.StoryCap>
     </Box>
   );
 }
@@ -434,21 +434,21 @@ function RSIMACDDemo() {
       <RSIGauge value={rsiValue} />
 
       <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 4 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>MACD (12, 26, 9)</Text>
+        <S.StoryMuted>MACD (12, 26, 9)</S.StoryMuted>
         <MACDPanel points={ta.macd} height={60} />
       </Box>
 
       {stochLast && (
         <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 2 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>Stochastic (14, 3)</Text>
+          <S.StoryMuted>Stochastic (14, 3)</S.StoryMuted>
           <Box style={{ flexDirection: 'row', gap: 12 }}>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: c.muted, fontSize: 10 }}>%K</Text>
+              <S.StoryMuted>%K</S.StoryMuted>
               <Text style={{ color: stochLast.k >= 80 ? C.red : stochLast.k <= 20 ? C.green : c.text, fontSize: 10, fontWeight: 'bold' }}>{stochLast.k.toFixed(1)}</Text>
             </Box>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
-              <Text style={{ color: c.muted, fontSize: 10 }}>%D</Text>
-              <Text style={{ color: c.muted, fontSize: 10 }}>{stochLast.d.toFixed(1)}</Text>
+              <S.StoryMuted>%D</S.StoryMuted>
+              <S.StoryMuted>{stochLast.d.toFixed(1)}</S.StoryMuted>
             </Box>
           </Box>
         </Box>
@@ -456,19 +456,19 @@ function RSIMACDDemo() {
 
       {bbLast && (
         <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 2 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>Bollinger Bands (20, 2)</Text>
+          <S.StoryMuted>Bollinger Bands (20, 2)</S.StoryMuted>
           <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
               <Text style={{ color: C.purple, fontSize: 10 }}>Upper</Text>
-              <Text style={{ color: c.text, fontSize: 10 }}>{bbLast.upper.toFixed(2)}</Text>
+              <S.StoryBody>{bbLast.upper.toFixed(2)}</S.StoryBody>
             </Box>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
               <Text style={{ color: C.accent, fontSize: 10 }}>Mid</Text>
-              <Text style={{ color: c.text, fontSize: 10 }}>{bbLast.middle.toFixed(2)}</Text>
+              <S.StoryBody>{bbLast.middle.toFixed(2)}</S.StoryBody>
             </Box>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
               <Text style={{ color: C.purple, fontSize: 10 }}>Lower</Text>
-              <Text style={{ color: c.text, fontSize: 10 }}>{bbLast.lower.toFixed(2)}</Text>
+              <S.StoryBody>{bbLast.lower.toFixed(2)}</S.StoryBody>
             </Box>
           </Box>
         </Box>
@@ -502,7 +502,7 @@ function PortfolioDemo() {
     <Box style={{ gap: 8, width: '100%' }}>
       <PortfolioCard snapshot={snapshot} />
       <Box style={{ gap: 2 }}>
-        <Text style={{ color: c.muted, fontSize: 10 }}>Allocation</Text>
+        <S.StoryMuted>Allocation</S.StoryMuted>
         <BarChart data={allocationBars} height={50} gap={4} showLabels interactive={false} />
       </Box>
     </Box>
@@ -525,7 +525,7 @@ function OrderBookDemo() {
     <Box style={{ gap: 6, width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
-        <Text style={{ fontSize: 9, color: c.muted }}>{`Spread: ${formatBps(spread)}`}</Text>
+        <S.StoryCap>{`Spread: ${formatBps(spread)}`}</S.StoryCap>
       </Box>
       <OrderBookPanel bids={book.bids} asks={book.asks} depth={8} />
     </Box>
@@ -545,17 +545,17 @@ function PatternDemo() {
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{`Scanning ${candles.length} candles...`}</Text>
+      <S.StoryCap>{`Scanning ${candles.length} candles...`}</S.StoryCap>
 
       {patterns.length === 0 ? (
-        <Text style={{ fontSize: 10, color: c.muted }}>No patterns in current window</Text>
+        <S.StoryMuted>No patterns in current window</S.StoryMuted>
       ) : (
         <Box style={{ gap: 3 }}>
           {patterns.map((p, i) => (
             <Box key={`${p.type}-${p.index}-${i}`} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: patternColor(p.type), flexShrink: 0 }} />
               <Text style={{ color: c.text, fontSize: 10, width: 120 }}>{patternLabel(p.type)}</Text>
-              <Text style={{ color: c.muted, fontSize: 9 }}>{`@${p.index}`}</Text>
+              <S.StoryCap>{`@${p.index}`}</S.StoryCap>
               <Text style={{ color: C.yellow, fontSize: 9 }}>{`${Math.round(p.confidence * 100)}%`}</Text>
             </Box>
           ))}
@@ -564,19 +564,19 @@ function PatternDemo() {
 
       {ta.pivots && (
         <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 2 }}>
-          <Text style={{ color: c.muted, fontSize: 10 }}>Pivot Points</Text>
+          <S.StoryMuted>Pivot Points</S.StoryMuted>
           <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
               <Text style={{ color: C.red, fontSize: 9 }}>R1</Text>
-              <Text style={{ color: c.text, fontSize: 9 }}>{ta.pivots.r1.toFixed(2)}</Text>
+              <S.StoryBreadcrumbActive>{ta.pivots.r1.toFixed(2)}</S.StoryBreadcrumbActive>
             </Box>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
               <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>P</Text>
-              <Text style={{ color: c.text, fontSize: 9 }}>{ta.pivots.pivot.toFixed(2)}</Text>
+              <S.StoryBreadcrumbActive>{ta.pivots.pivot.toFixed(2)}</S.StoryBreadcrumbActive>
             </Box>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
               <Text style={{ color: C.green, fontSize: 9 }}>S1</Text>
-              <Text style={{ color: c.text, fontSize: 9 }}>{ta.pivots.s1.toFixed(2)}</Text>
+              <S.StoryBreadcrumbActive>{ta.pivots.s1.toFixed(2)}</S.StoryBreadcrumbActive>
             </Box>
           </Box>
         </Box>
@@ -624,7 +624,7 @@ function IndicatorCatalog() {
         <Box key={ind.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: ind.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 80, flexShrink: 0 }}>{ind.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{ind.desc}</Text>
+          <S.StoryCap>{ind.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -637,7 +637,7 @@ export function FinanceStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1014,6 +1014,6 @@ export function FinanceStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

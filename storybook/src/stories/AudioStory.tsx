@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Slider, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Slider, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import {
   useAudioInit,
   useRack,
@@ -269,17 +269,17 @@ const TOPOLOGY_ONLY_RACK_OPTIONS = { topologyOnly: true };
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -325,9 +325,9 @@ function RackInfoDemo() {
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {ready ? 'Engine ready — live rack state:' : 'Initializing audio engine...'}
-      </Text>
+      </S.StoryCap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.blue }}>Modules:</Text>
@@ -338,8 +338,8 @@ function RackInfoDemo() {
               backgroundColor: c.surface1, borderRadius: 4,
               paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
             }}>
-              <Text style={{ fontSize: 9, color: c.muted }}>{type}</Text>
-              <Text style={{ fontSize: 9, color: c.text }}>{String(count)}</Text>
+              <S.StoryCap>{type}</S.StoryCap>
+              <S.StoryBreadcrumbActive>{String(count)}</S.StoryBreadcrumbActive>
             </Box>
           ))}
         </Box>
@@ -350,10 +350,10 @@ function RackInfoDemo() {
         {rack.connections.map((conn, i) => (
           <Box key={i} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
             <Text style={{ fontSize: 8, color: C.blue }}>{conn.fromId}</Text>
-            <Text style={{ fontSize: 8, color: c.muted }}>{`.${conn.fromPort}`}</Text>
+            <S.StoryTiny>{`.${conn.fromPort}`}</S.StoryTiny>
             <Text style={{ fontSize: 8, color: C.orange }}>{'>'}</Text>
             <Text style={{ fontSize: 8, color: C.green }}>{conn.toId}</Text>
-            <Text style={{ fontSize: 8, color: c.muted }}>{`.${conn.toPort}`}</Text>
+            <S.StoryTiny>{`.${conn.toPort}`}</S.StoryTiny>
           </Box>
         ))}
       </Box>
@@ -372,12 +372,12 @@ function ModuleParamDemo() {
   const waveforms = ['sine', 'saw', 'square', 'triangle'];
 
   if (!ready) {
-    return <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for engine...'}</Text>;
+    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
   }
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Live param control via useModule + useParam'}</Text>
+      <S.StoryCap>{'Live param control via useModule + useParam'}</S.StoryCap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.blue }}>{'Oscillator waveform:'}</Text>
@@ -419,12 +419,12 @@ function ModuleParamDemo() {
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 9, color: C.green }}>{'Current state:'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>
+          <S.StoryTiny>
             {`osc: ${mod.params.waveform || 'saw'} @ ${mod.params.frequency || 440}Hz`}
-          </Text>
-          <Text style={{ fontSize: 8, color: c.muted }}>
+          </S.StoryTiny>
+          <S.StoryTiny>
             {`filter: ${cutoff || 2000}Hz cutoff`}
-          </Text>
+          </S.StoryTiny>
         </Box>
       </Box>
     </Box>
@@ -448,12 +448,12 @@ function ClockDemo() {
   const clock = useClock('demo_clock');
 
   if (!ready) {
-    return <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for engine...'}</Text>;
+    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
   }
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Live transport via useClock'}</Text>
+      <S.StoryCap>{'Live transport via useClock'}</S.StoryCap>
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Pressable onPress={() => clock.running ? clock.stop() : clock.start()}>
@@ -492,15 +492,15 @@ function ClockDemo() {
         flexDirection: 'row', gap: 16, justifyContent: 'center',
       }}>
         <Box style={{ alignItems: 'center', gap: 2 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'BAR'}</Text>
+          <S.StoryTiny>{'BAR'}</S.StoryTiny>
           <Text style={{ fontSize: 14, color: C.yellow }}>{String(clock.bar + 1)}</Text>
         </Box>
         <Box style={{ alignItems: 'center', gap: 2 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'BEAT'}</Text>
+          <S.StoryTiny>{'BEAT'}</S.StoryTiny>
           <Text style={{ fontSize: 14, color: C.yellow }}>{String(clock.beat + 1)}</Text>
         </Box>
         <Box style={{ alignItems: 'center', gap: 2 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'STEP'}</Text>
+          <S.StoryTiny>{'STEP'}</S.StoryTiny>
           <Text style={{ fontSize: 14, color: C.yellow }}>{String((clock.step % 4) + 1)}</Text>
         </Box>
       </Box>
@@ -527,13 +527,13 @@ function SequencerDemo() {
   const trackColors = [C.blue, C.green, C.orange, C.pink];
 
   if (!ready) {
-    return <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for engine...'}</Text>;
+    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
   }
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'Live pattern via useSequencer — click to toggle'}</Text>
+        <S.StoryCap>{'Live pattern via useSequencer — click to toggle'}</S.StoryCap>
         <Pressable onPress={() => seq.clearPattern()}>
           <Box style={{ backgroundColor: C.red, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
             <Text style={{ fontSize: 8, color: '#1e1e2e' }}>{'CLEAR'}</Text>
@@ -596,12 +596,12 @@ function SamplerDemo() {
   const slotColors = [C.blue, C.green, C.orange, C.pink, C.teal, C.mauve, C.yellow, C.cyan];
 
   if (!ready) {
-    return <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for engine...'}</Text>;
+    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
   }
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Live pads via useSampler — click to trigger'}</Text>
+      <S.StoryCap>{'Live pads via useSampler — click to trigger'}</S.StoryCap>
 
       <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
         {Array.from({ length: 8 }, (_, i) => {
@@ -636,11 +636,11 @@ function SamplerDemo() {
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 9, color: C.green }}>{'Active voices:'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>
+          <S.StoryTiny>
             {sampler.voices.length > 0
               ? sampler.voices.map((v) => `slot ${v.slot} @ ${v.position.toFixed(2)}s`).join(', ')
               : 'None'}
-          </Text>
+          </S.StoryTiny>
         </Box>
       </Box>
     </Box>
@@ -655,7 +655,7 @@ function MIDIDemo() {
   const midi = useMIDI();
 
   if (!ready) {
-    return <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for engine...'}</Text>;
+    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
   }
 
   return (
@@ -680,10 +680,10 @@ function MIDIDemo() {
                   width: 5, height: 5, borderRadius: 3,
                   backgroundColor: d.connected ? C.green : C.red,
                 }} />
-                <Text style={{ fontSize: 8, color: c.muted }}>{`${d.name} (${d.id})`}</Text>
+                <S.StoryTiny>{`${d.name} (${d.id})`}</S.StoryTiny>
               </Box>
             ))
-            : <Text style={{ fontSize: 8, color: c.muted }}>{'No MIDI devices detected'}</Text>
+            : <S.StoryTiny>{'No MIDI devices detected'}</S.StoryTiny>
           }
         </Box>
       </Box>
@@ -693,11 +693,11 @@ function MIDIDemo() {
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
           {midi.mappings.length > 0
             ? midi.mappings.map((m, i) => (
-              <Text key={i} style={{ fontSize: 8, color: c.muted }}>
+              <S.StoryTiny key={i}>
                 {`CC${m.cc} ch${m.channel} -> ${m.moduleId}.${m.param}`}
-              </Text>
+              </S.StoryTiny>
             ))
-            : <Text style={{ fontSize: 8, color: c.muted }}>{'No mappings — use midi.learn() to map'}</Text>
+            : <S.StoryTiny>{'No mappings — use midi.learn() to map'}</S.StoryTiny>
           }
         </Box>
       </Box>
@@ -726,23 +726,23 @@ function RecorderDemo() {
   }, [ready]);
 
   if (!ready) {
-    return <Text style={{ fontSize: 9, color: c.muted }}>{'Waiting for engine...'}</Text>;
+    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
   }
 
   return (
     <Box style={{ gap: 6, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Live recording state via useRecorder'}</Text>
+      <S.StoryCap>{'Live recording state via useRecorder'}</S.StoryCap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.red }}>{'Recording devices:'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
           {recorder.devices.length > 0
             ? recorder.devices.map((d) => (
-              <Text key={d.index} style={{ fontSize: 8, color: c.muted }}>
+              <S.StoryTiny key={d.index}>
                 {`[${d.index}] ${d.name}`}
-              </Text>
+              </S.StoryTiny>
             ))
-            : <Text style={{ fontSize: 8, color: c.muted }}>{'No recording devices found'}</Text>
+            : <S.StoryTiny>{'No recording devices found'}</S.StoryTiny>
           }
         </Box>
       </Box>
@@ -804,11 +804,11 @@ function KnobFaderDemo() {
       <Box style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-end', justifyContent: 'center' }}>
         <Box style={{ alignItems: 'center', gap: 4 }}>
           <Knob value={knob1} onChange={setKnob1} color={C.pink} label="Cutoff" />
-          <Text style={{ fontSize: 9, color: c.muted }}>{`${Math.round(knob1 * 100)}%`}</Text>
+          <S.StoryCap>{`${Math.round(knob1 * 100)}%`}</S.StoryCap>
         </Box>
         <Box style={{ alignItems: 'center', gap: 4 }}>
           <Knob value={knob2} onChange={setKnob2} color={C.teal} label="Reso" />
-          <Text style={{ fontSize: 9, color: c.muted }}>{`${Math.round(knob2 * 100)}%`}</Text>
+          <S.StoryCap>{`${Math.round(knob2 * 100)}%`}</S.StoryCap>
         </Box>
         <Fader value={faderVal} onChange={setFaderVal} color={C.accent} label="Vol" />
         <PitchWheel value={pitchVal} onChange={setPitchVal} springReturn height={120} width={28} />
@@ -848,13 +848,13 @@ function MeterLEDDemo() {
       </Box>
       <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
         <LEDIndicator on color={C.green} size={8} />
-        <Text style={{ fontSize: 8, color: c.muted }}>{'Active'}</Text>
+        <S.StoryTiny>{'Active'}</S.StoryTiny>
         <LEDIndicator on={ledBlink} color={C.red} size={8} />
-        <Text style={{ fontSize: 8, color: c.muted }}>{'Recording'}</Text>
+        <S.StoryTiny>{'Recording'}</S.StoryTiny>
         <LEDIndicator on={ledBlink} color={C.orange} size={8} />
-        <Text style={{ fontSize: 8, color: c.muted }}>{'Clipping'}</Text>
+        <S.StoryTiny>{'Clipping'}</S.StoryTiny>
         <LEDIndicator on={false} color={C.blue} size={8} />
-        <Text style={{ fontSize: 8, color: c.muted }}>{'Off'}</Text>
+        <S.StoryTiny>{'Off'}</S.StoryTiny>
       </Box>
     </Box>
   );
@@ -899,8 +899,8 @@ function PadXYDemo() {
         </Box>
       </Box>
       <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
-        <Text style={{ fontSize: 8, color: c.muted }}>{`X: ${xyX.toFixed(2)}`}</Text>
-        <Text style={{ fontSize: 8, color: c.muted }}>{`Y: ${xyY.toFixed(2)}`}</Text>
+        <S.StoryTiny>{`X: ${xyX.toFixed(2)}`}</S.StoryTiny>
+        <S.StoryTiny>{`Y: ${xyY.toFixed(2)}`}</S.StoryTiny>
       </Box>
     </Box>
   );
@@ -974,7 +974,7 @@ function PianoDemo() {
           blackActive: C.accent,
         }}
       />
-      <Text style={{ fontSize: 8, color: c.muted }}>{lastNote ? `Last: ${lastNote}` : 'Click or drag across keys'}</Text>
+      <S.StoryTiny>{lastNote ? `Last: ${lastNote}` : 'Click or drag across keys'}</S.StoryTiny>
     </Box>
   );
 }
@@ -1023,7 +1023,7 @@ function PortTypeList() {
         <Box key={p.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: p.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 60, flexShrink: 0 }}>{p.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{p.desc}</Text>
+          <S.StoryCap>{p.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -1036,7 +1036,7 @@ export function AudioStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1492,6 +1492,6 @@ export function AudioStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

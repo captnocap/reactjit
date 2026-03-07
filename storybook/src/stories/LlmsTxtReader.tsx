@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Box, Text, ScrollView, Pressable } from '../../../packages/core/src';
+import { Box, Text, ScrollView, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const CHUNK_SIZE = 50; // lines per Text node
@@ -81,7 +81,7 @@ export function LlmsTxtReader() {
   const sizeKB = Math.round(raw.length / 1024);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
       {/* Header */}
       <Box style={{
         height: 40,
@@ -125,6 +125,6 @@ export function LlmsTxtReader() {
           )}
         </Box>
       </ScrollView>
-    </Box>
+    </S.StoryRoot>
   );
 }

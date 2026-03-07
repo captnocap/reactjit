@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, classifiers as S} from '../../../packages/core/src';
 import { useLocalStore } from '../../../packages/core/src/useLocalStore';
 import { useHotState } from '../../../packages/core/src/useHotState';
 import { useSearch, useFuzzySearch } from '../../../packages/core/src/useSearch';
@@ -189,17 +189,17 @@ const SEARCH_DEMO_OPTIONS: { key: Array<'name' | 'role'> } = { key: ['name', 'ro
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -226,7 +226,7 @@ function LocalStoreDemo() {
 
   return (
     <Box style={{ gap: 10, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Persists to SQLite — reload the app and values stay'}</Text>
+      <S.StoryCap>{'Persists to SQLite — reload the app and values stay'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: C.green }}>{'Counter (useLocalStore)'}</Text>
@@ -244,7 +244,7 @@ function LocalStoreDemo() {
           </Pressable>
           <Pressable onPress={() => setCount(0)}>
             <Box style={{ backgroundColor: c.surface2, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
-              <Text style={{ fontSize: 10, color: c.text }}>{'Reset'}</Text>
+              <S.StoryBody>{'Reset'}</S.StoryBody>
             </Box>
           </Pressable>
         </Box>
@@ -274,7 +274,7 @@ function HotStateDemo() {
 
   return (
     <Box style={{ gap: 10, width: '100%' }}>
-      <Text style={{ fontSize: 9, color: c.muted }}>{'Survives HMR — edit code and tab stays selected'}</Text>
+      <S.StoryCap>{'Survives HMR — edit code and tab stays selected'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: C.yellow }}>{'Active tab (useHotState)'}</Text>
@@ -300,7 +300,7 @@ function HotStateDemo() {
               <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{open ? 'Open' : 'Closed'}</Text>
             </Box>
           </Pressable>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Lost on full restart — use useLocalStore for that'}</Text>
+          <S.StoryCap>{'Lost on full restart — use useLocalStore for that'}</S.StoryCap>
         </Box>
       </Box>
     </Box>
@@ -326,8 +326,8 @@ function SearchDemo() {
         {results.map(item => (
           <Box key={item.name} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.blue }} />
-            <Text style={{ fontSize: 10, color: c.text }}>{item.name}</Text>
-            <Text style={{ fontSize: 9, color: c.muted }}>{item.role}</Text>
+            <S.StoryBody>{item.name}</S.StoryBody>
+            <S.StoryCap>{item.role}</S.StoryCap>
           </Box>
         ))}
         {results.length === 0 && query.length > 0 && (
@@ -347,9 +347,9 @@ function TierOverview() {
       {TIERS.map(t => (
         <Box key={t.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.color }} />
-          <Text style={{ fontSize: 9, color: c.text }}>{t.label}</Text>
+          <S.StoryBreadcrumbActive>{t.label}</S.StoryBreadcrumbActive>
           <Text style={{ fontSize: 8, color: t.color }}>{t.persist}</Text>
-          <Text style={{ fontSize: 8, color: c.muted }}>{`survives ${t.survives}`}</Text>
+          <S.StoryTiny>{`survives ${t.survives}`}</S.StoryTiny>
         </Box>
       ))}
     </Box>
@@ -365,8 +365,8 @@ function AdapterList() {
       {ADAPTERS.map(a => (
         <Box key={a.name} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color }} />
-          <Text style={{ fontSize: 9, color: c.text }}>{a.name}</Text>
-          <Text style={{ fontSize: 8, color: c.muted }}>{a.target}</Text>
+          <S.StoryBreadcrumbActive>{a.name}</S.StoryBreadcrumbActive>
+          <S.StoryTiny>{a.target}</S.StoryTiny>
         </Box>
       ))}
     </Box>
@@ -379,7 +379,7 @@ export function StorageStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -682,6 +682,6 @@ export function StorageStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

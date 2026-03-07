@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, useScale, Typography } from '../../../packages/core/src';
+import { Box, Text, useScale, Typography, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StorySection } from './_shared/StoryScaffold';
 
@@ -105,7 +105,7 @@ export function TextStylesStory() {
       <StorySection index={3} title="Emphasis and decoration">
         <Box style={{ width: '100%', gap: 8 }}>
           <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>Typography wrappers</Text>
+            <S.StoryMuted>Typography wrappers</S.StoryMuted>
             <Typography.Bold style={{ color: c.text, fontSize: 16 }}>
               Bold text stands out
             </Typography.Bold>
@@ -121,7 +121,7 @@ export function TextStylesStory() {
           </Box>
 
           <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>Raw textDecorationLine combinations</Text>
+            <S.StoryMuted>Raw textDecorationLine combinations</S.StoryMuted>
             <Text style={{ color: c.warning, fontSize: 16, fontWeight: 'bold', textDecorationLine: 'underline' }}>
               Bold + underline
             </Text>
@@ -140,21 +140,21 @@ export function TextStylesStory() {
 
       <StorySection index={4} title="Text truncation">
         <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>numberOfLines: 1</Text>
+          <S.StoryMuted>numberOfLines: 1</S.StoryMuted>
           <Text style={{ color: c.text, fontSize: 13 }} numberOfLines={1}>
             {LONG_TEXT}
           </Text>
         </Box>
 
         <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>numberOfLines: 2</Text>
+          <S.StoryMuted>numberOfLines: 2</S.StoryMuted>
           <Text style={{ color: c.text, fontSize: 13 }} numberOfLines={2}>
             {LONG_TEXT}
           </Text>
         </Box>
 
         <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>No limit</Text>
+          <S.StoryMuted>No limit</S.StoryMuted>
           <Text style={{ color: c.text, fontSize: 13 }}>
             {LONG_TEXT}
           </Text>

@@ -16,7 +16,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Image, Pressable, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, Pressable, ScrollView, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Map, TileLayer, Marker, Polyline } from '../../../packages/geo/src';
 import { Knob, Fader, Meter, RadarSweep } from '../../../packages/controls/src';
@@ -97,13 +97,13 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
                 <Box style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c.surface, borderWidth: 2, borderColor: C.accent, alignItems: 'center', justifyContent: 'center' }}>
                   <Box style={{ width: 4, height: 16, backgroundColor: C.accent, borderRadius: 2, marginTop: -16 }} />
                 </Box>
-                <Text style={{ color: c.muted, fontSize: 10 }}>{'Luma Flux'}</Text>
+                <S.StoryMuted>{'Luma Flux'}</S.StoryMuted>
               </Box>
               <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <Box style={{ width: 8, height: 60, backgroundColor: c.surface, borderRadius: 4, alignItems: 'center' }}>
                   <Box style={{ width: 24, height: 12, backgroundColor: C.accent, borderRadius: 2, marginTop: 20 }} />
                 </Box>
-                <Text style={{ color: c.muted, fontSize: 10 }}>{'Distortion'}</Text>
+                <S.StoryMuted>{'Distortion'}</S.StoryMuted>
               </Box>
             </Box>
           </Box>
@@ -173,7 +173,7 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -189,7 +189,7 @@ export function CreativeConceptsStory() {
   const tab = TABS.find(it => it.id === activeId) || TABS[0];
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -368,6 +368,6 @@ export function CreativeConceptsStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

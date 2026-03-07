@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, ScrollView, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 // Every snippet has a comment + unterminated block comment to hit the fixed bug paths
@@ -157,7 +157,7 @@ export function SyntaxStressStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
       <Box style={{
         flexShrink: 0,
         backgroundColor: c.bgElevated,
@@ -199,6 +199,6 @@ export function SyntaxStressStory() {
           </Box>
         ))}
       </ScrollView>
-    </Box>
+    </S.StoryRoot>
   );
 }

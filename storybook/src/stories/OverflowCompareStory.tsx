@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Box, Text, ScrollView } from '../../../packages/core/src';
+import { Box, Text, ScrollView, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const COLORS = [
@@ -57,7 +57,7 @@ function Panel({ label, subtitle, children }: { label: string; subtitle: string;
     <Box style={{ flexGrow: 1, flexBasis: 0, gap: 12, padding: 16 }}>
       <Box style={{ gap: 4 }}>
         <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>{label}</Text>
-        <Text style={{ color: c.muted, fontSize: 10 }}>{subtitle}</Text>
+        <S.StoryMuted>{subtitle}</S.StoryMuted>
       </Box>
       {/* Container — deliberately narrower than card row content */}
       <Box style={{
@@ -72,10 +72,10 @@ function Panel({ label, subtitle, children }: { label: string; subtitle: string;
         {children}
       </Box>
       <Box style={{ gap: 3 }}>
-        <Text style={{ color: c.muted, fontSize: 9 }}>
+        <S.StoryCap>
           {`${CARD_COUNT} cards × ${CARD_W}px + gaps = ${CARD_COUNT * CARD_W + (CARD_COUNT - 1) * CARD_GAP}px total`}
-        </Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Container: fills panel width'}</Text>
+        </S.StoryCap>
+        <S.StoryCap>{'Container: fills panel width'}</S.StoryCap>
       </Box>
     </Box>
   );
@@ -108,7 +108,7 @@ export function OverflowCompareStory() {
           <Text style={{ color: '#6366f1', fontSize: 10 }}>{'Layouts'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Same cards, same container, three different answers'}</Text>
+        <S.StoryMuted>{'Same cards, same container, three different answers'}</S.StoryMuted>
       </Box>
 
       {/* Three panels */}
@@ -140,19 +140,19 @@ export function OverflowCompareStory() {
       </Box>
 
       {/* Horizontal section divider */}
-      <Box style={{ flexShrink: 0, height: 1, backgroundColor: c.border }} />
+      <S.StoryDivider />
 
       {/* Scale to fit — full width */}
       <Box style={{ flexShrink: 0, gap: 10, paddingLeft: 20, paddingRight: 20, paddingTop: 14, paddingBottom: 14, backgroundColor: c.bgElevated }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>{'Scale to Fit'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'full width — all cards visible, proportional, one row'}</Text>
+          <S.StoryHeadline>{'Scale to Fit'}</S.StoryHeadline>
+          <S.StoryMuted>{'full width — all cards visible, proportional, one row'}</S.StoryMuted>
         </Box>
         <Box style={{ width: '100%', paddingLeft: 10, paddingRight: 10, paddingTop: 10, paddingBottom: 10, overflow: 'hidden' }}>
           <CardRow scaleToFit />
         </Box>
       </Box>
-      <Box style={{ flexShrink: 0, height: 1, backgroundColor: c.border }} />
+      <S.StoryDivider />
 
       {/* Footer note */}
       <Box style={{
@@ -163,9 +163,9 @@ export function OverflowCompareStory() {
         paddingLeft: 20, paddingRight: 20,
         paddingTop: 8, paddingBottom: 8,
       }}>
-        <Text style={{ color: c.muted, fontSize: 9 }}>
+        <S.StoryCap>
           {'scaleToFit is a painter-level transform — layout engine sees natural sizes, painter scales the result to fill the container width.'}
-        </Text>
+        </S.StoryCap>
       </Box>
     </ScrollView>
   );

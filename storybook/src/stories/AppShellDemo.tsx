@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider } from '../../../packages/core/src';
+import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import type { NavSection, Tab, BreadcrumbItem, ToolbarEntry } from '../../../packages/core/src';
 
@@ -133,10 +133,10 @@ export function AppShellDemoStory() {
               This area would contain the page content. All four navigation components are working together:
             </Text>
             <Box style={{ gap: 4, paddingLeft: 8 }}>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>- NavPanel controls the page</Text>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>- Toolbar triggers actions</Text>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>- Breadcrumbs show location</Text>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>- Tabs switch content views</Text>
+              <S.StoryMuted>- NavPanel controls the page</S.StoryMuted>
+              <S.StoryMuted>- Toolbar triggers actions</S.StoryMuted>
+              <S.StoryMuted>- Breadcrumbs show location</S.StoryMuted>
+              <S.StoryMuted>- Tabs switch content views</S.StoryMuted>
             </Box>
             <Box style={{ flexGrow: 1 }} />
             <Box style={{
@@ -145,12 +145,12 @@ export function AppShellDemoStory() {
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>
+              <S.StoryMuted>
                 {`Last toolbar action: ${lastAction}`}
-              </Text>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>
+              </S.StoryMuted>
+              <S.StoryMuted>
                 {`Page: ${activePage} | Tab: ${activeTab}`}
-              </Text>
+              </S.StoryMuted>
             </Box>
           </Box>
         </Box>

@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, useHotState, DevToolsEmbed } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, useHotState, DevToolsEmbed, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -209,9 +209,9 @@ function HotStateDemo() {
         </Box>
       </Box>
 
-      <Text style={{ fontSize: 8, color: c.muted }}>
+      <S.StoryTiny>
         {'Increment both, then press F5 to hot reload. The left counter survives. The right resets to 0.'}
-      </Text>
+      </S.StoryTiny>
     </Box>
   );
 }
@@ -426,7 +426,7 @@ function FeatureCatalog({ items }: { items: typeof DEV_FEATURES }) {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -439,7 +439,7 @@ export function DevToolsStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* Header */}
       <Box style={{
@@ -744,6 +744,6 @@ export function DevToolsStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

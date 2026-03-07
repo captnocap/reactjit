@@ -35,8 +35,7 @@ import {
   detectSearchableFields,
   useAppSearch,
   useHotkey,
-  type BreadcrumbItem,
-} from '../../../packages/core/src';
+  type BreadcrumbItem, classifiers as S} from '../../../packages/core/src';
 import type { NavSection, Tab, ToolbarEntry, SearchResultItem, CommandDef } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
@@ -68,7 +67,7 @@ function styleTooltip(style: Record<string, any>) {
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -278,7 +277,7 @@ function NavPanelDemo() {
           header={
             <Box style={{ width: '100%', gap: 2 }}>
               <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>Studio</Text>
-              <Text style={{ color: c.textDim, fontSize: 9 }}>Navigation</Text>
+              <S.StoryCap>Navigation</S.StoryCap>
             </Box>
           }
           width={210}
@@ -367,7 +366,7 @@ function ToolbarDemo() {
   return (
     <Box style={{ gap: 6 }}>
       <Toolbar items={TOOLBAR_ITEMS} onSelect={setLastAction} style={{ justifyContent: 'space-between' }} />
-      <Text style={{ color: c.textDim, fontSize: 10 }}>{`Last action: ${lastAction}`}</Text>
+      <S.StoryMuted>{`Last action: ${lastAction}`}</S.StoryMuted>
     </Box>
   );
 }
@@ -404,7 +403,7 @@ function SearchResultsDemo() {
   const flatResults = useSearch(FILES, flatQuery, FLAT_SEARCH_OPTIONS);
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>SearchBar + flat SearchResults dropdown:</Text>
+      <S.StoryMuted>SearchBar + flat SearchResults dropdown:</S.StoryMuted>
       <Box style={{ width: '100%', position: 'relative' }}>
         <SearchBar
           onSearch={(q) => { setFlatQuery(q); setFlatOpen(q.trim().length > 0); }}
@@ -449,7 +448,7 @@ function SearchSectionsDemo() {
   const tsFiles = useSearch(TS_FILES, sectQuery, SECTION_SEARCH_OPTIONS);
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>SearchResultsSections — grouped by file type:</Text>
+      <S.StoryMuted>SearchResultsSections — grouped by file type:</S.StoryMuted>
       <Box style={{ width: '100%', position: 'relative' }}>
         <SearchBar
           onSearch={(q) => { setSectQuery(q); setSectOpen(q.trim().length > 0); }}
@@ -494,7 +493,7 @@ function SearchComboDemo() {
   const [comboSelected, setComboSelected] = useState('');
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>SearchCombo — all-in-one input + dropdown:</Text>
+      <S.StoryMuted>SearchCombo — all-in-one input + dropdown:</S.StoryMuted>
       <SearchCombo
         items={FILES}
         searchKey="label"
@@ -521,7 +520,7 @@ function CommandPaletteDemo() {
   const btnStyle = { backgroundColor: c.primary, borderRadius: 6, paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8 };
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>CommandPalette — full-screen modal launcher:</Text>
+      <S.StoryMuted>CommandPalette — full-screen modal launcher:</S.StoryMuted>
       <Pressable
         onPress={() => setPaletteOpen(true)}
         style={({ pressed, hovered }) => ({
@@ -572,7 +571,7 @@ function FuzzySearchDemo() {
   const dropStyle = { backgroundColor: c.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingLeft: 4, paddingRight: 4, paddingTop: 4, paddingBottom: 4 };
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>useFuzzySearch + useSearchHighlight — sorted by relevance:</Text>
+      <S.StoryMuted>useFuzzySearch + useSearchHighlight — sorted by relevance:</S.StoryMuted>
       <Box style={{ width: '100%', position: 'relative' }}>
         <SearchBar
           onSearch={(q) => { setFuzzyQuery(q); setFuzzyOpen(q.trim().length > 0); }}
@@ -602,7 +601,7 @@ function FuzzySearchDemo() {
                         <Box style={{ flexGrow: 1 }}>
                           <HighlightedText text={item.label} query={fuzzyQuery} color={c.text} matchColor={c.primary} />
                         </Box>
-                        <Text style={{ fontSize: 9, color: c.textDim }}>{`score: ${score}`}</Text>
+                        <S.StoryCap>{`score: ${score}`}</S.StoryCap>
                         <Text style={{ fontSize: 9, color: c.textSecondary }}>{item.meta}</Text>
                       </Box>
                     );
@@ -625,7 +624,7 @@ function SearchSchemaDemo() {
   const allFields = detectSearchableFields(OPAQUE_DATA);
   return (
     <Box style={{ width: '100%', gap: 10 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>useSearchSchema — auto-detects searchable fields, shows them to the user:</Text>
+      <S.StoryMuted>useSearchSchema — auto-detects searchable fields, shows them to the user:</S.StoryMuted>
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
         {allFields.map(String).map((f) => {
           const chipStyle = { backgroundColor: c.bgElevated, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderWidth: 1, borderColor: c.border };
@@ -653,11 +652,11 @@ function SearchSchemaDemo() {
       {selected ? <Text style={{ color: c.success, fontSize: 11 }}>{`Selected: ${selected}`}</Text> : null}
       <Box style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
         <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 8, gap: 4 }}>
-          <Text style={{ fontSize: 9, color: c.textDim }}>No key (auto)</Text>
+          <S.StoryCap>No key (auto)</S.StoryCap>
           <SearchSchemaHint schema={autoSchema} color={c.textDim} fieldColor={c.text} />
         </Box>
         <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 8, gap: 4 }}>
-          <Text style={{ fontSize: 9, color: c.textDim }}>key="name"</Text>
+          <S.StoryCap>key="name"</S.StoryCap>
           <SearchSchemaHint schema={explicitSchema} color={c.textDim} fieldColor={c.text} />
         </Box>
       </Box>
@@ -672,7 +671,7 @@ function SearchHistoryDemo() {
   const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <Box style={{ gap: 6 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>useSearchHistory — SQLite-backed. Type and press Enter to record:</Text>
+      <S.StoryMuted>useSearchHistory — SQLite-backed. Type and press Enter to record:</S.StoryMuted>
       <Box style={{ width: '100%', position: 'relative' }}>
         <SearchBar
           onSearch={(q) => { setHistoryQuery(q); setHistoryOpen(q.trim().length > 0); }}
@@ -691,7 +690,7 @@ function SearchHistoryDemo() {
             onPointerLeave={() => setHistoryOpen(false)}
           >
             <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>Recent searches</Text>
+              <S.StoryMuted>Recent searches</S.StoryMuted>
               <Pressable onPress={clearHistory}>
                 <Text style={{ color: c.error, fontSize: 10 }}>Clear all</Text>
               </Pressable>
@@ -726,7 +725,7 @@ function AppSearchSection() {
 
   return (
     <Searchable id="nav-story-app-search" style={{ width: '100%', gap: 10 }}>
-      <Text style={{ color: c.textDim, fontSize: 10 }}>AppSearch — hot (live tree) + cold (compile-time) dual-tier:</Text>
+      <S.StoryMuted>AppSearch — hot (live tree) + cold (compile-time) dual-tier:</S.StoryMuted>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Pressable onPress={() => setOpen(true)} style={btnStyle} tooltip={styleTooltip(btnStyle)}>
           <Text style={{ color: '#fff', fontSize: 12 }}>Open AppSearch</Text>
@@ -762,7 +761,7 @@ function AppSearchSection() {
                     >
                       <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: c.primary }} />
                       <Text style={{ color: c.text, fontSize: 11, flexGrow: 1 }}>{r.text}</Text>
-                      <Text style={{ color: c.textDim, fontSize: 9 }}>{r.context[0] ?? ''}</Text>
+                      <S.StoryCap>{r.context[0] ?? ''}</S.StoryCap>
                     </Pressable>
                   ))}
                 </Box>
@@ -820,7 +819,7 @@ export function NavigationStory() {
 
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1026,6 +1025,6 @@ export function NavigationStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

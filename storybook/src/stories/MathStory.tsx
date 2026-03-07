@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useMath } from '../../../packages/math/src';
 
@@ -125,17 +125,17 @@ const FEATURE_LIST = [
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -152,7 +152,7 @@ function Label({ label, value, color }: { label: string; value: string; color?: 
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
+      <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
     </Box>
   );
@@ -226,9 +226,9 @@ function VectorDemo() {
         <ActionBtn label={'\u2190 Rotate'} color={C.vec} onPress={() => setAngle(p => p - 0.3)} />
         <ActionBtn label={'Rotate \u2192'} color={C.vec} onPress={() => setAngle(p => p + 0.3)} />
       </Box>
-      <Text style={{ color: c.textDim, fontSize: 8 }}>
+      <S.StoryTiny>
         {`angle: ${(angle * 180 / Math.PI).toFixed(1)}\u00B0`}
-      </Text>
+      </S.StoryTiny>
     </Box>
   );
 }
@@ -368,7 +368,7 @@ function InterpolationDemo() {
             ))}
           </Box>
         </Box>
-      )) : <Text style={{ fontSize: 10, color: c.textDim }}>Computing curves...</Text>}
+      )) : <S.StoryMuted>Computing curves...</S.StoryMuted>}
       {extras && <>
         <Label label="pingPong(2.7, 1)" value={extras.pingPong.toFixed(3)} />
         <Label label="remap(0.5, 0, 1, 100, 200)" value={extras.remap.toFixed(1)} />
@@ -479,7 +479,7 @@ function NoiseFieldDemo() {
           ))}
         </Box>
       ) : (
-        <Text style={{ fontSize: 10, color: c.textDim }}>Loading noise field...</Text>
+        <S.StoryMuted>Loading noise field...</S.StoryMuted>
       )}
       <Label label="seed" value={String(seed)} color={C.noise} />
       <Label label="scale" value={scale.toFixed(2)} color={C.noise} />
@@ -529,7 +529,7 @@ function FFTDemo() {
         {`sin(${freq}x) + 0.5\u00B7sin(${freq * 3}x)  \u2014  ${N} samples`}
       </Text>
       <Box style={{ gap: 2 }}>
-        <Text style={{ color: c.textDim, fontSize: 8 }}>Waveform</Text>
+        <S.StoryTiny>Waveform</S.StoryTiny>
         <Box style={{ flexDirection: 'row', gap: 0, height: 32, alignItems: 'center' }}>
           {samples.map((v, i) => (
             <Box key={i} style={{ flexGrow: 1, height: Math.max(1, Math.abs(v) * 14), backgroundColor: C.fft + '88', borderRadius: 1 }} />
@@ -538,7 +538,7 @@ function FFTDemo() {
       </Box>
       {spectrumSlice ? (
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textDim, fontSize: 8 }}>Magnitude spectrum</Text>
+          <S.StoryTiny>Magnitude spectrum</S.StoryTiny>
           <Box style={{ flexDirection: 'row', gap: 0, height: 40, alignItems: 'end' }}>
             {spectrumSlice.map((v, i) => {
               const h = maxSpectrum > 0 ? Math.max(1, (v / maxSpectrum) * 38) : 1;
@@ -547,7 +547,7 @@ function FFTDemo() {
           </Box>
         </Box>
       ) : (
-        <Text style={{ fontSize: 10, color: c.textDim }}>Computing FFT...</Text>
+        <S.StoryMuted>Computing FFT...</S.StoryMuted>
       )}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label={`freq ${freq - 1}`} color={C.fft} onPress={() => setFreq(p => Math.max(1, p - 1))} />
@@ -582,7 +582,7 @@ function BezierDemo() {
       ))}
       {curve ? (
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: c.textDim, fontSize: 8 }}>{`${curve.length} evaluated points`}</Text>
+          <S.StoryTiny>{`${curve.length} evaluated points`}</S.StoryTiny>
           <Box style={{ flexDirection: 'row', gap: 1, height: 40, alignItems: 'end' }}>
             {curve.map((p, i) => {
               const h = Math.max(1, (p[1] / 300) * 38);
@@ -591,7 +591,7 @@ function BezierDemo() {
           </Box>
         </Box>
       ) : (
-        <Text style={{ fontSize: 10, color: c.textDim }}>Computing bezier...</Text>
+        <S.StoryMuted>Computing bezier...</S.StoryMuted>
       )}
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label={'\u2190 Flatten'} color={C.bezier} onPress={() => setCy(p => Math.max(0, p - 30))} />
@@ -624,7 +624,7 @@ export function MathStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1026,6 +1026,6 @@ export function MathStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.2.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

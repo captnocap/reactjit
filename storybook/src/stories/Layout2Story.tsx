@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -58,7 +58,7 @@ export function Layout2Story() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -207,6 +207,6 @@ export function Layout2Story() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

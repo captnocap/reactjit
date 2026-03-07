@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import type { LintMessage } from './lib/linter';
 
@@ -36,7 +36,7 @@ export function StatusBar({ messages, onJumpToLine }: StatusBarProps) {
           ))}
           {messages.length > 5 && (
             <Box style={{ paddingLeft: 12, paddingTop: 2 }}>
-              <Text style={{ color: c.textDim, fontSize: 10 }}>{`+${messages.length - 5} more`}</Text>
+              <S.StoryMuted>{`+${messages.length - 5} more`}</S.StoryMuted>
             </Box>
           )}
         </Box>

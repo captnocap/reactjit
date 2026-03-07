@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useVoice } from './VoiceProvider';
 
@@ -23,9 +23,9 @@ export function VoiceToggle() {
         backgroundColor: state.hovered ? c.surface : 'transparent',
       })}
     >
-      <Text style={{ fontSize: 10, color: c.textDim }}>
+      <S.StoryMuted>
         {isShitpost ? 'unhinged' : 'corporate'}
-      </Text>
+      </S.StoryMuted>
       <Box style={{
         width: 26,
         height: 14,

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
-import { Box, Text, Slider, Switch, Badge, useLoveRPC, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Slider, Switch, Badge, useLoveRPC, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 
@@ -78,9 +78,9 @@ function LabeledSlider({
     <Box style={{ gap: 4 }}>
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={{ color: c.textSecondary, fontSize: 10 }}>{label}</Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>
+        <S.StoryMuted>
           {value.toFixed(step < 1 ? 1 : 0)}
-        </Text>
+        </S.StoryMuted>
       </Box>
       <Slider
         value={value}
@@ -187,14 +187,14 @@ export function Scene3DFrameworkGalaxyStory() {
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>
               {`fps ${fps || '--'} | layout ${layoutMs.toFixed(1)}ms | paint ${paintMs.toFixed(1)}ms`}
             </Text>
-            <Text style={{ color: c.textDim, fontSize: 10 }}>
+            <S.StoryMuted>
               {`total frame work ${totalMs.toFixed(1)}ms | nodes ${nodeCount || '--'}`}
-            </Text>
+            </S.StoryMuted>
           </Box>
 
-          <Text style={{ color: c.textDim, fontSize: 10 }}>
+          <S.StoryMuted>
             Each cube uses the same 2D framework texture pipeline as the single-cube demo.
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Scene style={{ flexGrow: 1 }} backgroundColor="#040812" stars>

@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 import { Scene, Camera, Mesh, DirectionalLight, AmbientLight } from '../../../packages/3d/src';
@@ -109,7 +109,7 @@ function Label({ label, value, color }: { label: string; value: string; color?: 
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
+      <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
     </Box>
   );
@@ -162,7 +162,7 @@ function GeometryDemo() {
       </Scene>
 
       <Label label="geometry" value={geo} color={GEO_COLORS[geo]} />
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Drag to orbit — rotation handled in Lua'}</Text>
+      <S.StoryCap>{'Drag to orbit — rotation handled in Lua'}</S.StoryCap>
 
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label="Next Shape" color={C.mesh} onPress={cycleGeo} />
@@ -289,7 +289,7 @@ function PlanetDemo() {
 
       <Label label="seed" value={String(seed)} color={C.material} />
       <Label label="moon pos" value={`[${moonX.toFixed(1)}, ${moonY.toFixed(1)}, ${moonZ.toFixed(1)}]`} color={C.camera} />
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Drag to orbit. Each seed generates unique terrain.'}</Text>
+      <S.StoryCap>{'Drag to orbit. Each seed generates unique terrain.'}</S.StoryCap>
 
       <Box style={{ flexDirection: 'row', gap: 8 }}>
         <ActionBtn label={`Seed ${seed + 1}`} color={C.material} onPress={() => setSeed(p => p + 1)} />
@@ -404,7 +404,7 @@ function FresnelDemo() {
         <ActionBtn label="Op 0.5" color={C.camera} onPress={() => setOpacity(0.5)} />
         <ActionBtn label="Op 0.8" color={C.camera} onPress={() => setOpacity(0.8)} />
       </Box>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Outer shell: unlit + fresnel for atmosphere glow'}</Text>
+      <S.StoryCap>{'Outer shell: unlit + fresnel for atmosphere glow'}</S.StoryCap>
     </Box>
   );
 }
@@ -449,7 +449,7 @@ export function ThreeDStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -665,6 +665,6 @@ export function ThreeDStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

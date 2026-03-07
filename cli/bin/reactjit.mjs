@@ -99,6 +99,8 @@ const HELP = `
     rjit classify --min 3         Minimum occurrences (default: 2)
     rjit classify --prefix App    Prefix names (default: auto-semantic)
     rjit classify --dir ./stories Scan specific directory
+    rjit classify rename Old New  Rename a classifier everywhere
+    rjit classify migrate        Rewrite inline styles → classifier refs
     rjit diagnose                 Find ghost nodes (in tree, not painting)
     rjit search-index             Index all <Text> nodes for cold AppSearch
     rjit help                     Show this help message

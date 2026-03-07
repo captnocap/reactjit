@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Box, CodeBlock, Pressable, ScrollView, Text } from '../../../packages/core/src';
+import { Box, CodeBlock, Pressable, ScrollView, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Spreadsheet, columnIndexToLabel, evaluateSpreadsheet } from '../../../packages/data/src';
 import type { SpreadsheetCellMap } from '../../../packages/data/src';
@@ -198,9 +198,9 @@ export function DataSpreadsheetStory() {
           <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
             {'Data Spreadsheet: Excel Replacement Case'}
           </Text>
-          <Text style={{ fontSize: 10, color: c.textDim }}>
+          <S.StoryMuted>
             {'Grid editor + formula graph + built-in convert/math packs in one runtime component.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
@@ -227,7 +227,7 @@ export function DataSpreadsheetStory() {
               paddingTop: 6,
               paddingBottom: 6,
             }}>
-              <Text style={{ fontSize: 10, color: c.text }}>{'Load Logistics Preset'}</Text>
+              <S.StoryBody>{'Load Logistics Preset'}</S.StoryBody>
             </Box>
           </Pressable>
 
@@ -245,7 +245,7 @@ export function DataSpreadsheetStory() {
               paddingTop: 6,
               paddingBottom: 6,
             }}>
-              <Text style={{ fontSize: 10, color: c.text }}>{'Load Lab Preset'}</Text>
+              <S.StoryBody>{'Load Lab Preset'}</S.StoryBody>
             </Box>
           </Pressable>
 
@@ -263,7 +263,7 @@ export function DataSpreadsheetStory() {
               paddingTop: 6,
               paddingBottom: 6,
             }}>
-              <Text style={{ fontSize: 10, color: c.text }}>{'Reset Column Widths'}</Text>
+              <S.StoryBody>{'Reset Column Widths'}</S.StoryBody>
             </Box>
           </Pressable>
         </Box>
@@ -283,14 +283,14 @@ export function DataSpreadsheetStory() {
                   paddingTop: 6,
                   paddingBottom: 6,
                 }}>
-                  <Text style={{ fontSize: 10, color: c.text }}>{`Jump ${cell}`}</Text>
+                  <S.StoryBody>{`Jump ${cell}`}</S.StoryBody>
                 </Box>
               </Pressable>
             ))}
           </Box>
-          <Text style={{ fontSize: 9, color: c.textDim }}>
+          <S.StoryCap>
             {'Status bar shows live input/value/error context for the active cell. This keeps edits auditable in app workflows.'}
-          </Text>
+          </S.StoryCap>
         </Box>
 
         <Box style={{ gap: 8 }}>
@@ -316,16 +316,16 @@ export function DataSpreadsheetStory() {
                   paddingTop: 6,
                   paddingBottom: 6,
                 }}>
-                  <Text style={{ fontSize: 10, color: c.text }}>
+                  <S.StoryBody>
                     {`${preset.label} ${preset.rows}x${preset.cols}`}
-                  </Text>
+                  </S.StoryBody>
                 </Box>
               </Pressable>
             ))}
           </Box>
-          <Text style={{ fontSize: 9, color: c.textDim }}>
+          <S.StoryCap>
             {'Drag any header separator to resize columns. Shift + wheel or drag in the grid to pan horizontally.'}
-          </Text>
+          </S.StoryCap>
         </Box>
 
         <Box style={{ gap: 8 }}>
@@ -349,9 +349,9 @@ export function DataSpreadsheetStory() {
 
         <Box style={{ gap: 8 }}>
           <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Embed Sizes: Mini + Medium'}</Text>
-          <Text style={{ fontSize: 9, color: c.textDim }}>
+          <S.StoryCap>
             {'Same dataset, same formulas, same jump behavior. These are constrained component containers, not full-screen views.'}
-          </Text>
+          </S.StoryCap>
           <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
             <Box style={{
               width: MINI_SIZE.width,
@@ -419,14 +419,14 @@ export function DataSpreadsheetStory() {
             paddingBottom: 10,
           }}>
             <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Why teams would choose this over Excel in-app'}</Text>
-            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: file handoffs, hidden macros, and no runtime guarantees.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: formulas execute in the same app runtime as the UI and business logic.'}</Text>
-            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: conversion logic scattered across tabs and helper sheets.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: CONVERT + math pack are first-class functions in every cell.'}</Text>
-            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: hard to productize collaborative workflows.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: spreadsheet UI is a composable component with controlled state and events.'}</Text>
-            <Text style={{ fontSize: 9, color: c.text }}>{'Excel pain: context is lost during edits.'}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{'Runtime answer: selection-aware headers + status bar keep input/value/error visible at all times.'}</Text>
+            <S.StoryBreadcrumbActive>{'Excel pain: file handoffs, hidden macros, and no runtime guarantees.'}</S.StoryBreadcrumbActive>
+            <S.StoryCap>{'Runtime answer: formulas execute in the same app runtime as the UI and business logic.'}</S.StoryCap>
+            <S.StoryBreadcrumbActive>{'Excel pain: conversion logic scattered across tabs and helper sheets.'}</S.StoryBreadcrumbActive>
+            <S.StoryCap>{'Runtime answer: CONVERT + math pack are first-class functions in every cell.'}</S.StoryCap>
+            <S.StoryBreadcrumbActive>{'Excel pain: hard to productize collaborative workflows.'}</S.StoryBreadcrumbActive>
+            <S.StoryCap>{'Runtime answer: spreadsheet UI is a composable component with controlled state and events.'}</S.StoryCap>
+            <S.StoryBreadcrumbActive>{'Excel pain: context is lost during edits.'}</S.StoryBreadcrumbActive>
+            <S.StoryCap>{'Runtime answer: selection-aware headers + status bar keep input/value/error visible at all times.'}</S.StoryCap>
           </Box>
 
           <Box style={{ flexGrow: 1, minWidth: 260, gap: 8 }}>

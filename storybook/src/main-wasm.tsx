@@ -7,7 +7,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createWasmApp } from '../../packages/renderer/src/WasmApp';
-import { BridgeProvider, useBridge } from '../../packages/core/src/context';
+import { BridgeProvider, useBridge, classifiers as S} from '../../packages/core/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
@@ -92,7 +92,7 @@ function StorybookPanel() {
       {Array.from(groups.entries()).map(([section, list]) => (
         <Box key={section}>
           <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-            <Text style={{ color: c.textDim, fontSize: 9 }}>{String(section || '').toUpperCase()}</Text>
+            <S.StoryCap>{String(section || '').toUpperCase()}</S.StoryCap>
           </Box>
           {list.map(s => {
             const idx = stories.indexOf(s);
@@ -202,9 +202,9 @@ function StorybookPanel() {
             <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
               {active?.title}
             </Text>
-            <Text style={{ color: c.textDim, fontSize: 9 }}>
+            <S.StoryCap>
               {active?.section}
-            </Text>
+            </S.StoryCap>
           </Box>
         )}
 

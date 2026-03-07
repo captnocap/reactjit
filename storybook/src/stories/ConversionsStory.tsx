@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useConvert } from '../../../packages/convert/src';
@@ -90,17 +90,17 @@ const HALF = {
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -143,11 +143,11 @@ function ColorDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'hex -> rgb -> hsl (Lua math, zero JS compute)'}</Text>
+      <S.StoryCap>{'hex -> rgb -> hsl (Lua math, zero JS compute)'}</S.StoryCap>
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Box style={{ width: 24, height: 24, borderRadius: 4, backgroundColor: hex }} />
-        <Text style={{ fontSize: 10, color: c.text }}>{hex}</Text>
+        <S.StoryBody>{hex}</S.StoryBody>
       </Box>
 
       {rgb && hsl && (
@@ -192,7 +192,7 @@ function UnitDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'Bidirectional registry \u2014 distance, temp, volume, angle'}</Text>
+      <S.StoryCap>{'Bidirectional registry \u2014 distance, temp, volume, angle'}</S.StoryCap>
 
       {results && (
         <Box style={{ gap: 2 }}>
@@ -246,7 +246,7 @@ function EncodingDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'text <-> base64, hex, url, html entities'}</Text>
+      <S.StoryCap>{'text <-> base64, hex, url, html entities'}</S.StoryCap>
       {enc && (
         <>
           <Box style={{ gap: 2 }}>
@@ -283,7 +283,7 @@ function NumberBaseDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 9, color: c.textDim }}>{'decimal <-> binary, octal, hex'}</Text>
+      <S.StoryCap>{'decimal <-> binary, octal, hex'}</S.StoryCap>
       {bases && (
         <Box style={{ gap: 2 }}>
           <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> binary: ${bases[0]}`}</Text>
@@ -414,7 +414,7 @@ function RegistryCatalog() {
   return (
     <Box style={{ gap: 6 }}>
       {total !== null && (
-        <Text style={{ fontSize: 9, color: c.textDim }}>{`${total} converters across ${catalog.length} categories`}</Text>
+        <S.StoryCap>{`${total} converters across ${catalog.length} categories`}</S.StoryCap>
       )}
       {catalog.map(({ cat, units }) => {
         const catColor = CAT_COLORS[cat] || c.text;
@@ -422,7 +422,7 @@ function RegistryCatalog() {
           <Box key={cat} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: catColor }} />
             <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 90 }}>{cat}</Text>
-            <Text style={{ fontSize: 9, color: c.textDim }}>{units.join(', ')}</Text>
+            <S.StoryCap>{units.join(', ')}</S.StoryCap>
           </Box>
         );
       })}
@@ -436,7 +436,7 @@ export function ConversionsStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       <Box style={{
         flexShrink: 0, flexDirection: 'row', alignItems: 'center',
@@ -632,6 +632,6 @@ export function ConversionsStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v1.0.0 — Lua backend'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

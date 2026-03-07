@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Box, Text, TextInput, Pressable, ScrollView } from '../../../packages/core/src';
+import { Box, Text, TextInput, Pressable, ScrollView, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Icon } from '../../../packages/icons/src';
 import * as AllIcons from '../../../packages/icons/src/icons';
@@ -145,7 +145,7 @@ export function IconStory() {
               {SIZES.map(sz => (
                 <Box key={sz} style={{ alignItems: 'center', gap: 4 }}>
                   <Icon icon={iconMap[selectedIcon]} size={sz} color={c.text} />
-                  <Text style={{ color: c.muted, fontSize: 9 }}>{`${sz}`}</Text>
+                  <S.StoryCap>{`${sz}`}</S.StoryCap>
                 </Box>
               ))}
             </Box>

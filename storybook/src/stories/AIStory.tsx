@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -413,7 +413,7 @@ function ConversationDemo() {
   return (
     <Box style={{ gap: 6, width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>useChat() message flow</Text>
+        <S.StoryCap>useChat() message flow</S.StoryCap>
         <Pressable onPress={replay}>
           <Box style={{ backgroundColor: C.blue, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Replay</Text>
@@ -436,7 +436,7 @@ function ConversationDemo() {
               <Text style={{ fontSize: 8, color: msg.role === 'user' ? C.blue : C.mauve }}>
                 {msg.role}
               </Text>
-              <Text style={{ fontSize: 9, color: c.text }}>{msg.content}</Text>
+              <S.StoryBreadcrumbActive>{msg.content}</S.StoryBreadcrumbActive>
             </Box>
           </Box>
         ))}
@@ -484,7 +484,7 @@ function AgenticLoopDemo() {
   return (
     <Box style={{ gap: 6, width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>Agentic tool execution loop</Text>
+        <S.StoryCap>Agentic tool execution loop</S.StoryCap>
         <Pressable onPress={replay}>
           <Box style={{ backgroundColor: C.yellow, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Replay</Text>
@@ -503,7 +503,7 @@ function AgenticLoopDemo() {
             </Box>
             <Box style={{ gap: 1, flexShrink: 1 }}>
               <Text style={{ fontSize: 8, color: s.color }}>{s.label}</Text>
-              <Text style={{ fontSize: 9, color: c.text }}>{s.text}</Text>
+              <S.StoryBreadcrumbActive>{s.text}</S.StoryBreadcrumbActive>
             </Box>
           </Box>
         ))}
@@ -572,7 +572,7 @@ function StreamingPipelineDemo() {
   return (
     <Box style={{ gap: 4, width: '100%' }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>SSE streaming pipeline</Text>
+        <S.StoryCap>SSE streaming pipeline</S.StoryCap>
         <Pressable onPress={replay}>
           <Box style={{ backgroundColor: C.teal, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Replay</Text>
@@ -591,7 +591,7 @@ function StreamingPipelineDemo() {
           }} />
           <Box style={{ gap: 1, flexShrink: 1 }}>
             <Text style={{ fontSize: 9, color: s.color }}>{s.label}</Text>
-            <Text style={{ fontSize: 8, color: c.muted }}>{s.desc}</Text>
+            <S.StoryTiny>{s.desc}</S.StoryTiny>
           </Box>
         </Box>
       ))}
@@ -609,7 +609,7 @@ function ComponentCatalog() {
         <Box key={comp.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: comp.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 160, flexShrink: 0 }}>{comp.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{comp.desc}</Text>
+          <S.StoryCap>{comp.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -658,7 +658,7 @@ function TemplateTierDemo() {
           <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', paddingLeft: 2 }}>
             {t.parts.map(p => (
               <Box key={p} style={{ backgroundColor: c.bg, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 3 }}>
-                <Text style={{ fontSize: 8, color: c.muted }}>{p}</Text>
+                <S.StoryTiny>{p}</S.StoryTiny>
               </Box>
             ))}
           </Box>
@@ -678,7 +678,7 @@ function MCPFeatureList() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -695,7 +695,7 @@ function BrowserFeatureList() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -712,7 +712,7 @@ function FeatureCatalog() {
         <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
           <Text style={{ fontSize: 9, color: c.text, width: 150, flexShrink: 0 }}>{f.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted }}>{f.desc}</Text>
+          <S.StoryCap>{f.desc}</S.StoryCap>
         </Box>
       ))}
     </Box>
@@ -725,7 +725,7 @@ export function AIStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -1157,6 +1157,6 @@ export function AIStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

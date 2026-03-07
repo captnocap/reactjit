@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { TableColumn } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -173,7 +173,7 @@ export function DataDashboardDemoStory() {
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
           <Text style={{ color: DIM, fontSize: 10 }}>Live</Text>
-          <Text style={{ color: c.textDim, fontSize: 10 }}>{`(${timeLabel})`}</Text>
+          <S.StoryMuted>{`(${timeLabel})`}</S.StoryMuted>
         </Box>
       </Box>
 

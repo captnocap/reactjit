@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { OverflowStressStory } from './OverflowStress';
 import { TradingPerfLabStory } from './TradingPerfLabStory';
@@ -85,7 +85,7 @@ function StressCard({ item, onSelect }: { item: StressDef; onSelect: (id: Stress
           <Text style={{ color, fontSize: 9, fontWeight: 'normal' }}>{item.category.toUpperCase()}</Text>
         </Box>
         <Text style={{ color: c.text, fontSize: 13, fontWeight: 'normal' }}>{item.name}</Text>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>{item.description}</Text>
+        <S.StoryMuted>{item.description}</S.StoryMuted>
       </Box>
     </Pressable>
   );
@@ -116,7 +116,7 @@ export function StressTestStory() {
   const categoryColor = CATEGORY_COLORS[current.category] || c.textDim;
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
       <Box
         style={{
           height: 36,
@@ -155,6 +155,6 @@ export function StressTestStory() {
           <ActiveStory />
         </Box>
       </Box>
-    </Box>
+    </S.StoryRoot>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import { Box, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
@@ -66,7 +66,7 @@ export function GradientStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: c.text, fontSize: 10 }}>Blue glow</Text>
+              <S.StoryBody>Blue glow</S.StoryBody>
             </Box>
             <Box style={{
               width: 150,
@@ -80,7 +80,7 @@ export function GradientStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: c.text, fontSize: 10 }}>Drop shadow</Text>
+              <S.StoryBody>Drop shadow</S.StoryBody>
             </Box>
             <Box style={{
               width: 150,
@@ -94,7 +94,7 @@ export function GradientStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: c.text, fontSize: 10 }}>Red halo</Text>
+              <S.StoryBody>Red halo</S.StoryBody>
             </Box>
           </Box>
         </StorySection>

@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   Clock,
@@ -112,17 +112,17 @@ const COUNTDOWN_OPTIONS = { tickRate: 50 };
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={C.accent} />
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+      <S.StorySectionIcon src={icon} tintColor={C.accent} />
+      <S.StoryLabelText>
         {children}
-      </Text>
+      </S.StoryLabelText>
     </Box>
   );
 }
@@ -137,15 +137,15 @@ function WorldClockDemo() {
       <Clock format="datetime" textStyle={{ fontSize: 11, color: c.text }} />
       <Box style={{ flexDirection: 'row', gap: 16 }}>
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'Tokyo'}</Text>
+          <S.StoryTiny>{'Tokyo'}</S.StoryTiny>
           <Clock timezone="Asia/Tokyo" textStyle={{ fontSize: 12, color: C.teal }} />
         </Box>
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'New York'}</Text>
+          <S.StoryTiny>{'New York'}</S.StoryTiny>
           <Clock timezone="America/New_York" textStyle={{ fontSize: 12, color: C.teal }} />
         </Box>
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'London'}</Text>
+          <S.StoryTiny>{'London'}</S.StoryTiny>
           <Clock timezone="Europe/London" textStyle={{ fontSize: 12, color: C.teal }} />
         </Box>
       </Box>
@@ -162,7 +162,7 @@ function StopwatchDemo() {
       <Text style={{ fontSize: 28, fontWeight: 'bold', color: sw.running ? C.green : c.text, letterSpacing: 2 }}>
         {formatDuration(sw.elapsed, { ms: true })}
       </Text>
-      <Text style={{ fontSize: 9, color: c.muted }}>{formatDurationLong(sw.elapsed)}</Text>
+      <S.StoryCap>{formatDurationLong(sw.elapsed)}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         {!sw.running ? (
           <Pressable onPress={sw.start} style={{ backgroundColor: C.green, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
@@ -174,7 +174,7 @@ function StopwatchDemo() {
           </Pressable>
         )}
         <Pressable onPress={sw.reset} style={{ backgroundColor: C.dim, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
-          <Text style={{ fontSize: 10, color: c.text }}>{'Reset'}</Text>
+          <S.StoryBody>{'Reset'}</S.StoryBody>
         </Pressable>
       </Box>
     </Box>
@@ -199,9 +199,9 @@ function CountdownDemo() {
           borderRadius: 2,
         }} />
       </Box>
-      <Text style={{ fontSize: 9, color: c.muted }}>
+      <S.StoryCap>
         {`${(cd.progress * 100).toFixed(1)}% elapsed`}
-      </Text>
+      </S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         {!cd.running ? (
           <Pressable onPress={cd.start} style={{ backgroundColor: C.green, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
@@ -230,7 +230,7 @@ function TickerDemo() {
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ticks % 2 === 0 ? C.accent : c.muted }} />
         <Text style={{ fontSize: 14, fontWeight: 'bold', color: C.accent }}>{String(ticks)}</Text>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'ticks @ 500ms'}</Text>
+        <S.StoryMuted>{'ticks @ 500ms'}</S.StoryMuted>
       </Box>
     </Box>
   );
@@ -247,7 +247,7 @@ function IntervalDemo() {
     <Box style={{ gap: 8 }}>
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.accent }}>{String(count)}</Text>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'ticks'}</Text>
+        <S.StoryMuted>{'ticks'}</S.StoryMuted>
       </Box>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         {[250, 500, 1000, 2000].map(ms => (
@@ -275,7 +275,7 @@ function FrameIntervalDemo() {
     <Box style={{ gap: 8 }}>
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.teal }}>{String(frameCount)}</Text>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'fires'}</Text>
+        <S.StoryMuted>{'fires'}</S.StoryMuted>
       </Box>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         {[1, 10, 60, 120].map(n => (
@@ -288,7 +288,7 @@ function FrameIntervalDemo() {
           </Pressable>
         ))}
       </Box>
-      <Text style={{ fontSize: 8, color: c.muted }}>{`every ${every} frame${every > 1 ? 's' : ''} \u2248 ${(every / 60).toFixed(1)}s at 60fps`}</Text>
+      <S.StoryTiny>{`every ${every} frame${every > 1 ? 's' : ''} \u2248 ${(every / 60).toFixed(1)}s at 60fps`}</S.StoryTiny>
     </Box>
   );
 }
@@ -326,7 +326,7 @@ export function TimeStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -622,6 +622,6 @@ export function TimeStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

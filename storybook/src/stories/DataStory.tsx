@@ -14,8 +14,7 @@ import {
   Box, Text, Image, Pressable, ScrollView, TextEditor, CodeBlock,
   Table, Badge, BarChart, ProgressBar, Sparkline,
   HorizontalBarChart, StackedBarChart, LineChart, AreaChart,
-  PieChart, RadarChart,
-} from '../../../packages/core/src';
+  PieChart, RadarChart, classifiers as S} from '../../../packages/core/src';
 import type { TableColumn } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
@@ -47,7 +46,7 @@ function styleTooltip(style: Record<string, any>): { content: string; layout: st
 
 function HorizontalDivider() {
   const c = useThemeColors();
-  return <Box style={{ height: 1, flexShrink: 0, backgroundColor: c.border }} />;
+  return <S.StoryDivider />;
 }
 
 function VerticalDivider() {
@@ -273,7 +272,7 @@ function DataPreview() {
           {DEMO_PIE_DATA.map((s) => (
             <Box key={s.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
               <Box style={{ width: 6, height: 6, borderRadius: 2, backgroundColor: s.color }} />
-              <Text style={{ color: c.muted, fontSize: 8 }}>{s.label}</Text>
+              <S.StoryTiny>{s.label}</S.StoryTiny>
             </Box>
           ))}
         </Box>
@@ -351,7 +350,7 @@ export function DataStory() {
   const col2 = PROPS.slice(mid);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -587,6 +586,6 @@ export function DataStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }

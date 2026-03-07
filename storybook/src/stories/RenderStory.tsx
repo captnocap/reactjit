@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, useLocalStore } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -181,7 +181,7 @@ function ScreenCaptureDemo() {
           }}>
             <Image src="monitor" style={{ width: 24, height: 24 }} tintColor={C.screen} />
             <Text style={{ fontSize: 11, color: C.screen }}>{'Start Screen Capture'}</Text>
-            <Text style={{ fontSize: 8, color: c.muted }}>{'Captures this display via XShm'}</Text>
+            <S.StoryTiny>{'Captures this display via XShm'}</S.StoryTiny>
           </Box>
         </Pressable>
       )}
@@ -231,7 +231,7 @@ function WindowCaptureDemo() {
         </Box>
       ) : (
         <Box style={{ gap: 6, width: '100%' }}>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Pick a window to capture:'}</Text>
+          <S.StoryCap>{'Pick a window to capture:'}</S.StoryCap>
           <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             {titles.map(t => (
               <Pressable key={t} onPress={() => startCapture(t)}>
@@ -241,7 +241,7 @@ function WindowCaptureDemo() {
               </Pressable>
             ))}
           </Box>
-          <Text style={{ fontSize: 8, color: c.textDim }}>{'Matches by partial window title via X11'}</Text>
+          <S.StoryTiny>{'Matches by partial window title via X11'}</S.StoryTiny>
         </Box>
       )}
     </Box>
@@ -279,14 +279,14 @@ function LibretroDemo() {
 
       {/* Core + ROM inputs */}
       <Box style={{ gap: 4, width: '100%' }}>
-        <Text style={{ fontSize: 8, color: c.textDim }}>{'Core .so path'}</Text>
+        <S.StoryTiny>{'Core .so path'}</S.StoryTiny>
         <Input
           value={corePath}
           placeholder="/usr/lib/libretro/snes9x_libretro.so"
           onChangeText={(t: string) => setCorePath(t)}
           style={{ height: 22, fontSize: 9, backgroundColor: c.surface, borderRadius: 4, paddingLeft: 6, paddingRight: 6, color: c.text, borderWidth: 1, borderColor: c.border }}
         />
-        <Text style={{ fontSize: 8, color: c.textDim }}>{'ROM path'}</Text>
+        <S.StoryTiny>{'ROM path'}</S.StoryTiny>
         <Input
           value={romPath}
           placeholder="game.sfc"
@@ -316,7 +316,7 @@ function LibretroDemo() {
         }}>
           <Image src="cpu" style={{ width: 24, height: 24 }} tintColor={C.libretro} />
           <Text style={{ fontSize: 9, color: C.libretro }}>{'Libretro Core'}</Text>
-          <Text style={{ fontSize: 8, color: c.muted }}>{'Enter a core + ROM path above'}</Text>
+          <S.StoryTiny>{'Enter a core + ROM path above'}</S.StoryTiny>
         </Box>
       )}
 
@@ -385,7 +385,7 @@ export function RenderStory() {
   const c = useThemeColors();
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
+    <S.StoryRoot>
 
       {/* ── Header ── */}
       <Box style={{
@@ -763,6 +763,6 @@ export function RenderStory() {
         <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
       </Box>
 
-    </Box>
+    </S.StoryRoot>
   );
 }
