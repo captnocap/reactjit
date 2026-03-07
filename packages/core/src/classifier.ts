@@ -5,27 +5,28 @@
  * exactly one primitive with default props. No per-file definitions, no duplicates,
  * no "my Banner vs your Banner." One name, one definition, project-wide.
  *
+ * Supports:
+ *   - Static defaults (padding, gap, radius, etc.)
+ *   - Theme token references ('theme:bg', 'theme:text', 'theme:border', etc.)
+ *   - Hook-powered behavior via `use` field (runs inside the FC at render time)
+ *
  * @example
- * // Register (once, at app entry)
  * import { classifier } from '@reactjit/core'
  *
  * classifier({
- *   Banner:   { type: 'Box', bg: '#1a1a2e', padding: 24, w: '100%' },
- *   Card:     { type: 'Box', borderRadius: 12, padding: 16, gap: 8 },
- *   Heading:  { type: 'Text', size: 28, bold: true },
- *   Subtitle: { type: 'Text', size: 16, color: '#888' },
+ *   Banner:   { type: 'Box', style: { backgroundColor: 'theme:bgElevated', padding: 24 } },
+ *   Card:     { type: 'Box', style: { borderRadius: 12, padding: 16, gap: 8, borderColor: 'theme:border' } },
+ *   Heading:  { type: 'Text', size: 28, bold: true, color: 'theme:text' },
+ *   Submit:   { type: 'Pressable', style: { backgroundColor: 'theme:primary' },
+ *              use: () => { const f = useForm(); return { onPress: f.submit }; } },
  * })
  *
- * // Use (anywhere)
  * import { classifiers as C } from '@reactjit/core'
  *
- * function MyPage() {
- *   return (
- *     <C.Banner>
- *       <C.Heading color="#fff">Welcome</C.Heading>
- *     </C.Banner>
- *   )
- * }
+ * <C.Banner>
+ *   <C.Heading>Welcome</C.Heading>
+ *   <C.Submit><C.Heading size={14}>Go</C.Heading></C.Submit>
+ * </C.Banner>
  */
 
 import React from 'react';
@@ -34,6 +35,7 @@ import { Pressable } from './Pressable';
 import { ScrollView } from './ScrollView';
 import { Input } from './Input';
 import { Video } from './Video';
+import { useThemeColorsOptional } from './context';
 import type {
   BoxProps, ColProps, TextProps, ImageProps,
   ScrollViewProps, InputProps, VideoProps,
@@ -57,6 +59,44 @@ export interface ClassifierMap {
 const PRIMITIVES: Record<string, React.FC<any>> = {
   Box, Row, Col, Text, Image, Pressable, ScrollView, Input, Video,
 };
+
+// ── Theme token resolution ──────────────────────────────
+
+const THEME_PREFIX = 'theme:';
+
+function isThemeToken(v: unknown): v is string {
+  return typeof v === 'string' && v.startsWith(THEME_PREFIX);
+}
+
+function resolveTokens(
+  obj: Record<string, any>,
+  colors: Record<string, string>,
+): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (isThemeToken(v)) {
+      out[k] = colors[v.slice(THEME_PREFIX.length)] ?? v;
+    } else if (v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Function)) {
+      out[k] = resolveTokens(v, colors);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/** Scan an object tree for any 'theme:*' string values. */
+function hasTokens(obj: Record<string, any>): boolean {
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (isThemeToken(v)) return true;
+    if (v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Function)) {
+      if (hasTokens(v)) return true;
+    }
+  }
+  return false;
+}
 
 // ── Style-object merge ────────────────────────────────────
 
@@ -84,11 +124,11 @@ function mergeProps(
 const _registry: Record<string, React.FC<any>> = {};
 
 type SheetEntry = {
-  [K in keyof ClassifierMap]: { type: K } & Partial<ClassifierMap[K]>
+  [K in keyof ClassifierMap]: { type: K; use?: () => Record<string, any> } & Partial<ClassifierMap[K]>
 }[keyof ClassifierMap];
 
 /**
- * Register classifiers globally. Call once at app init.
+ * Register classifiers globally. Call from any `.cls.ts` file.
  * Throws on duplicate names — each classifier can only be defined once.
  */
 export function classifier(defs: Record<string, SheetEntry>): void {
@@ -100,7 +140,11 @@ export function classifier(defs: Record<string, SheetEntry>): void {
       );
     }
 
-    const { type, ...defaults } = defs[name] as { type: keyof ClassifierMap; [k: string]: any };
+    const { type, use, ...defaults } = defs[name] as {
+      type: keyof ClassifierMap;
+      use?: () => Record<string, any>;
+      [k: string]: any;
+    };
     const Primitive = PRIMITIVES[type];
     if (!Primitive) {
       throw new Error(
@@ -109,9 +153,29 @@ export function classifier(defs: Record<string, SheetEntry>): void {
     }
 
     const hasDefaults = Object.keys(defaults).length > 0;
-    const C: React.FC<any> = hasDefaults
-      ? (props) => React.createElement(Primitive, mergeProps(defaults, props))
-      : Primitive;
+    const needsTheme = hasDefaults && hasTokens(defaults);
+    const needsHook = typeof use === 'function';
+
+    let C: React.FC<any>;
+
+    if (!hasDefaults && !needsHook) {
+      // Bare alias — just the primitive
+      C = Primitive;
+    } else if (!needsTheme && !needsHook) {
+      // Static defaults only — no theme, no hook
+      C = (props) => React.createElement(Primitive, mergeProps(defaults, props));
+    } else {
+      // Theme tokens and/or hook — resolve at render time
+      C = (props) => {
+        const colors = needsTheme ? useThemeColorsOptional() : null;
+        const resolved = colors ? resolveTokens(defaults, colors) : defaults;
+        const hookProps = needsHook ? use!() : null;
+        const merged = hookProps
+          ? mergeProps(resolved, mergeProps(hookProps, props))
+          : mergeProps(resolved, props);
+        return React.createElement(Primitive, merged);
+      };
+    }
 
     C.displayName = name;
     _registry[name] = C;
