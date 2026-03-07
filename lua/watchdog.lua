@@ -40,6 +40,19 @@ function Watchdog.launch(opts)
 
   -- Clean stale files from previous run
   local tmpDir = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+
+  -- Kill any leftover crash reporter window from the previous session
+  local crPidFile = tmpDir .. "/reactjit_crashreporter.pid"
+  local crPf = io.open(crPidFile, "r")
+  if crPf then
+    local crPid = crPf:read("*l")
+    crPf:close()
+    if crPid and crPid:match("^%d+$") then
+      os.execute("kill " .. crPid .. " 2>/dev/null")
+    end
+    os.remove(crPidFile)
+  end
+
   os.remove(tmpDir .. "/reactjit_crash.lua")
   os.remove(tmpDir .. "/reactjit_snapshot.lua")
   os.remove(tmpDir .. "/reactjit_panic.signal")

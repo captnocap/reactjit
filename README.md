@@ -1,21 +1,21 @@
 # ReactJIT
 
-React rendered through a hand-rolled SDL2 + OpenGL renderer on LuaJIT.
+React rendered through Love2D + OpenGL on LuaJIT.
 
 ```
 React JSX
-   │
-   ▼
-Reconciler ──► mutation commands
-   │
-   ▼
+   |
+   v
+Reconciler --> mutation commands
+   |
+   v
 QuickJS FFI bridge
-   │
-   ▼
-Layout engine ──► computed {x, y, w, h}
-   │
-   ▼
-SDL2 + OpenGL painter ──► pixels
+   |
+   v
+Layout engine --> computed {x, y, w, h}
+   |
+   v
+Love2D painter (OpenGL 2.1) --> pixels
 ```
 
 A reconciler, a layout engine, and a painter. That's it.
@@ -30,68 +30,94 @@ cd my-app
 reactjit dev
 ```
 
-Your React app renders in a native SDL2 + OpenGL window. No browser, no Electron, no game engine.
+Your React app renders in a native Love2D window. No browser, no Electron, no game engine runtime — just LuaJIT + Love2D + OpenGL 2.1.
 
-## Targets
+## Target
 
 | Target | What it is |
 |--------|-----------|
-| **SDL2 / OpenGL** | Hand-rolled renderer — LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. Primary target. |
-| **Love2D** | Game engine UI via QuickJS in-process. For game devs who want Love2D's ecosystem. |
-| **Web (WASM)** | Same SDL2 renderer compiled to WASM + WebGL via Emscripten. Planned. `<canvas>`, not DOM. |
+| **Love2D** | LuaJIT + Love2D + OpenGL 2.1 via QuickJS in-process. The only renderer. |
+| **WASM** | Same Love2D pipeline compiled to WebAssembly via love.js (Emscripten). Renders to `<canvas>`, not DOM. |
+
+There is no DOM target. No react-dom. No SDL2 primary target. No terminal grid target. Love2D is the renderer — WASM is the same renderer running in a browser canvas.
 
 ## Packages
 
-### Core
+### Core (load-bearing)
 
 | Package | Import | What it does |
 |---------|--------|-------------|
-| `packages/core` | `@reactjit/core` | Primitives (`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Modal`, `Slider`, `Switch`, `Checkbox`, `Radio`, `Select`, `FlatList`), hooks, animation, types |
+| `packages/core` | `@reactjit/core` | Primitives (`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `Input`, `Modal`, `FlatList`), form controls (`Slider`, `Switch`, `Checkbox`, `Radio`, `Select`), layout (`FlexRow`, `FlexColumn`, `Spacer`), navigation (`NavPanel`, `Tabs`, `Breadcrumbs`, `Toolbar`), data viz (`Table`, `BarChart`, `LineChart`, `PieChart`, `RadarChart`, `Sparkline`, `CandlestickChart`, `DepthChart`, `OrderBook`, `AreaChart`), chat UI (`MessageBubble`, `ChatInput`, `MessageList`), animation, effects, masks, search, capabilities, types |
 | `packages/renderer` | `@reactjit/renderer` | react-reconciler host config, QuickJS FFI bridge, instance tree, event dispatch |
-
 
 ### UI & Interaction
 
 | Package | Import | What it does |
 |---------|--------|-------------|
-| `packages/controls` | `@reactjit/controls` | Hardware-style controls — `Knob`, `Fader`, `Meter`, `LEDIndicator`, `PadButton`, `StepSequencer`, `TransportBar` |
-| `packages/theme` | `@reactjit/theme` | Theme system — `ThemeProvider`, `ThemeSwitcher`, `useTheme`, built-in dark/light/solarized themes |
+| `packages/controls` | `@reactjit/controls` | Hardware-style controls — `Knob`, `Fader`, `Meter`, `LEDIndicator`, `PadButton`, `StepSequencer`, `TransportBar`, `PianoKeyboard` |
+| `packages/theme` | `@reactjit/theme` | Theme system — `ThemeProvider`, `useTheme`, built-in presets |
 | `packages/router` | `@reactjit/router` | In-app navigation — `useRouter`, `Route`, screen transitions |
+| `packages/layouts` | `@reactjit/layouts` | Page/container/nav layout presets |
+| `packages/icons` | `@reactjit/icons` | Icon registry + SVG-to-pixel icon set |
 
 ### Media & 3D
 
 | Package | Import | What it does |
 |---------|--------|-------------|
 | `packages/3d` | `@reactjit/3d` | 3D scenes — `Scene`, `Mesh`, `Camera`, `AmbientLight`, `DirectionalLight` (OpenGL) |
-| `packages/audio` | `@reactjit/audio` | Audio playback and synthesis hooks |
-| `packages/media` | `@reactjit/media` | Video, image, and media library management |
-| `packages/geo` | `@reactjit/geo` | Maps — `Map`, `TileLayer`, `Marker`, `Polygon`, `Polyline`, `GeoJSON` |
+| `packages/audio` | `@reactjit/audio` | Modular audio rack, MIDI, sampler, sequencer |
+| `packages/media` | `@reactjit/media` | Archive reading, media library indexing |
+| `packages/geo` | `@reactjit/geo` | Leaflet-style maps — `MapContainer`, `TileLayer`, `Marker`, `Polygon`, `GeoJSON` |
+| `packages/geo3d` | `@reactjit/geo3d` | 3D geographic scenes with terrain |
+| `packages/imaging` | `@reactjit/imaging` | Image processing, layer composition, draw canvas, golden testing |
+| `packages/physics` | `@reactjit/physics` | 2D physics (Box2D via Love2D) |
 
 ### Data & Networking
 
 | Package | Import | What it does |
 |---------|--------|-------------|
-| `packages/crypto` | `@reactjit/crypto` | Cryptography — hashing, encryption, key derivation, signing (noble/scure) |
-| `packages/storage` | `@reactjit/storage` | Local persistence — key-value store, CRUD, adapters |
-| `packages/server` | `@reactjit/server` | HTTP server hooks for local APIs |
-| `packages/rss` | `@reactjit/rss` | RSS feed parsing and subscription |
-| `packages/webhooks` | `@reactjit/webhooks` | Webhook listener hooks |
-| `packages/apis` | `@reactjit/apis` | External API integration — service registry, API key management |
-| `packages/ai` | `@reactjit/ai` | AI chat UI components, MCP protocol, model provider abstraction |
+| `packages/crypto` | `@reactjit/crypto` | Hashing, encryption, key derivation, signing via libsodium |
+| `packages/storage` | `@reactjit/storage` | CRUD, schema validation, adapters |
+| `packages/server` | `@reactjit/server` | HTTP server, static file serving |
+| `packages/rss` | `@reactjit/rss` | RSS feed parsing + OPML |
+| `packages/webhooks` | `@reactjit/webhooks` | Webhook send/receive |
+| `packages/apis` | `@reactjit/apis` | External API wrappers (Spotify, GitHub, Weather, etc.) |
+| `packages/ai` | `@reactjit/ai` | LLM providers, chat hooks, MCP protocol, AI components |
+| `packages/networking` | `@reactjit/networking` | Game server hosting (Minecraft, etc.) |
+| `packages/wireguard` | `@reactjit/wireguard` | WireGuard + userspace P2P tunnels |
+| `packages/privacy` | `@reactjit/privacy` | GPG, keyrings, PII redaction, secure storage |
+
+### Domain
+
+| Package | Import | What it does |
+|---------|--------|-------------|
+| `packages/chemistry` | `@reactjit/chemistry` | Periodic table, molecules, reactions, reagent tests, spectra, phase diagrams, PubChem API |
+| `packages/finance` | `@reactjit/finance` | Technical analysis, portfolio tracking, price feeds |
+| `packages/math` | `@reactjit/math` | Vector/matrix math, noise, bezier, geometry |
+| `packages/data` | `@reactjit/data` | Spreadsheet formula engine |
+| `packages/convert` | `@reactjit/convert` | Unit/color/encoding conversions |
+| `packages/time` | `@reactjit/time` | Timers, stopwatch, countdown, date utils |
+| `packages/terminal` | `@reactjit/terminal` | Claude Canvas (PTY + classified terminal) |
 
 ## Features
 
-- **Flexbox layout** — the full set: directions, wrapping, alignment, grow/shrink, gap, padding, margin, `%`/`vw`/`vh` units, absolute positioning
-- **Animation** — timing, spring physics, easing, composite (`parallel`, `sequence`, `stagger`, `loop`), interpolation
+- **Flexbox layout** — directions, wrapping, alignment, grow/shrink, gap, padding, margin, `%`/`vw`/`vh` units, absolute positioning
+- **Auto-sizing** — containers size from content, empty surfaces fall back to 1/4 parent, `flexGrow` fills remaining space
+- **Animation** — timing, spring physics, easing, composite (`parallel`, `sequence`, `stagger`, `loop`), interpolation, presets (`usePulse`, `useShake`, `useEntrance`, `useBounce`, `useTypewriter`)
+- **Generative effects** — `Spirograph`, `Rings`, `FlowParticles`, `Mirror`, `Mandala`, `Cymatics`, `Constellation`, `Mycelium`, `Terrain`, `Automata`, `LSystem`, and more
+- **Post-processing masks** — `CRT`, `VHS`, `Scanlines`, `Dither`, `Ascii`, `Watercolor`, `DataMosh`, `FeedbackLoop`, `FishEye`, `Tile`
 - **Event system** — mouse, touch, drag, keyboard, file drop — bubbling with `stopPropagation()`
 - **Prop diffing** — only changed properties cross the bridge; style objects deep-diffed; updates coalesced per frame
 - **Hot reload** — edit components, see changes without restarting
 - **Error overlay** — source-mapped errors rendered in-app
 - **Visual inspector** — F12 to inspect the layout tree, computed styles, node boundaries
 - **Gradients, shadows, transforms, clipping, border radius** — CSS-level visual capability
-- **Text rendering** — FreeType font rasterization, font weight, alignment, overflow, line height, letter spacing
-- **Binary distribution** — ship as a single self-extracting executable
-- **Declarative capabilities** — register native features (audio, sensors, timers) as React components with auto-generated schemas for AI discovery
+- **Text rendering** — FreeType font rasterization, full Unicode (DejaVu Sans covers arrows, math, dingbats, block elements), font weight, alignment, overflow, line height, letter spacing
+- **Declarative capabilities** — register native features (audio, GPIO, timers, boids, image processing, game servers) as React components with auto-generated schemas for AI discovery
+- **Search** — `SearchBar`, `SearchResults`, `CommandPalette`, `AppSearch`, fuzzy/async search hooks
+- **Binary distribution** — ship as a single self-extracting executable (Linux, macOS Intel/ARM, Windows)
+- **GIF/video capture** — `useGifRecorder`, `useRecorder` for screen recording via ffmpeg
+- **Classifier** — global named primitive registry for semantic UI classification
 
 ## Components
 
@@ -124,6 +150,33 @@ parallel([
 ]).start();
 ```
 
+### Declarative Capabilities
+
+```tsx
+import { Audio, TTS, Timer, GameServer, Window } from '@reactjit/core';
+
+// One-liner components — Lua does the work, React declares intent
+<Audio src="beat.mp3" playing volume={0.8} />
+<TTS text="Hello world" voice="en-us" rate={1.0} />
+<Timer duration={30000} onComplete={() => setDone(true)} />
+<GameServer type="minecraft" port={25565} maxPlayers={20} />
+<Window title="Settings" width={400} height={300} />
+```
+
+### Chemistry
+
+```tsx
+import { PeriodicTable, ReagentTest, BohrModel } from '@reactjit/chemistry';
+import { useElement, useMolecule } from '@reactjit/chemistry';
+
+const element = useElement(26); // Iron
+const water = useMolecule('H2O');
+
+<PeriodicTable onSelect={setElement} />
+<BohrModel element={26} />
+<ReagentTest compound="FeCl3" reagent="NaOH" />
+```
+
 ## TSL — TypeScript-to-Lua
 
 TSL (`.tsl` files) lets you write Lua-side logic in TypeScript syntax. The transpiler converts it 1:1 to idiomatic Lua — no runtime, no class emulation, no bridge overhead. It runs at LuaJIT speed because the output *is* Lua.
@@ -137,7 +190,7 @@ TSL (`.tsl` files) lets you write Lua-side logic in TypeScript syntax. The trans
 Place `.tsl` files in `src/tsl/`. The CLI handles the rest:
 
 ```bash
-reactjit dev    # transpiles src/tsl/*.tsl → lua/tsl/*.lua on startup, re-transpiles on save
+reactjit dev    # transpiles src/tsl/*.tsl -> lua/tsl/*.lua on startup, re-transpiles on save
 reactjit build  # transpiles before bundling; TSL errors block the build like lint errors
 ```
 
@@ -173,14 +226,14 @@ export function bounce(t: number): number {
 Transpiles to clean, readable Lua — no wrappers, no overhead.
 
 Supported features:
-- Variables (`const`, `let`) → `local`
-- Functions, arrow functions → `function`
+- Variables (`const`, `let`) -> `local`
+- Functions, arrow functions -> `function`
 - `if / else if / else`
 - `for`, `while`, `do-while`, numeric `for`, `for-of`, `for-in`
-- Objects → tables, arrays → tables
+- Objects -> tables, arrays -> tables
 - Destructuring, template literals, optional chaining (`?.`), nullish coalescing (`??`)
 - `Math.*`, `string.*`, array method transforms (`map`, `filter`, `forEach`, `find`, `reduce`, `some`, `every`, `flat`, etc.)
-- Imports → `require`, exports → return table
+- Imports -> `require`, exports -> return table
 - Type annotations stripped cleanly
 - Comments preserved
 
@@ -228,30 +281,35 @@ reactjit tsl --test                      # run the test suite
 
 ## Built-in Tooling
 
-- **Visual Inspector (F12)** — hover any element to see its computed bounds, style properties, and position in the tree. Click to lock. Works at runtime in both SDL2 and Love2D.
-- **Error Overlay** — source-mapped stack traces rendered directly in the app window. No terminal hunting.
-- **Console** — in-app eval console for live debugging (`lua/console.lua`)
+- **Visual Inspector (F12)** — hover any element to see its computed bounds, style properties, and position in the tree. Click to lock.
+- **Error Overlay** — source-mapped stack traces rendered directly in the app window
+- **Console** — in-app eval console for live debugging
 - **DevTools** — runtime tree viewer, node property inspector, performance stats
 - **Screenshot Capture** — headless `reactjit screenshot` for CI/visual regression
-- **Static Linter** — catches layout bugs (missing fontSize, hardcoded heights, unicode in Text) at build time as blocking errors
-- **Theme Menu** — runtime theme switcher with built-in presets (dark, light, solarized, nord, dracula, etc.)
-- **Theme-aware mask shaders** — CRT/VHS/Watercolor masks now reuse imaging-grade shader passes (HSV/contrast/posterize/grain/vignette) with theme-token tint defaults
+- **Static Linter** — catches layout bugs (hardcoded heights, mixed text children, invalid styles) at build time as blocking errors
+- **Theme Menu** — runtime theme switcher with built-in presets
 - **On-Screen Keyboard** — soft keyboard for kiosk/touchscreen deployments
 - **Context Menu** — right-click menus with nested submenus
-- **Drag & Drop** — file drop events from OS, in-app drag reordering
-- **Spellcheck** — inline spellcheck for TextInput/TextEditor
+- **Drag & Drop** — file drop events from OS
+- **Spellcheck** — inline spellcheck for text inputs
 - **Text Editor** — full multiline editor with syntax highlighting, tooltips, cursor management
+- **CartridgeInspector** — inspect and debug Love2D cartridge internals
 
 ## Using the CLI
 
 ```bash
 reactjit init <name>              # Create a new project
-reactjit dev [target]             # Watch mode (default: sdl2)
-reactjit build [target]           # Lint + bundle for dev
-reactjit build dist:<target>      # Production build (sdl2, love)
+reactjit dev                      # Watch mode + HMR (Love2D)
+reactjit build                    # Lint + bundle for dev
+reactjit build linux              # Production: self-extracting Linux binary (x64)
+reactjit build macos              # Production: macOS bundle (Intel x64)
+reactjit build macmseries         # Production: macOS bundle (Apple Silicon arm64)
+reactjit build windows            # Production: Windows archive (x64)
+reactjit build dist:love          # Production: self-extracting Linux binary (Love2D + glibc)
 reactjit lint                     # Static layout linter
 reactjit screenshot [--output]    # Headless screenshot capture
 reactjit update                   # Sync runtime files into current project
+reactjit test <spec.ts>           # Run tests inside Love2D process
 ```
 
 ---
@@ -262,26 +320,25 @@ reactjit update                   # Sync runtime files into current project
 
 ```
 React component tree
-   │  react-reconciler
-   ▼
-Instance tree (JS) ──── mutation commands ────► Instance tree (Lua)
-                         QuickJS FFI               │
-                                                   ▼
+   |  react-reconciler
+   v
+Instance tree (JS) ---- mutation commands ----> Instance tree (Lua)
+                         QuickJS FFI               |
+                                                   v
                                             Layout engine
                                             (flexbox, % units, auto-sizing)
-                                                   │
-                                                   ▼
-                                            Target painter
-                                            SDL2: sdl2_painter.lua (OpenGL 2.1)
-                                            Love2D: painter.lua (love.graphics)
+                                                   |
+                                                   v
+                                            Love2D painter
+                                            painter.lua (love.graphics / OpenGL 2.1)
 ```
 
-### Bridge Protocol (Lua ↔ JS)
+### Bridge Protocol (Lua <-> JS)
 
 Values cross the bridge via direct QuickJS C API traversal — no JSON serialization. The bridge validates JSValue tag layout at init and falls back to JSON if needed.
 
-- **Commands** (JS → Lua): Mutation commands coalesced and flushed once per frame
-- **Events** (Lua → JS): Input events collected in a Lua queue, returned as raw array when polled
+- **Commands** (JS -> Lua): Mutation commands coalesced and flushed once per frame
+- **Events** (Lua -> JS): Input events collected in a Lua queue, returned as raw array when polled
 - **Handlers stay in JS** — only `hasHandlers` boolean crosses the bridge; dispatch happens in JS
 
 ### Source of Truth
@@ -293,6 +350,26 @@ Values cross the bridge via direct QuickJS C API traversal — no JSON serializa
 | `packages/renderer/` | `<project>/reactjit/renderer/` |
 
 **Never edit copies.** Always edit `lua/`, `packages/core/`, `packages/renderer/` at the monorepo root. Run `make cli-setup` then `reactjit update` to propagate.
+
+## Layout
+
+### How sizing works
+
+The layout engine has three sizing tiers. They resolve in order — the first one that applies wins:
+
+1. **Explicit dimensions** — `width`, `height`, `flexGrow`, or `flexBasis`. Always takes priority.
+2. **Content auto-sizing** — containers with children auto-size from their content. Text measures from font metrics. Default for any element with children.
+3. **Proportional surface fallback** — empty surface nodes (`Box`, `Image`, `Video`, `Scene3D`) with no explicit dimensions and no children fall back to 1/4 of parent's available space.
+
+### Rules
+
+- Root containers need `width: '100%', height: '100%'`
+- Use `flexGrow: 1` for space-filling elements — not hardcoded pixel heights
+- `ScrollView` needs explicit height (excluded from proportional fallback)
+- Don't mix text and expressions in `<Text>` — use template literals: `` {`Hello ${name}!`} ``
+- No `paddingHorizontal`/`paddingVertical` — use `paddingLeft`/`paddingRight`/`paddingTop`/`paddingBottom`
+- No `flex: 1` shorthand — use `flexGrow: 1`
+- Unicode works fine in `<Text>` — DejaVu Sans has full coverage (arrows, math, dingbats, block elements)
 
 ## Contributing
 
@@ -308,7 +385,7 @@ This is the #1 source of "it builds but doesn't work" bugs. There are two kinds 
 ### The storybook is special
 
 `storybook/lua` is a **symlink** to `../lua`. It reads framework source directly. Do not:
-- Run `reactjit update` from the storybook directory (the CLI blocks this)
+- Run `reactjit update` from the storybook directory
 - Replace the symlink with a real directory
 - Create `storybook/lua/` or `storybook/reactjit/` as real directories
 
@@ -316,44 +393,49 @@ This is the #1 source of "it builds but doesn't work" bugs. There are two kinds 
 
 Always use the CLI (`rjit build`, `rjit dev`, `rjit lint`). Never run raw esbuild commands — the CLI encodes correct flags, enforces lint gates, and handles runtime file placement.
 
-`reactjit update` **merges** framework files into your project's `lua/` — it overwrites framework files but preserves any custom Lua modules you created.
-
-### Layout rules that cause bugs
-
-- Every `<Text>` must have `fontSize` in its `style` prop
-- Use `flexGrow: 1` to fill space, not hardcoded pixel heights
-- No `paddingHorizontal`/`paddingVertical` — use `paddingLeft`/`paddingRight`/`paddingTop`/`paddingBottom`
-- No `flex: 1` shorthand — use `flexGrow: 1`
-- No Unicode symbols in `<Text>` — they won't render in the default font
-- Row Boxes need explicit `width` for `justifyContent` to work
-
 ### AI agents
 
-See `CLAUDE.md` for Claude Code instructions and `AGENTS.md` for sandboxed agents (Codex, etc.). Key rule for sandboxed agents: **do not build** — you don't have the toolchain. Edit source files, run `rjit lint` to verify, and let the maintainer build.
+See `CLAUDE.md` for Claude Code instructions and `AGENTS.md` for sandboxed agents (Codex, etc.).
 
 ### Project Structure
 
 ```
 reactjit/
-  lua/                 Lua runtime (layout, painter, tree, events, bridges, inspector)
+  lua/                 Lua runtime (layout, painter, tree, events, bridge, inspector, capabilities)
   packages/
-    shared/            @reactjit/core — primitives, components, hooks, animation, types
+    core/              @reactjit/core — primitives, components, hooks, animation, effects, masks, types
     renderer/          @reactjit/renderer — reconciler, QuickJS bridge, event dispatch
-    controls/          @reactjit/controls — hardware UI (Knob, Fader, Meter...)
-    theme/             @reactjit/theme — theme system
-    router/            @reactjit/router — navigation
     3d/                @reactjit/3d — 3D scenes (OpenGL)
-    audio/             @reactjit/audio — audio playback/synthesis
-    media/             @reactjit/media — video/media library
-    geo/               @reactjit/geo — maps and geospatial
-    crypto/            @reactjit/crypto — cryptography
-    storage/           @reactjit/storage — local persistence
-    server/            @reactjit/server — HTTP server hooks
-    ai/                @reactjit/ai — AI chat UI + MCP
-    apis/              @reactjit/apis — external API integration
-    rss/               @reactjit/rss — RSS feeds
-    webhooks/          @reactjit/webhooks — webhook listeners
+    ai/                @reactjit/ai — LLM providers, chat hooks, MCP
+    apis/              @reactjit/apis — external API wrappers
+    audio/             @reactjit/audio — modular audio rack, MIDI, sampler, sequencer
+    chemistry/         @reactjit/chemistry — periodic table, molecules, reactions, spectra
+    controls/          @reactjit/controls — hardware UI (Knob, Fader, PianoKeyboard...)
+    convert/           @reactjit/convert — unit/color/encoding conversions
+    crypto/            @reactjit/crypto — hashing, encryption, signing
+    data/              @reactjit/data — spreadsheet formula engine
+    finance/           @reactjit/finance — technical analysis, portfolio, price feeds
+    geo/               @reactjit/geo — Leaflet-style maps
+    geo3d/             @reactjit/geo3d — 3D geographic scenes with terrain
+    icons/             @reactjit/icons — icon registry + SVG-to-pixel icons
+    imaging/           @reactjit/imaging — image processing, composition, draw canvas
+    layouts/           @reactjit/layouts — page/container/nav presets
+    math/              @reactjit/math — vector/matrix, noise, bezier, geometry
+    media/             @reactjit/media — archive reading, media library
+    networking/        @reactjit/networking — game server hosting
+    physics/           @reactjit/physics — 2D physics (Box2D via Love2D)
+    privacy/           @reactjit/privacy — GPG, keyrings, PII redaction
+    router/            @reactjit/router — client-side routing
+    rss/               @reactjit/rss — RSS feed parsing + OPML
+    server/            @reactjit/server — HTTP server, static files
+    storage/           @reactjit/storage — CRUD, schema validation
+    terminal/          @reactjit/terminal — Claude Canvas (PTY + classifier)
+    theme/             @reactjit/theme — theming system
+    time/              @reactjit/time — timers, stopwatch, countdown
+    webhooks/          @reactjit/webhooks — webhook send/receive
+    wireguard/         @reactjit/wireguard — WireGuard + P2P tunnels
   storybook/           Reference implementation — component catalog, playground, docs
-  cli/                 reactjit CLI and runtime
-  examples/            Example projects
+  cli/                 reactjit CLI and runtime distribution
+  examples/            Consumer projects (native-hud, neofetch, wallet, audio-synth, browser, etc.)
+  content/             Documentation source (.txt files, 14 sections, 198 pages)
 ```

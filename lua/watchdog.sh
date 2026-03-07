@@ -204,6 +204,13 @@ while kill -0 "$PID" 2>/dev/null; do
       # Crisis analysis: the crash reporter reads /tmp/reactjit_crisis.lua directly
       # (written by the flight recorder via FFI syscalls). No extraction needed here.
 
+      # Kill any previous crash reporter window before spawning a new one
+      if [ -f "$TMPDIR/reactjit_crashreporter.pid" ]; then
+        PREV_CR=$(cat "$TMPDIR/reactjit_crashreporter.pid" 2>/dev/null)
+        [ -n "$PREV_CR" ] && kill "$PREV_CR" 2>/dev/null
+        rm -f "$TMPDIR/reactjit_crashreporter.pid"
+      fi
+
       # Build comprehensive crash file
       CRASH_FILE="$TMPDIR/reactjit_crash.lua"
       CMDLINE_ESC=$(echo "$CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
@@ -248,6 +255,7 @@ CRASHEOF
       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
       if [ -f "$SCRIPT_DIR/crashreport/main.lua" ]; then
         love "$SCRIPT_DIR/crashreport" &
+        echo $! > "$TMPDIR/reactjit_crashreporter.pid"
       fi
       exit 0
     fi
@@ -319,10 +327,18 @@ CRASHEOF
 
       echo "[WATCHDOG] Crash report written to $CRASH_FILE" >&2
 
+      # Kill any previous crash reporter window before spawning a new one
+      if [ -f "$TMPDIR/reactjit_crashreporter.pid" ]; then
+        PREV_CR=$(cat "$TMPDIR/reactjit_crashreporter.pid" 2>/dev/null)
+        [ -n "$PREV_CR" ] && kill "$PREV_CR" 2>/dev/null
+        rm -f "$TMPDIR/reactjit_crashreporter.pid"
+      fi
+
       # Spawn crash report window
       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
       if [ -f "$SCRIPT_DIR/crashreport/main.lua" ]; then
         love "$SCRIPT_DIR/crashreport" &
+        echo $! > "$TMPDIR/reactjit_crashreporter.pid"
       fi
       exit 0
     fi
@@ -505,8 +521,16 @@ fi
 
 echo "[WATCHDOG] Crash report written to $CRASH_FILE" >&2
 
+# Kill any previous crash reporter window before spawning a new one
+if [ -f "$TMPDIR/reactjit_crashreporter.pid" ]; then
+  PREV_CR=$(cat "$TMPDIR/reactjit_crashreporter.pid" 2>/dev/null)
+  [ -n "$PREV_CR" ] && kill "$PREV_CR" 2>/dev/null
+  rm -f "$TMPDIR/reactjit_crashreporter.pid"
+fi
+
 # Spawn crash report window
 if [ -f "$SCRIPT_DIR/crashreport/main.lua" ]; then
   echo "[WATCHDOG] Spawning crash reporter" >&2
   love "$SCRIPT_DIR/crashreport" &
+  echo $! > "$TMPDIR/reactjit_crashreporter.pid"
 fi

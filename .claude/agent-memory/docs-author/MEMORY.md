@@ -175,12 +175,81 @@
 - faq.txt: 6 examples covering no DOM, no CSS, flexGrow vs heights, capability system for features, browser API alternatives, click debugging checklist
 - Pattern: each FAQ/error uses Example format with narrative explanation inside the code block delimiters
 
+## API Reference Docs (12-api-reference)
+- Written 2026-03-06: index, spotify, tmdb, github, weather, home-assistant, lastfm, plex, trakt, notion, todoist, ynab, google, hue, nasa, coingecko, steam, telegram, polypizza, style-properties, types
+- Total files: 21 (index + 10 original services + 9 new services + style-properties + types)
+- API Reference category, intermediate difficulty, love2d platform
+- Source: `packages/apis/src/` -- base.ts (useAPI, useAPIMutation, bearer, qs), registry.ts (ServiceDefinition, builtinServices), useServiceKey.ts, rateLimit.ts, settings.ts
+- All service hooks follow pattern: first arg is key/token (null to disable), returns APIResult<T> = { data, loading, error, refetch }
+- Polling driven by useLuaInterval (Lua-side timers), not JS setInterval
+- Rate limiting: sliding window per domain via rateLimit.ts, optional `rateLimit: { maxCalls, perSeconds }` in APIOptions
+- Key management: useServiceKey reads from Lua persistent storage via bridge RPC 'settings:getKey'
+- Service registry: builtinServices array, categories: media/dev/ai/smart-home/productivity/finance/social/custom
+- Pre-built display components in components.tsx: SpotifyNowPlaying, TMDBTrending, GitHubProfile, etc.
+- Auth patterns vary: bearer token (Spotify, GitHub, HA, Notion, Todoist, YNAB, Google), API key as query param (TMDB, Weather, Last.fm, NASA, Steam), custom headers (Plex, Jellyfin, Trakt, CoinGecko x-cg-demo-api-key, Poly Pizza x-api-key), URL path (Hue bridge API key, Telegram bot token)
+- Plex wraps all responses in MediaContainer; always access data.MediaContainer.Metadata/Directory
+- TMDB image paths are relative; use tmdbImage(path, size) helper
+- Last.fm artist format varies by endpoint ('#text' in recent, 'name' in top)
+- Trakt has no images; use ids.tmdb with tmdbImage() for poster art
+- Notion search/query endpoints use POST (useAPIMutation internally) but present as reactive hooks
+- useSpotifyNowPlaying polls 5s, useLastFMNowPlaying polls 10s, usePlexSessions/useJellyfinSessions poll 10s, useTraktWatching polls 30s
+- ---- subsection headers used in API/SYNTAX for per-hook documentation
+- index.txt uses EXAMPLES (not just OVERVIEW) to demonstrate useAPI, useServiceKey, useSettingsRegistry, useAPIMutation
+- style-properties.txt: comprehensive Style reference organized by category (Sizing, Flexbox, Spacing, Visual, Shadow, Gradient, Transform, Text, Positioning, Scroll, Vector Shapes, Stroke Dash, Transitions, Keyframe Animations)
+- types.txt: BoxProps (with shorthand props), TextProps, ImageProps, InputProps, ScrollViewProps, FlatListProps, LoveEvent (all event fields by category), LayoutEvent, TooltipConfig, CapabilitySchema
+- YNAB amounts are in milliunits (/1000); ynabAmount() helper documented
+- NASA hooks fall back to DEMO_KEY when apiKey is null
+- CoinGecko free tier needs no auth; optional apiKey for higher rate limits
+- Hue uses local bridge IP + API key in URL path; hueXYToHex converts CIE xy colors
+- Telegram bot token in URL path; updates polling defaults to 5s interval
+- Poly Pizza response shape varies by API version; attribution helpers are defensive
+- Google covers both Calendar and Sheets in one file; mutations use USER_ENTERED
+
+## Storage Docs (13-storage)
+- Written 2026-03-06: index, storage-api
+- Storage category, intermediate difficulty, love2d platform
+- Source: `packages/storage/src/` -- index.ts, hooks.ts, crud.ts, schema.ts, types.ts, query.ts, migrations.ts, format.ts, adapters/
+- z schema builder: string, number, boolean, date, array, object, enum, literal -- all support optional/nullable/default
+- ObjectSchema has: strict(), partial(), pick(), omit(), merge() -- passes through unknown fields by default
+- useCRUD: returns CRUDHandle<T> with create/get/update/delete/list + useQuery/useListQuery (reactive)
+- createCRUD: same without React (no useQuery/useListQuery)
+- StorageProvider provides adapter via context; useCRUD can also take explicit adapter option
+- Adapters: MemoryAdapter (in-memory), Love2DFileAdapter (RPC to Lua), TerminalSQLiteAdapter (node:sqlite), LocalStorageAdapter, IndexedDBAdapter
+- Query engine: where (direct/$eq/$ne/$gt/$gte/$lt/$lte/$in/$contains), orderBy, order, limit, offset
+- Migrations: versioned via _version field, sequential v1->v2->v3, autoMigrate reads+writes back
+- Format utils: parseContent/serializeContent for json/markdown/text
+
+## Domain Package Docs (14-packages)
+- Written 2026-03-06: chemistry, physics, finance, imaging, math, time, convert, 3d, ai, audio, controls, theme, privacy, icons, data, layouts, geo, geo3d, wireguard, media, rss, webhooks, server, networking, terminal-package
+- Total files: 25 (12 original + 13 new domain packages)
+- Packages category, love2d. Validator does NOT check category whitelist -- "Packages" and "Storage" are fine
+- 3d: Scene/Camera/Mesh/DirectionalLight/AmbientLight via g3d, host elements (Scene3D/Camera3D/Mesh3D etc), orbitControls Lua-owned
+- ai: AIProvider+useChat+useCompletion+useModels, 3 tiers (hooks/components/templates), MCP, tool execution loops, SSE streaming
+- audio: rack/module/port model, Lua engine, useRack/useModule/useParam/useMIDI/useClock/useSampler/useRecorder/useSequencer
+- controls: Knob/Fader/Meter/LEDIndicator/PadButton/StepSequencer/TransportBar/PianoKeyboard/XYPad/PitchWheel, decoupled from audio
+- theme: ThemeProvider/useThemeColors/createTheme/registerTheme/ThemeSwitcher, 16+ built-in themes, auto-persist, Lua sync
+- chemistry: ELEMENTS[118], hooks+Lua capabilities, LaTeX notation, PubChem API, registers conversions into @reactjit/convert
+- physics: Box2D wrappers (PhysicsWorld/RigidBody/Collider/Sensor/joints/useForce/useImpulse/useTorque) via Native
+- finance: pure indicators, useTechnicalAnalysis (Lua), usePriceFeed (CoinGecko+Binance WS), TickerTape (Lua-owned)
+- imaging: useImaging (GPU pipeline), useImagingComposer, useImagingSelection, useDrawCanvas, golden testing
+- math: Vec2/Vec3/Vec4/Mat4/Quat static namespaces on tuples, interpolation, Lua-backed noise/FFT/bezier
+- time: useStopwatch/useCountdown (Lua-driven), useOnTime (frame-precise), widgets, date utils
+- convert: fluent convert(val,from).to(target), extensible registry, 11 unit categories + color + encoding + currency
+- privacy: usePrivacy() master hook with 17 namespaces (gpg, keyring, shamir, sanitize, noise, steganography, audit, policy, etc.), all operations async via Lua RPCs
+- icons: Icon component with strokePaths rendering, 1400+ Lucide-compatible names, auto-registration via registerIcons()
+- data: Spreadsheet component (visual + formula bar + cell selection), useSpreadsheet (headless), formula engine with 25+ built-in functions, cell references, circular reference detection
+- layouts: 3 tiers -- page (AppShell, HolyGrail, Centered, Stage, Mosaic, Pinboard, Curtain), container (Stack, Cluster, Sidebar, Shelf, Keystone, Frame, Ladder, Reel), nav (TopNav, SideNav, BottomNav, CommandShell, Drawer, Bookshelf, Crumb)
+- geo: MapContainer + 12 vector layers + 6 hooks (useMap, useMapEvent, useMapEvents, useMapView, useTileCache, useProjection), react-leaflet-compatible API, Lua MapView host element
+- geo3d: GeoScene + TerrainLayer + BuildingLayer + GeoPath3D + GeoMarker3D + Sky, useGeoCamera + useTerrainHeight, extends @reactjit/3d Scene3D
+- wireguard: two tiers -- useWireGuard (kernel wg CLI, needs root) and usePeerTunnel (userspace libsodium, no root), useWireGuardIdentity for keypair management
+- media: archive hooks (useArchive, useArchiveInfo, useArchiveRead, useArchiveSearch) + media library hooks (useMediaLibrary, useMediaStats, useMediaIndex), classifyFile + formatSize utils
+- rss: useRSSFeed (single), useRSSAggregate (multi), fetchFeed (imperative), parseOPML/generateOPML, polling via useLuaInterval, deduplication
+- webhooks: useWebhook (receiver w/ HMAC-SHA256), sendWebhook (imperative w/ retries), useWebhookSender (React hook), exponential backoff, GitHub-style signatures
+- server: useServer (dynamic routes + static), useStaticServer (one-liner), useLibrary (media indexing), Lua HTTP server (zero bridge overhead for static)
+- networking: GameServer component (goldsrc/source/source2/minecraft), useGameServer + usePlayerList + useServerStatus + useServerLogs, A2S query protocol, RCON, staggered polling
+- terminal-package: ClaudeCanvas (Lua capability node), useClaude (permission/question/status state), useSessionChrome (polls claude:classified at 100ms), proxy input pattern (keystrokeTarget/submitTarget)
+
 ## Section Patterns
-- Getting Started: beginner difficulty, category "Getting Started", overview-heavy, step-by-step examples
 - index.txt: METADATA + OVERVIEW + EXAMPLES (section contents listing) + SEE ALSO
-- Tutorial files: METADATA + OVERVIEW + progressive EXAMPLES (Step 1, Step 2...) + CRITICAL RULES + SEE ALSO
-- Old docs referenced web/terminal/CC/nvim/hs/awesome -- all removed in architecture purge
-- Template App.tsx uses `export function App()` (named export), main.tsx uses `import { App }`
-- CLI init generates: package.json, tsconfig.json, src/App.tsx, src/main.tsx, main.lua, copies lua/, lib/, reactjit/
-- `reactjit dev` launches esbuild watch AND Love2D automatically
-- Valid categories from content-format.md: Getting Started, Architecture, CLI, Layout, Components, Hooks, Animation, Routing, Targets, Advanced, Troubleshooting, API Reference
+- Tutorial files: METADATA + OVERVIEW + progressive EXAMPLES + CRITICAL RULES + SEE ALSO
+- Valid categories: Getting Started, Architecture, CLI, Layout, Components, Hooks, Animation, Routing, Targets, Advanced, Troubleshooting, API Reference, Storage, Packages (not enforced by validator)
