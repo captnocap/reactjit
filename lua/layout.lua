@@ -57,6 +57,8 @@ Layout._scaleCap = 1.8
 Layout._scaleFactor = 1   -- computed each layout pass from viewport vs ref
 
 -- Properties whose numeric values represent pixel dimensions and should scale.
+-- ALL dimensional values scale at the same rate so estimation, flex allocation,
+-- padding, and text measurement stay consistent with each other.
 local SCALE_PROPS = {
   width = true, height = true, minWidth = true, minHeight = true,
   maxWidth = true, maxHeight = true, flexBasis = true,
@@ -90,10 +92,15 @@ local function applyCurve(raw, curve, cap)
 end
 
 --- Compute scale factor from viewport dimensions.
+--- Subtracts _scaleInsetW from viewport width so the scale factor
+--- reflects the actual content area, not the full window (e.g. when
+--- a fixed sidebar steals space from the content).
 local function computeScaleFactor(vw, vh)
   local ref = Layout._scaleRef
   if not ref then return 1 end
-  local raw = math.min(vw / ref.w, vh / ref.h)
+  local effectiveW = vw - (Layout._scaleInsetW or 0)
+  if effectiveW < 1 then effectiveW = 1 end
+  local raw = math.min(effectiveW / ref.w, vh / ref.h)
   local s = applyCurve(raw, Layout._scaleCurve, Layout._scaleCap)
   return math.max(1, s)
 end
@@ -114,21 +121,32 @@ local function scaleStyleTable(s, sf)
   return out
 end
 
+--- Sync Measure.textScale with the layout scale factor so text measurement
+--- and painting use the same scaled font sizes as flex allocation.
+local function syncTextScale(sf)
+  if Measure.getTextScale() ~= sf then
+    Measure.setTextScale(sf)
+  end
+end
+
 --- Configure viewport scaling. Called from RPC 'scale:configure'.
 function Layout.configureScale(args)
   if not args then
     Layout._scaleRef = nil
     Layout._scaleFactor = 1
+    syncTextScale(1)
     return
   end
   Layout._scaleRef = { w = args.refW or 800, h = args.refH or 600 }
   Layout._scaleCurve = args.curve or "linear"
   Layout._scaleCap = args.cap or 1.8
+  Layout._scaleInsetW = args.insetW or 0
   -- Recompute immediately if viewport is known
   local vw = Layout._viewportW
   local vh = Layout._viewportH
   if vw and vh then
     Layout._scaleFactor = computeScaleFactor(vw, vh)
+    syncTextScale(Layout._scaleFactor)
   end
 end
 
@@ -540,7 +558,7 @@ function Layout.setMcwDebug(v) _mcwDebug = v end
 local function computeMinContentW(node, depth)
   depth = depth or 0
   local ru = Layout.resolveUnit
-  local s = node.style or {}
+  local s = scaleStyleTable(node.style or {}, Layout._scaleFactor)
   local pad = ru(s.padding, 0) or 0
   local padL = ru(s.paddingLeft, 0) or pad
   local padR = ru(s.paddingRight, 0) or pad
@@ -585,7 +603,7 @@ local function computeMinContentW(node, depth)
   local minW = 0
   local visCount = 0
   for _, child in ipairs(children) do
-    local cs = child.style or {}
+    local cs = scaleStyleTable(child.style or {}, Layout._scaleFactor)
     if cs.display ~= "none" and cs.position ~= "absolute" then
       local childMin = computeMinContentW(child, depth + 1)
       if childIsRow then
@@ -648,7 +666,7 @@ end
 --- @return number  Estimated size in pixels
 local function estimateIntrinsicMain(node, isRow, pw, ph)
   profileCount("intrinsicEstimateInvocations")
-  local s = node.style or {}
+  local s = scaleStyleTable(node.style or {}, Layout._scaleFactor)
   local ru = Layout.resolveUnit
 
   -- 1. Calculate padding along the measurement axis
@@ -761,7 +779,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     -- Main axis: sum children + gaps
     local sum = 0
     for _, child in ipairs(children) do
-      local cs = child.style or {}
+      local cs = scaleStyleTable(child.style or {}, Layout._scaleFactor)
       if cs.display ~= "none" and cs.position ~= "absolute" then
         visibleCount = visibleCount + 1
 
@@ -789,7 +807,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     -- Collect visible children with their main-axis and cross-axis sizes
     local items = {}
     for _, child in ipairs(children) do
-      local cs = child.style or {}
+      local cs = scaleStyleTable(child.style or {}, Layout._scaleFactor)
       if cs.display ~= "none" and cs.position ~= "absolute" then
         local cmar = ru(cs.margin, isRow and pw or ph) or 0
         local marStart = isRow and (ru(cs.marginLeft, pw) or cmar)
@@ -1264,7 +1282,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
 
   local _tChildCollect = profileSectionStart("childCollectMs")
   for i, child in ipairs(allChildren) do
-    local cs = child.style or {}
+    local cs = scaleStyleTable(child.style or {}, Layout._scaleFactor)
 
     -- display:none children are completely skipped from layout
     if cs.display == "none" then
@@ -1811,7 +1829,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
     for _, idx in ipairs(line) do
       local child = allChildren[idx]
       local ci = childInfos[idx]
-      local cs = child.style or {}
+      local cs = scaleStyleTable(child.style or {}, Layout._scaleFactor)
       local cx, cy, cw_final, ch_final
 
       -- Determine effective alignment for this child (alignSelf or parent alignItems)
@@ -2172,7 +2190,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   local _tAbsoluteLayout = profileSectionStart("absoluteLayoutMs")
   for _, idx in ipairs(absoluteIndices) do
     local child = allChildren[idx]
-    local cs = child.style or {}
+    local cs = scaleStyleTable(child.style or {}, Layout._scaleFactor)
 
     -- Resolve explicit dimensions
     local cw = ru(cs.width, w)
@@ -2364,6 +2382,7 @@ function Layout.layout(node, x, y, w, h)
 
   -- Recompute viewport-proportional scale factor for this pass.
   Layout._scaleFactor = computeScaleFactor(w, h)
+  syncTextScale(Layout._scaleFactor)
 
   -- Root auto-fill: if the root has no explicit dimensions, tell
   -- layoutNode to use the viewport size via the same signals that the

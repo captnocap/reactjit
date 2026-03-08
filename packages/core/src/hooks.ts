@@ -26,6 +26,7 @@ export function useWindowDimensions(): { width: number; height: number } {
 
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
+      if (!payload || !payload.width || !payload.height) return;
       _lastViewport = payload;
       setDims(payload);
     });

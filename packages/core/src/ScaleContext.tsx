@@ -40,6 +40,10 @@ export interface ScaleProviderProps {
   curve?: ScaleCurve;
   /** Hard cap value for 'capped' curve. Default: 1.8. */
   cap?: number;
+  /** Pixels to subtract from viewport width before computing scale factor.
+   *  Use when the ScaleProvider content doesn't span the full viewport
+   *  (e.g. a fixed sidebar steals space). Default: 0. */
+  insetWidth?: number;
   children: React.ReactNode;
 }
 
@@ -57,11 +61,11 @@ function applyCurve(raw: number, curve: ScaleCurve, cap: number): number {
   }
 }
 
-export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, children }: ScaleProviderProps) {
+export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, insetWidth = 0, children }: ScaleProviderProps) {
   const bridge = useBridge();
   const { width, height } = useWindowDimensions();
 
-  // Send scale config to Lua on mount and when curve/reference/cap changes.
+  // Send scale config to Lua on mount and when curve/reference/cap/inset changes.
   // Lua computes the actual scale factor per frame in layout.lua.
   useEffect(() => {
     bridge.rpc('scale:configure', {
@@ -69,18 +73,20 @@ export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, children
       refH: reference.height,
       curve,
       cap,
+      insetW: insetWidth,
     });
-  }, [bridge, reference.width, reference.height, curve, cap]);
+  }, [bridge, reference.width, reference.height, curve, cap, insetWidth]);
 
   // Compute scale locally for useScale() consumers (CodeBlock, Slider, Math).
   // This does NOT trigger re-renders in primitives — only components that
   // explicitly call useScale() will re-render on resize.
   const value = useMemo<ScaleContextValue>(() => {
     if (width <= 0 || height <= 0) return { scale: 1, curve, rawScale: 1 };
-    const raw = Math.min(width / reference.width, height / reference.height);
+    const effectiveW = Math.max(1, width - insetWidth);
+    const raw = Math.min(effectiveW / reference.width, height / reference.height);
     const s = applyCurve(raw, curve, cap);
     return { scale: Math.max(1, s), curve, rawScale: Math.max(1, raw) };
-  }, [width, height, reference.width, reference.height, curve, cap]);
+  }, [width, height, reference.width, reference.height, curve, cap, insetWidth]);
 
   return (
     <ScaleContext.Provider value={value}>

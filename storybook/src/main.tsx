@@ -8,7 +8,7 @@
  * Navigation: click story names, or use Up/Down + Enter keys.
  */
 
-import React, { useState, useCallback, useRef, type ErrorInfo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, type ErrorInfo } from 'react';
 import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
@@ -205,7 +205,7 @@ function StorybookPanel() {
   const initialIdx = (globalThis as any).__devState?.activeIdx ?? 0;
   const [activeIdx, setActiveIdx] = useState(initialIdx);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [scaleCurve, setScaleCurve] = useState<ScaleCurve>('linear');
+  const [scaleCurve, setScaleCurve] = useState<ScaleCurve>('sqrt');
   currentActiveIdx = activeIdx; // sync for __getDevState
   const groups = groupBySection(stories);
   const active = stories[activeIdx];
@@ -213,6 +213,7 @@ function StorybookPanel() {
   const c = useThemeColors();
   const bp = useBreakpoint();
   const compact = bp === 'sm';
+  const sidebarW = bp === 'md' ? 140 : 180;
 
   const handleKeyDown = useCallback((e: any) => {
     const key = e.key || e.scancode;
@@ -223,8 +224,13 @@ function StorybookPanel() {
     }
   }, []);
 
-  // ── Ghost node diagnostic crawl (Ctrl+Shift+D) ──
+  // ── Record route changes in the event trail for crash diagnostics ──
   const bridge = useBridge();
+  useEffect(() => {
+    if (active) bridge.rpc('trail:navigate', { route: active.title });
+  }, [activeIdx]);
+
+  // ── Ghost node diagnostic crawl (Ctrl+Shift+D) ──
   const crawlingRef = useRef(false);
 
   useHotkey('ctrl+shift+d', useCallback(async () => {
@@ -443,7 +449,7 @@ function StorybookPanel() {
         )
       ) : (
         <Box style={{
-          width: 180,
+          width: sidebarW,
           backgroundColor: c.bgAlt,
           borderWidth: 1,
           borderColor: c.border,
@@ -456,7 +462,7 @@ function StorybookPanel() {
 
       {/* Content */}
       <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'scroll' }}>
-        <ScaleProvider reference={{ width: 800, height: 600 }} curve={scaleCurve}>
+        <ScaleProvider reference={{ width: 800, height: 600 }} curve={scaleCurve} insetWidth={compact ? 0 : sidebarW}>
           {StoryComp && <StoryComp key={active.id} />}
         </ScaleProvider>
       </Box>
