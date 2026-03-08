@@ -270,6 +270,7 @@ local SURFACE_TYPES = {
   Emulator = true,
   Render   = true,
   Chart2D  = true,
+  PresentationEditor = true,
 }
 
 --- Check if a node is a visual surface (eligible for proportional fallback).
@@ -1274,7 +1275,11 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- ====================================================================
   -- Scene3D and Emulator nodes are opaque leaf boxes in the 2D layout.
   -- Their children use non-flex coordinates, so we skip them entirely.
-  local isOpaqueLeaf = (node.type == "Scene3D" or node.type == "Emulator")
+  local isOpaqueLeaf = (
+    node.type == "Scene3D"
+    or node.type == "Emulator"
+    or node.type == "PresentationEditor"
+  )
   local allChildren = isOpaqueLeaf and {} or (node.children or {})
   local visibleIndices = {}  -- list of indices into allChildren for visible kids
   local absoluteIndices = {} -- list of indices for position:absolute children

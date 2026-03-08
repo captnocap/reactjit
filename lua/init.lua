@@ -801,6 +801,9 @@ function ReactJIT.init(config)
     M.textinput = require("lua.textinput")
     M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
 
+    M.presentationeditor = require("lua.presentation_editor")
+    M.presentationeditor.init({ measure = M.measure })
+
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
 
@@ -885,6 +888,9 @@ function ReactJIT.init(config)
 
     M.textinput = require("lua.textinput")
     M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+
+    M.presentationeditor = require("lua.presentation_editor")
+    M.presentationeditor.init({ measure = M.measure })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -971,6 +977,9 @@ function ReactJIT.init(config)
 
     M.textinput = require("lua.textinput")
     M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+
+    M.presentationeditor = require("lua.presentation_editor")
+    M.presentationeditor.init({ measure = M.measure })
 
     M.codeblock = require("lua.codeblock")
     M.codeblock.init({ measure = M.measure })
@@ -3461,6 +3470,18 @@ function ReactJIT.update(dt)
     end
   end
 
+  if M.presentationeditor then
+    local editorEvents = M.presentationeditor.drainEvents()
+    if editorEvents then
+      for _, evt in ipairs(editorEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = evt.payload,
+        })
+      end
+    end
+  end
+
   -- 11. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
   if M.dragdrop then
     M.dragdrop.poll()
@@ -3523,6 +3544,10 @@ function ReactJIT.update(dt)
 
   -- On-screen keyboard update (stick repeat timer)
   if M.osk then M.osk.update(dt) end
+
+  if M.presentationeditor and M.tree then
+    M.presentationeditor.update(dt, M.tree.getNodes())
+  end
 
   -- Update focusStyle overlays when focus changes
   do
@@ -4263,6 +4288,13 @@ function ReactJIT.mousepressed(x, y, button)
       if M.mapmod then
         M.mapmod.handleMousePressed(hit, x, y, button)
       end
+    elseif hit.type == "PresentationEditor" then
+      if M.presentationeditor and M.presentationeditor.handleMousePressed(hit, x, y, button) then
+        if hit.props and hit.props.focusable then
+          focus.set(hit)
+        end
+        return
+      end
     elseif M.capabilities and M.capabilities.isHittable(hit.type) then
       -- Clicked a hittable capability (e.g. ClaudeCanvas): set focus
       if not focus.isFocused(hit) then
@@ -4362,6 +4394,17 @@ function ReactJIT.mousereleased(x, y, button)
       for _, node in pairs(nodes) do
         if node.type == "Map2D" then
           M.mapmod.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
+  end
+
+  if M.presentationeditor and M.tree then
+    local nodes = M.tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "PresentationEditor" and M.presentationeditor.handleMouseReleased(node, x, y, button) then
+          return
         end
       end
     end
@@ -4494,6 +4537,17 @@ function ReactJIT.mousemoved(x, y)
       for _, node in pairs(nodes) do
         if node.type == "Map2D" then
           M.mapmod.handleMouseMoved(node, x, y)
+        end
+      end
+    end
+  end
+
+  if M.presentationeditor and M.tree then
+    local nodes = M.tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "PresentationEditor" and M.presentationeditor.handleMouseMoved(node, x, y) then
+          return
         end
       end
     end
@@ -5063,6 +5117,12 @@ function ReactJIT.wheelmoved(x, y)
     return  -- no bridge traffic (map emits viewchange events)
   end
 
+  if hit.type == "PresentationEditor" and M.presentationeditor then
+    if M.presentationeditor.handleWheel(hit, x, y) then
+      return
+    end
+  end
+
   -- Hittable capabilities handle their own scroll (e.g. ClaudeCanvas)
   if M.capabilities and M.capabilities.isHittable(hit.type) then
     local capDef = M.capabilities.getDefinition(hit.type)
@@ -5620,6 +5680,8 @@ function ReactJIT.reload()
       M.texteditor.init({ measure = M.measure, theme = M.currentTheme })
       M.textinput  = require("lua.textinput")
       M.textinput.init({ measure = M.measure, theme = M.currentTheme, spellcheck = M.spellcheck })
+      M.presentationeditor = require("lua.presentation_editor")
+      M.presentationeditor.init({ measure = M.measure })
       M.codeblock  = require("lua.codeblock")
       M.codeblock.init({ measure = M.measure })
       M.widgets    = require("lua.widgets")

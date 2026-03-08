@@ -23,6 +23,7 @@ export {
   type CreatePresentationVideoNodeOptions,
   type PresentationFactoryOptions,
 } from './document.ts';
+export { PresentationEditor } from './PresentationEditor.tsx';
 export {
   applyPresentationPatch,
   applyPresentationPatches,
@@ -44,6 +45,10 @@ export type {
   PresentationCamera,
   PresentationComponentNode,
   PresentationDocument,
+  PresentationEditorCameraEvent,
+  PresentationEditorPatchEvent,
+  PresentationEditorProps,
+  PresentationEditorSelectionEvent,
   PresentationEasing,
   PresentationFragment,
   PresentationFrame,

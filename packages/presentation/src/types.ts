@@ -1,4 +1,5 @@
 import type { Color, Style } from '@reactjit/core';
+import type { PresentationPatch } from './patches';
 
 export type PresentationAspectRatio = '16:9' | '4:3' | 'custom';
 export type PresentationAuthoringMode = 'slide' | 'world';
@@ -176,4 +177,40 @@ export interface PresentationDocument {
 export interface PresentationSelection {
   slideId: string;
   nodeId: string;
+}
+
+export interface PresentationEditorPatchEvent {
+  patch: PresentationPatch;
+  transient?: boolean;
+  targetId?: number;
+}
+
+export interface PresentationEditorSelectionEvent {
+  selection: PresentationSelection[];
+  targetId?: number;
+}
+
+export interface PresentationEditorCameraEvent {
+  slideId: string;
+  camera: PresentationCamera;
+  transient?: boolean;
+  targetId?: number;
+}
+
+export interface PresentationEditorProps {
+  document: PresentationDocument;
+  slideId?: string;
+  style?: Style;
+  w?: number | string;
+  h?: number | string;
+  showGrid?: boolean;
+  showFrame?: boolean;
+  allowPan?: boolean;
+  allowZoom?: boolean;
+  minZoom?: number;
+  maxZoom?: number;
+  onPatch?: (event: PresentationEditorPatchEvent) => void;
+  onSelectionChange?: (event: PresentationEditorSelectionEvent) => void;
+  onCameraChange?: (event: PresentationEditorCameraEvent) => void;
+  key?: string | number;
 }
