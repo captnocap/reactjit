@@ -261,6 +261,24 @@ export function createPresentationSlide(
   }, factory);
 }
 
+function duplicatePresentationNode(
+  node: PresentationNode,
+  factory: Required<PresentationFactoryOptions>,
+): PresentationNode {
+  if (node.kind === 'group') {
+    return normalizeNode({
+      ...node,
+      id: factory.idFactory('group'),
+      children: node.children.map((child) => duplicatePresentationNode(child, factory)),
+    }, factory);
+  }
+
+  return normalizeNode({
+    ...node,
+    id: factory.idFactory(node.kind),
+  }, factory);
+}
+
 function normalizeSlide(
   slide: CreatePresentationSlideOptions | PresentationSlide,
   factory: Required<PresentationFactoryOptions>,
@@ -274,6 +292,18 @@ function normalizeSlide(
     camera: normalizeCamera(slide.camera),
     nodes: (slide.nodes ?? []).map((node) => normalizeNode(node, factory)),
   };
+}
+
+export function duplicatePresentationSlide(
+  slide: PresentationSlide,
+  factoryOptions?: PresentationFactoryOptions,
+): PresentationSlide {
+  const factory = resolveFactory(factoryOptions);
+  return normalizeSlide({
+    ...slide,
+    id: factory.idFactory('slide'),
+    nodes: slide.nodes.map((node) => duplicatePresentationNode(node, factory)),
+  }, factory);
 }
 
 export function createPresentationDocument(

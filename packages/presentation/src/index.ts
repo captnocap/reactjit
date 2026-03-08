@@ -3,6 +3,7 @@ export {
   createPresentationDocument,
   createPresentationGroupNode,
   createPresentationImageNode,
+  duplicatePresentationSlide,
   createPresentationShapeNode,
   createPresentationSlide,
   createPresentationTextNode,
@@ -24,6 +25,7 @@ export {
   type PresentationFactoryOptions,
 } from './document.ts';
 export { PresentationEditor } from './PresentationEditor.tsx';
+export { PresentationSlideStrip } from './PresentationSlideStrip.tsx';
 export {
   applyPresentationPatch,
   applyPresentationPatches,
@@ -61,6 +63,7 @@ export type {
   PresentationShapeKind,
   PresentationShapeNode,
   PresentationSlide,
+  PresentationSlideStripProps,
   PresentationStageSize,
   PresentationTextNode,
   PresentationTheme,

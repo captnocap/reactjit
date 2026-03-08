@@ -6,6 +6,7 @@ import {
   createPresentationGroupNode,
   createPresentationSlide,
   createPresentationTextNode,
+  duplicatePresentationSlide,
   findPresentationNode,
   getSlideStepCount,
 } from '../src/document.ts';
@@ -120,5 +121,33 @@ describe('presentation document foundations', () => {
 
     assert.equal(doc.slides.length, 1);
     assert.notEqual(doc.slides[0].id, slideId);
+  });
+
+  it('duplicates a slide with fresh ids for the slide and nested nodes', () => {
+    const factory = createFactory();
+    const source = createPresentationSlide({
+      title: 'Overview',
+      nodes: [
+        createPresentationGroupNode({
+          frame: { x: 40, y: 40, width: 400, height: 200 },
+          children: [
+            createPresentationTextNode({
+              text: 'Nested copy target',
+              frame: { x: 20, y: 20, width: 240, height: 64 },
+            }, factory),
+          ],
+        }, factory),
+      ],
+    }, factory);
+
+    const duplicated = duplicatePresentationSlide(source, factory);
+
+    assert.notEqual(duplicated.id, source.id);
+    assert.equal(duplicated.title, source.title);
+    assert.equal(duplicated.nodes.length, source.nodes.length);
+    assert.notEqual(duplicated.nodes[0].id, source.nodes[0].id);
+    assert.equal(duplicated.nodes[0].kind, 'group');
+    assert.notEqual(duplicated.nodes[0].children[0].id, source.nodes[0].children[0].id);
+    assert.equal(duplicated.nodes[0].children[0].text, 'Nested copy target');
   });
 });
