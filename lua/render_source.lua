@@ -306,6 +306,12 @@ local function parseSource(source)
     return { type = "display", resolution = displayRes }
   end
 
+  -- Direct VNC connection (vnc:host:port)
+  local vncHost, vncPort = source:match("^vnc:([%w%.%-]+):(%d+)$")
+  if vncHost and vncPort then
+    return { type = "vnc_direct", host = vncHost, port = tonumber(vncPort) }
+  end
+
   -- Explicit VM prefix
   local vmPath = source:match("^vm:(.+)$")
   if vmPath then
@@ -609,8 +615,9 @@ sock:send(string.char(0, 0, 0, 0) -- type=0, padding x3
     0, 0, 0 -- padding
   ))
 
--- SetEncodings: RAW only (encoding type 0)
-sock:send(string.char(2, 0) .. u16be(1) .. u32be(0))
+-- SetEncodings: RAW + DesktopSize pseudo-encoding (-223 = 0xFFFFFF21)
+-- DesktopSize notifies us when the VM switches display resolution (e.g. GRUB→SDL2)
+sock:send(string.char(2, 0) .. u16be(2) .. u32be(0) .. u32be(0xFFFFFF21))
 
 statusChannel:push("ready")
 
@@ -671,19 +678,35 @@ while true do
       local ry = readU16(rectHdr, 3)
       local rw = readU16(rectHdr, 5)
       local rh = readU16(rectHdr, 7)
-      -- encoding = readU32(rectHdr, 9), should be 0 (RAW)
+      local encoding = readU32(rectHdr, 9)
 
-      local pixSize = rw * rh * 4
-      if pixSize > 0 then
-        local pixData = recvExact(sock, pixSize)
-        if not pixData then goto continue end
+      -- DesktopSize pseudo-encoding (-223 = 0xFFFFFF21): resolution changed
+      if encoding == 0xFFFFFF21 then
+        fbWidth = rw
+        fbHeight = rh
+        fullSize = fbWidth * fbHeight * 4
+        framebuf = string.rep("\0", fullSize)
+        -- Push new dimensions so main thread can resize ImageData
+        infoChannel:push(fbWidth)
+        infoChannel:push(fbHeight)
+      elseif encoding == 0 then
+        -- RAW encoding
+        local pixSize = rw * rh * 4
+        if pixSize > 0 then
+          local pixData = recvExact(sock, pixSize)
+          if not pixData then goto continue end
 
-        -- If single full-screen rect, use directly
-        if rx == 0 and ry == 0 and rw == fbWidth and rh == fbHeight then
-          framebuf = pixData
-          gotFullFrame = true
+          -- If single full-screen rect, use directly
+          if rx == 0 and ry == 0 and rw == fbWidth and rh == fbHeight then
+            framebuf = pixData
+            gotFullFrame = true
+          end
+          -- Partial rects: would need compositing (skip for V1, most VMs send full frames)
         end
-        -- Partial rects: would need compositing (skip for V1, most VMs send full frames)
+      else
+        -- Unknown encoding, skip its pixel data if any
+        local pixSize = rw * rh * 4
+        if pixSize > 0 then recvExact(sock, pixSize) end
       end
     end
 
@@ -865,7 +888,7 @@ local function createVMFeed(nodeId, parsed, props)
   end
 
   local qemuCmd = string.format(
-    "qemu-system-x86_64 %s -m %d -smp %d %s -display none -vnc :%d -usb -device usb-tablet",
+    "qemu-system-x86_64 %s -m %d -smp %d %s -vga none -device virtio-vga-gl -display egl-headless -vnc :%d -usb -device usb-tablet",
     kvmFlag, memory, cpus, driveFlags, vncDisplay
   )
 
@@ -935,6 +958,65 @@ local function createVMFeed(nodeId, parsed, props)
 end
 
 -- ============================================================================
+-- Direct VNC connection (no QEMU spawn)
+-- ============================================================================
+
+local function createVNCDirectFeed(nodeId, parsed, props)
+  local resolution = props.resolution or "1280x720"
+  local w, h = parseResolution(resolution)
+  local fps = props.fps or 30
+  local host = parsed.host
+  local port = parsed.port
+
+  Log.log("render", "Connecting to VNC at %s:%d", host, port)
+
+  -- Start VNC reader thread
+  local feedId = tostring(nodeId):gsub("[^%w]", "_")
+  local controlChannel = love.thread.getChannel("render_control_" .. feedId)
+  local frameChannel = love.thread.getChannel("render_frames_" .. feedId)
+  local statusChannel = love.thread.getChannel("render_status_" .. feedId)
+  local infoChannel = love.thread.getChannel("render_info_" .. feedId)
+
+  controlChannel:clear()
+  frameChannel:clear()
+  statusChannel:clear()
+  infoChannel:clear()
+
+  local thread = love.thread.newThread(VNC_READER_THREAD_CODE)
+  controlChannel:push(feedId)
+  controlChannel:push(host)
+  controlChannel:push(port)
+  controlChannel:push(fps)
+  thread:start("render_control_" .. feedId)
+
+  local imageData = love.image.newImageData(w, h)
+
+  local feed = {
+    nodeId = nodeId,
+    parsed = parsed,
+    backend = "vnc",
+    width = w,
+    height = h,
+    imageData = imageData,
+    image = nil,
+    thread = thread,
+    controlChannel = controlChannel,
+    frameChannel = frameChannel,
+    statusChannel = statusChannel,
+    infoChannel = infoChannel,
+    status = "connecting",
+    frameCount = 0,
+    interactive = props.interactive ~= false,
+    source = props.source,
+    vncPort = port,
+    vncDisplay = port - 5900,
+  }
+
+  feeds[nodeId] = feed
+  return feed
+end
+
+-- ============================================================================
 -- Feed lifecycle
 -- ============================================================================
 
@@ -948,6 +1030,11 @@ function RenderSource.create(nodeId, props)
   -- Virtual display
   if parsed.type == "display" then
     return createDisplayFeed(nodeId, props)
+  end
+
+  -- Direct VNC
+  if parsed.type == "vnc_direct" then
+    return createVNCDirectFeed(nodeId, parsed, props)
   end
 
   -- VM
@@ -1116,7 +1203,6 @@ end
 
 function RenderSource.syncWithTree(nodes)
   local seen = {}
-
   for id, node in pairs(nodes) do
     if node.type == "Render" then
       seen[id] = true
@@ -1202,20 +1288,21 @@ function RenderSource.updateAll()
         status = feed.statusChannel:pop()
       end
 
-      -- Check for dimension info from VNC handshake (once)
-      if not feed.vncDimsReceived and feed.infoChannel then
+      -- Check for dimension info from VNC (initial handshake + DesktopSize resize events)
+      if feed.infoChannel then
         local vncW = feed.infoChannel:pop()
         local vncH = feed.infoChannel:pop()
         if vncW and vncH then
-          feed.vncDimsReceived = true
           -- If VNC framebuffer size differs from our ImageData, recreate
           if vncW ~= feed.width or vncH ~= feed.height then
-            Log.log("render", "VNC framebuffer: %dx%d (was %dx%d)", vncW, vncH, feed.width, feed.height)
+            Log.log("render", "VNC framebuffer resize: %dx%d (was %dx%d)", vncW, vncH, feed.width, feed.height)
             feed.width = vncW
             feed.height = vncH
             if feed.imageData then feed.imageData:release() end
             if feed.image then feed.image:release(); feed.image = nil end
             feed.imageData = love.image.newImageData(vncW, vncH)
+            -- Clear stale frames with old dimensions
+            feed.frameChannel:clear()
           end
         end
       end
@@ -1225,6 +1312,12 @@ function RenderSource.updateAll()
       if frameData and #frameData == feed.width * feed.height * 4 then
         local ptr = ffi.cast("uint8_t*", feed.imageData:getFFIPointer())
         ffi.copy(ptr, frameData, #frameData)
+
+        -- VNC sends depth=24 (RGB + padding byte=0). Love2D needs alpha=255.
+        local npx = feed.width * feed.height
+        for i = 0, npx - 1 do
+          ptr[i * 4 + 3] = 255
+        end
 
         if feed.image then
           feed.image:replacePixels(feed.imageData)

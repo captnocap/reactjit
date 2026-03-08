@@ -25,6 +25,10 @@ local Measure = require("lua.measure")
 local Painter = require("lua.painter")
 local Events  = require("lua.events")
 
+-- Optional: render_source for <Render> nodes (VNC feeds etc.)
+local RenderSource
+pcall(function() RenderSource = require("lua.render_source") end)
+
 local conn         -- TCP connection to parent
 local port         -- Parent's TCP port
 local windowW, windowH
@@ -34,6 +38,9 @@ local shuttingDown = false  -- true when parent sent "quit" (clean exit, no onCl
 
 -- Notification mode state (enabled by REACTJIT_WINDOW_NOTIFICATION=1)
 local isNotification = os.getenv("REACTJIT_WINDOW_NOTIFICATION") == "1"
+
+-- Forward declarations
+local findInteractiveRender
 local notifDuration  = tonumber(os.getenv("REACTJIT_WINDOW_NOTIF_DURATION")) or 5
 local notifAccentHex = os.getenv("REACTJIT_WINDOW_NOTIF_ACCENT") or "4C9EFF"
 local notifRefocusWin = os.getenv("REACTJIT_WINDOW_NOTIF_REFOCUS") or ""
@@ -118,10 +125,10 @@ function love.load()
     refocusPreviousWindow()
   end
 
-  -- Initialize modules (child has no images/videos/animations)
+  -- Initialize modules (child has no images/videos/animations, but may have Render nodes)
   Tree.init()
   Layout.init({ measure = Measure })
-  Painter.init({ measure = Measure })
+  Painter.init({ measure = Measure, render_source = RenderSource })
 
   if not port then
     io.write("[child_window] ERROR: REACTJIT_IPC_PORT not set\n"); io.flush()
@@ -228,6 +235,12 @@ function love.update(dt)
     end
     treeDirty = false
   end
+
+  -- Sync and update render sources (VNC feeds etc.) if available
+  if RenderSource then
+    RenderSource.syncWithTree(Tree.getNodes())
+    RenderSource.updateAll()
+  end
 end
 
 -- ============================================================================
@@ -251,12 +264,45 @@ end
 -- Input events — hit test locally, send to parent
 -- ============================================================================
 
+-- Helper: get local coords within a Render node (for mouse forwarding to VNC)
+local function renderLocalCoords(nodeId, x, y)
+  local nodes = Tree.getNodes()
+  local node = nodes[nodeId]
+  if not node then return x, y end
+  -- node._computed has layout results: x, y, w, h
+  local c = node._computed or node
+  local nx, ny = c.x or 0, c.y or 0
+  local nw, nh = c.w or 1, c.h or 1
+  -- Get the actual source dimensions
+  local srcW, srcH = RenderSource.getDimensions(nodeId)
+  if not srcW then return x - nx, y - ny end
+  -- Scale from node pixel space to source resolution (objectFit=contain)
+  local scaleX = srcW / nw
+  local scaleY = srcH / nh
+  local scale = math.max(scaleX, scaleY)  -- contain uses max to find the limiting axis
+  local drawW = srcW / scale
+  local drawH = srcH / scale
+  local ox = (nw - drawW) / 2
+  local oy = (nh - drawH) / 2
+  local lx = (x - nx - ox) * scale
+  local ly = (y - ny - oy) * scale
+  return math.max(0, math.min(srcW, lx)), math.max(0, math.min(srcH, ly))
+end
+
 function love.mousepressed(x, y, button)
   -- Notification mode: click anywhere to dismiss
   if isNotification then
     shuttingDown = true
     sendWindowEvent("onClose", {})
     love.event.quit()
+    return
+  end
+
+  -- Forward to interactive Render (VNC) if present
+  local renderId = findInteractiveRender()
+  if renderId then
+    local lx, ly = renderLocalCoords(renderId, x, y)
+    RenderSource.forwardMouse(renderId, "mousepressed", lx, ly, button)
     return
   end
 
@@ -278,6 +324,13 @@ function love.mousepressed(x, y, button)
 end
 
 function love.mousereleased(x, y, button)
+  local renderId = findInteractiveRender()
+  if renderId then
+    local lx, ly = renderLocalCoords(renderId, x, y)
+    RenderSource.forwardMouse(renderId, "mousereleased", lx, ly, button)
+    return
+  end
+
   local root = Tree.getTree()
   if not root then return end
   local hit = Events.hitTest(root, x, y)
@@ -295,7 +348,12 @@ function love.mousereleased(x, y, button)
 end
 
 function love.mousemoved(x, y, dx, dy)
-  -- Hover events could be forwarded here if needed
+  -- Forward mouse movement to interactive Render (VNC) if present
+  local renderId = findInteractiveRender()
+  if renderId then
+    local lx, ly = renderLocalCoords(renderId, x, y)
+    RenderSource.forwardMouse(renderId, "mousemoved", lx, ly, 0)
+  end
 end
 
 function love.wheelmoved(wx, wy)
@@ -332,7 +390,24 @@ function love.wheelmoved(wx, wy)
   end
 end
 
+-- Helper: find the first interactive Render node for input forwarding
+findInteractiveRender = function()
+  if not RenderSource then return nil end
+  for id, node in pairs(Tree.getNodes()) do
+    if node.type == "Render" and RenderSource.isInteractive(id) then
+      return id, node
+    end
+  end
+  return nil
+end
+
 function love.keypressed(key, scancode, isrepeat)
+  -- Forward to interactive Render (VNC) if present
+  local renderId = findInteractiveRender()
+  if renderId then
+    RenderSource.forwardKey(renderId, "keypressed", key)
+    return
+  end
   sendEvent({
     type     = "keydown",
     key      = key,
@@ -342,6 +417,11 @@ function love.keypressed(key, scancode, isrepeat)
 end
 
 function love.keyreleased(key, scancode)
+  local renderId = findInteractiveRender()
+  if renderId then
+    RenderSource.forwardKey(renderId, "keyreleased", key)
+    return
+  end
   sendEvent({
     type     = "keyup",
     key      = key,
@@ -372,6 +452,10 @@ function love.focus(hasFocus)
 end
 
 function love.quit()
+  -- Clean up render sources (VNC feeds) before exit
+  if RenderSource then
+    RenderSource.syncWithTree({})  -- empty tree destroys all feeds
+  end
   if shuttingDown then
     -- Parent told us to quit (React already unmounted the <Window>)
     IPC.cleanup(conn)

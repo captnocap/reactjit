@@ -180,18 +180,20 @@ function WindowManager.getAll()
 end
 
 --- Update a window's dimensions after resize. Recalculates scale factors.
-function WindowManager.handleResize(entry)
+--- Optional explicitW/explicitH bypass love.graphics.getWidth() which may
+--- return stale values immediately after love.window.updateMode().
+function WindowManager.handleResize(entry, explicitW, explicitH)
   if entry.isMain then
-    entry.width  = love.graphics.getWidth()
-    entry.height = love.graphics.getHeight()
+    entry.width  = explicitW or love.graphics.getWidth()
+    entry.height = explicitH or love.graphics.getHeight()
     entry.scaleX = love.window.getDPIScale()
     entry.scaleY = love.window.getDPIScale()
   elseif entry.loveId then
     local ww, wh, pw, ph = love.window.getSecondarySize(entry.loveId)
-    entry.width  = pw
-    entry.height = ph
-    local sx = (ww > 0) and (pw / ww) or 1
-    local sy = (wh > 0) and (ph / wh) or 1
+    entry.width  = explicitW or pw
+    entry.height = explicitH or ph
+    local sx = (ww > 0) and ((explicitW or pw) / ww) or 1
+    local sy = (wh > 0) and ((explicitH or ph) / wh) or 1
     entry.scaleX = sx
     entry.scaleY = sy
   end
@@ -216,7 +218,8 @@ function WindowManager.setSize(entry, w, h)
     love.window.updateMode(w, h, { resizable = true })
   end
   -- Love2D secondary windows: no resize API yet
-  WindowManager.handleResize(entry)
+  -- Pass explicit dims: love.graphics.getWidth() may be stale after updateMode
+  WindowManager.handleResize(entry, w, h)
 end
 
 --- Set a window's position.
