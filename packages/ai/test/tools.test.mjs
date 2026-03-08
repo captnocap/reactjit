@@ -95,6 +95,29 @@ describe('AI tool execution contract', () => {
       },
     ]);
   });
+
+  it('normalizes non-Error thrown values into strings', async () => {
+    const results = await executeToolCalls(
+      [{ id: 'call_1', name: 'explode', arguments: '{}' }],
+      [{
+        name: 'explode',
+        description: 'explode',
+        parameters: {},
+        async execute() {
+          throw 'plain boom';
+        },
+      }],
+    );
+
+    assert.deepEqual(results, [
+      {
+        callId: 'call_1',
+        name: 'explode',
+        result: null,
+        error: 'plain boom',
+      },
+    ]);
+  });
 });
 
 describe('AI tool result formatting contract', () => {
@@ -119,6 +142,27 @@ describe('AI tool result formatting contract', () => {
     assert.deepEqual(messages, [
       { role: 'tool', toolCallId: 'call_1', content: '[object Object]' },
       { role: 'tool', toolCallId: 'call_2', content: 'Error: network down' },
+    ]);
+  });
+
+  it('passes successful string results through unchanged', () => {
+    const calls = [];
+    const provider = {
+      formatToolResult(callId, result) {
+        calls.push([callId, result]);
+        return { role: 'tool', toolCallId: callId, content: result };
+      },
+    };
+
+    const messages = formatToolResults(provider, [
+      { callId: 'call_1', name: 'echo', result: 'done' },
+    ]);
+
+    assert.deepEqual(calls, [
+      ['call_1', 'done'],
+    ]);
+    assert.deepEqual(messages, [
+      { role: 'tool', toolCallId: 'call_1', content: 'done' },
     ]);
   });
 });

@@ -22,6 +22,12 @@ describe('SSEParser protocol semantics', () => {
     );
   });
 
+  it('ignores event-only blocks without data fields', () => {
+    const parser = new SSEParser();
+
+    assert.deepEqual(parser.feed('event: ping\n\n'), []);
+  });
+
   it('supports CRLF-delimited events', () => {
     const parser = new SSEParser();
 
@@ -39,6 +45,14 @@ describe('SSEParser protocol semantics', () => {
 
     assert.deepEqual(parser.feed('data:  indented\n\n'), [
       { event: undefined, data: ' indented' },
+    ]);
+  });
+
+  it('preserves explicitly empty data payloads', () => {
+    const parser = new SSEParser();
+
+    assert.deepEqual(parser.feed('data:\n\n'), [
+      { event: undefined, data: '' },
     ]);
   });
 
