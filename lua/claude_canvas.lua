@@ -21,6 +21,7 @@ local Session      = require("lua.claude_session")
 local Graph        = require("lua.claude_graph")
 local Color        = require("lua.color")
 local Focus        = require("lua.focus")
+local Scissor      = require("lua.scissor")
 local Tree         = require("lua.tree")
 
 local Measure = nil
@@ -264,7 +265,7 @@ Capabilities.register("ClaudeCanvas", {
                              Color.toTable("#0f172a")[3], effectiveOpacity)
       love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
 
-      love.graphics.setScissor(contentRect.x, contentRect.y, contentRect.w, contentRect.h)
+      local prevScissor = Scissor.saveIntersected(contentRect.x, contentRect.y, contentRect.w, contentRect.h)
 
       -- Find last non-empty row to avoid rendering 200 blank lines
       local lastNonEmpty = 0
@@ -676,7 +677,7 @@ Capabilities.register("ClaudeCanvas", {
         end
         ::continue_row::
       end
-      love.graphics.setScissor()
+      Scissor.restore(prevScissor)
 
       -- ── Prompt cursor ─────────────────────────────────────────
       -- The CLI (Ink) parks the vterm cursor below visible content.

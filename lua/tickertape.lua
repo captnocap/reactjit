@@ -6,6 +6,7 @@
 ]]
 
 local Color = require("lua.color")
+local Scissor = require("lua.scissor")
 
 local TickerTape = {}
 
@@ -180,8 +181,7 @@ function TickerTape.draw(node, effectiveOpacity)
   love.graphics.setColor(bor, bog, bob, boa * alpha)
   love.graphics.line(c.x, c.y + c.h - 0.5, c.x + c.w, c.y + c.h - 0.5)
 
-  local oldSX, oldSY, oldSW, oldSH = love.graphics.getScissor()
-  love.graphics.setScissor(c.x, c.y, c.w, c.h)
+  local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, c.h)
 
   local symbolFont = getFont(p.symbolSize, "bold")
   local priceFont = getFont(p.priceSize)
@@ -252,11 +252,7 @@ function TickerTape.draw(node, effectiveOpacity)
   state.contentWidth = contentWidth
   state.scrollX = clamp(state.scrollX, 0, maxScroll(state, c))
 
-  if oldSX then
-    love.graphics.setScissor(oldSX, oldSY, oldSW, oldSH)
-  else
-    love.graphics.setScissor()
-  end
+  Scissor.restore(prevScissor)
 end
 
 function TickerTape.handleMousePressed(node, mx, my, button)

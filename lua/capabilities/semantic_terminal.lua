@@ -31,6 +31,7 @@ local Graph        = require("lua.semantic_graph")
 local Recorder     = require("lua.session_recorder")
 local Player       = require("lua.session_player")
 local Color        = require("lua.color")
+local Scissor      = require("lua.scissor")
 
 -- ── Lazy-loaded Measure module (not available at require time) ──────────────
 
@@ -566,7 +567,7 @@ Capabilities.register("SemanticTerminal", {
     local gutterWidth = showTokens and 80 or 0
 
     -- Scissor to content area
-    love.graphics.setScissor(c.x, c.y, c.w, contentHeight)
+    local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, contentHeight)
 
     -- Build a lookup from row index to classified entry
     local rowLookup = {}
@@ -634,7 +635,7 @@ Capabilities.register("SemanticTerminal", {
       end
     end
 
-    love.graphics.setScissor()
+    Scissor.restore(prevScissor)
 
     -- ── Timeline scrubber (playback mode) ──────────────────────────────────
 

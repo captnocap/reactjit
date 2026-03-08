@@ -14,6 +14,7 @@
 ]]
 
 local Color = require("lua.color")
+local Scissor = require("lua.scissor")
 
 local PresentationEditor = {}
 
@@ -893,26 +894,18 @@ local function drawNodes(document, slide, nodes, parentX, parentY, opacity, stat
       elseif nodeDef.kind == "group" and nodeDef.children then
         local restoreScissor = nil
         if nodeDef.clip then
-          local sx1, sy1 = worldToScreen(layout, state.camera, absX, absY)
-          local sx2, sy2 = worldToScreen(layout, state.camera, absX + (frame.width or 0), absY + (frame.height or 0))
-          local prevScissor = { love.graphics.getScissor() }
-          love.graphics.intersectScissor(
-            math.min(sx1, sx2),
-            math.min(sy1, sy2),
-            math.abs(sx2 - sx1),
-            math.abs(sy2 - sy1)
+          restoreScissor = Scissor.saveIntersected(
+            absX,
+            absY,
+            frame.width or 0,
+            frame.height or 0
           )
-          restoreScissor = prevScissor
         end
 
         drawNodes(document, slide, nodeDef.children, absX, absY, nodeOpacity, state, layout)
 
         if restoreScissor then
-          if restoreScissor[1] then
-            love.graphics.setScissor(unpack(restoreScissor))
-          else
-            love.graphics.setScissor()
-          end
+          Scissor.restore(restoreScissor)
         end
       end
     end
@@ -969,21 +962,16 @@ end
 local function drawEmptyState(node, opacity)
   local c = node.computed
   if not c then return end
-  local prevScissor = { love.graphics.getScissor() }
+  local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, c.h)
 
   love.graphics.push("all")
-  love.graphics.intersectScissor(c.x, c.y, c.w, c.h)
   love.graphics.setColor(FALLBACK_WORKSPACE_BG[1], FALLBACK_WORKSPACE_BG[2], FALLBACK_WORKSPACE_BG[3], FALLBACK_WORKSPACE_BG[4] * opacity)
   love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
   love.graphics.setColor(FALLBACK_TEXT[1], FALLBACK_TEXT[2], FALLBACK_TEXT[3], FALLBACK_TEXT[4] * opacity)
   love.graphics.printf("PresentationEditor: no slide loaded", c.x + 20, c.y + c.h * 0.5 - 8, math.max(1, c.w - 40), "center")
   love.graphics.pop()
 
-  if prevScissor[1] then
-    love.graphics.setScissor(unpack(prevScissor))
-  else
-    love.graphics.setScissor()
-  end
+  Scissor.restore(prevScissor)
 end
 
 local function resizeFrameFromHandle(frame, handle, dx, dy)
@@ -1442,9 +1430,8 @@ function PresentationEditor.draw(node, opacity)
   local layout = getViewportLayout(node, state, document)
   state.lastLayout = layout
 
-  local prevScissor = { love.graphics.getScissor() }
+  local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, c.h)
   love.graphics.push("all")
-  love.graphics.intersectScissor(c.x, c.y, c.w, c.h)
 
   setParsedColor(nil, opacity, FALLBACK_WORKSPACE_BG)
   love.graphics.rectangle("fill", c.x, c.y, c.w, c.h)
@@ -1486,12 +1473,7 @@ function PresentationEditor.draw(node, opacity)
   drawSelection(document, slide, state, layout, opacity or 1)
 
   love.graphics.pop()
-
-  if prevScissor[1] then
-    love.graphics.setScissor(unpack(prevScissor))
-  else
-    love.graphics.setScissor()
-  end
+  Scissor.restore(prevScissor)
 end
 
 return PresentationEditor

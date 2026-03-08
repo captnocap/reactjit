@@ -20,6 +20,7 @@
 
 local Measure = nil
 local Color   = require("lua.color")
+local Scissor = require("lua.scissor")
 local Syntax  = require("lua.syntax")
 
 local Renderer = {}
@@ -462,8 +463,7 @@ function Renderer.render(node, c, effectiveOpacity)
   local textStartX = c.x + MARGIN_LEFT + BULLET_SIZE * 2 + BULLET_GAP
 
   -- Scissor to node rect (transform-aware for scroll containers)
-  local sx, sy = love.graphics.transformPoint(c.x, c.y)
-  love.graphics.setScissor(sx, sy, c.w, c.h)
+  local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, c.h)
 
   -- Background (fixed, not scrolled)
   setColorWithOpacity(COLORS.bg, effectiveOpacity)
@@ -666,7 +666,7 @@ function Renderer.render(node, c, effectiveOpacity)
   love.graphics.print(hints, c.x + c.w - hintsW - MARGIN_LEFT, statusY)
 
   -- Reset scissor
-  love.graphics.setScissor()
+  Scissor.restore(prevScissor)
 
   -- Permission prompts render natively through vterm — no overlay needed.
   -- Keyboard y/a/n interception handled by claude_canvas.lua.
