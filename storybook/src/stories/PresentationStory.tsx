@@ -3,12 +3,14 @@ import { Box, Pressable, Text } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PresentationEditor,
+  PresentationSlideStrip,
   applyPresentationPatch,
   createPresentationDocument,
   createPresentationGroupNode,
   createPresentationShapeNode,
   createPresentationSlide,
   createPresentationTextNode,
+  duplicatePresentationSlide,
   findPresentationNode,
   type PresentationCamera,
   type PresentationEditorCommand,
@@ -451,6 +453,23 @@ export function PresentationStory() {
     pushLog(setLog, formatPatch(patch));
   }, [document.slides.length]);
 
+  const handleDuplicateSlide = useCallback(() => {
+    const nextSlide = {
+      ...duplicatePresentationSlide(activeSlide, DEMO_FACTORY),
+      title: activeSlide.title ? `${activeSlide.title} Copy` : `Slide ${document.slides.length + 1}`,
+    };
+    const patch: PresentationPatch = {
+      type: 'addSlide',
+      slide: nextSlide,
+      index: activeSlideIndex + 1,
+    };
+
+    setDocument((current) => applyPresentationPatch(current, patch));
+    setActiveSlideId(nextSlide.id);
+    setSelection([]);
+    pushLog(setLog, formatPatch(patch));
+  }, [activeSlide, activeSlideIndex, document.slides.length]);
+
   const handleRemoveSlide = useCallback(() => {
     if (!canRemoveSlide) {
       pushLog(setLog, 'removeSlide blocked for the last remaining slide');
@@ -524,21 +543,24 @@ export function PresentationStory() {
         </Text>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        {document.slides.map((slide, index) => (
-          <ToolbarButton
-            key={slide.id}
-            label={`Slide ${index + 1}: ${slide.title}`}
-            active={slide.id === activeSlideId}
-            onPress={() => handleSelectSlide(slide.id)}
-          />
-        ))}
-        <ToolbarButton label="+ Slide" onPress={handleAddSlide} />
-        <ToolbarButton label="Remove Slide" disabled={!canRemoveSlide} onPress={handleRemoveSlide} />
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <ToolbarButton label="Reset" onPress={handleReset} />
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+        <PresentationSlideStrip
+          document={document}
+          activeSlideId={activeSlideId}
+          onSelectSlide={handleSelectSlide}
+          onAddSlide={handleAddSlide}
+          onDuplicateSlide={handleDuplicateSlide}
+          onRemoveSlide={handleRemoveSlide}
+          style={{
+            width: 240,
+            height: 560,
+          }}
+        />
+
         <Box style={{ flexGrow: 1, flexBasis: 0 }}>
           <Panel title="Editor Surface">
             <PresentationEditor

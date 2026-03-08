@@ -216,3 +216,16 @@ export interface PresentationEditorProps {
   onCameraChange?: (event: PresentationEditorCameraEvent) => void;
   key?: string | number;
 }
+
+export interface PresentationSlideStripProps {
+  document: PresentationDocument;
+  activeSlideId?: string;
+  title?: string;
+  style?: Style;
+  w?: number | string;
+  h?: number | string;
+  onSelectSlide?: (slideId: string) => void;
+  onAddSlide?: () => void;
+  onDuplicateSlide?: () => void;
+  onRemoveSlide?: () => void;
+}
