@@ -268,11 +268,14 @@ export function formatDurationLong(ms: number): string {
  */
 export function formatDate(timestamp: number, opts: FormatDateOptions = {}): string {
   const { timezone, locale, intl: intlOpts } = opts;
-  const baseOpts: Intl.DateTimeFormatOptions = {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    ...intlOpts,
-  };
+  // When caller provides explicit intl opts, use them as-is (no base merge).
+  // This lets formatTimeOfDay pass only time fields without date contamination.
+  const baseOpts: Intl.DateTimeFormatOptions = intlOpts
+    ? { ...intlOpts }
+    : {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      };
 
   // If a timezone is requested but Intl doesn't support it, use manual offset
   if (timezone && !INTL_TZ_WORKS) {
@@ -358,11 +361,11 @@ export function tzOffsetMinutes(timezone: string, timestamp = Date.now()): numbe
       });
       const parts = fmt.formatToParts(new Date(timestamp));
       const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? '0', 10);
-      const localDate = new Date(
+      const wallUtc = Date.UTC(
         get('year'), get('month') - 1, get('day'),
         get('hour'), get('minute'), get('second')
       );
-      return Math.round((localDate.getTime() - timestamp) / 60_000);
+      return Math.round((wallUtc - timestamp) / 60_000);
     } catch {
       return fallbackTzOffset(timezone) ?? 0;
     }
@@ -431,7 +434,7 @@ export function parseDuration(str: string): number {
 
   // Labelled segments: 1h30m20s500ms
   let ms = 0;
-  const re = /(\d+(?:\.\d+)?)\s*(h|hr|hour|m|min|minute|s|sec|second|ms|millisecond)/gi;
+  const re = /(\d+(?:\.\d+)?)\s*(ms|millisecond|h|hr|hour|min|minute|m|sec|second|s)/gi;
   let matched = false;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s)) !== null) {
@@ -439,8 +442,8 @@ export function parseDuration(str: string): number {
     const val  = parseFloat(m[1]);
     const unit = m[2].toLowerCase();
     if (unit.startsWith('h'))                ms += val * 3_600_000;
-    else if (unit.startsWith('mi') || unit === 'm') ms += val * 60_000;
     else if (unit === 'ms' || unit.startsWith('mill')) ms += val;
+    else if (unit.startsWith('mi') || unit === 'm') ms += val * 60_000;
     else /* s */                             ms += val * 1_000;
   }
   if (matched) return Math.round(ms);

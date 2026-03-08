@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { rpc } from './rpc';
 import type {
   PrivacyAPI, GPGKey, KeyEntry, ShamirShare, PIIMatch,
-  FileMetadata, HKDFOptions,
+  FileMetadata, HKDFOptions, EnvelopeEncrypted, NoiseHandshake,
+  SecureHandle, ProtectMode, KeyGenOptions, PIIType, RedactOptions,
 } from './types';
 
 export type { PrivacyAPI } from './types';
@@ -112,3 +113,114 @@ export const usePrivacy = (): PrivacyAPI => useMemo((): PrivacyAPI => ({
     checkAlgorithmStrength:(a) => rpc('privacy:safety:checkAlgorithmStrength', {algorithm:a}),
   },
 }), []);
+
+// ── Direct function exports (usable outside React components) ─────────────────
+
+export const hkdfDerive = (ikm: string, opts?: HKDFOptions): Promise<string> =>
+  rpc<{ key: string }>('privacy:hkdf:derive', { ikm, ...(opts ?? {}) }).then(r => r.key);
+
+export const shamirSplit = (secret: string, n: number, k: number): Promise<ShamirShare[]> =>
+  rpc<{ shares: ShamirShare[] }>('privacy:shamir:split', { secret, n, k }).then(r => r.shares);
+
+export const shamirCombine = (shares: ShamirShare[]): Promise<string> =>
+  rpc<{ secret: string }>('privacy:shamir:combine', { shares }).then(r => r.secret);
+
+export const envelopeEncrypt = (data: string, kek: string): Promise<EnvelopeEncrypted> =>
+  rpc<EnvelopeEncrypted>('privacy:envelope:encrypt', { data, kek });
+
+export const envelopeDecrypt = (envelope: EnvelopeEncrypted, kek: string): Promise<string> =>
+  rpc<{ data: string }>('privacy:envelope:decrypt', { envelope, kek }).then(r => r.data);
+
+export const noiseInitiate = (remotePublicKey: string): Promise<NoiseHandshake> =>
+  rpc<NoiseHandshake>('privacy:noise:initiate', { remotePublicKey });
+
+export const noiseRespond = (staticPrivateKey: string, handshakeMessage: string): Promise<NoiseHandshake> =>
+  rpc<NoiseHandshake>('privacy:noise:respond', { staticPrivateKey, handshakeMessage });
+
+export const noiseSend = (sessionId: string, plaintext: string): Promise<string> =>
+  rpc<{ ciphertext: string }>('privacy:noise:send', { sessionId, plaintext }).then(r => r.ciphertext);
+
+export const noiseReceive = (sessionId: string, ciphertext: string): Promise<string> =>
+  rpc<{ plaintext: string }>('privacy:noise:receive', { sessionId, ciphertext }).then(r => r.plaintext);
+
+export const noiseClose = (sessionId: string): Promise<void> =>
+  rpc('privacy:noise:close', { sessionId });
+
+export const secureAlloc = (dataHex: string): Promise<SecureHandle> =>
+  rpc<{ handle: number }>('privacy:secmem:alloc', { dataHex }).then(r => r.handle);
+
+export const secureRead = (handle: SecureHandle): Promise<string> =>
+  rpc<{ hex: string }>('privacy:secmem:read', { handle }).then(r => r.hex);
+
+export const secureFree = (handle: SecureHandle): Promise<void> =>
+  rpc('privacy:secmem:free', { handle });
+
+export const secureProtect = (handle: SecureHandle, mode: ProtectMode): Promise<void> =>
+  rpc('privacy:secmem:protect', { handle, mode });
+
+export const tokenize = (value: string, salt: string): Promise<string> =>
+  rpc<{ hex: string }>('privacy:sanitize:tokenize', { value, salt }).then(r => r.hex);
+
+export const createKeyring = (path: string, masterPassword: string): Promise<string> =>
+  rpc<{ handle: string }>('privacy:keyring:create', { path, masterPassword }).then(r => r.handle);
+
+export const openKeyring = (path: string, masterPassword: string): Promise<string> =>
+  rpc<{ handle: string }>('privacy:keyring:open', { path, masterPassword }).then(r => r.handle);
+
+export const closeKeyring = (handle: string): Promise<void> =>
+  rpc('privacy:keyring:close', { handle });
+
+export const generateKey = (handle: string, opts: KeyGenOptions): Promise<KeyEntry> =>
+  rpc<{ key: KeyEntry }>('privacy:keyring:generateKey', { handle, opts }).then(r => r.key);
+
+export const listKeys = (handle: string): Promise<KeyEntry[]> =>
+  rpc<{ keys: KeyEntry[] }>('privacy:keyring:listKeys', { handle }).then(r => r.keys);
+
+export const secureDelete = (path: string, passes?: number): Promise<void> =>
+  rpc('privacy:file:secureDelete', { path, passes });
+
+// ── Pure-TS synchronous helpers ───────────────────────────────────────────────
+
+export function stegEmbedWhitespace(carrier: string, secret: string): string {
+  if (carrier.length < 2) return carrier;
+  let bits = '';
+  for (let i = 0; i < secret.length; i++) {
+    const c = secret.charCodeAt(i);
+    for (let b = 7; b >= 0; b--) bits += (c >> b) & 1 ? '\u200C' : '\u200B';
+  }
+  return carrier[0] + bits + carrier.slice(1);
+}
+
+const PII_PATTERNS: Array<{ type: PIIType; re: RegExp }> = [
+  { type: 'email',      re: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
+  { type: 'ssn',        re: /\b\d{3}-\d{2}-\d{4}\b/g },
+  { type: 'creditCard', re: /\b(?:\d{4}[- ]){3}\d{4}\b/g },
+  { type: 'phone',      re: /\b(?:\+?\d[\d\s\-().]{7,})\d\b/g },
+  { type: 'ipv4',       re: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g },
+];
+
+export function detectPII(text: string): PIIMatch[] {
+  const matches: PIIMatch[] = [];
+  for (const { type, re } of PII_PATTERNS) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      matches.push({ type, value: m[0], start: m.index, end: m.index + m[0].length });
+    }
+  }
+  return matches.sort((a, b) => a.start - b.start);
+}
+
+export function redactPII(text: string, opts?: RedactOptions): string {
+  const replacement = opts?.replacement ?? '[REDACTED]';
+  const matches = detectPII(text).filter(m => !opts?.types || opts.types.includes(m.type));
+  let result = '';
+  let last = 0;
+  for (const m of matches) {
+    if (m.start >= last) {
+      result += text.slice(last, m.start) + replacement;
+      last = m.end;
+    }
+  }
+  return result + text.slice(last);
+}

@@ -14,7 +14,8 @@ export class SSEParser {
 
   /** Feed a raw text chunk from the network. Returns parsed SSE events. */
   feed(chunk: string): SSEEvent[] {
-    this.buffer += chunk;
+    // Normalize CRLF to LF so we only need one boundary type
+    this.buffer += chunk.replaceAll('\r\n', '\n');
     const events: SSEEvent[] = [];
 
     // SSE events are separated by double newlines
@@ -27,18 +28,6 @@ export class SSEParser {
       if (event) events.push(event);
 
       boundary = this.buffer.indexOf('\n\n');
-    }
-
-    // Also handle \r\n\r\n (some servers use CRLF)
-    boundary = this.buffer.indexOf('\r\n\r\n');
-    while (boundary !== -1) {
-      const block = this.buffer.slice(0, boundary);
-      this.buffer = this.buffer.slice(boundary + 4);
-
-      const event = this.parseBlock(block);
-      if (event) events.push(event);
-
-      boundary = this.buffer.indexOf('\r\n\r\n');
     }
 
     return events;
@@ -59,9 +48,8 @@ export class SSEParser {
       if (line.startsWith('event:')) {
         eventType = line.slice(6).trim();
       } else if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).trimStart());
-      } else if (line.startsWith('data: ')) {
-        dataLines.push(line.slice(6));
+        const value = line.slice(5);
+        dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
       }
     }
 

@@ -34,7 +34,7 @@ export function applyQuery<T>(items: T[], query?: Query): T[] {
   if (query.offset) {
     result = result.slice(query.offset);
   }
-  if (query.limit) {
+  if (query.limit != null) {
     result = result.slice(0, query.limit);
   }
 

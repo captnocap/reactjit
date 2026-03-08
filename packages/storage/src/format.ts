@@ -120,8 +120,8 @@ function parseText(content: string): any {
     const key = line.slice(0, colonIdx).trim();
     const value = line.slice(colonIdx + 1).trim();
 
-    // Only treat as key:value if key looks like an identifier
-    if (/^[a-zA-Z_]\w*$/.test(key)) {
+    // Only treat as key:value if key looks like an identifier and value isn't a URL remainder
+    if (/^[a-zA-Z_]\w*$/.test(key) && !value.startsWith('//')) {
       data[key] = parseYAMLValue(value);
       hasKeyValue = true;
     }
