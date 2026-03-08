@@ -177,3 +177,34 @@ export function CalloutBand({ borderColor, bgColor, children }: {
     </Box>
   );
 }
+
+/** Audit label for demos that cannot prove themselves without user-supplied connectors. */
+export function ExternalDependencyNotice({
+  label = 'This is a mock demo, not a real representation.',
+  detail = 'This story depends on external connectors, credentials, or services supplied by the user. Until those are configured, treat the UI as documentation of the integration surface rather than proof of a live backend.',
+}: {
+  label?: string;
+  detail?: string;
+}) {
+  const bp = useBreakpoint();
+  const compact = bp === 'sm';
+  return (
+    <Box style={{
+      backgroundColor: 'rgba(245, 158, 11, 0.08)',
+      borderLeftWidth: 3,
+      borderColor: 'rgba(245, 158, 11, 0.45)',
+      paddingLeft: compact ? 12 : 25,
+      paddingRight: compact ? 12 : 28,
+      paddingTop: compact ? 10 : 14,
+      paddingBottom: compact ? 10 : 14,
+      gap: 6,
+    }}>
+      <Text style={{ color: '#f59e0b', fontSize: 10, fontWeight: 'bold' }}>
+        {label}
+      </Text>
+      <Text style={{ color: '#d6d3d1', fontSize: 9 }}>
+        {detail}
+      </Text>
+    </Box>
+  );
+}

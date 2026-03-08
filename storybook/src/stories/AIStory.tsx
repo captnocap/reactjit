@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, ExternalDependencyNotice } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -773,6 +773,12 @@ export function AIStory() {
             {'useChat() streams conversations with automatic tool execution loops. useCompletion() handles one-shots. useMCPServer() connects to any Model Context Protocol server. useBrowser() controls a stealth Firefox session for autonomous web agents. OpenAI, Anthropic, and any compatible endpoint — same API.'}
           </Text>
         </HeroBand>
+
+        <Divider />
+
+        <ExternalDependencyNotice
+          detail={'Live model execution requires a user-supplied provider key or a compatible local endpoint. Until that connector exists, this page is a mock/demo shell for the integration surface and should not be read as proof of a live model session.'}
+        />
 
         <Divider />
 

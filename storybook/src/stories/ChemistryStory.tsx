@@ -23,7 +23,7 @@ import {
 } from '../../../packages/chemistry/src';
 import type { PubChemCompound } from '../../../packages/chemistry/src';
 import type { ReagentType } from '../../../packages/chemistry/src';
-import { Band, Half, Divider, SectionLabel, CalloutBand } from './_shared/StoryScaffold';
+import { Band, Half, Divider, SectionLabel, CalloutBand, ExternalDependencyNotice } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -1168,6 +1168,12 @@ export function ChemistryStory() {
           <StructureDemo />
           <CodeBlock language="tsx" fontSize={9} code={STRUCTURE_CODE} />
         </Box>
+
+        <Divider />
+
+        <ExternalDependencyNotice
+          detail={'This PubChem section depends on live network access to an external service. Until that connector is available, treat this as a demonstration of the integration surface rather than proof of a successful live lookup.'}
+        />
 
         <Divider />
 

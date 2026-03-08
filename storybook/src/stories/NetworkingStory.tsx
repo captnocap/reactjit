@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Input, classifiers as S} from '../../../packages/core/src';
 import { useScrape } from '../../../packages/core/src/useScrape';
 import { useThemeColors } from '../../../packages/theme/src';
+import { ExternalDependencyNotice } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -912,6 +913,12 @@ export function NetworkingStory() {
             {'API integrations are networking hooks with pre-built UI components. Each hook fetches from a public API via useFetch, returns typed data, and has a matching component for one-liner rendering.'}
           </Text>
         </Box>
+
+        <Divider />
+
+        <ExternalDependencyNotice
+          detail={'The integrations below depend on third-party services, user accounts, local devices, or network reachability. Without those connectors, they are demonstration surfaces only and should not be read as live verification of the remote system path.'}
+        />
 
         <Divider />
 

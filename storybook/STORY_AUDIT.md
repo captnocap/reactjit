@@ -41,12 +41,13 @@ Scope of this pass:
 | `Chemistry` | `mixed` | The story uses real chemistry hooks/components, including RPC-backed reactions and imperative PubChem fetch, but this pass did not runtime-verify external lookup or all capability renderers. See [storybook/src/stories/ChemistryStory.tsx](/home/siah/creative/reactjit/storybook/src/stories/ChemistryStory.tsx) and [packages/chemistry/src/index.ts](/home/siah/creative/reactjit/packages/chemistry/src/index.ts). |
 | `Windows` | `mixed` | The window/notification parts appear to spawn real child OS windows, but the crash-screen section includes an explicit BSOD mock preview. See [storybook/src/stories/WindowsStory.tsx](/home/siah/creative/reactjit/storybook/src/stories/WindowsStory.tsx). |
 | `Privacy` | `mock/problem` | The file presents itself as “visual demos” and does not import or call `usePrivacy()` in the live demo sections. It does not currently prove the privacy runtime behind the API. See [storybook/src/stories/PrivacyStory.tsx](/home/siah/creative/reactjit/storybook/src/stories/PrivacyStory.tsx). |
-| `AI` | `mock/problem` | The story discusses `useChat`, `useCompletion`, `useBrowser`, and `useMCPServer`, but this file does not import or execute the AI package surface in the live page. It is documentation/presentation, not verification. See [storybook/src/stories/AIStory.tsx](/home/siah/creative/reactjit/storybook/src/stories/AIStory.tsx). |
+| `AI` | `mixed` | The story is now explicitly labeled as externally gated. It remains a documentation/demo shell unless a user supplies provider credentials or a compatible local endpoint, so it should not be treated as live proof by default. See [storybook/src/stories/AIStory.tsx](/home/siah/creative/reactjit/storybook/src/stories/AIStory.tsx). |
 | `CreativeConcepts` | `mock/problem` | The file contains explicit `TODO` markers and comments calling out placeholder content and mocks. It should not be trusted as evidence of a real subsystem. See [storybook/src/stories/CreativeConceptsStory.tsx](/home/siah/creative/reactjit/storybook/src/stories/CreativeConceptsStory.tsx). |
 
 ## Immediate Risk Calls
 
-- `Privacy`, `AI`, and `CreativeConcepts` are the clearest audit failures in this pass.
+- `Privacy` and `CreativeConcepts` are the clearest audit failures in this pass.
+- `AI` is externally gated rather than inherently fake; it still needs clear labeling because the story is not self-proving without a user-supplied connector.
 - `Finance` should not be interpreted as live market integration; it is mostly proving compute/rendering over synthetic inputs.
 - `Render`, `Overlay`, `Windows`, and `Networking` expose real paths, but the story pages mix verification with explanation and environment-dependent affordances.
 
