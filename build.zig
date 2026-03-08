@@ -47,8 +47,8 @@ pub fn build(b: *std.Build) void {
 
         // quickjs-ng core sources. addIncludePath lets them resolve each other
         // via their internal #include "..." directives (no subdirectory prefix).
-        lib.addIncludePath(b.path("quickjs"));
-        lib.addCSourceFiles(.{
+        mod.addIncludePath(b.path("quickjs"));
+        mod.addCSourceFiles(.{
             .root = b.path("quickjs"),
             .files = &.{
                 "cutils.c",
@@ -63,7 +63,7 @@ pub fn build(b: *std.Build) void {
 
         // Our FFI shim — canonical copy in native/quickjs-shim/ (tracked in
         // git). build.zig references it directly — no manual cp step needed.
-        lib.addCSourceFile(.{
+        mod.addCSourceFile(.{
             .file = b.path("native/quickjs-shim/qjs_ffi_shim.c"),
             .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
         });
@@ -101,7 +101,7 @@ pub fn build(b: *std.Build) void {
             .root_module = blake3_mod,
         });
 
-        blake3_lib.addIncludePath(b.path("third_party/blake3"));
+        blake3_mod.addIncludePath(b.path("third_party/blake3"));
 
         const blake3_os = target.result.os.tag;
         const blake3_arch = target.result.cpu.arch;
@@ -118,7 +118,7 @@ pub fn build(b: *std.Build) void {
         else
             &.{ "-O3", "-DBLAKE3_NO_SSE2", "-DBLAKE3_NO_SSE41", "-DBLAKE3_NO_AVX2", "-DBLAKE3_NO_AVX512" };
 
-        blake3_lib.addCSourceFiles(.{
+        blake3_mod.addCSourceFiles(.{
             .root = b.path("third_party/blake3"),
             .files = &.{
                 "blake3.c",
@@ -130,13 +130,13 @@ pub fn build(b: *std.Build) void {
 
         if (blake3_use_asm) {
             // Unix x86_64: hand-written assembly (fastest path)
-            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_sse2_x86-64_unix.S"));
-            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_sse41_x86-64_unix.S"));
-            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_avx2_x86-64_unix.S"));
-            blake3_lib.addAssemblyFile(b.path("third_party/blake3/blake3_avx512_x86-64_unix.S"));
+            blake3_mod.addAssemblyFile(b.path("third_party/blake3/blake3_sse2_x86-64_unix.S"));
+            blake3_mod.addAssemblyFile(b.path("third_party/blake3/blake3_sse41_x86-64_unix.S"));
+            blake3_mod.addAssemblyFile(b.path("third_party/blake3/blake3_avx2_x86-64_unix.S"));
+            blake3_mod.addAssemblyFile(b.path("third_party/blake3/blake3_avx512_x86-64_unix.S"));
         } else if (blake3_arch == .aarch64) {
             // aarch64: ARM NEON intrinsics (4-way parallel hashing)
-            blake3_lib.addCSourceFile(.{
+            blake3_mod.addCSourceFile(.{
                 .file = b.path("third_party/blake3/blake3_neon.c"),
                 .flags = &.{"-O3"},
             });
@@ -174,20 +174,20 @@ pub fn build(b: *std.Build) void {
             .root_module = mod,
         });
 
-        exe.addCSourceFile(.{
+        mod.addCSourceFile(.{
             .file = b.path("experiments/cartridge-os/init.c"),
             .flags = &.{"-O2"},
         });
-        exe.addCSourceFile(.{
+        mod.addCSourceFile(.{
             .file = b.path("experiments/cartridge-os/tweetnacl.c"),
             .flags = &.{"-O2"},
         });
-        exe.addCSourceFile(.{
+        mod.addCSourceFile(.{
             .file = b.path("experiments/cartridge-os/sha512.c"),
             .flags = &.{"-O2"},
         });
 
-        exe.addIncludePath(b.path("experiments/cartridge-os"));
+        mod.addIncludePath(b.path("experiments/cartridge-os"));
 
         // musl target + linkLibC() = static musl link. No -static flag needed.
         exe.linkLibC();
@@ -219,7 +219,7 @@ pub fn build(b: *std.Build) void {
                 .root_module = mod,
             });
 
-            lib.addCSourceFile(.{
+            mod.addCSourceFile(.{
                 .file = b.path("native/overlay-hook/overlay_hook.c"),
                 .flags = &.{ "-O2", "-D_GNU_SOURCE" },
             });

@@ -31,13 +31,13 @@ mkdir -p "$DIST_DIR" "$STAGING" "$PARTS" "$CACHE_DIR"
 
 # ── Step 1: Compile init + ft_helper via zig build ───────────────────────
 echo "  [1/7] Compiling native artifacts (zig build)..."
-(cd "$REPO_ROOT" && zig build cartridge ft-helper \
+(cd "$REPO_ROOT" && zig build cartridge \
     -Dtarget=x86_64-linux-musl \
     -Doptimize=ReleaseFast 2>&1)
 cp "$REPO_ROOT/zig-out/cartridge/init" "$DIST_DIR/init"
 chmod +x "$DIST_DIR/init"
 echo "        init:      $(du -sh "$DIST_DIR/init" | cut -f1)"
-echo "        ft_helper: $(du -sh "$REPO_ROOT/zig-out/lib/libft_helper.so" | cut -f1)"
+echo "        init:      $(du -sh "$DIST_DIR/init" | cut -f1)"
 echo ""
 
 # ── Step 2: Download apk.static (cached) ────────────────────────────────
@@ -85,11 +85,24 @@ mkdir -p "$PARTS"
     libgcc \
     eudev-libs \
     font-liberation \
+    freetype \
+    freetype-dev \
     linux-virt \
     2>&1 | grep -E "^(\(|OK:)" || true
 
 PARTS_SIZE=$(du -sm "$PARTS" | cut -f1)
 echo "        parts bin: ${PARTS_SIZE}M (throwaway)"
+
+# ── Compile ft_helper.so (musl-native, against Alpine FreeType) ──
+echo "        compiling ft_helper.so (musl, dynamic freetype)..."
+zig cc -target x86_64-linux-musl -shared -O2 -fPIC \
+    -o "$DIST_DIR/ft_helper.so" \
+    "$SCRIPT_DIR/ft_helper.c" \
+    -I"$PARTS/usr/include/freetype2" \
+    -L"$PARTS/usr/lib" \
+    -lfreetype \
+    2>&1 | head -5
+echo "        ft_helper: $(du -sh "$DIST_DIR/ft_helper.so" | cut -f1)"
 echo ""
 
 # ── Step 4: Extract kernel + modules ────────────────────────────────────
@@ -188,6 +201,8 @@ SEED_LIBS=(
     "$(find "$PARTS/usr/lib" -name 'libdrm.so.2*' -type f | head -1)"
     # libudev — SDL2 KMSDRM dlopen's this to enumerate DRM devices
     "$(find "$PARTS/usr/lib" "$PARTS/lib" -name 'libudev.so.*' \( -type f -o -type l \) 2>/dev/null | head -1)"
+    # FreeType — ft_helper.so dynamically links this for glyph rasterization
+    "$(find "$PARTS/usr/lib" -name 'libfreetype.so.*' -type f | head -1)"
 )
 
 for seed in "${SEED_LIBS[@]}"; do
@@ -339,7 +354,7 @@ cp "$PARTS/usr/share/fonts/liberation/LiberationSans-Regular.ttf" \
 cp "$DIST_DIR/init" "$STAGING/init"
 
 # ── App files ──
-cp "$REPO_ROOT/zig-out/lib/libft_helper.so" "$STAGING/app/ft_helper.so"
+cp "$DIST_DIR/ft_helper.so" "$STAGING/app/ft_helper.so"
 # sandbox.lua lives in the OS rootfs, NOT in the cart.
 # The cart cannot replace or modify the jailer.
 cp "$SCRIPT_DIR/app/sandbox.lua"    "$STAGING/os/"
