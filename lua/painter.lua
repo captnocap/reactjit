@@ -717,6 +717,86 @@ local function applyTransform(transform, c)
   return true
 end
 
+local function saveIntersectedScissor(x, y, w, h)
+  local prevScissor = {love.graphics.getScissor()}
+  local sx, sy = love.graphics.transformPoint(x, y)
+  local sx2, sy2 = love.graphics.transformPoint(x + w, y + h)
+  local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
+  love.graphics.intersectScissor(sx, sy, sw, sh)
+  return prevScissor
+end
+
+local function restoreScissor(prevScissor)
+  if prevScissor and prevScissor[1] then
+    love.graphics.setScissor(prevScissor[1], prevScissor[2], prevScissor[3], prevScissor[4])
+  else
+    love.graphics.setScissor()
+  end
+end
+
+local function isStencilAttachmentError(err)
+  local msg = tostring(err)
+  return msg:find("requires either stencil=true or a custom stencil%-type Canvas")
+      or msg:find("requires either stencil=true")
+end
+
+local function rebindActiveCanvasWithStencil()
+  local getCanvas = love.graphics.getCanvas
+  if type(getCanvas) ~= "function" then return false end
+  local activeCanvas = getCanvas()
+  if not activeCanvas then return false end
+  local ok = pcall(function()
+    love.graphics.setCanvas({activeCanvas, stencil = true})
+  end)
+  return ok
+end
+
+local function beginClipRegion(drawShape, x, y, w, h, stencilDepth)
+  local stencilValue = stencilDepth + 1
+  local function applyStencil()
+    love.graphics.stencil(drawShape, "replace", stencilValue, stencilDepth > 0)
+    love.graphics.setStencilTest("greater", stencilDepth)
+  end
+
+  local ok, err = pcall(applyStencil)
+  if not ok and isStencilAttachmentError(err) and rebindActiveCanvasWithStencil() then
+    ok, err = pcall(applyStencil)
+  end
+
+  if ok then
+    return {
+      mode = "stencil",
+      previousStencilDepth = stencilDepth,
+      nextStencilDepth = stencilValue,
+    }
+  end
+
+  if not ok and isStencilAttachmentError(err) then
+    return {
+      mode = "scissor",
+      prevScissor = saveIntersectedScissor(x, y, w, h),
+      previousStencilDepth = stencilDepth,
+      nextStencilDepth = stencilDepth,
+    }
+  end
+
+  error(err, 0)
+end
+
+local function endClipRegion(clip)
+  if not clip then return end
+
+  if clip.mode == "stencil" then
+    if clip.previousStencilDepth > 0 then
+      love.graphics.setStencilTest("greater", clip.previousStencilDepth - 1)
+    else
+      love.graphics.setStencilTest()
+    end
+  elseif clip.mode == "scissor" then
+    restoreScissor(clip.prevScissor)
+  end
+end
+
 -- ============================================================================
 -- Video frame helper (shared by Video, backgroundVideo, hoverVideo)
 -- ============================================================================
@@ -754,25 +834,17 @@ local function drawVideoFrame(canvas, src, c, objectFit, borderRadius, stencilDe
   end
 
   -- Stencil clip for border radius
-  local needClip = borderRadius > 0
-  if needClip then
-    local stencilValue = stencilDepth + 1
-    love.graphics.stencil(function()
+  local clip = nil
+  if borderRadius > 0 then
+    clip = beginClipRegion(function()
       love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-    end, "replace", stencilValue, stencilDepth > 0)
-    love.graphics.setStencilTest("greater", stencilDepth)
+    end, c.x, c.y, c.w, c.h, stencilDepth)
   end
 
   love.graphics.setColor(1, 1, 1, effectiveOpacity)
   love.graphics.draw(canvas, drawX, drawY, 0, scaleX, scaleY)
 
-  if needClip then
-    if stencilDepth > 0 then
-      love.graphics.setStencilTest("greater", stencilDepth - 1)
-    else
-      love.graphics.setStencilTest()
-    end
-  end
+  endClipRegion(clip)
 end
 
 -- ============================================================================
@@ -874,30 +946,26 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   local needsClipping = s.overflow == "hidden" or isScroll
   local useStencil = needsClipping and hasRoundedCorners
   local useScissor = needsClipping and not hasRoundedCorners
-  local prevScissor
-  local prevStencilDepth = stencilDepth  -- save before any modification
+  local overflowClip = nil
 
   -- Apply stencil clipping for rounded corners
   if useStencil then
-    local stencilValue = stencilDepth + 1
-    love.graphics.stencil(function()
+    overflowClip = beginClipRegion(function()
       if isPerCorner then
         drawRoundedRect("fill", c.x, c.y, c.w, c.h, tl, tr, bl, br)
       else
         love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
       end
-    end, "replace", stencilValue, stencilDepth > 0)
-    love.graphics.setStencilTest("greater", stencilDepth)
-    stencilDepth = stencilValue
+    end, c.x, c.y, c.w, c.h, stencilDepth)
+    stencilDepth = overflowClip.nextStencilDepth
   elseif useScissor then
     -- Scissor clipping for rectangular overflow:hidden or scroll.
     -- Save previous scissor and intersect so nested clips stack correctly
     -- (e.g., overflow:scroll inside a scaled transform inside overflow:hidden).
-    prevScissor = {love.graphics.getScissor()}
-    local sx, sy = love.graphics.transformPoint(c.x, c.y)
-    local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
-    local sw, sh = math.max(0, sx2 - sx), math.max(0, sy2 - sy)
-    love.graphics.intersectScissor(sx, sy, sw, sh)
+    overflowClip = {
+      mode = "scissor",
+      prevScissor = saveIntersectedScissor(c.x, c.y, c.w, c.h),
+    }
   end
 
   -- Mask canvas capture: if this node has a mask child, redirect all rendering
@@ -936,24 +1004,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       local grad = s.backgroundGradient
       -- Apply borderRadius clipping if needed (stencil for rounded gradients)
       if hasRoundedCorners then
-        local gradStencilValue = stencilDepth + 1
-        love.graphics.stencil(function()
+        local gradientClip = beginClipRegion(function()
           if isPerCorner then
             drawRoundedRect("fill", c.x, c.y, c.w, c.h, tl, tr, bl, br)
           else
             love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
           end
-        end, "replace", gradStencilValue, stencilDepth > 0)
-        love.graphics.setStencilTest("greater", stencilDepth)
+        end, c.x, c.y, c.w, c.h, stencilDepth)
 
         drawGradient(c.x, c.y, c.w, c.h, grad.direction, grad.colors[1], grad.colors[2], effectiveOpacity)
 
-        -- Restore stencil test
-        if stencilDepth > 0 then
-          love.graphics.setStencilTest("greater", stencilDepth - 1)
-        else
-          love.graphics.setStencilTest()
-        end
+        endClipRegion(gradientClip)
       else
         drawGradient(c.x, c.y, c.w, c.h, grad.direction, grad.colors[1], grad.colors[2], effectiveOpacity)
       end
@@ -1345,27 +1406,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         end
 
         -- Apply borderRadius clipping if needed (and not already in a stencil clip)
-        local imageStencil = borderRadius > 0
-        if imageStencil then
-          local stencilValue = stencilDepth + 1
-          love.graphics.stencil(function()
+        local imageClip = nil
+        if borderRadius > 0 then
+          imageClip = beginClipRegion(function()
             love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-          end, "replace", stencilValue, stencilDepth > 0)
-          love.graphics.setStencilTest("greater", stencilDepth)
+          end, c.x, c.y, c.w, c.h, stencilDepth)
         end
 
         -- Draw the image with effective opacity (inherited * node)
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
         love.graphics.draw(image, drawX, drawY, 0, scaleX, scaleY)
 
-        -- Restore stencil test to parent level
-        if imageStencil then
-          if stencilDepth > 0 then
-            love.graphics.setStencilTest("greater", stencilDepth - 1)
-          else
-            love.graphics.setStencilTest()
-          end
-        end
+        endClipRegion(imageClip)
       else
         -- Fallback: draw a placeholder rectangle if image failed to load
         love.graphics.setColor(0.5, 0.5, 0.5, 0.3 * effectiveOpacity)
@@ -1429,27 +1481,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
           end
 
           -- Apply borderRadius clipping if needed
-          local videoStencil = borderRadius > 0
-          if videoStencil then
-            local stencilValue = stencilDepth + 1
-            love.graphics.stencil(function()
+          local videoClip = nil
+          if borderRadius > 0 then
+            videoClip = beginClipRegion(function()
               love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-            end, "replace", stencilValue, stencilDepth > 0)
-            love.graphics.setStencilTest("greater", stencilDepth)
+            end, c.x, c.y, c.w, c.h, stencilDepth)
           end
 
           -- Draw the video frame (Canvas is drawable just like Video)
           love.graphics.setColor(1, 1, 1, effectiveOpacity)
           love.graphics.draw(canvas, drawX, drawY, 0, scaleX, scaleY)
 
-          -- Restore stencil
-          if videoStencil then
-            if stencilDepth > 0 then
-              love.graphics.setStencilTest("greater", stencilDepth - 1)
-            else
-              love.graphics.setStencilTest()
-            end
-          end
+          endClipRegion(videoClip)
         end
 
       else
@@ -1621,25 +1664,17 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         end
 
         -- Apply borderRadius clipping if needed
-        local renderStencil = borderRadius > 0
-        if renderStencil then
-          local stencilValue = stencilDepth + 1
-          love.graphics.stencil(function()
+        local renderClip = nil
+        if borderRadius > 0 then
+          renderClip = beginClipRegion(function()
             love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
-          end, "replace", stencilValue, stencilDepth > 0)
-          love.graphics.setStencilTest("greater", stencilDepth)
+          end, c.x, c.y, c.w, c.h, stencilDepth)
         end
 
         love.graphics.setColor(1, 1, 1, effectiveOpacity)
         love.graphics.draw(img, drawX, drawY, 0, scaleX, scaleY)
 
-        if renderStencil then
-          if stencilDepth > 0 then
-            love.graphics.setStencilTest("greater", stencilDepth - 1)
-          else
-            love.graphics.setStencilTest()
-          end
-        end
+        endClipRegion(renderClip)
       else
         -- No frame yet: draw placeholder
         love.graphics.setColor(0.1, 0.1, 0.15, effectiveOpacity)
@@ -1960,21 +1995,7 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   end
 
   -- Restore clipping state
-  if useStencil then
-    -- Restore stencil test to what it was before this node entered.
-    -- prevStencilDepth is the original parameter before modification.
-    if prevStencilDepth > 0 then
-      love.graphics.setStencilTest("greater", prevStencilDepth - 1)
-    else
-      love.graphics.setStencilTest()
-    end
-  elseif useScissor then
-    if prevScissor and prevScissor[1] then
-      love.graphics.setScissor(prevScissor[1], prevScissor[2], prevScissor[3], prevScissor[4])
-    else
-      love.graphics.setScissor()
-    end
-  end
+  endClipRegion(overflowClip)
 
   -- Restore transform state
   if didTransform then
