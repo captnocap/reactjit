@@ -52,6 +52,7 @@ import { DevToolsStory } from './DevToolsStory';
 import { RenderStory } from './RenderStory';
 import { CompatibilityStory } from './CompatibilityStory';
 import { PhysicsStory } from './PhysicsStory';
+import { GeoStory } from './GeoStory';
 import { GeoScene3DStory } from './GeoScene3DStory';
 import { ThreeDStory } from './ThreeDStory';
 import { OverlayStory } from './OverlayStory';
@@ -69,6 +70,7 @@ import { GalleryStory } from './GalleryStory';
 import { HookGalleryStory } from './HookGalleryStory';
 import { AnimationStory } from './AnimationStory';
 import { ClassifierStory } from './ClassifierStory';
+import { PresentationStory } from './PresentationStory';
 
 export const stories: StoryDef[] = [
   // Core — framework primitives in learning order
@@ -104,6 +106,8 @@ export const stories: StoryDef[] = [
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
   { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
   { id: '3d', title: '3D', section: 'Packages', component: ThreeDStory },
+  { id: 'geo', title: 'Geo', section: 'Packages', component: GeoStory },
+  { id: 'presentation', title: 'Presentation', section: 'Packages', component: PresentationStory },
   { id: 'render', title: 'Render', section: 'Core', component: RenderStory },
 
   // Demos

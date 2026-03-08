@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, useLocalStore, classifiers as S} from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, Window, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -335,6 +335,100 @@ function LibretroDemo() {
   );
 }
 
+// ── Live Demo: CartridgeOS VM ────────────────────────────
+
+const CARTRIDGE_ISO = '/home/siah/creative/reactjit/experiments/cartridge-os/dist/cartridge-os.iso';
+
+function CartridgeOSDemo() {
+  const c = useThemeColors();
+  const [active, setActive] = useState(false);
+  const [poppedOut, setPoppedOut] = useState(false);
+  const [vncPort, setVncPort] = useState(0);
+  const [status, setStatus] = useState('Boot CartridgeOS');
+
+  const onReady = useCallback((e: any) => {
+    setStatus('VM running');
+    if (e.vmInfo?.vncPort) setVncPort(e.vmInfo.vncPort);
+  }, []);
+  const onError = useCallback((e: any) => setStatus(`Error: ${e.message}`), []);
+
+  return (
+    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <Tag text="QEMU" color={C.vm} />
+        <Tag text="virtio-vga" color={C.vm} />
+        <Tag text="VNC" color={C.vm} />
+      </Box>
+
+      {/* VM Render — always in the same tree position when active */}
+      {active && (
+        <Box style={poppedOut
+          ? { width: 0, height: 0, overflow: 'hidden' }
+          : { width: '100%', height: 280, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: C.vm + '44', backgroundColor: '#000' }
+        }>
+          <Render source={CARTRIDGE_ISO} interactive vmMemory={2048} vmCpus={2} objectFit="contain" style={{ flexGrow: 1 }} onReady={onReady} onError={onError} />
+        </Box>
+      )}
+      {/* Boot button when inactive */}
+      {!active && (
+        <Pressable onPress={() => setActive(true)}>
+          <Box style={{
+            width: '100%', height: 200, borderRadius: 6, overflow: 'hidden',
+            borderWidth: 1, borderColor: C.vm + '44',
+            backgroundColor: '#1a0a0a',
+            justifyContent: 'center', alignItems: 'center', gap: 8,
+          }}>
+            <Image src="server" style={{ width: 24, height: 24 }} tintColor={C.vm} />
+            <Text style={{ fontSize: 11, color: C.vm }}>{'Boot CartridgeOS'}</Text>
+            <S.StoryTiny>{'Recursive: ReactJIT rendering a VM running ReactJIT'}</S.StoryTiny>
+          </Box>
+        </Pressable>
+      )}
+      {/* Popped out placeholder */}
+      {active && poppedOut && (
+        <Box style={{
+          width: '100%', height: 200, borderRadius: 6,
+          borderWidth: 1, borderColor: C.vm + '44',
+          backgroundColor: '#1a0a0a',
+          justifyContent: 'center', alignItems: 'center', gap: 6,
+        }}>
+          <Image src="external-link" style={{ width: 20, height: 20 }} tintColor={C.vm} />
+          <Text style={{ fontSize: 10, color: C.vm }}>{'Popped out to own window'}</Text>
+        </Box>
+      )}
+
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? C.webcam : c.textDim }} />
+        <Text style={{ fontSize: 9, color: active ? C.vm : c.textDim }}>{status}</Text>
+        {active && vncPort > 0 && (
+          <Pressable onPress={() => setPoppedOut(p => !p)}>
+            <Box style={{ backgroundColor: C.accent + '22', paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+              <Text style={{ fontSize: 8, color: C.accent }}>{poppedOut ? 'Pop in' : 'Pop out'}</Text>
+            </Box>
+          </Pressable>
+        )}
+        {active && (
+          <Pressable onPress={() => { setActive(false); setPoppedOut(false); setVncPort(0); }}>
+            <Box style={{ backgroundColor: C.vm + '22', paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+              <Text style={{ fontSize: 8, color: C.vm }}>{'Stop'}</Text>
+            </Box>
+          </Pressable>
+        )}
+      </Box>
+
+      {poppedOut && vncPort > 0 && (
+        <Box style={{ width: 0, height: 0, overflow: 'hidden' }}>
+          <Window title="CartridgeOS" width={1280} height={720} onClose={() => setPoppedOut(false)}>
+            <Box style={{ width: '100%', height: '100%', backgroundColor: '#000' }}>
+              <Render source={`vnc:localhost:${vncPort}`} interactive objectFit="contain" style={{ flexGrow: 1 }} />
+            </Box>
+          </Window>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // ── Source Catalog ───────────────────────────────────────
 
 function SourceCatalog() {
@@ -568,37 +662,7 @@ export function RenderStory() {
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={VM_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
-              <Box style={{ flexDirection: 'row', gap: 6 }}>
-                <Tag text="QEMU" color={C.vm} />
-                <Tag text="KVM" color={C.vm} />
-                <Tag text="VNC" color={C.vm} />
-              </Box>
-              <Box style={{
-                width: 200, height: 140, borderRadius: 6,
-                backgroundColor: '#1a0a0a',
-                borderWidth: 1, borderColor: C.vm + '44',
-                justifyContent: 'center', alignItems: 'center', gap: 8,
-              }}>
-                <Image src="server" style={{ width: 24, height: 24 }} tintColor={C.vm} />
-                <Text style={{ fontSize: 10, color: C.vm }}>{'debian.iso'}</Text>
-                <Text style={{ fontSize: 8, color: c.muted }}>{'2048 MB / 2 vCPUs'}</Text>
-              </Box>
-              <Box style={{ flexDirection: 'row', gap: 8 }}>
-                <Box style={{ gap: 1, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 8, color: c.textDim }}>{'vmMemory'}</Text>
-                  <Text style={{ fontSize: 9, color: C.vm }}>{'2048'}</Text>
-                </Box>
-                <Box style={{ gap: 1, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 8, color: c.textDim }}>{'vmCpus'}</Text>
-                  <Text style={{ fontSize: 9, color: C.vm }}>{'2'}</Text>
-                </Box>
-                <Box style={{ gap: 1, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 8, color: c.textDim }}>{'interactive'}</Text>
-                  <Text style={{ fontSize: 9, color: C.webcam }}>{'true'}</Text>
-                </Box>
-              </Box>
-            </Box>
+            <CartridgeOSDemo />
           </Half>
         </Band>
 

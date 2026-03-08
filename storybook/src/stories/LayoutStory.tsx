@@ -433,7 +433,7 @@ export function LayoutStory() {
                 <Box style={{ flexDirection: 'row', gap: 4, width: '100%', justifyContent: 'center' }}>
                   {(['start', 'center', 'end'] as const).map(align => (
                     <Box key={align} style={{
-                      flexGrow: 1, height: 60, backgroundColor: c.surface,
+                      flexGrow: 1, height: 74, backgroundColor: c.surface,
                       borderRadius: 6, padding: 4, gap: 2, alignItems: align,
                     }}>
                       <Bar label="Short" width={36} color={P.violet} />

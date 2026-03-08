@@ -416,7 +416,8 @@ export function MasksStory() {
 
       {/* ── Command center — live-editable props ── */}
       <Box style={{
-        flexShrink: 0,
+        flexShrink: 1,
+        overflow: 'hidden',
         borderBottomWidth: 1,
         borderColor: c.border,
         backgroundColor: c.bgElevated,
@@ -480,6 +481,7 @@ export function MasksStory() {
                 flexDirection: 'row', alignItems: 'center', gap: 2,
                 paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2,
                 borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+                overflow: 'hidden',
               }}>
                 <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={c.muted} />
                 <Text style={{ color: c.muted, fontSize: 9, marginRight: 2 }}>{p.name}</Text>
@@ -509,7 +511,7 @@ export function MasksStory() {
                   />
                 ) : (
                   <Pressable onPress={() => setEditingProp(p.name)}>
-                    <Text style={{ color: c.text, fontSize: 9, minWidth: 28 }}>
+                    <Text style={{ color: c.text, fontSize: 9, width: 30 }}>
                       {step >= 1 ? String(val) : val.toFixed(step < 0.01 ? 3 : 2)}
                     </Text>
                   </Pressable>

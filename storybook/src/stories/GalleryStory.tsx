@@ -525,10 +525,13 @@ export function GalleryStory() {
   const tabGridHeight = tabsExpanded ? 380 : 232;
 
   return (
-    <S.StoryRoot>
+    <S.StoryRoot testId="gallery-root">
+
+      {/* ── Content area: everything above footer, clipped to fit ── */}
+      <Box testId="gallery-content" style={{ flexGrow: 1, overflow: 'hidden' }}>
 
       {/* ── Header row 1: Gallery title ── */}
-      <Box style={{
+      <Box testId="gallery-header1" style={{
         flexShrink: 0, flexDirection: 'row', alignItems: 'center',
         backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
         paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, gap: 14,
@@ -543,7 +546,7 @@ export function GalleryStory() {
       </Box>
 
       {/* ── Header row 2: Component name + package badge ── */}
-      <Box style={{
+      <Box testId="gallery-header2" style={{
         flexShrink: 0, flexDirection: 'row', alignItems: 'center',
         backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
         paddingLeft: 20, paddingRight: 20, paddingTop: 8, paddingBottom: 8, gap: 10,
@@ -563,7 +566,7 @@ export function GalleryStory() {
       </Box>
 
       {/* ── Info row: description | usage | props ── */}
-      <Box style={{
+      <Box testId="gallery-info-row" style={{
         height: 120, flexShrink: 0, flexDirection: 'row',
         borderBottomWidth: 1, borderColor: c.border, backgroundColor: c.bgElevated, overflow: 'hidden',
       }}>
@@ -609,13 +612,13 @@ export function GalleryStory() {
       </Box>
 
       {/* ── Preview area ── */}
-      <Box style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
+      <Box testId="gallery-preview" style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
         {PREVIEWS[tab.id]?.(c)}
       </Box>
 
       {/* ── Divider bar: expand toggle + search ── */}
       <Pressable onPress={() => setTabsExpanded(!tabsExpanded)}>
-        <Box style={{
+        <Box testId="gallery-divider-bar" style={{
           flexShrink: 0, flexDirection: 'row', alignItems: 'center',
           backgroundColor: c.bgElevated, borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.border,
           paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, gap: 10,
@@ -665,7 +668,7 @@ export function GalleryStory() {
       </Pressable>
 
       {/* ── Tab grid — thumbnail previews ── */}
-      <ScrollView style={{
+      <ScrollView testId="gallery-tab-grid" style={{
         height: tabGridHeight, flexShrink: 0,
         backgroundColor: c.bgElevated,
       }}>
@@ -710,8 +713,10 @@ export function GalleryStory() {
         </Box>
       </ScrollView>
 
+      </Box>{/* end gallery-content */}
+
       {/* ── Footer — breadcrumbs + counter ── */}
-      <Box style={{
+      <Box testId="gallery-footer-toolbar" style={{
         flexShrink: 0, flexDirection: 'row', alignItems: 'center',
         backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
         paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,

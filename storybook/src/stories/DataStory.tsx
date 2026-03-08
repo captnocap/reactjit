@@ -215,7 +215,6 @@ const DEMO_EMPLOYEES: Employee[] = [
 
 const previewCardStyle = {
   width: '100%',
-  maxWidth: 420,
   backgroundColor: 'rgba(255,255,255,0.03)',
   borderRadius: 8,
   borderWidth: 1,
@@ -240,12 +239,12 @@ function PreviewSection({ label, children }: { label: string; children: React.Re
 function DataPreview() {
   const c = useThemeColors();
   const tableColumns: TableColumn<Employee>[] = useMemo(() => [
-    { key: 'name', title: 'Name', width: 90 },
-    { key: 'role', title: 'Role', width: 70 },
+    { key: 'name', title: 'Name' },
+    { key: 'role', title: 'Role' },
     {
       key: 'status',
       title: 'Status',
-      width: 70,
+      width: 56,
       render: (value: Employee['status']) => (
         <Badge
           label={value}
@@ -253,13 +252,13 @@ function DataPreview() {
         />
       ),
     },
-    { key: 'score', title: 'Score', width: 50, align: 'right' },
+    { key: 'score', title: 'Score', width: 42, align: 'right' },
   ], []);
 
   return (
     <Box style={{ gap: 14, alignItems: 'center', width: '100%' }}>
       <PreviewSection label="BAR CHART">
-        <BarChart data={DEMO_BAR_DATA} width={380} height={140} showValues interactive />
+        <BarChart data={DEMO_BAR_DATA} height={140} showValues interactive style={{ width: '100%' }} />
       </PreviewSection>
 
       <PreviewSection label="TABLE">
@@ -279,23 +278,23 @@ function DataPreview() {
       </PreviewSection>
 
       <PreviewSection label="LINE CHART">
-        <LineChart data={DEMO_LINE_DATA} width={380} height={140} showArea interactive color="#3b82f6" />
+        <LineChart data={DEMO_LINE_DATA} height={140} showArea interactive color="#3b82f6" style={{ width: '100%' }} />
       </PreviewSection>
 
       <PreviewSection label="AREA CHART">
-        <AreaChart data={DEMO_AREA_DATA} width={380} height={140} interactive color="#22c55e" showDots />
+        <AreaChart data={DEMO_AREA_DATA} height={140} interactive color="#22c55e" showDots style={{ width: '100%' }} />
       </PreviewSection>
 
       <PreviewSection label="SPARKLINE">
-        <Sparkline data={DEMO_SPARK_DATA} width={260} height={40} interactive color="#22c55e" />
+        <Sparkline data={DEMO_SPARK_DATA} width={400} height={40} interactive color="#22c55e" />
       </PreviewSection>
 
       <PreviewSection label="HORIZONTAL BAR">
-        <HorizontalBarChart data={DEMO_HBAR_DATA} width={300} showValues interactive />
+        <HorizontalBarChart data={DEMO_HBAR_DATA} width={400} showValues interactive />
       </PreviewSection>
 
       <PreviewSection label="STACKED BAR">
-        <StackedBarChart labels={DEMO_STACKED_LABELS} series={DEMO_STACKED_SERIES} height={140} interactive />
+        <StackedBarChart labels={DEMO_STACKED_LABELS} series={DEMO_STACKED_SERIES} height={140} interactive style={{ width: '100%' }} />
       </PreviewSection>
 
       <PreviewSection label="RADAR">
@@ -303,7 +302,7 @@ function DataPreview() {
       </PreviewSection>
 
       <PreviewSection label="PROGRESS BAR">
-        <Box style={{ width: '100%', maxWidth: 300, gap: 6 }}>
+        <Box style={{ width: '100%', gap: 6 }}>
           <ProgressBar value={0.28} showLabel label="Build Queue" />
           <ProgressBar value={0.63} showLabel label="Data Sync" color="#f59e0b" />
           <ProgressBar value={0.91} showLabel label="Deploy" color="#22c55e" />
