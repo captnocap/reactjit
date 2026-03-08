@@ -5,11 +5,14 @@ import {
   PresentationEditor,
   PresentationSlideStrip,
   applyPresentationPatch,
+  applyPresentationPatches,
   createPresentationDocument,
   createPresentationGroupNode,
+  createPresentationImageNode,
   createPresentationShapeNode,
   createPresentationSlide,
   createPresentationTextNode,
+  createPresentationVideoNode,
   duplicatePresentationSlide,
   findPresentationNode,
   type PresentationCamera,
@@ -18,6 +21,7 @@ import {
   type PresentationEditorCameraEvent,
   type PresentationEditorPatchEvent,
   type PresentationEditorSelectionEvent,
+  type PresentationAsset,
   type PresentationPatch,
   type PresentationSelection,
 } from '../../../packages/presentation/src';
@@ -249,10 +253,67 @@ function createStarterShapeNode(index: number) {
   }, DEMO_FACTORY);
 }
 
+function createStarterImageAsset(index: number): PresentationAsset {
+  return {
+    id: DEMO_FACTORY.idFactory('asset'),
+    kind: 'image',
+    title: `Editorial Still ${index}`,
+    src: `demo://image-${index}.jpg`,
+    mimeType: 'image/jpeg',
+    width: 1400,
+    height: 900,
+  };
+}
+
+function createStarterImageNode(index: number, assetId: string) {
+  return createPresentationImageNode({
+    assetId,
+    alt: `Editorial still ${index}`,
+    fit: 'cover',
+    frame: {
+      x: 840,
+      y: 148 + ((index - 1) % 3) * 118,
+      width: 420,
+      height: 220,
+    },
+  }, DEMO_FACTORY);
+}
+
+function createStarterVideoAsset(index: number): PresentationAsset {
+  return {
+    id: DEMO_FACTORY.idFactory('asset'),
+    kind: 'video',
+    title: `Loop Clip ${index}`,
+    src: `demo://video-${index}.mp4`,
+    mimeType: 'video/mp4',
+    width: 1920,
+    height: 1080,
+    durationMs: 24000,
+    poster: `demo://video-${index}-poster.jpg`,
+  };
+}
+
+function createStarterVideoNode(index: number, assetId: string) {
+  return createPresentationVideoNode({
+    assetId,
+    fit: 'cover',
+    autoplay: false,
+    loop: true,
+    muted: true,
+    frame: {
+      x: 900,
+      y: 170 + ((index - 1) % 2) * 196,
+      width: 468,
+      height: 264,
+    },
+  }, DEMO_FACTORY);
+}
+
 const INITIAL_DOCUMENT = createDemoDocument();
 const INITIAL_LOG = [
   'Click inside the editor to focus it.',
   'Drag a node to move it, drag a corner to resize it, and drag empty space to pan.',
+  'Use the slide strip to duplicate or move the active slide. Insert image and video nodes from the panel on the right.',
   'Ctrl+A or Cmd+A selects the editable canvas nodes. Arrow keys nudge. Shift plus Arrow moves 10 pixels. Escape clears selection.',
 ];
 
@@ -458,6 +519,18 @@ export function PresentationStory() {
     pushLog(setLog, formatPatch(patch));
   }, [activeSlide, activeSlideIndex, document.slides.length]);
 
+  const handleMoveSlide = useCallback((slideId: string, index: number) => {
+    const patch: PresentationPatch = {
+      type: 'reorderSlide',
+      slideId,
+      index,
+    };
+
+    setDocument((current) => applyPresentationPatch(current, patch));
+    setActiveSlideId(slideId);
+    pushLog(setLog, formatPatch(patch));
+  }, []);
+
   const handleRemoveSlide = useCallback(() => {
     if (!canRemoveSlide) {
       pushLog(setLog, 'removeSlide blocked for the last remaining slide');
@@ -513,6 +586,40 @@ export function PresentationStory() {
     pushLog(setLog, formatPatch(patch));
   }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
 
+  const handleAddImage = useCallback(() => {
+    const nextIndex = activeSlide.nodes.filter((node) => node.kind === 'image').length + 1;
+    const asset = createStarterImageAsset(nextIndex);
+    const nextNode = createStarterImageNode(nextIndex, asset.id);
+    const patches: PresentationPatch[] = [
+      { type: 'upsertAsset', asset },
+      { type: 'addNode', slideId: activeSlide.id, node: nextNode },
+    ];
+
+    setDocument((current) => applyPresentationPatches(current, patches));
+    issueEditorCommand({
+      type: 'setSelection',
+      selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
+    });
+    patches.forEach((patch) => pushLog(setLog, formatPatch(patch)));
+  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+
+  const handleAddVideo = useCallback(() => {
+    const nextIndex = activeSlide.nodes.filter((node) => node.kind === 'video').length + 1;
+    const asset = createStarterVideoAsset(nextIndex);
+    const nextNode = createStarterVideoNode(nextIndex, asset.id);
+    const patches: PresentationPatch[] = [
+      { type: 'upsertAsset', asset },
+      { type: 'addNode', slideId: activeSlide.id, node: nextNode },
+    ];
+
+    setDocument((current) => applyPresentationPatches(current, patches));
+    issueEditorCommand({
+      type: 'setSelection',
+      selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
+    });
+    patches.forEach((patch) => pushLog(setLog, formatPatch(patch)));
+  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+
   return (
     <Box
       style={{
@@ -542,6 +649,7 @@ export function PresentationStory() {
           onSelectSlide={handleSelectSlide}
           onAddSlide={handleAddSlide}
           onDuplicateSlide={handleDuplicateSlide}
+          onMoveSlide={handleMoveSlide}
           onRemoveSlide={handleRemoveSlide}
           style={{
             width: 240,
@@ -580,6 +688,8 @@ export function PresentationStory() {
             <S.RowG8 style={{ flexWrap: 'wrap' }}>
               <ToolbarButton label="+ Text" onPress={handleAddText} />
               <ToolbarButton label="+ Shape" onPress={handleAddShape} />
+              <ToolbarButton label="+ Image" onPress={handleAddImage} />
+              <ToolbarButton label="+ Video" onPress={handleAddVideo} />
             </S.RowG8>
           </Panel>
 
@@ -587,6 +697,7 @@ export function PresentationStory() {
             <KeyValue label="slide" value={`${activeSlideIndex + 1} / ${document.slides.length}`} />
             <KeyValue label="title" value={activeSlide.title || '(untitled)'} />
             <KeyValue label="nodes" value={String(activeSlide.nodes.length)} />
+            <KeyValue label="assets" value={String(Object.keys(document.assets).length)} />
             <KeyValue label="stage" value={`${document.settings.stage.width} x ${document.settings.stage.height}`} />
             <KeyValue label="camera x" value={cameraPreview.x.toFixed(2)} />
             <KeyValue label="camera y" value={cameraPreview.y.toFixed(2)} />
@@ -612,6 +723,8 @@ export function PresentationStory() {
                   <S.StoryBody>{selectedNode.text}</S.StoryBody>
                 ) : selectedNode.kind === 'shape' ? (
                   <S.StoryBody>{selectedNode.shape}</S.StoryBody>
+                ) : selectedNode.kind === 'image' || selectedNode.kind === 'video' ? (
+                  <S.StoryBody>{document.assets[selectedNode.assetId]?.title || selectedNode.assetId}</S.StoryBody>
                 ) : null}
               </Box>
             ) : (
@@ -621,6 +734,8 @@ export function PresentationStory() {
 
           <Panel title="Shortcuts">
             <Box style={{ gap: 6 }}>
+              <S.StoryBody>Use Up and Down in the slide strip to reorder the active slide.</S.StoryBody>
+              <S.StoryBody>Image and video insertions land as native media placeholders on the canvas.</S.StoryBody>
               <S.StoryBody>Click the editor surface to focus it.</S.StoryBody>
               <S.StoryBody>Ctrl+A or Cmd+A selects every editable node on the canvas.</S.StoryBody>
               <S.StoryBody>Shift plus click adds a node to the canvas selection.</S.StoryBody>

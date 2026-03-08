@@ -38,10 +38,11 @@ function visitNodes(nodes: readonly PresentationNode[], visitor: (node: Presenta
   }
 }
 
-function summarizeSlide(slide: PresentationSlide): { preview: string; textCount: number; shapeCount: number } {
+function summarizeSlide(slide: PresentationSlide): { preview: string; textCount: number; shapeCount: number; mediaCount: number } {
   let preview = '';
   let textCount = 0;
   let shapeCount = 0;
+  let mediaCount = 0;
 
   visitNodes(slide.nodes, (node) => {
     if (node.kind === 'text') {
@@ -51,18 +52,20 @@ function summarizeSlide(slide: PresentationSlide): { preview: string; textCount:
       }
     } else if (node.kind === 'shape') {
       shapeCount += 1;
+    } else if (node.kind === 'image' || node.kind === 'video') {
+      mediaCount += 1;
     }
   });
 
   if (!preview) {
-    preview = `${textCount} text, ${shapeCount} shape`;
+    preview = `${textCount} text, ${shapeCount} shape, ${mediaCount} media`;
   }
 
   if (preview.length > 54) {
     preview = `${preview.slice(0, 51)}...`;
   }
 
-  return { preview, textCount, shapeCount };
+  return { preview, textCount, shapeCount, mediaCount };
 }
 
 function ActionButton({
@@ -108,14 +111,18 @@ export function PresentationSlideStrip(props: PresentationSlideStripProps) {
     onSelectSlide,
     onAddSlide,
     onDuplicateSlide,
+    onMoveSlide,
     onRemoveSlide,
   } = props;
 
   const resolvedStyle = resolveStripStyle(props);
   const scaledStyle = useScaledStyle(resolvedStyle);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0] ?? null;
+  const activeSlideIndex = activeSlide ? document.slides.findIndex((slide) => slide.id === activeSlide.id) : -1;
   const canDuplicate = activeSlide != null;
   const canRemove = document.slides.length > 1 && activeSlide != null;
+  const canMoveUp = activeSlideIndex > 0;
+  const canMoveDown = activeSlideIndex >= 0 && activeSlideIndex < document.slides.length - 1;
 
   return (
     <Box
@@ -142,6 +149,24 @@ export function PresentationSlideStrip(props: PresentationSlideStripProps) {
       <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         <ActionButton label="+ Slide" onPress={onAddSlide} />
         <ActionButton label="Duplicate" disabled={!canDuplicate} onPress={onDuplicateSlide} />
+        <ActionButton
+          label="Up"
+          disabled={!canMoveUp}
+          onPress={() => {
+            if (activeSlide && activeSlideIndex > 0) {
+              onMoveSlide?.(activeSlide.id, activeSlideIndex - 1);
+            }
+          }}
+        />
+        <ActionButton
+          label="Down"
+          disabled={!canMoveDown}
+          onPress={() => {
+            if (activeSlide && activeSlideIndex >= 0) {
+              onMoveSlide?.(activeSlide.id, activeSlideIndex + 1);
+            }
+          }}
+        />
         <ActionButton label="Remove" disabled={!canRemove} onPress={onRemoveSlide} />
       </Box>
 
@@ -218,6 +243,9 @@ export function PresentationSlideStrip(props: PresentationSlideStripProps) {
                   </Text>
                   <Text style={{ fontSize: 9, color: PANEL_MUTED }}>
                     {summary.shapeCount} shape
+                  </Text>
+                  <Text style={{ fontSize: 9, color: PANEL_MUTED }}>
+                    {summary.mediaCount} media
                   </Text>
                   <Text style={{ fontSize: 9, color: PANEL_MUTED }}>
                     zoom {slide.camera.zoom.toFixed(2)}

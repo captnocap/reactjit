@@ -222,6 +222,13 @@ local function pointInRect(px, py, x, y, w, h)
   return px >= x and px <= x + w and py >= y and py <= y + h
 end
 
+local function isEditableNode(nodeDef)
+  return nodeDef.kind == "text"
+    or nodeDef.kind == "shape"
+    or nodeDef.kind == "image"
+    or nodeDef.kind == "video"
+end
+
 local function findNodeRecord(nodes, nodeId, parentX, parentY, overrides)
   for _, entry in ipairs(sortedNodes(nodes)) do
     local nodeDef = entry.node
@@ -271,7 +278,7 @@ local function hitTestNodes(nodes, worldX, worldY, parentX, parentY, overrides)
         end
       end
 
-      if (nodeDef.kind == "text" or nodeDef.kind == "shape") and pointInRect(worldX, worldY, absX, absY, width, height) then
+      if isEditableNode(nodeDef) and pointInRect(worldX, worldY, absX, absY, width, height) then
         return {
           node = nodeDef,
           frame = frame,
@@ -373,7 +380,7 @@ local function collectSelectableSelections(nodes, slideId, selections)
     if not nodeDef.hidden then
       if nodeDef.kind == "group" and nodeDef.children then
         collectSelectableSelections(nodeDef.children, slideId, selections)
-      elseif nodeDef.kind == "text" or nodeDef.kind == "shape" then
+      elseif isEditableNode(nodeDef) then
         selections[#selections + 1] = {
           slideId = slideId,
           nodeId = nodeDef.id,
@@ -429,7 +436,7 @@ local function collectSelectionsInRect(nodes, slideId, x, y, w, h, parentX, pare
         if allowChildren then
           collectSelectionsInRect(nodeDef.children, slideId, x, y, w, h, absX, absY, overrides, selections)
         end
-      elseif (nodeDef.kind == "text" or nodeDef.kind == "shape") and rectsIntersect(x, y, w, h, absX, absY, width, height) then
+      elseif isEditableNode(nodeDef) and rectsIntersect(x, y, w, h, absX, absY, width, height) then
         selections[#selections + 1] = {
           slideId = slideId,
           nodeId = nodeDef.id,
@@ -699,6 +706,12 @@ local function resolveAccentColor(document)
   return nil
 end
 
+local function resolveAsset(document, assetId)
+  local assets = document and document.assets or nil
+  if not assets or not assetId then return nil end
+  return assets[assetId]
+end
+
 local function getFontForText(nodeDef)
   local textStyle = nodeDef.textStyle or {}
   local style = nodeDef.style or {}
@@ -707,6 +720,16 @@ local function getFontForText(nodeDef)
   local fontWeight = textStyle.fontWeight or style.fontWeight
   if Measure and Measure.getFont then
     return Measure.getFont(fontSize, fontFamily, fontWeight)
+  end
+  if love.graphics and love.graphics.newFont then
+    return love.graphics.newFont(fontSize)
+  end
+  return love.graphics.getFont()
+end
+
+local function getUIFont(fontSize, fontWeight)
+  if Measure and Measure.getFont then
+    return Measure.getFont(fontSize, nil, fontWeight)
   end
   if love.graphics and love.graphics.newFont then
     return love.graphics.newFont(fontSize)
@@ -749,6 +772,7 @@ end
 
 local function drawText(document, nodeDef, frame, absX, absY, opacity)
   local width = math.max(1, frame.width or 0)
+  local height = math.max(1, frame.height or 0)
   local padding = 12
   local font = getFontForText(nodeDef)
   local textStyle = nodeDef.textStyle or {}
@@ -775,6 +799,55 @@ local function drawText(document, nodeDef, frame, absX, absY, opacity)
   end
 end
 
+local function drawMediaNode(document, nodeDef, frame, absX, absY, opacity)
+  local width = math.max(1, frame.width or 0)
+  local height = math.max(1, frame.height or 0)
+  local asset = resolveAsset(document, nodeDef.assetId)
+  local title = asset and (asset.title or asset.src) or (nodeDef.assetId or (nodeDef.kind == "video" and "Video asset" or "Image asset"))
+  local subtitle = nodeDef.kind == "video" and "Video placeholder" or "Image placeholder"
+  local corner = 18
+
+  setParsedColor(nodeDef.kind == "video" and "#101726" or "#f3f7ff", opacity, FALLBACK_SLIDE_BG)
+  love.graphics.rectangle("fill", absX, absY, width, height, corner, corner)
+
+  setParsedColor(resolveAccentColor(document), opacity, FALLBACK_ACCENT)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", absX, absY, width, height, corner, corner)
+
+  setParsedColor(nodeDef.kind == "video" and "#ff8f3d" or "#8fb8ff", opacity, FALLBACK_ACCENT)
+  if nodeDef.kind == "video" then
+    local cx = absX + math.min(width * 0.26, 56)
+    local cy = absY + height * 0.5
+    local size = math.min(width, height) * 0.16
+    love.graphics.polygon("fill",
+      cx - size * 0.35, cy - size,
+      cx - size * 0.35, cy + size,
+      cx + size, cy
+    )
+  else
+    love.graphics.rectangle("line", absX + 18, absY + 18, math.max(12, width * 0.22), math.max(12, height * 0.22), 8, 8)
+    love.graphics.line(absX + 18, absY + height * 0.7, absX + width * 0.34, absY + height * 0.48, absX + width * 0.52, absY + height * 0.7)
+    love.graphics.circle("fill", absX + width * 0.24, absY + height * 0.32, math.max(6, math.min(width, height) * 0.035))
+  end
+
+  local titleFont = getUIFont(20, "bold")
+  local bodyFont = getUIFont(14)
+  if titleFont then love.graphics.setFont(titleFont) end
+  setParsedColor(nodeDef.kind == "video" and "#f8fbff" or "#102030", opacity, FALLBACK_TEXT)
+  love.graphics.printf(title, absX + 86, absY + 26, math.max(1, width - 102), "left")
+
+  if bodyFont then love.graphics.setFont(bodyFont) end
+  setParsedColor(nodeDef.kind == "video" and "#d5deed" or "#516173", opacity, FALLBACK_MUTED)
+  love.graphics.printf(subtitle, absX + 86, absY + 56, math.max(1, width - 102), "left")
+  love.graphics.printf(
+    string.format("%dx%d", math.floor(width + 0.5), math.floor(height + 0.5)),
+    absX + 86,
+    absY + math.max(84, height - 34),
+    math.max(1, width - 102),
+    "left"
+  )
+end
+
 local function drawNodes(document, slide, nodes, parentX, parentY, opacity, state, layout)
   for _, entry in ipairs(sortedNodes(nodes)) do
     local nodeDef = entry.node
@@ -788,6 +861,8 @@ local function drawNodes(document, slide, nodes, parentX, parentY, opacity, stat
         drawShape(document, nodeDef, frame, absX, absY, nodeOpacity)
       elseif nodeDef.kind == "text" then
         drawText(document, nodeDef, frame, absX, absY, nodeOpacity)
+      elseif nodeDef.kind == "image" or nodeDef.kind == "video" then
+        drawMediaNode(document, nodeDef, frame, absX, absY, nodeOpacity)
       elseif nodeDef.kind == "group" and nodeDef.children then
         local restoreScissor = nil
         if nodeDef.clip then

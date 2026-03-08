@@ -227,5 +227,6 @@ export interface PresentationSlideStripProps {
   onSelectSlide?: (slideId: string) => void;
   onAddSlide?: () => void;
   onDuplicateSlide?: () => void;
+  onMoveSlide?: (slideId: string, index: number) => void;
   onRemoveSlide?: () => void;
 }
