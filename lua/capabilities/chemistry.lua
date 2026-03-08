@@ -26,6 +26,7 @@ local M = {}
 
 local ELEMENTS = {}
 local BY_SYMBOL = {}
+local BY_ELEMENT_NAME = {}
 
 local function el(n, sym, name, mass, cat, grp, per, phase, en, shells, cpk, mp, bp, dens)
   local e = {
@@ -36,6 +37,7 @@ local function el(n, sym, name, mass, cat, grp, per, phase, en, shells, cpk, mp,
   }
   ELEMENTS[n] = e
   BY_SYMBOL[sym] = e
+  BY_ELEMENT_NAME[name:lower()] = e
 end
 
 el(1,  'H',  'Hydrogen',      1.008,   'nonmetal',              1, 1,'gas',   2.20,{1},              '#FFFFFF', 14.01,  20.28,  0.00008988)
@@ -730,9 +732,7 @@ function M.getHandlers()
   return {
     ["chemistry:element"] = function(args)
       if not args or not args.key then return nil end
-      local key = args.key
-      if type(key) == 'number' then return ELEMENTS[key] end
-      return BY_SYMBOL[key] or BY_SYMBOL[key:sub(1,1):upper() .. (key:sub(2) or '')]
+      return M.getElement(args.key)
     end,
 
     ["chemistry:elements"] = function(args)
@@ -995,8 +995,14 @@ end
 -- ── Public accessors (for other Lua modules) ─────────────────────────────────
 
 function M.getElement(key)
-  if type(key) == "number" then return ELEMENTS[key]
-  elseif type(key) == "string" then return BY_SYMBOL[key]
+  if type(key) == "number" then
+    return ELEMENTS[key]
+  elseif type(key) == "string" then
+    local trimmed = key:match("^%s*(.-)%s*$")
+    if trimmed == "" then return nil end
+    return BY_SYMBOL[trimmed]
+      or BY_SYMBOL[trimmed:sub(1,1):upper() .. trimmed:sub(2):lower()]
+      or BY_ELEMENT_NAME[trimmed:lower()]
   end
   return nil
 end

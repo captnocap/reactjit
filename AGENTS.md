@@ -123,6 +123,17 @@ Your job is to edit source files cleanly and run the sync pipeline. That's it.
 - Run the sync pipeline (`make cli-setup`, `reactjit update`, `reactjit build`)
 - Create or modify files that are clearly part of the task you were given
 
+## Test Parity (NON-NEGOTIABLE)
+
+If you add or expand a package test under `packages/*/test/*.test.mjs`, you MUST classify it in `cli/lib/test-parity.mjs`.
+
+- `nodeOnly` means the test covers behavior that exists only in JS/TS. Add a short rationale.
+- `luaBacked` means the package behavior is mirrored or implemented in Lua. Add one or more Lua harnesses under `packages/*/test/*.lua` and list them as counterparts.
+
+For `luaBacked` coverage, the Lua harness must mirror the behavioral contract being asserted on the JS side. Do not stop at the npm test if the runtime path goes through Lua.
+
+Use `node cli/bin/reactjit.mjs test <packages/.../*.test.mjs>` when verifying a Lua-backed package test. The runner will execute the Node test and its declared Lua counterparts together.
+
 ## Dev Servers: Use `dv` CLI (NON-NEGOTIABLE)
 
 **NEVER start dev servers directly.** No `love .`, no `npm run dev`, no direct spawning. Every dev server goes through the `dv` CLI (`~/.local/bin/dv`). Direct spawning causes duplicate processes that pile up and waste system resources.

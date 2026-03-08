@@ -1,10 +1,15 @@
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname, basename, extname } from 'node:path';
-import { execSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
+import {
+  checkPackageTestParity,
+  getPackageNodeTestPolicy,
+  isPackageNodeTest,
+} from '../lib/test-parity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT   = join(__dirname, '..');
@@ -17,6 +22,7 @@ const dim   = (s) => `\x1b[2m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const red   = (s) => `\x1b[31m${s}\x1b[0m`;
 const cyan  = (s) => `\x1b[36m${s}\x1b[0m`;
+const NODE_TEST_TIMEOUT_MS = 180000;
 
 // ── Node test discovery ─────────────────────────────────────────────────────
 // Finds all .test.mjs files in source-of-truth locations (not copies in
@@ -35,6 +41,13 @@ function discoverNodeTests() {
   return tests;
 }
 
+function discoverLuaTests() {
+  const tests = [];
+  const dir = join(REPO_ROOT, 'packages');
+  if (existsSync(dir)) walkForLuaTests(dir, tests, false);
+  return tests;
+}
+
 function walkForTests(dir, results) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -48,6 +61,31 @@ function walkForTests(dir, results) {
   }
 }
 
+function walkForLuaTests(dir, results, inTestDir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules') continue;
+      walkForLuaTests(full, results, inTestDir || entry.name === 'test');
+    } else if (inTestDir && entry.name.endsWith('.lua')) {
+      results.push(full);
+    }
+  }
+}
+
+function findExecutable(name) {
+  const pathEntries = (process.env.PATH || '').split(':').filter(Boolean);
+  for (const entry of pathEntries) {
+    const full = join(entry, name);
+    if (existsSync(full)) return full;
+  }
+  return null;
+}
+
+function exitedCleanlyDespiteSandbox(error) {
+  return error && error.status === 0 && !error.signal;
+}
+
 // ── Run a single node test file ─────────────────────────────────────────────
 function runNodeTest(file) {
   const label = file.startsWith(REPO_ROOT)
@@ -55,10 +93,49 @@ function runNodeTest(file) {
     : file;
   process.stdout.write(`  ${dim('node --test')} ${label} `);
   try {
-    execSync(`node --test ${file}`, { cwd: REPO_ROOT, stdio: 'pipe', timeout: 60000 });
+    execFileSync(process.execPath, ['--test', file], {
+      cwd: REPO_ROOT,
+      stdio: 'pipe',
+      timeout: NODE_TEST_TIMEOUT_MS,
+    });
     console.log(green('ok'));
     return true;
   } catch (e) {
+    if (exitedCleanlyDespiteSandbox(e)) {
+      console.log(green('ok'));
+      return true;
+    }
+    console.log(red('FAIL'));
+    const out = (e.stdout || e.stderr || e.message || '').toString().trim();
+    if (out) console.error('  ' + out.split('\n').slice(0, 20).join('\n  '));
+    return false;
+  }
+}
+
+function findLuaCommand() {
+  return findExecutable('luajit') || findExecutable('lua');
+}
+
+function runLuaTest(file) {
+  const luaCmd = findLuaCommand();
+  const label = file.startsWith(REPO_ROOT)
+    ? file.slice(REPO_ROOT.length + 1)
+    : file;
+  process.stdout.write(`  ${dim(luaCmd || 'lua')} ${label} `);
+  if (!luaCmd) {
+    console.log(red('FAIL'));
+    console.error('  No Lua interpreter found (expected luajit or lua).');
+    return false;
+  }
+  try {
+    execFileSync(luaCmd, [file], { cwd: REPO_ROOT, stdio: 'pipe', timeout: 60000 });
+    console.log(green('ok'));
+    return true;
+  } catch (e) {
+    if (exitedCleanlyDespiteSandbox(e)) {
+      console.log(green('ok'));
+      return true;
+    }
     console.log(red('FAIL'));
     const out = (e.stdout || e.stderr || e.message || '').toString().trim();
     if (out) console.error('  ' + out.split('\n').slice(0, 20).join('\n  '));
@@ -72,29 +149,68 @@ function isNodeTest(filePath) {
   return ext === '.mjs' || ext === '.js';
 }
 
+function isLuaTest(filePath) {
+  return extname(filePath) === '.lua';
+}
+
+function printParityFailures(failures) {
+  console.error(`\n  ${red(bold('Test parity check failed'))}\n`);
+  for (const failure of failures) {
+    console.error('  ' + failure.replace(/\n/g, '\n  '));
+  }
+  console.error('');
+}
+
 // ── entry point ───────────────────────────────────────────────────────────────
 export async function testCommand(args) {
   const cwd = process.cwd();
+  const runAll = args.includes('--all');
+  const runNodeOnly = args.includes('--node');
+  const runLuaOnly = args.includes('--lua');
 
-  // ── --all: discover and run every node test ───────────────────────────────
-  if (args.includes('--all') || args.includes('--node')) {
+  // ── --all / --node / --lua: discover and run test files ───────────────────
+  if (runAll || runNodeOnly || runLuaOnly) {
     const tests = discoverNodeTests();
-    if (tests.length === 0) {
-      console.error(`\n  No node tests found.\n`);
+    const luaTests = discoverLuaTests();
+    const parityFailures = checkPackageTestParity({ repoRoot: REPO_ROOT, nodeTests: tests, luaTests });
+    if (parityFailures.length > 0) {
+      printParityFailures(parityFailures);
       process.exit(1);
     }
-    console.log(`\n  ${bold('rjit test --all')}  ${dim(`(${tests.length} node test files)`)}\n`);
+
+    const selectedNodeTests = runLuaOnly ? [] : tests;
+    const selectedLuaTests = runNodeOnly ? [] : luaTests;
+    const totalTests = selectedNodeTests.length + selectedLuaTests.length;
+
+    if (totalTests === 0) {
+      console.error(`\n  No tests found for the selected mode.\n`);
+      process.exit(1);
+    }
+
+    const modeLabel = runAll
+      ? 'rjit test --all'
+      : runNodeOnly
+        ? 'rjit test --node'
+        : 'rjit test --lua';
+    const detail = [];
+    if (selectedNodeTests.length > 0) detail.push(`${selectedNodeTests.length} node test files`);
+    if (selectedLuaTests.length > 0) detail.push(`${selectedLuaTests.length} lua harnesses`);
+    console.log(`\n  ${bold(modeLabel)}  ${dim(`(${detail.join(', ')})`)}\n`);
+
     let passed = 0, failed = 0;
-    for (const t of tests) {
+    for (const t of selectedNodeTests) {
       if (runNodeTest(t)) passed++; else failed++;
+    }
+    for (const t of selectedLuaTests) {
+      if (runLuaTest(t)) passed++; else failed++;
     }
     console.log('');
     if (failed === 0) {
-      console.log(`  ${green(bold(passed + ' passed'))} ${dim('(' + tests.length + ' files)')}\n`);
+      console.log(`  ${green(bold(passed + ' passed'))} ${dim('(' + totalTests + ' files)')}\n`);
     } else {
       console.log(
         `  ${green(passed + ' passed')}  ${red(bold(failed + ' failed'))} ` +
-        `${dim('(' + tests.length + ' files)')}\n`
+        `${dim('(' + totalTests + ' files)')}\n`
       );
     }
     process.exit(failed > 0 ? 1 : 0);
@@ -103,8 +219,10 @@ export async function testCommand(args) {
   // Find spec file (first non-flag arg)
   const specArg = args.find(a => !a.startsWith('-'));
   if (!specArg) {
-    console.error(`\n  Usage: rjit test <spec-file>        Run a single test (.ts → Love2D, .mjs → node)`);
-    console.error(`         rjit test --all              Run all node tests in the monorepo\n`);
+    console.error(`\n  Usage: rjit test <spec-file>        Run a single test (.ts → Love2D, .mjs/.js → node, .lua → standalone Lua)`);
+    console.error(`         rjit test --all              Run monorepo node tests plus standalone Lua harnesses`);
+    console.error(`         rjit test --node             Run monorepo node tests only`);
+    console.error(`         rjit test --lua              Run standalone Lua harnesses only\n`);
     process.exit(1);
   }
 
@@ -117,7 +235,31 @@ export async function testCommand(args) {
   // ── Node tests: .mjs / .js files run with node --test ─────────────────────
   if (isNodeTest(specFile)) {
     console.log(`\n  ${bold('rjit test')} ${dim(basename(specFile))}  ${dim('(node)')}\n`);
-    const ok = runNodeTest(specFile);
+    let ok = runNodeTest(specFile);
+
+    if (ok && isPackageNodeTest(REPO_ROOT, specFile)) {
+      const policy = getPackageNodeTestPolicy(REPO_ROOT, specFile);
+      if (!policy) {
+        printParityFailures([
+          `${specArg} is an unclassified package node test.\n` +
+          '  Add it to cli/lib/test-parity.mjs as either nodeOnly or luaBacked.',
+        ]);
+        process.exit(1);
+      }
+      if (policy.kind === 'luaBacked') {
+        console.log(`\n  ${dim('Mirrored Lua counterparts')}\n`);
+        for (const luaFile of policy.lua) {
+          ok = runLuaTest(resolve(REPO_ROOT, luaFile)) && ok;
+        }
+      }
+    }
+
+    process.exit(ok ? 0 : 1);
+  }
+
+  if (isLuaTest(specFile)) {
+    console.log(`\n  ${bold('rjit test')} ${dim(basename(specFile))}  ${dim('(lua)')}\n`);
+    const ok = runLuaTest(specFile);
     process.exit(ok ? 0 : 1);
   }
 
@@ -140,9 +282,14 @@ export async function testCommand(args) {
 
   process.stdout.write(`  ${dim('[1/2]')} Bundling spec...`);
   try {
-    execSync(
+    const npxCmd = findExecutable('npx');
+    if (!npxCmd) {
+      throw new Error('npx not found in PATH');
+    }
+    execFileSync(
+      npxCmd,
       [
-        'npx', 'esbuild',
+        'esbuild',
         '--bundle',
         '--format=iife',
         '--target=es2020',
@@ -151,15 +298,19 @@ export async function testCommand(args) {
         `--outfile=${specBundle}`,
         ...getEsbuildAliases(cwd),
         specFile,
-      ].join(' '),
+      ],
       { cwd, stdio: 'pipe' }
     );
     process.stdout.write(` ${green('ok')}\n`);
   } catch (e) {
-    process.stdout.write(` ${red('failed')}\n\n`);
-    const msg = (e.stderr || e.stdout || e.message || '').toString().trim();
-    if (msg) console.error('  ' + msg.replace(/\n/g, '\n  '));
-    process.exit(1);
+    if (exitedCleanlyDespiteSandbox(e)) {
+      process.stdout.write(` ${green('ok')}\n`);
+    } else {
+      process.stdout.write(` ${red('failed')}\n\n`);
+      const msg = (e.stderr || e.stdout || e.message || '').toString().trim();
+      if (msg) console.error('  ' + msg.replace(/\n/g, '\n  '));
+      process.exit(1);
+    }
   }
 
   // ── 2. Launch Love2D in test mode ───────────────────────────────────────────
@@ -173,11 +324,11 @@ export async function testCommand(args) {
   };
 
   // Prefer xvfb-run for headless CI environments
-  let useXvfb = false;
-  try { execSync('which xvfb-run', { stdio: 'pipe' }); useXvfb = true; } catch {}
-  const loveCmd = useXvfb
-    ? ['xvfb-run', '-a', 'love', loveDir]
-    : ['love', loveDir];
+  const xvfbRun = findExecutable('xvfb-run');
+  const loveExecutable = findExecutable('love') || 'love';
+  const loveCmd = xvfbRun
+    ? [xvfbRun, '-a', loveExecutable, loveDir]
+    : [loveExecutable, loveDir];
 
   const timeout = parseInt(args.find(a => a.startsWith('--timeout='))?.slice(10) || '30', 10);
 
