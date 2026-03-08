@@ -65,6 +65,8 @@ local activeCanvas = nil
 local activeColor = { 1, 1, 1, 1 }
 local activeBlendMode = 'alpha'
 local activeShader = nil
+local activeLineWidth = 1
+local activeLineJoin = 'miter'
 
 local function snapshotState()
   return {
@@ -72,6 +74,8 @@ local function snapshotState()
     color = cloneArray(activeColor),
     blendMode = activeBlendMode,
     shader = activeShader,
+    lineWidth = activeLineWidth,
+    lineJoin = activeLineJoin,
   }
 end
 
@@ -80,6 +84,8 @@ local function restoreState(state)
   activeColor = cloneArray(state.color)
   activeBlendMode = state.blendMode
   activeShader = state.shader
+  activeLineWidth = state.lineWidth
+  activeLineJoin = state.lineJoin
 end
 
 local function newFakeCanvas(w, h, label)
@@ -115,6 +121,8 @@ local function recordOp(op)
   op.color = cloneArray(activeColor)
   op.blendMode = activeBlendMode
   op.shader = activeShader
+  op.lineWidth = activeLineWidth
+  op.lineJoin = activeLineJoin
   table.insert(activeCanvas.ops, op)
 end
 
@@ -189,6 +197,31 @@ function love.graphics.ellipse(mode, x, y, rx, ry)
     rx = rx,
     ry = ry,
   })
+end
+
+function love.graphics.circle(mode, x, y, radius)
+  recordOp({
+    kind = 'circle',
+    mode = mode,
+    x = x,
+    y = y,
+    radius = radius,
+  })
+end
+
+function love.graphics.line(x1, y1, x2, y2)
+  recordOp({
+    kind = 'line',
+    points = { x1, y1, x2, y2 },
+  })
+end
+
+function love.graphics.setLineWidth(width)
+  activeLineWidth = width
+end
+
+function love.graphics.setLineJoin(join)
+  activeLineJoin = join
 end
 
 function love.graphics.polygon(mode, points, ...)
@@ -268,6 +301,7 @@ local Capabilities = require('lua.capabilities')
 local Imaging = require('lua.imaging')
 local Pipeline = require('lua.imaging.pipeline')
 local MaskRegistry = require('lua.imaging.mask_registry')
+local DrawCanvas = require('lua.capabilities.draw_canvas')
 local handlers = require('lua.capabilities.imaging')
 
 local function findRecordedOp(canvas, kind)
@@ -565,6 +599,55 @@ test('imaging:selection_rasterize stores replace/add/subtract masks with expecte
   handlers['imaging:mask_release']({ maskId = added.maskId })
   handlers['imaging:mask_release']({ maskId = subtracted.maskId })
   assertEqual(handlers['imaging:mask_info']().count, 0, 'mask count after releasing rasterized masks')
+end)
+
+test('canvas:paint clips strokes through selection masks on the Lua side', function()
+  resetMaskRegistry()
+
+  local drawDef = Capabilities.getDefinition('DrawCanvas')
+  assertTrue(drawDef ~= nil, 'DrawCanvas capability should register itself')
+
+  local state = drawDef.create('draw_canvas_masked', {
+    canvasId = 'draw_canvas_masked',
+    width = 24,
+    height = 16,
+    background = 'transparent',
+  })
+
+  local paintCanvas = DrawCanvas.getCanvas('draw_canvas_masked')
+  assertTrue(paintCanvas ~= nil, 'DrawCanvas should create a backing canvas')
+
+  local maskCanvas = newFakeCanvas(24, 16, 'paint_mask')
+  local maskId = MaskRegistry.store(maskCanvas)
+
+  local rpcHandlers = Capabilities.getHandlers()
+  local result = rpcHandlers['canvas:paint']({
+    canvasId = 'draw_canvas_masked',
+    points = { { 2, 3 }, { 10, 9 } },
+    color = { 0.25, 0.5, 0.75, 1 },
+    size = 8,
+    opacity = 0.4,
+    maskId = maskId,
+  })
+
+  assertEqual(result.ok, true, 'masked paint should succeed')
+
+  local compositeOp = findRecordedOp(paintCanvas, 'draw')
+  assertTrue(compositeOp ~= nil, 'masked paint should composite a temporary stroke canvas')
+  assertTrue(compositeOp.shader ~= nil, 'masked paint should use a clipping shader')
+  assertEqual(compositeOp.shader.sent.mask, maskCanvas, 'masked paint should send the selection mask to the shader')
+  assertEqual(compositeOp.blendMode, 'alpha', 'masked paint should preserve alpha blending')
+  assertTrue(type(compositeOp.drawable) == 'table', 'masked paint should draw from a temporary stroke canvas')
+
+  local strokeCircle = findRecordedOp(compositeOp.drawable, 'circle')
+  local strokeLine = findRecordedOp(compositeOp.drawable, 'line')
+  assertTrue(strokeCircle ~= nil, 'temporary stroke canvas should include stamped circles')
+  assertTrue(strokeLine ~= nil, 'temporary stroke canvas should include connecting line segments')
+  assertEqual(strokeCircle.color[4], 0.4, 'masked paint should preserve requested opacity on the stroke canvas')
+  assertEqual(compositeOp.drawable.releaseCount, 1, 'temporary stroke canvas should be released after compositing')
+
+  rpcHandlers['imaging:mask_release']({ maskId = maskId })
+  drawDef.destroy('draw_canvas_masked', state)
 end)
 
 io.write(string.format('\n%d tests, %d failures\n', total, failures))

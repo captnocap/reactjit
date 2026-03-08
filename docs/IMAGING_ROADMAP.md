@@ -93,7 +93,7 @@ Interactive paint canvas owned by Lua, declared by React.
 
 **Lua:**
 - `lua/capabilities/draw_canvas.lua` — `DrawCanvas` capability (visual)
-  - `canvas:paint` — draw smooth strokes along a point path
+  - `canvas:paint` — draw smooth strokes along a point path, optionally clipped by a selection mask handle
   - `canvas:erase` — erase to transparency along a path
   - `canvas:fill` — CPU flood fill via BFS on ImageData
   - `canvas:clear` — reset canvas to background
@@ -110,7 +110,7 @@ Interactive paint canvas owned by Lua, declared by React.
 ## 8) Next TODOs
 
 - Tile-level dirty tracking in compose (replace full-canvas dirtyRegions).
-- Mask clipping for canvas:paint (strokes inside selection only).
+- Mask clipping parity for `canvas:erase` and `canvas:fill`.
 - Pressure-sensitive brush via Gaussian falloff shader stamp.
 - Channel-aware blend (affect individual RGB channels with masks).
 

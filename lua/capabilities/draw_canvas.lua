@@ -24,12 +24,24 @@
 
 local Capabilities = require("lua.capabilities")
 local Imaging      = require("lua.imaging")
+local MaskRegistry = require("lua.imaging.mask_registry")
+local ShaderCache  = require("lua.imaging.shader_cache")
 
 -- Module-level canvas registry: canvasId -> love.Canvas
 -- Exposed via DrawCanvas.getCanvas() so imaging.lua can pull live canvas as a layer.
 local canvasRegistry = {}
 
 local DrawCanvas = {}
+
+local maskedStrokeShader = [[
+  extern Image mask;
+
+  vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    vec4 stroke = Texel(tex, tc) * color;
+    float weight = Texel(mask, tc).r;
+    return vec4(stroke.rgb, stroke.a * weight);
+  }
+]]
 
 --- Get a canvas by canvasId (used by imaging:compose for drawCanvasId layers).
 function DrawCanvas.getCanvas(canvasId)
@@ -80,6 +92,17 @@ local function resolveColor(color)
   return 1, 1, 1, 1
 end
 
+local function decodePoints(points)
+  if type(points) == "string" then
+    local ok, decoded = pcall(require("lua.json").decode, points)
+    points = ok and decoded or nil
+  end
+  if type(points) ~= "table" then
+    return nil, "points must be an array"
+  end
+  return points, nil
+end
+
 --- Draw a smooth stroke of circles along a point path.
 local function drawStroke(canvas, points, r, g, b, a, size, maskCanvas)
   if not canvas or type(points) ~= "table" or #points == 0 then return end
@@ -109,6 +132,29 @@ local function drawStroke(canvas, points, r, g, b, a, size, maskCanvas)
   end
 
   love.graphics.pop()
+end
+
+local function compositeMaskedStroke(canvas, strokeCanvas, maskCanvas)
+  if not canvas or not strokeCanvas or not maskCanvas then
+    return false, "canvas, strokeCanvas, and maskCanvas are required"
+  end
+
+  local shader, shaderErr = ShaderCache.get("draw_canvas_masked_stroke", maskedStrokeShader)
+  if not shader then
+    return false, shaderErr or "failed to compile draw_canvas_masked_stroke"
+  end
+
+  love.graphics.push("all")
+  love.graphics.setCanvas(canvas)
+  love.graphics.setBlendMode("alpha")
+  love.graphics.setColor(1, 1, 1, 1)
+  shader:send("mask", maskCanvas)
+  love.graphics.setShader(shader)
+  love.graphics.draw(strokeCanvas, 0, 0)
+  love.graphics.setShader()
+  love.graphics.pop()
+
+  return true
 end
 
 --- Erase along a point path (sets pixels to transparent).
@@ -309,21 +355,36 @@ local handlers = {
       return { ok = false, error = "canvasId not found: " .. tostring(args.canvasId) }
     end
 
-    local points = args.points
-    if type(points) == "string" then
-      local ok, decoded = pcall(require("lua.json").decode, points)
-      points = ok and decoded or nil
-    end
-    if type(points) ~= "table" then
-      return { ok = false, error = "points must be an array" }
+    local points, pointsErr = decodePoints(args.points)
+    if not points then
+      return { ok = false, error = pointsErr }
     end
 
     local r, g, b, a = resolveColor(args.color)
     local size    = math.max(1, tonumber(args.size)    or 10)
     local opacity = clamp(tonumber(args.opacity) or 1, 0, 1)
 
-    -- Optional mask clipping (future: composite stroke with mask)
-    drawStroke(canvas, points, r, g, b, a * opacity, size, nil)
+    local maskCanvas = nil
+    if args.maskId and args.maskId ~= "" then
+      maskCanvas = MaskRegistry.get(args.maskId)
+      if not maskCanvas then
+        return { ok = false, error = "maskId not found: " .. tostring(args.maskId) }
+      end
+    end
+
+    if maskCanvas then
+      local strokeCanvas = newBlankCanvas(canvas:getWidth(), canvas:getHeight(), "transparent")
+      drawStroke(strokeCanvas, points, r, g, b, a * opacity, size, nil)
+
+      local ok, err = compositeMaskedStroke(canvas, strokeCanvas, maskCanvas)
+      strokeCanvas:release()
+      if not ok then
+        return { ok = false, error = tostring(err) }
+      end
+    else
+      drawStroke(canvas, points, r, g, b, a * opacity, size, nil)
+    end
+
     return { ok = true }
   end,
 
@@ -334,13 +395,9 @@ local handlers = {
       return { ok = false, error = "canvasId not found: " .. tostring(args.canvasId) }
     end
 
-    local points = args.points
-    if type(points) == "string" then
-      local ok, decoded = pcall(require("lua.json").decode, points)
-      points = ok and decoded or nil
-    end
-    if type(points) ~= "table" then
-      return { ok = false, error = "points must be an array" }
+    local points, pointsErr = decodePoints(args.points)
+    if not points then
+      return { ok = false, error = pointsErr }
     end
 
     local size = math.max(1, tonumber(args.size) or 10)
