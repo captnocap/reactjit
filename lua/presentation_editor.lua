@@ -931,8 +931,9 @@ local function drawSelection(document, slide, state, layout, opacity)
       gesture.currentWorldX,
       gesture.currentWorldY
     )
-    setParsedColor(accent, opacity, FALLBACK_SELECTION)
-    love.graphics.rectangle("fill", left, top, width, height)
+    love.graphics.setColor(0, 0, 0, 0.14 * (opacity or 1))
+    love.graphics.setLineWidth(4 / math.max(layout.scale, 0.0001))
+    love.graphics.rectangle("line", left, top, width, height)
     setParsedColor(accent, opacity, FALLBACK_ACCENT)
     love.graphics.setLineWidth(2 / math.max(layout.scale, 0.0001))
     love.graphics.rectangle("line", left, top, width, height)
