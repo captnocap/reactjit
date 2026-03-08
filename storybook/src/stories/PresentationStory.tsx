@@ -11,6 +11,7 @@ import {
   createPresentationTextNode,
   findPresentationNode,
   type PresentationCamera,
+  type PresentationEditorCommand,
   type PresentationDocument,
   type PresentationEditorCameraEvent,
   type PresentationEditorPatchEvent,
@@ -211,11 +212,46 @@ function createStarterSlide(index: number) {
   }, DEMO_FACTORY);
 }
 
+function createStarterTextNode(index: number) {
+  return createPresentationTextNode({
+    text: `Headline ${index}`,
+    frame: {
+      x: 128,
+      y: 138 + ((index - 1) % 4) * 86,
+      width: 620,
+      height: 72,
+    },
+    textStyle: {
+      fontSize: 52,
+      color: '#102030',
+      fontWeight: 'bold',
+    },
+  }, DEMO_FACTORY);
+}
+
+function createStarterShapeNode(index: number) {
+  const accent = STARTER_ACCENTS[(index - 1) % STARTER_ACCENTS.length];
+  const column = (index - 1) % 2;
+  const row = Math.floor((index - 1) / 2) % 3;
+
+  return createPresentationShapeNode({
+    shape: 'rectangle',
+    fill: accent,
+    radius: 24,
+    frame: {
+      x: 900 + column * 124,
+      y: 180 + row * 112,
+      width: 248,
+      height: 160,
+    },
+  }, DEMO_FACTORY);
+}
+
 const INITIAL_DOCUMENT = createDemoDocument();
 const INITIAL_LOG = [
   'Click inside the editor to focus it.',
   'Drag a node to move it, drag a corner to resize it, and drag empty space to pan.',
-  'Arrow keys nudge the selection. Shift plus Arrow moves 10 pixels. Delete, equal, minus, and zero work too.',
+  'Arrow keys nudge the selection. Shift plus Arrow moves 10 pixels. Escape clears selection. Delete, equal, minus, and zero work too.',
 ];
 
 function pushLog(setter: React.Dispatch<React.SetStateAction<string[]>>, line: string) {
@@ -347,6 +383,10 @@ export function PresentationStory() {
   const [activeSlideId, setActiveSlideId] = useState(INITIAL_DOCUMENT.slides[0].id);
   const [selection, setSelection] = useState<PresentationSelection[]>([]);
   const [cameraPreview, setCameraPreview] = useState<PresentationCamera>(INITIAL_DOCUMENT.slides[0].camera);
+  const [editorCommand, setEditorCommand] = useState<{
+    id: number | null;
+    value?: PresentationEditorCommand;
+  }>({ id: null });
   const [log, setLog] = useState<string[]>(INITIAL_LOG);
 
   const activeSlide = useMemo(
@@ -387,7 +427,15 @@ export function PresentationStory() {
     setActiveSlideId(INITIAL_DOCUMENT.slides[0].id);
     setSelection([]);
     setCameraPreview(INITIAL_DOCUMENT.slides[0].camera);
+    setEditorCommand({ id: null });
     setLog(INITIAL_LOG);
+  }, []);
+
+  const issueEditorCommand = useCallback((command: PresentationEditorCommand) => {
+    setEditorCommand((current) => ({
+      id: current.id == null ? 1 : current.id + 1,
+      value: command,
+    }));
   }, []);
 
   const handleAddSlide = useCallback(() => {
@@ -425,6 +473,38 @@ export function PresentationStory() {
     setActiveSlideId(slideId);
     setSelection([]);
   }, []);
+
+  const handleAddText = useCallback(() => {
+    const nextNode = createStarterTextNode(activeSlide.nodes.filter((node) => node.kind === 'text').length + 1);
+    const patch: PresentationPatch = {
+      type: 'addNode',
+      slideId: activeSlide.id,
+      node: nextNode,
+    };
+
+    setDocument((current) => applyPresentationPatch(current, patch));
+    issueEditorCommand({
+      type: 'setSelection',
+      selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
+    });
+    pushLog(setLog, formatPatch(patch));
+  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+
+  const handleAddShape = useCallback(() => {
+    const nextNode = createStarterShapeNode(activeSlide.nodes.filter((node) => node.kind === 'shape').length + 1);
+    const patch: PresentationPatch = {
+      type: 'addNode',
+      slideId: activeSlide.id,
+      node: nextNode,
+    };
+
+    setDocument((current) => applyPresentationPatch(current, patch));
+    issueEditorCommand({
+      type: 'setSelection',
+      selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
+    });
+    pushLog(setLog, formatPatch(patch));
+  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
 
   return (
     <Box
@@ -464,6 +544,8 @@ export function PresentationStory() {
             <PresentationEditor
               document={document}
               slideId={activeSlideId}
+              command={editorCommand.value}
+              commandId={editorCommand.id ?? undefined}
               onPatch={handlePatch}
               onSelectionChange={handleSelectionChange}
               onCameraChange={handleCameraChange}
@@ -478,12 +560,19 @@ export function PresentationStory() {
               }}
             />
             <Text style={{ fontSize: 10, color: c.textDim }}>
-              Click the editor to focus it. Arrow keys nudge, Shift plus Arrow moves 10 pixels, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
+              Click the editor to focus it. Arrow keys nudge, Shift plus Arrow moves 10 pixels, Escape clears selection, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
             </Text>
           </Panel>
         </Box>
 
         <Box style={{ width: 320, gap: 12 }}>
+          <Panel title="Insert">
+            <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              <ToolbarButton label="+ Text" onPress={handleAddText} />
+              <ToolbarButton label="+ Shape" onPress={handleAddShape} />
+            </Box>
+          </Panel>
+
           <Panel title="Active Slide">
             <KeyValue label="slide" value={`${activeSlideIndex + 1} / ${document.slides.length}`} />
             <KeyValue label="title" value={activeSlide.title || '(untitled)'} />
@@ -519,6 +608,7 @@ export function PresentationStory() {
               <Text style={{ fontSize: 10, color: c.text }}>Click the editor surface to focus it.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Arrow keys move the selected node by 1 pixel.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Shift plus Arrow moves the selected node by 10 pixels.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Escape clears the selection.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Delete removes the selected node.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Wheel zooms. Equal, minus, and zero control zoom from the keyboard.</Text>
             </Box>

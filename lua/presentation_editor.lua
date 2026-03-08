@@ -147,6 +147,7 @@ local function ensureState(node)
     cameraCommitTimer = nil,
     lastLayout = nil,
     lastDocumentUpdatedAt = nil,
+    lastCommandId = nil,
   }
 
   node._presentationEditor = state
@@ -301,17 +302,92 @@ local function setSelection(node, state, selection)
   emitSelectionChange(node.id, nextSelection)
 end
 
+local function activateSlide(node, state, slide)
+  state.slideId = slide and slide.id or nil
+  state.selection = {}
+  state.frameOverrides = {}
+  state.gesture = nil
+  state.cameraDirty = false
+  state.cameraCommitTimer = nil
+  state.camera = slide and clampCameraZoom(node, copyCamera(slide.camera)) or { x = 0, y = 0, zoom = 1, rotation = 0 }
+end
+
+local function applyCommand(node, state, document, slide)
+  local props = node.props or {}
+  local commandId = props.commandId
+  if commandId == nil or commandId == state.lastCommandId then
+    return slide
+  end
+
+  state.lastCommandId = commandId
+
+  local command = props.command
+  if type(command) ~= "table" then
+    return slide
+  end
+
+  if command.type == "loadDocument" then
+    local targetSlide = getActiveSlide(document, props.slideId or state.slideId)
+    if targetSlide then
+      activateSlide(node, state, targetSlide)
+      return targetSlide
+    end
+    return slide
+  end
+
+  if command.type == "setActiveSlide" then
+    if props.slideId and props.slideId ~= command.slideId then
+      return slide
+    end
+
+    local targetSlide = getActiveSlide(document, command.slideId)
+    if targetSlide then
+      activateSlide(node, state, targetSlide)
+      return targetSlide
+    end
+
+    return slide
+  end
+
+  if command.type == "setSelection" then
+    local nextSelection = command.selection and command.selection[1] or nil
+    if not nextSelection then
+      setSelection(node, state, nil)
+      return slide
+    end
+
+    local targetSlide = getActiveSlide(document, nextSelection.slideId)
+    if not targetSlide then
+      setSelection(node, state, nil)
+      return slide
+    end
+
+    if targetSlide.id ~= slide.id then
+      if props.slideId and props.slideId ~= targetSlide.id then
+        return slide
+      end
+
+      activateSlide(node, state, targetSlide)
+      slide = targetSlide
+    end
+
+    local liveNode = findNodeRecord(slide.nodes, nextSelection.nodeId, 0, 0, nil)
+    if liveNode then
+      setSelection(node, state, { slideId = slide.id, nodeId = nextSelection.nodeId })
+    else
+      setSelection(node, state, nil)
+    end
+  end
+
+  return slide
+end
+
 local function syncState(node, state)
   local document = node.props and node.props.document or nil
   local slide = getActiveSlide(document, (node.props and node.props.slideId) or state.slideId)
 
   if not document or not slide then
-    state.slideId = nil
-    state.selection = {}
-    state.frameOverrides = {}
-    state.gesture = nil
-    state.cameraDirty = false
-    state.cameraCommitTimer = nil
+    activateSlide(node, state, nil)
     state.lastDocumentUpdatedAt = nil
     return nil, nil
   end
@@ -321,13 +397,7 @@ local function syncState(node, state)
   clampCameraZoom(node, state.camera)
 
   if state.slideId ~= slide.id then
-    state.slideId = slide.id
-    state.selection = {}
-    state.frameOverrides = {}
-    state.gesture = nil
-    state.cameraDirty = false
-    state.cameraCommitTimer = nil
-    state.camera = clampCameraZoom(node, copyCamera(slide.camera))
+    activateSlide(node, state, slide)
     state.lastDocumentUpdatedAt = document.updatedAt
     return document, slide
   end
@@ -362,6 +432,7 @@ local function syncState(node, state)
     setSelection(node, state, nil)
   end
 
+  slide = applyCommand(node, state, document, slide)
   state.lastDocumentUpdatedAt = document.updatedAt
 
   return document, slide
@@ -935,6 +1006,14 @@ function PresentationEditor.handleKeyPressed(node, key, _scancode, _isrepeat)
   local state = ensureState(node)
   local _, slide = syncState(node, state)
   if not slide then return false end
+
+  if key == "escape" then
+    if state.selection[1] then
+      setSelection(node, state, nil)
+      return true
+    end
+    return false
+  end
 
   local selectedRecord = getSelectedRecord(state, slide)
 

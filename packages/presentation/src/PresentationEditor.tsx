@@ -22,6 +22,8 @@ export function PresentationEditor(props: PresentationEditorProps) {
   const {
     document,
     slideId,
+    command,
+    commandId,
     showGrid = true,
     showFrame = true,
     allowPan = true,
@@ -39,6 +41,8 @@ export function PresentationEditor(props: PresentationEditorProps) {
   return React.createElement('PresentationEditor', {
     document,
     slideId,
+    command,
+    commandId,
     style: scaledStyle,
     showGrid,
     showFrame,

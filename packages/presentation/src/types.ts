@@ -1,5 +1,5 @@
 import type { Color, Style } from '@reactjit/core';
-import type { PresentationPatch } from './patches';
+import type { PresentationEditorCommand, PresentationPatch } from './patches';
 
 export type PresentationAspectRatio = '16:9' | '4:3' | 'custom';
 export type PresentationAuthoringMode = 'slide' | 'world';
@@ -200,6 +200,8 @@ export interface PresentationEditorCameraEvent {
 export interface PresentationEditorProps {
   document: PresentationDocument;
   slideId?: string;
+  command?: PresentationEditorCommand;
+  commandId?: string | number;
   style?: Style;
   w?: number | string;
   h?: number | string;
