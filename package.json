@@ -45,6 +45,7 @@
     "test:ai-tools": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/ai/test/tools.test.mjs",
     "test:ai-mcp-protocol": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/ai/test/mcp-protocol.test.mjs",
     "test:ai-mcp-transport": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/ai/test/mcp-transport.test.mjs",
+    "test:chemistry-elements": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/chemistry/test/elements.test.mjs",
     "test:core": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test packages/core/test/tw-roundtrip.test.mjs",
     "test:math": "sh -c 'if command -v luajit >/dev/null 2>&1; then luajit packages/math/test/precision-harness.lua; else lua packages/math/test/precision-harness.lua; fi'",
     "test:router": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON packages/router/test/router.test.mjs",
