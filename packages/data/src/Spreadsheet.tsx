@@ -4,12 +4,13 @@ import {
   Input,
   type LayoutEvent,
   type LoveEvent,
+  type ScrollEvent,
   Pressable,
+  ScrollView,
   Text,
   useThemeColorsOptional,
 } from '@reactjit/core';
 import {
-  buildAddressMatrix,
   columnIndexToLabel,
   normalizeCellAddress,
   parseCellAddress,
@@ -22,6 +23,7 @@ const EMPTY_EVAL: SpreadsheetEvaluation = { values: {}, errors: {} };
 const ROW_HEADER_WIDTH = 52;
 const DEFAULT_MIN_COLUMN_WIDTH = 72;
 const DEFAULT_MAX_COLUMN_WIDTH = 460;
+const VISIBLE_ROW_BUFFER = 3;
 
 function toDisplayString(value: SpreadsheetScalar): string {
   if (typeof value === 'number') {
@@ -78,6 +80,12 @@ function areEqualWidths(left: number[], right: number[]): boolean {
     if (left[i] !== right[i]) return false;
   }
   return true;
+}
+
+function buildEvaluationTargets(cells: SpreadsheetCellMap, selectedAddress: string): string[] {
+  const targets = new Set(Object.keys(cells).map(normalizeCellAddress));
+  targets.add(selectedAddress);
+  return Array.from(targets);
 }
 
 export function Spreadsheet({
@@ -173,6 +181,7 @@ export function Spreadsheet({
   const selectedKey = normalizeCellAddress(selectionControlled ? (selectedAddressProp as string) : internalSelectedAddress);
   const selectedLocation = parseCellAddress(selectedKey) ?? { col: 0, row: 0 };
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 });
   const [programmaticScroll, setProgrammaticScroll] = useState<{ x: number; y: number } | null>(null);
   const scrollReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const internalSelectionChangeRef = useRef(false);
@@ -182,12 +191,36 @@ export function Spreadsheet({
     setFormulaInput(liveCells[selectedKey] ?? '');
   }, [liveCells, selectedKey]);
 
-  const addressMatrix = useMemo(() => buildAddressMatrix(rows, cols), [rows, cols]);
+  const columnLabels = useMemo(
+    () => Array.from({ length: cols }, (_, colIdx) => columnIndexToLabel(colIdx)),
+    [cols],
+  );
+  const columnOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let left = ROW_HEADER_WIDTH;
+    for (let colIdx = 0; colIdx < cols; colIdx += 1) {
+      offsets[colIdx] = left;
+      left += liveColumnWidths[colIdx] ?? columnWidth;
+    }
+    return offsets;
+  }, [cols, liveColumnWidths, columnWidth]);
+  const evaluationTargets = useMemo(
+    () => buildEvaluationTargets(liveCells, selectedKey),
+    [liveCells, selectedKey],
+  );
   const evaluate = useDataEvaluate();
   const [evaluation, setEvaluation] = useState<SpreadsheetEvaluation>(EMPTY_EVAL);
   useEffect(() => {
-    evaluate({ cells: liveCells, targets: addressMatrix }).then(setEvaluation).catch(() => {});
-  }, [liveCells, addressMatrix]);
+    let active = true;
+    evaluate({ cells: liveCells, targets: evaluationTargets })
+      .then((nextEvaluation) => {
+        if (active) setEvaluation(nextEvaluation);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [evaluate, liveCells, evaluationTargets]);
 
   const selectedError = evaluation.errors[selectedKey];
   const selectedRawInput = liveCells[selectedKey] ?? '';
@@ -216,6 +249,7 @@ export function Spreadsheet({
   };
 
   const queueProgrammaticScroll = (x: number, y: number) => {
+    setScrollPosition({ x, y });
     setProgrammaticScroll({ x, y });
     if (typeof setTimeout !== 'function') return;
     if (scrollReleaseTimerRef.current && typeof clearTimeout === 'function') {
@@ -280,6 +314,25 @@ export function Spreadsheet({
   const viewportRows = Math.max(resolvedMinRows, Math.min(resolvedMaxRows, rows + 1));
   const gridViewportHeight = viewportHeight ?? viewportRows * rowHeight + 2;
   const totalHeight = (rows + 1) * rowHeight;
+  const fallbackViewportHeight = typeof gridViewportHeight === 'number' ? gridViewportHeight : viewportRows * rowHeight;
+  const effectiveViewportHeight = viewportSize.height > 0 ? viewportSize.height : fallbackViewportHeight;
+  const visibleRowCount = Math.max(1, Math.ceil(effectiveViewportHeight / rowHeight) + VISIBLE_ROW_BUFFER * 2);
+  const firstVisibleRow = rows > 0
+    ? clamp(Math.floor(Math.max(0, scrollPosition.y - rowHeight) / rowHeight) - VISIBLE_ROW_BUFFER, 0, rows - 1)
+    : 0;
+  const lastVisibleRow = rows > 0
+    ? clamp(firstVisibleRow + visibleRowCount - 1, 0, rows - 1)
+    : -1;
+  const topSpacerHeight = Math.max(0, firstVisibleRow * rowHeight);
+  const bottomSpacerHeight = Math.max(0, (rows - lastVisibleRow - 1) * rowHeight);
+
+  const handleScroll = (event: ScrollEvent) => {
+    setScrollPosition((prev) => (
+      prev.x === event.scrollX && prev.y === event.scrollY
+        ? prev
+        : { x: event.scrollX, y: event.scrollY }
+    ));
+  };
 
   useEffect(() => {
     const fromInternalSelection = internalSelectionChangeRef.current;
@@ -287,10 +340,7 @@ export function Spreadsheet({
     if (!selectionControlled || !autoScrollToSelection || fromInternalSelection) return;
     if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
 
-    let cellLeft = ROW_HEADER_WIDTH;
-    for (let colIdx = 0; colIdx < selectedLocation.col; colIdx += 1) {
-      cellLeft += liveColumnWidths[colIdx] ?? columnWidth;
-    }
+    const cellLeft = columnOffsets[selectedLocation.col] ?? ROW_HEADER_WIDTH;
     const cellWidth = liveColumnWidths[selectedLocation.col] ?? columnWidth;
     const cellTop = rowHeight + selectedLocation.row * rowHeight;
 
@@ -313,6 +363,7 @@ export function Spreadsheet({
     selectedLocation.row,
     viewportSize.width,
     viewportSize.height,
+    columnOffsets,
     liveColumnWidths,
     columnWidth,
     rowHeight,
@@ -401,144 +452,161 @@ export function Spreadsheet({
         style={{
           width: '100%',
           height: gridViewportHeight,
-          overflow: 'scroll',
-          ...(programmaticScroll ? { scrollX: programmaticScroll.x, scrollY: programmaticScroll.y } : {}),
         }}
       >
-        <Box style={{ width: totalWidth }}>
-          <Box style={{
-            flexDirection: 'row',
-            backgroundColor: colors.surface,
-            borderBottomWidth: 1,
-            borderColor: colors.border,
-            ...headerStyle,
-          }}>
+        <ScrollView
+          onScroll={handleScroll}
+          style={{
+            width: '100%',
+            height: '100%',
+            ...(programmaticScroll ? { scrollX: programmaticScroll.x, scrollY: programmaticScroll.y } : {}),
+          }}
+        >
+          <Box style={{ width: totalWidth }}>
             <Box style={{
-              width: ROW_HEADER_WIDTH,
-              height: rowHeight,
-              borderRightWidth: 1,
+              flexDirection: 'row',
+              backgroundColor: colors.surface,
+              borderBottomWidth: 1,
               borderColor: colors.border,
-              justifyContent: 'center',
-              alignItems: 'center',
+              ...headerStyle,
             }}>
-              <Text style={{ color: colors.textDim, fontSize: 9, fontWeight: 'bold' }}>{'ROW'}</Text>
-            </Box>
-
-            {Array.from({ length: cols }, (_, colIdx) => (
-              <Box
-                key={`header-${colIdx}`}
-                style={{
-                  width: liveColumnWidths[colIdx],
-                  height: rowHeight,
-                  borderRightWidth: colIdx < cols - 1 ? 1 : 0,
-                  borderColor: colors.border,
-                  backgroundColor: selectedLocation.col === colIdx ? colors.accentSoft : colors.surface,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  position: 'relative',
-                }}
-              >
-                <Text style={{ color: selectedLocation.col === colIdx ? colors.accent : colors.text, fontSize: 10, fontWeight: 'bold' }}>
-                  {columnIndexToLabel(colIdx)}
-                </Text>
-                {canResizeColumns && (
-                  <Box
-                    onDragStart={() => beginColumnResize(colIdx)}
-                    onDrag={(event) => dragColumnResize(colIdx, event)}
-                    onDragEnd={endColumnResize}
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: 0,
-                      width: 8,
-                      height: rowHeight,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      backgroundColor: resizingColumnIndex === colIdx ? colors.accentSoft : 'transparent',
-                      userSelect: 'none',
-                    }}
-                  >
-                    <Box style={{
-                      width: 2,
-                      height: rowHeight - 10,
-                      borderRadius: 2,
-                      backgroundColor: resizingColumnIndex === colIdx ? colors.accent : colors.border,
-                    }} />
-                  </Box>
-                )}
-              </Box>
-            ))}
-          </Box>
-
-          {Array.from({ length: rows }, (_, rowIdx) => (
-            <Box key={`row-${rowIdx}`} style={{ flexDirection: 'row' }}>
               <Box style={{
                 width: ROW_HEADER_WIDTH,
                 height: rowHeight,
                 borderRightWidth: 1,
-                borderBottomWidth: 1,
                 borderColor: colors.border,
-                backgroundColor: selectedLocation.row === rowIdx ? colors.accentSoft : colors.surface,
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: selectedLocation.row === rowIdx ? colors.accent : colors.textDim, fontSize: 9 }}>{String(rowIdx + 1)}</Text>
+                <Text style={{ color: colors.textDim, fontSize: 9, fontWeight: 'bold' }}>{'ROW'}</Text>
               </Box>
 
-              {Array.from({ length: cols }, (_, colIdx) => {
-                const address = `${columnIndexToLabel(colIdx)}${rowIdx + 1}`;
-                const normalized = normalizeCellAddress(address);
-                const cellValue = evaluation.values[normalized] ?? '';
-                const cellError = evaluation.errors[normalized];
-                const selected = normalized === selectedKey;
-                const inSelectionBand = selectedLocation.col === colIdx || selectedLocation.row === rowIdx;
-                const displayValue = cellError ? '#ERR' : toDisplayString(cellValue);
-                const align = isNumeric(cellValue) && !cellError ? 'right' : 'left';
-
-                return (
-                  <Pressable
-                    key={normalized}
-                    disabled={false}
-                    onPress={() => {
-                      selectAddress(normalized);
-                    }}
-                    style={{
-                      width: liveColumnWidths[colIdx],
-                      height: rowHeight,
-                    }}
-                  >
-                    <Box style={{
-                      width: '100%',
-                      height: '100%',
-                      borderRightWidth: colIdx < cols - 1 ? 1 : 0,
-                      borderBottomWidth: 1,
-                      borderColor: selected ? colors.accent : colors.border,
-                      backgroundColor: selected ? colors.accentSoft : (inSelectionBand ? colors.surface : colors.bgAlt),
-                      paddingLeft: 6,
-                      paddingRight: 6,
-                      paddingTop: 6,
-                      paddingBottom: 6,
-                      justifyContent: 'center',
-                      ...cellStyle,
-                    }}>
-                      <Text
-                        style={{
-                          color: cellError ? colors.error : colors.text,
-                          fontSize: 10,
-                          textAlign: align,
-                          whiteSpace: 'nowrap',
-                        }}
-                        numberOfLines={1}
-                      >
-                        {displayValue}
-                      </Text>
+              {columnLabels.map((label, colIdx) => (
+                <Box
+                  key={`header-${label}`}
+                  style={{
+                    width: liveColumnWidths[colIdx],
+                    height: rowHeight,
+                    borderRightWidth: colIdx < cols - 1 ? 1 : 0,
+                    borderColor: colors.border,
+                    backgroundColor: selectedLocation.col === colIdx ? colors.accentSoft : colors.surface,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    position: 'relative',
+                  }}
+                >
+                  <Text style={{ color: selectedLocation.col === colIdx ? colors.accent : colors.text, fontSize: 10, fontWeight: 'bold' }}>
+                    {label}
+                  </Text>
+                  {canResizeColumns && (
+                    <Box
+                      onDragStart={() => beginColumnResize(colIdx)}
+                      onDrag={(event) => dragColumnResize(colIdx, event)}
+                      onDragEnd={endColumnResize}
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 0,
+                        width: 8,
+                        height: rowHeight,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        backgroundColor: resizingColumnIndex === colIdx ? colors.accentSoft : 'transparent',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <Box style={{
+                        width: 2,
+                        height: rowHeight - 10,
+                        borderRadius: 2,
+                        backgroundColor: resizingColumnIndex === colIdx ? colors.accent : colors.border,
+                      }} />
                     </Box>
-                  </Pressable>
-                );
-              })}
+                  )}
+                </Box>
+              ))}
             </Box>
-          ))}
-        </Box>
+
+            {topSpacerHeight > 0 && (
+              <Box style={{ width: '100%', height: topSpacerHeight }} />
+            )}
+
+            {Array.from({ length: Math.max(0, lastVisibleRow - firstVisibleRow + 1) }, (_, visibleIdx) => {
+              const rowIdx = firstVisibleRow + visibleIdx;
+              return (
+                <Box key={`row-${rowIdx}`} style={{ flexDirection: 'row' }}>
+                  <Box style={{
+                    width: ROW_HEADER_WIDTH,
+                    height: rowHeight,
+                    borderRightWidth: 1,
+                    borderBottomWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: selectedLocation.row === rowIdx ? colors.accentSoft : colors.surface,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}>
+                    <Text style={{ color: selectedLocation.row === rowIdx ? colors.accent : colors.textDim, fontSize: 9 }}>{String(rowIdx + 1)}</Text>
+                  </Box>
+
+                  {columnLabels.map((label, colIdx) => {
+                    const normalized = `${label}${rowIdx + 1}`;
+                    const cellValue = evaluation.values[normalized] ?? '';
+                    const cellError = evaluation.errors[normalized];
+                    const selected = normalized === selectedKey;
+                    const inSelectionBand = selectedLocation.col === colIdx || selectedLocation.row === rowIdx;
+                    const displayValue = cellError ? '#ERR' : toDisplayString(cellValue);
+                    const align = isNumeric(cellValue) && !cellError ? 'right' : 'left';
+
+                    return (
+                      <Pressable
+                        key={normalized}
+                        disabled={false}
+                        onPress={() => {
+                          selectAddress(normalized);
+                        }}
+                        style={{
+                          width: liveColumnWidths[colIdx],
+                          height: rowHeight,
+                        }}
+                      >
+                        <Box style={{
+                          width: '100%',
+                          height: '100%',
+                          borderRightWidth: colIdx < cols - 1 ? 1 : 0,
+                          borderBottomWidth: 1,
+                          borderColor: selected ? colors.accent : colors.border,
+                          backgroundColor: selected ? colors.accentSoft : (inSelectionBand ? colors.surface : colors.bgAlt),
+                          paddingLeft: 6,
+                          paddingRight: 6,
+                          paddingTop: 6,
+                          paddingBottom: 6,
+                          justifyContent: 'center',
+                          ...cellStyle,
+                        }}>
+                          <Text
+                            style={{
+                              color: cellError ? colors.error : colors.text,
+                              fontSize: 10,
+                              textAlign: align,
+                              whiteSpace: 'nowrap',
+                            }}
+                            numberOfLines={1}
+                          >
+                            {displayValue}
+                          </Text>
+                        </Box>
+                      </Pressable>
+                    );
+                  })}
+                </Box>
+              );
+            })}
+
+            {bottomSpacerHeight > 0 && (
+              <Box style={{ width: '100%', height: bottomSpacerHeight }} />
+            )}
+          </Box>
+        </ScrollView>
       </Box>
 
       {showStatusBar && (

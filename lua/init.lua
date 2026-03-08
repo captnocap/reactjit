@@ -1138,6 +1138,16 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register convert RPC handlers
+  do
+    local convertOk, convertMod = pcall(require, "lua.capabilities.convert")
+    if convertOk then
+      for method, handler in pairs(convertMod.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Register data (spreadsheet evaluator) RPC handlers
   do
     local dataOk, dataMod = pcall(require, "lua.capabilities.data")

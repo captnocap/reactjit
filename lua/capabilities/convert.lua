@@ -27,6 +27,20 @@ local function reg(from, to, fn, category)
   end
 end
 
+local function run_convert(from, to, value)
+  local from_key = tostring(from or ""):lower()
+  local to_key = tostring(to or ""):lower()
+  local fn = _converters[from_key .. "->" .. to_key]
+  if not fn then
+    return nil, "no converter: " .. from_key .. " -> " .. to_key
+  end
+  local ok, result = pcall(fn, value)
+  if not ok then
+    return nil, tostring(result)
+  end
+  return result
+end
+
 -- Register a group of units with conversion factors relative to a base.
 -- factors: unit -> how many base units equal 1 of this unit.
 local function reg_group(category, base, factors)
@@ -343,19 +357,17 @@ reg("hex-num", "binary",   function(v) return to_binary(tonumber(v, 16)) end,   
 reg("octal",   "hex-num",  function(v) return string.format("%x", tonumber(v, 8)) end,   "number-base")
 reg("hex-num", "octal",    function(v) return string.format("%o", tonumber(v, 16)) end,  "number-base")
 
+function M.convertValue(from, to, value)
+  return run_convert(from, to, value)
+end
+
 -- ── RPC handlers ───────────────────────────────────────────────────────────
 
 function M.getHandlers()
   return {
     ["convert:convert"] = function(args)
-      local from = (args.from or ""):lower()
-      local to   = (args.to   or ""):lower()
-      local fn   = _converters[from .. "->" .. to]
-      if not fn then
-        return { error = "no converter: " .. from .. " -> " .. to }
-      end
-      local ok, result = pcall(fn, args.value)
-      if not ok then return { error = tostring(result) } end
+      local result, err = run_convert(args and args.from, args and args.to, args and args.value)
+      if err then return { error = err } end
       return { result = result }
     end,
 

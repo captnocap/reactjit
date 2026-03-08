@@ -12,6 +12,8 @@
 ]]
 
 local M = {}
+local convert = require("lua.capabilities.convert")
+local list_unpack = table.unpack or unpack
 
 -- ============================================================================
 -- Cell address utilities
@@ -258,6 +260,11 @@ local BUILTINS = {
   CONCAT  = function(...) local parts={}; for _,v in ipairs(flatAll({...})) do parts[#parts+1]=tostring(v or '') end; return table.concat(parts) end,
   TEXT    = function(v) return tostring(toScalar(v)) end,
   VALUE   = function(v) return toNum(v) or 0 end,
+  CONVERT = function(v, from, to)
+    local result, err = convert.convertValue(tostring(from or ''), tostring(to or ''), v)
+    if err then error(err) end
+    return result
+  end,
   MOD     = function(v,d) local n=toNum(v) or 0; local dd=toNum(d) or 1; return dd~=0 and n%dd or 0 end,
   INT     = function(v) return math.floor(toNum(v) or 0) end,
   SIGN    = function(v) local n=toNum(v) or 0; return n>0 and 1 or n<0 and -1 or 0 end,
@@ -340,7 +347,7 @@ local function makeEval(cell_fn, range_fn)
           end
           if peek().type == TK.RP then advance() end
           local fn = BUILTINS[name:upper()]
-          if fn then return fn(table.unpack(args))
+          if fn then return fn(list_unpack(args))
           else error('Unknown function: ' .. name) end
         else
           -- Cell reference
