@@ -451,11 +451,30 @@ Commit early and often. This project has no test suite, so git history IS the sa
 - **Never leave a session with uncommitted work.** If the conversation is winding down and there are unstaged changes, commit them. The next Claude instance that picks up this repo should start from a clean tree.
 - **When the human approves, commit immediately + update docs.** Once you hear "yes, this works" or similar confirmation, that is the signal to: (1) run `git status` and `git diff` to prepare the commit, (2) create the commit with a descriptive message, (3) emit the CHANGESET brief, (4) invoke `/docs` to update documentation. Do not wait or ask for permission again — the approval already happened.
 
+### Parallel sessions and the "empty fridge" problem (READ THIS)
+
+Multiple Claude instances work on this repo simultaneously. This causes a specific failure mode:
+
+1. You make changes to files A, B, C
+2. Another Claude session (which is also you) commits those files to clean the tree
+3. You run `git status` expecting to see your dirty files — but the tree is clean
+4. **DO NOT LOOP.** Do not run `git status` again. Do not run `git diff` again. The fridge is empty. Opening it again will not make food appear.
+
+**When `git status` shows a clean tree but you expected uncommitted work:**
+- Run `git log --oneline -5` ONCE. Your changes are almost certainly in a recent commit by another session.
+- If you see a commit covering your files, **your work is already committed. Move on.**
+- Do not investigate further. Do not try to understand "what happened." Another you committed it. That's the whole story.
+
+**To prevent this from happening:**
+- Commit your own work immediately after completing it — don't leave dirty files sitting around for another session to scoop up.
+- If you are explicitly told to commit everything dirty, do it. But if you are committing on your own initiative, only commit files you personally modified in this session.
+
 ### What NOT to do
 
 - Do not accumulate a dozen file changes across multiple features and dump them in one mega-commit.
 - Do not assume the user will commit for you. They won't. That's your job.
 - Do not skip committing because "it's just a small change." Small changes are the easiest to commit and the hardest to reconstruct later.
+- Do not run the same git command more than twice expecting different results. If `git status` is clean, it's clean. Check `git log` and move on.
 
 ## Documentation Workflow (CRITICAL)
 

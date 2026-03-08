@@ -1,5 +1,5 @@
 --[[
-  find_overlay.lua — Ctrl+F interactive text search overlay.
+  find_overlay.lua — Ctrl+F interactive find-in-page text search overlay.
 
   Draws a floating search bar (top-right), highlights all matches in the tree,
   and navigates between them with Enter / Shift+Enter (or arrow keys).

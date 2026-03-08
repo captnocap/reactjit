@@ -53,6 +53,24 @@ clean this cycle:
 - packages/math/ — fully migrated to useLoveRPC one-liner
 - packages/core/src/useLatch.ts — new bridge plumbing hook (Lua→React value pipe), acceptable
 
+### 2026-03-07 (update 3 — full package scan, 170+ files, ~51k lines)
+
+**7 NEW major violations found (never caught by previous audits):**
+
+1. **packages/core/src/animation.ts** (764 lines) — entire spring physics + timing + easing + interpolation runtime in TS
+2. **packages/core/src/tw.ts** (819 lines) — complete Tailwind CSS class parser in TS
+3. **packages/core/src/useScrape.ts** (590 lines) — full HTML parser + CSS selector engine in TS
+4. **packages/core/src/useSearch.ts** (490 lines) — fuzzy scoring algorithm in TS
+5. **packages/time/src/utils.ts** (454 lines) — date formatting/parsing/arithmetic duplicated from Lua
+6. **packages/finance/src/indicators.ts** (371 lines) — full technical analysis math library (SMA, EMA, RSI, MACD, Bollinger, etc.)
+7. **packages/finance/src/format.ts** + **portfolio.ts** (133 lines combined) — currency formatting + portfolio math
+
+**6 previously reported violations still present:** scaleStyle.ts, ScaleContext.tsx, useBreakpoint.ts, rss/parser.ts, storage/format.ts, storage/query.ts
+
+**Fixed since last audit:** chemistry/ cleaned (2183→one-liners), data/formula.ts cleaned (spreadsheet evaluator→36-line RPC wrapper). 20+ packages confirmed clean.
+
+**Total TS compute that should be in Lua: ~4,500 lines across 13 files.**
+
 ### 2026-03-06
 
 (first audit log entry — violations present in chemistry package, 2183 lines pure TS god file)

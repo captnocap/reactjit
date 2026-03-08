@@ -19,6 +19,7 @@ love.errorhandler = require("lua.bsod")
 
 function love.load()
   print("[main.lua] love.load START")
+
   love.graphics.setBackgroundColor(0.04, 0.04, 0.06)
 
   local ok, err = pcall(function()

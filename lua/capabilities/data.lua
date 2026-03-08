@@ -464,7 +464,7 @@ local function evaluateAll(cells, targets, max_range_cells)
 
   local eval_cell  -- forward decl
 
-  local function cell_fn(addr)
+  local function resolve_cell(addr)
     addr = normalizeAddress(addr)
     return eval_cell(addr)
   end
@@ -473,7 +473,7 @@ local function evaluateAll(cells, targets, max_range_cells)
     return expandRange(range_str, max_range_cells)
   end
 
-  local evaluate_expr = makeEval(cell_fn, range_fn)
+  local evaluate_expr = makeEval(resolve_cell, range_fn)
 
   eval_cell = function(address)
     address = normalizeAddress(address)

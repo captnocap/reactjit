@@ -790,6 +790,7 @@ function Inspector.mousepressed(x, y, button)
       state.selectedNode = target
       state.detailScrollY = 0
       state.scrollToSelected = true  -- tree panel will auto-scroll on next draw
+      Inspector.setPickMode(false)   -- drop out of pick mode after selecting
     end
     return true
   end

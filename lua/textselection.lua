@@ -138,6 +138,15 @@ local function resolveTextStyle(node)
     if not s.letterSpacing and ps.letterSpacing then letterSpacing = ps.letterSpacing end
   end
 
+  -- Apply text scale so selection coordinates match painted text (painter does
+  -- the same multiplication — without it, line heights and character widths
+  -- are computed at the unscaled font size and selection drifts).
+  if Measure and Measure.resolveTextScale then
+    local ts = Measure.resolveTextScale(node)
+    fontSize = math.floor(fontSize * ts)
+    if lineHeight then lineHeight = math.floor(lineHeight * ts) end
+  end
+
   return fontSize, fontFamily, fontWeight, lineHeight, letterSpacing
 end
 

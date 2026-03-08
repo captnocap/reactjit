@@ -201,6 +201,15 @@ while kill -0 "$PID" 2>/dev/null; do
         LUA_SNAPSHOT=$(cat "$SNAPSHOT_FILE")
       fi
 
+      # Read persisted event trail (written by Lua alongside heartbeat)
+      TRAIL_FILE="$TMPDIR/reactjit_trail_${PID}.txt"
+      TRAIL_CONTENT=""
+      if [ -f "$TRAIL_FILE" ] && [ -s "$TRAIL_FILE" ]; then
+        TRAIL_CONTENT=$(cat "$TRAIL_FILE" 2>/dev/null || true)
+        rm -f "$TRAIL_FILE"
+      fi
+      TRAIL_ESC=$(printf '%s' "$TRAIL_CONTENT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+
       # Crisis analysis: the crash reporter reads /tmp/reactjit_crisis.lua directly
       # (written by the flight recorder via FFI syscalls). No extraction needed here.
 
@@ -231,6 +240,9 @@ while kill -0 "$PID" 2>/dev/null; do
         if [ -n "$LUA_SNAPSHOT" ]; then
           echo "  hasLuaSnapshot = true," >> "$CRASH_FILE"
         fi
+        if [ -n "$TRAIL_CONTENT" ]; then
+          echo "  trail = \"${TRAIL_ESC}\"," >> "$CRASH_FILE"
+        fi
         echo "}" >> "$CRASH_FILE"
       else
         cat > "$CRASH_FILE" << CRASHEOF
@@ -244,6 +256,7 @@ return {
   procSnapshot = "${PROC_ESC}",
   procFinal = "${FINAL_PROC_ESC}",
   rssMB = ${RSS_MB},
+  trail = "${TRAIL_ESC}",
 CRASHEOF
         if [ -n "$LUA_SNAPSHOT" ]; then
           echo "  hasLuaSnapshot = true," >> "$CRASH_FILE"
@@ -307,6 +320,15 @@ CRASHEOF
 
       rm -f "$HEARTBEAT_FILE"
 
+      # Read persisted event trail (written by Lua alongside heartbeat)
+      TRAIL_FILE="$TMPDIR/reactjit_trail_${PID}.txt"
+      TRAIL_CONTENT=""
+      if [ -f "$TRAIL_FILE" ] && [ -s "$TRAIL_FILE" ]; then
+        TRAIL_CONTENT=$(cat "$TRAIL_FILE" 2>/dev/null || true)
+        rm -f "$TRAIL_FILE"
+      fi
+      TRAIL_ESC=$(printf '%s' "$TRAIL_CONTENT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+
       # Build crash report
       CRASH_FILE="$TMPDIR/reactjit_crash.lua"
       CMDLINE_ESC=$(echo "$CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
@@ -322,6 +344,7 @@ return {
   rebootCwd = "${CWD_ESC}",
   rssMB = ${RSS_MB},
   heartbeatAge = ${HEARTBEAT_AGE},
+  trail = "${TRAIL_ESC}",
 }
 CRASHEOF
 
@@ -389,15 +412,27 @@ fi
 # Clean up heartbeat file
 rm -f "$HEARTBEAT_FILE"
 
+# Read persisted event trail before any exit (needed for crash report)
+TRAIL_FILE="$TMPDIR/reactjit_trail_${PID}.txt"
+TRAIL_CONTENT=""
+if [ -f "$TRAIL_FILE" ] && [ -s "$TRAIL_FILE" ]; then
+  TRAIL_CONTENT=$(cat "$TRAIL_FILE" 2>/dev/null || true)
+fi
+
 if [ -f "$CLEAN_EXIT_MARKER" ]; then
-  # Normal exit — clean up marker and go
+  # Normal exit — clean up marker, trail file, and go
   rm -f "$CLEAN_EXIT_MARKER"
+  rm -f "$TRAIL_FILE"
   exit 0
 fi
 
 # ── Crash detected ──────────────────────────────────────────────
 echo "" >&2
 echo "[WATCHDOG] Process $PID vanished without clean exit — probable crash (segfault/signal)" >&2
+
+# Clean up trail file (we already read it)
+rm -f "$TRAIL_FILE"
+TRAIL_ESC=$(printf '%s' "$TRAIL_CONTENT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
 
 # Capture the original command line if we saved it during monitoring
 # (process is already dead, /proc is gone — we need to have cached it)
@@ -495,6 +530,7 @@ if [ -f "$CRASH_FILE" ] && [ -s "$CRASH_FILE" ]; then
   [ -n "$CACHED_CMDLINE" ] && echo "  rebootCmd = \"${CMDLINE_ESC}\"," >> "$CRASH_FILE"
   [ -n "$CACHED_CWD" ] && echo "  rebootCwd = \"${CWD_ESC}\"," >> "$CRASH_FILE"
   echo "  rssMB = $((LAST_RSS / 1024))," >> "$CRASH_FILE"
+  [ -n "$TRAIL_CONTENT" ] && echo "  trail = \"${TRAIL_ESC}\"," >> "$CRASH_FILE"
   echo "}" >> "$CRASH_FILE"
 else
   CMDLINE_ESC=$(echo "$CACHED_CMDLINE" | sed 's/\\/\\\\/g; s/"/\\"/g')
@@ -515,6 +551,7 @@ return {
   rebootCmd = "${CMDLINE_ESC}",
   rebootCwd = "${CWD_ESC}",
   rssMB = $((LAST_RSS / 1024)),
+  trail = "${TRAIL_ESC}",
 }
 CRASHEOF
 fi

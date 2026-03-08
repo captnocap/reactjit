@@ -1999,6 +1999,11 @@ function ReactJIT.init(config)
     M.screenshot = require("lua.screenshot")
     M.screenshot.init({
       outputPath = os.getenv("REACTJIT_SCREENSHOT_OUTPUT") or "screenshot.png",
+      tree       = M.tree,
+      node       = os.getenv("REACTJIT_SCREENSHOT_NODE"),
+      region     = os.getenv("REACTJIT_SCREENSHOT_REGION"),
+      padding    = tonumber(os.getenv("REACTJIT_SCREENSHOT_PAD")) or 8,
+      listMode   = os.getenv("REACTJIT_SCREENSHOT_LIST") == "1",
     })
   end
 
@@ -2073,6 +2078,7 @@ function ReactJIT.init(config)
     rpcHandlers["test:snap"]       = function(a) return tr.screenshot_region(a) end
     rpcHandlers["test:audit"]      = function(a) return tr.audit(a) end
     rpcHandlers["test:text-audit"] = function(a) return tr.text_audit(a) end
+    rpcHandlers["test:divider-audit"] = function(a) return tr.divider_audit(a) end
     rpcHandlers["test:text-wrap-diag"] = function(a) return tr.text_wrap_diagnostics(a) end
     rpcHandlers["test:resize"]     = function(a) return tr.resize(a) end
     rpcHandlers["test:writeFile"]  = function(a) return tr.writeFile(a) end
