@@ -270,6 +270,7 @@ Love2D:
 - Operations are serialized as JSON and sent to Lua via RPC. Large operation chains are fine but avoid sending very large pixel data through the bridge.
 - DrawCanvas requires a matching `<Native type="DrawCanvas" canvasId={dc.canvasId}>` element in the tree for the canvas to be visible. The hook creates the RPC interface; the Native element creates the renderable surface.
 - Selection rasterize returns a maskId string handle. Pass it to apply's maskId field to restrict operations to the selected region. Call clearMask when done to free GPU memory.
+- `useDrawCanvas.paint(..., maskId)` clips brush strokes to the active Lua-side selection mask without sending pixel data through JS.
 - Golden testing (hashRGBA, runGoldenFixtures) operates on raw Uint8Array RGBA buffers. The executor function must render the fixture and return pixel data.
 
 === SEE ALSO ===
