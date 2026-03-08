@@ -16,6 +16,7 @@ import {
   parseCellAddress,
   useDataEvaluate,
 } from './formula';
+import { getNavigatedAddress, normalizeSpreadsheetKey } from './interaction';
 import { fitColumnWidthsToViewport } from './layout';
 import type { SpreadsheetCellMap, SpreadsheetEvaluation, SpreadsheetProps, SpreadsheetScalar } from './types';
 
@@ -187,11 +188,17 @@ export function Spreadsheet({
   const [programmaticScroll, setProgrammaticScroll] = useState<{ x: number; y: number } | null>(null);
   const scrollReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const internalSelectionChangeRef = useRef(false);
+  const [editingAddress, setEditingAddress] = useState<string | null>(null);
+  const [editingInput, setEditingInput] = useState('');
   const [formulaInput, setFormulaInput] = useState(liveCells[selectedKey] ?? '');
 
   useEffect(() => {
+    if (editingAddress === selectedKey) {
+      setFormulaInput(editingInput);
+      return;
+    }
     setFormulaInput(liveCells[selectedKey] ?? '');
-  }, [liveCells, selectedKey]);
+  }, [liveCells, selectedKey, editingAddress, editingInput]);
 
   const columnLabels = useMemo(
     () => Array.from({ length: cols }, (_, colIdx) => columnIndexToLabel(colIdx)),
@@ -253,17 +260,62 @@ export function Spreadsheet({
     onCellsChange?.(next);
   };
 
+  const applySelection = (address: string) => {
+    const normalized = normalizeCellAddress(address);
+    internalSelectionChangeRef.current = true;
+    if (!selectionControlled) setInternalSelectedAddress(normalized);
+    onSelectedAddressChange?.(normalized);
+    setFormulaInput(liveCells[normalized] ?? '');
+  };
+
+  const commitInlineEdit = (input: string, nextAddress?: string) => {
+    if (readOnly) return;
+    const address = editingAddress ?? selectedKey;
+    setEditingAddress(null);
+    setEditingInput('');
+    commitCell(address, input);
+    if (nextAddress) {
+      applySelection(nextAddress);
+      return;
+    }
+    setFormulaInput(input);
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingAddress(null);
+    setEditingInput('');
+    setFormulaInput(liveCells[selectedKey] ?? '');
+  };
+
+  const startInlineEdit = (seedInput?: string) => {
+    if (readOnly) return;
+    const nextInput = seedInput ?? liveCells[selectedKey] ?? '';
+    setEditingAddress(selectedKey);
+    setEditingInput(nextInput);
+    setFormulaInput(nextInput);
+  };
+
+  const handleFormulaLiveChange = (input: string) => {
+    setFormulaInput(input);
+    if (editingAddress === selectedKey) setEditingInput(input);
+  };
+
   const commitFormula = (input: string) => {
+    if (editingAddress === selectedKey) {
+      commitInlineEdit(input);
+      return;
+    }
     setFormulaInput(input);
     commitCell(selectedKey, input);
   };
 
   const selectAddress = (address: string) => {
     const normalized = normalizeCellAddress(address);
-    internalSelectionChangeRef.current = true;
-    if (!selectionControlled) setInternalSelectedAddress(normalized);
-    onSelectedAddressChange?.(normalized);
-    setFormulaInput(liveCells[normalized] ?? '');
+    if (editingAddress && editingAddress !== normalized) {
+      commitInlineEdit(editingInput, normalized);
+      return;
+    }
+    applySelection(normalized);
   };
 
   const queueProgrammaticScroll = (x: number, y: number) => {
@@ -352,6 +404,56 @@ export function Spreadsheet({
     ));
   };
 
+  const handleGridKeyDown = (event: LoveEvent) => {
+    const key = normalizeSpreadsheetKey(event);
+    if (editingAddress === selectedKey) {
+      if (key === 'escape') {
+        cancelInlineEdit();
+        return;
+      }
+      if (key === 'tab') {
+        const nextAddress = getNavigatedAddress({
+          selectedAddress: selectedKey,
+          rows,
+          cols,
+          key,
+          shift: !!event.shift,
+        });
+        commitInlineEdit(editingInput, nextAddress ?? selectedKey);
+      }
+      return;
+    }
+
+    const nextAddress = getNavigatedAddress({
+      selectedAddress: selectedKey,
+      rows,
+      cols,
+      key,
+      shift: !!event.shift,
+    });
+    if (nextAddress) {
+      applySelection(nextAddress);
+      return;
+    }
+
+    if (readOnly) return;
+    if (key === 'f2') {
+      startInlineEdit();
+      return;
+    }
+    if (key === 'backspace' || key === 'delete') {
+      startInlineEdit('');
+    }
+  };
+
+  const handleGridTextInput = (event: LoveEvent) => {
+    if (readOnly || editingAddress) return;
+    if (event.ctrl || event.alt || event.meta) return;
+    const text = event.text ?? '';
+    if (text.length === 0 || /[\u0000-\u001f]/.test(text)) return;
+    startInlineEdit(text);
+  };
+
   useEffect(() => {
     const fromInternalSelection = internalSelectionChangeRef.current;
     internalSelectionChangeRef.current = false;
@@ -390,7 +492,11 @@ export function Spreadsheet({
   ]);
 
   return (
-    <Box style={{
+    <Box
+      focusable
+      onKeyDown={handleGridKeyDown}
+      onTextInput={handleGridTextInput}
+      style={{
       width: '100%',
       minWidth: 0,
       backgroundColor: colors.bg,
@@ -399,7 +505,8 @@ export function Spreadsheet({
       borderRadius: 8,
       overflow: 'hidden',
       ...style,
-    }}>
+      }}
+    >
       {showFormulaBar && (
         <Box style={{
           backgroundColor: colors.surface,
@@ -430,7 +537,7 @@ export function Spreadsheet({
                 value={formulaInput}
                 editable={!readOnly}
                 live
-                onLiveChange={setFormulaInput}
+                onLiveChange={handleFormulaLiveChange}
                 onBlur={commitFormula}
                 onSubmit={commitFormula}
                 placeholder={'Type a value or formula: =SUM(A1:A4), =CONVERT(A2,"mi","km"), =REMAP(B2,0,100,0,1)'}
@@ -458,7 +565,7 @@ export function Spreadsheet({
           )}
           {!selectedError && !readOnly && (
             <Text style={{ color: colors.textDim, fontSize: 9 }}>
-              {'Enter applies updates. Drag column separators to resize.'}
+              {'Arrow keys and Tab move. F2 or type to edit. Drag column separators to resize.'}
             </Text>
           )}
         </Box>
@@ -598,24 +705,52 @@ export function Spreadsheet({
                           borderBottomWidth: 1,
                           borderColor: selected ? colors.accent : colors.border,
                           backgroundColor: selected ? colors.accentSoft : (inSelectionBand ? colors.surface : colors.bgAlt),
-                          paddingLeft: 6,
-                          paddingRight: 6,
-                          paddingTop: 6,
-                          paddingBottom: 6,
+                          paddingLeft: selected && editingAddress === normalized ? 0 : 6,
+                          paddingRight: selected && editingAddress === normalized ? 0 : 6,
+                          paddingTop: selected && editingAddress === normalized ? 0 : 6,
+                          paddingBottom: selected && editingAddress === normalized ? 0 : 6,
                           justifyContent: 'center',
                           ...cellStyle,
                         }}>
-                          <Text
-                            style={{
-                              color: cellError ? colors.error : colors.text,
-                              fontSize: 10,
-                              textAlign: align,
-                              whiteSpace: 'nowrap',
-                            }}
-                            numberOfLines={1}
-                          >
-                            {displayValue}
-                          </Text>
+                          {selected && editingAddress === normalized ? (
+                            <Box onKeyDown={handleGridKeyDown} style={{ width: '100%', height: '100%' }}>
+                              <Input
+                                value={editingInput}
+                                editable={!readOnly}
+                                live
+                                autoFocus
+                                submitOnEnter
+                                onLiveChange={setEditingInput}
+                                onBlur={commitInlineEdit}
+                                onSubmit={commitInlineEdit}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  borderWidth: 0,
+                                  borderRadius: 0,
+                                  backgroundColor: colors.accentSoft,
+                                  color: colors.text,
+                                  fontSize: 10,
+                                  paddingLeft: 6,
+                                  paddingRight: 6,
+                                  paddingTop: 6,
+                                  paddingBottom: 6,
+                                }}
+                              />
+                            </Box>
+                          ) : (
+                            <Text
+                              style={{
+                                color: cellError ? colors.error : colors.text,
+                                fontSize: 10,
+                                textAlign: align,
+                                whiteSpace: 'nowrap',
+                              }}
+                              numberOfLines={1}
+                            >
+                              {displayValue}
+                            </Text>
+                          )}
                         </Box>
                       </Pressable>
                     );

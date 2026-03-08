@@ -22,7 +22,7 @@ Definition of done:
 
 ## Phase 2: Spreadsheet Interaction Core
 
-Status: planned
+Status: in progress
 
 - Keyboard navigation: arrows, tab, enter, shift+enter, escape.
 - Inline cell editing without forcing all edits through the formula bar.
