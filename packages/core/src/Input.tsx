@@ -51,6 +51,7 @@ export function Input(rawProps: InputProps) {
     syntaxHighlight,
     tooltipLevel,
     sessionId,
+    onEditorStateChange,
     style,
     textStyle,
     autoFocus,
@@ -128,6 +129,14 @@ export function Input(rawProps: InputProps) {
     [effectiveOnChange],
   );
 
+  const handleEditorState = useCallback(
+    (event: LoveEvent) => {
+      const state = (event as any).value;
+      if (state) onEditorStateChange?.(state);
+    },
+    [onEditorStateChange],
+  );
+
   // -- Build props for the host element --
 
   if (editor) {
@@ -157,6 +166,7 @@ export function Input(rawProps: InputProps) {
     if (onBlur || onChangeText) props['onTextEditorBlur'] = handleBlur;
     if (onSubmit) props['onTextEditorSubmit'] = handleSubmit;
     if (effectiveOnChange) props['onTextEditorChange'] = handleChange;
+    if (onEditorStateChange) props['onTextEditorState'] = handleEditorState;
 
     return React.createElement('TextEditor', props);
   }

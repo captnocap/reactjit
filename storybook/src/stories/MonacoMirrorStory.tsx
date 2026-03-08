@@ -161,6 +161,7 @@ export function MonacoMirrorStory() {
           workspaceLabel="reactjit-playground"
           branch="feature/monaco-navigation"
           language="typescript"
+          activityItems={['TAB', 'EX', 'CODE', 'MAP']}
           explorerFiles={EXPLORER_FILES}
           spellCheck={false}
           wordWrap={false}
@@ -176,6 +177,7 @@ export function MonacoMirrorStory() {
             workspaceLabel="constrained-panel"
             branch="fit-check"
             language="typescript"
+            activityItems={['TAB', 'EX', 'CODE', 'MAP']}
             explorerFiles={EXPLORER_FILES}
           />
 
@@ -188,6 +190,7 @@ export function MonacoMirrorStory() {
             workspaceLabel="small-panel"
             branch="compact"
             language="typescript"
+            activityItems={['TAB', 'EX', 'CODE', 'MAP']}
             explorerFiles={EXPLORER_FILES}
           />
         </Box>

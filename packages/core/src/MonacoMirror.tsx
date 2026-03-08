@@ -3,9 +3,9 @@ import { Box, Text } from './primitives';
 import { Input } from './Input';
 import { Pressable } from './Pressable';
 import { useIFTTT } from './useIFTTT';
-import type { InputProps, LayoutEvent, Style } from './types';
+import type { InputProps, LayoutEvent, Style, TextEditorViewState } from './types';
 
-const DEFAULT_ACTIVITY_ITEMS = ['EX', 'SE', 'SC', 'RU'];
+const DEFAULT_ACTIVITY_ITEMS = ['TAB', 'EX', 'CODE', 'MAP'];
 
 type ViewTarget = 'tabs' | 'explorer' | 'editor' | 'minimap';
 
@@ -15,6 +15,15 @@ const VIEW_TARGET_LABELS: Record<ViewTarget, { label: string; short: string }> =
   editor: { label: 'Code', short: 'CODE' },
   minimap: { label: 'Map', short: 'MAP' },
 };
+
+function resolveActivityTarget(item: string): ViewTarget | null {
+  const normalized = item.trim().toLowerCase();
+  if (normalized === 'tabs' || normalized === 'tab') return 'tabs';
+  if (normalized === 'explorer' || normalized === 'files' || normalized === 'file' || normalized === 'ex') return 'explorer';
+  if (normalized === 'editor' || normalized === 'code' || normalized === 'ed') return 'editor';
+  if (normalized === 'minimap' || normalized === 'map' || normalized === 'mp') return 'minimap';
+  return null;
+}
 
 let monacoMirrorInstanceCount = 0;
 let shoulderNavigationOwnerId: string | null = null;
@@ -244,6 +253,7 @@ export function MonacoMirror({
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [editorViewportHeight, setEditorViewportHeight] = useState<number | undefined>(undefined);
+  const [editorViewState, setEditorViewState] = useState<TextEditorViewState | null>(null);
   const [viewTarget, setViewTarget] = useState<ViewTarget>('editor');
   const instanceIdRef = useRef<string>(nextMonacoMirrorInstanceId());
   const [isShoulderNavigationOwner, setIsShoulderNavigationOwner] = useState(
@@ -259,6 +269,10 @@ export function MonacoMirror({
   }, [filePath, selectedFilePath]);
 
   const activeFilePath = selectedFilePath ? normalizePath(selectedFilePath) : internalSelectedFile;
+
+  useEffect(() => {
+    setEditorViewState(null);
+  }, [activeFilePath]);
 
   const breadcrumbs = useMemo(() => {
     const source = activeFilePath || filePath || tabLabel || 'untitled.tsx';
@@ -369,10 +383,27 @@ export function MonacoMirror({
     });
   }, [minimapMaxLineLength, minimapRows]);
   const minimapTrackHeightPx = Math.max(minimapRows.length * 3, 12);
-  const minimapAllVisible = minimapViewportRows >= minimapRowCount;
+  const viewStateFirstVisibleLine = editorViewState?.firstVisibleLine ?? 1;
+  const viewStateVisibleLineCount = editorViewState?.visibleLineCount ?? minimapViewportRows;
+  const viewStateTotalVisibleLines = editorViewState?.totalVisibleLines ?? minimapRowCount;
+  const minimapAllVisible = viewStateVisibleLineCount >= viewStateTotalVisibleLines;
   const minimapViewportPx = minimapAllVisible
     ? minimapTrackHeightPx
-    : Math.max(10, Math.min(minimapTrackHeightPx, Math.round((minimapViewportRows / minimapRowCount) * minimapTrackHeightPx)));
+    : Math.max(10, Math.min(
+      minimapTrackHeightPx,
+      Math.round((viewStateVisibleLineCount / Math.max(1, viewStateTotalVisibleLines)) * minimapTrackHeightPx),
+    ));
+  const minimapViewportTopPx = minimapAllVisible
+    ? 0
+    : Math.max(
+      0,
+      Math.min(
+        minimapTrackHeightPx - minimapViewportPx,
+        Math.round(((viewStateFirstVisibleLine - 1) / Math.max(1, viewStateTotalVisibleLines - 1)) * minimapTrackHeightPx),
+      ),
+    );
+  const cursorLineLabel = editorViewState?.cursorLine ?? 1;
+  const cursorColumnLabel = (editorViewState?.cursorCol ?? 0) + 1;
 
   const candidateExplorerPaths = useMemo(() => {
     const sourcePaths = explorerFiles && explorerFiles.length > 0
@@ -550,6 +581,30 @@ export function MonacoMirror({
     });
   }, []);
 
+  const handleEditorStateChange = useCallback((nextState: TextEditorViewState) => {
+    setEditorViewState((prev) => {
+      if (
+        prev &&
+        prev.cursorLine === nextState.cursorLine &&
+        prev.cursorCol === nextState.cursorCol &&
+        prev.scrollX === nextState.scrollX &&
+        prev.scrollY === nextState.scrollY &&
+        prev.lineCount === nextState.lineCount &&
+        prev.firstVisibleLine === nextState.firstVisibleLine &&
+        prev.visibleLineCount === nextState.visibleLineCount &&
+        prev.totalVisibleLines === nextState.totalVisibleLines &&
+        prev.lineHeight === nextState.lineHeight &&
+        prev.selectionStartLine === nextState.selectionStartLine &&
+        prev.selectionStartCol === nextState.selectionStartCol &&
+        prev.selectionEndLine === nextState.selectionEndLine &&
+        prev.selectionEndCol === nextState.selectionEndCol
+      ) {
+        return prev;
+      }
+      return nextState;
+    });
+  }, []);
+
   const handleToggleSidebarPanel = useCallback(() => {
     if (!widthCanShowSidebar) return;
     claimShoulderNavigation();
@@ -678,7 +733,7 @@ export function MonacoMirror({
                 <Box
                   style={{
                     flexShrink: 0,
-                    borderRadius: 999,
+                    borderRadius: 4,
                     borderWidth: 1,
                     borderColor: '#56b6ff',
                     backgroundColor: '#56b6ff22',
@@ -899,21 +954,34 @@ export function MonacoMirror({
               alignItems: 'center',
             }}
           >
-            {activityItems.map((item) => (
-              <Box
-                key={item}
-                style={{
-                  width: 30,
-                  height: 22,
-                  borderRadius: 4,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  backgroundColor: '#252526',
-                }}
-              >
-                <Text style={{ color: '#c5c5c5', fontSize: 8, fontFamily: 'monospace' }}>{item}</Text>
-              </Box>
-            ))}
+            {activityItems.map((item) => {
+              const target = resolveActivityTarget(item);
+              const isActive = target !== null && viewTarget === target;
+              const canTarget = target !== null && availableViewTargets.includes(target);
+
+              return (
+                <Pressable
+                  key={item}
+                  onPress={canTarget ? () => targetView(target as ViewTarget) : undefined}
+                  style={({ hovered }) => ({
+                    width: 30,
+                    height: 22,
+                    borderRadius: 4,
+                    borderWidth: isActive ? 1 : 0,
+                    borderColor: isActive ? '#3794ff' : 'transparent',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: isActive
+                      ? '#0f3b60'
+                      : hovered && canTarget
+                        ? '#2d2d2d'
+                        : '#252526',
+                  })}
+                >
+                  <Text style={{ color: isActive ? '#ffffff' : '#c5c5c5', fontSize: 8, fontFamily: 'monospace' }}>{item}</Text>
+                </Pressable>
+              );
+            })}
           </Box>
         )}
 
@@ -963,7 +1031,7 @@ export function MonacoMirror({
                 {viewTarget === 'explorer' && (
                   <Box
                     style={{
-                      borderRadius: 999,
+                      borderRadius: 4,
                       borderWidth: 1,
                       borderColor: '#3794ff',
                       backgroundColor: '#3794ff22',
@@ -1108,6 +1176,7 @@ export function MonacoMirror({
                 onChangeText={handleChangeText}
                 onLiveChange={handleLiveChange}
                 onChange={handleEditorChange}
+                onEditorStateChange={handleEditorStateChange}
                 changeDelay={changeDelay ?? 0.08}
                 live
                 liveChangeDebounce={liveChangeDebounce ?? 80}
@@ -1179,7 +1248,7 @@ export function MonacoMirror({
                         {'TARGET'}
                       </Text>
                     )}
-                    <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${lineCount}L`}</Text>
+                    <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${editorViewState?.lineCount ?? lineCount}L`}</Text>
                   </Box>
                 </Box>
                 <Box style={{ position: 'relative', height: minimapTrackHeightPx, overflow: 'hidden' }}>
@@ -1202,7 +1271,7 @@ export function MonacoMirror({
                       position: 'absolute',
                       left: 0,
                       right: 0,
-                      top: 0,
+                      top: minimapViewportTopPx,
                       height: minimapViewportPx,
                       borderWidth: 1,
                       borderColor: '#3f78a8',
@@ -1286,7 +1355,10 @@ export function MonacoMirror({
               <Text style={{ color: widthCanShowMinimap ? '#ffffff' : '#b4d9eb', fontSize: compact ? 7 : 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'MAP'}</Text>
             </Pressable>
           )}
-          <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`Ln ${lineCount}`}</Text>
+          <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`Ln ${cursorLineLabel}, Col ${cursorColumnLabel}`}</Text>
+          {!compact && (
+            <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{`${editorViewState?.lineCount ?? lineCount} lines`}</Text>
+          )}
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{`${charCount} chars`}</Text>
         </Box>
       )}

@@ -2398,6 +2398,17 @@ function ReactJIT.update(dt)
           }
         })
       end
+      local viewState = M.texteditor.takeStateUpdate(canvasFocusedNode, false)
+      if viewState then
+        pushEvent({
+          type = "texteditor:state",
+          payload = {
+            type = "texteditor:state",
+            targetId = canvasFocusedNode.id,
+            value = viewState,
+          }
+        })
+      end
     elseif canvasFocusedNode and canvasFocusedNode.type == "TextInput" then
       M.textinput.update(canvasFocusedNode, dt)
       M.textinput.tickChange(canvasFocusedNode, dt, pushEvent)
@@ -4330,6 +4341,17 @@ function ReactJIT.mousepressed(x, y, button)
               value = M.texteditor.getValue(hit),
             }
           })
+          local viewState = M.texteditor.takeStateUpdate(hit, true)
+          if viewState then
+            pushEvent({
+              type = "texteditor:state",
+              payload = {
+                type = "texteditor:state",
+                targetId = hit.id,
+                value = viewState,
+              }
+            })
+          end
         end
       end
     elseif hit.type == "TextInput" then

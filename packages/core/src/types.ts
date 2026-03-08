@@ -650,11 +650,29 @@ export interface InputProps {
   tooltipLevel?: 'beginner' | 'guided' | 'clean';
   /** PTY session ID for real-time keystroke passthrough. Implies multiline. */
   sessionId?: string;
+  /** Fires when the Lua-owned editor view state changes (cursor, selection, scroll). */
+  onEditorStateChange?: (state: TextEditorViewState) => void;
   style?: Style;
   textStyle?: Style;
   autoFocus?: boolean;
   cursorColor?: Color;
   key?: string | number;
+}
+
+export interface TextEditorViewState {
+  cursorLine: number;
+  cursorCol: number;
+  scrollX: number;
+  scrollY: number;
+  lineCount: number;
+  firstVisibleLine: number;
+  visibleLineCount: number;
+  totalVisibleLines: number;
+  lineHeight: number;
+  selectionStartLine?: number;
+  selectionStartCol?: number;
+  selectionEndLine?: number;
+  selectionEndCol?: number;
 }
 
 /** @deprecated Use InputProps */

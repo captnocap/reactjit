@@ -215,6 +215,10 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onTextEditorChange');
   });
 
+  bridge.subscribe('texteditor:state', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onTextEditorState');
+  });
+
   // ── TextInput events (Lua-owned, target-only) ─────────
 
   bridge.subscribe('textinput:focus', (event: LoveEvent) => {

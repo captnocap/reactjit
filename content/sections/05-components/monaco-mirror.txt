@@ -43,7 +43,7 @@ Props (inherits all Input props except multiline, lineNumbers, syntaxHighlight, 
 | layoutMode        | 'auto' \| 'full' \| 'compact' | 'auto'       | Layout mode selection                    |
 | compactMaxWidth   | number                      | 560             | Width threshold for auto compact mode    |
 | compactMaxHeight  | number                      | 260             | Height threshold for auto compact mode   |
-| activityItems     | string[]                    | ['EX','SE','SC','RU'] | Activity bar icon labels          |
+| activityItems     | string[]                    | ['TAB','EX','CODE','MAP'] | Activity bar icon labels / shortcuts |
 
 All Input props (value, defaultValue, onChangeText, onSubmit, onBlur, onFocus, onLiveChange, onChange, placeholder, editable, spellCheck, wordWrap, cursorColor, textStyle) are passed through to the embedded Input.
 
@@ -131,7 +131,7 @@ Platforms: love2d
 Love2D:
   MonacoMirror is a React compound component -- the chrome (tab bar, sidebar, minimap, status bar) is built from Box, Text, and Pressable elements. Only the editor area itself delegates to a Lua-owned Input. This means the chrome re-renders when React state changes (file selection, panel toggles), but the actual text editing remains zero-latency Lua.
 
-  The minimap renders a simplified representation of the code as ink-density bars, not actual text. It shows a viewport highlight that approximates the visible portion of the editor.
+  The minimap renders a simplified representation of the code as ink-density bars, not actual text. Its viewport highlight tracks the real Lua editor scroll position, and the status bar reflects the live cursor line/column from the Lua-owned editor.
 
   At small container sizes (below compactMaxWidth or compactMaxHeight), the layout automatically switches to compact mode, hiding the activity bar, sidebar, minimap, and breadcrumbs to maximize editor space.
 

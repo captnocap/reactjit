@@ -215,6 +215,22 @@ local function resetBlink(es)
   es.blinkOn = true
 end
 
+local function encodeSelection(es)
+  local startLine = ""
+  local startCol = ""
+  local endLine = ""
+  local endCol = ""
+  if es.selectStart then
+    startLine = tostring(es.selectStart[1] or "")
+    startCol = tostring(es.selectStart[2] or "")
+  end
+  if es.selectEnd then
+    endLine = tostring(es.selectEnd[1] or "")
+    endCol = tostring(es.selectEnd[2] or "")
+  end
+  return startLine, startCol, endLine, endCol
+end
+
 local function markDirty(es)
   es.dirty = true
   es.changeTimer = 0
@@ -776,6 +792,7 @@ end
 
 function TextEditor.update(node, dt)
   local es = ensureState(node)
+  TextEditor.syncValue(node)
 
   -- Track mouse position for hover tooltips (always, even when unfocused)
   local mx, my = love.mouse.getPosition()
@@ -800,6 +817,64 @@ function TextEditor.update(node, dt)
       return "change"
     end
   end
+end
+
+function TextEditor.getViewState(node)
+  local es = ensureState(node)
+  local lh = getLineHeight(node)
+  local va = visibleArea(node, es)
+  local wrapData = getWrapData(node, es)
+  local totalVisibleLines = wrapData and wrapData.totalVisualLines or lineCount(es)
+  local firstVisibleLine = math.floor((es.scrollY or 0) / lh) + 1
+  local visibleLineCount = math.max(1, math.floor((va.textAreaH or 0) / lh))
+
+  local state = {
+    cursorLine = es.cursorLine or 1,
+    cursorCol = es.cursorCol or 0,
+    scrollX = es.scrollX or 0,
+    scrollY = es.scrollY or 0,
+    lineCount = lineCount(es),
+    firstVisibleLine = math.max(1, math.min(totalVisibleLines, firstVisibleLine)),
+    visibleLineCount = math.max(1, math.min(totalVisibleLines, visibleLineCount)),
+    totalVisibleLines = totalVisibleLines,
+    lineHeight = lh,
+  }
+
+  if es.selectStart then
+    state.selectionStartLine = es.selectStart[1]
+    state.selectionStartCol = es.selectStart[2]
+  end
+  if es.selectEnd then
+    state.selectionEndLine = es.selectEnd[1]
+    state.selectionEndCol = es.selectEnd[2]
+  end
+
+  return state
+end
+
+function TextEditor.takeStateUpdate(node, force)
+  local es = ensureState(node)
+  local state = TextEditor.getViewState(node)
+  local selStartLine, selStartCol, selEndLine, selEndCol = encodeSelection(es)
+  local signature = table.concat({
+    tostring(state.cursorLine),
+    tostring(state.cursorCol),
+    tostring(state.scrollX),
+    tostring(state.scrollY),
+    tostring(state.lineCount),
+    tostring(state.firstVisibleLine),
+    tostring(state.visibleLineCount),
+    tostring(state.totalVisibleLines),
+    tostring(state.lineHeight),
+    selStartLine,
+    selStartCol,
+    selEndLine,
+    selEndCol,
+  }, "|")
+
+  if not force and es._lastPublishedViewState == signature then return nil end
+  es._lastPublishedViewState = signature
+  return state
 end
 
 -- ============================================================================
