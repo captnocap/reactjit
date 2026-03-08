@@ -98,6 +98,59 @@ test("spreadsheet evaluator composes converted values into range formulas", func
   assertAlmostEqual(result.values.C4, 40.23, EPSILON, "C4 summed converted values")
 end)
 
+test("spreadsheet evaluator resolves arithmetic, comparisons, and text helpers", function()
+  local result = evaluate({
+    cells = {
+      A1 = "5",
+      A2 = "7",
+      B1 = "=A1+A2*2",
+      B2 = '=IF(B1 >= 19, CONCAT("ok-", UPPER("go")), "bad")',
+      B3 = '=TRIM("  hi  ") & "-" & LOWER("LOUD")',
+    },
+    targets = { "B1", "B2", "B3" },
+  })
+
+  assertEqual(result.errors.B1, nil, "B1 should not error")
+  assertEqual(result.errors.B2, nil, "B2 should not error")
+  assertEqual(result.errors.B3, nil, "B3 should not error")
+  assertAlmostEqual(result.values.B1, 19, EPSILON, "B1 arithmetic")
+  assertEqual(result.values.B2, "ok-GO", "B2 logical/text result")
+  assertEqual(result.values.B3, "hi-loud", "B3 trim/lower/concat result")
+end)
+
+test("spreadsheet evaluator detects circular references", function()
+  local result = evaluate({
+    cells = {
+      A1 = "=B1",
+      B1 = "=A1",
+    },
+    targets = { "A1", "B1" },
+  })
+
+  assertTrue(type(result.errors.A1) == "string", "A1 should report circular reference")
+  assertTrue(result.errors.A1:match("Circular reference") ~= nil, "A1 circular reference text")
+  assertEqual(result.values.A1, "", "A1 should collapse to empty string")
+end)
+
+test("spreadsheet evaluator parses raw literals consistently", function()
+  local result = evaluate({
+    cells = {
+      A1 = "42",
+      A2 = "true",
+      A3 = '"quoted"',
+      A4 = "'0012",
+      A5 = "   ",
+    },
+    targets = { "A1", "A2", "A3", "A4", "A5" },
+  })
+
+  assertAlmostEqual(result.values.A1, 42, EPSILON, "A1 number literal")
+  assertEqual(result.values.A2, true, "A2 boolean literal")
+  assertEqual(result.values.A3, "quoted", "A3 quoted string")
+  assertEqual(result.values.A4, "0012", "A4 forced text")
+  assertEqual(result.values.A5, "", "A5 empty string")
+end)
+
 test("spreadsheet evaluator surfaces converter lookup failures as formula errors", function()
   local result = evaluate({
     cells = {

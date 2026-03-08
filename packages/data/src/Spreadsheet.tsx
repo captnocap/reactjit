@@ -16,6 +16,7 @@ import {
   parseCellAddress,
   useDataEvaluate,
 } from './formula';
+import { fitColumnWidthsToViewport } from './layout';
 import type { SpreadsheetCellMap, SpreadsheetEvaluation, SpreadsheetProps, SpreadsheetScalar } from './types';
 
 const EMPTY_EVAL: SpreadsheetEvaluation = { values: {}, errors: {} };
@@ -102,6 +103,7 @@ export function Spreadsheet({
   resizableColumns = true,
   minColumnWidth = DEFAULT_MIN_COLUMN_WIDTH,
   maxColumnWidth = DEFAULT_MAX_COLUMN_WIDTH,
+  fitColumnsToViewport = false,
   rowHeight = 30,
   viewportHeight,
   minVisibleRows = 6,
@@ -195,15 +197,31 @@ export function Spreadsheet({
     () => Array.from({ length: cols }, (_, colIdx) => columnIndexToLabel(colIdx)),
     [cols],
   );
+  const renderedColumnWidths = useMemo(() => {
+    if (!fitColumnsToViewport || viewportSize.width <= 0) return liveColumnWidths;
+    return fitColumnWidthsToViewport({
+      widths: liveColumnWidths,
+      viewportWidth: viewportSize.width,
+      rowHeaderWidth: ROW_HEADER_WIDTH,
+      minWidth: resolvedMinColumnWidth,
+      maxWidth: resolvedMaxColumnWidth,
+    });
+  }, [
+    fitColumnsToViewport,
+    liveColumnWidths,
+    viewportSize.width,
+    resolvedMinColumnWidth,
+    resolvedMaxColumnWidth,
+  ]);
   const columnOffsets = useMemo(() => {
     const offsets: number[] = [];
     let left = ROW_HEADER_WIDTH;
     for (let colIdx = 0; colIdx < cols; colIdx += 1) {
       offsets[colIdx] = left;
-      left += liveColumnWidths[colIdx] ?? columnWidth;
+      left += renderedColumnWidths[colIdx] ?? columnWidth;
     }
     return offsets;
-  }, [cols, liveColumnWidths, columnWidth]);
+  }, [cols, renderedColumnWidths, columnWidth]);
   const evaluationTargets = useMemo(
     () => buildEvaluationTargets(liveCells, selectedKey),
     [liveCells, selectedKey],
@@ -308,7 +326,7 @@ export function Spreadsheet({
     setResizingColumnIndex(null);
   };
 
-  const totalWidth = ROW_HEADER_WIDTH + liveColumnWidths.reduce((sum, width) => sum + width, 0);
+  const totalWidth = ROW_HEADER_WIDTH + renderedColumnWidths.reduce((sum, width) => sum + width, 0);
   const resolvedMinRows = Math.max(1, minVisibleRows);
   const resolvedMaxRows = Math.max(resolvedMinRows, maxVisibleRows);
   const viewportRows = Math.max(resolvedMinRows, Math.min(resolvedMaxRows, rows + 1));
@@ -341,7 +359,7 @@ export function Spreadsheet({
     if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
 
     const cellLeft = columnOffsets[selectedLocation.col] ?? ROW_HEADER_WIDTH;
-    const cellWidth = liveColumnWidths[selectedLocation.col] ?? columnWidth;
+    const cellWidth = renderedColumnWidths[selectedLocation.col] ?? columnWidth;
     const cellTop = rowHeight + selectedLocation.row * rowHeight;
 
     const targetX = clamp(
@@ -364,7 +382,7 @@ export function Spreadsheet({
     viewportSize.width,
     viewportSize.height,
     columnOffsets,
-    liveColumnWidths,
+    renderedColumnWidths,
     columnWidth,
     rowHeight,
     totalWidth,
@@ -489,7 +507,7 @@ export function Spreadsheet({
                 <Box
                   key={`header-${label}`}
                   style={{
-                    width: liveColumnWidths[colIdx],
+                    width: renderedColumnWidths[colIdx],
                     height: rowHeight,
                     borderRightWidth: colIdx < cols - 1 ? 1 : 0,
                     borderColor: colors.border,
@@ -569,7 +587,7 @@ export function Spreadsheet({
                           selectAddress(normalized);
                         }}
                         style={{
-                          width: liveColumnWidths[colIdx],
+                          width: renderedColumnWidths[colIdx],
                           height: rowHeight,
                         }}
                       >

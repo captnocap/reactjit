@@ -30,6 +30,7 @@ export interface SpreadsheetProps {
   resizableColumns?: boolean;
   minColumnWidth?: number;
   maxColumnWidth?: number;
+  fitColumnsToViewport?: boolean;
   rowHeight?: number;
   viewportHeight?: number | string;
   minVisibleRows?: number;
