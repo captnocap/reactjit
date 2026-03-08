@@ -286,20 +286,102 @@ local function hitTestNodes(nodes, worldX, worldY, parentX, parentY, overrides)
   return nil
 end
 
+local function copySelectionItem(item)
+  return {
+    slideId = item.slideId,
+    nodeId = item.nodeId,
+  }
+end
+
+local function normalizeSelectionItems(selection)
+  if not selection then return {} end
+
+  local nextSelection = {}
+  local seen = {}
+
+  if selection.slideId and selection.nodeId then
+    nextSelection[1] = copySelectionItem(selection)
+    return nextSelection
+  end
+
+  for _, item in ipairs(selection) do
+    if item and item.slideId and item.nodeId then
+      local key = tostring(item.slideId) .. ":" .. tostring(item.nodeId)
+      if not seen[key] then
+        seen[key] = true
+        nextSelection[#nextSelection + 1] = copySelectionItem(item)
+      end
+    end
+  end
+
+  return nextSelection
+end
+
 local function selectionKey(selection)
-  local item = selection and selection[1]
-  if not item then return "" end
-  return tostring(item.slideId) .. ":" .. tostring(item.nodeId)
+  if not selection or #selection == 0 then return "" end
+
+  local parts = {}
+  for index, item in ipairs(selection) do
+    parts[index] = tostring(item.slideId) .. ":" .. tostring(item.nodeId)
+  end
+
+  return table.concat(parts, "|")
 end
 
 local function setSelection(node, state, selection)
-  local nextSelection = selection and { selection } or {}
+  local nextSelection = normalizeSelectionItems(selection)
   if selectionKey(state.selection) == selectionKey(nextSelection) then
     state.selection = nextSelection
     return
   end
   state.selection = nextSelection
   emitSelectionChange(node.id, nextSelection)
+end
+
+local function isNodeSelected(state, slideId, nodeId)
+  for _, selected in ipairs(state.selection or {}) do
+    if selected.slideId == slideId and selected.nodeId == nodeId then
+      return true
+    end
+  end
+  return false
+end
+
+local function getSelectionRecords(state, slide)
+  local records = {}
+  local seen = {}
+
+  for _, selected in ipairs(state.selection or {}) do
+    if selected.slideId == slide.id and not seen[selected.nodeId] then
+      local record = findNodeRecord(slide.nodes, selected.nodeId, 0, 0, state.frameOverrides)
+      if record then
+        seen[selected.nodeId] = true
+        records[#records + 1] = record
+      end
+    end
+  end
+
+  return records
+end
+
+local function collectSelectableSelections(nodes, slideId, selections)
+  selections = selections or {}
+
+  for _, entry in ipairs(sortedNodes(nodes)) do
+    local nodeDef = entry.node
+    if not nodeDef.hidden then
+      if nodeDef.kind == "group" and nodeDef.children then
+        collectSelectableSelections(nodeDef.children, slideId, selections)
+      elseif nodeDef.kind == "text" or nodeDef.kind == "shape" then
+        selections[#selections + 1] = {
+          slideId = slideId,
+          nodeId = nodeDef.id,
+        }
+      end
+    end
+  end
+
+  return selections
 end
 
 local function activateSlide(node, state, slide)
@@ -350,13 +432,14 @@ local function applyCommand(node, state, document, slide)
   end
 
   if command.type == "setSelection" then
-    local nextSelection = command.selection and command.selection[1] or nil
-    if not nextSelection then
+    local nextSelection = normalizeSelectionItems(command.selection)
+    local primarySelection = nextSelection[1]
+    if not primarySelection then
       setSelection(node, state, nil)
       return slide
     end
 
-    local targetSlide = getActiveSlide(document, nextSelection.slideId)
+    local targetSlide = getActiveSlide(document, primarySelection.slideId)
     if not targetSlide then
       setSelection(node, state, nil)
       return slide
@@ -371,12 +454,20 @@ local function applyCommand(node, state, document, slide)
       slide = targetSlide
     end
 
-    local liveNode = findNodeRecord(slide.nodes, nextSelection.nodeId, 0, 0, nil)
-    if liveNode then
-      setSelection(node, state, { slideId = slide.id, nodeId = nextSelection.nodeId })
-    else
-      setSelection(node, state, nil)
+    local liveSelection = {}
+    for _, selected in ipairs(nextSelection) do
+      if selected.slideId == slide.id then
+        local liveNode = findNodeRecord(slide.nodes, selected.nodeId, 0, 0, nil)
+        if liveNode then
+          liveSelection[#liveSelection + 1] = {
+            slideId = slide.id,
+            nodeId = selected.nodeId,
+          }
+        end
+      end
     end
+
+    setSelection(node, state, liveSelection)
   end
 
   return slide
@@ -422,14 +513,21 @@ local function syncState(node, state)
     end
   end
 
-  local selected = state.selection[1]
-  if selected and selected.slideId == slide.id then
-    local liveNode = findNodeRecord(slide.nodes, selected.nodeId, 0, 0, nil)
-    if not liveNode then
-      setSelection(node, state, nil)
+  local liveSelection = {}
+  for _, selected in ipairs(state.selection or {}) do
+    if selected.slideId == slide.id then
+      local liveNode = findNodeRecord(slide.nodes, selected.nodeId, 0, 0, nil)
+      if liveNode then
+        liveSelection[#liveSelection + 1] = {
+          slideId = slide.id,
+          nodeId = selected.nodeId,
+        }
+      end
     end
-  elseif selected then
-    setSelection(node, state, nil)
+  end
+
+  if selectionKey(liveSelection) ~= selectionKey(state.selection) then
+    setSelection(node, state, liveSelection)
   end
 
   slide = applyCommand(node, state, document, slide)
@@ -491,11 +589,10 @@ local function getHandleWorldPosition(record, handle)
 end
 
 local function hitResizeHandle(state, slide, layout, sx, sy)
-  local selected = state.selection[1]
-  if not selected or selected.slideId ~= slide.id then return nil, nil end
+  local selectionRecords = getSelectionRecords(state, slide)
+  if #selectionRecords ~= 1 then return nil, nil end
 
-  local record = findNodeRecord(slide.nodes, selected.nodeId, 0, 0, state.frameOverrides)
-  if not record then return nil, nil end
+  local record = selectionRecords[1]
 
   local half = HANDLE_SIZE * 0.5
   local handleNames = { "nw", "ne", "se", "sw" }
@@ -664,34 +761,36 @@ local function drawNodes(document, slide, nodes, parentX, parentY, opacity, stat
 end
 
 local function drawSelection(document, slide, state, layout, opacity)
-  local selected = state.selection[1]
-  if not selected or selected.slideId ~= slide.id then return end
-
-  local record = findNodeRecord(slide.nodes, selected.nodeId, 0, 0, state.frameOverrides)
-  if not record then return end
+  local selectionRecords = getSelectionRecords(state, slide)
+  if #selectionRecords == 0 then return end
 
   local accent = resolveAccentColor(document)
-  local frame = record.frame
   local outlineWidth = 2 / math.max(layout.scale, 0.0001)
   local handleWorldSize = HANDLE_SIZE / math.max(layout.scale, 0.0001)
 
-  setParsedColor(accent, opacity, FALLBACK_SELECTION)
-  love.graphics.rectangle("fill", record.absX, record.absY, frame.width, frame.height)
+  for _, record in ipairs(selectionRecords) do
+    local frame = record.frame
+    setParsedColor(accent, opacity, FALLBACK_SELECTION)
+    love.graphics.rectangle("fill", record.absX, record.absY, frame.width, frame.height)
 
-  setParsedColor(accent, opacity, FALLBACK_ACCENT)
-  love.graphics.setLineWidth(outlineWidth)
-  love.graphics.rectangle("line", record.absX, record.absY, frame.width, frame.height)
+    setParsedColor(accent, opacity, FALLBACK_ACCENT)
+    love.graphics.setLineWidth(outlineWidth)
+    love.graphics.rectangle("line", record.absX, record.absY, frame.width, frame.height)
+  end
 
-  local handleNames = { "nw", "ne", "se", "sw" }
-  for _, handle in ipairs(handleNames) do
-    local hx, hy = getHandleWorldPosition(record, handle)
-    love.graphics.rectangle(
-      "fill",
-      hx - handleWorldSize * 0.5,
-      hy - handleWorldSize * 0.5,
-      handleWorldSize,
-      handleWorldSize
-    )
+  if #selectionRecords == 1 then
+    local record = selectionRecords[1]
+    local handleNames = { "nw", "ne", "se", "sw" }
+    for _, handle in ipairs(handleNames) do
+      local hx, hy = getHandleWorldPosition(record, handle)
+      love.graphics.rectangle(
+        "fill",
+        hx - handleWorldSize * 0.5,
+        hy - handleWorldSize * 0.5,
+        handleWorldSize,
+        handleWorldSize
+      )
+    end
   end
 end
 
@@ -762,12 +861,6 @@ local function commitCameraPatch(node, state, slideId)
       },
     },
   }, false)
-end
-
-local function getSelectedRecord(state, slide)
-  local selected = state.selection[1]
-  if not selected or selected.slideId ~= slide.id then return nil end
-  return findNodeRecord(slide.nodes, selected.nodeId, 0, 0, state.frameOverrides)
 end
 
 local function emitNodeFramePatch(nodeId, slideId, targetNodeId, frame)
@@ -846,14 +939,24 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
   local worldX, worldY = screenToWorld(layout, state.camera, sx, sy)
   local hit = hitTestNodes(slide.nodes, worldX, worldY, 0, 0, state.frameOverrides)
   if hit then
-    setSelection(node, state, { slideId = slide.id, nodeId = hit.node.id })
+    if not isNodeSelected(state, slide.id, hit.node.id) then
+      setSelection(node, state, { slideId = slide.id, nodeId = hit.node.id })
+    end
+
     if not hit.node.locked then
+      local moveSelection = getSelectionRecords(state, slide)
+      local startFrames = {}
+      for _, record in ipairs(moveSelection) do
+        if not record.node.locked then
+          startFrames[record.node.id] = copyFrame(record.frame)
+        end
+      end
+
       state.gesture = {
         mode = "move",
-        nodeId = hit.node.id,
         startWorldX = worldX,
         startWorldY = worldY,
-        startFrame = copyFrame(hit.frame),
+        startFrames = startFrames,
       }
     else
       state.gesture = nil
@@ -908,10 +1011,12 @@ function PresentationEditor.handleMouseMoved(node, sx, sy)
   local dy = worldY - gesture.startWorldY
 
   if gesture.mode == "move" then
-    local nextFrame = copyFrame(gesture.startFrame)
-    nextFrame.x = gesture.startFrame.x + dx
-    nextFrame.y = gesture.startFrame.y + dy
-    state.frameOverrides[gesture.nodeId] = nextFrame
+    for nodeId, startFrame in pairs(gesture.startFrames or {}) do
+      local nextFrame = copyFrame(startFrame)
+      nextFrame.x = startFrame.x + dx
+      nextFrame.y = startFrame.y + dy
+      state.frameOverrides[nodeId] = nextFrame
+    end
     return true
   end
 
@@ -940,6 +1045,20 @@ function PresentationEditor.handleMouseReleased(node, _sx, _sy, button)
     return true
   end
 
+  if gesture.mode == "move" then
+    for nodeId, startFrame in pairs(gesture.startFrames or {}) do
+      local nextFrame = state.frameOverrides[nodeId]
+      if nextFrame then
+        if frameMatches(nextFrame, startFrame) then
+          state.frameOverrides[nodeId] = nil
+        else
+          emitNodeFramePatch(node.id, slide.id, nodeId, nextFrame)
+        end
+      end
+    end
+    return true
+  end
+
   local nextFrame = state.frameOverrides[gesture.nodeId]
   if not nextFrame then
     return true
@@ -950,19 +1069,7 @@ function PresentationEditor.handleMouseReleased(node, _sx, _sy, button)
     return true
   end
 
-  emitPatch(node.id, {
-    type = "updateNode",
-    slideId = slide.id,
-    nodeId = gesture.nodeId,
-    changes = {
-      frame = {
-        x = nextFrame.x,
-        y = nextFrame.y,
-        width = nextFrame.width,
-        height = nextFrame.height,
-      },
-    },
-  }, false)
+  emitNodeFramePatch(node.id, slide.id, gesture.nodeId, nextFrame)
 
   return true
 end
@@ -1007,25 +1114,39 @@ function PresentationEditor.handleKeyPressed(node, key, _scancode, _isrepeat)
   local _, slide = syncState(node, state)
   if not slide then return false end
 
+  if key == "a" and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
+    setSelection(node, state, collectSelectableSelections(slide.nodes, slide.id))
+    return true
+  end
+
   if key == "escape" then
-    if state.selection[1] then
+    if #state.selection > 0 then
       setSelection(node, state, nil)
       return true
     end
     return false
   end
 
-  local selectedRecord = getSelectedRecord(state, slide)
+  local selectionRecords = getSelectionRecords(state, slide)
 
-  if (key == "delete" or key == "backspace") and selectedRecord then
-    if selectedRecord.node.locked then return true end
-    state.frameOverrides[selectedRecord.node.id] = nil
-    setSelection(node, state, nil)
-    emitPatch(node.id, {
-      type = "removeNode",
-      slideId = slide.id,
-      nodeId = selectedRecord.node.id,
-    }, false)
+  if (key == "delete" or key == "backspace") and #selectionRecords > 0 then
+    local remainingSelection = {}
+    for _, record in ipairs(selectionRecords) do
+      if record.node.locked then
+        remainingSelection[#remainingSelection + 1] = {
+          slideId = slide.id,
+          nodeId = record.node.id,
+        }
+      else
+        state.frameOverrides[record.node.id] = nil
+        emitPatch(node.id, {
+          type = "removeNode",
+          slideId = slide.id,
+          nodeId = record.node.id,
+        }, false)
+      end
+    end
+    setSelection(node, state, remainingSelection)
     return true
   end
 
@@ -1041,14 +1162,17 @@ function PresentationEditor.handleKeyPressed(node, key, _scancode, _isrepeat)
     moveY = 1
   end
 
-  if (moveX ~= 0 or moveY ~= 0) and selectedRecord then
-    if selectedRecord.node.locked then return true end
+  if (moveX ~= 0 or moveY ~= 0) and #selectionRecords > 0 then
     local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
-    local nextFrame = copyFrame(selectedRecord.frame)
-    nextFrame.x = nextFrame.x + moveX * step
-    nextFrame.y = nextFrame.y + moveY * step
-    state.frameOverrides[selectedRecord.node.id] = nextFrame
-    emitNodeFramePatch(node.id, slide.id, selectedRecord.node.id, nextFrame)
+    for _, record in ipairs(selectionRecords) do
+      if not record.node.locked then
+        local nextFrame = copyFrame(record.frame)
+        nextFrame.x = nextFrame.x + moveX * step
+        nextFrame.y = nextFrame.y + moveY * step
+        state.frameOverrides[record.node.id] = nextFrame
+        emitNodeFramePatch(node.id, slide.id, record.node.id, nextFrame)
+      end
+    end
     return true
   end
 

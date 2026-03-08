@@ -251,7 +251,7 @@ const INITIAL_DOCUMENT = createDemoDocument();
 const INITIAL_LOG = [
   'Click inside the editor to focus it.',
   'Drag a node to move it, drag a corner to resize it, and drag empty space to pan.',
-  'Arrow keys nudge the selection. Shift plus Arrow moves 10 pixels. Escape clears selection. Delete, equal, minus, and zero work too.',
+  'Ctrl+A or Cmd+A selects the editable canvas nodes. Arrow keys nudge. Shift plus Arrow moves 10 pixels. Escape clears selection.',
 ];
 
 function pushLog(setter: React.Dispatch<React.SetStateAction<string[]>>, line: string) {
@@ -560,7 +560,7 @@ export function PresentationStory() {
               }}
             />
             <Text style={{ fontSize: 10, color: c.textDim }}>
-              Click the editor to focus it. Arrow keys nudge, Shift plus Arrow moves 10 pixels, Escape clears selection, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
+              Click the editor to focus it. Ctrl+A or Cmd+A selects the editable canvas nodes. Arrow keys nudge, Shift plus Arrow moves 10 pixels, Escape clears selection, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
             </Text>
           </Panel>
         </Box>
@@ -586,12 +586,18 @@ export function PresentationStory() {
           <Panel title="Selection">
             {selectedNode ? (
               <Box style={{ gap: 8 }}>
+                <KeyValue label="count" value={String(selection.length)} />
                 <KeyValue label="id" value={selectedNode.id} />
                 <KeyValue label="kind" value={selectedNode.kind} />
                 <KeyValue
                   label="frame"
                   value={`${selectedNode.frame.x}, ${selectedNode.frame.y}, ${selectedNode.frame.width}, ${selectedNode.frame.height}`}
                 />
+                {selection.length > 1 ? (
+                  <Text style={{ fontSize: 10, color: c.textDim }}>
+                    Multi-selection is active. Keyboard move and delete apply to the full canvas selection.
+                  </Text>
+                ) : null}
                 {selectedNode.kind === 'text' ? (
                   <Text style={{ fontSize: 10, color: c.text }}>{selectedNode.text}</Text>
                 ) : selectedNode.kind === 'shape' ? (
@@ -606,10 +612,11 @@ export function PresentationStory() {
           <Panel title="Shortcuts">
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 10, color: c.text }}>Click the editor surface to focus it.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Arrow keys move the selected node by 1 pixel.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Shift plus Arrow moves the selected node by 10 pixels.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Ctrl+A or Cmd+A selects every editable node on the canvas.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Arrow keys move the selected nodes by 1 pixel.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Shift plus Arrow moves the selected nodes by 10 pixels.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Escape clears the selection.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Delete removes the selected node.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Delete removes the selected nodes.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Wheel zooms. Equal, minus, and zero control zoom from the keyboard.</Text>
             </Box>
           </Panel>
