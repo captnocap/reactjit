@@ -21,6 +21,7 @@ local PresentationEditor = {}
 local Measure = nil
 local pendingEvents = {}
 local getFontForText
+local commitCameraPatch
 
 local HANDLE_SIZE = 10
 local MIN_NODE_SIZE = 24
@@ -33,6 +34,19 @@ local FALLBACK_TEXT = { 0.09, 0.11, 0.16, 1 }
 local FALLBACK_MUTED = { 0.28, 0.33, 0.42, 1 }
 local FALLBACK_ACCENT = { 0.95, 0.54, 0.16, 1 }
 local FALLBACK_SELECTION = { 0.95, 0.54, 0.16, 0.24 }
+local FALLBACK_MENU_BG = { 0.08, 0.1, 0.14, 0.98 }
+local FALLBACK_MENU_BORDER = { 0.24, 0.28, 0.34, 1 }
+local FALLBACK_MENU_HOVER = { 0.95, 0.54, 0.16, 0.2 }
+local FALLBACK_MENU_DISABLED = { 0.44, 0.48, 0.54, 1 }
+
+local MENU_FONT_SIZE = 13
+local MENU_ITEM_HEIGHT = 28
+local MENU_SEPARATOR_HEIGHT = 10
+local MENU_PADDING_X = 8
+local MENU_PADDING_Y = 6
+local MENU_TEXT_PADDING_X = 10
+local MENU_MIN_WIDTH = 188
+local MENU_RADIUS = 8
 
 local function clamp(value, minValue, maxValue)
   if value < minValue then return minValue end
@@ -151,6 +165,8 @@ local function ensureState(node)
     lastLayout = nil,
     lastDocumentUpdatedAt = nil,
     lastCommandId = nil,
+    contextMenu = nil,
+    pendingSelection = nil,
   }
 
   node._presentationEditor = state
@@ -621,6 +637,17 @@ local function syncState(node, state)
     setSelection(node, state, liveSelection)
   end
 
+  if state.pendingSelection and state.pendingSelection.slideId == slide.id then
+    local liveNode = findNodeRecord(slide.nodes, state.pendingSelection.nodeId, 0, 0, nil)
+    if liveNode then
+      setSelection(node, state, {
+        slideId = slide.id,
+        nodeId = state.pendingSelection.nodeId,
+      })
+      state.pendingSelection = nil
+    end
+  end
+
   slide = applyCommand(node, state, document, slide)
   state.lastDocumentUpdatedAt = document.updatedAt
 
@@ -738,6 +765,344 @@ local function resolveAsset(document, assetId)
   local assets = document and document.assets or nil
   if not assets or not assetId then return nil end
   return assets[assetId]
+end
+
+local function getSelectionBounds(selectionRecords)
+  if not selectionRecords or #selectionRecords == 0 then return nil end
+
+  local minX = nil
+  local minY = nil
+  local maxX = nil
+  local maxY = nil
+
+  for _, record in ipairs(selectionRecords) do
+    local left = record.absX
+    local top = record.absY
+    local right = record.absX + (record.boundsW or 0)
+    local bottom = record.absY + (record.boundsH or 0)
+
+    if minX == nil or left < minX then minX = left end
+    if minY == nil or top < minY then minY = top end
+    if maxX == nil or right > maxX then maxX = right end
+    if maxY == nil or bottom > maxY then maxY = bottom end
+  end
+
+  return {
+    x = minX or 0,
+    y = minY or 0,
+    width = math.max(0, (maxX or 0) - (minX or 0)),
+    height = math.max(0, (maxY or 0) - (minY or 0)),
+  }
+end
+
+local function getFirstAssetIdByKind(document, kind)
+  local assets = document and document.assets or nil
+  if not assets then return nil end
+
+  local assetIds = {}
+  for assetId, asset in pairs(assets) do
+    if asset and asset.kind == kind then
+      assetIds[#assetIds + 1] = assetId
+    end
+  end
+
+  table.sort(assetIds)
+  return assetIds[1]
+end
+
+local function createNodeId(kind)
+  local timeValue = love.timer and love.timer.getTime and love.timer.getTime() or os.clock()
+  local millis = math.floor((timeValue or 0) * 1000)
+  local randomValue = math.random(1000, 9999)
+  return string.format("presentation-%s-%d-%d", tostring(kind or "node"), millis, randomValue)
+end
+
+local function clampMenuPosition(menu, node)
+  if not menu or not node or not node.computed then return end
+  local c = node.computed
+  menu.x = clamp(menu.x, c.x + 8, math.max(c.x + 8, c.x + c.w - menu.width - 8))
+  menu.y = clamp(menu.y, c.y + 8, math.max(c.y + 8, c.y + c.h - menu.height - 8))
+end
+
+local function getMenuFont()
+  if Measure and Measure.getFont then
+    return Measure.getFont(MENU_FONT_SIZE)
+  end
+  if love.graphics and love.graphics.newFont then
+    return love.graphics.newFont(MENU_FONT_SIZE)
+  end
+  return love.graphics.getFont()
+end
+
+local function calcMenuHeight(items)
+  local height = MENU_PADDING_Y * 2
+  for _, item in ipairs(items or {}) do
+    height = height + (item.separator and MENU_SEPARATOR_HEIGHT or MENU_ITEM_HEIGHT)
+  end
+  return height
+end
+
+local function calcMenuWidth(items, font)
+  local width = MENU_MIN_WIDTH
+  for _, item in ipairs(items or {}) do
+    if not item.separator then
+      width = math.max(width, MENU_PADDING_X * 2 + MENU_TEXT_PADDING_X * 2 + font:getWidth(tostring(item.label or "")))
+    end
+  end
+  return width
+end
+
+local function getMenuItemIndexAt(menu, sx, sy)
+  if not menu then return 0 end
+  if sx < menu.x or sx > menu.x + menu.width or sy < menu.y or sy > menu.y + menu.height then
+    return 0
+  end
+
+  local cursorY = menu.y + MENU_PADDING_Y
+  for index, item in ipairs(menu.items or {}) do
+    local itemHeight = item.separator and MENU_SEPARATOR_HEIGHT or MENU_ITEM_HEIGHT
+    if sy >= cursorY and sy <= cursorY + itemHeight then
+      if item.separator or item.disabled then
+        return 0
+      end
+      return index
+    end
+    cursorY = cursorY + itemHeight
+  end
+
+  return 0
+end
+
+local function findNextMenuIndex(items, startIndex, step)
+  if not items or #items == 0 then return 0 end
+  local index = startIndex
+  for _ = 1, #items do
+    index = index + step
+    if index < 1 then index = #items end
+    if index > #items then index = 1 end
+    local item = items[index]
+    if item and not item.separator and not item.disabled then
+      return index
+    end
+  end
+  return 0
+end
+
+local function closeContextMenu(state)
+  state.contextMenu = nil
+end
+
+local function buildContextMenuItems(document, slide, state, worldX, worldY)
+  local imageAssetId = getFirstAssetIdByKind(document, "image")
+  local videoAssetId = getFirstAssetIdByKind(document, "video")
+  local hasSelection = #(state.selection or {}) > 0
+
+  return {
+    {
+      label = "Insert Text",
+      action = "insertText",
+      worldX = worldX,
+      worldY = worldY,
+    },
+    {
+      label = "Insert Shape",
+      action = "insertShape",
+      worldX = worldX,
+      worldY = worldY,
+    },
+    {
+      label = "Insert Image",
+      action = "insertImage",
+      worldX = worldX,
+      worldY = worldY,
+      assetId = imageAssetId,
+      disabled = imageAssetId == nil,
+    },
+    {
+      label = "Insert Video",
+      action = "insertVideo",
+      worldX = worldX,
+      worldY = worldY,
+      assetId = videoAssetId,
+      disabled = videoAssetId == nil,
+    },
+    { separator = true },
+    {
+      label = "Select All",
+      action = "selectAll",
+    },
+    {
+      label = "Delete Selection",
+      action = "deleteSelection",
+      disabled = not hasSelection,
+    },
+    {
+      label = "Reset Camera",
+      action = "resetCamera",
+    },
+  }
+end
+
+local function deleteCurrentSelection(node, state, slide)
+  local selectionRecords = getSelectionRecords(state, slide)
+  if #selectionRecords == 0 then return false end
+
+  local remainingSelection = {}
+  for _, record in ipairs(selectionRecords) do
+    if record.node.locked then
+      remainingSelection[#remainingSelection + 1] = {
+        slideId = slide.id,
+        nodeId = record.node.id,
+      }
+    else
+      state.frameOverrides[record.node.id] = nil
+      emitPatch(node.id, {
+        type = "removeNode",
+        slideId = slide.id,
+        nodeId = record.node.id,
+      }, false)
+    end
+  end
+
+  setSelection(node, state, remainingSelection)
+  return true
+end
+
+local function openContextMenu(node, state, document, slide, sx, sy, worldX, worldY)
+  local font = getMenuFont()
+  local items = buildContextMenuItems(document, slide, state, worldX, worldY)
+  local menu = {
+    x = sx,
+    y = sy,
+    worldX = worldX,
+    worldY = worldY,
+    items = items,
+    width = calcMenuWidth(items, font),
+    height = calcMenuHeight(items),
+    hoverIndex = findNextMenuIndex(items, 0, 1),
+  }
+  clampMenuPosition(menu, node)
+  state.contextMenu = menu
+end
+
+local function activateContextMenuItem(node, state, document, slide, item)
+  if not item or item.disabled or item.separator then return false end
+
+  if item.action == "insertText" then
+    local textNode = {
+      id = createNodeId("text"),
+      kind = "text",
+      text = "New text",
+      frame = {
+        x = item.worldX - 120,
+        y = item.worldY - 36,
+        width = 240,
+        height = 96,
+        rotation = 0,
+        zIndex = 0,
+      },
+      textStyle = {
+        fontSize = 32,
+      },
+    }
+    emitPatch(node.id, {
+      type = "addNode",
+      slideId = slide.id,
+      node = textNode,
+    }, false)
+    state.pendingSelection = { slideId = slide.id, nodeId = textNode.id }
+    closeContextMenu(state)
+    return true
+  end
+
+  if item.action == "insertShape" then
+    local shapeNode = {
+      id = createNodeId("shape"),
+      kind = "shape",
+      shape = "rectangle",
+      fill = "#f28a3d",
+      stroke = "#c96a25",
+      strokeWidth = 2,
+      radius = 18,
+      frame = {
+        x = item.worldX - 110,
+        y = item.worldY - 70,
+        width = 220,
+        height = 140,
+        rotation = 0,
+        zIndex = 0,
+      },
+    }
+    emitPatch(node.id, {
+      type = "addNode",
+      slideId = slide.id,
+      node = shapeNode,
+    }, false)
+    state.pendingSelection = { slideId = slide.id, nodeId = shapeNode.id }
+    closeContextMenu(state)
+    return true
+  end
+
+  if item.action == "insertImage" or item.action == "insertVideo" then
+    if not item.assetId then
+      closeContextMenu(state)
+      return true
+    end
+    local asset = resolveAsset(document, item.assetId)
+    local nodeKind = item.action == "insertVideo" and "video" or "image"
+    local defaultWidth = nodeKind == "video" and 320 or 280
+    local defaultHeight = nodeKind == "video" and 180 or 180
+    local mediaWidth = asset and asset.width or defaultWidth
+    local mediaHeight = asset and asset.height or defaultHeight
+    local fitScale = math.min(defaultWidth / math.max(mediaWidth, 1), defaultHeight / math.max(mediaHeight, 1), 1)
+    local width = math.max(140, math.floor(mediaWidth * fitScale + 0.5))
+    local height = math.max(100, math.floor(mediaHeight * fitScale + 0.5))
+    local mediaNode = {
+      id = createNodeId(nodeKind),
+      kind = nodeKind,
+      assetId = item.assetId,
+      frame = {
+        x = item.worldX - width * 0.5,
+        y = item.worldY - height * 0.5,
+        width = width,
+        height = height,
+        rotation = 0,
+        zIndex = 0,
+      },
+    }
+    emitPatch(node.id, {
+      type = "addNode",
+      slideId = slide.id,
+      node = mediaNode,
+    }, false)
+    state.pendingSelection = { slideId = slide.id, nodeId = mediaNode.id }
+    closeContextMenu(state)
+    return true
+  end
+
+  if item.action == "selectAll" then
+    setSelection(node, state, collectSelectableSelections(slide.nodes, slide.id))
+    closeContextMenu(state)
+    return true
+  end
+
+  if item.action == "deleteSelection" then
+    deleteCurrentSelection(node, state, slide)
+    closeContextMenu(state)
+    return true
+  end
+
+  if item.action == "resetCamera" then
+    state.camera = { x = 0, y = 0, zoom = 1, rotation = 0 }
+    state.cameraDirty = true
+    state.cameraCommitTimer = nil
+    commitCameraPatch(node, state, slide.id)
+    closeContextMenu(state)
+    return true
+  end
+
+  closeContextMenu(state)
+  return false
 end
 
 getFontForText = function(nodeDef)
@@ -914,6 +1279,7 @@ end
 
 local function drawSelection(document, slide, state, layout, opacity)
   local selectionRecords = getSelectionRecords(state, slide)
+  local selectionBounds = getSelectionBounds(selectionRecords)
 
   local accent = resolveAccentColor(document)
   local gesture = state.gesture
@@ -937,10 +1303,28 @@ local function drawSelection(document, slide, state, layout, opacity)
   local outlineWidth = 2 / math.max(layout.scale, 0.0001)
   local handleWorldSize = HANDLE_SIZE / math.max(layout.scale, 0.0001)
 
+  if selectionBounds and #selectionRecords > 1 then
+    love.graphics.setColor(0, 0, 0, 0.12 * (opacity or 1))
+    love.graphics.setLineWidth(6 / math.max(layout.scale, 0.0001))
+    love.graphics.rectangle("line", selectionBounds.x, selectionBounds.y, selectionBounds.width, selectionBounds.height)
+  end
+
   for _, record in ipairs(selectionRecords) do
+    if #selectionRecords > 1 then
+      local r, g, b, a = parseColor(accent, FALLBACK_ACCENT)
+      love.graphics.setColor(r, g, b, (a or 1) * 0.42 * (opacity or 1))
+      love.graphics.setLineWidth(1 / math.max(layout.scale, 0.0001))
+    else
+      setParsedColor(accent, opacity, FALLBACK_ACCENT)
+      love.graphics.setLineWidth(outlineWidth)
+    end
+    love.graphics.rectangle("line", record.absX, record.absY, record.boundsW, record.boundsH)
+  end
+
+  if selectionBounds and #selectionRecords > 1 then
     setParsedColor(accent, opacity, FALLBACK_ACCENT)
     love.graphics.setLineWidth(outlineWidth)
-    love.graphics.rectangle("line", record.absX, record.absY, record.boundsW, record.boundsH)
+    love.graphics.rectangle("line", selectionBounds.x, selectionBounds.y, selectionBounds.width, selectionBounds.height)
   end
 
   if #selectionRecords == 1 then
@@ -955,6 +1339,58 @@ local function drawSelection(document, slide, state, layout, opacity)
         handleWorldSize,
         handleWorldSize
       )
+    end
+  end
+end
+
+local function drawContextMenu(state, opacity)
+  local menu = state.contextMenu
+  if not menu then return end
+
+  local font = getMenuFont()
+  love.graphics.setFont(font)
+
+  setParsedColor(nil, opacity, FALLBACK_MENU_BG)
+  love.graphics.rectangle("fill", menu.x, menu.y, menu.width, menu.height, MENU_RADIUS, MENU_RADIUS)
+
+  setParsedColor(nil, opacity, FALLBACK_MENU_BORDER)
+  love.graphics.setLineWidth(1)
+  love.graphics.rectangle("line", menu.x, menu.y, menu.width, menu.height, MENU_RADIUS, MENU_RADIUS)
+
+  local cursorY = menu.y + MENU_PADDING_Y
+  for index, item in ipairs(menu.items or {}) do
+    if item.separator then
+      setParsedColor(nil, opacity, FALLBACK_MENU_BORDER)
+      local lineY = cursorY + MENU_SEPARATOR_HEIGHT * 0.5
+      love.graphics.line(menu.x + MENU_PADDING_X + 4, lineY, menu.x + menu.width - MENU_PADDING_X - 4, lineY)
+      cursorY = cursorY + MENU_SEPARATOR_HEIGHT
+    else
+      if index == menu.hoverIndex and not item.disabled then
+        setParsedColor(nil, opacity, FALLBACK_MENU_HOVER)
+        love.graphics.rectangle(
+          "fill",
+          menu.x + MENU_PADDING_X,
+          cursorY,
+          menu.width - MENU_PADDING_X * 2,
+          MENU_ITEM_HEIGHT,
+          6,
+          6
+        )
+      end
+
+      if item.disabled then
+        setParsedColor(nil, opacity, FALLBACK_MENU_DISABLED)
+      else
+        setParsedColor(nil, opacity, FALLBACK_TEXT)
+      end
+
+      love.graphics.print(
+        tostring(item.label or ""),
+        menu.x + MENU_PADDING_X + MENU_TEXT_PADDING_X,
+        cursorY + math.floor((MENU_ITEM_HEIGHT - font:getHeight()) * 0.5)
+      )
+
+      cursorY = cursorY + MENU_ITEM_HEIGHT
     end
   end
 end
@@ -1007,7 +1443,7 @@ local function resizeFrameFromHandle(frame, handle, dx, dy)
   }
 end
 
-local function commitCameraPatch(node, state, slideId)
+commitCameraPatch = function(node, state, slideId)
   emitCameraChange(node.id, slideId, state.camera, false)
   emitPatch(node.id, {
     type = "updateSlide",
@@ -1069,8 +1505,6 @@ function PresentationEditor.update(dt, nodes)
 end
 
 function PresentationEditor.handleMousePressed(node, sx, sy, button)
-  if button ~= 1 then return false end
-
   local state = ensureState(node)
   local document, slide = syncState(node, state)
   if not document or not slide or not node.computed then return false end
@@ -1078,9 +1512,40 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
   local layout = getViewportLayout(node, state, document)
   state.lastLayout = layout
 
+  if state.contextMenu then
+    if button == 1 then
+      local itemIndex = getMenuItemIndexAt(state.contextMenu, sx, sy)
+      if itemIndex > 0 then
+        local item = state.contextMenu.items[itemIndex]
+        activateContextMenuItem(node, state, document, slide, item)
+        return true
+      end
+    end
+    closeContextMenu(state)
+    if button ~= 1 then
+      return pointInRect(sx, sy, layout.x, layout.y, layout.w, layout.h)
+    end
+  end
+
   if not pointInRect(sx, sy, layout.x, layout.y, layout.w, layout.h) then
     return false
   end
+
+  local worldX, worldY = screenToWorld(layout, state.camera, sx, sy)
+  if button == 2 then
+    local hit = hitTestNodes(slide.nodes, worldX, worldY, 0, 0, state.frameOverrides)
+    if hit then
+      if not isNodeSelected(state, slide.id, hit.node.id) then
+        setSelection(node, state, { slideId = slide.id, nodeId = hit.node.id })
+      end
+    else
+      setSelection(node, state, nil)
+    end
+    openContextMenu(node, state, document, slide, sx, sy, worldX, worldY)
+    return true
+  end
+
+  if button ~= 1 then return false end
 
   local shiftDown = love.keyboard.isDown("lshift", "rshift")
   local handle, selectedRecord = hitResizeHandle(state, slide, layout, sx, sy)
@@ -1097,7 +1562,6 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
     return true
   end
 
-  local worldX, worldY = screenToWorld(layout, state.camera, sx, sy)
   local hit = hitTestNodes(slide.nodes, worldX, worldY, 0, 0, state.frameOverrides)
   if hit then
     if shiftDown then
@@ -1167,6 +1631,10 @@ end
 
 function PresentationEditor.handleMouseMoved(node, sx, sy)
   local state = ensureState(node)
+  if state.contextMenu then
+    state.contextMenu.hoverIndex = getMenuItemIndexAt(state.contextMenu, sx, sy)
+    return true
+  end
   local gesture = state.gesture
   if not gesture then return false end
 
@@ -1338,6 +1806,28 @@ function PresentationEditor.handleKeyPressed(node, key, _scancode, _isrepeat)
   local _, slide = syncState(node, state)
   if not slide then return false end
 
+  if state.contextMenu then
+    if key == "escape" then
+      closeContextMenu(state)
+      return true
+    end
+    if key == "up" then
+      state.contextMenu.hoverIndex = findNextMenuIndex(state.contextMenu.items, state.contextMenu.hoverIndex or (#state.contextMenu.items + 1), -1)
+      return true
+    end
+    if key == "down" then
+      state.contextMenu.hoverIndex = findNextMenuIndex(state.contextMenu.items, state.contextMenu.hoverIndex or 0, 1)
+      return true
+    end
+    if key == "return" or key == "kpenter" then
+      local item = state.contextMenu.items[state.contextMenu.hoverIndex or 0]
+      if item then
+        return activateContextMenuItem(node, state, node.props and node.props.document or nil, slide, item)
+      end
+      return true
+    end
+  end
+
   if key == "a" and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
     setSelection(node, state, collectSelectableSelections(slide.nodes, slide.id))
     return true
@@ -1354,24 +1844,7 @@ function PresentationEditor.handleKeyPressed(node, key, _scancode, _isrepeat)
   local selectionRecords = getSelectionRecords(state, slide)
 
   if (key == "delete" or key == "backspace") and #selectionRecords > 0 then
-    local remainingSelection = {}
-    for _, record in ipairs(selectionRecords) do
-      if record.node.locked then
-        remainingSelection[#remainingSelection + 1] = {
-          slideId = slide.id,
-          nodeId = record.node.id,
-        }
-      else
-        state.frameOverrides[record.node.id] = nil
-        emitPatch(node.id, {
-          type = "removeNode",
-          slideId = slide.id,
-          nodeId = record.node.id,
-        }, false)
-      end
-    end
-    setSelection(node, state, remainingSelection)
-    return true
+    return deleteCurrentSelection(node, state, slide)
   end
 
   local moveX = 0
@@ -1473,6 +1946,7 @@ function PresentationEditor.draw(node, opacity)
   drawSelection(document, slide, state, layout, opacity or 1)
 
   love.graphics.pop()
+  drawContextMenu(state, opacity or 1)
   Scissor.restore(prevScissor)
 end
 

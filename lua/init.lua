@@ -4216,6 +4216,17 @@ function ReactJIT.mousepressed(x, y, button)
     end
   end
 
+  -- PresentationEditor canvas menu gets first shot before the global app menu.
+  if button == 2 and M.presentationeditor then
+    local hit = M.events.hitTest(root, x, y)
+    if hit and hit.type == "PresentationEditor" and M.presentationeditor.handleMousePressed(hit, x, y, button) then
+      if not focus.isFocused(hit) then
+        focus.set(hit)
+      end
+      return
+    end
+  end
+
   -- Context menu: consume clicks when open (close on outside click, select on item)
   if M.contextmenu and M.contextmenu.isOpen() then
     M.contextmenu.handleMousePressed(x, y, button)
