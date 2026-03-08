@@ -12,6 +12,7 @@
     test:wait       — no-op; RPC round-trip naturally spans one frame
     test:screenshot — capture a PNG to the given path
     test:audit      — walk the tree and detect layout violations
+    test:divider-audit — detect text nodes overlapping thin separators
     test:done       — print results, quit Love2D with exit code
 ]]
 
@@ -700,6 +701,106 @@ function Testrunner.text_audit(args)
               end
             end
           end
+        end
+      end
+    end
+  end
+
+  return violations
+end
+
+-- ---------------------------------------------------------------------------
+-- Divider audit — detect text nodes overlapping thin separator elements
+-- ---------------------------------------------------------------------------
+
+--- A "divider" is any laid-out node whose computed size is very thin in one
+--- axis (<=2px) and spans a meaningful length in the other (>20px).
+--- This catches both horizontal and vertical separators regardless of their
+--- component type or debug name.
+
+local DIVIDER_THICKNESS = 2   -- max px in thin axis
+local DIVIDER_MIN_SPAN  = 20  -- min px in long axis
+
+--- Collect all divider-like nodes in the tree.
+local function collectDividers(node, vpW, vpH, out)
+  if not node or not node.computed then return end
+  local c = node.computed
+  if c.w <= 0 or c.h <= 0 then return end
+  if isHidden(node) then return end
+  -- Skip off-viewport
+  if c.x + c.w < 0 or c.y + c.h < 0 or c.x > vpW or c.y > vpH then return end
+
+  -- Horizontal divider: thin height, wide width
+  local isHDiv = c.h <= DIVIDER_THICKNESS and c.w >= DIVIDER_MIN_SPAN
+  -- Vertical divider: thin width, tall height
+  local isVDiv = c.w <= DIVIDER_THICKNESS and c.h >= DIVIDER_MIN_SPAN
+
+  if isHDiv or isVDiv then
+    out[#out + 1] = { node = node, horizontal = isHDiv }
+  end
+
+  for _, child in ipairs(node.children or {}) do
+    collectDividers(child, vpW, vpH, out)
+  end
+end
+
+--- Run a divider-focused layout audit.
+--- Finds all thin separator elements and checks if any text node overlaps them.
+--- Returns an array of violation objects with rule = "text-divider-overlap".
+function Testrunner.divider_audit(args)
+  local root = Tree.getTree()
+  if not root then return {} end
+
+  local vpW = love.graphics.getWidth()
+  local vpH = love.graphics.getHeight()
+  local violations = {}
+
+  -- Collect dividers
+  local dividers = {}
+  collectDividers(root, vpW, vpH, dividers)
+
+  -- Collect text nodes (reuse existing helper)
+  local textNodes = {}
+  collectTextNodes(root, vpW, vpH, textNodes)
+
+  -- Filter to Text parents only (not __TEXT__) to avoid duplicates
+  local textParents = {}
+  for _, n in ipairs(textNodes) do
+    if n.type == "Text" then
+      textParents[#textParents + 1] = n
+    end
+  end
+
+  -- Check each text node against each divider for overlap
+  for _, t in ipairs(textParents) do
+    local tc = t.computed
+    for _, d in ipairs(dividers) do
+      local dn = d.node
+      local dc = dn.computed
+      -- Skip parent-child pairs
+      if not isDescendant(t, dn) and not isDescendant(dn, t)
+         and sameScrollContext(t, dn) then
+        local area, ox, oy = overlapArea(
+          tc.x, tc.y, tc.w, tc.h,
+          dc.x, dc.y, dc.w, dc.h
+        )
+        if area > OVERLAP_MIN then
+          local orient = d.horizontal and "horizontal" or "vertical"
+          violations[#violations + 1] = {
+            rule     = "text-divider-overlap",
+            severity = "error",
+            message  = (t.debugName or t.type)
+                       .. " overlaps " .. orient .. " divider"
+                       .. " by " .. math.floor(ox) .. "x" .. math.floor(oy) .. "px"
+                       .. " (text: \"" .. string.sub(nodeText(t), 1, 40) .. "\")",
+            nodeId   = t.id,
+            nodeName = t.debugName or t.type,
+            nodeRect = { x = tc.x, y = tc.y, w = tc.w, h = tc.h },
+            dividerId   = dn.id,
+            dividerName = dn.debugName or dn.type,
+            dividerRect = { x = dc.x, y = dc.y, w = dc.w, h = dc.h },
+            dividerOrientation = orient,
+          }
         end
       end
     end
