@@ -832,6 +832,7 @@ function ReactJIT.init(config)
     M.events.setWidgetsModule(M.widgets)
 
     M.search = require("lua.search")
+    M.findOverlay = require("lua.find_overlay")
 
     loadThemes()
 
@@ -1003,6 +1004,9 @@ function ReactJIT.init(config)
 
     -- App-wide text search (hot index over live tree + cold structural paths)
     M.search = require("lua.search")
+
+    -- Ctrl+F find-in-page overlay (builds on search.lua)
+    M.findOverlay = require("lua.find_overlay")
 
     -- Initialize async HTTP (love.thread + LuaSocket) — gated by network permit
     if permit.check("network") then
@@ -3487,6 +3491,7 @@ function ReactJIT.update(dt)
   -- 11. Tick Lua-side transitions and animations (before layout)
   if M.animate then M.animate.tick(dt) end
   if M.search  then M.search.tick(dt)  end
+  if M.findOverlay then M.findOverlay.tick(dt) end
 
   -- 11. Relayout if tree changed
   if M.tree.isDirty() then
@@ -3774,6 +3779,9 @@ function ReactJIT.draw()
     end
   end
 
+  -- Find-in-page match highlights (drawn under devtools)
+  if M.findOverlay then M.findOverlay.drawHighlights() end
+
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   -- When popped out, draw() only renders canvas overlays on the main window
   if M.inspectorEnabled then
@@ -3800,6 +3808,9 @@ function ReactJIT.draw()
   if M.contextmenu and M.contextmenu.isOpen() then
     M.contextmenu.draw()
   end
+
+  -- Find-in-page search bar (after other overlays, before errors)
+  if M.findOverlay then M.findOverlay.drawBar() end
 
   -- Error overlay renders on top of everything, using raw Love2D calls
   errors.draw()
@@ -4674,6 +4685,17 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     return
   end
 
+  -- Ctrl+F find-in-page overlay
+  if M.findOverlay then
+    if M.findOverlay.isOpen() then
+      if M.findOverlay.keypressed(key) then return end
+    elseif key == "f" and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
+      local root = M.tree and M.tree.getTree()
+      M.findOverlay.open(root)
+      return
+    end
+  end
+
   -- Ctrl+C / Cmd+C: copy text selection to clipboard
   if M.textselection and key == "c" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
     if M.textselection.copyToClipboard() then
@@ -4953,6 +4975,8 @@ function ReactJIT.textinput(text)
   if M.themeMenuEnabled and themeMenu.textinput(text) then return end
   -- Inspector/console captures text input when active
   if M.inspectorEnabled and devtools.textinput(text) then return end
+  -- Find-in-page overlay captures text input when open
+  if M.findOverlay and M.findOverlay.textinput(text) then return end
   if not isRendering() then return end
 
   -- Route to focused TextEditor or TextInput if any
