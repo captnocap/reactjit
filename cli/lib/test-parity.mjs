@@ -10,6 +10,7 @@ export const PACKAGE_TEST_PARITY = {
     'packages/ai/test/tools.test.mjs': 'Pure JS tool orchestration with no Lua implementation.',
     'packages/3d/test/camera.test.mjs': 'Pure JS camera normalization math and preset mapping with no direct Lua-owned counterpart.',
     'packages/core/test/tw-roundtrip.test.mjs': 'Shared Tailwind conversion helpers; no Lua-owned counterpart.',
+    'packages/presentation/test/document.test.mjs': 'Pure JS document schema and patch application helpers shared by the future editor/player layers; no Lua-owned counterpart yet.',
     'packages/router/test/router.test.mjs': 'Pure JS routing state machine with no Lua implementation.',
     'packages/storage/test/format.test.mjs': 'Pure JS format parsing/serialization with no Lua implementation.',
     'packages/storage/test/migrations.test.mjs': 'Pure JS migration utilities with no Lua implementation.',

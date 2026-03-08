@@ -32,6 +32,7 @@ export const ALIAS_MAP = {
   apis: '@reactjit/apis',
   icons: '@reactjit/icons',
   layouts: '@reactjit/layouts',
+  presentation: '@reactjit/presentation',
   terminal: '@reactjit/terminal',
   math: '@reactjit/math',
   convert: '@reactjit/convert',

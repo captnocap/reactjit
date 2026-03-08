@@ -16,6 +16,7 @@
     "packages/geo",
     "packages/geo3d",
     "packages/layouts",
+    "packages/presentation",
     "packages/terminal",
     "packages/icons",
     "packages/math",

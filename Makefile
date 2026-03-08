@@ -469,6 +469,7 @@ endif
 	cp -r packages/privacy cli/runtime/reactjit/privacy
 	cp -r packages/icons cli/runtime/reactjit/icons
 	cp -r packages/layouts cli/runtime/reactjit/layouts
+	cp -r packages/presentation cli/runtime/reactjit/presentation
 	cp -r packages/terminal cli/runtime/reactjit/terminal
 	cp -r packages/imaging cli/runtime/reactjit/imaging
 	cp -r packages/data cli/runtime/reactjit/data
