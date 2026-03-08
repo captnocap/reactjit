@@ -5,6 +5,9 @@ import { useWindowDimensions } from './hooks';
 
 export type Breakpoint = 'sm' | 'md' | 'lg' | 'xl';
 
+/** Viewport orientation based on aspect ratio. */
+export type Orientation = 'portrait' | 'landscape' | 'square';
+
 export type SemanticSpan =
   | 'full'
   | 'half'
@@ -57,7 +60,16 @@ export function spanToFlexBasis(span: number): string {
   return `${(span / 12) * 100}%`;
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────
+/** Determine orientation from dimensions. 20% tolerance band → 'square'. */
+function resolveOrientation(width: number, height: number): Orientation {
+  if (width <= 0 || height <= 0) return 'square';
+  const ratio = width / height;
+  if (ratio > 1.2) return 'landscape';
+  if (ratio < 0.833) return 'portrait'; // 1/1.2
+  return 'square';
+}
+
+// ── Hooks ────────────────────────────────────────────────────────────
 
 /** Returns the current breakpoint based on viewport width. */
 export function useBreakpoint(): Breakpoint {
@@ -68,4 +80,22 @@ export function useBreakpoint(): Breakpoint {
     if (width >= BREAKPOINTS.md) return 'md';
     return 'sm';
   }, [width]);
+}
+
+/** Returns viewport orientation: 'portrait', 'landscape', or 'square'. */
+export function useOrientation(): Orientation {
+  const { width, height } = useWindowDimensions();
+  return useMemo(() => resolveOrientation(width, height), [width, height]);
+}
+
+/** Combined breakpoint + orientation for layout decisions. */
+export function useLayout(): { breakpoint: Breakpoint; orientation: Orientation } {
+  const { width, height } = useWindowDimensions();
+  return useMemo(() => ({
+    breakpoint: width >= BREAKPOINTS.xl ? 'xl'
+      : width >= BREAKPOINTS.lg ? 'lg'
+      : width >= BREAKPOINTS.md ? 'md'
+      : 'sm',
+    orientation: resolveOrientation(width, height),
+  }), [width, height]);
 }

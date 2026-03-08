@@ -46,6 +46,92 @@ Layout._profileLastPass = nil
 Layout._profileTotals = nil
 Layout._profilePassSeq = 0
 
+-- ── Viewport-proportional scaling ─────────────────────────────────
+-- Configured by React's ScaleProvider via RPC 'scale:configure'.
+-- Numeric style values (px dimensions) are scaled during layout.
+-- String values ('100%', 'fit') are never scaled.
+
+Layout._scaleRef = nil    -- { w=800, h=600 } or nil (disabled)
+Layout._scaleCurve = "linear"
+Layout._scaleCap = 1.8
+Layout._scaleFactor = 1   -- computed each layout pass from viewport vs ref
+
+-- Properties whose numeric values represent pixel dimensions and should scale.
+local SCALE_PROPS = {
+  width = true, height = true, minWidth = true, minHeight = true,
+  maxWidth = true, maxHeight = true, flexBasis = true,
+  gap = true,
+  padding = true, paddingLeft = true, paddingRight = true,
+  paddingTop = true, paddingBottom = true,
+  margin = true, marginLeft = true, marginRight = true,
+  marginTop = true, marginBottom = true,
+  fontSize = true, lineHeight = true, letterSpacing = true,
+  borderRadius = true, borderWidth = true,
+  borderTopWidth = true, borderRightWidth = true,
+  borderBottomWidth = true, borderLeftWidth = true,
+  borderTopLeftRadius = true, borderTopRightRadius = true,
+  borderBottomLeftRadius = true, borderBottomRightRadius = true,
+  shadowOffsetX = true, shadowOffsetY = true, shadowBlur = true,
+  textShadowOffsetX = true, textShadowOffsetY = true,
+  outlineWidth = true, outlineOffset = true,
+  top = true, right = true, bottom = true, left = true,
+}
+
+--- Apply the chosen curve to a raw linear scale factor.
+local function applyCurve(raw, curve, cap)
+  if raw <= 1 then return 1 end
+  if curve == "sqrt" then
+    return math.sqrt(raw)
+  elseif curve == "capped" then
+    return math.min(raw, cap)
+  else -- "linear"
+    return raw
+  end
+end
+
+--- Compute scale factor from viewport dimensions.
+local function computeScaleFactor(vw, vh)
+  local ref = Layout._scaleRef
+  if not ref then return 1 end
+  local raw = math.min(vw / ref.w, vh / ref.h)
+  local s = applyCurve(raw, Layout._scaleCurve, Layout._scaleCap)
+  return math.max(1, s)
+end
+
+--- Build a scaled view of a style table. Only numeric values in SCALE_PROPS
+--- are multiplied. Everything else passes through unchanged.
+--- Returns the original table when sf==1 (zero allocation).
+local function scaleStyleTable(s, sf)
+  if sf == 1 then return s end
+  local out = {}
+  for k, v in pairs(s) do
+    if type(v) == "number" and SCALE_PROPS[k] then
+      out[k] = math.floor(v * sf + 0.5)
+    else
+      out[k] = v
+    end
+  end
+  return out
+end
+
+--- Configure viewport scaling. Called from RPC 'scale:configure'.
+function Layout.configureScale(args)
+  if not args then
+    Layout._scaleRef = nil
+    Layout._scaleFactor = 1
+    return
+  end
+  Layout._scaleRef = { w = args.refW or 800, h = args.refH or 600 }
+  Layout._scaleCurve = args.curve or "linear"
+  Layout._scaleCap = args.cap or 1.8
+  -- Recompute immediately if viewport is known
+  local vw = Layout._viewportW
+  local vh = Layout._viewportH
+  if vw and vh then
+    Layout._scaleFactor = computeScaleFactor(vw, vh)
+  end
+end
+
 --- Check if a dimension value is "fit-content" (or the shorthand "fit").
 local function isFitContent(v)
   return v == "fit-content" or v == "fit"
@@ -822,7 +908,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
     end
   end
   local _lt0 = profileNow()
-  local s = node.style or {}
+  local s = scaleStyleTable(node.style or {}, Layout._scaleFactor)
   Log.log("layout", "layoutNode id=%s type=%s debugName=%s avail=%sx%s", tostring(node.id), tostring(node.type), tostring(node.debugName or "-"), tostring(pw), tostring(ph))
 
   -- ==================================================================
@@ -2275,6 +2361,9 @@ function Layout.layout(node, x, y, w, h)
   -- dimensions to every depth, giving wrong results for nested nodes).
   Layout._viewportW = w
   Layout._viewportH = h
+
+  -- Recompute viewport-proportional scale factor for this pass.
+  Layout._scaleFactor = computeScaleFactor(w, h)
 
   -- Root auto-fill: if the root has no explicit dimensions, tell
   -- layoutNode to use the viewport size via the same signals that the

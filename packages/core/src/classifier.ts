@@ -178,6 +178,7 @@ export function classifier(defs: Record<string, SheetEntry>): void {
     }
 
     C.displayName = name;
+    (C as any).__isClassifier = true;
     _registry[name] = C;
   }
 }

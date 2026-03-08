@@ -1739,6 +1739,17 @@ function ReactJIT.init(config)
       return wmMod.getMain()
     end
 
+    -- Configure viewport-proportional scaling (curve, reference, cap).
+    -- Called by React's ScaleProvider on mount.
+    rpcHandlers["scale:configure"] = function(args)
+      if M.layout then
+        M.layout.configureScale(args)
+        -- Force layout recompute so scaling takes effect immediately
+        if M.tree then M.tree.markDirty() end
+      end
+      return true
+    end
+
     -- Declarative window resize: useWindowSize(w, h, { animate, windowId })
     rpcHandlers["window:setSize"] = function(args)
       local win = resolveWindow(args)
@@ -2017,6 +2028,8 @@ function ReactJIT.init(config)
     rpcHandlers["test:screenshot"] = function(a) return tr.screenshot(a) end
     rpcHandlers["test:snap"]       = function(a) return tr.screenshot_region(a) end
     rpcHandlers["test:audit"]      = function(a) return tr.audit(a) end
+    rpcHandlers["test:text-audit"] = function(a) return tr.text_audit(a) end
+    rpcHandlers["test:resize"]     = function(a) return tr.resize(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0
     ReactJIT._testStarted    = false
@@ -2112,13 +2125,47 @@ function ReactJIT._pollHMR()
     if (jsChanged or luaChanged) and hmrHasLoaded then
       if luaHmrDirty then
         io.write("[reactjit] Lua HMR: clearing module cache...\n"); io.flush()
-        -- Clear all lua.* entries from package.loaded so require() gets fresh copies
+        -- Clear lua.* entries from package.loaded so require() gets fresh copies.
+        -- CRITICAL: Skip modules that contain ffi.cdef declarations. Re-requiring
+        -- them would re-run ffi.cdef which redefines C types — LuaJIT either errors
+        -- or segfaults on duplicate typedefs. These are infrastructure modules whose
+        -- C bindings never change during development (bridge, crypto, video, etc.).
+        local ffiModules = {
+          ["lua"] = true,
+          ["lua.init"] = true,
+          ["lua.bridge_quickjs"] = true,
+          ["lua.privacy"] = true,
+          ["lua.overlay_shm"] = true,
+          ["lua.watchdog"] = true,
+          ["lua.overlay"] = true,
+          ["lua.notification_window.main"] = true,
+          ["lua.child_window.main"] = true,
+          ["lua.videos"] = true,
+          ["lua.pty"] = true,
+          ["lua.vterm"] = true,
+          ["lua.indigo"] = true,
+          ["lua.render_source"] = true,
+          ["lua.process_registry"] = true,
+          ["lua.crashreport"] = true,
+          ["lua.crypto"] = true,
+          ["lua.dragdrop"] = true,
+          ["lua.archive"] = true,
+          ["lua.emulator"] = true,
+          ["lua.sqlite"] = true,
+          ["lua.quarantine"] = true,
+          ["lua.capabilities.libretro"] = true,
+          ["lua.capabilities.notification"] = true,
+          ["lua.capabilities.image_process"] = true,
+          ["lua.gpio.serial"] = true,
+          ["lua.gpio.spi"] = true,
+          ["lua.gpio.i2c"] = true,
+          ["lua.gpio.gpiod"] = true,
+          ["lua.audio.midi"] = true,
+          ["lua.g3d.model"] = true,
+        }
         for modname, _ in pairs(package.loaded) do
-          if type(modname) == "string" and modname:match("^lua%.") then
-            -- Don't clear init.lua itself — we're running inside it
-            if modname ~= "lua" and modname ~= "lua.init" then
-              package.loaded[modname] = nil
-            end
+          if type(modname) == "string" and modname:match("^lua%.") and not ffiModules[modname] then
+            package.loaded[modname] = nil
           end
         end
       end

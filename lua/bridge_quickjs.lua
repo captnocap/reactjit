@@ -29,8 +29,13 @@ local Measure = require("lua.measure")
 -- ============================================================================
 -- QuickJS C API declarations
 -- Subset needed for evaluation + host function exposure
+-- Guard: ffi.cdef must only run once per process. On Lua HMR, this module
+-- stays cached (init.lua skips eviction), but if it IS re-required, the
+-- guard prevents LuaJIT from choking on duplicate type definitions.
 -- ============================================================================
 
+if not rawget(_G, "_qjs_cdef_done") then
+_G._qjs_cdef_done = true
 ffi.cdef[[
   typedef struct JSRuntime JSRuntime;
   typedef struct JSContext JSContext;
@@ -118,6 +123,7 @@ ffi.cdef[[
   void qjs_set_host_random(HostCallback cb);
   void qjs_register_host_functions(JSContext *ctx);
 ]]
+end -- _qjs_cdef_done guard
 
 local JS_EVAL_TYPE_GLOBAL = 0
 local JS_EVAL_TYPE_MODULE = 1
@@ -292,9 +298,9 @@ local function luaToJSValue(ctx, qjs, val, depth)
     return ffi.new("JSValue", {0, TAG_NULL})
 
   elseif t == "table" then
-    -- Heuristic: array if val[1] ~= nil, object otherwise.
-    -- Empty tables become empty objects (empty arrays rarely matter).
-    if val[1] ~= nil then
+    -- Heuristic: array if val[1] ~= nil OR table is empty, object otherwise.
+    -- Matches json.lua: empty tables become empty arrays.
+    if val[1] ~= nil or next(val) == nil then
       -- Array mode
       local arr = qjs.JS_NewArray(ctx)
       local len = #val

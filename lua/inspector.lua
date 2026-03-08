@@ -22,6 +22,7 @@
 local ZIndex = require("lua.zindex")
 local Measure = require("lua.measure")
 local SourceEditor = require("lua.source_editor")
+local WM = require("lua.window_manager")
 local console = nil  -- lazy-loaded to avoid circular deps
 
 -- UTF-8 lib (LuaJIT doesn't have the Lua 5.3 utf8 global)
@@ -2843,6 +2844,7 @@ end
 function drawPerfBar()
   local font = getFont()
   local screenW = love.graphics.getWidth()
+  local screenH = love.graphics.getHeight()
   local pad = 6
   local lineH = font:getHeight() + 2
 
@@ -2868,6 +2870,11 @@ function drawPerfBar()
     { label = "Paint", value = string.format("%.1fms", state.paintMs), color = PERF_TEXT },
     { label = "Nodes", value = tostring(state.nodeCount), color = PERF_TEXT },
     { label = "RSS", value = rssMB and string.format("%.0f MB", rssMB) or "?", color = PERF_TEXT },
+    { label = "Win", value = (function()
+      local mw = WM.getMain()
+      if mw then return mw.width .. "x" .. mw.height end
+      return screenW .. "x" .. screenH
+    end)(), color = PERF_TEXT },
   }
 
   -- Measure width

@@ -1032,11 +1032,52 @@ function parseClsFile(clsPath, ts) {
 /**
  * Migrate a single TSX file: replace inline styles with classifier references.
  */
-function migrateFile(filePath, bySig, clsAlias, ts) {
+function migrateFile(filePath, bySig, clsAlias, ts, partial = false) {
   const source = readFileSync(filePath, 'utf-8');
   const sf = ts.createSourceFile(filePath, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TSX);
 
   const replacements = []; // { start, end, text }
+
+  // For partial matching: find best classifier whose properties are a subset
+  // of the element's properties with matching values.
+  function findPartialMatch(primitive, elStyle, elJsx) {
+    let best = null;
+    let bestScore = 0;
+    for (const [, cls] of bySig) {
+      if (cls.primitive !== primitive) continue;
+      // Check: all classifier style props must be in element with matching values
+      const clsStyle = cls.styleStatics;
+      const clsJsx = cls.jsxProps;
+      let allMatch = true;
+      let score = 0;
+      for (const [k, v] of Object.entries(clsStyle)) {
+        if (elStyle[k] === undefined || JSON.stringify(elStyle[k]) !== JSON.stringify(v)) {
+          allMatch = false;
+          break;
+        }
+        score++;
+      }
+      if (!allMatch) continue;
+      for (const [k, v] of Object.entries(clsJsx)) {
+        if (elJsx[k] === undefined || JSON.stringify(elJsx[k]) !== JSON.stringify(v)) {
+          allMatch = false;
+          break;
+        }
+        score++;
+      }
+      if (!allMatch) continue;
+      // Must actually cover at least 2 properties to be worthwhile
+      if (score < 2) continue;
+      // Element must have MORE properties (otherwise it's exact, already handled)
+      const totalEl = Object.keys(elStyle).length + Object.keys(elJsx).length;
+      if (totalEl <= score) continue;
+      if (score > bestScore) {
+        bestScore = score;
+        best = cls;
+      }
+    }
+    return best;
+  }
 
   function visitJsx(node) {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
@@ -1049,7 +1090,7 @@ function migrateFile(filePath, bySig, clsAlias, ts) {
         let styleStatics = {};
         let dynamicKeys = [];
         let hasSpread = false;
-        let styleAttrStart = -1, styleAttrEnd = -1;
+        let styleObjNode = null;
 
         const attrs = element.attributes;
         if (attrs) {
@@ -1067,8 +1108,7 @@ function migrateFile(filePath, bySig, clsAlias, ts) {
               styleStatics = extracted.statics;
               dynamicKeys = extracted.dynamicKeys;
               hasSpread = extracted.hasSpread;
-              styleAttrStart = attr.getStart(sf);
-              styleAttrEnd = attr.getEnd();
+              styleObjNode = init.expression;
             }
           }
         }
@@ -1081,19 +1121,17 @@ function migrateFile(filePath, bySig, clsAlias, ts) {
 
         const jsxProps = extractJsxProps(element, ts);
         const sig = makeSignature(primitive, styleStatics, jsxProps);
-        const match = bySig.get(sig);
+        let match = bySig.get(sig);
+        let isPartial = false;
+
+        // If no exact match and partial mode is on, find partial match
+        if (!match && partial) {
+          match = findPartialMatch(primitive, styleStatics, jsxProps);
+          if (match) isPartial = true;
+        }
 
         if (match) {
-          // Found a classifier match! Build the replacement.
-          // We need to:
-          // 1. Replace <TagName with <C.ClassifierName
-          // 2. Remove the style attr (it's in the classifier)
-          // 3. Remove jsx props that are in the classifier
-          // 4. If it's a JsxElement, also replace </TagName> with </C.ClassifierName>
-
           const cName = `${clsAlias}.${match.name}`;
-
-          // Collect which props to remove (they're in the classifier)
           const removeProps = new Set(Object.keys(match.jsxProps));
 
           // Build new attributes string — keep props NOT in the classifier
@@ -1107,8 +1145,27 @@ function migrateFile(filePath, bySig, clsAlias, ts) {
               if (!ts.isJsxAttribute(attr)) continue;
               if (!attr.name) continue;
               const aName = attr.name.text;
-              if (aName === 'style') continue; // removed — it's in the classifier
-              if (removeProps.has(aName)) continue; // removed — it's in the classifier
+
+              if (aName === 'style') {
+                if (isPartial && styleObjNode) {
+                  // Partial match: keep style properties NOT covered by classifier
+                  const coveredKeys = new Set(Object.keys(match.styleStatics));
+                  const keptProps = [];
+                  for (const prop of styleObjNode.properties) {
+                    if (!ts.isPropertyAssignment(prop)) continue;
+                    const pName = ts.isIdentifier(prop.name) ? prop.name.text
+                                : ts.isStringLiteral(prop.name) ? prop.name.text : null;
+                    if (!pName || coveredKeys.has(pName)) continue;
+                    keptProps.push(source.slice(prop.getStart(sf), prop.getEnd()));
+                  }
+                  if (keptProps.length > 0) {
+                    keptAttrs.push(`style={{ ${keptProps.join(', ')} }}`);
+                  }
+                }
+                // For exact match: style is fully removed (already in classifier)
+                continue;
+              }
+              if (removeProps.has(aName)) continue;
               keptAttrs.push(source.slice(attr.getStart(sf), attr.getEnd()));
             }
           }
@@ -1116,14 +1173,12 @@ function migrateFile(filePath, bySig, clsAlias, ts) {
           const attrStr = keptAttrs.length > 0 ? ' ' + keptAttrs.join(' ') : '';
 
           if (ts.isJsxSelfClosingElement(node)) {
-            // <Tag style={{...}} /> → <C.Name />
             replacements.push({
               start: node.getStart(sf),
               end: node.getEnd(),
               text: `<${cName}${attrStr} />`,
             });
           } else {
-            // <Tag style={{...}}>children</Tag> → <C.Name>children</C.Name>
             const opening = node.openingElement;
             const closing = node.closingElement;
             const childrenSrc = source.slice(opening.getEnd(), closing.getStart(sf));
@@ -1135,7 +1190,6 @@ function migrateFile(filePath, bySig, clsAlias, ts) {
             });
           }
 
-          // Don't visit children of replaced nodes — they'll be carried along
           return;
         }
       }
@@ -1196,10 +1250,12 @@ async function migrateCommand(args, ts) {
   const cwd = process.cwd();
   let scanDir = join(cwd, 'src');
   let clsPath = null;
+  let partial = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dir') { scanDir = join(cwd, args[++i]); continue; }
     if (args[i] === '--cls') { clsPath = args[++i]; continue; }
+    if (args[i] === '--partial') { partial = true; continue; }
   }
 
   if (!existsSync(scanDir)) {
@@ -1239,7 +1295,7 @@ async function migrateCommand(args, ts) {
     const aliases = findClassifierAliases(source);
     const clsAlias = aliases.size > 0 ? [...aliases][0] : 'C';
 
-    const { changed, count } = migrateFile(filePath, bySig, clsAlias, ts);
+    const { changed, count } = migrateFile(filePath, bySig, clsAlias, ts, partial);
     if (changed) {
       totalReplacements += count;
       touchedFiles.push({ file: relative(cwd, filePath), count });
@@ -1247,7 +1303,7 @@ async function migrateCommand(args, ts) {
   }
 
   if (touchedFiles.length === 0) {
-    console.log(`  No inline styles matched any classifier.\n`);
+    console.log(`  No inline styles matched any classifier.${partial ? '' : ' Try --partial for superset matching.'}\n`);
     return;
   }
 
@@ -1364,6 +1420,229 @@ function appendEntries(clsPath, entries) {
   const after = source.slice(lastClose);
   const insert = '\n' + entries.join('\n\n') + '\n';
   writeFileSync(clsPath, before + insert + after, 'utf-8');
+}
+
+// ── Add command (non-interactive) ─────────────────────────────
+
+/**
+ * Non-interactive classifier add: name a pattern, append to .cls.ts, auto-migrate.
+ *
+ * Usage:
+ *   rjit classify add <Name> '<json_definition>'
+ *   rjit classify add SurfaceCard '{"type":"Box","style":{"backgroundColor":"theme:surface","borderWidth":1,"borderColor":"theme:border"}}'
+ *   rjit classify add MutedCaption '{"type":"Text","size":9,"color":"theme:textDim"}'
+ */
+async function addCommand(args, ts) {
+  const cwd = process.cwd();
+  let scanDir = join(cwd, 'src');
+  let clsPath = null;
+  let noMigrate = false;
+  let dryRun = false;
+
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--dir') { scanDir = join(cwd, args[++i]); continue; }
+    if (args[i] === '--cls') { clsPath = args[++i]; continue; }
+    if (args[i] === '--no-migrate') { noMigrate = true; continue; }
+    if (args[i] === '--dry-run') { dryRun = true; continue; }
+    if (args[i] === '--help' || args[i] === '-h') {
+      console.log(`
+  rjit classify add — Add a single classifier and auto-migrate
+
+  Usage:
+    rjit classify add <Name> '<json_definition>'
+
+  Examples:
+    rjit classify add SurfaceCard '{"type":"Box","style":{"backgroundColor":"theme:surface","borderWidth":1,"borderColor":"theme:border"}}'
+    rjit classify add MutedCaption '{"type":"Text","size":9,"color":"theme:textDim"}'
+    rjit classify add InlineG4 '{"type":"Box","style":{"flexDirection":"row","gap":4,"alignItems":"center"}}'
+
+  The JSON definition uses the same format as classifier() entries:
+    - type: primitive name (Box, Text, Image, Pressable, ScrollView, Input, Video, Row, Col)
+    - style: { ... } for CSS-like style properties
+    - For Text: size, bold, color are top-level (not inside style)
+    - Use 'theme:X' strings for theme tokens (theme:text, theme:textDim, theme:surface, etc.)
+
+  Options:
+    --dir <path>      Scan directory for migration (default: src/)
+    --cls <path>      Target .cls.ts file (default: auto-detect or app.cls.ts)
+    --no-migrate      Skip auto-migration after adding
+    --dry-run         Show what would be added without writing
+`);
+      return;
+    }
+    positional.push(args[i]);
+  }
+
+  if (positional.length < 2) {
+    console.error('  Usage: rjit classify add <Name> \'<json_definition>\'');
+    process.exit(1);
+  }
+
+  const name = positional[0];
+  const defStr = positional.slice(1).join(' ');
+
+  // Validate name
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) {
+    console.error(`  Name must be PascalCase (e.g., MyPanel): "${name}"`);
+    process.exit(1);
+  }
+
+  // Parse definition
+  let def;
+  try {
+    def = JSON.parse(defStr);
+  } catch (e) {
+    console.error(`  Invalid JSON definition: ${e.message}`);
+    console.error(`  Got: ${defStr}`);
+    process.exit(1);
+  }
+
+  const primitive = def.type;
+  if (!primitive || !CLASSIFIER_PRIMITIVES.has(primitive)) {
+    console.error(`  Invalid type "${primitive}". Valid: ${[...CLASSIFIER_PRIMITIVES].join(', ')}`);
+    process.exit(1);
+  }
+
+  // Build styleStatics and jsxProps for signature matching
+  const styleStatics = { ...(def.style || {}) };
+  const jsxProps = {};
+
+  for (const [k, v] of Object.entries(def)) {
+    if (k === 'type' || k === 'style' || k === 'use') continue;
+    if (primitive === 'Text') {
+      if (k === 'size') { styleStatics.fontSize = v; continue; }
+      if (k === 'bold' && v === true) { styleStatics.fontWeight = 'bold'; continue; }
+      if (k === 'color') { styleStatics.color = v; continue; }
+    }
+    jsxProps[k] = v;
+  }
+
+  // Count matches in codebase
+  let matchCount = 0;
+  let matchFileCount = 0;
+  if (existsSync(scanDir)) {
+    const sig = makeSignature(primitive, styleStatics, jsxProps);
+    const { elements } = scanElements(scanDir, ts);
+    const matchFiles = new Set();
+    for (const el of elements) {
+      const elSig = makeSignature(el.primitive, el.styleStatics, el.jsxProps);
+      if (elSig === sig) {
+        matchCount++;
+        matchFiles.add(el.file);
+      }
+    }
+    matchFileCount = matchFiles.size;
+  }
+
+  // Generate the entry — styleStatics for generatePickEntry must include
+  // Text shorthand props (size→fontSize, bold→fontWeight, color) so the
+  // output renders them correctly as top-level classifier fields.
+  const entryStyleStatics = { ...(def.style || {}) };
+  const entryJsxProps = {};
+  for (const [k, v] of Object.entries(def)) {
+    if (k === 'type' || k === 'style' || k === 'use') continue;
+    if (primitive === 'Text') {
+      if (k === 'size') { entryStyleStatics.fontSize = v; continue; }
+      if (k === 'bold' && v === true) { entryStyleStatics.fontWeight = 'bold'; continue; }
+      if (k === 'color') { entryStyleStatics.color = v; continue; }
+    }
+    entryJsxProps[k] = v;
+  }
+
+  const entry = generatePickEntry({
+    name,
+    primitive,
+    styleStatics: entryStyleStatics,
+    jsxProps: entryJsxProps,
+    matches: new Array(matchCount),
+  });
+
+  // Find or create .cls.ts (needed for duplicate check before dry-run)
+  if (!clsPath) {
+    if (existsSync(scanDir)) {
+      const { cls } = findRenameTargets(scanDir);
+      clsPath = cls.length > 0 ? cls[0] : null;
+    }
+    // Fall back: look in cwd for any .cls.ts
+    if (!clsPath) {
+      try {
+        const cwdEntries = readdirSync(cwd);
+        const found = cwdEntries.find(e => e.endsWith('.cls.ts'));
+        if (found) clsPath = join(cwd, found);
+      } catch {}
+    }
+    if (!clsPath) {
+      clsPath = join(cwd, 'app.cls.ts');
+    }
+  }
+
+  // Check for duplicate name
+  if (existsSync(clsPath)) {
+    const existing = readFileSync(clsPath, 'utf-8');
+    const nameRe = new RegExp(`^\\s*${name}\\s*:`, 'm');
+    if (nameRe.test(existing)) {
+      console.error(`  Classifier "${name}" already exists in ${relative(cwd, clsPath)}`);
+      process.exit(1);
+    }
+  }
+
+  console.log(`\n  ${name}: ${primitive}`);
+  const traits = formatTraits(styleStatics, jsxProps);
+  if (traits) console.log(`    ${traits}`);
+  console.log(`    ${matchCount} exact matches across ${matchFileCount} files`);
+
+  if (dryRun) {
+    console.log(`\n  Entry that would be added:\n${entry}\n`);
+    return;
+  }
+
+  if (existsSync(clsPath)) {
+    appendEntries(clsPath, [entry]);
+  } else {
+    const content = [
+      `import { classifier } from '@reactjit/core';`,
+      ``,
+      `classifier({`,
+      entry,
+      `});`,
+      ``,
+    ].join('\n');
+    writeFileSync(clsPath, content, 'utf-8');
+  }
+
+  console.log(`  Written to ${relative(cwd, clsPath)}`);
+
+  // Auto-migrate (always uses partial matching — the whole point of `add` is partial patterns)
+  if (!noMigrate && existsSync(scanDir)) {
+    console.log(`  Running migration (partial)...`);
+    const { bySig } = parseClsFile(clsPath, ts);
+    const { tsx } = findRenameTargets(scanDir);
+    let totalReplacements = 0;
+    const touchedFiles = [];
+
+    for (const filePath of tsx) {
+      const source = readFileSync(filePath, 'utf-8');
+      const aliases = findClassifierAliases(source);
+      const clsAlias = aliases.size > 0 ? [...aliases][0] : 'S';
+      const { changed, count } = migrateFile(filePath, bySig, clsAlias, ts, true);
+      if (changed) {
+        totalReplacements += count;
+        touchedFiles.push({ file: relative(cwd, filePath), count });
+      }
+    }
+
+    if (touchedFiles.length > 0) {
+      console.log(`  Migrated ${totalReplacements} inline styles across ${touchedFiles.length} files:`);
+      for (const { file, count } of touchedFiles.sort((a, b) => b.count - a.count)) {
+        console.log(`    ${file.padEnd(55)} ${count}`);
+      }
+    } else {
+      console.log(`  No inline styles matched for migration.`);
+    }
+  }
+
+  console.log('');
 }
 
 // ── Pick command ──────────────────────────────────────────────
@@ -1719,6 +1998,10 @@ export async function classifyCommand(args) {
 
   if (args[0] === 'pick') {
     return pickCommand(args.slice(1), ts);
+  }
+
+  if (args[0] === 'add') {
+    return addCommand(args.slice(1), ts);
   }
 
   // Parse args

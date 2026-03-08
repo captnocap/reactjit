@@ -36,8 +36,8 @@ export {
 } from './context';
 
 // Viewport-proportional scaling
-export { ScaleProvider, ScaleContext, useScale, useScaledStyle, NoScale } from './ScaleContext';
-export type { ScaleProviderProps, ScaleContextValue } from './ScaleContext';
+export { ScaleProvider, ScaleContext, useScale, useScaleInfo, useScaledStyle, NoScale } from './ScaleContext';
+export type { ScaleProviderProps, ScaleContextValue, ScaleCurve } from './ScaleContext';
 export { scaleStyle } from './scaleStyle';
 
 // Hooks
@@ -71,11 +71,14 @@ export { useOverlay, type OverlayState, type OverlayMode } from './overlay';
 // Breakpoint / responsive grid
 export {
   useBreakpoint,
+  useOrientation,
+  useLayout,
   resolveSpan,
   spanToFlexBasis,
   BREAKPOINTS,
   RESPONSIVE_DEFAULTS,
   type Breakpoint,
+  type Orientation,
   type SemanticSpan,
   type SpanValue,
 } from './useBreakpoint';

@@ -465,13 +465,22 @@ export const hostConfig: HostConfig<
 
     if (internalHandle) {
       try {
-        // Walk up the fiber tree to find the nearest component name
+        // Walk up the fiber tree to find the nearest user component name.
+        // Skip primitive wrappers (Box, Text, etc.) and classifier FCs —
+        // these are framework internals. The meaningful debugName is the
+        // user component that uses them (Band, LayoutStory, etc.).
+        const PRIMITIVE_NAMES = new Set([
+          'Box', 'Text', 'Image', 'Pressable', 'TextInput', 'ScrollView',
+          'Modal', 'Row', 'Col', 'CodeBlock', 'Window', 'TextEditor',
+        ]);
         let fiber = internalHandle;
         while (fiber) {
-          // Function/class components have a type with a name or displayName
           if (fiber.type && typeof fiber.type === 'function') {
-            debugName = fiber.type.displayName || fiber.type.name;
-            break;
+            const name = fiber.type.displayName || fiber.type.name;
+            if (name && !PRIMITIVE_NAMES.has(name) && !(fiber.type as any).__isClassifier) {
+              debugName = name;
+              break;
+            }
           }
           fiber = fiber.return;
         }

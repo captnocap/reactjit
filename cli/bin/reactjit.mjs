@@ -92,15 +92,20 @@ const HELP = `
     rjit convert <file> -o out    Write converted output to file
     rjit tsl <file.tsl>           Transpile TypeScript-to-Lua (.tsl → .lua)
     rjit tsl --test               Run TSL transpiler test suite
-    rjit test <spec.ts>           Run tests against a built app (rjit build first)
+    rjit test <spec.ts>           Run Love2D integration test (rjit build first)
+    rjit test <spec.mjs>          Run node test (node --test)
+    rjit test --all               Run all node tests in the monorepo
     rjit screenshot [--output]    Lint + build + headless screenshot
     rjit classify                 Extract repeated style patterns → .cls.ts
     rjit classify --output x.cls.ts  Write classifier sheet to file
     rjit classify --min 3         Minimum occurrences (default: 2)
     rjit classify --prefix App    Prefix names (default: auto-semantic)
     rjit classify --dir ./stories Scan specific directory
+    rjit classify pick           Interactive pattern picker → name → migrate
+    rjit classify add Name '{}'  Add one classifier (non-interactive) → migrate
     rjit classify rename Old New  Rename a classifier everywhere
     rjit classify migrate        Rewrite inline styles → classifier refs
+    rjit classify migrate --partial  Also migrate superset matches (extras kept)
     rjit diagnose                 Find ghost nodes (in tree, not painting)
     rjit search-index             Index all <Text> nodes for cold AppSearch
     rjit help                     Show this help message
