@@ -6,16 +6,12 @@ export type SpreadsheetCellMap = Record<string, string>;
 export type SpreadsheetValueMap = Record<string, SpreadsheetScalar>;
 export type SpreadsheetErrorMap = Record<string, string>;
 
-export type SpreadsheetFormulaFn = (...args: unknown[]) => unknown;
-export type SpreadsheetFunctionMap = Record<string, SpreadsheetFormulaFn>;
-
 export interface SpreadsheetEvaluation {
   values: SpreadsheetValueMap;
   errors: SpreadsheetErrorMap;
 }
 
 export interface SpreadsheetEvaluateOptions {
-  functions?: SpreadsheetFunctionMap;
   targetAddresses?: string[];
   maxRangeCells?: number;
 }
@@ -26,7 +22,6 @@ export interface SpreadsheetProps {
   initialCells?: SpreadsheetCellMap;
   cells?: SpreadsheetCellMap;
   onCellsChange?: (cells: SpreadsheetCellMap) => void;
-  functionMap?: SpreadsheetFunctionMap;
   readOnly?: boolean;
   showFormulaBar?: boolean;
   columnWidth?: number;
