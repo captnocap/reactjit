@@ -11,14 +11,23 @@ export async function screenshotCommand(args) {
   const cwd = process.cwd();
   const projectName = basename(cwd);
 
-  // Parse --output flag
+  // Parse flags
   let outputPath = resolve(cwd, 'screenshot.png');
+  let node = null;
+  let region = null;
+  let padding = null;
+  let listMode = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--output' || args[i] === '-o') {
-      if (args[i + 1]) {
-        outputPath = resolve(cwd, args[i + 1]);
-        i++;
-      }
+      if (args[i + 1]) { outputPath = resolve(cwd, args[i + 1]); i++; }
+    } else if (args[i] === '--node' || args[i] === '-n') {
+      if (args[i + 1]) { node = args[i + 1]; i++; }
+    } else if (args[i] === '--region' || args[i] === '-r') {
+      if (args[i + 1]) { region = args[i + 1]; i++; }
+    } else if (args[i] === '--padding' || args[i] === '--pad' || args[i] === '-p') {
+      if (args[i + 1]) { padding = args[i + 1]; i++; }
+    } else if (args[i] === '--list' || args[i] === '-l') {
+      listMode = true;
     }
   }
 
@@ -47,7 +56,9 @@ export async function screenshotCommand(args) {
   ].join(' '), { cwd, stdio: 'inherit' });
 
   // 3. Launch Love2D in screenshot mode
+  const target = node ? `node '${node}'` : region ? `region ${region}` : 'full page';
   console.log('  [3/3] Capturing screenshot...');
+  console.log(`         Target: ${target}`);
   console.log(`         Output: ${outputPath}`);
 
   const env = {
@@ -55,6 +66,10 @@ export async function screenshotCommand(args) {
     REACTJIT_SCREENSHOT: '1',
     REACTJIT_SCREENSHOT_OUTPUT: outputPath,
   };
+  if (node) env.REACTJIT_SCREENSHOT_NODE = node;
+  if (region) env.REACTJIT_SCREENSHOT_REGION = region;
+  if (padding) env.REACTJIT_SCREENSHOT_PAD = padding;
+  if (listMode) env.REACTJIT_SCREENSHOT_LIST = '1';
 
   // Detect xvfb-run for headless operation
   let useXvfb = false;
@@ -92,7 +107,13 @@ export async function screenshotCommand(args) {
     });
 
     proc.stdout.on('data', (data) => {
-      stdout += data.toString();
+      const chunk = data.toString();
+      stdout += chunk;
+      // In list mode, stream node list to console
+      if (listMode && chunk.includes('SCREENSHOT_NODES_')) {
+        done = true;
+      }
+      if (listMode) process.stdout.write(chunk);
       // Check for success marker
       if (stdout.includes('SCREENSHOT_SAVED:')) {
         done = true;
@@ -117,7 +138,9 @@ export async function screenshotCommand(args) {
     proc.on('close', (code) => {
       clearTimeout(timeout);
       if (done || code === 0) {
-        if (existsSync(outputPath)) {
+        if (listMode) {
+          resolveP();
+        } else if (existsSync(outputPath)) {
           console.log(`\n  Done! Screenshot saved to ${outputPath}\n`);
           resolveP();
         } else {
