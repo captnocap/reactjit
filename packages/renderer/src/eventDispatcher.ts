@@ -233,6 +233,23 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onTextInputChange');
   });
 
+  // ── PresentationEditor events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('presentationeditor:patch', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onPatch');
+  });
+
+  bridge.subscribe('presentationeditor:selectionchange', (event: LoveEvent) => {
+    dispatchToTargetOnly({
+      ...event,
+      selection: normalizeList((event as any).selection),
+    }, 'onSelectionChange');
+  });
+
+  bridge.subscribe('presentationeditor:camerachange', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onCameraChange');
+  });
+
   // ── Video events (target-only) ────────────────────────
 
   bridge.subscribe('video:ready', (event: LoveEvent) => {

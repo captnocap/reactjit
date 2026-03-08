@@ -69,6 +69,7 @@ local HoldingRowModule = nil
 local PortfolioCardModule = nil
 local TickerSymbolModule = nil
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
+local PresentationEditorModule = nil
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
   local ok_require, mod = pcall(require, "utf8")
@@ -1496,6 +1497,13 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       TextInputModule = require("lua.textinput")
     end
     TextInputModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "PresentationEditor" then
+    -- Lua-owned presentation editor: delegate rendering entirely to presentation_editor.lua
+    if not PresentationEditorModule then
+      PresentationEditorModule = require("lua.presentation_editor")
+    end
+    PresentationEditorModule.draw(node, effectiveOpacity)
 
   elseif not isHidden and node.type == "CodeBlock" then
     -- Lua-owned code block: delegate rendering entirely to codeblock.lua

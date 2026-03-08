@@ -25,6 +25,7 @@ local LUA_HITTABLE = {
   TextEditor = true, TextInput = true, CodeBlock = true,
   Video = true, VideoPlayer = true, ContextMenu = true,
   Scene3D = true, Map2D = true, GameCanvas = true,
+  PresentationEditor = true,
 }
 
 function Events.setTreeModule(tree)
