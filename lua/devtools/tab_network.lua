@@ -38,10 +38,12 @@ local M = {}
 -- Constants
 -- ============================================================================
 
-local NET_MAX_EVENTS   = 1600
-local NET_MAX_PER_TICK = 220
-local NET_MAX_HEADERS  = 24
-local NET_MAX_PREVIEW  = 240
+local NET_MAX_EVENTS      = 1600
+local NET_MAX_PER_TICK    = 220
+local NET_MAX_HEADERS     = 24
+local NET_MAX_PREVIEW     = 240
+local NET_MAX_BODY_DETAIL = 2200
+local NET_MAX_BODY_ITEMS  = 18
 
 -- ============================================================================
 -- Module-local state (ring buffer, trace metadata, UI state)
@@ -143,6 +145,125 @@ local function sanitizePreview(value, trimTo)
     return tok
   end)
   return trimTo(s, NET_MAX_PREVIEW)
+end
+
+local function sanitizeValueString(value, trimTo, limit)
+  local s = tostring(value or "")
+  s = s:gsub("eyJ[%w%-_]+%.[%w%-_]+%.[%w%-_]+", "<redacted-jwt>")
+  s = s:gsub("Bearer%s+[A-Za-z0-9%._%-]+", "Bearer <redacted>")
+  if #s >= 48 and s:match("^[A-Za-z0-9%+/_%-=]+$") then
+    s = "<redacted-token>"
+  end
+  return trimTo(s, limit or NET_MAX_BODY_DETAIL)
+end
+
+local function sanitizeStructuredValue(value, trimTo, depth)
+  depth = depth or 0
+  if depth > 5 then return "<max-depth>" end
+
+  local t = type(value)
+  if t == "table" then
+    local out = {}
+    local isArray = rawget(value, 1) ~= nil or next(value) == nil
+    if isArray then
+      local count = math.min(#value, NET_MAX_BODY_ITEMS)
+      for i = 1, count do
+        out[i] = sanitizeStructuredValue(value[i], trimTo, depth + 1)
+      end
+      if #value > count then
+        out[count + 1] = "<+" .. tostring(#value - count) .. " more items>"
+      end
+    else
+      local keys = {}
+      for k in pairs(value) do keys[#keys + 1] = tostring(k) end
+      table.sort(keys)
+      local count = math.min(#keys, NET_MAX_BODY_ITEMS)
+      for i = 1, count do
+        local key = keys[i]
+        if isSensitiveKey(key) then
+          out[key] = "<redacted>"
+        else
+          out[key] = sanitizeStructuredValue(value[key], trimTo, depth + 1)
+        end
+      end
+      if #keys > count then
+        out["..."] = "+" .. tostring(#keys - count) .. " more keys"
+      end
+    end
+    return out
+  elseif t == "string" then
+    return sanitizeValueString(value, trimTo, 220)
+  elseif t == "number" or t == "boolean" or t == "nil" then
+    return value
+  end
+  return sanitizeValueString(value, trimTo, 220)
+end
+
+local function encodePrettyJSON(value, depth, seen)
+  depth = depth or 0
+  seen = seen or {}
+
+  local t = type(value)
+  if t ~= "table" then
+    local ok, encoded = pcall(json.encode, value)
+    return ok and encoded or json.encode(tostring(value))
+  end
+  if seen[value] then return json.encode("<cycle>") end
+  if depth > 5 then return json.encode("<max-depth>") end
+
+  seen[value] = true
+  local indent = string.rep("  ", depth)
+  local childIndent = string.rep("  ", depth + 1)
+  local isArray = rawget(value, 1) ~= nil or next(value) == nil
+
+  if isArray then
+    if #value == 0 then
+      seen[value] = nil
+      return "[]"
+    end
+    local pieces = {}
+    for i = 1, #value do
+      pieces[#pieces + 1] = childIndent .. encodePrettyJSON(value[i], depth + 1, seen)
+    end
+    seen[value] = nil
+    return "[\n" .. table.concat(pieces, ",\n") .. "\n" .. indent .. "]"
+  end
+
+  local keys = {}
+  for k in pairs(value) do keys[#keys + 1] = tostring(k) end
+  table.sort(keys)
+  if #keys == 0 then
+    seen[value] = nil
+    return "{}"
+  end
+
+  local pieces = {}
+  for _, key in ipairs(keys) do
+    pieces[#pieces + 1] = childIndent .. json.encode(key) .. ": " .. encodePrettyJSON(value[key], depth + 1, seen)
+  end
+  seen[value] = nil
+  return "{\n" .. table.concat(pieces, ",\n") .. "\n" .. indent .. "}"
+end
+
+local function sanitizeBodyDetail(value, trimTo)
+  if value == nil then return "" end
+
+  if type(value) == "table" then
+    local redacted = sanitizeStructuredValue(value, trimTo, 0)
+    return trimTo(encodePrettyJSON(redacted), NET_MAX_BODY_DETAIL)
+  end
+
+  local s = tostring(value or "")
+  local lead = s:match("^%s*(.)")
+  if lead == "{" or lead == "[" then
+    local ok, decoded = pcall(json.decode, s)
+    if ok and type(decoded) == "table" then
+      local redacted = sanitizeStructuredValue(decoded, trimTo, 0)
+      return trimTo(encodePrettyJSON(redacted), NET_MAX_BODY_DETAIL)
+    end
+  end
+
+  return sanitizeValueString(s, trimTo, NET_MAX_BODY_DETAIL)
 end
 
 -- ============================================================================
@@ -277,7 +398,8 @@ local function normalizeNetworkEvent(raw, fromSync, ctx)
   evt.error          = evt.error and trimTo(evt.error, 180) or nil
   evt.blockedReason  = evt.blockedReason and trimTo(evt.blockedReason, 100) or nil
   evt.payloadPreview = sanitizePreview(evt.payloadPreview or evt.payload or "", trimTo)
-  evt.requestBody    = sanitizePreview(evt.requestBody or evt.body or "", trimTo)
+  evt.requestBody    = sanitizeBodyDetail(evt.requestBody or evt.body or "", trimTo)
+  evt.responseBody   = sanitizeBodyDetail(evt.responseBody or evt.response or "", trimTo)
   evt.headers        = sanitizeHeaders(evt.headers, trimTo)
   evt.responseHeaders = sanitizeHeaders(evt.responseHeaders, trimTo)
   evt.size           = tonumber(evt.size) or nil
@@ -366,6 +488,123 @@ local function netExportTrace(traceId, nowSec)
   return encoded
 end
 
+local function netFormatBytes(n)
+  local value = tonumber(n)
+  if not value or value < 0 then return "-" end
+  if value < 1024 then return string.format("%dB", value) end
+  if value < 1024 * 1024 then return string.format("%.1fKB", value / 1024) end
+  return string.format("%.1fMB", value / (1024 * 1024))
+end
+
+local function netHeadersToLines(headers)
+  local lines = {}
+  if type(headers) ~= "table" then return lines end
+  local keys = {}
+  for k in pairs(headers) do keys[#keys + 1] = tostring(k) end
+  table.sort(keys)
+  for _, key in ipairs(keys) do
+    lines[#lines + 1] = key .. ": " .. tostring(headers[key])
+  end
+  return lines
+end
+
+local function netBodyToLines(body)
+  local lines = {}
+  local text = tostring(body or "")
+  if text == "" then return lines end
+  for line in (text .. "\n"):gmatch("(.-)\n") do
+    lines[#lines + 1] = line
+  end
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines)
+  end
+  return lines
+end
+
+local function netHeaderValue(headers, name)
+  if type(headers) ~= "table" then return nil end
+  local needle = tostring(name or ""):lower()
+  for k, v in pairs(headers) do
+    if tostring(k):lower() == needle then return v end
+  end
+  return nil
+end
+
+local function netCollectTraceDetails(traceId)
+  local info = {
+    requestHeaders = {},
+    responseHeaders = {},
+    requestBody = "",
+    responseBody = "",
+    responseBytes = 0,
+    requestBytes = 0,
+    chunkCount = 0,
+  }
+
+  local chunkParts = {}
+  for _, evt in ipairs(netGetTraceEvents(traceId)) do
+    if evt.method and not info.method then info.method = evt.method end
+    if evt.target and evt.target ~= "" and not info.target then info.target = evt.target end
+    if evt.headers and next(evt.headers) and next(info.requestHeaders) == nil then
+      info.requestHeaders = evt.headers
+    end
+    if evt.requestBody and evt.requestBody ~= "" and info.requestBody == "" then
+      info.requestBody = evt.requestBody
+    end
+    if evt.responseHeaders and next(evt.responseHeaders) then
+      info.responseHeaders = evt.responseHeaders
+    end
+    if evt.responseBody and evt.responseBody ~= "" then
+      info.responseBody = evt.responseBody
+    end
+    if evt.code then info.code = evt.code end
+    if evt.error then info.error = evt.error end
+    if evt.durationMs then info.durationMs = evt.durationMs end
+    if evt.direction == "out" and evt.size then
+      info.requestBytes = math.max(info.requestBytes or 0, evt.size)
+    elseif evt.direction == "in" and evt.size then
+      info.responseBytes = (info.responseBytes or 0) + evt.size
+    end
+    if evt.phase == "chunk" or evt.phase == "firstByte" then
+      info.chunkCount = info.chunkCount + 1
+      if evt.payloadPreview and evt.payloadPreview ~= "" then
+        chunkParts[#chunkParts + 1] = evt.payloadPreview
+      end
+    end
+  end
+
+  if info.responseBody == "" and #chunkParts > 0 then
+    info.responseBody = sanitizeBodyDetail(table.concat(chunkParts), function(s, n)
+      if #s <= n then return s end
+      return s:sub(1, n)
+    end)
+  end
+  info.contentType = netHeaderValue(info.responseHeaders, "content-type")
+  return info
+end
+
+local function netDrawDetailSection(font, trimWidth, dx, dy, maxW, title, lines, titleColor, valueColor, maxLines)
+  if not lines or #lines == 0 then return dy end
+  maxLines = maxLines or #lines
+
+  love.graphics.setColor(titleColor)
+  love.graphics.print(title, dx, dy)
+  dy = dy + font:getHeight() + 2
+
+  local count = math.min(#lines, maxLines)
+  love.graphics.setColor(valueColor)
+  for i = 1, count do
+    love.graphics.print(trimWidth(lines[i], maxW), dx, dy)
+    dy = dy + font:getHeight() + 2
+  end
+  if #lines > count then
+    love.graphics.setColor(Style.network.dim)
+    love.graphics.print("... +" .. tostring(#lines - count) .. " more lines", dx, dy)
+    dy = dy + font:getHeight() + 2
+  end
+  return dy + 2
+end
+
 local function netEventBadge(evt)
   if evt.phase == "dropped" then return "DROP", Style.network.warn end
   if evt.origin == "quarantine" then return "QUAR", Style.network.warn end
@@ -435,7 +674,7 @@ function M.draw(ctx, region)
   local lineH = font:getHeight() + 4
   local controlsH = 52
   local tableHeaderH = lineH + 6
-  local detailH = netSelectedEventId and 156 or 0
+  local detailH = netSelectedEventId and 244 or 0
   local headerY = region.y + controlsH
   local rowsY = headerY + tableHeaderH
   local rowsH = math.max(40, region.h - controlsH - tableHeaderH - detailH - 4)
@@ -641,11 +880,12 @@ function M.draw(ctx, region)
   if selected then
     local traceId = traceOf(selected)
     local meta = netTraceMeta[traceId]
+    local details = netCollectTraceDetails(traceId)
     love.graphics.setColor(Style.network.header)
     love.graphics.print("Trace " .. traceId, dx, dy)
     dy = dy + lineH
     love.graphics.setColor(Style.network.value)
-    love.graphics.print(selected.phase .. "  " .. netEventSummary(selected, trimTo), dx, dy)
+    love.graphics.print(trimWidth((details.method or selected.phase or "-") .. "  " .. (details.target or netEventSummary(selected, trimTo)), region.w - pad * 2), dx, dy)
     dy = dy + lineH
 
     love.graphics.setColor(Style.network.dim)
@@ -717,6 +957,17 @@ function M.draw(ctx, region)
     end
     dy = dy + 2
 
+    local responseMeta = {}
+    if details.code then responseMeta[#responseMeta + 1] = "status " .. tostring(details.code) end
+    if details.contentType and details.contentType ~= "" then responseMeta[#responseMeta + 1] = tostring(details.contentType) end
+    if details.responseBytes and details.responseBytes > 0 then responseMeta[#responseMeta + 1] = netFormatBytes(details.responseBytes) end
+    if details.chunkCount and details.chunkCount > 0 then responseMeta[#responseMeta + 1] = tostring(details.chunkCount) .. " chunks" end
+    if #responseMeta > 0 then
+      love.graphics.setColor(Style.network.good)
+      love.graphics.print(trimWidth(table.concat(responseMeta, "  "), region.w - pad * 2), dx, dy)
+      dy = dy + lineH
+    end
+
     if selected.error then
       love.graphics.setColor(Style.network.err)
       love.graphics.print(trimWidth("error: " .. selected.error, region.w - pad * 2), dx, dy)
@@ -727,10 +978,26 @@ function M.draw(ctx, region)
       dy = dy + lineH
     end
 
-    if selected.payloadPreview and selected.payloadPreview ~= "" then
-      love.graphics.setColor(Style.network.dim)
-      love.graphics.print(trimWidth("payload: " .. selected.payloadPreview, region.w - pad * 2), dx, dy)
-      dy = dy + lineH
+    local maxW = region.w - pad * 2
+    if details.requestBody ~= "" then
+      local reqMeta = {}
+      if details.requestBytes and details.requestBytes > 0 then
+        reqMeta[#reqMeta + 1] = netFormatBytes(details.requestBytes)
+      end
+      local reqTitle = "Request"
+      if #reqMeta > 0 then reqTitle = reqTitle .. "  " .. table.concat(reqMeta, "  ") end
+      dy = netDrawDetailSection(font, trimWidth, dx, dy, maxW, reqTitle, netBodyToLines(details.requestBody), Style.network.header, Style.network.dim, 5)
+    end
+    if next(details.requestHeaders) then
+      dy = netDrawDetailSection(font, trimWidth, dx, dy, maxW, "Request headers", netHeadersToLines(details.requestHeaders), Style.network.header, Style.network.dim, 4)
+    end
+    if next(details.responseHeaders) then
+      dy = netDrawDetailSection(font, trimWidth, dx, dy, maxW, "Response headers", netHeadersToLines(details.responseHeaders), Style.network.header, Style.network.dim, 4)
+    end
+    if details.responseBody ~= "" then
+      dy = netDrawDetailSection(font, trimWidth, dx, dy, maxW, "Response body", netBodyToLines(details.responseBody), Style.network.header, Style.network.value, 6)
+    elseif selected.payloadPreview and selected.payloadPreview ~= "" then
+      dy = netDrawDetailSection(font, trimWidth, dx, dy, maxW, "Payload", netBodyToLines(selected.payloadPreview), Style.network.header, Style.network.value, 4)
     end
   else
     love.graphics.setColor(Style.network.dim)

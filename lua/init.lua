@@ -2551,6 +2551,7 @@ function ReactJIT.update(dt)
               headers = payload.headers,
               requestBody = payload.body,
               payloadPreview = payload.body,
+              size = netSizeOf(payload.body),
             })
           end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
@@ -2605,6 +2606,7 @@ function ReactJIT.update(dt)
                   target = payload.url,
                   code = immediate.status,
                   responseHeaders = immediate.headers,
+                  responseBody = immediate.body,
                   payloadPreview = immediate.error or immediate.body,
                   size = netSizeOf(immediate.body),
                   durationMs = netDurationMs(traceId),
@@ -2661,6 +2663,7 @@ function ReactJIT.update(dt)
               headers = payload.headers,
               requestBody = payload.body,
               payloadPreview = payload.body,
+              size = netSizeOf(payload.body),
             })
           end
           if payload and payload.url and M.quarantine and not M.quarantine.isActive() then
@@ -2715,6 +2718,7 @@ function ReactJIT.update(dt)
                   target = payload.url,
                   code = immediate.status,
                   responseHeaders = immediate.headers,
+                  responseBody = immediate.body,
                   payloadPreview = immediate.error or immediate.body,
                   size = netSizeOf(immediate.body),
                   durationMs = netDurationMs(traceId),
@@ -3177,6 +3181,7 @@ function ReactJIT.update(dt)
             status = (isError or statusNum >= 400) and "error" or "ok",
             code = resp.status,
             responseHeaders = resp.headers,
+            responseBody = resp.body,
             payloadPreview = isError and resp.error or resp.body,
             size = netSizeOf(resp.body),
             error = resp.error,
