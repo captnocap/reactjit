@@ -99,6 +99,20 @@ local function buildModels3D(state, elem)
   state.electronModel = g.newModel(cap3d.sphere(0.04, 8, 6), cap3d.rgbTexture(1, 1, 1))
 end
 
+local function syncElementFromProps(state, props)
+  local key = props.element
+  if key ~= state.prevElement then
+    state.prevElement = key
+    state.elementData = Chemistry.getElement(key)
+    state.time = 0
+    if state.view3d and state.elementData then
+      buildModels3D(state, state.elementData)
+    else
+      releaseModels3D(state)
+    end
+  end
+end
+
 -- ============================================================================
 -- 3D render path
 -- ============================================================================
@@ -213,7 +227,7 @@ Capabilities.register("BohrModel", {
   events = {},
 
   create = function(nodeId, props)
-    return {
+    local state = {
       time = 0,
       elementData = nil,
       prevElement = nil,
@@ -229,18 +243,12 @@ Capabilities.register("BohrModel", {
       torusModels = nil,
       electronModel = nil,
     }
+    syncElementFromProps(state, props)
+    return state
   end,
 
   update = function(nodeId, props, prev, state)
-    local key = props.element
-    if key ~= state.prevElement then
-      state.prevElement = key
-      state.elementData = Chemistry.getElement(key)
-      state.time = 0
-      if state.view3d and state.elementData then
-        buildModels3D(state, state.elementData)
-      end
-    end
+    syncElementFromProps(state, props)
 
     -- Sync view3d from prop
     if props.view3d ~= nil and (props.view3d and true or false) ~= state.view3d then

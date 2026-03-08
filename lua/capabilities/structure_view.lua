@@ -160,6 +160,31 @@ local function buildModels3D(state)
   end
 end
 
+local function syncGeometryFromProps(state, props)
+  local smiles = props.smiles or ""
+  local showH = props.showHydrogens or false
+
+  if smiles ~= state.prevSmiles or showH ~= state.prevShowH then
+    state.prevSmiles = smiles
+    state.prevShowH = showH
+
+    if smiles ~= "" and Indigo.available then
+      local geom, err = Indigo.parseAndExtract(smiles, not showH)
+      state.geometry = geom
+      state.error = err
+    else
+      state.geometry = nil
+      state.error = not Indigo.available and "libindigo not available" or nil
+    end
+
+    if state.view3d and state.geometry then
+      buildModels3D(state)
+    else
+      releaseModels3D(state)
+    end
+  end
+end
+
 -- ============================================================================
 -- 3D render path
 -- ============================================================================
@@ -230,7 +255,7 @@ Capabilities.register("StructureView", {
   events = {},
 
   create = function(nodeId, props)
-    return {
+    local state = {
       geometry = nil,
       prevSmiles = nil,
       prevShowH = nil,
@@ -246,32 +271,12 @@ Capabilities.register("StructureView", {
       atomModel3D = nil,
       bondModel3D = nil,
     }
+    syncGeometryFromProps(state, props)
+    return state
   end,
 
   update = function(nodeId, props, prev, state)
-    local smiles = props.smiles or ""
-    local showH = props.showHydrogens or false
-
-    if smiles ~= state.prevSmiles or showH ~= state.prevShowH then
-      state.prevSmiles = smiles
-      state.prevShowH = showH
-
-      if smiles ~= "" and Indigo.available then
-        local geom, err = Indigo.parseAndExtract(smiles, not showH)
-        state.geometry = geom
-        state.error = err
-      else
-        state.geometry = nil
-        state.error = not Indigo.available and "libindigo not available" or nil
-      end
-
-      -- Rebuild 3D models if in 3D mode
-      if state.view3d and state.geometry then
-        buildModels3D(state)
-      else
-        releaseModels3D(state)
-      end
-    end
+    syncGeometryFromProps(state, props)
 
     -- Sync view3d from prop
     if props.view3d ~= nil and (props.view3d and true or false) ~= state.view3d then
