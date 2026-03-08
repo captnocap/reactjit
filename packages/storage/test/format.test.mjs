@@ -82,6 +82,32 @@ describe('storage markdown format semantics', () => {
       content: 'Body text',
     });
   });
+
+  it('parses yaml-like arrays, nulls, and single-quoted values in frontmatter', () => {
+    const doc = [
+      '---',
+      'aliases: [alpha, "bravo", 7, false, null]',
+      'deletedAt: ~',
+      "owner: 'alice'",
+      '---',
+      '',
+      'Body text',
+    ].join('\n');
+
+    assert.deepEqual(parseContent(doc, 'markdown'), {
+      aliases: ['alpha', 'bravo', 7, false, null],
+      deletedAt: null,
+      owner: 'alice',
+      content: 'Body text',
+    });
+  });
+
+  it('serializes content-only markdown without adding frontmatter fences', () => {
+    assert.equal(
+      serializeContent({ content: 'Just the body' }, 'markdown'),
+      'Just the body',
+    );
+  });
 });
 
 describe('storage text format semantics', () => {
@@ -122,6 +148,22 @@ describe('storage text format semantics', () => {
       serializeContent({ name: 'reactjit', count: 2, enabled: false }, 'text'),
       'name: reactjit\ncount: 2\nenabled: false',
     );
+  });
+
+  it('parses quoted strings, zero, and null values from text records', () => {
+    const text = [
+      "title: 'Release notes'",
+      'count: 0',
+      'deletedAt: null',
+      'summary: " spaced out "',
+    ].join('\n');
+
+    assert.deepEqual(parseContent(text, 'text'), {
+      title: 'Release notes',
+      count: 0,
+      deletedAt: null,
+      summary: ' spaced out ',
+    });
   });
 });
 
