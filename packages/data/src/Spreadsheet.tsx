@@ -373,6 +373,8 @@ export function Spreadsheet({
 
   return (
     <Box style={{
+      width: '100%',
+      minWidth: 0,
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.border,
@@ -451,6 +453,7 @@ export function Spreadsheet({
         }}
         style={{
           width: '100%',
+          minWidth: 0,
           height: gridViewportHeight,
         }}
       >
@@ -458,6 +461,7 @@ export function Spreadsheet({
           onScroll={handleScroll}
           style={{
             width: '100%',
+            minWidth: 0,
             height: '100%',
             ...(programmaticScroll ? { scrollX: programmaticScroll.x, scrollY: programmaticScroll.y } : {}),
           }}
