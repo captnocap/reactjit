@@ -1,13 +1,13 @@
 --[[
-  capabilities/structure_view.lua — 2D molecular structure renderer
+  capabilities/structure_view.lua — 2D/3D molecular structure renderer
 
-  Renders 2D structural formulas from SMILES strings using the Indigo
-  cheminformatics library (FFI) for parsing and coordinate generation,
-  and Love2D for rendering. All computation in Lua — zero frame delay.
+  2D: Skeletal formula from SMILES via Indigo FFI + Love2D line/circle drawing.
+  3D: Ball-and-stick model — atom spheres + bond cylinders via g3d.
+  Right-click toggles between 2D and 3D. Mode broadcast via latch.
 
   React usage:
     <StructureView smiles="CCO" />
-    <StructureView smiles="c1ccccc1" showLabels />
+    <StructureView smiles="c1ccccc1" showLabels view3d />
     <StructureView smiles="CC(=O)O" showHydrogens={false} />
 
   Props:
@@ -16,12 +16,15 @@
     showHydrogens  boolean  Show explicit H atoms (default: false)
     bondColor      string   Bond line color hex (default: "#aaaaaa")
     atomScale      number   Atom circle scale factor (default: 1.0)
+    view3d         boolean  Start in 3D mode (default: false)
 
   Requires: libindigo (apt install libindigo0d libindigo-dev)
 ]]
 
 local Capabilities = require("lua.capabilities")
 local Indigo = require("lua.indigo")
+local cap3d = require("lua.cap3d")
+local Latches = require("lua.latches")
 
 -- ============================================================================
 -- CPK colors for common elements (R, G, B)
@@ -68,6 +71,147 @@ local function hexToRgb(hex)
 end
 
 -- ============================================================================
+-- 3D model lifecycle
+-- ============================================================================
+
+local function releaseModels3D(state)
+  if state.atomModel3D then state.atomModel3D.mesh:release(); state.atomModel3D = nil end
+  if state.bondModel3D then state.bondModel3D.mesh:release(); state.bondModel3D = nil end
+end
+
+local function buildModels3D(state)
+  local g = cap3d.getG3D()
+  local geom = state.geometry
+  if not g or not geom or not geom.atoms then return end
+
+  releaseModels3D(state)
+
+  local atoms = geom.atoms
+  local bonds = geom.bonds
+
+  -- Bounding box
+  local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+  local atomCount = 0
+  for _, a in pairs(atoms) do
+    if a.x < minX then minX = a.x end
+    if a.y < minY then minY = a.y end
+    if a.x > maxX then maxX = a.x end
+    if a.y > maxY then maxY = a.y end
+    atomCount = atomCount + 1
+  end
+  if atomCount == 0 then return end
+
+  local rangeX = math.max(maxX - minX, 0.001)
+  local rangeY = math.max(maxY - minY, 0.001)
+  local scale = 3.0 / math.max(rangeX, rangeY)
+  scale = math.min(scale, 2.0)
+  local centerX = (minX + maxX) / 2
+  local centerY = (minY + maxY) / 2
+
+  -- Unit sphere for stamping
+  local unitSphere = cap3d.sphere(1.0, 10, 8)
+
+  -- Combined atom mesh (per-vertex colors)
+  local allAtomVerts = {}
+  local atomR = 0.15
+
+  for _, atom in pairs(atoms) do
+    local ax = (atom.x - centerX) * scale
+    local ay = (atom.y - centerY) * scale
+    local col = getAtomColor(atom.symbol)
+    local isCarbon = (atom.symbol == "C")
+    local r = isCarbon and atomR * 0.5 or atomR
+
+    for _, v in ipairs(unitSphere) do
+      allAtomVerts[#allAtomVerts + 1] = {
+        v[1] * r + ax, v[2] * r + ay, v[3] * r,
+        v[4], v[5], v[6], v[7], v[8],
+        col[1], col[2], col[3], 1,
+      }
+    end
+  end
+
+  if #allAtomVerts > 0 then
+    state.atomModel3D = g.newModel(allAtomVerts, cap3d.rgbTexture(1, 1, 1))
+  end
+
+  -- Combined bond mesh (grey)
+  local allBondVerts = {}
+  local bondR = 0.04
+
+  for _, bond in ipairs(bonds) do
+    local a1 = atoms[bond.source]
+    local a2 = atoms[bond.dest]
+    if a1 and a2 then
+      local p1 = { (a1.x - centerX) * scale, (a1.y - centerY) * scale, 0 }
+      local p2 = { (a2.x - centerX) * scale, (a2.y - centerY) * scale, 0 }
+      local bondVerts = cap3d.bond(p1, p2, bondR, 6)
+      for _, v in ipairs(bondVerts) do
+        allBondVerts[#allBondVerts + 1] = {
+          v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8],
+          0.55, 0.55, 0.55, 1,
+        }
+      end
+    end
+  end
+
+  if #allBondVerts > 0 then
+    state.bondModel3D = g.newModel(allBondVerts, cap3d.rgbTexture(1, 1, 1))
+  end
+end
+
+-- ============================================================================
+-- 3D render path
+-- ============================================================================
+
+local function render3D(node, c, opacity, state)
+  local x, y, w, h = c.x, c.y, c.w, c.h
+
+  cap3d.renderTo(node.id, w, h, { 0.04, 0.04, 0.07, 1 }, function(g3d)
+    cap3d.applyOrbitCamera(state, 4.0)
+
+    local lightOpts = {
+      lightDir = { 1, -0.5, 0.7 },
+      lightColor = { 0.85, 0.85, 0.8 },
+      ambientColor = { 0.18, 0.18, 0.22 },
+      camPos = g3d.camera.position,
+    }
+
+    -- Bonds first (behind atoms)
+    if state.bondModel3D then
+      cap3d.drawLit(state.bondModel3D, lightOpts)
+    end
+
+    -- Atoms
+    if state.atomModel3D then
+      cap3d.drawLit(state.atomModel3D, {
+        lightDir = lightOpts.lightDir,
+        lightColor = lightOpts.lightColor,
+        ambientColor = lightOpts.ambientColor,
+        camPos = lightOpts.camPos,
+        specular = 48,
+      })
+    end
+  end)
+
+  -- Composite canvas
+  local canvas = cap3d.getCanvas(node.id)
+  if canvas then
+    love.graphics.setColor(1, 1, 1, opacity)
+    love.graphics.draw(canvas, x, y)
+  end
+
+  -- Formula label overlay
+  local geom = state.geometry
+  if geom and geom.formula and geom.formula ~= "" then
+    local font = love.graphics.getFont()
+    love.graphics.setColor(0.6, 0.6, 0.6, 0.5 * opacity)
+    local fw = font:getWidth(geom.formula)
+    love.graphics.print(geom.formula, x + (w - fw) / 2, y + h - 14)
+  end
+end
+
+-- ============================================================================
 -- Capability registration
 -- ============================================================================
 
@@ -75,11 +219,12 @@ Capabilities.register("StructureView", {
   visual = true,
 
   schema = {
-    smiles        = { type = "string", default = "",       desc = "SMILES notation" },
-    showLabels    = { type = "bool",   default = true,     desc = "Show element labels on heteroatoms" },
-    showHydrogens = { type = "bool",   default = false,    desc = "Show explicit hydrogen atoms" },
+    smiles        = { type = "string", default = "",        desc = "SMILES notation" },
+    showLabels    = { type = "bool",   default = true,      desc = "Show element labels on heteroatoms" },
+    showHydrogens = { type = "bool",   default = false,     desc = "Show explicit hydrogen atoms" },
     bondColor     = { type = "string", default = "#aaaaaa", desc = "Bond line color (hex)" },
-    atomScale     = { type = "number", default = 1.0,      desc = "Atom circle scale factor" },
+    atomScale     = { type = "number", default = 1.0,       desc = "Atom circle scale factor" },
+    view3d        = { type = "bool",   default = false,     desc = "Start in 3D mode (right-click toggles)" },
   },
 
   events = {},
@@ -90,6 +235,16 @@ Capabilities.register("StructureView", {
       prevSmiles = nil,
       prevShowH = nil,
       error = nil,
+      -- 3D state
+      view3d = props.view3d or false,
+      orbitRotX = 0.4,
+      orbitRotY = 0.3,
+      orbitPrevMX = nil,
+      orbitPrevMY = nil,
+      screenRect = nil,
+      togglePrev = false,
+      atomModel3D = nil,
+      bondModel3D = nil,
     }
   end,
 
@@ -109,13 +264,48 @@ Capabilities.register("StructureView", {
         state.geometry = nil
         state.error = not Indigo.available and "libindigo not available" or nil
       end
+
+      -- Rebuild 3D models if in 3D mode
+      if state.view3d and state.geometry then
+        buildModels3D(state)
+      else
+        releaseModels3D(state)
+      end
+    end
+
+    -- Sync view3d from prop
+    if props.view3d ~= nil and (props.view3d and true or false) ~= state.view3d then
+      state.view3d = props.view3d and true or false
+      if state.view3d and state.geometry then
+        buildModels3D(state)
+      elseif not state.view3d then
+        releaseModels3D(state)
+      end
     end
   end,
 
-  destroy = function(nodeId, state) end,
+  destroy = function(nodeId, state)
+    releaseModels3D(state)
+    cap3d.releaseCanvas(nodeId)
+  end,
 
   tick = function(nodeId, state, dt, pushEvent, props)
-    -- Static rendering — no animation needed
+    -- Right-click toggle
+    if cap3d.checkToggle(state) then
+      if state.view3d and state.geometry then
+        buildModels3D(state)
+      elseif not state.view3d then
+        releaseModels3D(state)
+      end
+    end
+
+    -- Orbit controls (3D mode only)
+    if state.view3d then
+      cap3d.updateOrbit(state)
+    end
+
+    -- Broadcast mode via latch
+    Latches.set("structureview:" .. nodeId .. ":view3d", state.view3d and 1 or 0)
   end,
 
   render = function(node, c, opacity)
@@ -123,7 +313,8 @@ Capabilities.register("StructureView", {
     if not state then return end
     state = state.state
 
-    local x, y, w, h = c.x, c.y, c.w, c.h
+    state.screenRect = { x = c.x, y = c.y, w = c.w, h = c.h }
+
     local props = node.props or {}
 
     -- Error state
@@ -132,17 +323,27 @@ Capabilities.register("StructureView", {
       local font = love.graphics.getFont()
       local msg = "Error: " .. tostring(state.error)
       local tw = font:getWidth(msg)
-      love.graphics.print(msg, x + (w - tw) / 2, y + h / 2 - 6)
+      love.graphics.print(msg, c.x + (c.w - tw) / 2, c.y + c.h / 2 - 6)
       return
     end
 
+    -- 3D branch
+    if state.view3d and (state.atomModel3D or state.bondModel3D) then
+      render3D(node, c, opacity, state)
+      return
+    end
+
+    -- ══════════════════════════════════════════════════════════════
+    -- 2D render (original, unchanged)
+    -- ══════════════════════════════════════════════════════════════
+
+    local x, y, w, h = c.x, c.y, c.w, c.h
     local geom = state.geometry
     if not geom or not geom.atoms then return end
 
     local atoms = geom.atoms
     local bonds = geom.bonds
 
-    -- Find bounding box of atom coordinates
     local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
     local atomCount = 0
     for _, a in pairs(atoms) do
@@ -152,12 +353,11 @@ Capabilities.register("StructureView", {
       if a.y > maxY then maxY = a.y end
       atomCount = atomCount + 1
     end
-
     if atomCount == 0 then return end
 
-    -- Single atom case
+    -- Single atom
     if atomCount == 1 then
-      local a = next(atoms) and atoms[next(atoms)] or nil
+      local a
       for _, at in pairs(atoms) do a = at; break end
       if a then
         local col = getAtomColor(a.symbol)
@@ -174,7 +374,6 @@ Capabilities.register("StructureView", {
       return
     end
 
-    -- Scale and center the molecule in the rendering area
     local rangeX = maxX - minX
     local rangeY = maxY - minY
     if rangeX < 0.001 then rangeX = 1 end
@@ -184,24 +383,21 @@ Capabilities.register("StructureView", {
     local availW = w - padding * 2
     local availH = h - padding * 2
     local scale = math.min(availW / math.max(0.001, rangeX), availH / math.max(0.001, rangeY))
-    scale = math.min(scale, 40) -- cap scale for very small molecules
+    scale = math.min(scale, 40)
 
     local centerX = (minX + maxX) / 2
     local centerY = (minY + maxY) / 2
     local offsetX = x + w / 2
     local offsetY = y + h / 2
 
-    -- Transform function: molecule coords → screen coords
     local function toScreen(mx, my)
       return offsetX + (mx - centerX) * scale,
              offsetY + (my - centerY) * scale
     end
 
-    -- Bond color
     local br, bg, bb = hexToRgb(props.bondColor)
 
-    -- ── Draw bonds ──────────────────────────────────────────────────
-
+    -- Draw bonds
     love.graphics.setLineWidth(2)
     for _, bond in ipairs(bonds) do
       local a1 = atoms[bond.source]
@@ -209,16 +405,12 @@ Capabilities.register("StructureView", {
       if a1 and a2 then
         local x1, y1 = toScreen(a1.x, a1.y)
         local x2, y2 = toScreen(a2.x, a2.y)
-
         local order = bond.order or 1
 
         if order == 1 then
-          -- Single bond
           love.graphics.setColor(br, bg, bb, opacity)
           love.graphics.line(x1, y1, x2, y2)
-
         elseif order == 2 then
-          -- Double bond: two parallel lines
           local dx, dy = x2 - x1, y2 - y1
           local len = math.sqrt(dx * dx + dy * dy)
           if len > 0 then
@@ -227,9 +419,7 @@ Capabilities.register("StructureView", {
             love.graphics.line(x1 + nx, y1 + ny, x2 + nx, y2 + ny)
             love.graphics.line(x1 - nx, y1 - ny, x2 - nx, y2 - ny)
           end
-
         elseif order == 3 then
-          -- Triple bond: three parallel lines
           local dx, dy = x2 - x1, y2 - y1
           local len = math.sqrt(dx * dx + dy * dy)
           if len > 0 then
@@ -239,16 +429,13 @@ Capabilities.register("StructureView", {
             love.graphics.line(x1 + nx, y1 + ny, x2 + nx, y2 + ny)
             love.graphics.line(x1 - nx, y1 - ny, x2 - nx, y2 - ny)
           end
-
         elseif order == 4 then
-          -- Aromatic bond: solid + dashed
           local dx, dy = x2 - x1, y2 - y1
           local len = math.sqrt(dx * dx + dy * dy)
           if len > 0 then
             local nx, ny = -dy / len * 3, dx / len * 3
             love.graphics.setColor(br, bg, bb, opacity)
             love.graphics.line(x1 + nx, y1 + ny, x2 + nx, y2 + ny)
-            -- Dashed inner line
             love.graphics.setColor(br, bg, bb, 0.5 * opacity)
             local segments = 5
             for s = 0, segments - 1, 2 do
@@ -265,8 +452,7 @@ Capabilities.register("StructureView", {
       end
     end
 
-    -- ── Draw atoms ──────────────────────────────────────────────────
-
+    -- Draw atoms
     local atomR = 4 * (props.atomScale or 1)
     local showLabels = props.showLabels ~= false
     local font = love.graphics.getFont()
@@ -276,19 +462,15 @@ Capabilities.register("StructureView", {
       local col = getAtomColor(atom.symbol)
       local isCarbon = (atom.symbol == "C")
 
-      -- Atom circle (heteroatoms get a filled circle, carbon gets a dot)
       if isCarbon then
-        -- Carbon: small dot or nothing (skeletal formula style)
         love.graphics.setColor(col[1], col[2], col[3], 0.4 * opacity)
         love.graphics.circle("fill", sx, sy, atomR * 0.5)
       else
-        -- Heteroatom: visible circle with background
         love.graphics.setColor(0.08, 0.08, 0.12, 0.9 * opacity)
         love.graphics.circle("fill", sx, sy, atomR * 2)
         love.graphics.setColor(col[1], col[2], col[3], opacity)
         love.graphics.circle("fill", sx, sy, atomR * 1.5)
 
-        -- Label
         if showLabels then
           love.graphics.setColor(1, 1, 1, opacity)
           local tw = font:getWidth(atom.symbol)
@@ -298,8 +480,7 @@ Capabilities.register("StructureView", {
       end
     end
 
-    -- ── Formula label ───────────────────────────────────────────────
-
+    -- Formula label
     if geom.formula and geom.formula ~= "" then
       love.graphics.setColor(0.6, 0.6, 0.6, 0.5 * opacity)
       local fw = font:getWidth(geom.formula)

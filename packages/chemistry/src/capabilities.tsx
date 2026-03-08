@@ -91,6 +91,7 @@ export interface PhaseDiagramProps {
   showTriplePoint?: boolean;
   temperature?: number;
   pressure?: number;
+  view3d?: boolean;
   style?: Style;
 }
 
@@ -105,6 +106,7 @@ export interface BohrModelProps {
   animated?: boolean;
   speed?: number;
   showLabel?: boolean;
+  view3d?: boolean;
   style?: Style;
 }
 
@@ -120,6 +122,7 @@ export interface StructureViewProps {
   showHydrogens?: boolean;
   bondColor?: string;
   atomScale?: number;
+  view3d?: boolean;
   style?: Style;
 }
 
