@@ -9,7 +9,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {

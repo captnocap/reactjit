@@ -96,7 +96,7 @@ ultrafast preset keeps H.264 encode under 1ms/frame.`;
 
 // ── Styles (hoisted) ─────────────────────────────────────
 
-const S = {
+const styles = {
   badge: {
     paddingLeft: 8, paddingRight: 8,
     paddingTop: 3, paddingBottom: 3,
@@ -128,7 +128,7 @@ const S = {
 
 function Badge({ label, color }: { label: string; color: string }) {
   return (
-    <Box style={{ ...S.badge, backgroundColor: color + '22' }}>
+    <Box style={{ ...styles.badge, backgroundColor: color + '22' }}>
       <Text style={{ color, fontSize: 11, fontWeight: '600' }}>{label}</Text>
     </Box>
   );
@@ -156,8 +156,8 @@ function GifDemo() {
 
   return (
     <Box style={{ gap: 10, width: '100%' }}>
-      <Box style={S.row}>
-        <Pressable onPress={toggle} style={{ ...S.btn, backgroundColor: recording ? C.accent : C.gif }}>
+      <Box style={styles.row}>
+        <Pressable onPress={toggle} style={{ ...styles.btn, backgroundColor: recording ? C.accent : C.gif }}>
           <Text style={{ color: '#1e1e2e', fontSize: 12, fontWeight: '700' }}>
             {recording ? 'Stop GIF' : 'Record GIF'}
           </Text>
@@ -198,25 +198,25 @@ function VideoDemo() {
 
   return (
     <Box style={{ gap: 10, width: '100%' }}>
-      <Box style={S.row}>
+      <Box style={styles.row}>
         {!recording && (
           <>
-            <Pressable onPress={cycleFormat} style={{ ...S.btnSmall, backgroundColor: c.surface }}>
+            <Pressable onPress={cycleFormat} style={{ ...styles.btnSmall, backgroundColor: c.surface }}>
               <Text style={{ color: c.text, fontSize: 11 }}>{selectedFormat.toUpperCase()}</Text>
             </Pressable>
-            <Pressable onPress={cycleFps} style={{ ...S.btnSmall, backgroundColor: c.surface }}>
+            <Pressable onPress={cycleFps} style={{ ...styles.btnSmall, backgroundColor: c.surface }}>
               <Text style={{ color: c.text, fontSize: 11 }}>{`${selectedFps}fps`}</Text>
             </Pressable>
           </>
         )}
-        <Pressable onPress={toggle} style={{ ...S.btn, backgroundColor: recording ? C.accent : C.video }}>
+        <Pressable onPress={toggle} style={{ ...styles.btn, backgroundColor: recording ? C.accent : C.video }}>
           <Text style={{ color: '#1e1e2e', fontSize: 12, fontWeight: '700' }}>
             {recording ? 'Stop Recording' : 'Record Video'}
           </Text>
         </Pressable>
       </Box>
       {recording && (
-        <Box style={S.statRow}>
+        <Box style={styles.statRow}>
           <StatBox label="Format" value={(format ?? 'mp4').toUpperCase()} />
           <StatBox label="Frames" value={`${frames}`} />
           <StatBox label="Duration" value={`${duration.toFixed(1)}s`} />
@@ -263,15 +263,15 @@ export function CaptureStory() {
           <Half>
             <SectionLabel icon="camera" accentColor={C.accent}>{'CAPTURE MODES'}</SectionLabel>
             <Box style={{ gap: 6 }}>
-              <Box style={S.row}>
+              <Box style={styles.row}>
                 <Badge label="Screenshot" color={C.screenshot} />
                 <Text style={{ color: c.muted, fontSize: 12 }}>{'Single-frame PNG via F2 or CLI'}</Text>
               </Box>
-              <Box style={S.row}>
+              <Box style={styles.row}>
                 <Badge label="GIF" color={C.gif} />
                 <Text style={{ color: c.muted, fontSize: 12 }}>{'Animated GIF with ffmpeg 2-pass palette'}</Text>
               </Box>
-              <Box style={S.row}>
+              <Box style={styles.row}>
                 <Badge label="Video" color={C.video} />
                 <Text style={{ color: c.muted, fontSize: 12 }}>{'MP4/WebM via raw RGBA pipe to ffmpeg'}</Text>
               </Box>
@@ -318,12 +318,12 @@ export function CaptureStory() {
               {'All capture methods are available as Lua RPCs for direct control from any context. The React hooks are thin wrappers over these.'}
             </Text>
             <Box style={{ gap: 4 }}>
-              <Box style={S.row}>
+              <Box style={styles.row}>
                 <Badge label="recorder:start" color={C.video} />
                 <Badge label="recorder:stop" color={C.video} />
                 <Badge label="recorder:status" color={C.video} />
               </Box>
-              <Box style={S.row}>
+              <Box style={styles.row}>
                 <Badge label="gif:start" color={C.gif} />
                 <Badge label="gif:stop" color={C.gif} />
                 <Badge label="gif:status" color={C.gif} />
