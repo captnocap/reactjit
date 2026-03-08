@@ -267,7 +267,11 @@ function Measure.measureText(text, fontSize, maxWidth, fontFamily, lineHeight, l
     -- is narrower because characters are wider, but Love2D's getWrap
     -- does not know about letterSpacing. We compensate by reducing
     -- the wrap width proportionally. This is an approximation.
-    local wrapConstraint = maxWidth
+    -- +1px epsilon: Love2D's font:getWrap and font:getWidth use slightly
+    -- different internal rounding. Text measuring exactly maxWidth via getWidth
+    -- can still wrap via getWrap due to sub-pixel accumulation differences.
+    -- The 1px buffer prevents false wrapping when text just barely fits.
+    local wrapConstraint = maxWidth + 1
     if letterSpacing and letterSpacing ~= 0 then
       -- Estimate: average character width + letterSpacing vs average character width
       -- Use a ratio to shrink the wrap width so getWrap wraps earlier.
