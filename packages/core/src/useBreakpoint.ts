@@ -77,6 +77,17 @@ function resolveOrientation(width: number, height: number): Orientation {
   return 'square';
 }
 
+// ── Initial viewport (set by Lua before mount) ──────────────────────
+
+/** Read initial viewport dimensions set by Lua before React mounts.
+ *  This avoids the race where useEffect subscribers miss the first
+ *  viewport event (pushed before effects register). */
+function getInitialViewport(): { width: number; height: number } {
+  const vp = (globalThis as any).__rjitViewport;
+  if (vp && vp.width > 0) return vp;
+  return { width: 0, height: 0 };
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────
 // These subscribe to the viewport event directly and only trigger a
 // React re-render when their derived value actually changes. During
@@ -86,7 +97,10 @@ function resolveOrientation(width: number, height: number): Orientation {
 /** Returns the current breakpoint based on viewport width. */
 export function useBreakpoint(): Breakpoint {
   const bridge = useBridge();
-  const [bp, setBp] = useState<Breakpoint>('sm');
+  const [bp, setBp] = useState<Breakpoint>(() => {
+    const { width } = getInitialViewport();
+    return width > 0 ? resolveBreakpoint(width) : 'sm';
+  });
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number }) => {
       if (!payload || !payload.width) return;
@@ -100,7 +114,10 @@ export function useBreakpoint(): Breakpoint {
 /** Returns viewport orientation: 'portrait', 'landscape', or 'square'. */
 export function useOrientation(): Orientation {
   const bridge = useBridge();
-  const [o, setO] = useState<Orientation>('square');
+  const [o, setO] = useState<Orientation>(() => {
+    const { width, height } = getInitialViewport();
+    return width > 0 ? resolveOrientation(width, height) : 'square';
+  });
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
       if (!payload || !payload.width || !payload.height) return;
@@ -114,8 +131,12 @@ export function useOrientation(): Orientation {
 /** Combined breakpoint + orientation for layout decisions. */
 export function useLayout(): { breakpoint: Breakpoint; orientation: Orientation } {
   const bridge = useBridge();
-  const [layout, setLayout] = useState<{ breakpoint: Breakpoint; orientation: Orientation }>({
-    breakpoint: 'sm', orientation: 'square',
+  const [layout, setLayout] = useState(() => {
+    const { width, height } = getInitialViewport();
+    return {
+      breakpoint: width > 0 ? resolveBreakpoint(width) : 'sm' as Breakpoint,
+      orientation: width > 0 ? resolveOrientation(width, height) : 'square' as Orientation,
+    };
   });
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {

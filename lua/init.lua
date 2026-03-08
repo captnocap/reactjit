@@ -2099,6 +2099,7 @@ function ReactJIT.init(config)
     rpcHandlers["test:text-audit"] = function(a) return tr.text_audit(a) end
     rpcHandlers["test:divider-audit"] = function(a) return tr.divider_audit(a) end
     rpcHandlers["test:text-wrap-diag"] = function(a) return tr.text_wrap_diagnostics(a) end
+    rpcHandlers["test:scroll-heights"] = function(a) return tr.scroll_heights(a) end
     rpcHandlers["test:resize"]     = function(a) return tr.resize(a) end
     rpcHandlers["test:writeFile"]  = function(a) return tr.writeFile(a) end
     rpcHandlers["test:sleep"]      = function(a) return tr.sleep(a) end
@@ -2464,12 +2465,21 @@ function ReactJIT.update(dt)
   -- instead of eval because JS_Eval hangs after complex React renders.
   if ReactJIT._needsMount then
     ReactJIT._needsMount = nil
+    -- Set viewport dimensions as a global BEFORE React mounts so hooks
+    -- like useBreakpoint() can read them synchronously in useState
+    -- initializers instead of defaulting to 'sm' and waiting for an
+    -- async event that arrives after the first render.
+    local initChromeInset = windowchrome.getContentInsetY()
+    local initVpW = love.graphics.getWidth()
+    local initVpH = love.graphics.getHeight() - initChromeInset
+    M.bridge:eval(string.format(
+      "globalThis.__rjitViewport={width:%d,height:%d}",
+      initVpW, initVpH))
     M.bridge:callGlobal("__mount")
     -- Tick immediately to drain any scheduled microtasks/timers
     M.bridge:tick()
     -- Push initial viewport dimensions so useWindowDimensions can pick them up
-    local initChromeInset = windowchrome.getContentInsetY()
-    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() - initChromeInset } })
+    pushEvent({ type = "viewport", payload = { width = initVpW, height = initVpH } })
   end
 
   -- Test mode: trigger _runTests() after 3 frames (mount + 2 render cycles)

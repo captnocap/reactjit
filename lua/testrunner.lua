@@ -939,6 +939,74 @@ function Testrunner.text_wrap_diagnostics(_args)
   return results
 end
 
+-- ---------------------------------------------------------------------------
+-- Scroll height diagnostic — walk the tree and report scroll container sizes
+-- ---------------------------------------------------------------------------
+
+--- Walk the tree and collect all scroll containers with their viewport height
+--- and content height. Used to detect "massive gap" layout bugs where content
+--- height is disproportionately large relative to the viewport.
+function Testrunner.scroll_heights(_args)
+  local root = Tree.getTree()
+  if not root then return {} end
+
+  local vpW = love.graphics.getWidth()
+  local vpH = love.graphics.getHeight()
+  local containers = {}
+
+  local function walk(node, depth)
+    if not node or not node.computed then return end
+    local c = node.computed
+    local s = node.style or {}
+
+    -- Collect scroll containers
+    if node.scrollState and (s.overflow == "scroll" or s.overflow == "auto") then
+      local ss = node.scrollState
+      local ratio = (c.h > 0) and (ss.contentH / c.h) or 0
+      containers[#containers + 1] = {
+        id        = node.id,
+        type      = node.type,
+        debugName = node.debugName or "",
+        depth     = depth,
+        x = c.x, y = c.y, w = c.w, h = c.h,
+        contentW  = ss.contentW,
+        contentH  = ss.contentH,
+        ratio     = math.floor(ratio * 100) / 100,
+        overflow  = s.overflow,
+      }
+    end
+
+    -- Also collect nodes with unusually large heights (> 3x viewport)
+    -- that are NOT inside a scroll container's content area
+    if c.h > vpH * 3 and not node.scrollState then
+      containers[#containers + 1] = {
+        id        = node.id,
+        type      = node.type,
+        debugName = node.debugName or "",
+        depth     = depth,
+        x = c.x, y = c.y, w = c.w, h = c.h,
+        contentW  = 0,
+        contentH  = 0,
+        ratio     = 0,
+        overflow  = s.overflow or "",
+        flag      = "oversized",
+      }
+    end
+
+    for _, child in ipairs(node.children or {}) do
+      walk(child, depth + 1)
+    end
+  end
+
+  walk(root, 0)
+
+  return {
+    vpW = vpW,
+    vpH = vpH,
+    containers = containers,
+  }
+end
+
 --- Print structured test results and quit Love2D.
 --- Exit code 0 if all tests passed, 1 if any failed.
 function Testrunner.report(args)

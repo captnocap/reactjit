@@ -186,6 +186,13 @@
       return result;
     },
 
+    // ── Scroll height diagnostic ──────────────────────────────────────
+    // Returns all scroll containers with viewport height, content height,
+    // and ratio. Used to detect "massive gap" layout bugs.
+    scrollHeights: async function () {
+      return await bridge.rpc('test:scroll-heights', {});
+    },
+
     audit: async function (options) {
       var args = {};
       if (options) {
