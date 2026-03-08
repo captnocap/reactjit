@@ -693,6 +693,28 @@ local function commitCameraPatch(node, state, slideId)
   }, false)
 end
 
+local function getSelectedRecord(state, slide)
+  local selected = state.selection[1]
+  if not selected or selected.slideId ~= slide.id then return nil end
+  return findNodeRecord(slide.nodes, selected.nodeId, 0, 0, state.frameOverrides)
+end
+
+local function emitNodeFramePatch(nodeId, slideId, targetNodeId, frame)
+  emitPatch(nodeId, {
+    type = "updateNode",
+    slideId = slideId,
+    nodeId = targetNodeId,
+    changes = {
+      frame = {
+        x = frame.x,
+        y = frame.y,
+        width = frame.width,
+        height = frame.height,
+      },
+    },
+  }, false)
+end
+
 function PresentationEditor.init(config)
   config = config or {}
   Measure = config.measure
@@ -907,6 +929,65 @@ function PresentationEditor.handleWheel(node, _dx, dy)
 
   emitCameraChange(node.id, slide.id, state.camera, true)
   return true
+end
+
+function PresentationEditor.handleKeyPressed(node, key, _scancode, _isrepeat)
+  local state = ensureState(node)
+  local _, slide = syncState(node, state)
+  if not slide then return false end
+
+  local selectedRecord = getSelectedRecord(state, slide)
+
+  if (key == "delete" or key == "backspace") and selectedRecord then
+    if selectedRecord.node.locked then return true end
+    state.frameOverrides[selectedRecord.node.id] = nil
+    setSelection(node, state, nil)
+    emitPatch(node.id, {
+      type = "removeNode",
+      slideId = slide.id,
+      nodeId = selectedRecord.node.id,
+    }, false)
+    return true
+  end
+
+  local moveX = 0
+  local moveY = 0
+  if key == "left" then
+    moveX = -1
+  elseif key == "right" then
+    moveX = 1
+  elseif key == "up" then
+    moveY = -1
+  elseif key == "down" then
+    moveY = 1
+  end
+
+  if (moveX ~= 0 or moveY ~= 0) and selectedRecord then
+    if selectedRecord.node.locked then return true end
+    local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
+    local nextFrame = copyFrame(selectedRecord.frame)
+    nextFrame.x = nextFrame.x + moveX * step
+    nextFrame.y = nextFrame.y + moveY * step
+    state.frameOverrides[selectedRecord.node.id] = nextFrame
+    emitNodeFramePatch(node.id, slide.id, selectedRecord.node.id, nextFrame)
+    return true
+  end
+
+  if key == "=" or key == "kp+" or key == "-" or key == "kp-" or key == "0" or key == "kp0" then
+    if key == "0" or key == "kp0" then
+      state.camera = { x = 0, y = 0, zoom = 1, rotation = 0 }
+    elseif key == "=" or key == "kp+" then
+      state.camera.zoom = clamp((state.camera.zoom or 1) * 1.15, getMinZoom(node), getMaxZoom(node))
+    else
+      state.camera.zoom = clamp((state.camera.zoom or 1) / 1.15, getMinZoom(node), getMaxZoom(node))
+    end
+    state.cameraDirty = true
+    state.cameraCommitTimer = nil
+    commitCameraPatch(node, state, slide.id)
+    return true
+  end
+
+  return false
 end
 
 function PresentationEditor.draw(node, opacity)

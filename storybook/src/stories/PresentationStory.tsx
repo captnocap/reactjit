@@ -24,6 +24,7 @@ const DEMO_FACTORY = {
   idFactory: (prefix: string) => `${prefix}_${++demoIdCounter}`,
   now: () => '2026-03-07T00:00:00.000Z',
 };
+const STARTER_ACCENTS = ['#ff8f3d', '#2a7fff', '#18a77a', '#d4577b'];
 
 function createDemoDocument(): PresentationDocument {
   demoIdCounter = 0;
@@ -158,11 +159,63 @@ function createDemoDocument(): PresentationDocument {
   }, DEMO_FACTORY);
 }
 
+function createStarterSlide(index: number) {
+  const accent = STARTER_ACCENTS[(index - 1) % STARTER_ACCENTS.length];
+
+  return createPresentationSlide({
+    title: `New Slide ${index}`,
+    backgroundColor: '#f6f8fc',
+    camera: { x: 0, y: 0, zoom: 1 },
+    nodes: [
+      createPresentationShapeNode({
+        shape: 'rectangle',
+        fill: accent,
+        radius: 18,
+        frame: { x: 104, y: 108, width: 248, height: 30 },
+      }, DEMO_FACTORY),
+      createPresentationTextNode({
+        text: `New Slide ${index}`,
+        frame: { x: 104, y: 164, width: 760, height: 88 },
+        textStyle: { fontSize: 56, color: '#102030', fontWeight: 'bold' },
+      }, DEMO_FACTORY),
+      createPresentationShapeNode({
+        shape: 'rectangle',
+        fill: '#ffffff',
+        stroke: '#d0d8e2',
+        strokeWidth: 2,
+        radius: 24,
+        frame: { x: 104, y: 288, width: 612, height: 244 },
+      }, DEMO_FACTORY),
+      createPresentationTextNode({
+        text: 'Click the stage to focus it, then move this slide with the native editor controls.\nArrow keys nudge the selected node. Shift plus Arrow moves 10 pixels.\nDelete removes the selection. Equal, minus, and zero control the camera.',
+        frame: { x: 144, y: 338, width: 520, height: 152 },
+        textStyle: { fontSize: 26, color: '#334155' },
+      }, DEMO_FACTORY),
+      createPresentationShapeNode({
+        shape: 'ellipse',
+        fill: accent,
+        frame: { x: 1078, y: 242, width: 220, height: 220 },
+      }, DEMO_FACTORY),
+      createPresentationShapeNode({
+        shape: 'rectangle',
+        fill: '#102030',
+        radius: 28,
+        frame: { x: 1008, y: 470, width: 352, height: 182 },
+      }, DEMO_FACTORY),
+      createPresentationTextNode({
+        text: 'Patch-based deck state.\nLua-owned interaction.',
+        frame: { x: 1052, y: 526, width: 268, height: 86 },
+        textStyle: { fontSize: 28, color: '#f8fbff', fontWeight: 'bold' },
+      }, DEMO_FACTORY),
+    ],
+  }, DEMO_FACTORY);
+}
+
 const INITIAL_DOCUMENT = createDemoDocument();
 const INITIAL_LOG = [
-  'Drag a node to move it.',
-  'Drag a corner handle to resize it.',
-  'Drag empty space to pan. Use the wheel to zoom.',
+  'Click inside the editor to focus it.',
+  'Drag a node to move it, drag a corner to resize it, and drag empty space to pan.',
+  'Arrow keys nudge the selection. Shift plus Arrow moves 10 pixels. Delete, equal, minus, and zero work too.',
 ];
 
 function pushLog(setter: React.Dispatch<React.SetStateAction<string[]>>, line: string) {
@@ -203,16 +256,18 @@ function formatPatch(patch: PresentationPatch): string {
 function ToolbarButton({
   label,
   active = false,
+  disabled = false,
   onPress,
 }: {
   label: string;
   active?: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   const c = useThemeColors();
 
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={disabled ? undefined : onPress}>
       <Box
         style={{
           paddingLeft: 10,
@@ -223,6 +278,7 @@ function ToolbarButton({
           backgroundColor: active ? c.primary : c.surface,
           borderWidth: 1,
           borderColor: active ? c.primary : c.border,
+          opacity: disabled ? 0.45 : 1,
         }}
       >
         <Text
@@ -297,6 +353,8 @@ export function PresentationStory() {
     () => document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0],
     [document, activeSlideId],
   );
+  const activeSlideIndex = Math.max(0, document.slides.findIndex((slide) => slide.id === activeSlide.id));
+  const canRemoveSlide = document.slides.length > 1;
 
   const selectedNode = useMemo(
     () => (selection[0] ? findPresentationNode(activeSlide.nodes, selection[0].nodeId) : null),
@@ -332,6 +390,37 @@ export function PresentationStory() {
     setLog(INITIAL_LOG);
   }, []);
 
+  const handleAddSlide = useCallback(() => {
+    const nextSlide = createStarterSlide(document.slides.length + 1);
+    const patch: PresentationPatch = {
+      type: 'addSlide',
+      slide: nextSlide,
+    };
+
+    setDocument((current) => applyPresentationPatch(current, patch));
+    setActiveSlideId(nextSlide.id);
+    setSelection([]);
+    pushLog(setLog, formatPatch(patch));
+  }, [document.slides.length]);
+
+  const handleRemoveSlide = useCallback(() => {
+    if (!canRemoveSlide) {
+      pushLog(setLog, 'removeSlide blocked for the last remaining slide');
+      return;
+    }
+
+    const fallbackSlide = document.slides[activeSlideIndex + 1] ?? document.slides[activeSlideIndex - 1];
+    const patch: PresentationPatch = {
+      type: 'removeSlide',
+      slideId: activeSlide.id,
+    };
+
+    setDocument((current) => applyPresentationPatch(current, patch));
+    setActiveSlideId(fallbackSlide.id);
+    setSelection([]);
+    pushLog(setLog, formatPatch(patch));
+  }, [activeSlide.id, activeSlideIndex, canRemoveSlide, document.slides]);
+
   const handleSelectSlide = useCallback((slideId: string) => {
     setActiveSlideId(slideId);
     setSelection([]);
@@ -351,7 +440,7 @@ export function PresentationStory() {
       <Box style={{ gap: 6 }}>
         <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>Presentation</Text>
         <Text style={{ fontSize: 11, color: c.textDim }}>
-          Native editor slice. Lua owns selection, pan, zoom, drag, and resize. JS only receives commit-time patches and reapplies them to the document.
+          Native editor slice. Lua owns selection, pan, zoom, drag, resize, and keyboard transforms. JS only receives commit-time patches and reapplies them to the document.
         </Text>
       </Box>
 
@@ -364,6 +453,8 @@ export function PresentationStory() {
             onPress={() => handleSelectSlide(slide.id)}
           />
         ))}
+        <ToolbarButton label="+ Slide" onPress={handleAddSlide} />
+        <ToolbarButton label="Remove Slide" disabled={!canRemoveSlide} onPress={handleRemoveSlide} />
         <ToolbarButton label="Reset" onPress={handleReset} />
       </Box>
 
@@ -387,14 +478,16 @@ export function PresentationStory() {
               }}
             />
             <Text style={{ fontSize: 10, color: c.textDim }}>
-              The editor only understands text and shape nodes in this slice. Group children render, but the hot path stays entirely in Lua.
+              Click the editor to focus it. Arrow keys nudge, Shift plus Arrow moves 10 pixels, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
             </Text>
           </Panel>
         </Box>
 
         <Box style={{ width: 320, gap: 12 }}>
           <Panel title="Active Slide">
+            <KeyValue label="slide" value={`${activeSlideIndex + 1} / ${document.slides.length}`} />
             <KeyValue label="title" value={activeSlide.title || '(untitled)'} />
+            <KeyValue label="nodes" value={String(activeSlide.nodes.length)} />
             <KeyValue label="stage" value={`${document.settings.stage.width} x ${document.settings.stage.height}`} />
             <KeyValue label="camera x" value={cameraPreview.x.toFixed(2)} />
             <KeyValue label="camera y" value={cameraPreview.y.toFixed(2)} />
@@ -419,6 +512,16 @@ export function PresentationStory() {
             ) : (
               <Text style={{ fontSize: 10, color: c.textDim }}>Nothing selected.</Text>
             )}
+          </Panel>
+
+          <Panel title="Shortcuts">
+            <Box style={{ gap: 6 }}>
+              <Text style={{ fontSize: 10, color: c.text }}>Click the editor surface to focus it.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Arrow keys move the selected node by 1 pixel.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Shift plus Arrow moves the selected node by 10 pixels.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Delete removes the selected node.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Wheel zooms. Equal, minus, and zero control zoom from the keyboard.</Text>
+            </Box>
           </Panel>
 
           <Panel title="Event Log">

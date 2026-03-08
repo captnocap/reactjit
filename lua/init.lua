@@ -4937,6 +4937,10 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
       forwardKeystroke(focusedNode, key, scancode, isrepeat)
       return
     end
+  elseif focusedNode and focusedNode.type == "PresentationEditor" then
+    if M.presentationeditor and M.presentationeditor.handleKeyPressed(focusedNode, key, scancode, isrepeat) then
+      return
+    end
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with keyboard handling
     local capDef = M.capabilities.getDefinition(focusedNode.type)
@@ -5004,7 +5008,11 @@ function ReactJIT.keyreleased(key, scancode)
 
   -- Suppress keyup when TextEditor or TextInput has focus
   local focusedNode = focus.get()
-  if focusedNode and (focusedNode.type == "TextEditor" or focusedNode.type == "TextInput") then
+  if focusedNode and (
+    focusedNode.type == "TextEditor"
+    or focusedNode.type == "TextInput"
+    or focusedNode.type == "PresentationEditor"
+  ) then
     return
   end
 
