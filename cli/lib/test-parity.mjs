@@ -8,6 +8,7 @@ export const PACKAGE_TEST_PARITY = {
     'packages/ai/test/providers.test.mjs': 'Pure JS provider request/response formatting with no Lua implementation.',
     'packages/ai/test/stream.test.mjs': 'Pure JS stream parser behavior with no Lua implementation.',
     'packages/ai/test/tools.test.mjs': 'Pure JS tool orchestration with no Lua implementation.',
+    'packages/3d/test/camera.test.mjs': 'Pure JS camera normalization math and preset mapping with no direct Lua-owned counterpart.',
     'packages/core/test/tw-roundtrip.test.mjs': 'Shared Tailwind conversion helpers; no Lua-owned counterpart.',
     'packages/router/test/router.test.mjs': 'Pure JS routing state machine with no Lua implementation.',
     'packages/storage/test/format.test.mjs': 'Pure JS format parsing/serialization with no Lua implementation.',

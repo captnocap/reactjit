@@ -720,21 +720,76 @@ function Scene3D.is3DChildType(nodeType)
 end
 
 --- Apply camera props from a Camera3D node to g3d's camera
+local function normalizeVec3(vec, fallback)
+  local src = type(vec) == "table" and vec or fallback
+  return {
+    tonumber(src[1]) or fallback[1],
+    tonumber(src[2]) or fallback[2],
+    tonumber(src[3]) or fallback[3],
+  }
+end
+
+local function lookAtFromDirection(pos, dir)
+  local dx = tonumber(dir[1]) or 0
+  local dy = tonumber(dir[2]) or 0
+  local dz = tonumber(dir[3]) or 0
+  local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+
+  if len < 0.00001 then
+    return { pos[1], pos[2] + 1, pos[3] }
+  end
+
+  return {
+    pos[1] + (dx / len),
+    pos[2] + (dy / len),
+    pos[3] + (dz / len),
+  }
+end
+
+local function lookAtFromAngles(pos, yaw, pitch)
+  local safeYaw = tonumber(yaw) or (math.pi / 2)
+  local safePitch = tonumber(pitch) or (-math.atan2(2, 3))
+  local cosPitch = math.cos(safePitch)
+  return {
+    pos[1] + math.cos(safeYaw) * cosPitch,
+    pos[2] + math.sin(safeYaw) * cosPitch,
+    pos[3] + math.sin(safePitch),
+  }
+end
+
 local function applyCamera(camNode, canvasW, canvasH)
   local props = camNode.props or {}
-  local pos = props.position or {0, 2, -5}
-  local lookAt = props.lookAt or {0, 0, 0}
+  local pos = normalizeVec3(props.position, {0, -3, 2})
+  local lookAt = nil
+  if type(props.lookAt) == "table" or type(props.target) == "table" then
+    lookAt = normalizeVec3(props.lookAt or props.target, {0, 0, 0})
+  elseif type(props.direction) == "table" then
+    lookAt = lookAtFromDirection(pos, props.direction)
+  elseif props.yaw ~= nil or props.pitch ~= nil then
+    lookAt = lookAtFromAngles(pos, props.yaw, props.pitch)
+  else
+    lookAt = {0, 0, 0}
+  end
+  local up = normalizeVec3(props.up, {0, 0, 1})
   local fov = props.fov or (math.pi / 3)  -- 60 degrees default
   local near = props.near or 0.01
   local far = props.far or 1000
+  local projection = props.projection or "perspective"
+  local size = props.size or 5
+  local aspect = canvasW / math.max(canvasH, 1)
 
-  g3d.camera.position = {pos[1] or 0, pos[2] or 0, pos[3] or 0}
-  g3d.camera.target = {lookAt[1] or 0, lookAt[2] or 0, lookAt[3] or 0}
+  g3d.camera.position = {pos[1], pos[2], pos[3]}
+  g3d.camera.target = {lookAt[1], lookAt[2], lookAt[3]}
+  g3d.camera.up = {up[1], up[2], up[3]}
   g3d.camera.fov = fov
   g3d.camera.nearClip = near
   g3d.camera.farClip = far
-  g3d.camera.aspectRatio = canvasW / canvasH
-  g3d.camera.updateProjectionMatrix()
+  g3d.camera.aspectRatio = aspect
+  if projection == "orthographic" then
+    g3d.camera.updateOrthographicMatrix(size)
+  else
+    g3d.camera.updateProjectionMatrix()
+  end
   g3d.camera.updateViewMatrix()
 end
 
@@ -1052,6 +1107,7 @@ local function renderScene(scene)
     else
       g3d.camera.position = {0, -3, 2}
       g3d.camera.target = {0, 0, 0}
+      g3d.camera.up = {0, 0, 1}
       g3d.camera.fov = math.pi / 3
       g3d.camera.nearClip = 0.01
       g3d.camera.farClip = 1000

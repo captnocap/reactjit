@@ -3,6 +3,24 @@ import type { Style, LoveEvent } from '@reactjit/core';
 /** 3D vector as [x, y, z] */
 export type Vec3 = [number, number, number];
 
+/** Projection model used by a camera */
+export type CameraProjection = 'perspective' | 'orthographic';
+
+/** High-level pose helper used by the generic <Camera> component */
+export type CameraKind = 'lookAt' | 'orbit' | 'firstPerson' | 'thirdPerson' | 'view';
+
+/** Built-in view presets for common scene layouts */
+export type CameraViewPreset =
+  | 'front'
+  | 'back'
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'bottom'
+  | 'isometric'
+  | 'dimetric'
+  | 'trimetric';
+
 /** Props for the <Scene> component — a 3D viewport in the 2D layout */
 export interface SceneProps {
   /** Style applied to the viewport box in the 2D layout (width, height, etc.) */
@@ -18,16 +36,75 @@ export interface SceneProps {
 
 /** Props for the <Camera> component */
 export interface CameraProps {
+  /** Pose helper. "lookAt" uses explicit position/lookAt, orbit/firstPerson/view derive the pose. */
+  kind?: CameraKind;
+  /** Projection model. Orthographic keeps object size constant with distance. */
+  projection?: CameraProjection;
   /** Camera position in world space [x, y, z] */
   position?: Vec3;
   /** Point the camera looks at [x, y, z] */
   lookAt?: Vec3;
+  /** Alias for lookAt, useful for orbit/view/third-person cameras */
+  target?: Vec3;
+  /** Camera up vector. Defaults to [0, 0, 1] unless the preset requires another axis. */
+  up?: Vec3;
+  /** Forward direction for first-person cameras. Overrides yaw/pitch when provided. */
+  direction?: Vec3;
+  /** Yaw angle in radians around the Z axis */
+  yaw?: number;
+  /** Pitch angle in radians above/below the horizon */
+  pitch?: number;
+  /** Roll angle in radians around the forward axis */
+  roll?: number;
+  /** Common preset views like front/top/isometric */
+  view?: CameraViewPreset;
+  /** Distance from target for orbit/view/third-person cameras */
+  distance?: number;
+  /** Orbit angle in radians around the Z axis */
+  azimuth?: number;
+  /** Orbit elevation in radians above the ground plane */
+  elevation?: number;
   /** Field of view in radians (default: Math.PI / 3 = 60deg) */
   fov?: number;
   /** Near clipping plane distance (default: 0.01) */
   near?: number;
   /** Far clipping plane distance (default: 1000) */
   far?: number;
+  /** Orthographic zoom size (default: 5) */
+  size?: number;
+}
+
+/** Explicit look-at camera, using perspective projection unless overridden */
+export interface PerspectiveCameraProps extends Omit<CameraProps, 'projection'> {
+  projection?: 'perspective';
+}
+
+/** Explicit look-at camera with orthographic projection */
+export interface OrthographicCameraProps extends Omit<CameraProps, 'projection'> {
+  projection?: 'orthographic';
+}
+
+/** Camera that orbits around a target using azimuth/elevation/distance */
+export interface OrbitCameraProps extends Omit<
+  CameraProps,
+  'kind' | 'position' | 'lookAt' | 'direction' | 'yaw' | 'pitch' | 'view'
+> {}
+
+/** First-person camera using position plus direction or yaw/pitch */
+export interface FirstPersonCameraProps extends Omit<
+  CameraProps,
+  'kind' | 'lookAt' | 'target' | 'distance' | 'azimuth' | 'elevation' | 'view'
+> {}
+
+/** Third-person follow camera using orbit semantics around a target */
+export interface ThirdPersonCameraProps extends OrbitCameraProps {}
+
+/** Camera using one of the built-in view presets */
+export interface ViewCameraProps extends Omit<
+  CameraProps,
+  'kind' | 'position' | 'direction' | 'yaw' | 'pitch'
+> {
+  view: CameraViewPreset;
 }
 
 /** Built-in geometry types */
