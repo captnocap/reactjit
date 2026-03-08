@@ -64,6 +64,24 @@ describe('storage migration version semantics', () => {
     );
   });
 
+  it('skips missing intermediate migration versions and still stamps the latest version', () => {
+    const migrations = {
+      2: (data) => ({ ...data, active: true }),
+      4: (data) => ({ ...data, slug: data.name.toLowerCase() }),
+    };
+
+    assert.deepEqual(
+      migrateRecord({ id: 'u1', name: 'Alice' }, migrations, true),
+      {
+        id: 'u1',
+        name: 'Alice',
+        active: true,
+        slug: 'alice',
+        _version: 4,
+      },
+    );
+  });
+
   it('stamps writes with the latest schema version and leaves empty migrations untouched', () => {
     const migrations = {
       2: (data) => ({ ...data, active: true }),
@@ -96,6 +114,21 @@ describe('storage migrating adapter contract', () => {
     assert.deepEqual(calls, [
       ['get', 'users', 'u1'],
       ['set', 'users', 'u1', { id: 'u1', name: 'alice', active: true, _version: 1 }],
+    ]);
+  });
+
+  it('returns null from get without attempting a write-back', async () => {
+    const migrations = {
+      1: (data) => ({ ...data, active: true }),
+    };
+    const { adapter, calls } = createAdapter({ getValue: null });
+    const wrapped = createMigratingAdapter(adapter, migrations, true);
+
+    const result = await wrapped.get('users', 'missing');
+
+    assert.equal(result, null);
+    assert.deepEqual(calls, [
+      ['get', 'users', 'missing'],
     ]);
   });
 
@@ -137,6 +170,41 @@ describe('storage migrating adapter contract', () => {
     assert.deepEqual(calls, [
       ['list', 'users', { limit: 10 }],
       ['set', 'users', 'u1', { id: 'u1', name: 'Alice', active: true, slug: 'alice', _version: 2 }],
+    ]);
+  });
+
+  it('leaves stale list results untouched when auto-migrate is disabled', async () => {
+    const migrations = {
+      1: (data) => ({ ...data, active: true }),
+    };
+    const listValue = [
+      { id: 'u1', name: 'Alice' },
+    ];
+    const { adapter, calls } = createAdapter({ listValue });
+    const wrapped = createMigratingAdapter(adapter, migrations, false);
+
+    const result = await wrapped.list('users', { limit: 5 });
+
+    assert.deepEqual(result, [
+      { id: 'u1', name: 'Alice' },
+    ]);
+    assert.deepEqual(calls, [
+      ['list', 'users', { limit: 5 }],
+    ]);
+  });
+
+  it('delegates delete directly to the wrapped adapter', async () => {
+    const migrations = {
+      1: (data) => ({ ...data, active: true }),
+    };
+    const { adapter, calls } = createAdapter();
+    const wrapped = createMigratingAdapter(adapter, migrations, true);
+
+    const result = await wrapped.delete('users', 'u1');
+
+    assert.equal(result, true);
+    assert.deepEqual(calls, [
+      ['delete', 'users', 'u1'],
     ]);
   });
 });

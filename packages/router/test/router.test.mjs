@@ -27,6 +27,20 @@ describe('router matching semantics', () => {
     });
   });
 
+  it('treats regex-like characters in static segments literally', () => {
+    assert.deepEqual(matchRoute('/docs/v1.0(legacy)', '/docs/v1.0(legacy)'), {
+      matched: true,
+      params: {},
+      path: '/docs/v1.0(legacy)',
+    });
+
+    assert.deepEqual(matchRoute('/docs/v1.0(legacy)', '/docs/v1x0legacy'), {
+      matched: false,
+      params: {},
+      path: '/docs/v1.0(legacy)',
+    });
+  });
+
   it('extracts and decodes named parameters', () => {
     assert.deepEqual(
       matchRoute('/users/:userId/posts/:slug', '/users/alice%20smith/posts/hello%2Fworld'),
@@ -71,6 +85,14 @@ describe('router matching semantics', () => {
       path: '/files/*',
     });
     assert.equal(Object.hasOwn(withoutRemainder.params, '$rest'), false);
+  });
+
+  it('decodes wildcard remainders before returning params', () => {
+    assert.deepEqual(matchRoute('/files/*', '/files/assets%20dir/icons%2Flogo.svg'), {
+      matched: true,
+      params: { $rest: 'assets dir/icons/logo.svg' },
+      path: '/files/*',
+    });
   });
 
   it('ranks static routes ahead of dynamic, optional, and wildcard routes', () => {
@@ -121,6 +143,20 @@ describe('memory history semantics', () => {
       pathname: '/users/42',
       search: '',
       hash: '#recent?tab=activity',
+    });
+  });
+
+  it('normalizes query-only and hash-only paths onto the root pathname', () => {
+    assert.deepEqual(parsePath('?tab=activity'), {
+      pathname: '/',
+      search: '?tab=activity',
+      hash: '',
+    });
+
+    assert.deepEqual(parsePath('#intro'), {
+      pathname: '/',
+      search: '',
+      hash: '#intro',
     });
   });
 
@@ -191,6 +227,24 @@ describe('memory history semantics', () => {
 
     history.forward();
     assert.equal(locationToString(history.location), '/guides#intro');
+  });
+
+  it('does not notify subscribers when back or forward cannot move', () => {
+    const history = createMemoryHistory({
+      initialEntries: ['/home', '/docs'],
+      initialIndex: 0,
+    });
+    const seen = [];
+
+    history.subscribe((location) => {
+      seen.push(locationToString(location));
+    });
+
+    history.back();
+    history.push('/pricing');
+    history.forward();
+
+    assert.deepEqual(seen, ['/pricing']);
   });
 
   it('notifies subscribers on navigation and stops after unsubscribe', () => {
