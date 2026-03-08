@@ -6,16 +6,21 @@ local failures = 0
 local total = 0
 
 local balance = handlers["chemistry:balance"]
+local element = handlers["chemistry:element"]
+local elements = handlers["chemistry:elements"]
 local molecule = handlers["chemistry:molecule"]
 local formula = handlers["chemistry:formula"]
 local molarMass = handlers["chemistry:molarmass"]
 local compute = handlers["chemistry:compute"]
 local reagentTest = handlers["chemistry:reagentTest"]
 local reagentTestMulti = handlers["chemistry:reagentTestMulti"]
+local reagentInfo = handlers["chemistry:reagentInfo"]
 local identifyIR = handlers["chemistry:identifyIR"]
+local irAbsorptions = handlers["chemistry:irAbsorptions"]
 local wavelengthToColor = handlers["chemistry:wavelengthToColor"]
 local absorptionColor = handlers["chemistry:absorptionColor"]
 local availableCompounds = handlers["chemistry:availableCompounds"]
+local compounds = handlers["chemistry:compounds"]
 
 local function fail(message)
   error(message, 2)
@@ -58,6 +63,15 @@ local function assertHasAbsorption(matches, expectedGroup, expectedBond, message
   fail(message .. string.format(" (missing %s %s)", expectedGroup, expectedBond))
 end
 
+local function assertContainsCompoundNamed(list, expectedName, message)
+  for _, item in ipairs(list) do
+    if item.name == expectedName then
+      return
+    end
+  end
+  fail(message .. " (missing " .. tostring(expectedName) .. ")")
+end
+
 local function test(name, fn)
   total = total + 1
   local ok, err = pcall(fn)
@@ -93,6 +107,21 @@ test("chemistry formula parsing preserves atomic counts for benchmark compounds"
   assertEqual(salt[1].count, 1, "salt sodium count")
   assertEqual(salt[2].symbol, "Cl", "salt chlorine symbol")
   assertEqual(salt[2].count, 1, "salt chlorine count")
+end)
+
+test("chemistry element handlers preserve lookup and filtering semantics", function()
+  local oxygenByNumber = element({ key = 8 })
+  local oxygenBySymbol = element({ key = "O" })
+  local oxygenByName = element({ key = "oxygen" })
+  local nobleGases = elements({ category = "noble-gas" })
+  local gasesMatchingNe = elements({ phase = "gas", search = "ne" })
+
+  assertEqual(oxygenByNumber.name, "Oxygen", "oxygen lookup by number")
+  assertEqual(oxygenBySymbol.number, 8, "oxygen lookup by symbol")
+  assertEqual(oxygenByName.symbol, "O", "oxygen lookup by name")
+  assertEqual(#nobleGases, 7, "noble gas count")
+  assertContains({ nobleGases[1].symbol, nobleGases[2].symbol, nobleGases[3].symbol, nobleGases[4].symbol, nobleGases[5].symbol, nobleGases[6].symbol, nobleGases[7].symbol }, "Ne", "noble gas list should include neon")
+  assertContains({ gasesMatchingNe[1].symbol, gasesMatchingNe[2].symbol, gasesMatchingNe[3].symbol }, "Ne", "gas search should include neon")
 end)
 
 test("chemistry molar mass and composition match accepted reference values", function()
@@ -190,6 +219,17 @@ test("chemistry reagent tests reflect known presumptive outcomes", function()
   assertEqual(ehrlichMdma.reaction.color, "#f5f5dc", "Ehrlich MDMA no reaction")
 end)
 
+test("chemistry reagent metadata stays aligned with the in-house spot-test catalog", function()
+  local allInfo = reagentInfo({})
+  local simons = reagentInfo({ type = "simons" })
+
+  assertEqual(simons.name, "Simon's", "Simon's reagent name")
+  assertEqual(simons.formula, "NaHCO3 + Na2[Fe(CN)5NO] + CH3CHO", "Simon's reagent formula")
+  assertEqual(simons.color, "#4682B4", "Simon's reagent swatch")
+  assertEqual(allInfo.marquis.formula, "H2SO4 + HCHO", "Marquis formula")
+  assertEqual(allInfo.ehrlich.formula, "DMAB + HCl", "Ehrlich formula")
+end)
+
 test("chemistry multi-reagent correlation increases identification confidence", function()
   local result = reagentTestMulti({
     reagents = { "marquis", "mecke", "simons" },
@@ -205,10 +245,13 @@ end)
 test("chemistry spectra helpers map hallmark peaks and visible light ranges", function()
   local carbonylMatches = identifyIR({ wavenumber = 1715 })
   local nitrileMatches = identifyIR({ wavenumber = 2250, tolerance = 10 })
+  local referenceAbsorptions = irAbsorptions({})
 
   assertHasAbsorption(carbonylMatches, "Carbonyl", "C=O stretch", "1715 cm-1 should include a carbonyl assignment")
   assertHasAbsorption(carbonylMatches, "Ketone", "C=O stretch", "1715 cm-1 should include a ketone assignment")
   assertHasAbsorption(nitrileMatches, "Nitrile", "C≡N stretch", "2250 cm-1 should include a nitrile assignment")
+  assertHasAbsorption(referenceAbsorptions, "Alcohol", "O-H stretch", "IR reference table should include alcohol O-H")
+  assertHasAbsorption(referenceAbsorptions, "Aromatic", "C-H bend (OOP)", "IR reference table should include aromatic out-of-plane bending")
 
   assertEqual(wavelengthToColor({ nm = 350 }), "#7F00FF", "UV edge color")
   assertEqual(wavelengthToColor({ nm = 450 }), "rgb(0, 51, 255)", "blue visible color")
@@ -221,12 +264,14 @@ end)
 test("chemistry available compound listings expose the tested reagent corpus", function()
   local simonsCompounds = availableCompounds({ type = "simons" })
   local allCompounds = availableCompounds({})
+  local acidCompounds = compounds({ search = "acid" })
 
   assertContains(simonsCompounds, "MDMA", "Simon's reagent compounds")
   assertContains(simonsCompounds, "MDA", "Simon's reagent compounds")
   assertContains(allCompounds, "Cocaine", "global compound list")
   assertContains(allCompounds, "LSD", "global compound list")
   assertContains(allCompounds, "Methamphetamine", "global compound list")
+  assertContainsCompoundNamed(acidCompounds, "Hydrochloric Acid", "compound search should include hydrochloric acid")
 end)
 
 io.write(string.format("\n%d tests, %d failures\n", total, failures))
