@@ -405,6 +405,7 @@ export function Spreadsheet({
   };
 
   const handleGridKeyDown = (event: LoveEvent) => {
+    event.stopPropagation?.();
     const key = normalizeSpreadsheetKey(event);
     if (editingAddress === selectedKey) {
       if (key === 'escape') {
@@ -447,6 +448,7 @@ export function Spreadsheet({
   };
 
   const handleGridTextInput = (event: LoveEvent) => {
+    event.stopPropagation?.();
     if (readOnly || editingAddress) return;
     if (event.ctrl || event.alt || event.meta) return;
     const text = event.text ?? '';
@@ -494,17 +496,18 @@ export function Spreadsheet({
   return (
     <Box
       focusable
+      focusGroup
       onKeyDown={handleGridKeyDown}
       onTextInput={handleGridTextInput}
       style={{
-      width: '100%',
-      minWidth: 0,
-      backgroundColor: colors.bg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 8,
-      overflow: 'hidden',
-      ...style,
+        width: '100%',
+        minWidth: 0,
+        backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+        ...style,
       }}
     >
       {showFormulaBar && (
