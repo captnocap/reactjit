@@ -4290,7 +4290,7 @@ function ReactJIT.mousepressed(x, y, button)
       end
     elseif hit.type == "PresentationEditor" then
       if M.presentationeditor and M.presentationeditor.handleMousePressed(hit, x, y, button) then
-        if hit.props and hit.props.focusable then
+        if not focus.isFocused(hit) then
           focus.set(hit)
         end
         return
@@ -4760,7 +4760,11 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
   -- Ctrl+A / Cmd+A: select all page text (when no text editor/input is focused)
   if M.textselection and key == "a" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
     local focusedNode = focus.get()
-    if not focusedNode or (focusedNode.type ~= "TextEditor" and focusedNode.type ~= "TextInput") then
+    if not focusedNode or (
+      focusedNode.type ~= "TextEditor"
+      and focusedNode.type ~= "TextInput"
+      and focusedNode.type ~= "PresentationEditor"
+    ) then
       local root = M.tree and M.tree.getTree()
       if root and M.textselection.selectAll(root) then
         return  -- Consumed
