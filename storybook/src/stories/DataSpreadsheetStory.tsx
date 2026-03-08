@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box, CodeBlock, Pressable, ScrollView, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Spreadsheet, columnIndexToLabel, evaluateSpreadsheet } from '../../../packages/data/src';
+import { Spreadsheet, columnIndexToLabel, useDataEvaluate } from '../../../packages/data/src';
 import type { SpreadsheetCellMap } from '../../../packages/data/src';
 
 const INSTALL_CODE = `import { Spreadsheet } from '@reactjit/data'
@@ -182,14 +182,17 @@ export function DataSpreadsheetStory() {
     ensureScaleCells(LOGISTICS_PRESET, SCALE_PRESETS[0].rows, SCALE_PRESETS[0].cols),
   );
 
-  const summary = useMemo(() => {
-    const formulaCount = Object.values(cells).filter((v) => v.trim().startsWith('=')).length;
-    const conversionCount = Object.values(cells).filter((v) => v.includes('CONVERT(')).length;
-    const mathCount = Object.values(cells).filter((v) => /(REMAP|CLAMP|DIST2D|ROUND|AVG|SUM)\(/.test(v)).length;
-    const evaluation = evaluateSpreadsheet(cells);
-    const errorCount = Object.keys(evaluation.errors).length;
-    return { formulaCount, conversionCount, mathCount, errorCount };
+  const evaluate = useDataEvaluate();
+  const [errorCount, setErrorCount] = useState(0);
+  useEffect(() => {
+    evaluate({ cells }).then(r => setErrorCount(Object.keys(r.errors).length)).catch(() => {});
   }, [cells]);
+  const summary = useMemo(() => ({
+    formulaCount:    Object.values(cells).filter(v => v.trim().startsWith('=')).length,
+    conversionCount: Object.values(cells).filter(v => v.includes('CONVERT(')).length,
+    mathCount:       Object.values(cells).filter(v => /(REMAP|CLAMP|DIST2D|ROUND|AVG|SUM)\(/.test(v)).length,
+    errorCount,
+  }), [cells, errorCount]);
 
   return (
     <ScrollView style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>

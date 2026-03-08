@@ -25,7 +25,7 @@ import './stories/_shared/storybook.cls'; // register storybook classifiers
 //   disableStatePreservation,
 //   setPreservationBridge,
 // } from '../../packages/core/src/preserveState';
-import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint } from '../../packages/core/src';
+import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint, useScaleInfo, type ScaleCurve } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -180,10 +180,32 @@ function StoryErrorScreen({ message, stack }: { message: string; stack: string }
   );
 }
 
+function ScaleInfoBadge() {
+  const c = useThemeColors();
+  const info = useScaleInfo();
+  return (
+    <Box style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 8 }}>
+      <Box style={{
+        backgroundColor: c.surface,
+        borderRadius: 4,
+        paddingLeft: 8,
+        paddingRight: 8,
+        paddingTop: 4,
+        paddingBottom: 4,
+      }}>
+        <Text style={{ color: c.textDim, fontSize: 8 }}>
+          {`${info.curve} | raw ${info.rawScale.toFixed(2)}x | applied ${info.scale.toFixed(2)}x`}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
 function StorybookPanel() {
   const initialIdx = (globalThis as any).__devState?.activeIdx ?? 0;
   const [activeIdx, setActiveIdx] = useState(initialIdx);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [scaleCurve, setScaleCurve] = useState<ScaleCurve>('linear');
   currentActiveIdx = activeIdx; // sync for __getDevState
   const groups = groupBySection(stories);
   const active = stories[activeIdx];
@@ -336,6 +358,33 @@ function StorybookPanel() {
           })}
         </Box>
       ))}
+
+      {/* Scale curve switcher */}
+      <Box style={{ height: 1, backgroundColor: c.border, marginTop: 8 }} />
+      <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
+        <S.StoryCap>{'SCALE CURVE'}</S.StoryCap>
+      </Box>
+      {(['linear', 'sqrt', 'capped'] as ScaleCurve[]).map(cv => (
+        <Pressable
+          key={cv}
+          onPress={() => setScaleCurve(cv)}
+          style={{
+            paddingLeft: 16,
+            paddingRight: 8,
+            paddingTop: 4,
+            paddingBottom: 4,
+            backgroundColor: cv === scaleCurve ? c.surface : 'transparent',
+          }}
+        >
+          <Text style={{
+            color: cv === scaleCurve ? c.text : c.textSecondary,
+            fontSize: 11,
+          }}>
+            {cv === 'linear' ? 'Linear (original)' : cv === 'sqrt' ? 'Square root' : 'Capped (1.8x)'}
+          </Text>
+        </Pressable>
+      ))}
+      <ScaleInfoBadge />
     </>
   );
 
@@ -407,7 +456,7 @@ function StorybookPanel() {
 
       {/* Content */}
       <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'scroll' }}>
-        <ScaleProvider reference={{ width: 800, height: 600 }}>
+        <ScaleProvider reference={{ width: 800, height: 600 }} curve={scaleCurve}>
           {StoryComp && <StoryComp key={active.id} />}
         </ScaleProvider>
       </Box>
