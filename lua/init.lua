@@ -116,8 +116,11 @@ local lastMouseX, lastMouseY = 0, 0
 
 -- Heartbeat: write a timestamp file every ~60 frames so the watchdog can
 -- detect frozen processes (alive but unresponsive — flat memory, no frames).
+-- Also persists the event trail to disk so the watchdog can include it in
+-- crash reports even after a kill -9.
 local heartbeatCounter = 0
 local heartbeatPath    = nil  -- set in init() after PID is known
+local trailPath        = nil  -- set alongside heartbeatPath
 
 local ok_json, json = pcall(require, "json")
 if not ok_json then ok_json, json = pcall(require, "lib.json") end
@@ -643,6 +646,7 @@ function ReactJIT.init(config)
       local pid = tostring(ffi.C.getpid())
       local tmp = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
       heartbeatPath = tmp .. "/reactjit_heartbeat_" .. pid
+      trailPath     = tmp .. "/reactjit_trail_" .. pid .. ".txt"
     end
   end
 
@@ -1215,6 +1219,14 @@ function ReactJIT.init(config)
     return { bytes = bytes, size = size, offset = offset, length = length, memType = memType }
   end
 
+  -- Record a route/navigation change in the event trail.
+  -- Called from React when the user navigates to a different story/page.
+  rpcHandlers["trail:navigate"] = function(args)
+    local route = (args and args.route) or "unknown"
+    eventTrail.recordSemantic("Route: " .. route)
+    return true
+  end
+
   -- Trigger a hot reload programmatically (dev tooling, demo, devtools button)
   rpcHandlers["dev:reload"] = function()
     ReactJIT.reload()
@@ -1771,6 +1783,15 @@ function ReactJIT.init(config)
       else
         wmMod.setSize(win, w, h)
       end
+      -- Ensure layout recomputes at the new dimensions even if
+      -- love.graphics.getWidth() hasn't updated yet.
+      if win.isMain then
+        if M.measure then M.measure.clearCache() end
+        if M.tree then M.tree.markDirty() end
+        if M.bridge then
+          pushEvent({ type = "viewport", payload = { width = w, height = h } })
+        end
+      end
       return { width = w, height = h }
     end
 
@@ -2039,7 +2060,10 @@ function ReactJIT.init(config)
     rpcHandlers["test:snap"]       = function(a) return tr.screenshot_region(a) end
     rpcHandlers["test:audit"]      = function(a) return tr.audit(a) end
     rpcHandlers["test:text-audit"] = function(a) return tr.text_audit(a) end
+    rpcHandlers["test:text-wrap-diag"] = function(a) return tr.text_wrap_diagnostics(a) end
     rpcHandlers["test:resize"]     = function(a) return tr.resize(a) end
+    rpcHandlers["test:writeFile"]  = function(a) return tr.writeFile(a) end
+    rpcHandlers["test:sleep"]      = function(a) return tr.sleep(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0
     ReactJIT._testStarted    = false
@@ -2223,6 +2247,7 @@ end
 --- Ticks the bridge, drains mutation commands, and relayouts the tree.
 function ReactJIT.update(dt)
   -- Heartbeat: touch file every ~60 frames so watchdog can detect freezes
+  -- Also persist the event trail so crash reports include it even after kill -9
   if heartbeatPath then
     heartbeatCounter = heartbeatCounter + 1
     if heartbeatCounter >= 60 then
@@ -2231,6 +2256,12 @@ function ReactJIT.update(dt)
       local tmp = heartbeatPath .. ".tmp"
       local hf = io.open(tmp, "w")
       if hf then hf:write(tostring(os.time())); hf:close(); os.rename(tmp, heartbeatPath) end
+      -- Persist event trail to disk (same cadence as heartbeat)
+      if trailPath then
+        local tt = trailPath .. ".tmp"
+        local tf = io.open(tt, "w")
+        if tf then tf:write(eventTrail.format(30)); tf:close(); os.rename(tt, trailPath) end
+      end
     end
   end
 
@@ -2287,8 +2318,14 @@ function ReactJIT.update(dt)
       local root = M.tree.getTree()
       if root then
         if M.inspectorEnabled then inspector.beginLayout() end
-        local vh = M.inspectorEnabled and devtools.getViewportHeight() or nil
-        M.layout.layout(root, nil, nil, nil, vh)
+        -- Use WM entry dimensions as primary source (correct after window:setSize RPC
+        -- even when love.graphics.getWidth() hasn't updated yet)
+        local wm = package.loaded["lua.window_manager"]
+        local mainWin = wm and wm.getMain()
+        local layoutW = mainWin and mainWin.width or nil
+        local layoutH = mainWin and mainWin.height or nil
+        local vh = M.inspectorEnabled and devtools.getViewportHeight() or layoutH
+        M.layout.layout(root, nil, nil, layoutW, vh)
         emitLayoutEvents(root)
         if M.inspectorEnabled then inspector.endLayout(root) end
       end
@@ -3457,8 +3494,12 @@ function ReactJIT.update(dt)
     local root = M.tree.getTree()
     if root then
       if M.inspectorEnabled then inspector.beginLayout() end
-      local vh = M.inspectorEnabled and devtools.getViewportHeight() or nil
-      M.layout.layout(root, nil, nil, nil, vh)
+      local wm = package.loaded["lua.window_manager"]
+      local mainWin = wm and wm.getMain()
+      local layoutW = mainWin and mainWin.width or nil
+      local layoutH = mainWin and mainWin.height or nil
+      local vh = M.inspectorEnabled and devtools.getViewportHeight() or layoutH
+      M.layout.layout(root, nil, nil, layoutW, vh)
       emitLayoutEvents(root)
       if M.inspectorEnabled then inspector.endLayout(root) end
     end
@@ -4511,10 +4552,11 @@ function ReactJIT.resize(w, h)
     pushEvent({ type = "viewport", payload = { width = w, height = h } })
   end
   -- Update mainWin dimensions + persist geometry on resize
+  -- Pass explicit w, h so handleResize doesn't read stale love.graphics values
   local wmOk, wmMod = pcall(require, "lua.window_manager")
   if wmOk and wmMod then
     local mainWin = wmMod.getMain()
-    if mainWin then wmMod.handleResize(mainWin) end
+    if mainWin then wmMod.handleResize(mainWin, w, h) end
     wmMod.saveGeometry()
   end
 end
@@ -5708,8 +5750,9 @@ function ReactJIT.quit()
   local f = io.open(tmpDir .. "/reactjit_clean_exit", "w")
   if f then f:write(tostring(os.time())); f:close() end
 
-  -- Clean up heartbeat file
+  -- Clean up heartbeat and trail files
   if heartbeatPath then os.remove(heartbeatPath) end
+  if trailPath then os.remove(trailPath) end
 
   -- Clean up devtools pop-out window
   if M.inspectorEnabled and devtools.isPoppedOut() then

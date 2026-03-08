@@ -143,6 +143,26 @@ function Testrunner.wait(_args)
   return {}
 end
 
+--- Sleep for N seconds (real wall-clock pause, not frame-count).
+function Testrunner.sleep(args)
+  local seconds = (args and args.seconds) or 2
+  love.timer.sleep(seconds)
+  return { slept = seconds }
+end
+
+--- Write a text file to disk (for test reports/diagnostics).
+function Testrunner.writeFile(args)
+  local path = args and args.path or "/tmp/test-report.txt"
+  local content = args and args.content or ""
+  local f = io.open(path, "w")
+  if f then
+    f:write(content)
+    f:close()
+    return { ok = true, path = path }
+  end
+  return { ok = false, error = "Could not open " .. path }
+end
+
 --- Resize the Love2D window.
 --- Love2D fires love.resize automatically on the next frame.
 function Testrunner.resize(args)
@@ -686,6 +706,114 @@ function Testrunner.text_audit(args)
   end
 
   return violations
+end
+
+-- ---------------------------------------------------------------------------
+-- Text wrap diagnostics — detailed per-node wrap metrics for regression tests
+-- ---------------------------------------------------------------------------
+
+--- Return detailed wrapping metrics for every text node in the tree.
+--- For each __TEXT__ node, resolves fontSize, lineHeight, text scale,
+--- measures natural (unconstrained) width, and computes wrap line count.
+--- This gives tests the data needed to detect pathological wrapping
+--- (e.g. text wrapping MORE at larger viewports).
+function Testrunner.text_wrap_diagnostics(_args)
+  local root = Tree.getTree()
+  if not root then return {} end
+
+  -- Lazy-load measure
+  if not MeasureModule then
+    local ok, m = pcall(require, "lua.measure")
+    if ok then MeasureModule = m end
+  end
+  if not MeasureModule then return {} end
+
+  local vpW = love.graphics.getWidth()
+  local vpH = love.graphics.getHeight()
+
+  local results = {}
+
+  local function walk(node)
+    if not node or not node.computed then return end
+    local c = node.computed
+    if c.w <= 0 or c.h <= 0 then return end
+    if isHidden(node) then return end
+
+    -- Only check __TEXT__ nodes (actual text content holders)
+    if node.type == "__TEXT__" and node.text and node.text ~= "" then
+      local text = node.text
+      local textLen = #text
+
+      -- Resolve font properties (with __TEXT__ → parent inheritance)
+      local s = node.style or {}
+      local ps = (node.parent and node.parent.style) or {}
+
+      local fontSize = s.fontSize or ps.fontSize or 14
+      local fontFamily = s.fontFamily or ps.fontFamily
+      local fontWeight = s.fontWeight or ps.fontWeight
+      local lineHeight = s.lineHeight or ps.lineHeight
+      local letterSpacing = s.letterSpacing or ps.letterSpacing
+      local noWrap = s.textNoWrap or ps.textNoWrap or s.noWrap or ps.noWrap
+
+      -- Apply text scale
+      local ts = MeasureModule.resolveTextScale(node)
+      local scaledFontSize = math.floor(fontSize * ts)
+      local scaledLineHeight = lineHeight and math.floor(lineHeight * ts) or nil
+
+      -- Get the font and effective line height
+      local font = MeasureModule.getFont(scaledFontSize, fontFamily, fontWeight)
+      local effectiveLH = scaledLineHeight or font:getHeight()
+
+      -- Measure natural (unconstrained) width — single-line
+      local naturalResult = MeasureModule.measureText(text, scaledFontSize, nil, fontFamily,
+        scaledLineHeight, letterSpacing, nil, fontWeight, false)
+      local naturalW = naturalResult.width
+
+      -- Measure with actual node width as constraint
+      local constrainW = c.w
+      local wrappedResult = MeasureModule.measureText(text, scaledFontSize, constrainW, fontFamily,
+        scaledLineHeight, letterSpacing, nil, fontWeight, noWrap)
+
+      -- Compute metrics
+      local numLines = math.max(1, math.floor(wrappedResult.height / effectiveLH + 0.5))
+      local charsPerLine = textLen / numLines
+      local wrapRatio = naturalW > 0 and (constrainW / naturalW) or 1
+
+      -- Parent container info
+      local parentW = 0
+      local parentDebugName = ""
+      if node.parent and node.parent.computed then
+        parentW = node.parent.computed.w
+        parentDebugName = node.parent.debugName or node.parent.type or ""
+      end
+
+      results[#results + 1] = {
+        id = node.id,
+        text = string.sub(text, 1, 80),
+        textLen = textLen,
+        x = c.x, y = c.y, w = c.w, h = c.h,
+        fontSize = scaledFontSize,
+        lineHeight = effectiveLH,
+        textScale = ts,
+        naturalW = naturalW,
+        numLines = numLines,
+        charsPerLine = math.floor(charsPerLine * 10) / 10,
+        wrapRatio = math.floor(wrapRatio * 1000) / 1000,
+        noWrap = noWrap and true or false,
+        parentW = parentW,
+        parentName = parentDebugName,
+        vpW = vpW,
+        vpH = vpH,
+      }
+    end
+
+    for _, child in ipairs(node.children or {}) do
+      walk(child)
+    end
+  end
+
+  walk(root)
+  return results
 end
 
 --- Print structured test results and quit Love2D.
