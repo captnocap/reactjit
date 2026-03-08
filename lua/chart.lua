@@ -19,14 +19,41 @@ local function clr(item, fallback)
   return fallback
 end
 
+local function normalizeDepthLevel(level)
+  if type(level) ~= "table" then return nil end
+  local price = tonumber(level.price) or tonumber(level[1])
+  local size = tonumber(level.size) or tonumber(level[2])
+  if not price or not size then return nil end
+  return { price = price, size = size }
+end
+
+local function collectDepthLevels(levels, descending)
+  local out = {}
+  if type(levels) ~= "table" then return out end
+
+  for i = 1, #levels do
+    local normalized = normalizeDepthLevel(levels[i])
+    if normalized then
+      out[#out + 1] = normalized
+    end
+  end
+
+  table.sort(out, function(a, b)
+    if descending then return a.price > b.price end
+    return a.price < b.price
+  end)
+
+  return out
+end
+
 function Chart.draw(props, x, y, width, height)
   if not props or not props.chartType or width <= 0 or height <= 0 then return end
   local chartType = props.chartType
   local data = props.data or {}
   local len = #data
   if chartType == "depth" then
-    local bids = props.bids or {}
-    local asks = props.asks or {}
+    local bids = collectDepthLevels(props.bids, true)
+    local asks = collectDepthLevels(props.asks, false)
     if #bids == 0 and #asks == 0 then return end
   elseif len == 0 then
     return
@@ -284,32 +311,23 @@ function Chart.draw(props, x, y, width, height)
   elseif chartType == "depth" then
     -- Depth chart: cumulative bid/ask area chart
     -- data format: { bids = {{price, size},...}, asks = {{price, size},...} }
-    local bids = props.bids or {}
-    local asks = props.asks or {}
+    local bids = collectDepthLevels(props.bids, true)
+    local asks = collectDepthLevels(props.asks, false)
     local bidClr = ColorUtils.toTable(props.bidColor or "#22c55e", {0,0.77,0.35,1})
     local askClr = ColorUtils.toTable(props.askColor or "#ef4444", {0.94,0.27,0.27,1})
     local bidFill = ColorUtils.toTable(props.bidFillColor or "rgba(34,197,94,0.15)", {0.13,0.77,0.37,0.15})
     local askFill = ColorUtils.toTable(props.askFillColor or "rgba(239,68,68,0.15)", {0.94,0.27,0.27,0.15})
 
-    -- Sort bids descending, asks ascending by price
-    local sortedBids = {}
-    for i = 1, #bids do sortedBids[i] = bids[i] end
-    table.sort(sortedBids, function(a, b) return a.price > b.price end)
-
-    local sortedAsks = {}
-    for i = 1, #asks do sortedAsks[i] = asks[i] end
-    table.sort(sortedAsks, function(a, b) return a.price < b.price end)
-
     -- Find price range and cumulative max
     local priceMin = math.huge
     local priceMax = -math.huge
-    for i = 1, #sortedBids do
-      if sortedBids[i].price < priceMin then priceMin = sortedBids[i].price end
-      if sortedBids[i].price > priceMax then priceMax = sortedBids[i].price end
+    for i = 1, #bids do
+      if bids[i].price < priceMin then priceMin = bids[i].price end
+      if bids[i].price > priceMax then priceMax = bids[i].price end
     end
-    for i = 1, #sortedAsks do
-      if sortedAsks[i].price < priceMin then priceMin = sortedAsks[i].price end
-      if sortedAsks[i].price > priceMax then priceMax = sortedAsks[i].price end
+    for i = 1, #asks do
+      if asks[i].price < priceMin then priceMin = asks[i].price end
+      if asks[i].price > priceMax then priceMax = asks[i].price end
     end
     if priceMin >= priceMax then priceMin = 0; priceMax = 1 end
     local priceRange = priceMax - priceMin
@@ -321,16 +339,16 @@ function Chart.draw(props, x, y, width, height)
     -- Build cumulative volumes
     local bidCum = {}
     local cumVol = 0
-    for i = 1, #sortedBids do
-      cumVol = cumVol + sortedBids[i].size
-      bidCum[i] = { price = sortedBids[i].price, cumVol = cumVol }
+    for i = 1, #bids do
+      cumVol = cumVol + bids[i].size
+      bidCum[i] = { price = bids[i].price, cumVol = cumVol }
     end
 
     local askCum = {}
     cumVol = 0
-    for i = 1, #sortedAsks do
-      cumVol = cumVol + sortedAsks[i].size
-      askCum[i] = { price = sortedAsks[i].price, cumVol = cumVol }
+    for i = 1, #asks do
+      cumVol = cumVol + asks[i].size
+      askCum[i] = { price = asks[i].price, cumVol = cumVol }
     end
 
     local maxCumVol = 1

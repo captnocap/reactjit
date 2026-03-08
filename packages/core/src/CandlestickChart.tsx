@@ -45,6 +45,11 @@ export function CandlestickChart({ style, width, height, ...rest }: CandlestickC
         ...rest,
         width,
         height,
-        style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
+        style: {
+            ...(width == null ? { width: '100%' } : {}),
+            ...style,
+            ...(width != null ? { width } : {}),
+            ...(height != null ? { height } : {}),
+        },
     });
 }
