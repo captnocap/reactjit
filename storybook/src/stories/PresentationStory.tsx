@@ -560,7 +560,7 @@ export function PresentationStory() {
               }}
             />
             <Text style={{ fontSize: 10, color: c.textDim }}>
-              Click the editor to focus it. Ctrl+A or Cmd+A selects the editable canvas nodes. Arrow keys nudge, Shift plus Arrow moves 10 pixels, Escape clears selection, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
+              Click the editor to focus it. Ctrl+A or Cmd+A selects the editable canvas nodes. Shift plus click adds to the selection, Shift plus drag marquee-selects on the canvas, Arrow keys nudge, Shift plus Arrow moves 10 pixels, Escape clears selection, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
             </Text>
           </Panel>
         </Box>
@@ -595,7 +595,7 @@ export function PresentationStory() {
                 />
                 {selection.length > 1 ? (
                   <Text style={{ fontSize: 10, color: c.textDim }}>
-                    Multi-selection is active. Keyboard move and delete apply to the full canvas selection.
+                    Multi-selection is active. Shift plus click and Shift plus drag expand the canvas selection, and keyboard move or delete applies to the full selection.
                   </Text>
                 ) : null}
                 {selectedNode.kind === 'text' ? (
@@ -613,6 +613,8 @@ export function PresentationStory() {
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 10, color: c.text }}>Click the editor surface to focus it.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Ctrl+A or Cmd+A selects every editable node on the canvas.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Shift plus click adds a node to the canvas selection.</Text>
+              <Text style={{ fontSize: 10, color: c.text }}>Shift plus drag on empty canvas space marquee-selects nodes.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Arrow keys move the selected nodes by 1 pixel.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Shift plus Arrow moves the selected nodes by 10 pixels.</Text>
               <Text style={{ fontSize: 10, color: c.text }}>Escape clears the selection.</Text>

@@ -22,6 +22,7 @@ local pendingEvents = {}
 
 local HANDLE_SIZE = 10
 local MIN_NODE_SIZE = 24
+local MARQUEE_DRAG_THRESHOLD = 4
 local CAMERA_COMMIT_DELAY = 0.18
 
 local FALLBACK_WORKSPACE_BG = { 0.06, 0.08, 0.12, 1 }
@@ -382,6 +383,62 @@ local function collectSelectableSelections(nodes, slideId, selections)
   end
 
   return selections
+end
+
+local function mergeSelections(a, b)
+  local merged = {}
+
+  for _, item in ipairs(normalizeSelectionItems(a)) do
+    merged[#merged + 1] = item
+  end
+
+  for _, item in ipairs(normalizeSelectionItems(b)) do
+    merged[#merged + 1] = item
+  end
+
+  return normalizeSelectionItems(merged)
+end
+
+local function rectsIntersect(ax, ay, aw, ah, bx, by, bw, bh)
+  return ax < bx + bw and ax + aw > bx and ay < by + bh and ay + ah > by
+end
+
+local function normalizeRect(x1, y1, x2, y2)
+  local left = math.min(x1, x2)
+  local top = math.min(y1, y2)
+  return left, top, math.abs(x2 - x1), math.abs(y2 - y1)
+end
+
+local function collectSelectionsInRect(nodes, slideId, x, y, w, h, parentX, parentY, overrides, selections)
+  selections = selections or {}
+
+  for _, entry in ipairs(sortedNodes(nodes)) do
+    local nodeDef = entry.node
+    if not nodeDef.hidden then
+      local frame = resolveFrame(nodeDef, overrides)
+      local absX = parentX + (frame.x or 0)
+      local absY = parentY + (frame.y or 0)
+      local width = frame.width or 0
+      local height = frame.height or 0
+
+      if nodeDef.kind == "group" and nodeDef.children then
+        local allowChildren = true
+        if nodeDef.clip then
+          allowChildren = rectsIntersect(x, y, w, h, absX, absY, width, height)
+        end
+        if allowChildren then
+          collectSelectionsInRect(nodeDef.children, slideId, x, y, w, h, absX, absY, overrides, selections)
+        end
+      elseif (nodeDef.kind == "text" or nodeDef.kind == "shape") and rectsIntersect(x, y, w, h, absX, absY, width, height) then
+        selections[#selections + 1] = {
+          slideId = slideId,
+          nodeId = nodeDef.id,
+        }
+      end
+    end
+  end
+
+  return normalizeSelectionItems(selections)
 end
 
 local function activateSlide(node, state, slide)
@@ -762,9 +819,25 @@ end
 
 local function drawSelection(document, slide, state, layout, opacity)
   local selectionRecords = getSelectionRecords(state, slide)
-  if #selectionRecords == 0 then return end
 
   local accent = resolveAccentColor(document)
+  local gesture = state.gesture
+  if gesture and gesture.mode == "marquee" and gesture.dragged then
+    local left, top, width, height = normalizeRect(
+      gesture.startWorldX,
+      gesture.startWorldY,
+      gesture.currentWorldX,
+      gesture.currentWorldY
+    )
+    setParsedColor(accent, opacity, FALLBACK_SELECTION)
+    love.graphics.rectangle("fill", left, top, width, height)
+    setParsedColor(accent, opacity, FALLBACK_ACCENT)
+    love.graphics.setLineWidth(2 / math.max(layout.scale, 0.0001))
+    love.graphics.rectangle("line", left, top, width, height)
+  end
+
+  if #selectionRecords == 0 then return end
+
   local outlineWidth = 2 / math.max(layout.scale, 0.0001)
   local handleWorldSize = HANDLE_SIZE / math.max(layout.scale, 0.0001)
 
@@ -922,6 +995,7 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
     return false
   end
 
+  local shiftDown = love.keyboard.isDown("lshift", "rshift")
   local handle, selectedRecord = hitResizeHandle(state, slide, layout, sx, sy)
   if handle and selectedRecord and not selectedRecord.node.locked then
     local worldX, worldY = screenToWorld(layout, state.camera, sx, sy)
@@ -939,7 +1013,14 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
   local worldX, worldY = screenToWorld(layout, state.camera, sx, sy)
   local hit = hitTestNodes(slide.nodes, worldX, worldY, 0, 0, state.frameOverrides)
   if hit then
-    if not isNodeSelected(state, slide.id, hit.node.id) then
+    if shiftDown then
+      if not isNodeSelected(state, slide.id, hit.node.id) then
+        setSelection(node, state, mergeSelections(state.selection, {
+          slideId = slide.id,
+          nodeId = hit.node.id,
+        }))
+      end
+    elseif not isNodeSelected(state, slide.id, hit.node.id) then
       setSelection(node, state, { slideId = slide.id, nodeId = hit.node.id })
     end
 
@@ -961,6 +1042,22 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
     else
       state.gesture = nil
     end
+    return true
+  end
+
+  if shiftDown then
+    state.gesture = {
+      mode = "marquee",
+      additive = true,
+      startWorldX = worldX,
+      startWorldY = worldY,
+      currentWorldX = worldX,
+      currentWorldY = worldY,
+      startScreenX = sx,
+      startScreenY = sy,
+      dragged = false,
+      baseSelection = normalizeSelectionItems(state.selection),
+    }
     return true
   end
 
@@ -1007,6 +1104,17 @@ function PresentationEditor.handleMouseMoved(node, sx, sy)
   end
 
   local worldX, worldY = screenToWorld(layout, state.camera, sx, sy)
+
+  if gesture.mode == "marquee" then
+    gesture.currentWorldX = worldX
+    gesture.currentWorldY = worldY
+    if not gesture.dragged then
+      gesture.dragged = math.abs(sx - gesture.startScreenX) >= MARQUEE_DRAG_THRESHOLD
+        or math.abs(sy - gesture.startScreenY) >= MARQUEE_DRAG_THRESHOLD
+    end
+    return true
+  end
+
   local dx = worldX - gesture.startWorldX
   local dy = worldY - gesture.startWorldY
 
@@ -1055,6 +1163,37 @@ function PresentationEditor.handleMouseReleased(node, _sx, _sy, button)
           emitNodeFramePatch(node.id, slide.id, nodeId, nextFrame)
         end
       end
+    end
+    return true
+  end
+
+  if gesture.mode == "marquee" then
+    if not gesture.dragged then
+      setSelection(node, state, gesture.baseSelection)
+      return true
+    end
+
+    local left, top, width, height = normalizeRect(
+      gesture.startWorldX,
+      gesture.startWorldY,
+      gesture.currentWorldX,
+      gesture.currentWorldY
+    )
+    local marqueeSelection = collectSelectionsInRect(
+      slide.nodes,
+      slide.id,
+      left,
+      top,
+      width,
+      height,
+      0,
+      0,
+      state.frameOverrides
+    )
+    if gesture.additive then
+      setSelection(node, state, mergeSelections(gesture.baseSelection, marqueeSelection))
+    else
+      setSelection(node, state, marqueeSelection)
     end
     return true
   end
