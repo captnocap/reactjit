@@ -25,6 +25,10 @@ export const PACKAGE_TEST_PARITY = {
       lua: ['packages/chemistry/test/elements-harness.lua'],
       reason: 'Element dataset and lookup semantics must stay aligned with lua/capabilities/chemistry.lua.',
     },
+    'packages/chemistry/test/operations.test.mjs': {
+      lua: ['packages/chemistry/test/operations-harness.lua'],
+      reason: 'Chemistry reference baselines and Lua-backed calculation outcomes must stay aligned with real-world chemistry expectations.',
+    },
     'packages/data/test/address-utils.test.mjs': {
       lua: ['packages/data/test/address-harness.lua'],
       reason: 'Spreadsheet address helpers must stay aligned with lua/capabilities/data.lua address behavior.',

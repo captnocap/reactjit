@@ -358,10 +358,10 @@ end
 local function balanceEquation(equation)
   -- Normalize arrow
   local eq = equation:gsub('%s+', ' ')
-  eq = eq:gsub('→', '->')
-  eq = eq:gsub('==>', '->')
-  eq = eq:gsub('-->', '->')
-  eq = eq:gsub('=>',  '->')
+  eq = eq:match('^%s*(.-)%s*$')
+  eq = eq:gsub('→', ' -> ')
+  eq = eq:gsub('%s*[=%-]+>%s*', ' -> ')
+  eq = eq:gsub('%s+', ' ')
   -- Split on ->
   local lhs, rhs = eq:match('^(.+)->(.+)$')
   if not lhs or not rhs then
@@ -639,10 +639,16 @@ local FUNCTIONAL_GROUPS = {'indole','methylenedioxy','phenol','primary amine','s
 
 local function extractFunctionalGroup(mechanism)
   local mech_lower = mechanism:lower()
+  local best_group = nil
+  local best_index = nil
   for _, g in ipairs(FUNCTIONAL_GROUPS) do
-    if mech_lower:find(g, 1, true) then return g end
+    local start_index = mech_lower:find(g, 1, true)
+    if start_index and (not best_index or start_index < best_index) then
+      best_group = g
+      best_index = start_index
+    end
   end
-  return nil
+  return best_group
 end
 
 local function runReagentTest(reagent, compound)
