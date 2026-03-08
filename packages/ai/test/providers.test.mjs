@@ -69,6 +69,18 @@ describe('OpenAI provider contract', () => {
     assert.equal(body.messages[2].tool_call_id, 'call_1');
   });
 
+  it('falls back to API error messages when choices are missing', () => {
+    assert.deepEqual(
+      openai.parseResponse({ error: { message: 'bad api key' } }),
+      { role: 'assistant', content: 'bad api key' },
+    );
+
+    assert.deepEqual(
+      openai.parseResponse({}),
+      { role: 'assistant', content: '' },
+    );
+  });
+
   it('parses normal responses, streaming deltas, and tool results', () => {
     assert.deepEqual(
       openai.parseResponse({
@@ -109,6 +121,19 @@ describe('OpenAI provider contract', () => {
       role: 'tool',
       toolCallId: 'call_1',
       content: '{"temp":18}',
+    });
+  });
+
+  it('marks stop chunks done even without content and preserves string tool results', () => {
+    assert.deepEqual(
+      openai.parseStreamChunk('{"choices":[{"delta":{},"finish_reason":"stop"}]}'),
+      { done: true },
+    );
+
+    assert.deepEqual(openai.formatToolResult('call_2', 'plain text'), {
+      role: 'tool',
+      toolCallId: 'call_2',
+      content: 'plain text',
     });
   });
 });
@@ -170,6 +195,38 @@ describe('Anthropic provider contract', () => {
     });
   });
 
+  it('joins system messages from input when config.systemPrompt is absent and supports tool-only assistant content', () => {
+    const req = anthropic.formatRequest(
+      [
+        { role: 'system', content: 'first system line' },
+        { role: 'system', content: 'second system line' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [{ id: 'tool_1', name: 'lookup_weather', arguments: '{"city":"SF"}' }],
+        },
+      ],
+      {
+        provider: 'anthropic',
+        model: 'claude-sonnet',
+        apiKey: 'anthropic-key',
+      },
+      [TOOL],
+      false,
+    );
+
+    const body = JSON.parse(req.body);
+
+    assert.equal(body.system, 'first system line\nsecond system line');
+    assert.equal(body.stream, false);
+    assert.deepEqual(body.messages, [{
+      role: 'assistant',
+      content: [
+        { type: 'tool_use', id: 'tool_1', name: 'lookup_weather', input: { city: 'SF' } },
+      ],
+    }]);
+  });
+
   it('parses response blocks into assistant content and tool calls', () => {
     assert.deepEqual(
       anthropic.parseResponse({
@@ -185,6 +242,25 @@ describe('Anthropic provider contract', () => {
         toolCalls: [{ id: 'tool_1', name: 'lookup_weather', arguments: '{"city":"SF"}' }],
       },
     );
+  });
+
+  it('parses API errors, end-turn stream deltas, invalid chunks, and object tool results', () => {
+    assert.deepEqual(
+      anthropic.parseResponse({ error: { message: 'quota exceeded' } }),
+      { role: 'assistant', content: 'quota exceeded' },
+    );
+
+    assert.deepEqual(
+      anthropic.parseStreamChunk('{"delta":{"stop_reason":"end_turn"}}', 'message_delta'),
+      { done: true },
+    );
+    assert.equal(anthropic.parseStreamChunk('{not-json}', 'message_delta'), null);
+
+    assert.deepEqual(anthropic.formatToolResult('tool_2', { ok: true }), {
+      role: 'tool',
+      toolCallId: 'tool_2',
+      content: '{"ok":true}',
+    });
   });
 
   it('parses streaming text and tool use events and resets state between messages', () => {
