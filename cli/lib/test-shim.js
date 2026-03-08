@@ -160,6 +160,25 @@
       return new AuditResult(violations || []);
     },
 
+    // ── Divider audit ───────────────────────────────────────────────────
+    // Finds thin separator elements (dividers) and checks if any text
+    // node overlaps them. Returns an AuditResult.
+    dividerAudit: async function () {
+      var violations = await bridge.rpc('test:divider-audit', {});
+      return new AuditResult(violations || []);
+    },
+
+    // ── Resize ──────────────────────────────────────────────────────────
+    // Resize the Love2D window. Returns { width, height }.
+    resize: async function (width, height) {
+      var result = await bridge.rpc('test:resize', { width: width, height: height });
+      // Wait 3 frames for layout to settle after resize
+      await bridge.rpc('test:wait', {});
+      await bridge.rpc('test:wait', {});
+      await bridge.rpc('test:wait', {});
+      return result;
+    },
+
     audit: async function (options) {
       var args = {};
       if (options) {
