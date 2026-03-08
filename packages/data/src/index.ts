@@ -4,8 +4,6 @@ export type {
   SpreadsheetCellMap,
   SpreadsheetValueMap,
   SpreadsheetErrorMap,
-  SpreadsheetFormulaFn,
-  SpreadsheetFunctionMap,
   SpreadsheetEvaluation,
   SpreadsheetEvaluateOptions,
   SpreadsheetProps,
@@ -13,17 +11,13 @@ export type {
   UseSpreadsheetResult,
 } from './types';
 
-// Formula engine
+// Formula engine (evaluation in Lua, address utils sync for render)
 export {
   normalizeCellAddress,
   parseCellAddress,
-  buildCellAddress,
-  expandCellRange,
   columnIndexToLabel,
-  columnLabelToIndex,
-  evaluateSpreadsheet,
-  createSpreadsheetFunctions,
   buildAddressMatrix,
+  useDataEvaluate,
 } from './formula';
 
 // React surface

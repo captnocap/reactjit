@@ -11,11 +11,13 @@ import {
 import {
   buildAddressMatrix,
   columnIndexToLabel,
-  evaluateSpreadsheet,
   normalizeCellAddress,
   parseCellAddress,
+  useDataEvaluate,
 } from './formula';
-import type { SpreadsheetCellMap, SpreadsheetProps, SpreadsheetScalar } from './types';
+import type { SpreadsheetCellMap, SpreadsheetEvaluation, SpreadsheetProps, SpreadsheetScalar } from './types';
+
+const EMPTY_EVAL: SpreadsheetEvaluation = { values: {}, errors: {} };
 
 const ROW_HEADER_WIDTH = 52;
 const DEFAULT_MIN_COLUMN_WIDTH = 72;
@@ -84,7 +86,6 @@ export function Spreadsheet({
   initialCells,
   cells,
   onCellsChange,
-  functionMap,
   readOnly = false,
   showFormulaBar = true,
   columnWidth = 118,
@@ -182,10 +183,11 @@ export function Spreadsheet({
   }, [liveCells, selectedKey]);
 
   const addressMatrix = useMemo(() => buildAddressMatrix(rows, cols), [rows, cols]);
-  const evaluation = useMemo(
-    () => evaluateSpreadsheet(liveCells, { functions: functionMap, targetAddresses: addressMatrix }),
-    [liveCells, functionMap, addressMatrix],
-  );
+  const evaluate = useDataEvaluate();
+  const [evaluation, setEvaluation] = useState<SpreadsheetEvaluation>(EMPTY_EVAL);
+  useEffect(() => {
+    evaluate({ cells: liveCells, targets: addressMatrix }).then(setEvaluation).catch(() => {});
+  }, [liveCells, addressMatrix]);
 
   const selectedError = evaluation.errors[selectedKey];
   const selectedRawInput = liveCells[selectedKey] ?? '';

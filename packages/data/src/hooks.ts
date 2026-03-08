@@ -1,27 +1,32 @@
-import { useCallback, useMemo, useState } from 'react';
-import { evaluateSpreadsheet, normalizeCellAddress } from './formula';
+import { useCallback, useEffect, useState } from 'react';
+import { useDataEvaluate, normalizeCellAddress } from './formula';
 import type {
   SpreadsheetCellMap,
+  SpreadsheetEvaluation,
   SpreadsheetScalar,
   UseSpreadsheetOptions,
   UseSpreadsheetResult,
 } from './types';
 
-function cloneCells(cells: SpreadsheetCellMap): SpreadsheetCellMap {
-  return { ...cells };
-}
+const EMPTY_EVAL: SpreadsheetEvaluation = { values: {}, errors: {} };
 
 export function useSpreadsheet(options: UseSpreadsheetOptions = {}): UseSpreadsheetResult {
-  const [cells, setCellsState] = useState<SpreadsheetCellMap>(() => cloneCells(options.initialCells ?? {}));
+  const [cells, setCellsState] = useState<SpreadsheetCellMap>(() => ({ ...(options.initialCells ?? {}) }));
+  const [evaluation, setEvaluation] = useState<SpreadsheetEvaluation>(EMPTY_EVAL);
+  const evaluate = useDataEvaluate();
 
-  const evaluation = useMemo(
-    () => evaluateSpreadsheet(cells, options),
-    [cells, options.functions, options.maxRangeCells, options.targetAddresses],
-  );
+  useEffect(() => {
+    const targets = options.targetAddresses && options.targetAddresses.length > 0
+      ? options.targetAddresses
+      : undefined;
+    evaluate({ cells, targets, maxRangeCells: options.maxRangeCells })
+      .then(setEvaluation)
+      .catch(() => {});
+  }, [cells, options.maxRangeCells, options.targetAddresses]);
 
   const setCell = useCallback((addressInput: string, input: string) => {
     const address = normalizeCellAddress(addressInput);
-    setCellsState((prev) => {
+    setCellsState(prev => {
       const next = { ...prev };
       if (input.length === 0) delete next[address];
       else next[address] = input;
@@ -30,7 +35,7 @@ export function useSpreadsheet(options: UseSpreadsheetOptions = {}): UseSpreadsh
   }, []);
 
   const setCells = useCallback((next: SpreadsheetCellMap) => {
-    setCellsState(cloneCells(next));
+    setCellsState({ ...next });
   }, []);
 
   const getCellInput = useCallback(
@@ -48,14 +53,5 @@ export function useSpreadsheet(options: UseSpreadsheetOptions = {}): UseSpreadsh
     [evaluation.errors],
   );
 
-  return {
-    cells,
-    values: evaluation.values,
-    errors: evaluation.errors,
-    setCell,
-    setCells,
-    getCellInput,
-    getCellValue,
-    getCellError,
-  };
+  return { cells, values: evaluation.values, errors: evaluation.errors, setCell, setCells, getCellInput, getCellValue, getCellError };
 }
