@@ -55,6 +55,8 @@ Layout._scaleRef = nil    -- { w=800, h=600 } or nil (disabled)
 Layout._scaleCurve = "linear"
 Layout._scaleCap = 1.8
 Layout._scaleFactor = 1   -- computed each layout pass from viewport vs ref
+Layout._scaleRaw = 1      -- pre-curve linear scale (for debug display)
+Layout._scaleChanged = false  -- set true when factor changes; init.lua reads + clears
 
 -- Properties whose numeric values represent pixel dimensions and should scale.
 -- ALL dimensional values scale at the same rate so estimation, flex allocation,
@@ -92,17 +94,18 @@ local function applyCurve(raw, curve, cap)
 end
 
 --- Compute scale factor from viewport dimensions.
+--- Returns (appliedScale, rawLinearScale).
 --- Subtracts _scaleInsetW from viewport width so the scale factor
 --- reflects the actual content area, not the full window (e.g. when
 --- a fixed sidebar steals space from the content).
 local function computeScaleFactor(vw, vh)
   local ref = Layout._scaleRef
-  if not ref then return 1 end
+  if not ref then return 1, 1 end
   local effectiveW = vw - (Layout._scaleInsetW or 0)
   if effectiveW < 1 then effectiveW = 1 end
   local raw = math.min(effectiveW / ref.w, vh / ref.h)
   local s = applyCurve(raw, Layout._scaleCurve, Layout._scaleCap)
-  return math.max(1, s)
+  return math.max(1, s), math.max(1, raw)
 end
 
 --- Build a scaled view of a style table. Only numeric values in SCALE_PROPS
@@ -134,6 +137,8 @@ function Layout.configureScale(args)
   if not args then
     Layout._scaleRef = nil
     Layout._scaleFactor = 1
+    Layout._scaleRaw = 1
+    Layout._scaleChanged = true
     syncTextScale(1)
     return
   end
@@ -145,8 +150,11 @@ function Layout.configureScale(args)
   local vw = Layout._viewportW
   local vh = Layout._viewportH
   if vw and vh then
-    Layout._scaleFactor = computeScaleFactor(vw, vh)
-    syncTextScale(Layout._scaleFactor)
+    local sf, raw = computeScaleFactor(vw, vh)
+    Layout._scaleFactor = sf
+    Layout._scaleRaw = raw
+    Layout._scaleChanged = true
+    syncTextScale(sf)
   end
 end
 
@@ -2386,7 +2394,15 @@ function Layout.layout(node, x, y, w, h)
   Layout._viewportH = h
 
   -- Recompute viewport-proportional scale factor for this pass.
-  Layout._scaleFactor = computeScaleFactor(w, h)
+  -- Flag when it changes so init.lua can push a bridge event (React only
+  -- re-renders useScale() consumers when the factor actually moves).
+  local prevSF = Layout._scaleFactor
+  local sf, raw = computeScaleFactor(w, h)
+  Layout._scaleFactor = sf
+  Layout._scaleRaw = raw
+  if math.abs(sf - prevSF) > 0.001 then
+    Layout._scaleChanged = true
+  end
   syncTextScale(Layout._scaleFactor)
 
   -- Root auto-fill: if the root has no explicit dimensions, tell

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useWindowDimensions } from './hooks';
+import { useState, useEffect } from 'react';
+import { useBridge } from './context';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -60,6 +60,14 @@ export function spanToFlexBasis(span: number): string {
   return `${(span / 12) * 100}%`;
 }
 
+/** Compute breakpoint from width. */
+function resolveBreakpoint(width: number): Breakpoint {
+  if (width >= BREAKPOINTS.xl) return 'xl';
+  if (width >= BREAKPOINTS.lg) return 'lg';
+  if (width >= BREAKPOINTS.md) return 'md';
+  return 'sm';
+}
+
 /** Determine orientation from dimensions. 20% tolerance band → 'square'. */
 function resolveOrientation(width: number, height: number): Orientation {
   if (width <= 0 || height <= 0) return 'square';
@@ -70,32 +78,55 @@ function resolveOrientation(width: number, height: number): Orientation {
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────
+// These subscribe to the viewport event directly and only trigger a
+// React re-render when their derived value actually changes. During
+// continuous resize, breakpoint changes at 4 thresholds and orientation
+// changes at 2 — not on every pixel.
 
 /** Returns the current breakpoint based on viewport width. */
 export function useBreakpoint(): Breakpoint {
-  const { width } = useWindowDimensions();
-  return useMemo(() => {
-    if (width >= BREAKPOINTS.xl) return 'xl';
-    if (width >= BREAKPOINTS.lg) return 'lg';
-    if (width >= BREAKPOINTS.md) return 'md';
-    return 'sm';
-  }, [width]);
+  const bridge = useBridge();
+  const [bp, setBp] = useState<Breakpoint>('sm');
+  useEffect(() => {
+    return bridge.subscribe('viewport', (payload: { width: number }) => {
+      if (!payload || !payload.width) return;
+      const next = resolveBreakpoint(payload.width);
+      setBp(prev => prev === next ? prev : next);
+    });
+  }, [bridge]);
+  return bp;
 }
 
 /** Returns viewport orientation: 'portrait', 'landscape', or 'square'. */
 export function useOrientation(): Orientation {
-  const { width, height } = useWindowDimensions();
-  return useMemo(() => resolveOrientation(width, height), [width, height]);
+  const bridge = useBridge();
+  const [o, setO] = useState<Orientation>('square');
+  useEffect(() => {
+    return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
+      if (!payload || !payload.width || !payload.height) return;
+      const next = resolveOrientation(payload.width, payload.height);
+      setO(prev => prev === next ? prev : next);
+    });
+  }, [bridge]);
+  return o;
 }
 
 /** Combined breakpoint + orientation for layout decisions. */
 export function useLayout(): { breakpoint: Breakpoint; orientation: Orientation } {
-  const { width, height } = useWindowDimensions();
-  return useMemo(() => ({
-    breakpoint: width >= BREAKPOINTS.xl ? 'xl'
-      : width >= BREAKPOINTS.lg ? 'lg'
-      : width >= BREAKPOINTS.md ? 'md'
-      : 'sm',
-    orientation: resolveOrientation(width, height),
-  }), [width, height]);
+  const bridge = useBridge();
+  const [layout, setLayout] = useState<{ breakpoint: Breakpoint; orientation: Orientation }>({
+    breakpoint: 'sm', orientation: 'square',
+  });
+  useEffect(() => {
+    return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
+      if (!payload || !payload.width || !payload.height) return;
+      const nextBp = resolveBreakpoint(payload.width);
+      const nextO = resolveOrientation(payload.width, payload.height);
+      setLayout(prev => {
+        if (prev.breakpoint === nextBp && prev.orientation === nextO) return prev;
+        return { breakpoint: nextBp, orientation: nextO };
+      });
+    });
+  }, [bridge]);
+  return layout;
 }

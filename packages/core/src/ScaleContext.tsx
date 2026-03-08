@@ -10,8 +10,7 @@
  * useScaledStyle() is a passthrough — Lua handles style scaling.
  */
 
-import React, { createContext, useContext, useEffect, useMemo } from 'react';
-import { useWindowDimensions } from './hooks';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useBridge } from './context';
 import type { Style } from './types';
 
@@ -47,23 +46,9 @@ export interface ScaleProviderProps {
   children: React.ReactNode;
 }
 
-/** Apply the chosen curve to a raw linear scale factor (TS side for useScale). */
-function applyCurve(raw: number, curve: ScaleCurve, cap: number): number {
-  if (raw <= 1) return 1;
-  switch (curve) {
-    case 'sqrt':
-      return Math.sqrt(raw);
-    case 'capped':
-      return Math.min(raw, cap);
-    case 'linear':
-    default:
-      return raw;
-  }
-}
 
 export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, insetWidth = 0, children }: ScaleProviderProps) {
   const bridge = useBridge();
-  const { width, height } = useWindowDimensions();
 
   // Send scale config to Lua on mount and when curve/reference/cap/inset changes.
   // Lua computes the actual scale factor per frame in layout.lua.
@@ -77,16 +62,21 @@ export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, insetWid
     });
   }, [bridge, reference.width, reference.height, curve, cap, insetWidth]);
 
-  // Compute scale locally for useScale() consumers (CodeBlock, Slider, Math).
-  // This does NOT trigger re-renders in primitives — only components that
-  // explicitly call useScale() will re-render on resize.
-  const value = useMemo<ScaleContextValue>(() => {
-    if (width <= 0 || height <= 0) return { scale: 1, curve, rawScale: 1 };
-    const effectiveW = Math.max(1, width - insetWidth);
-    const raw = Math.min(effectiveW / reference.width, height / reference.height);
-    const s = applyCurve(raw, curve, cap);
-    return { scale: Math.max(1, s), curve, rawScale: Math.max(1, raw) };
-  }, [width, height, reference.width, reference.height, curve, cap, insetWidth]);
+  // Subscribe to Lua's computed scale factor — only fires when it actually
+  // changes, NOT on every resize frame. Zero React re-renders during drag.
+  const [scaleState, setScaleState] = useState({ scale: 1, rawScale: 1 });
+  useEffect(() => {
+    return bridge.subscribe('scaleChanged', (payload: { scale: number; rawScale: number }) => {
+      if (!payload) return;
+      setScaleState({ scale: payload.scale, rawScale: payload.rawScale });
+    });
+  }, [bridge]);
+
+  const value = useMemo<ScaleContextValue>(() => ({
+    scale: scaleState.scale,
+    rawScale: scaleState.rawScale,
+    curve,
+  }), [scaleState.scale, scaleState.rawScale, curve]);
 
   return (
     <ScaleContext.Provider value={value}>

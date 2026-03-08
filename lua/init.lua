@@ -106,6 +106,7 @@ local themeMenu  = M.themeMenu
 local systemPanel = M.systemPanel
 local focus      = M.focus
 local tooltips   = require("lua.tooltips")
+local windowchrome = require("lua.windowchrome")
 local permit     = M.permit
 local audit      = M.audit
 local manifestMod = M.manifestMod
@@ -449,6 +450,7 @@ local function loadThemes()
     if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
     tooltips.setTheme(M.currentTheme)
     if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
+    windowchrome.setTheme(M.currentTheme)
     if M.themeMenuEnabled then
       themeMenu.setCurrentTheme(M.currentThemeName, M.currentTheme)
     end
@@ -725,6 +727,7 @@ function ReactJIT.init(config)
           if M.texteditor and M.texteditor.setTheme then M.texteditor.setTheme(M.currentTheme) end
           tooltips.setTheme(M.currentTheme)
           if devtools and devtools.setTheme then devtools.setTheme(M.currentTheme) end
+          windowchrome.setTheme(M.currentTheme)
           if M.tree then M.tree.markDirty() end
           themeMenu.setCurrentTheme(name, M.currentTheme)
           pushEvent({
@@ -1779,6 +1782,12 @@ function ReactJIT.init(config)
     rpcHandlers["scale:configure"] = function(args)
       if M.layout then
         M.layout.configureScale(args)
+        -- Push initial scale so React gets the value on mount
+        pushEvent({ type = "scaleChanged", payload = {
+          scale = M.layout._scaleFactor,
+          rawScale = M.layout._scaleRaw or 1,
+        }})
+        M.layout._scaleChanged = false  -- already pushed
         -- Force layout recompute so scaling takes effect immediately
         if M.tree then M.tree.markDirty() end
       end
@@ -1845,6 +1854,16 @@ function ReactJIT.init(config)
       wmMod.raise(win)
       return true
     end
+  end
+
+  -- Custom window chrome (borderless title bar, drag-to-move, edge resize).
+  -- Auto-detects borderless mode; no-op when OS decorations are present.
+  windowchrome.init({ title = config.title or love.window.getTitle() })
+
+  -- Chrome RPCs: let React set title, query chrome state
+  rpcHandlers["chrome:setTitle"] = function(args)
+    windowchrome.setTitle(args.title)
+    return true
   end
 
   -- Load declarative capabilities (Audio, Timer, etc.)
@@ -2344,11 +2363,24 @@ function ReactJIT.update(dt)
         local layoutW = mainWin and mainWin.width or nil
         local layoutH = mainWin and mainWin.height or nil
         local vh = M.inspectorEnabled and devtools.getViewportHeight() or layoutH
-        M.layout.layout(root, nil, nil, layoutW, vh)
+        local chromeInset = windowchrome.getContentInsetY()
+        local layoutY = chromeInset > 0 and chromeInset or nil
+        local layoutVH = vh and (vh - chromeInset) or nil
+        M.layout.layout(root, nil, layoutY, layoutW, layoutVH)
         emitLayoutEvents(root)
         if M.inspectorEnabled then inspector.endLayout(root) end
       end
       M.tree.clearDirty()
+
+      -- Push scaleChanged event to React only when the scale factor actually
+      -- moved. This prevents per-frame React re-renders during window drag.
+      if M.layout._scaleChanged then
+        M.layout._scaleChanged = false
+        pushEvent({ type = "scaleChanged", payload = {
+          scale = M.layout._scaleFactor,
+          rawScale = M.layout._scaleRaw or 1,
+        }})
+      end
     end
 
     -- Update TextEditor/TextInput blink timer if one has focus (canvas mode)
@@ -2436,7 +2468,8 @@ function ReactJIT.update(dt)
     -- Tick immediately to drain any scheduled microtasks/timers
     M.bridge:tick()
     -- Push initial viewport dimensions so useWindowDimensions can pick them up
-    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() } })
+    local initChromeInset = windowchrome.getContentInsetY()
+    pushEvent({ type = "viewport", payload = { width = love.graphics.getWidth(), height = love.graphics.getHeight() - initChromeInset } })
   end
 
   -- Test mode: trigger _runTests() after 3 frames (mount + 2 render cycles)
@@ -3536,11 +3569,24 @@ function ReactJIT.update(dt)
       local layoutW = mainWin and mainWin.width or nil
       local layoutH = mainWin and mainWin.height or nil
       local vh = M.inspectorEnabled and devtools.getViewportHeight() or layoutH
-      M.layout.layout(root, nil, nil, layoutW, vh)
+      local chromeInset = windowchrome.getContentInsetY()
+      local layoutY = chromeInset > 0 and chromeInset or nil
+      local layoutVH = vh and (vh - chromeInset) or nil
+      M.layout.layout(root, nil, layoutY, layoutW, layoutVH)
       emitLayoutEvents(root)
       if M.inspectorEnabled then inspector.endLayout(root) end
     end
     M.tree.clearDirty()
+
+    -- Push scaleChanged event to React only when the scale factor actually
+    -- moved. This prevents per-frame React re-renders during window drag.
+    if M.layout._scaleChanged then
+      M.layout._scaleChanged = false
+      pushEvent({ type = "scaleChanged", payload = {
+        scale = M.layout._scaleFactor,
+        rawScale = M.layout._scaleRaw or 1,
+      }})
+    end
 
     -- Per-window layout removed: child processes handle their own layout.
   end
@@ -3777,6 +3823,9 @@ function ReactJIT.draw()
 
     -- Multi-window paint removed: child processes render in their own Love2D instances.
   end
+
+  -- Window chrome (title bar, controls) — painted over content, under overlays
+  windowchrome.draw()
 
   -- Focus rings (after paint, before overlays) — animated, one per group
   if focus.getInputMode() == "controller" then
@@ -4136,6 +4185,8 @@ end
 function ReactJIT.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
+  -- Window chrome: drag-to-move, resize, title bar buttons
+  if windowchrome.mousepressed(x, y, button) then return end
   if M.systemPanelEnabled and systemPanel.mousepressed(x, y, button) then return end
   if M.settingsEnabled and settings.mousepressed(x, y, button) then return end
   if M.themeMenuEnabled and themeMenu.mousepressed(x, y, button) then return end
@@ -4361,6 +4412,7 @@ end
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactJIT.mousereleased(x, y, button)
+  windowchrome.mousereleased(x, y, button)
   if M.systemPanelEnabled and systemPanel.mousereleased(x, y, button) then return end
   if M.inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if M.settingsEnabled and settings.mousereleased(x, y, button) then return end
@@ -4458,6 +4510,8 @@ end
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
   lastMouseX, lastMouseY = x, y
+  -- Window chrome drag/resize takes priority over everything
+  if windowchrome.mousemoved(x, y) then return end
   if M.systemPanelEnabled then systemPanel.mousemoved(x, y) end
   if M.settingsEnabled then settings.mousemoved(x, y) end
   if M.themeMenuEnabled then themeMenu.mousemoved(x, y) end
@@ -4628,7 +4682,8 @@ function ReactJIT.resize(w, h)
     M.tree.markDirty()
   end
   if M.bridge then
-    pushEvent({ type = "viewport", payload = { width = w, height = h } })
+    local chromeInset = windowchrome.getContentInsetY()
+    pushEvent({ type = "viewport", payload = { width = w, height = h - chromeInset } })
   end
   -- Update mainWin dimensions + persist geometry on resize
   -- Pass explicit w, h so handleResize doesn't read stale love.graphics values

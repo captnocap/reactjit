@@ -82,6 +82,8 @@ local SENSITIVE_KEYS = {
   ["x-amz-signature"]     = true,
 }
 
+local trimWidth  -- forward-declare; defined in M.draw()
+
 local function isSensitiveKey(key)
   local k = tostring(key or ""):lower()
   if SENSITIVE_KEYS[k] then return true end
@@ -686,7 +688,7 @@ function M.draw(ctx, region)
   local colOriginX = colDirX + 50
   local colNameX   = colOriginX + 58
 
-  local function trimWidth(s, maxW)
+  trimWidth = function(s, maxW)
     s = tostring(s or "")
     if maxW <= 12 then return "..." end
     if font:getWidth(s) <= maxW then return s end
