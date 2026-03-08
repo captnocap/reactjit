@@ -12,15 +12,30 @@
 // Run:  cd storybook && rjit build && rjit test tests/syntax-tokenizer.test.ts
 
 test('navigate to Syntax Stress story', async () => {
-  // Click "Stress Test" section in sidebar to expand it
-  const section = page.find('Text', { children: 'Stress Test' });
-  await section.click();
-  await page.wait(2);
+  const bridge = (globalThis as any).__rjitBridge;
 
-  // Click the Syntax Stress story entry
+  // Resize to a tall window so the full sidebar fits without scrolling.
+  // "Syntax Stress" is deep in the list — at 600px it's off-screen/clipped.
+  await bridge.rpc('window:setSize', { width: 400, height: 3000 });
+  await page.wait(4);
+
+  // In compact mode (width < 640) the sidebar is behind a hamburger. Open it.
+  try {
+    const hamburger = page.find('Text', { children: '\u2630' });
+    await hamburger.click();
+    await page.wait(2);
+  } catch {
+    // Non-compact: sidebar is always visible, no hamburger
+  }
+
+  // All story entries are now in-viewport — click Syntax Stress.
   const entry = page.find('Text', { children: 'Syntax Stress' });
   await entry.click();
   await page.wait(5);
+
+  // Restore window to a reasonable size for the remaining tests.
+  await bridge.rpc('window:setSize', { width: 800, height: 600 });
+  await page.wait(4);
 });
 
 test('all 16 language labels render (no tokenizer hang)', async () => {

@@ -143,6 +143,15 @@ function Testrunner.wait(_args)
   return {}
 end
 
+--- Resize the Love2D window.
+--- Love2D fires love.resize automatically on the next frame.
+function Testrunner.resize(args)
+  local w = args.width or 800
+  local h = args.height or 600
+  love.window.updateMode(w, h)
+  return { width = w, height = h }
+end
+
 --- Capture the current frame to a PNG file.
 function Testrunner.screenshot(args)
   local path = (args and args.path) or "test-screenshot.png"
@@ -392,6 +401,288 @@ function Testrunner.audit(args)
       if v.rule == r then filtered[#filtered + 1] = v end
     end
     violations = filtered
+  end
+
+  return violations
+end
+
+-- ---------------------------------------------------------------------------
+-- Text-specific audit — detect text overlap, escape, truncation, clipping
+-- ---------------------------------------------------------------------------
+
+local MeasureModule = nil  -- lazy-loaded to avoid early require
+
+local TEXT_TYPES = { Text = true, __TEXT__ = true }
+local TEXT_BEARING = { Text = true, __TEXT__ = true, CodeBlock = true }
+
+--- Collect all text-bearing nodes (Text, __TEXT__, CodeBlock) with valid rects.
+--- Only collects nodes that are on-screen (within viewport bounds).
+local function collectTextNodes(node, vpW, vpH, out)
+  if not node or not node.computed then return end
+  local c = node.computed
+  if c.w <= 0 or c.h <= 0 then return end
+  if isHidden(node) then return end
+
+  -- Skip nodes entirely off-viewport
+  if c.x + c.w < 0 or c.y + c.h < 0 or c.x > vpW or c.y > vpH then return end
+
+  if TEXT_BEARING[node.type] then
+    out[#out + 1] = node
+  end
+
+  for _, child in ipairs(node.children or {}) do
+    collectTextNodes(child, vpW, vpH, out)
+  end
+end
+
+--- AABB overlap area between two rects
+local function overlapArea(ax, ay, aw, ah, bx, by, bw, bh)
+  local ox = math.max(0, math.min(ax + aw, bx + bw) - math.max(ax, bx))
+  local oy = math.max(0, math.min(ay + ah, by + bh) - math.max(ay, by))
+  return ox * oy, ox, oy
+end
+
+--- Check if node is a descendant of ancestor
+local function isDescendant(node, ancestor)
+  local cur = node.parent
+  while cur do
+    if cur == ancestor then return true end
+    cur = cur.parent
+  end
+  return false
+end
+
+--- Get the nearest scroll ancestor (or nil if none).
+--- Nodes in different scroll contexts shouldn't be compared for overlap
+--- because their computed positions are in different coordinate spaces.
+local function getScrollAncestor(node)
+  local cur = node.parent
+  while cur do
+    local s = cur.style or {}
+    if s.overflow == "scroll" or s.overflow == "auto"
+       or cur.type == "ScrollView" then
+      return cur
+    end
+    cur = cur.parent
+  end
+  return nil
+end
+
+--- Check if two nodes share the same scroll context.
+local function sameScrollContext(a, b)
+  return getScrollAncestor(a) == getScrollAncestor(b)
+end
+
+--- Get the effective font size for a text node (with __TEXT__ inheritance)
+local function getEffectiveFontSize(node)
+  local s = node.style or {}
+  local fs = s.fontSize
+  if not fs and node.type == "__TEXT__" and node.parent then
+    fs = (node.parent.style or {}).fontSize
+  end
+  return fs or 14
+end
+
+--- Run a text-focused layout audit.
+--- Returns an array of violation objects with rules:
+---   text-overlap       — two text-bearing nodes overlap each other
+---   text-codeblock-overlap — a Text node overlaps a CodeBlock node
+---   text-escape        — text node extends beyond its parent's bounds
+---   text-truncation    — measured text width exceeds allocated node width
+function Testrunner.text_audit(args)
+  local root = Tree.getTree()
+  if not root then return {} end
+
+  local vpW = love.graphics.getWidth()
+  local vpH = love.graphics.getHeight()
+  local violations = {}
+
+  -- Lazy-load measure (needs Love2D graphics to be up)
+  if not MeasureModule then
+    local ok, m = pcall(require, "lua.measure")
+    if ok then MeasureModule = m end
+  end
+
+  -- Collect all text-bearing nodes (on-screen only)
+  local textNodes = {}
+  collectTextNodes(root, vpW, vpH, textNodes)
+
+  -- Separate into categories
+  -- Use only "Text" (not __TEXT__) for overlap checks — __TEXT__ is always
+  -- a child of Text and shares its parent's rect, causing 4x duplicates.
+  local textParents = {}   -- type == "Text" only
+  local allText = {}       -- Text + __TEXT__ (for escape/truncation checks)
+  local codeBlocks = {}    -- CodeBlock
+  for _, n in ipairs(textNodes) do
+    if n.type == "Text" then
+      textParents[#textParents + 1] = n
+      allText[#allText + 1] = n
+    elseif n.type == "__TEXT__" then
+      allText[#allText + 1] = n
+    elseif n.type == "CodeBlock" then
+      codeBlocks[#codeBlocks + 1] = n
+    end
+  end
+
+  -- ── 1. Text↔Text overlap ─────────────────────────────────────────────
+  -- Only compare Text parents (not __TEXT__) to avoid duplicate reports.
+  -- Only compare nodes in the same scroll context.
+  for i = 1, #textParents do
+    local a = textParents[i]
+    local ac = a.computed
+    for j = i + 1, #textParents do
+      local b = textParents[j]
+      -- Skip parent-child pairs and cross-scroll-context comparisons
+      if not isDescendant(a, b) and not isDescendant(b, a)
+         and sameScrollContext(a, b) then
+        local bc = b.computed
+        local area, ox, oy = overlapArea(ac.x, ac.y, ac.w, ac.h, bc.x, bc.y, bc.w, bc.h)
+        if area > OVERLAP_MIN then
+          violations[#violations + 1] = {
+            rule     = "text-overlap",
+            severity = "error",
+            message  = (a.debugName or a.type) .. " overlaps "
+                       .. (b.debugName or b.type)
+                       .. " by " .. math.floor(ox) .. "x" .. math.floor(oy) .. "px"
+                       .. " (text: \"" .. string.sub(nodeText(a), 1, 30) .. "\")",
+            nodeId   = a.id,
+            nodeName = a.debugName or a.type,
+            nodeRect = { x = ac.x, y = ac.y, w = ac.w, h = ac.h },
+            siblingId   = b.id,
+            siblingName = b.debugName or b.type,
+            siblingRect = { x = bc.x, y = bc.y, w = bc.w, h = bc.h },
+          }
+        end
+      end
+    end
+  end
+
+  -- ── 2. Text↔CodeBlock overlap ─────────────────────────────────────────
+  -- Only compare Text parents (not __TEXT__) against CodeBlocks.
+  -- Only compare nodes in the same scroll context.
+  for _, t in ipairs(textParents) do
+    local tc = t.computed
+    for _, cb in ipairs(codeBlocks) do
+      if not isDescendant(t, cb) and not isDescendant(cb, t)
+         and sameScrollContext(t, cb) then
+        local cbc = cb.computed
+        local area, ox, oy = overlapArea(tc.x, tc.y, tc.w, tc.h, cbc.x, cbc.y, cbc.w, cbc.h)
+        if area > OVERLAP_MIN then
+          violations[#violations + 1] = {
+            rule     = "text-codeblock-overlap",
+            severity = "error",
+            message  = (t.debugName or t.type) .. " overlaps CodeBlock"
+                       .. " by " .. math.floor(ox) .. "x" .. math.floor(oy) .. "px"
+                       .. " (text: \"" .. string.sub(nodeText(t), 1, 30) .. "\")",
+            nodeId   = t.id,
+            nodeName = t.debugName or t.type,
+            nodeRect = { x = tc.x, y = tc.y, w = tc.w, h = tc.h },
+            siblingId   = cb.id,
+            siblingName = "CodeBlock",
+            siblingRect = { x = cbc.x, y = cbc.y, w = cbc.w, h = cbc.h },
+          }
+        end
+      end
+    end
+  end
+
+  -- ── 3. Text escaping container ────────────────────────────────────────
+  -- Check Text nodes only (not __TEXT__ — they inherit parent's rect)
+  for _, n in ipairs(textParents) do
+    local parent = n.parent
+    if parent and parent.computed then
+      local nc = n.computed
+      local pc = parent.computed
+      -- Skip if parent clips (overflow: hidden/scroll)
+      if not parentClips(parent) and not isAbsolute(n)
+         and pc.w > 0 and pc.h > 0 then
+        local overR = (nc.x + nc.w) - (pc.x + pc.w)
+        local overB = (nc.y + nc.h) - (pc.y + pc.h)
+        local overL = pc.x - nc.x
+        local overT = pc.y - nc.y
+        if overR > TOLERANCE or overB > TOLERANCE or overL > TOLERANCE or overT > TOLERANCE then
+          local dirs = {}
+          if overR > TOLERANCE then dirs[#dirs + 1] = "right +" .. math.floor(overR) .. "px" end
+          if overB > TOLERANCE then dirs[#dirs + 1] = "bottom +" .. math.floor(overB) .. "px" end
+          if overL > TOLERANCE then dirs[#dirs + 1] = "left +" .. math.floor(overL) .. "px" end
+          if overT > TOLERANCE then dirs[#dirs + 1] = "top +" .. math.floor(overT) .. "px" end
+          violations[#violations + 1] = {
+            rule     = "text-escape",
+            severity = "error",
+            message  = (n.debugName or n.type) .. " escapes container "
+                       .. (parent.debugName or parent.type) .. ": " .. table.concat(dirs, ", ")
+                       .. " (text: \"" .. string.sub(nodeText(n), 1, 30) .. "\")",
+            nodeId   = n.id,
+            nodeName = n.debugName or n.type,
+            nodeRect = { x = nc.x, y = nc.y, w = nc.w, h = nc.h },
+            parentId = parent.id,
+            parentName = parent.debugName or parent.type,
+            parentRect = { x = pc.x, y = pc.y, w = pc.w, h = pc.h },
+          }
+        end
+      end
+    end
+  end
+
+  -- ── 4. Text truncation (measured width > allocated width) ─────────────
+  -- Check __TEXT__ nodes (they hold actual text content for measurement)
+  if MeasureModule then
+    for _, n in ipairs(allText) do
+      local nc = n.computed
+      if nc.w > 0 then
+        local text = nodeText(n)
+        if text ~= "" then
+          local ok, result = pcall(function()
+            local fontSize = getEffectiveFontSize(n)
+            local s = n.style or {}
+            local fontFamily = s.fontFamily
+            if not fontFamily and n.type == "__TEXT__" and n.parent then
+              fontFamily = (n.parent.style or {}).fontFamily
+            end
+            local fontWeight = s.fontWeight
+            if not fontWeight and n.type == "__TEXT__" and n.parent then
+              fontWeight = (n.parent.style or {}).fontWeight
+            end
+            local ts = MeasureModule.resolveTextScale(n)
+            fontSize = math.floor(fontSize * ts)
+
+            local font = MeasureModule.getFont(fontSize, fontFamily, fontWeight)
+            local letterSpacing = s.letterSpacing
+            if not letterSpacing and n.type == "__TEXT__" and n.parent then
+              letterSpacing = (n.parent.style or {}).letterSpacing
+            end
+            return MeasureModule.getWidthWithSpacing(font, text, letterSpacing)
+          end)
+          if ok and result then
+            local measuredW = result
+            local overflow = measuredW - nc.w
+            if overflow > TOLERANCE then
+              local s = n.style or {}
+              local textOverflow = s.textOverflow
+              if not textOverflow and n.type == "__TEXT__" and n.parent then
+                textOverflow = (n.parent.style or {}).textOverflow
+              end
+              local parentClipping = n.parent and parentClips(n.parent)
+              if not parentClipping and not hasScrollAncestor(n) then
+                violations[#violations + 1] = {
+                  rule     = "text-truncation",
+                  severity = "warning",
+                  message  = (n.debugName or n.type)
+                             .. " text overflows by " .. math.floor(overflow) .. "px"
+                             .. " (measured=" .. math.floor(measuredW) .. " alloc=" .. math.floor(nc.w) .. ")"
+                             .. " (text: \"" .. string.sub(text, 1, 30) .. "\")",
+                  nodeId   = n.id,
+                  nodeName = n.debugName or n.type,
+                  nodeRect = { x = nc.x, y = nc.y, w = nc.w, h = nc.h },
+                  measuredWidth = measuredW,
+                  allocatedWidth = nc.w,
+                }
+              end
+            end
+          end
+        end
+      end
+    end
   end
 
   return violations

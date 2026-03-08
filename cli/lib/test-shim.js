@@ -148,6 +148,18 @@
     //   await expect(audit).toHaveNoViolations();
     //
     //   const overflows = await page.audit({ rule: 'child-overflow' });
+    // ── Text-specific audit ─────────────────────────────────────────────
+    // Returns an AuditResult containing text-specific layout violations:
+    //   text-overlap, text-codeblock-overlap, text-escape, text-truncation
+    //
+    // Usage:
+    //   const result = await page.textAudit();
+    //   await expect(result).toHaveNoViolations();
+    textAudit: async function () {
+      var violations = await bridge.rpc('test:text-audit', {});
+      return new AuditResult(violations || []);
+    },
+
     audit: async function (options) {
       var args = {};
       if (options) {
