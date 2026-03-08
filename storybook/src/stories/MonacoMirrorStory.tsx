@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Box, MonacoMirror, Text, classifiers as S} from '../../../packages/core/src';
+import { Box, MonacoMirror, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const STARTER_CODE = `import React from 'react';
@@ -39,6 +39,72 @@ export function App() {
   );
 }`;
 
+const FILE_CONTENTS: Record<string, string> = {
+  'src/playground/CounterCard.tsx': STARTER_CODE,
+  'src/playground/PreviewPane.tsx': `import React from 'react';
+import { Box, Text } from '@reactjit/core';
+
+export function PreviewPane({ fileName }: { fileName: string }) {
+  return (
+    <Box style={{
+      width: '100%',
+      backgroundColor: '#0f172a',
+      borderWidth: 1,
+      borderColor: '#1e293b',
+      borderRadius: 8,
+      paddingLeft: 12,
+      paddingRight: 12,
+      paddingTop: 10,
+      paddingBottom: 10,
+      gap: 6,
+    }}>
+      <Text style={{ color: '#e2e8f0', fontSize: 12 }}>
+        {'Live preview'}
+      </Text>
+      <Text style={{ color: '#94a3b8', fontSize: 10 }}>
+        {fileName}
+      </Text>
+    </Box>
+  );
+}`,
+  'src/components/EditorShell.tsx': `import React from 'react';
+import { Box, MonacoMirror } from '@reactjit/core';
+
+export function EditorShell({ code, selectedFile }: {
+  code: string;
+  selectedFile: string;
+}) {
+  return (
+    <Box style={{ width: '100%', height: '100%' }}>
+      <MonacoMirror
+        value={code}
+        filePath={selectedFile}
+        workspaceLabel="reactjit-playground"
+      />
+    </Box>
+  );
+}`,
+  'src/hooks/useEditorState.ts': `import { useState } from 'react';
+
+export function useEditorState(initialFile: string) {
+  const [selectedFile, setSelectedFile] = useState(initialFile);
+  const [dirtyFiles, setDirtyFiles] = useState<string[]>([]);
+
+  function markDirty(path: string) {
+    setDirtyFiles((current) => current.includes(path) ? current : [...current, path]);
+  }
+
+  return {
+    selectedFile,
+    setSelectedFile,
+    dirtyFiles,
+    markDirty,
+  };
+}`,
+};
+
+const OPEN_FILES = Object.keys(FILE_CONTENTS);
+
 const EXPLORER_FILES = [
   'src/playground/CounterCard.tsx',
   'src/playground/PreviewPane.tsx',
@@ -53,18 +119,25 @@ const EXPLORER_FILES = [
 
 export function MonacoMirrorStory() {
   const c = useThemeColors();
-  const [code, setCode] = useState(STARTER_CODE);
+  const [fileContents, setFileContents] = useState<Record<string, string>>(FILE_CONTENTS);
   const [lastSubmitChars, setLastSubmitChars] = useState(STARTER_CODE.length);
-  const [selectedFile, setSelectedFile] = useState('src/playground/CounterCard.tsx');
+  const [selectedFile, setSelectedFile] = useState(OPEN_FILES[0]);
+  const activeCode = fileContents[selectedFile] ?? STARTER_CODE;
 
   const handleChange = useCallback((next: string) => {
-    setCode(next);
-  }, []);
+    setFileContents((current) => ({
+      ...current,
+      [selectedFile]: next,
+    }));
+  }, [selectedFile]);
 
   const handleSubmit = useCallback((next: string) => {
-    setCode(next);
+    setFileContents((current) => ({
+      ...current,
+      [selectedFile]: next,
+    }));
     setLastSubmitChars(next.length);
-  }, []);
+  }, [selectedFile]);
 
   return (
     <Box
@@ -94,7 +167,7 @@ export function MonacoMirrorStory() {
 
       <Box style={{ flexGrow: 1, minHeight: 0, gap: 10 }}>
         <MonacoMirror
-          value={code}
+          value={activeCode}
           onChange={handleChange}
           onSubmit={handleSubmit}
           changeDelay={0.08}
@@ -102,8 +175,9 @@ export function MonacoMirrorStory() {
           filePath="src/playground/CounterCard.tsx"
           selectedFilePath={selectedFile}
           onFileSelect={setSelectedFile}
+          openFiles={OPEN_FILES}
           workspaceLabel="reactjit-playground"
-          branch="feature/monaco-mirror"
+          branch="feature/monaco-navigation"
           language="typescript"
           explorerFiles={EXPLORER_FILES}
           spellCheck={false}
@@ -116,6 +190,7 @@ export function MonacoMirrorStory() {
             defaultValue={STARTER_CODE}
             style={{ width: 620, height: 260 }}
             filePath="src/playground/CounterCard.tsx"
+            openFiles={OPEN_FILES}
             workspaceLabel="constrained-panel"
             branch="fit-check"
             language="typescript"
@@ -127,6 +202,7 @@ export function MonacoMirrorStory() {
             defaultValue={STARTER_CODE}
             style={{ width: 400, height: 200 }}
             filePath="src/small/Widget.tsx"
+            openFiles={OPEN_FILES.slice(0, 3)}
             workspaceLabel="small-panel"
             branch="compact"
             language="typescript"

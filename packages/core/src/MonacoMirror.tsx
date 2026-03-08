@@ -1,10 +1,40 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from './primitives';
 import { Input } from './Input';
 import { Pressable } from './Pressable';
+import { useIFTTT } from './useIFTTT';
 import type { InputProps, LayoutEvent, Style } from './types';
 
 const DEFAULT_ACTIVITY_ITEMS = ['EX', 'SE', 'SC', 'RU'];
+
+type ViewTarget = 'tabs' | 'explorer' | 'editor' | 'minimap';
+
+const VIEW_TARGET_LABELS: Record<ViewTarget, { label: string; short: string }> = {
+  tabs: { label: 'Tabs', short: 'TAB' },
+  explorer: { label: 'Files', short: 'FILES' },
+  editor: { label: 'Code', short: 'CODE' },
+  minimap: { label: 'Map', short: 'MAP' },
+};
+
+let monacoMirrorInstanceCount = 0;
+let shoulderNavigationOwnerId: string | null = null;
+const shoulderNavigationOwnerListeners = new Set<(ownerId: string | null) => void>();
+
+function nextMonacoMirrorInstanceId(): string {
+  monacoMirrorInstanceCount += 1;
+  return `monaco-mirror-${monacoMirrorInstanceCount}`;
+}
+
+function setShoulderNavigationOwner(ownerId: string | null) {
+  if (shoulderNavigationOwnerId === ownerId) return;
+  shoulderNavigationOwnerId = ownerId;
+  for (const listener of shoulderNavigationOwnerListeners) listener(ownerId);
+}
+
+function subscribeShoulderNavigationOwner(listener: (ownerId: string | null) => void) {
+  shoulderNavigationOwnerListeners.add(listener);
+  return () => shoulderNavigationOwnerListeners.delete(listener);
+}
 
 function inferLanguage(pathOrName: string | undefined, fallback: string): string {
   if (!pathOrName) return fallback;
@@ -31,6 +61,20 @@ function dirnamePath(input: string): string {
   const parts = splitPath(normalizePath(input));
   if (parts.length <= 1) return '';
   return parts.slice(0, -1).join('/');
+}
+
+function basenamePath(input: string): string {
+  const parts = splitPath(normalizePath(input));
+  if (parts.length === 0) return input;
+  return parts[parts.length - 1];
+}
+
+function compactParentLabel(input: string, fallback: string): string {
+  const dir = dirnamePath(input);
+  if (!dir) return fallback;
+  const parts = splitPath(dir);
+  if (parts.length <= 2) return dir;
+  return parts.slice(-2).join('/');
 }
 
 function uniquePaths(input: string[]): string[] {
@@ -128,6 +172,7 @@ export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineN
   activityItems?: string[];
   filePath?: string;
   selectedFilePath?: string;
+  openFiles?: string[];
   explorerFiles?: string[];
   onFileSelect?: (path: string) => void;
   tabLabel?: string;
@@ -142,6 +187,7 @@ export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineN
   showBreadcrumbs?: boolean;
   showStatusBar?: boolean;
   minimapMaxLines?: number;
+  maxTabs?: number;
   layoutMode?: 'auto' | 'full' | 'compact';
   compactMaxWidth?: number;
   compactMaxHeight?: number;
@@ -169,6 +215,7 @@ export function MonacoMirror({
   activityItems = DEFAULT_ACTIVITY_ITEMS,
   filePath = 'src/App.tsx',
   selectedFilePath,
+  openFiles,
   explorerFiles,
   onFileSelect,
   tabLabel,
@@ -183,6 +230,7 @@ export function MonacoMirror({
   showBreadcrumbs = true,
   showStatusBar = true,
   minimapMaxLines = 120,
+  maxTabs = 5,
   layoutMode = 'auto',
   compactMaxWidth = 560,
   compactMaxHeight = 260,
@@ -196,6 +244,11 @@ export function MonacoMirror({
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [editorViewportHeight, setEditorViewportHeight] = useState<number | undefined>(undefined);
+  const [viewTarget, setViewTarget] = useState<ViewTarget>('editor');
+  const instanceIdRef = useRef<string>(nextMonacoMirrorInstanceId());
+  const [isShoulderNavigationOwner, setIsShoulderNavigationOwner] = useState(
+    () => shoulderNavigationOwnerId === instanceIdRef.current,
+  );
 
   useEffect(() => {
     if (value !== undefined) setMirrorText(value);
@@ -242,7 +295,7 @@ export function MonacoMirror({
     (explicitHeight !== undefined && explicitHeight <= compactMaxHeight)
   );
   const compact = layoutMode === 'compact' || (layoutMode === 'auto' && compactBySize);
-  const topBarHeight = compact ? 26 : 34;
+  const topBarHeight = compact ? 28 : 42;
   const statusBarHeight = compact ? 18 : 22;
   const editorFontSize = compact ? 10 : 12;
 
@@ -267,6 +320,13 @@ export function MonacoMirror({
   const renderSidebar = showSidebar && !compact && widthCanShowSidebar && sidebarOpen;
   const renderMinimap = showMinimap && !compact && widthCanShowMinimap && minimapOpen;
   const renderBreadcrumbs = showBreadcrumbs && !compact;
+  const availableViewTargets = useMemo<ViewTarget[]>(() => {
+    const nextTargets: ViewTarget[] = ['tabs'];
+    if (showSidebar && !compact && widthCanShowSidebar) nextTargets.push('explorer');
+    nextTargets.push('editor');
+    if (showMinimap && !compact && widthCanShowMinimap) nextTargets.push('minimap');
+    return nextTargets;
+  }, [compact, showMinimap, showSidebar, widthCanShowMinimap, widthCanShowSidebar]);
 
   const resolvedSidebarWidth = explicitWidth !== undefined
     ? Math.max(132, Math.min(sidebarWidth, Math.floor(explicitWidth * 0.38)))
@@ -320,6 +380,15 @@ export function MonacoMirror({
       : buildFallbackExplorerPaths(filePath);
     return uniquePaths([...sourcePaths, filePath, activeFilePath]);
   }, [activeFilePath, explorerFiles, filePath]);
+  const tabPaths = useMemo(() => {
+    const sourcePaths = openFiles && openFiles.length > 0
+      ? openFiles
+      : candidateExplorerPaths;
+    const normalized = uniquePaths([filePath, ...sourcePaths]);
+    const visible = normalized.slice(0, Math.max(1, maxTabs));
+    if (visible.includes(activeFilePath)) return visible;
+    return uniquePaths([activeFilePath, ...visible]).slice(0, Math.max(1, maxTabs));
+  }, [activeFilePath, candidateExplorerPaths, filePath, maxTabs, openFiles]);
 
   const explorerTree = useMemo(() => buildExplorerTree(candidateExplorerPaths), [candidateExplorerPaths]);
   const folderPaths = useMemo(() => collectFolderPaths(explorerTree), [explorerTree]);
@@ -350,6 +419,30 @@ export function MonacoMirror({
     });
   }, [activeFolderAncestors]);
 
+  useEffect(() => {
+    return subscribeShoulderNavigationOwner((ownerId) => {
+      setIsShoulderNavigationOwner(ownerId === instanceIdRef.current);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (shoulderNavigationOwnerId === null) setShoulderNavigationOwner(instanceIdRef.current);
+    return () => {
+      if (shoulderNavigationOwnerId === instanceIdRef.current) {
+        setShoulderNavigationOwner(null);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (availableViewTargets.includes(viewTarget)) return;
+    if (availableViewTargets.includes('editor')) {
+      setViewTarget('editor');
+      return;
+    }
+    if (availableViewTargets.length > 0) setViewTarget(availableViewTargets[0]);
+  }, [availableViewTargets, viewTarget]);
+
   const handleLiveChange = useCallback((next: string) => {
     setMirrorText(next);
     onLiveChange?.(next);
@@ -376,17 +469,78 @@ export function MonacoMirror({
     onBlur?.(next);
   }, [onBlur]);
 
+  const claimShoulderNavigation = useCallback(() => {
+    setShoulderNavigationOwner(instanceIdRef.current);
+  }, []);
+
+  const targetView = useCallback((nextTarget: ViewTarget) => {
+    if (!availableViewTargets.includes(nextTarget)) return;
+    claimShoulderNavigation();
+    setViewTarget(nextTarget);
+    if (nextTarget === 'explorer' && showSidebar && !compact && widthCanShowSidebar) {
+      setPanelPreferenceTouched(true);
+      setSidebarOpen(true);
+    }
+    if (nextTarget === 'minimap' && showMinimap && !compact && widthCanShowMinimap) {
+      setPanelPreferenceTouched(true);
+      setMinimapOpen(true);
+    }
+  }, [
+    availableViewTargets,
+    claimShoulderNavigation,
+    compact,
+    showMinimap,
+    showSidebar,
+    widthCanShowMinimap,
+    widthCanShowSidebar,
+  ]);
+
+  const cycleTargetedView = useCallback((direction: -1 | 1) => {
+    if (availableViewTargets.length <= 1) return;
+    const currentIndex = availableViewTargets.indexOf(viewTarget);
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = (safeIndex + direction + availableViewTargets.length) % availableViewTargets.length;
+    targetView(availableViewTargets[nextIndex]);
+  }, [availableViewTargets, targetView, viewTarget]);
+
+  useIFTTT('gamepad:leftshoulder', () => {
+    if (!isShoulderNavigationOwner) return;
+    cycleTargetedView(-1);
+  });
+
+  useIFTTT('gamepad:rightshoulder', () => {
+    if (!isShoulderNavigationOwner) return;
+    cycleTargetedView(1);
+  });
+
   const toggleFolder = useCallback((path: string) => {
+    claimShoulderNavigation();
     setCollapsedFolders((prev) => ({
       ...prev,
       [path]: !(prev[path] ?? false),
     }));
-  }, []);
+  }, [claimShoulderNavigation]);
 
-  const handleFileSelect = useCallback((path: string) => {
+  const commitFileSelect = useCallback((path: string) => {
     if (selectedFilePath === undefined) setInternalSelectedFile(path);
     onFileSelect?.(path);
   }, [onFileSelect, selectedFilePath]);
+
+  const handleTabSelect = useCallback((path: string) => {
+    targetView('tabs');
+    commitFileSelect(path);
+  }, [commitFileSelect, targetView]);
+
+  const handleExplorerFileSelect = useCallback((path: string) => {
+    targetView('explorer');
+    commitFileSelect(path);
+  }, [commitFileSelect, targetView]);
+
+  const handleEditorFocus = useCallback(() => {
+    claimShoulderNavigation();
+    setViewTarget('editor');
+    onFocus?.();
+  }, [claimShoulderNavigation, onFocus]);
 
   const handleEditorViewportLayout = useCallback((event: LayoutEvent) => {
     const nextHeight = Math.max(0, Math.round(event.height));
@@ -398,27 +552,41 @@ export function MonacoMirror({
 
   const handleToggleSidebarPanel = useCallback(() => {
     if (!widthCanShowSidebar) return;
+    claimShoulderNavigation();
     setPanelPreferenceTouched(true);
-    setSidebarOpen((open) => !open);
-  }, [widthCanShowSidebar]);
+    setSidebarOpen((open) => {
+      const next = !open;
+      if (next) setViewTarget('explorer');
+      else if (viewTarget === 'explorer') setViewTarget('editor');
+      return next;
+    });
+  }, [claimShoulderNavigation, viewTarget, widthCanShowSidebar]);
 
   const handleToggleMinimapPanel = useCallback(() => {
     if (!widthCanShowMinimap) return;
+    claimShoulderNavigation();
     setPanelPreferenceTouched(true);
-    setMinimapOpen((open) => !open);
-  }, [widthCanShowMinimap]);
+    setMinimapOpen((open) => {
+      const next = !open;
+      if (next) setViewTarget('minimap');
+      else if (viewTarget === 'minimap') setViewTarget('editor');
+      return next;
+    });
+  }, [claimShoulderNavigation, viewTarget, widthCanShowMinimap]);
 
   const handleCollapseAll = useCallback(() => {
+    claimShoulderNavigation();
     const next: Record<string, boolean> = {};
     for (const path of folderPaths) next[path] = true;
     setCollapsedFolders(next);
-  }, [folderPaths]);
+  }, [claimShoulderNavigation, folderPaths]);
 
   const handleExpandAll = useCallback(() => {
+    claimShoulderNavigation();
     const next: Record<string, boolean> = {};
     for (const path of folderPaths) next[path] = false;
     setCollapsedFolders(next);
-  }, [folderPaths]);
+  }, [claimShoulderNavigation, folderPaths]);
 
   const renderExplorerNodes = (nodes: ExplorerTreeNode[], depth: number): React.ReactNode => (
     nodes.map((node) => {
@@ -444,12 +612,17 @@ export function MonacoMirror({
             />
           )}
           <Pressable
-            onPress={() => (isFolder ? toggleFolder(node.path) : handleFileSelect(node.path))}
+            onPress={() => (isFolder ? toggleFolder(node.path) : handleExplorerFileSelect(node.path))}
             style={({ hovered }) => ({
-              backgroundColor: isSelected ? '#094771' : (hovered ? '#2a2d2e' : 'transparent'),
-              borderLeftWidth: isSelected ? 2 : 0,
+              backgroundColor: isSelected
+                ? '#0f3b60'
+                : hovered
+                  ? '#2a2d2e'
+                  : (isFolder && isActiveBranch ? '#21272e' : 'transparent'),
+              borderLeftWidth: isSelected ? 3 : 0,
+              borderWidth: isSelected ? 1 : 0,
               borderColor: isSelected ? '#56b6ff' : 'transparent',
-              borderRadius: 2,
+              borderRadius: 4,
               minWidth: 0,
             })}
           >
@@ -501,6 +674,25 @@ export function MonacoMirror({
                   {node.name}
                 </Text>
               </Box>
+              {isSelected && (
+                <Box
+                  style={{
+                    flexShrink: 0,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: '#56b6ff',
+                    backgroundColor: '#56b6ff22',
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    paddingTop: 1,
+                    paddingBottom: 1,
+                  }}
+                >
+                  <Text style={{ color: '#dff1ff', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                    {'ACTIVE'}
+                  </Text>
+                </Box>
+              )}
             </Box>
           </Pressable>
           {isFolder && !isCollapsed && node.children && renderExplorerNodes(node.children, depth + 1)}
@@ -511,6 +703,9 @@ export function MonacoMirror({
 
   return (
     <Box
+      focusable={false}
+      onPointerEnter={claimShoulderNavigation}
+      onClick={claimShoulderNavigation}
       style={{
         width: '100%',
         height: '100%',
@@ -527,84 +722,168 @@ export function MonacoMirror({
           flexShrink: 0,
           height: topBarHeight,
           flexDirection: 'row',
-          alignItems: 'end',
+          alignItems: 'stretch',
           backgroundColor: '#252526',
           borderBottomWidth: 1,
           borderColor: '#3c3c3c',
         }}
       >
-        <Box style={{ width: 10 }} />
         <Box
           style={{
-            height: compact ? 22 : 28,
-            backgroundColor: '#1e1e1e',
-            borderTopLeftRadius: 6,
-            borderTopRightRadius: 6,
-            borderWidth: 1,
-            borderColor: '#3c3c3c',
-            borderBottomWidth: 0,
+            flexGrow: 1,
+            minWidth: 0,
             flexDirection: 'row',
-            alignItems: 'center',
-            paddingLeft: 10,
-            paddingRight: 10,
+            alignItems: 'stretch',
+            paddingLeft: compact ? 6 : 8,
+            paddingTop: compact ? 4 : 6,
+            gap: 2,
+            position: 'relative',
           }}
         >
-          <Text style={{ color: '#9cdcfe', fontSize: 10, fontFamily: 'monospace' }}>{fileName}</Text>
+          {!compact && viewTarget === 'tabs' && (
+            <Box
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                height: 2,
+                backgroundColor: '#3794ff',
+              }}
+            />
+          )}
+          {tabPaths.map((path) => {
+            const isActive = path === activeFilePath;
+            const parentLabel = compactParentLabel(path, workspaceLabel);
+            const tabDisplayName = isActive && tabLabel && tabLabel.length > 0
+              ? tabLabel
+              : basenamePath(path);
+            return (
+              <Pressable
+                key={path}
+                onPress={() => handleTabSelect(path)}
+                style={({ hovered }) => ({
+                  minWidth: 0,
+                  maxWidth: compact ? 180 : 220,
+                  height: compact ? 20 : 34,
+                  borderTopLeftRadius: 6,
+                  borderTopRightRadius: 6,
+                  borderWidth: 1,
+                  borderBottomWidth: 0,
+                  borderColor: isActive ? '#4f8cc9' : '#3c3c3c',
+                  borderTopWidth: isActive ? 2 : 1,
+                  backgroundColor: isActive
+                    ? '#1e1e1e'
+                    : hovered
+                      ? '#323233'
+                      : '#2d2d2d',
+                })}
+              >
+                <Box
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    minWidth: 0,
+                    gap: 6,
+                    paddingLeft: 10,
+                    paddingRight: 10,
+                    paddingTop: compact ? 3 : 5,
+                    paddingBottom: compact ? 3 : 4,
+                  }}
+                >
+                  <Box
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: 7,
+                      flexShrink: 0,
+                      backgroundColor: isActive ? '#56b6ff' : '#4b5563',
+                    }}
+                  />
+                  <Box style={{ flexGrow: 1, minWidth: 0 }}>
+                    <Text
+                      style={{
+                        color: isActive ? '#ffffff' : '#d4d4d4',
+                        fontSize: compact ? 9 : 10,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'nowrap',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {tabDisplayName}
+                    </Text>
+                    {!compact && (
+                      <Text
+                        style={{
+                          color: isActive ? '#9fbfe1' : '#8a8a8a',
+                          fontSize: 8,
+                          fontFamily: 'monospace',
+                          whiteSpace: 'nowrap',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {parentLabel}
+                      </Text>
+                    )}
+                  </Box>
+                </Box>
+              </Pressable>
+            );
+          })}
         </Box>
-        <Box style={{ flexGrow: 1 }} />
         {!compact && (
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 8, paddingBottom: 5 }}>
-            {showSidebar && (
-              <Pressable
-                onPress={handleToggleSidebarPanel}
-                style={({ hovered }) => ({
-                  backgroundColor: !widthCanShowSidebar
-                    ? '#2b2b2b'
-                    : sidebarOpen
-                      ? '#0e639c'
-                      : (hovered ? '#3c3c3c' : '#2d2d2d'),
-                  borderRadius: 4,
-                  paddingLeft: 6,
-                  paddingRight: 6,
-                  paddingTop: 3,
-                  paddingBottom: 3,
+          <Box style={{ flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 8, paddingRight: 10 }}>
+            <Box style={{ alignItems: 'end', gap: 2 }}>
+              <Text style={{ color: isShoulderNavigationOwner ? '#9fbfe1' : '#8a8a8a', fontSize: 7, fontFamily: 'monospace' }}>
+                {isShoulderNavigationOwner ? 'LB/RB TARGET' : 'CLICK INSIDE TO ARM'}
+              </Text>
+              <Box style={{ flexDirection: 'row', gap: 4 }}>
+                {availableViewTargets.map((target) => {
+                  const isActiveTarget = viewTarget === target;
+                  return (
+                    <Pressable
+                      key={target}
+                      onPress={() => targetView(target)}
+                      style={({ hovered }) => ({
+                        borderRadius: 4,
+                        borderWidth: 1,
+                        borderColor: isActiveTarget ? '#3794ff' : '#4b5563',
+                        backgroundColor: isActiveTarget
+                          ? '#0f3b60'
+                          : hovered
+                            ? '#3c3c3c'
+                            : '#2d2d2d',
+                        paddingLeft: 7,
+                        paddingRight: 7,
+                        paddingTop: 3,
+                        paddingBottom: 3,
+                      })}
+                    >
+                      <Text style={{ color: isActiveTarget ? '#ffffff' : '#d4d4d4', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                        {VIEW_TARGET_LABELS[target].short}
+                      </Text>
+                    </Pressable>
+                  );
                 })}
-              >
-                <Text style={{ color: widthCanShowSidebar ? '#d4d4d4' : '#666666', fontSize: 8, fontFamily: 'monospace' }}>{'EX'}</Text>
-              </Pressable>
-            )}
-            {showMinimap && (
-              <Pressable
-                onPress={handleToggleMinimapPanel}
-                style={({ hovered }) => ({
-                  backgroundColor: !widthCanShowMinimap
-                    ? '#2b2b2b'
-                    : minimapOpen
-                      ? '#0e639c'
-                      : (hovered ? '#3c3c3c' : '#2d2d2d'),
-                  borderRadius: 4,
-                  paddingLeft: 6,
-                  paddingRight: 6,
-                  paddingTop: 3,
-                  paddingBottom: 3,
-                })}
-              >
-                <Text style={{ color: widthCanShowMinimap ? '#d4d4d4' : '#666666', fontSize: 8, fontFamily: 'monospace' }}>{'MAP'}</Text>
-              </Pressable>
-            )}
+              </Box>
+            </Box>
+            <Box style={{ width: 1, alignSelf: 'stretch', backgroundColor: '#3c3c3c' }} />
+            <Text style={{ color: '#8a8a8a', fontSize: 9, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{branch}</Text>
           </Box>
         )}
-        <Text
-          style={{
-            color: '#8a8a8a',
-            fontSize: compact ? 8 : 9,
-            fontFamily: 'monospace',
-            paddingRight: 10,
-            paddingBottom: compact ? 5 : 8,
-          }}
-        >
-          {branch}
-        </Text>
+        {compact && (
+          <Text
+            style={{
+              color: '#8a8a8a',
+              fontSize: 8,
+              fontFamily: 'monospace',
+              paddingRight: 10,
+              paddingTop: 8,
+            }}
+          >
+            {branch}
+          </Text>
+        )}
       </Box>
 
       <Box style={{ flexGrow: 1, minHeight: 0, flexDirection: 'row' }}>
@@ -641,10 +920,11 @@ export function MonacoMirror({
         {renderSidebar && (
           <Box
             style={{
+              position: 'relative',
               width: resolvedSidebarWidth,
               minWidth: 132,
               flexShrink: 1,
-              backgroundColor: '#252526',
+              backgroundColor: viewTarget === 'explorer' ? '#20262d' : '#252526',
               borderRightWidth: 1,
               borderColor: '#3c3c3c',
               paddingLeft: 4,
@@ -653,47 +933,107 @@ export function MonacoMirror({
               paddingBottom: 4,
             }}
           >
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0, paddingBottom: 3 }}>
-              <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'EX'}</Text>
-              <Text
+            {viewTarget === 'explorer' && (
+              <Box
                 style={{
-                  color: '#9a9a9a',
-                  fontSize: 8,
-                  fontFamily: 'monospace',
-                  flexGrow: 1,
-                  whiteSpace: 'nowrap',
-                  textOverflow: 'ellipsis',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  backgroundColor: '#3794ff',
+                }}
+              />
+            )}
+            <Box style={{ gap: 4, paddingBottom: 4 }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                <Text style={{ color: '#8a8a8a', fontSize: 8, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'EX'}</Text>
+                <Text
+                  style={{
+                    color: '#9a9a9a',
+                    fontSize: 8,
+                    fontFamily: 'monospace',
+                    flexGrow: 1,
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {workspaceLabel}
+                </Text>
+                {viewTarget === 'explorer' && (
+                  <Box
+                    style={{
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: '#3794ff',
+                      backgroundColor: '#3794ff22',
+                      paddingLeft: 4,
+                      paddingRight: 4,
+                      paddingTop: 1,
+                      paddingBottom: 1,
+                    }}
+                  >
+                    <Text style={{ color: '#dff1ff', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                      {'TARGET'}
+                    </Text>
+                  </Box>
+                )}
+                <Box style={{ flexDirection: 'row', gap: 2 }}>
+                  <Pressable
+                    onPress={handleExpandAll}
+                    style={({ hovered }) => ({
+                      backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
+                      borderRadius: 3,
+                      paddingLeft: 3,
+                      paddingRight: 3,
+                      paddingTop: 1,
+                      paddingBottom: 1,
+                    })}
+                  >
+                    <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'O'}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleCollapseAll}
+                    style={({ hovered }) => ({
+                      backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
+                      borderRadius: 3,
+                      paddingLeft: 3,
+                      paddingRight: 3,
+                      paddingTop: 1,
+                      paddingBottom: 1,
+                    })}
+                  >
+                    <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'C'}</Text>
+                  </Pressable>
+                </Box>
+              </Box>
+              <Box
+                style={{
+                  borderRadius: 5,
+                  borderWidth: 1,
+                  borderColor: '#3c3c3c',
+                  backgroundColor: '#1f2328',
+                  paddingLeft: 6,
+                  paddingRight: 6,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  gap: 2,
                 }}
               >
-                {workspaceLabel}
-              </Text>
-              <Box style={{ flexDirection: 'row', gap: 2 }}>
-                <Pressable
-                  onPress={handleExpandAll}
-                  style={({ hovered }) => ({
-                    backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
-                    borderRadius: 3,
-                    paddingLeft: 3,
-                    paddingRight: 3,
-                    paddingTop: 1,
-                    paddingBottom: 1,
-                  })}
+                <Text style={{ color: '#8a8a8a', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                  {'ACTIVE FILE'}
+                </Text>
+                <Text
+                  style={{
+                    color: '#ffffff',
+                    fontSize: 8,
+                    fontFamily: 'monospace',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                  }}
                 >
-                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'O'}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleCollapseAll}
-                  style={({ hovered }) => ({
-                    backgroundColor: hovered ? '#3c3c3c' : '#2d2d2d',
-                    borderRadius: 3,
-                    paddingLeft: 3,
-                    paddingRight: 3,
-                    paddingTop: 1,
-                    paddingBottom: 1,
-                  })}
-                >
-                  <Text style={{ color: '#c5c5c5', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'C'}</Text>
-                </Pressable>
+                  {activeFilePath}
+                </Text>
               </Box>
             </Box>
             <Box style={{ height: 1, backgroundColor: '#3c3c3c', marginBottom: 2 }} />
@@ -736,12 +1076,33 @@ export function MonacoMirror({
           )}
 
           <Box style={{ flexGrow: 1, minHeight: 0, flexDirection: 'row' }}>
-            <Box style={{ flexGrow: 1, minWidth: 0 }} onLayout={handleEditorViewportLayout}>
+            <Box
+              style={{
+                flexGrow: 1,
+                minWidth: 0,
+                position: 'relative',
+                backgroundColor: '#1e1e1e',
+              }}
+              onLayout={handleEditorViewportLayout}
+            >
+              {viewTarget === 'editor' && !compact && (
+                <Box
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: 2,
+                    backgroundColor: '#3794ff',
+                    zIndex: 1,
+                  }}
+                />
+              )}
               <Input
                 {...rest}
                 value={value}
                 defaultValue={defaultValue}
-                onFocus={onFocus}
+                onFocus={handleEditorFocus}
                 onBlur={handleBlur}
                 onSubmit={handleSubmit}
                 onChangeText={handleChangeText}
@@ -782,10 +1143,11 @@ export function MonacoMirror({
             {renderMinimap && (
               <Box
                 style={{
+                  position: 'relative',
                   width: resolvedMinimapWidth,
                   minWidth: 58,
                   flexShrink: 1,
-                  backgroundColor: '#252526',
+                  backgroundColor: viewTarget === 'minimap' ? '#20262d' : '#252526',
                   borderLeftWidth: 1,
                   borderColor: '#3c3c3c',
                   paddingLeft: 2,
@@ -793,13 +1155,32 @@ export function MonacoMirror({
                   paddingTop: 2,
                   paddingBottom: 2,
                   gap: 2,
-                  position: 'relative',
                   overflow: 'hidden',
                 }}
               >
+                {viewTarget === 'minimap' && (
+                  <Box
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      height: 2,
+                      backgroundColor: '#3794ff',
+                      zIndex: 1,
+                    }}
+                  />
+                )}
                 <Box style={{ flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 2 }}>
                   <Text style={{ color: '#8a8a8a', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{'MAP'}</Text>
-                  <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${lineCount}L`}</Text>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {viewTarget === 'minimap' && (
+                      <Text style={{ color: '#dff1ff', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                        {'TARGET'}
+                      </Text>
+                    )}
+                    <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${lineCount}L`}</Text>
+                  </Box>
                 </Box>
                 <Box style={{ position: 'relative', height: minimapTrackHeightPx, overflow: 'hidden' }}>
                   {minimapInkPercents.map((percent, index) => (
@@ -851,6 +1232,16 @@ export function MonacoMirror({
           <Text style={{ color: '#ffffff', fontSize: compact ? 8 : 9, fontFamily: 'monospace' }}>{languageLabel}</Text>
           {!compact && <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'Spaces: 2'}</Text>}
           {!compact && <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>{'UTF-8'}</Text>}
+          {!compact && (
+            <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>
+              {`Target:${VIEW_TARGET_LABELS[viewTarget].label}`}
+            </Text>
+          )}
+          {!compact && (
+            <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>
+              {isShoulderNavigationOwner ? 'LB/RB cycle' : 'click to arm'}
+            </Text>
+          )}
           {!compact && (
             <Text style={{ color: '#ffffff', fontSize: 9, fontFamily: 'monospace' }}>
               {`EX:${renderSidebar ? 'on' : 'off'} MAP:${renderMinimap ? 'on' : 'off'}`}
