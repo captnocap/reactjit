@@ -158,36 +158,17 @@ export function SyntaxStressStory() {
 
   return (
     <S.StoryRoot>
-      <Box style={{
-        flexShrink: 0,
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-      }}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>
+      <S.BorderBottom style={{ flexShrink: 0, backgroundColor: c.bgElevated, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12 }}>
+        <S.BoldText style={{ fontSize: 16 }}>
           {'Syntax Stress Test — 16 Languages'}
-        </Text>
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        </S.BoldText>
+        <S.StoryMuted>
           {'Every snippet has comments that previously caused infinite tokenizer loops.'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.BorderBottom>
       <ScrollView style={{ flexGrow: 1 }}>
         {ALL_LANGS.map((item, i) => (
-          <Box key={i} style={{
-            flexDirection: 'row',
-            paddingLeft: 20,
-            paddingRight: 20,
-            paddingTop: 14,
-            paddingBottom: 14,
-            gap: 20,
-            alignItems: 'flex-start',
-            borderBottomWidth: 1,
-            borderColor: c.border,
-          }}>
+          <S.BorderBottom key={i} style={{ flexDirection: 'row', paddingLeft: 20, paddingRight: 20, paddingTop: 14, paddingBottom: 14, gap: 20, alignItems: 'flex-start' }}>
             <Box style={{ width: 60, paddingTop: 4 }}>
               <Text style={{ color: c.primary, fontSize: 11, fontWeight: 'bold' }}>
                 {item.lang}
@@ -196,7 +177,7 @@ export function SyntaxStressStory() {
             <Box style={{ flexGrow: 1 }}>
               <CodeBlock language={item.lang} fontSize={9} code={item.code} />
             </Box>
-          </Box>
+          </S.BorderBottom>
         ))}
       </ScrollView>
     </S.StoryRoot>

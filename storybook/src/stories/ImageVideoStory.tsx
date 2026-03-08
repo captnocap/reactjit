@@ -43,7 +43,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── Static data (hoisted — never recreated) ──────────────
@@ -196,58 +196,36 @@ export function ImageVideoStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="image" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="image" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Image & Video'}
-        </Text>
+        </S.StoryTitle>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <S.StoryBtnSm style={{ flexDirection: 'row', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
           <Text style={{ color: SYN.component, fontSize: 10 }}>{'Image'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'src'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <S.StoryMuted>{'='}</S.StoryMuted>
           <Text style={{ color: SYN.value, fontSize: 10 }}>{'"..."'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'/>'}</Text>
-        </Box>
+        </S.StoryBtnSm>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Pics or it didn\'t happen'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -259,7 +237,7 @@ export function ImageVideoStory() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -270,79 +248,79 @@ export function ImageVideoStory() {
               <Box style={{ width: '100%', padding: 20, gap: 14 }}>
 
                 {/* Image objectFit comparison */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'IMAGE — OBJECTFIT'}</Text>
-                <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'IMAGE — OBJECTFIT'}</S.StoryTiny>
+                <S.RowG8 style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
                   {(['fill', 'contain', 'cover'] as const).map((fit) => {
                     const frame = { width: 120, height: 80, borderRadius: 6, overflow: 'hidden' as const, borderWidth: 1, borderColor: c.border, backgroundColor: P.frame };
                     return (
-                      <Box key={fit} style={{ alignItems: 'center', gap: 4 }}>
+                      <S.CenterG4 key={fit}>
                         <Box style={frame} tooltip={styleTooltip({ objectFit: fit })}>
                           <Image
                             src="lib/placeholders/landscape.png"
                             style={{ width: '100%', height: '100%', objectFit: fit }}
                           />
                         </Box>
-                        <Text style={{ color: c.muted, fontSize: 8 }}>{fit}</Text>
-                      </Box>
+                        <S.StoryTiny>{fit}</S.StoryTiny>
+                      </S.CenterG4>
                     );
                   })}
-                </Box>
+                </S.RowG8>
 
                 {/* Rounded avatar */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'IMAGE — SHAPES'}</Text>
-                <Box style={{ flexDirection: 'row', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'IMAGE — SHAPES'}</S.StoryTiny>
+                <S.RowCenterG12 style={{ justifyContent: 'center' }}>
+                  <S.CenterG4>
                     <Image
                       src="lib/placeholders/avatar.png"
                       style={{ width: 64, height: 64, borderRadius: 32, objectFit: 'cover', borderWidth: 2, borderColor: P.accent }}
                     />
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'avatar'}</Text>
-                  </Box>
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
-                    <Box style={{ width: 120, height: 64, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: c.border }}>
+                    <S.StoryTiny>{'avatar'}</S.StoryTiny>
+                  </S.CenterG4>
+                  <S.CenterG4>
+                    <S.Bordered style={{ width: 120, height: 64, borderRadius: 8, overflow: 'hidden' }}>
                       <Image
                         src="lib/placeholders/poster.png"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
-                    </Box>
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'card cover'}</Text>
-                  </Box>
-                </Box>
+                    </S.Bordered>
+                    <S.StoryTiny>{'card cover'}</S.StoryTiny>
+                  </S.CenterG4>
+                </S.RowCenterG12>
 
                 {/* Video player */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'VIDEO — PLAYER'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'VIDEO — PLAYER'}</S.StoryTiny>
                 <Box style={{ alignItems: 'center' }}>
                   <VideoPlayer src={DEMO_VIDEO_SRC} w={280} h={158} radius={6} />
                 </Box>
 
                 {/* Video objectFit — idle mockups */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'VIDEO — OBJECTFIT'}</Text>
-                <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'VIDEO — OBJECTFIT'}</S.StoryTiny>
+                <S.RowG8 style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
                   {/* fill: stretches to fill, distorts aspect ratio */}
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
+                  <S.CenterG4>
                     <Box style={{ width: 100, height: 56, borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: P.frame, justifyContent: 'center', alignItems: 'center' }}>
                       <Box style={{ width: 100, height: 56, backgroundColor: P.accent, opacity: 0.25, borderRadius: 3 }} />
                     </Box>
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'fill'}</Text>
+                    <S.StoryTiny>{'fill'}</S.StoryTiny>
                     <Text style={{ color: c.muted, fontSize: 7 }}>{'stretches to fit'}</Text>
-                  </Box>
+                  </S.CenterG4>
                   {/* contain: fits inside, letterboxed */}
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
+                  <S.CenterG4>
                     <Box style={{ width: 100, height: 56, borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: P.frame, justifyContent: 'center', alignItems: 'center' }}>
                       <Box style={{ width: 74, height: 42, backgroundColor: P.accent, opacity: 0.25, borderRadius: 3 }} />
                     </Box>
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'contain'}</Text>
+                    <S.StoryTiny>{'contain'}</S.StoryTiny>
                     <Text style={{ color: c.muted, fontSize: 7 }}>{'fits inside, letterbox'}</Text>
-                  </Box>
+                  </S.CenterG4>
                   {/* cover: fills container, crops overflow */}
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
+                  <S.CenterG4>
                     <Box style={{ width: 100, height: 56, borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: P.frame, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
                       <Box style={{ width: 100, height: 75, backgroundColor: P.accent, opacity: 0.25, borderRadius: 3 }} />
                     </Box>
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'cover'}</Text>
+                    <S.StoryTiny>{'cover'}</S.StoryTiny>
                     <Text style={{ color: c.muted, fontSize: 7 }}>{'fills, crops overflow'}</Text>
-                  </Box>
-                </Box>
+                  </S.CenterG4>
+                </S.RowG8>
 
               </Box>
             </ScrollView>
@@ -351,154 +329,142 @@ export function ImageVideoStory() {
 
             {/* ── Right: API Reference ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
                 {/* Overview */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'OVERVIEW'}</Text>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'OVERVIEW'}</S.StoryTiny>
+                <S.StoryBody>
                   {'Image displays files/URLs with sizing and objectFit control. Video plays any libmpv-supported format (MP4, MKV, WebM, etc.) with hardware-accelerated decoding. VideoPlayer wraps Video with Lua-native controls. All three are surface nodes — without explicit dimensions they fall back to 1/4 of parent.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
                 {/* Usage */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'USAGE'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'USAGE'}</S.StoryTiny>
                 <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
                 {/* Behavior */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'BEHAVIOR'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'BEHAVIOR'}</S.StoryTiny>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                    <S.RowG6 key={i} style={{ alignItems: 'flex-start', width: '100%' }}>
                       <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</S.StoryBody>
+                    </S.RowG6>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* Image props */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'IMAGE PROPS'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'IMAGE PROPS'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {IMAGE_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 {/* Image style props */}
                 <Box style={{ gap: 3 }}>
                   {IMAGE_STYLE_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.value} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.value} />
                       <Text style={{ color: SYN.value, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 {/* Image callbacks */}
                 <Box style={{ gap: 3 }}>
                   {IMAGE_CALLBACKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.tag} />
                       <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                      <S.StoryCap>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* Video props */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'VIDEO PROPS'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'VIDEO PROPS'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {VIDEO_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 {/* Video callbacks */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'CALLBACKS'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'CALLBACKS'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {VIDEO_CALLBACKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.tag} />
                       <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                      <S.StoryCap>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* VideoPlayer */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'VIDEOPLAYER'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'VIDEOPLAYER'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {PLAYER_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
-                <Text style={{ color: c.text, fontSize: 9 }}>
+                <S.StoryBreadcrumbActive>
                   {'Lua-native controls: play/pause, seek bar, volume, loop, fullscreen. Auto-hide after 3s.'}
-                </Text>
+                </S.StoryBreadcrumbActive>
 
                 <HorizontalDivider />
 
                 {/* Box video props */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'BOX VIDEO PROPS'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'BOX VIDEO PROPS'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {BOX_VIDEO_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
-                <Text style={{ color: c.text, fontSize: 9 }}>
+                <S.StoryBreadcrumbActive>
                   {'backgroundVideo loops muted. hoverVideo plays on hover, pauses on leave.'}
-                </Text>
+                </S.StoryBreadcrumbActive>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="image" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Image & Video'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="image" />
+        <S.StoryBreadcrumbActive>{'Image & Video'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -516,11 +482,7 @@ export function ImageVideoStory() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,
@@ -530,8 +492,8 @@ export function ImageVideoStory() {
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

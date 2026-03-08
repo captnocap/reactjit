@@ -19,7 +19,7 @@ function Chip({ label, color, size = 42 }: { label: string; color: string; size?
       justifyContent: 'center',
       alignItems: 'center',
     }}>
-      <Text style={{ color: '#fff', fontSize: 10 }}>{label}</Text>
+      <S.WhiteBody>{label}</S.WhiteBody>
     </Box>
   );
 }
@@ -35,7 +35,7 @@ function Bar({ label, width, color }: { label: string; width: number; color: str
       paddingLeft: 8,
       paddingRight: 8,
     }}>
-      <Text style={{ color: '#fff', fontSize: 10 }}>{label}</Text>
+      <S.WhiteBody>{label}</S.WhiteBody>
     </Box>
   );
 }
@@ -53,7 +53,7 @@ export function FlexRowStory() {
           </S.StoryMuted>
           {(['start', 'center', 'end', 'space-between', 'space-around'] as const).map(justify => (
             <Box key={justify} style={{ gap: 4 }}>
-              <Text style={{ color: c.textSecondary, fontSize: 10 }}>{`justify: ${justify}`}</Text>
+              <S.SecondaryBody>{`justify: ${justify}`}</S.SecondaryBody>
               <Box style={{
                 width: '100%',
                 flexDirection: 'row',
@@ -71,7 +71,7 @@ export function FlexRowStory() {
         </StorySection>
 
         <StorySection index={2} title="Column layout (`alignItems`)">
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 10 }}>
+          <S.StackG10W100 style={{ flexDirection: 'row' }}>
             {(['start', 'center', 'end'] as const).map((align, i) => (
               <Box
                 key={align}
@@ -91,36 +91,22 @@ export function FlexRowStory() {
                 <Bar label="Long Label" width={98} color={WRAP_COLORS[i * 3 + 2]} />
               </Box>
             ))}
-          </Box>
+          </S.StackG10W100>
         </StorySection>
 
         <StorySection index={3} title="Wrapping (`flexWrap`)">
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Fixed-size items + gap</Text>
-            <Box style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: 6,
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              padding: 8,
-            }}>
+            <S.SecondaryBody>Fixed-size items + gap</S.SecondaryBody>
+            <S.RowG6 style={{ flexWrap: 'wrap', backgroundColor: c.surface, borderRadius: 6, padding: 8 }}>
               {WRAP_COLORS.map((color, i) => (
                 <Chip key={i} label={`${i + 1}`} color={color} size={36} />
               ))}
-            </Box>
+            </S.RowG6>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Wrapping rows with `flexBasis` + `flexGrow`</Text>
-            <Box style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: 6,
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              padding: 8,
-            }}>
+            <S.SecondaryBody>Wrapping rows with `flexBasis` + `flexGrow`</S.SecondaryBody>
+            <S.RowG6 style={{ flexWrap: 'wrap', backgroundColor: c.surface, borderRadius: 6, padding: 8 }}>
               {['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'].map((name, i) => (
                 <Box
                   key={name}
@@ -134,158 +120,130 @@ export function FlexRowStory() {
                     alignItems: 'center',
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 10 }}>{name}</Text>
+                  <S.WhiteBody>{name}</S.WhiteBody>
                 </Box>
               ))}
-            </Box>
+            </S.RowG6>
           </Box>
         </StorySection>
 
         <StorySection index={4} title="Spacing (`padding` + `margin`)">
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Uniform `padding: 20`</Text>
-            <Box style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              padding: 20,
-            }}>
-              <Box style={{
-                backgroundColor: c.primary,
-                borderRadius: 5,
-                height: 30,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>Content</Text>
-              </Box>
-            </Box>
+            <S.SecondaryBody>Uniform `padding: 20`</S.SecondaryBody>
+            <S.SurfaceR6 style={{ padding: 20 }}>
+              <S.Center style={{ backgroundColor: c.primary, borderRadius: 5, height: 30 }}>
+                <S.WhiteBody>Content</S.WhiteBody>
+              </S.Center>
+            </S.SurfaceR6>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Per-side padding (`left: 40`, `top: 8`)</Text>
-            <Box style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              paddingLeft: 40,
-              paddingTop: 8,
-              paddingRight: 8,
-              paddingBottom: 8,
-            }}>
-              <Box style={{
-                backgroundColor: c.success,
-                borderRadius: 5,
-                height: 30,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>Offset left</Text>
-              </Box>
-            </Box>
+            <S.SecondaryBody>Per-side padding (`left: 40`, `top: 8`)</S.SecondaryBody>
+            <S.SurfaceR6 style={{ paddingLeft: 40, paddingTop: 8, paddingRight: 8, paddingBottom: 8 }}>
+              <S.Center style={{ backgroundColor: c.success, borderRadius: 5, height: 30 }}>
+                <S.WhiteBody>Offset left</S.WhiteBody>
+              </S.Center>
+            </S.SurfaceR6>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Sibling spacing with `marginLeft`</Text>
-            <Box style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              padding: 8,
-              flexDirection: 'row',
-            }}>
+            <S.SecondaryBody>Sibling spacing with `marginLeft`</S.SecondaryBody>
+            <S.SurfaceR6 style={{ padding: 8, flexDirection: 'row' }}>
               <Box style={{ width: 36, height: 36, backgroundColor: '#ef4444', borderRadius: 5 }} />
               <Box style={{ width: 36, height: 36, backgroundColor: '#f97316', borderRadius: 5, marginLeft: 20 }} />
               <Box style={{ width: 36, height: 36, backgroundColor: '#eab308', borderRadius: 5, marginLeft: 8 }} />
-            </Box>
+            </S.SurfaceR6>
           </Box>
         </StorySection>
 
         <StorySection index={5} title="Flex shrink (`flexShrink`)">
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Default shrink (items wider than container)</Text>
-            <Box style={{ width: 250, flexDirection: 'row', gap: 4, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
-              <Box style={{ width: 120, height: 36, backgroundColor: '#ef4444', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>120px</Text>
-              </Box>
-              <Box style={{ width: 120, height: 36, backgroundColor: '#f97316', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>120px</Text>
-              </Box>
-              <Box style={{ width: 120, height: 36, backgroundColor: '#eab308', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>120px</Text>
-              </Box>
-            </Box>
+            <S.SecondaryBody>Default shrink (items wider than container)</S.SecondaryBody>
+            <S.RowG4 style={{ width: 250, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
+              <S.Center style={{ width: 120, height: 36, backgroundColor: '#ef4444', borderRadius: 5 }}>
+                <S.WhiteBody>120px</S.WhiteBody>
+              </S.Center>
+              <S.Center style={{ width: 120, height: 36, backgroundColor: '#f97316', borderRadius: 5 }}>
+                <S.WhiteBody>120px</S.WhiteBody>
+              </S.Center>
+              <S.Center style={{ width: 120, height: 36, backgroundColor: '#eab308', borderRadius: 5 }}>
+                <S.WhiteBody>120px</S.WhiteBody>
+              </S.Center>
+            </S.RowG4>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>First item `flexShrink: 0` (won't shrink)</Text>
-            <Box style={{ width: 250, flexDirection: 'row', gap: 4, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
-              <Box style={{ width: 120, height: 36, flexShrink: 0, backgroundColor: '#3b82f6', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>No shrink</Text>
-              </Box>
-              <Box style={{ width: 120, height: 36, backgroundColor: '#6366f1', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>Shrinks</Text>
-              </Box>
-              <Box style={{ width: 120, height: 36, backgroundColor: '#8b5cf6', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>Shrinks</Text>
-              </Box>
-            </Box>
+            <S.SecondaryBody>First item `flexShrink: 0` (won't shrink)</S.SecondaryBody>
+            <S.RowG4 style={{ width: 250, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
+              <S.Center style={{ width: 120, height: 36, flexShrink: 0, backgroundColor: '#3b82f6', borderRadius: 5 }}>
+                <S.WhiteBody>No shrink</S.WhiteBody>
+              </S.Center>
+              <S.Center style={{ width: 120, height: 36, backgroundColor: '#6366f1', borderRadius: 5 }}>
+                <S.WhiteBody>Shrinks</S.WhiteBody>
+              </S.Center>
+              <S.Center style={{ width: 120, height: 36, backgroundColor: '#8b5cf6', borderRadius: 5 }}>
+                <S.WhiteBody>Shrinks</S.WhiteBody>
+              </S.Center>
+            </S.RowG4>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Shrink ratios: `1 / 2 / 3`</Text>
-            <Box style={{ width: 220, flexDirection: 'row', gap: 4, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
-              <Box style={{ width: 120, height: 36, flexShrink: 1, backgroundColor: '#22c55e', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>1x</Text>
-              </Box>
-              <Box style={{ width: 120, height: 36, flexShrink: 2, backgroundColor: '#14b8a6', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>2x</Text>
-              </Box>
-              <Box style={{ width: 120, height: 36, flexShrink: 3, backgroundColor: '#06b6d4', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>3x</Text>
-              </Box>
-            </Box>
+            <S.SecondaryBody>Shrink ratios: `1 / 2 / 3`</S.SecondaryBody>
+            <S.RowG4 style={{ width: 220, backgroundColor: c.surface, borderRadius: 6, padding: 6 }}>
+              <S.Center style={{ width: 120, height: 36, flexShrink: 1, backgroundColor: '#22c55e', borderRadius: 5 }}>
+                <S.WhiteBody>1x</S.WhiteBody>
+              </S.Center>
+              <S.Center style={{ width: 120, height: 36, flexShrink: 2, backgroundColor: '#14b8a6', borderRadius: 5 }}>
+                <S.WhiteBody>2x</S.WhiteBody>
+              </S.Center>
+              <S.Center style={{ width: 120, height: 36, flexShrink: 3, backgroundColor: '#06b6d4', borderRadius: 5 }}>
+                <S.WhiteBody>3x</S.WhiteBody>
+              </S.Center>
+            </S.RowG4>
           </Box>
         </StorySection>
 
         <StorySection index={6} title="Aspect ratio (`aspectRatio`)">
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Square from width: `width: 80, aspectRatio: 1`</Text>
-            <Box style={{ width: 80, aspectRatio: 1, backgroundColor: '#ef4444', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>80x80</Text>
-            </Box>
+            <S.SecondaryBody>Square from width: `width: 80, aspectRatio: 1`</S.SecondaryBody>
+            <S.Center style={{ width: 80, aspectRatio: 1, backgroundColor: '#ef4444', borderRadius: 5 }}>
+              <S.WhiteBody>80x80</S.WhiteBody>
+            </S.Center>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Video card from width: `240, aspectRatio: 16/9`</Text>
+            <S.SecondaryBody>Video card from width: `240, aspectRatio: 16/9`</S.SecondaryBody>
             <Box style={{ width: 240, aspectRatio: 16 / 9, backgroundColor: '#3b82f6', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>240x135</Text>
+              <S.WhiteBody>240x135</S.WhiteBody>
             </Box>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Width derived from height: `height: 50, aspectRatio: 2`</Text>
-            <Box style={{ height: 50, aspectRatio: 2, backgroundColor: '#22c55e', borderRadius: 5, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>100x50</Text>
-            </Box>
+            <S.SecondaryBody>Width derived from height: `height: 50, aspectRatio: 2`</S.SecondaryBody>
+            <S.Center style={{ height: 50, aspectRatio: 2, backgroundColor: '#22c55e', borderRadius: 5 }}>
+              <S.WhiteBody>100x50</S.WhiteBody>
+            </S.Center>
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Row ratios: `1:1`, `2:1`, `3:1` (fixed height)</Text>
-            <Box style={{ flexDirection: 'row', gap: 8 }}>
+            <S.SecondaryBody>Row ratios: `1:1`, `2:1`, `3:1` (fixed height)</S.SecondaryBody>
+            <S.RowG8>
               <Box style={{ height: 34, aspectRatio: 1, backgroundColor: '#a855f7', borderRadius: 5 }} />
               <Box style={{ height: 34, aspectRatio: 2, backgroundColor: '#d946ef', borderRadius: 5 }} />
               <Box style={{ height: 34, aspectRatio: 3, backgroundColor: '#ec4899', borderRadius: 5 }} />
-            </Box>
+            </S.RowG8>
           </Box>
         </StorySection>
 
         <StorySection index={8} title="Spring Layout Animation">
-          <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
+          <S.RowWrap style={{ width: '100%', justifyContent: 'center', gap: 12 }}>
             <Box style={{ width: 320, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 10, alignItems: 'center' }}>
-              <Text style={{ color: c.textSecondary, fontSize: 10 }}>Width spring</Text>
+              <S.SecondaryBody>Width spring</S.SecondaryBody>
               <Pressable
                 onPress={() => setExpanded(v => !v)}
                 style={{ backgroundColor: c.primary, padding: 10, borderRadius: 6, alignItems: 'center', width: 120 }}
               >
-                <Text style={{ color: '#fff', fontSize: 12 }}>{expanded ? 'Collapse' : 'Expand'}</Text>
+                <S.WhiteMedText>{expanded ? 'Collapse' : 'Expand'}</S.WhiteMedText>
               </Pressable>
               <Box style={{
                 width: expanded ? 260 : 80,
@@ -299,17 +257,17 @@ export function FlexRowStory() {
                   width: { duration: 600, easing: 'spring' },
                 },
               }}>
-                <Text style={{ color: '#fff', fontSize: 12 }}>{expanded ? '260px' : '80px'}</Text>
+                <S.WhiteMedText>{expanded ? '260px' : '80px'}</S.WhiteMedText>
               </Box>
             </Box>
 
             <Box style={{ width: 320, backgroundColor: c.surface, borderRadius: 8, padding: 12, gap: 10, alignItems: 'center' }}>
-              <Text style={{ color: c.textSecondary, fontSize: 10 }}>Position spring</Text>
+              <S.SecondaryBody>Position spring</S.SecondaryBody>
               <Pressable
                 onPress={() => setToggled(v => !v)}
                 style={{ backgroundColor: c.success, padding: 10, borderRadius: 6, alignItems: 'center', width: 120 }}
               >
-                <Text style={{ color: '#fff', fontSize: 12 }}>Toggle</Text>
+                <S.WhiteMedText>Toggle</S.WhiteMedText>
               </Pressable>
               <Box style={{
                 width: 60, height: 60,
@@ -326,14 +284,14 @@ export function FlexRowStory() {
                   transform: { duration: 600, easing: 'spring' },
                 },
               }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>{toggled ? '160' : '0'}</Text>
+                <S.WhiteBody>{toggled ? '160' : '0'}</S.WhiteBody>
               </Box>
               <Box style={{ padding: 8, backgroundColor: c.bgElevated, borderRadius: 4, gap: 2 }}>
                 <S.StoryMuted>{`translateX: ${toggled ? 160 : 0}px`}</S.StoryMuted>
                 <S.StoryMuted>{`scale: ${toggled ? '1.20' : '1.00'}`}</S.StoryMuted>
               </Box>
             </Box>
-          </Box>
+          </S.RowWrap>
         </StorySection>
     </StoryPage>
   );

@@ -499,7 +499,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── GalleryStory ─────────────────────────────────────────
@@ -531,27 +531,19 @@ export function GalleryStory() {
       <Box testId="gallery-content" style={{ flexGrow: 1, overflow: 'hidden' }}>
 
       {/* ── Header row 1: Gallery title ── */}
-      <Box testId="gallery-header1" style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, gap: 14,
-      }}>
-        <Image src="layout-grid" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Components'}</Text>
+      <S.RowCenterBorder testId="gallery-header1" style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, gap: 14 }}>
+        <S.StoryHeaderIcon src="layout-grid" tintColor={C.accent} />
+        <S.StoryTitle>{'Components'}</S.StoryTitle>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'Gallery'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Composed components, live and interactive'}</Text>
-      </Box>
+        <S.StoryMuted>{'Composed components, live and interactive'}</S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Header row 2: Component name + package badge ── */}
-      <Box testId="gallery-header2" style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 8, paddingBottom: 8, gap: 10,
-      }}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>{tab.label}</Text>
+      <S.RowCenterBorder testId="gallery-header2" style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 8, paddingBottom: 8, gap: 10 }}>
+        <S.BoldText style={{ fontSize: 16 }}>{tab.label}</S.BoldText>
         {pkgColor ? (
           <Box style={{ backgroundColor: `${pkgColor}22`, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
             <Text style={{ color: pkgColor, fontSize: 10 }}>{`@reactjit/${tab.pkg}`}</Text>
@@ -562,92 +554,76 @@ export function GalleryStory() {
           </Box>
         )}
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
-      </Box>
+        <S.StoryCap>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</S.StoryCap>
+      </S.RowCenterBorder>
 
       {/* ── Info row: description | usage | props ── */}
-      <Box testId="gallery-info-row" style={{
-        height: 120, flexShrink: 0, flexDirection: 'row',
-        borderBottomWidth: 1, borderColor: c.border, backgroundColor: c.bgElevated, overflow: 'hidden',
-      }}>
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'DESCRIPTION'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{tab.desc}</Text>
-        </Box>
+      <S.BorderBottom testId="gallery-info-row" style={{ height: 120, flexShrink: 0, flexDirection: 'row', backgroundColor: c.bgElevated, overflow: 'hidden' }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>{'DESCRIPTION'}</S.StoryLabelText>
+          <S.StoryMuted>{tab.desc}</S.StoryMuted>
+        </S.Half>
 
         <VerticalDivider />
 
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'USAGE'}</Text>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>{'USAGE'}</S.StoryLabelText>
           <CodeBlock language="tsx" fontSize={9} code={tab.usage} />
-        </Box>
+        </S.Half>
 
         <VerticalDivider />
 
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'PROPS'}</Text>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>{'PROPS'}</S.StoryLabelText>
           <Box style={{ gap: 3 }}>
             {tab.props.map(([name, type]) => (
-              <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-              </Box>
+              <S.RowCenterG5 key={name}>
+                <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                <S.StoryCap>{type}</S.StoryCap>
+              </S.RowCenterG5>
             ))}
           </Box>
           {tab.callbacks.length > 0 && (
             <>
               <HorizontalDivider />
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'CALLBACKS'}</Text>
+              <S.StoryLabelText>{'CALLBACKS'}</S.StoryLabelText>
               <Box style={{ gap: 3 }}>
                 {tab.callbacks.map(([name, sig]) => (
-                  <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                    <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                    <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                  </Box>
+                  <S.RowCenterG5 key={name}>
+                    <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                    <S.StoryCap>{sig}</S.StoryCap>
+                  </S.RowCenterG5>
                 ))}
               </Box>
             </>
           )}
-        </Box>
-      </Box>
+        </S.Half>
+      </S.BorderBottom>
 
       {/* ── Preview area ── */}
-      <Box testId="gallery-preview" style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
+      <S.BorderBottom testId="gallery-preview" style={{ flexGrow: 1 }}>
         {PREVIEWS[tab.id]?.(c)}
-      </Box>
+      </S.BorderBottom>
 
       {/* ── Divider bar: expand toggle + search ── */}
       <Pressable onPress={() => setTabsExpanded(!tabsExpanded)}>
-        <Box testId="gallery-divider-bar" style={{
-          flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-          backgroundColor: c.bgElevated, borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.border,
-          paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, gap: 10,
-        }}>
+        <S.RowCenterBorder testId="gallery-divider-bar" style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, borderBottomWidth: 1, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, gap: 10 }}>
           {/* Drag/expand handle */}
           <Box style={{ gap: 2 }}>
             <Box style={{ width: 16, height: 2, backgroundColor: c.muted, borderRadius: 1, opacity: 0.5 }} />
             <Box style={{ width: 16, height: 2, backgroundColor: c.muted, borderRadius: 1, opacity: 0.5 }} />
           </Box>
-          <Image
-            src={tabsExpanded ? 'chevron-down' : 'chevron-up'}
-            style={{ width: 12, height: 12 }}
-            tintColor={c.muted}
-          />
-          <Text style={{ color: c.muted, fontSize: 9 }}>
+          <S.DimIcon12 src={tabsExpanded ? 'chevron-down' : 'chevron-up'} />
+          <S.StoryCap>
             {`${filteredTabs.length} component${filteredTabs.length !== 1 ? 's' : ''}`}
-          </Text>
+          </S.StoryCap>
 
           <Box style={{ flexGrow: 1 }} />
 
           {/* Search input */}
           <Pressable onPress={(e: any) => { if (e && e.stopPropagation) e.stopPropagation(); }}>
-            <Box style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, borderColor: c.border,
-              paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-              width: 180,
-            }}>
-              <Image src="search" style={{ width: 10, height: 10 }} tintColor={c.muted} />
+            <S.RowCenterG6 style={{ backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, borderColor: c.border, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, width: 180 }}>
+              <S.StorySectionIcon src="search" tintColor={c.muted} />
               <Input
                 placeholder="Filter components..."
                 value={searchQuery}
@@ -659,12 +635,12 @@ export function GalleryStory() {
               />
               {searchQuery.length > 0 && (
                 <Pressable onPress={() => setSearchQuery('')}>
-                  <Image src="x" style={{ width: 8, height: 8 }} tintColor={c.muted} />
+                  <S.DimIcon8 src="x" />
                 </Pressable>
               )}
-            </Box>
+            </S.RowCenterG6>
           </Pressable>
-        </Box>
+        </S.RowCenterBorder>
       </Pressable>
 
       {/* ── Tab grid — thumbnail previews ── */}
@@ -672,10 +648,7 @@ export function GalleryStory() {
         height: tabGridHeight, flexShrink: 0,
         backgroundColor: c.bgElevated,
       }}>
-        <Box style={{
-          flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
-          paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8, gap: 6,
-        }}>
+        <S.RowG6 style={{ flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8 }}>
           {filteredTabs.map(comp => {
             const active = comp.id === activeId;
             const compPkgColor = PKG[comp.pkg];
@@ -707,30 +680,26 @@ export function GalleryStory() {
           })}
           {filteredTabs.length === 0 && (
             <Box style={{ padding: 20, alignItems: 'center' }}>
-              <Text style={{ color: c.muted, fontSize: 11 }}>{`No components match "${searchQuery}"`}</Text>
+              <S.DimBody11>{`No components match "${searchQuery}"`}</S.DimBody11>
             </Box>
           )}
-        </Box>
+        </S.RowG6>
       </ScrollView>
 
       </Box>{/* end gallery-content */}
 
       {/* ── Footer — breadcrumbs + counter ── */}
-      <Box testId="gallery-footer-toolbar" style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Components'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="layout-grid" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{tab.pkg}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Text style={{ color: c.text, fontSize: 9 }}>{tab.label}</Text>
+      <S.RowCenterBorder testId="gallery-footer-toolbar" style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Components'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.DimIcon12 src="layout-grid" />
+        <S.StoryCap>{tab.pkg}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.StoryBreadcrumbActive>{tab.label}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
-      </Box>
+        <S.StoryCap>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

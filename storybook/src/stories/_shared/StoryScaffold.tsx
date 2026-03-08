@@ -86,12 +86,12 @@ export function Divider() {
 export function SectionLabel({ icon, children, accentColor }: { icon: string; children: string; accentColor?: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={accentColor ?? c.muted} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -199,9 +199,9 @@ export function ExternalDependencyNotice({
       paddingBottom: compact ? 10 : 14,
       gap: 6,
     }}>
-      <Text style={{ color: '#f59e0b', fontSize: 10, fontWeight: 'bold' }}>
+      <S.StoryBtnText style={{ color: '#f59e0b' }}>
         {label}
-      </Text>
+      </S.StoryBtnText>
       <Text style={{ color: '#d6d3d1', fontSize: 9 }}>
         {detail}
       </Text>

@@ -480,33 +480,17 @@ function HtmlPlayground() {
       backgroundColor: c.bgElevated,
     }}>
       {/* Title bar */}
-      <Box style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingLeft: 14,
-        paddingRight: 14,
-        paddingTop: 9,
-        paddingBottom: 9,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bg,
-      }}>
+      <S.RowCenterG8 style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 9, paddingBottom: 9, borderBottomWidth: 1, borderColor: c.border, backgroundColor: c.bg }}>
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' }} />
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#eab308' }} />
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e' }} />
-        <Box style={{ width: 1, height: 14, backgroundColor: c.border, marginLeft: 4, marginRight: 4 }} />
+        <S.VertDivider style={{ height: 14, marginLeft: 4, marginRight: 4 }} />
         <Text style={{ color: C.compat, fontSize: 10, fontWeight: 'bold' }}>{'LIVE HTML + TAILWIND PLAYGROUND'}</Text>
         <Box style={{ flexGrow: 1 }} />
         <S.StoryTiny>{'renders inside Love2D — no browser'}</S.StoryTiny>
-      </Box>
+      </S.RowCenterG8>
       {/* Preset tabs */}
-      <Box style={{
-        flexDirection: 'row',
-        backgroundColor: c.bg,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-      }}>
+      <S.BorderBottom style={{ flexDirection: 'row', backgroundColor: c.bg }}>
         {PG_PRESETS.map((p, idx) => (
           <Pressable key={p.label} onPress={() => { setActivePreset(idx); setHtml(p.html); }}>
             <Box style={{
@@ -528,28 +512,17 @@ function HtmlPlayground() {
         ))}
         <Box style={{ flexGrow: 1 }} />
         <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontFamily: 'monospace' }}>{'HTML + Tailwind → ReactJIT'}</Text>
+          <S.StoryTiny style={{ fontFamily: 'monospace' }}>{'HTML + Tailwind → ReactJIT'}</S.StoryTiny>
         </Box>
-      </Box>
+      </S.BorderBottom>
       {/* Editor + Preview */}
       <Box style={{ flexDirection: 'row', minHeight: 300 }}>
         {/* Left: HTML editor */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, borderRightWidth: 1, borderColor: c.border }}>
-          <Box style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 6,
-            paddingBottom: 6,
-            borderBottomWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.bgElevated,
-            gap: 6,
-          }}>
+        <S.Half style={{ borderRightWidth: 1, borderColor: c.border }}>
+          <S.RowCenterG6 style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: c.border, backgroundColor: c.bgElevated }}>
             <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.compat + '88' }} />
             <S.StoryTiny>{'HTML INPUT'}</S.StoryTiny>
-          </Box>
+          </S.RowCenterG6>
           <Input
             multiline
             submitOnEnter={false}
@@ -564,26 +537,15 @@ function HtmlPlayground() {
               color: c.text,
             }}
           />
-        </Box>
+        </S.Half>
         {/* Right: live preview */}
-        <Box style={{ flexGrow: 1, flexBasis: 0 }}>
-          <Box style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 6,
-            paddingBottom: 6,
-            borderBottomWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.bgElevated,
-            gap: 6,
-          }}>
+        <S.Half>
+          <S.RowCenterG6 style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: c.border, backgroundColor: c.bgElevated }}>
             <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e88' }} />
             <S.StoryTiny>{'LIVE PREVIEW'}</S.StoryTiny>
             <Box style={{ flexGrow: 1 }} />
             <Text style={{ color: '#22c55e', fontSize: 8 }}>{'● rendering'}</Text>
-          </Box>
+          </S.RowCenterG6>
           <ScrollView style={{ flexGrow: 1 }}>
             <Box style={{ padding: 16, flexGrow: 1 }}>
               {nodes
@@ -592,7 +554,7 @@ function HtmlPlayground() {
               }
             </Box>
           </ScrollView>
-        </Box>
+        </S.Half>
       </Box>
     </Box>
   );
@@ -613,37 +575,17 @@ function TailwindLiveDemo() {
   }, [input]);
 
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 8,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'LIVE: tw() PARSER'}</Text>
-      <Box style={{
-        backgroundColor: c.bg,
-        borderRadius: 4,
-        padding: 8,
-        borderWidth: 1,
-        borderColor: c.border,
-      }}>
+      <S.Bordered style={{ backgroundColor: c.bg, borderRadius: 4, padding: 8 }}>
         <Text style={{ color: C.compat, fontSize: 9, fontFamily: 'monospace' }}>{`tw("${input}")`}</Text>
-      </Box>
-      <Box style={{ height: 1, backgroundColor: c.border }} />
+      </S.Bordered>
+      <S.HorzDivider />
       <S.StoryTiny>{'Resolved style object:'}</S.StoryTiny>
-      <Box style={{
-        backgroundColor: c.bg,
-        borderRadius: 4,
-        padding: 8,
-        borderWidth: 1,
-        borderColor: c.border,
-      }}>
+      <S.Bordered style={{ backgroundColor: c.bg, borderRadius: 4, padding: 8 }}>
         <Text style={{ color: c.text, fontSize: 8, fontFamily: 'monospace' }}>{resolved}</Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+      </S.Bordered>
+      <S.RowWrap style={{ gap: 4 }}>
         {['p-4 flex-row gap-2 bg-blue-500 rounded-lg',
           'mx-auto w-1/2 text-center font-bold text-xl',
           'border-2 border-red-500 bg-red-500/10 rounded-[16]',
@@ -664,51 +606,35 @@ function TailwindLiveDemo() {
             </Box>
           </Pressable>
         ))}
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.Bordered>
   );
 }
 
 function TwCategoriesDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 4,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 4 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'TAILWIND COVERAGE'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 2 }} />
+      <S.HorzDivider style={{ marginBottom: 2 }} />
       {TW_CATEGORIES.map((row) => (
-        <Box key={row.cat} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <S.RowCenterG8 key={row.cat}>
           <Box style={{ width: 60 }}>
             <Text style={{ color: C.accent, fontSize: 8, fontWeight: 'bold' }}>{row.cat}</Text>
           </Box>
-          <Text style={{ color: c.muted, fontSize: 8, fontFamily: 'monospace' }}>{row.examples}</Text>
-        </Box>
+          <S.StoryTiny style={{ fontFamily: 'monospace' }}>{row.examples}</S.StoryTiny>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.Bordered>
   );
 }
 
 function ColorPaletteDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 3,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 3 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'COLOR PALETTE — 22 FAMILIES × 11 SHADES'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 2 }} />
+      <S.HorzDivider style={{ marginBottom: 2 }} />
       {COLOR_FAMILIES.map(color => (
         <Box key={color} className="flex-row gap-1" style={{ width: '100%' }}>
           {COLOR_SHADES.map(shade => (
@@ -721,34 +647,26 @@ function ColorPaletteDemo() {
           ))}
         </Box>
       ))}
-    </Box>
+    </S.Bordered>
   );
 }
 
 function ElementMapDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 4,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 4 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'ELEMENT MAPPING'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 2 }} />
+      <S.HorzDivider style={{ marginBottom: 2 }} />
       {ELEMENT_MAP.map((row) => (
-        <Box key={row.from} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <S.RowCenterG8 key={row.from}>
           <Box style={{ width: 180 }}>
             <Text style={{ color: C.danger, fontSize: 8, fontFamily: 'monospace' }}>{row.from}</Text>
           </Box>
           <S.StoryTiny>{'→'}</S.StoryTiny>
           <Text style={{ color: C.pipeline, fontSize: 8, fontFamily: 'monospace', fontWeight: 'bold' }}>{row.to}</Text>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -757,17 +675,9 @@ function HtmlLiveDemo() {
   const [clicks, setClicks] = useState(0);
 
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 10,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 10 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'LIVE: HTML ELEMENTS IN REACTJIT'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border }} />
+      <S.HorzDivider />
 
       {/* Headings */}
       <div className="p-3 bg-gray-800 rounded-lg w-full gap-1">
@@ -865,25 +775,17 @@ function HtmlLiveDemo() {
           <span className="text-white text-sm font-bold">{'Submit'}</span>
         </button>
       </form>
-    </Box>
+    </S.Bordered>
   );
 }
 
 function CopyPasteDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 8,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'COPY-PASTE PROOF'}</Text>
       <S.StoryTiny>{'Real React+Tailwind JSX running in ReactJIT:'}</S.StoryTiny>
-      <Box style={{ height: 1, backgroundColor: c.border }} />
+      <S.HorzDivider />
       <div className="p-4 bg-gray-900 rounded-xl w-full">
         <div className="flex-row gap-4 items-center">
           <div className="w-12 h-12 bg-blue-500 rounded-full items-center justify-center">
@@ -927,39 +829,31 @@ function CopyPasteDemo() {
           <span className="text-gray-500 text-xs">{'↗ 3'}</span>
         </div>
       </div>
-    </Box>
+    </S.Bordered>
   );
 }
 
 function MergePrecedenceDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 8,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'MERGE PRECEDENCE'}</Text>
       <S.StoryTiny>{'Priority: className (tw) < shorthand props < style={}'}</S.StoryTiny>
-      <Box style={{ height: 1, backgroundColor: c.border }} />
+      <S.HorzDivider />
 
       {/* className < shorthand */}
       <Box style={{ gap: 4 }}>
         <S.StoryTiny>{'className="p-8" + padding={4} → padding wins (4):'}</S.StoryTiny>
-        <Box className="p-8 bg-red-500 rounded-lg" padding={4} style={{ width: '100%', alignItems: 'center' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'padding=4 overrides className="p-8"'}</Text>
-        </Box>
+        <S.CenterW100 className="p-8 bg-red-500 rounded-lg" padding={4}>
+          <S.WhiteBody>{'padding=4 overrides className="p-8"'}</S.WhiteBody>
+        </S.CenterW100>
       </Box>
 
       {/* className < style */}
       <Box style={{ gap: 4 }}>
         <S.StoryTiny>{'className="bg-red-500" + style={{ bg: blue }} → blue wins:'}</S.StoryTiny>
         <Box className="bg-red-500 rounded-lg p-4" style={{ backgroundColor: C.blue, width: '100%', alignItems: 'center' }}>
-          <Text style={{ color: '#fff', fontSize: 10 }}>{'style={{ bg: blue }} overrides bg-red-500'}</Text>
+          <S.WhiteBody>{'style={{ bg: blue }} overrides bg-red-500'}</S.WhiteBody>
         </Box>
       </Box>
 
@@ -969,56 +863,45 @@ function MergePrecedenceDemo() {
         <Row gap={8} style={{ width: '100%' }}>
           <Box className="flex-1">
             <Box className="bg-indigo-600 rounded-lg p-3 flex-row items-center justify-between" style={{ width: '100%' }}>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{'Hello'}</Text>
+              <S.WhiteMedText style={{ fontWeight: 'bold' }}>{'Hello'}</S.WhiteMedText>
               <Box className="bg-indigo-400 rounded" style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 9 }}>{'badge'}</Text>
+                <S.WhiteCaption>{'badge'}</S.WhiteCaption>
               </Box>
             </Box>
           </Box>
-          <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
-            <Box style={{
-              backgroundColor: '#4f46e5', borderRadius: 8, padding: 12,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%',
-            }}>
-              <Text style={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}>{'Hello'}</Text>
+          <S.Half style={{ flexShrink: 1 }}>
+            <S.RowCenter style={{ backgroundColor: '#4f46e5', borderRadius: 8, padding: 12, justifyContent: 'space-between', width: '100%' }}>
+              <S.WhiteMedText style={{ fontWeight: 'bold' }}>{'Hello'}</S.WhiteMedText>
               <Box style={{ backgroundColor: '#818cf8', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 9 }}>{'badge'}</Text>
+                <S.WhiteCaption>{'badge'}</S.WhiteCaption>
               </Box>
-            </Box>
-          </Box>
+            </S.RowCenter>
+          </S.Half>
         </Row>
       </Box>
-    </Box>
+    </S.Bordered>
   );
 }
 
 function VisualEffectsDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 8,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'VISUAL EFFECTS'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border }} />
+      <S.HorzDivider />
 
       {/* Shadows */}
       <S.StoryTiny>{'Shadows: shadow-sm through shadow-2xl'}</S.StoryTiny>
-      <Box style={{ flexDirection: 'row', gap: 6, width: '100%' }}>
+      <S.RowG6 style={{ width: '100%' }}>
         {(['sm', 'md', 'lg', 'xl', '2xl'] as const).map(s => (
           <Box key={s} style={{
             ...tw(`shadow-${s} bg-slate-700 rounded-lg p-2`),
             flexGrow: 1, alignItems: 'center',
           }}>
-            <Text style={{ color: '#fff', fontSize: 8 }}>{`${s}`}</Text>
+            <S.WhiteTiny>{`${s}`}</S.WhiteTiny>
           </Box>
         ))}
-      </Box>
+      </S.RowG6>
 
       {/* Transforms */}
       <S.StoryTiny>{'Transforms: rotate + scale'}</S.StoryTiny>
@@ -1039,17 +922,17 @@ function VisualEffectsDemo() {
 
       {/* Gradients */}
       <S.StoryTiny>{'Gradients: horizontal, vertical, diagonal'}</S.StoryTiny>
-      <Box style={{ gap: 4, width: '100%' }}>
+      <S.StackG4W100>
         <Box style={{ ...tw('bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-3'), width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 9 }}>{'bg-gradient-to-r from-blue-500 to-purple-500'}</Text>
+          <S.WhiteCaption>{'bg-gradient-to-r from-blue-500 to-purple-500'}</S.WhiteCaption>
         </Box>
         <Box style={{ ...tw('bg-gradient-to-b from-emerald-400 to-cyan-500 rounded-lg p-3'), width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 9 }}>{'bg-gradient-to-b from-emerald-400 to-cyan-500'}</Text>
+          <S.WhiteCaption>{'bg-gradient-to-b from-emerald-400 to-cyan-500'}</S.WhiteCaption>
         </Box>
         <Box style={{ ...tw('bg-gradient-to-br from-rose-500 to-amber-500 rounded-lg p-3'), width: '100%' }}>
-          <Text style={{ color: '#fff', fontSize: 9 }}>{'bg-gradient-to-br from-rose-500 to-amber-500'}</Text>
+          <S.WhiteCaption>{'bg-gradient-to-br from-rose-500 to-amber-500'}</S.WhiteCaption>
         </Box>
-      </Box>
+      </S.StackG4W100>
 
       {/* Opacity */}
       <S.StoryTiny>{'Opacity: 25%, 50%, 75%, 100%'}</S.StoryTiny>
@@ -1059,30 +942,22 @@ function VisualEffectsDemo() {
             ...tw(`opacity-${o} bg-blue-500 rounded-lg p-3`),
             flexGrow: 1, alignItems: 'center',
           }}>
-            <Text style={{ color: '#fff', fontSize: 9 }}>{`${o}%`}</Text>
+            <S.WhiteCaption>{`${o}%`}</S.WhiteCaption>
           </Box>
         ))}
       </Box>
-    </Box>
+    </S.Bordered>
   );
 }
 
 function FrameworkCoverageDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 4,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 4 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'MIGRATION COVERAGE'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 2 }} />
+      <S.HorzDivider style={{ marginBottom: 2 }} />
       {FRAMEWORK_COVERAGE.map((fw) => (
-        <Box key={fw.framework} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <S.RowCenterG8 key={fw.framework}>
           <Box style={{ width: 90 }}>
             <Text style={{ color: c.text, fontSize: 8 }}>{fw.framework}</Text>
           </Box>
@@ -1101,33 +976,25 @@ function FrameworkCoverageDemo() {
               {fw.status === 'full' ? 'full' : 'server-side'}
             </Text>
           </Box>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.Bordered>
   );
 }
 
 function LintRulesDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 6,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 6 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'LINT RULES (GATE ALL BUILDS)'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 2 }} />
+      <S.HorzDivider style={{ marginBottom: 2 }} />
       {LINT_RULES.map((rule) => (
         <Box key={rule.rule} style={{ gap: 2 }}>
           <Text style={{ color: C.danger, fontSize: 8, fontFamily: 'monospace', fontWeight: 'bold' }}>{rule.rule}</Text>
           <S.StoryTiny>{rule.desc}</S.StoryTiny>
         </Box>
       ))}
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -1142,19 +1009,11 @@ function PipelineFlowDemo() {
     { label: 'Ship', desc: 'rjit build <target>', color: C.migrate },
   ];
   return (
-    <Box style={{
-      width: '100%',
-      backgroundColor: c.bgElevated,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 12,
-      gap: 6,
-    }}>
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 6 }}>
       <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{'BUILD PIPELINE'}</Text>
-      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 4 }} />
+      <S.HorzDivider style={{ marginBottom: 4 }} />
       {stages.map((stage, i) => (
-        <Box key={stage.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <S.RowCenterG8 key={stage.label}>
           <Box style={{
             width: 18,
             height: 18,
@@ -1166,12 +1025,12 @@ function PipelineFlowDemo() {
             <Text style={{ color: stage.color, fontSize: 9, fontWeight: 'bold' }}>{String(i + 1)}</Text>
           </Box>
           <Box style={{ width: 50 }}>
-            <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>{stage.label}</Text>
+            <S.StoryBreadcrumbActive style={{ fontWeight: 'bold' }}>{stage.label}</S.StoryBreadcrumbActive>
           </Box>
           <S.StoryTiny>{stage.desc}</S.StoryTiny>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -1189,7 +1048,7 @@ function ResponsiveDemo() {
   ];
 
   return (
-    <Box style={{ width: '100%', gap: 10 }}>
+    <S.StackG10W100>
       {/* Current viewport readout */}
       <Box style={{
         width: '100%',
@@ -1212,7 +1071,7 @@ function ResponsiveDemo() {
       </Box>
 
       {/* Breakpoint indicator bar */}
-      <Box style={{ width: '100%', flexDirection: 'row', gap: 4 }}>
+      <S.RowG4 style={{ width: '100%' }}>
         {bpData.map(b => (
           <Box key={b.label} style={{
             flexGrow: 1,
@@ -1231,16 +1090,10 @@ function ResponsiveDemo() {
             </Text>
           </Box>
         ))}
-      </Box>
+      </S.RowG4>
 
       {/* Live row/column switch demo */}
-      <Box style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 8,
-        padding: 10,
-        gap: 6,
-      }}>
+      <S.StackG6W100 style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 10 }}>
         <S.StoryLabelText>
           {'LIVE LAYOUT SWITCH'}
         </S.StoryLabelText>
@@ -1250,25 +1103,16 @@ function ResponsiveDemo() {
           width: '100%',
         }}>
           {['Panel A', 'Panel B', 'Panel C'].map(label => (
-            <Box key={label} style={{
-              flexGrow: 1,
-              flexBasis: 0,
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: c.border,
-              padding: 10,
-              alignItems: 'center',
-            }}>
+            <S.SurfaceBordered key={label} style={{ flexGrow: 1, flexBasis: 0, borderRadius: 6, padding: 10, alignItems: 'center' }}>
               <S.StoryBody>{label}</S.StoryBody>
               <S.StoryTiny>
                 {compact ? 'stacked' : 'side-by-side'}
               </S.StoryTiny>
-            </Box>
+            </S.SurfaceBordered>
           ))}
         </Box>
-      </Box>
-    </Box>
+      </S.StackG6W100>
+    </S.StackG10W100>
   );
 }
 
@@ -1281,23 +1125,11 @@ export function CompatibilityStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="refresh-cw" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="refresh-cw" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Compatibility'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -1309,22 +1141,22 @@ export function CompatibilityStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'cli + compat'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Hedonism in your source code'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'From any framework to ReactJIT. Zero rewrites required.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Paste React+Tailwind verbatim and it renders. HTML elements remap to primitives. Tailwind classes become style objects. Converter CLI batch-transforms codebases. Dedicated migrators handle Flutter, SwiftUI, Tkinter, PyQt6, and Blessed. The build pipeline handles linting, bundling, cross-compilation, and runtime syncing.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         {/* ── HTML Playground ── */}
@@ -1341,12 +1173,12 @@ export function CompatibilityStory() {
           </Half>
           <Half>
             <SectionLabel icon="code" accentColor={C.compat}>{'TAILWIND PARSER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Zero-install Tailwind parser built into @reactjit/core. Pass class strings to tw() and get native style objects. Covers spacing, sizing, colors (with alpha), flex, borders, fonts, shadows, transforms, gradients, and arbitrary values via bracket syntax.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'No PostCSS. No build step. No node_modules. Pure TypeScript function that maps class names to style objects at call time.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={TW_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -1357,9 +1189,9 @@ export function CompatibilityStory() {
         <Band>
           <Half>
             <SectionLabel icon="layers" accentColor={C.compat}>{'CLASS COVERAGE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The tw() parser handles the full Tailwind utility surface: spacing scale (0-96), fractional widths, the complete color palette with shade variants (22 families × 11 shades), flexbox, borders with radius, font sizes (xs-9xl), weights, shadows, transforms, gradients, opacity, and arbitrary values in square brackets.'}
-            </Text>
+            </S.StoryBody>
             <TwCategoriesDemo />
           </Half>
           <Half>
@@ -1376,12 +1208,12 @@ export function CompatibilityStory() {
           </Half>
           <Half>
             <SectionLabel icon="sparkles" accentColor={C.compat}>{'SHADOWS · TRANSFORMS · GRADIENTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Tailwind shadow classes map to the Love2D shadow system. Rotation and scale transform the element at paint time. Gradients resolve to backgroundGradient with direction and color stops. All via className or tw() — identical to native style objects.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'shadow-sm/md/lg/xl/2xl, rotate-N, scale-N, bg-gradient-to-r/b/br with from-/to- color stops.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -1389,10 +1221,10 @@ export function CompatibilityStory() {
 
         {/* ── Callout: why compat exists ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'ReactJIT has no DOM. No CSS. No browser. Components are geometry descriptions for a GPU painter. But developers have muscle memory — they reach for className, <div>, and Tailwind utilities. Instead of fighting that, we parse it. tw() converts classes to style objects. HTML elements remap to primitives. You paste your React code and it works.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -1401,9 +1233,9 @@ export function CompatibilityStory() {
         <Band>
           <Half>
             <SectionLabel icon="box" accentColor={C.compat}>{'HTML ELEMENT REMAPPING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Every standard HTML element is remapped to a ReactJIT primitive at the reconciler level. div becomes Box. span becomes Text. button becomes Pressable. Combined with tw(), you can paste a React+Tailwind component from any codebase and it renders immediately.'}
-            </Text>
+            </S.StoryBody>
             <ElementMapDemo />
             <CodeBlock language="tsx" fontSize={9} code={HTML_CODE} style={{ width: '100%' }} />
           </Half>
@@ -1421,9 +1253,9 @@ export function CompatibilityStory() {
           </Half>
           <Half>
             <SectionLabel icon="check-circle" accentColor={C.compat}>{'COPY-PASTE PROOF + MERGE RULES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Real React+Tailwind components, pasted verbatim. Profile cards, social posts — they just work. When you mix className with shorthand props with style={}, the priority is clear: className < shorthand < style. style always wins.'}
-            </Text>
+            </S.StoryBody>
             <MergePrecedenceDemo />
           </Half>
         </Band>
@@ -1434,16 +1266,16 @@ export function CompatibilityStory() {
         <Band>
           <Half>
             <SectionLabel icon="terminal" accentColor={C.convert}>{'CONVERTER CLI'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'For batch conversion of existing React codebases, rjit convert transforms HTML/JSX to native ReactJIT primitives. It resolves Tailwind classes, remaps DOM events, normalizes inline styles, and extracts text content. Pipe mode works with clipboard for quick one-offs.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="bash" fontSize={9} code={CONVERT_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
             <SectionLabel icon="git-merge" accentColor={C.migrate}>{'PROJECT MIGRATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Full-project migration scans every file, classifies it (UI, logic, server, assets), and routes each through the right converter. Express routes become useServer() hooks. Business logic transpiles to Lua. A MIGRATION.md report flags anything that needs manual attention.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="bash" fontSize={9} code={MIGRATE_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -1457,9 +1289,9 @@ export function CompatibilityStory() {
           </Half>
           <Half>
             <SectionLabel icon="globe" accentColor={C.migrate}>{'CROSS-FRAMEWORK MIGRATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Dedicated migrators for six frameworks. Each understands the source framework\'s widget tree, layout model, state management, and event system. The output is idiomatic ReactJIT — not a mechanical translation, but real components with proper flex layout, hooks, and event handlers.'}
-            </Text>
+            </S.StoryBody>
           </Half>
         </Band>
 
@@ -1471,41 +1303,41 @@ export function CompatibilityStory() {
           paddingBottom: 16,
           gap: 12,
         }}>
-          <Box style={{ flexDirection: 'row', gap: 12 }}>
-            <Box style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', overflow: 'hidden' }}>
+          <S.RowG12>
+            <S.HalfCenter style={{ overflow: 'hidden' }}>
               <CodeBlock language="bash" fontSize={8} code={FLUTTER_CODE} style={{ width: '100%' }} />
-            </Box>
-            <Box style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', overflow: 'hidden' }}>
+            </S.HalfCenter>
+            <S.HalfCenter style={{ overflow: 'hidden' }}>
               <CodeBlock language="bash" fontSize={8} code={SWIFTUI_CODE} style={{ width: '100%' }} />
-            </Box>
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 12 }}>
-            <Box style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', overflow: 'hidden' }}>
+            </S.HalfCenter>
+          </S.RowG12>
+          <S.RowG12>
+            <S.HalfCenter style={{ overflow: 'hidden' }}>
               <CodeBlock language="bash" fontSize={8} code={TKINTER_CODE} style={{ width: '100%' }} />
-            </Box>
-            <Box style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', overflow: 'hidden' }}>
+            </S.HalfCenter>
+            <S.HalfCenter style={{ overflow: 'hidden' }}>
               <CodeBlock language="bash" fontSize={8} code={PYQT_CODE} style={{ width: '100%' }} />
-            </Box>
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 12 }}>
-            <Box style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', overflow: 'hidden' }}>
+            </S.HalfCenter>
+          </S.RowG12>
+          <S.RowG12>
+            <S.HalfCenter style={{ overflow: 'hidden' }}>
               <CodeBlock language="bash" fontSize={8} code={BLESSED_CODE} style={{ width: '100%' }} />
-            </Box>
-            <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            </S.HalfCenter>
+            <S.HalfCenter style={{ gap: 8 }}>
               {/* rjit-ignore-next-line */}
-              <Text style={{ color: c.muted, fontSize: 9, fontStyle: 'italic' }}>
+              <S.StoryCap style={{ fontStyle: 'italic' }}>
                 {'All migrators use a shared IR (intermediate representation) and the same component assembly pipeline. Custom framework? Implement parse + generate against migration-core.mjs.'}
-              </Text>
-            </Box>
-          </Box>
+              </S.StoryCap>
+            </S.HalfCenter>
+          </S.RowG12>
         </Box>
 
         {/* ── Callout: migration philosophy ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Migration is a spectrum, not a switch. Start by pasting existing code — tw() and HTML compat handle it. Run rjit convert for batch cleanup. Use dedicated migrators for non-React codebases. Over time, adopt native primitives and hooks as you learn the system. The compat layer doesn\'t go away.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -1514,9 +1346,9 @@ export function CompatibilityStory() {
         <Band>
           <Half>
             <SectionLabel icon="cpu" accentColor={C.pipeline}>{'BUILD PIPELINE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The CLI encodes all esbuild flags, enforces lint gates before every build, handles runtime file placement, and produces correct distribution packages for five platforms. Never run raw esbuild. Never copy Lua files manually. The pipeline does it.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="bash" fontSize={9} code={PIPELINE_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -1534,12 +1366,12 @@ export function CompatibilityStory() {
           </Half>
           <Half>
             <SectionLabel icon="database" accentColor={C.pipeline}>{'SOURCE-OF-TRUTH ARCHITECTURE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Framework files flow one way: source → staging → consumer. Edit lua/ and packages/ at the monorepo root. make cli-setup copies to cli/runtime/. reactjit update copies from cli/runtime/ into your project. The storybook bypasses this entirely — it reads from source via symlinks.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Never edit cli/runtime/ or project/lua/ directly. Those are disposable copies. The storybook\'s lua/ directory is a symlink — never replace it with a real directory.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -1549,9 +1381,9 @@ export function CompatibilityStory() {
         <Band>
           <Half>
             <SectionLabel icon="smartphone" accentColor={C.compat}>{'RESPONSIVE BREAKPOINTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useBreakpoint() returns sm/md/lg/xl based on viewport width. useWindowDimensions() gives raw pixels. All Layout2 scaffolds (Band, Half, HeroBand, CalloutBand) and the storybook sidebar respond automatically — row layouts stack to columns on sm, padding tightens, and the sidebar collapses to a hamburger overlay.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="typescript" fontSize={9} code={RESPONSIVE_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -1566,26 +1398,15 @@ export function CompatibilityStory() {
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 8,
-        paddingBottom: 8,
-      }}>
-        <Text style={{ color: c.muted, fontSize: 9 }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 8, paddingBottom: 8 }}>
+        <S.StoryCap>
           {'reactjit / compat'}
-        </Text>
+        </S.StoryCap>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>
+        <S.StoryCap>
           {'tw() · HTML compat · rjit convert · rjit migrate · rjit build · responsive'}
-        </Text>
-      </Box>
+        </S.StoryCap>
+      </S.RowCenterBorder>
     </S.StoryRoot>
   );
 }

@@ -195,12 +195,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -225,12 +225,12 @@ function LocalStoreDemo() {
   const [text, setText] = useLocalStore('demo:note', '');
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       <S.StoryCap>{'Persists to SQLite — reload the app and values stay'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: C.green }}>{'Counter (useLocalStore)'}</Text>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8>
           <Pressable onPress={() => setCount(n => n - 1)}>
             <Box style={{ backgroundColor: C.red, borderRadius: 6, padding: 6, paddingLeft: 12, paddingRight: 12 }}>
               <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'-1'}</Text>
@@ -247,7 +247,7 @@ function LocalStoreDemo() {
               <S.StoryBody>{'Reset'}</S.StoryBody>
             </Box>
           </Pressable>
-        </Box>
+        </S.RowCenterG8>
       </Box>
 
       <Box style={{ gap: 4 }}>
@@ -259,7 +259,7 @@ function LocalStoreDemo() {
           style={{ fontSize: 10, color: c.text, backgroundColor: c.surface1, borderRadius: 6, padding: 8 }}
         />
       </Box>
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -273,12 +273,12 @@ function HotStateDemo() {
   const tabs = ['Home', 'Settings', 'Profile'];
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       <S.StoryCap>{'Survives HMR — edit code and tab stays selected'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: C.yellow }}>{'Active tab (useHotState)'}</Text>
-        <Box style={{ flexDirection: 'row', gap: 6 }}>
+        <S.RowG6>
           {tabs.map((t, i) => (
             <Pressable key={t} onPress={() => setTab(i)}>
               <Box style={{
@@ -289,21 +289,21 @@ function HotStateDemo() {
               </Box>
             </Pressable>
           ))}
-        </Box>
+        </S.RowG6>
       </Box>
 
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 9, color: C.yellow }}>{'Sidebar toggle (useHotState)'}</Text>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8>
           <Pressable onPress={() => setOpen(!open)}>
             <Box style={{ backgroundColor: open ? C.green : C.red, borderRadius: 6, padding: 6, paddingLeft: 12, paddingRight: 12 }}>
               <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{open ? 'Open' : 'Closed'}</Text>
             </Box>
           </Pressable>
           <S.StoryCap>{'Lost on full restart — use useLocalStore for that'}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       </Box>
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -315,7 +315,7 @@ function SearchDemo() {
   const results = useSearch(SEARCH_ITEMS, query, SEARCH_DEMO_OPTIONS);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -324,17 +324,17 @@ function SearchDemo() {
       />
       <Box style={{ gap: 3 }}>
         {results.map(item => (
-          <Box key={item.name} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8 key={item.name}>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.blue }} />
             <S.StoryBody>{item.name}</S.StoryBody>
             <S.StoryCap>{item.role}</S.StoryCap>
-          </Box>
+          </S.RowCenterG8>
         ))}
         {results.length === 0 && query.length > 0 && (
           <Text style={{ fontSize: 9, color: C.red }}>{'No matches'}</Text>
         )}
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -345,12 +345,12 @@ function TierOverview() {
   return (
     <Box style={{ gap: 4 }}>
       {TIERS.map(t => (
-        <Box key={t.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={t.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.color }} />
           <S.StoryBreadcrumbActive>{t.label}</S.StoryBreadcrumbActive>
           <Text style={{ fontSize: 8, color: t.color }}>{t.persist}</Text>
           <S.StoryTiny>{`survives ${t.survives}`}</S.StoryTiny>
-        </Box>
+        </S.RowCenterG8>
       ))}
     </Box>
   );
@@ -363,11 +363,11 @@ function AdapterList() {
   return (
     <Box style={{ gap: 4 }}>
       {ADAPTERS.map(a => (
-        <Box key={a.name} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={a.name}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color }} />
           <S.StoryBreadcrumbActive>{a.name}</S.StoryBreadcrumbActive>
           <S.StoryTiny>{a.target}</S.StoryTiny>
-        </Box>
+        </S.RowCenterG8>
       ))}
     </Box>
   );
@@ -382,23 +382,11 @@ export function StorageStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="database" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="database" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Storage'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -410,10 +398,10 @@ export function StorageStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core + @reactjit/storage'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Forget me knots'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -428,12 +416,12 @@ export function StorageStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Four tiers of persistence. Pick the right one.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'useHotState for HMR-surviving UI state. useLocalStore for restart-surviving app data. DocStore for MongoDB-like queries. SQLite FFI for raw SQL. Plus @reactjit/storage for Zod schemas, CRUD hooks, and 5 pluggable adapters.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -442,9 +430,9 @@ export function StorageStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Core hooks (useLocalStore, useHotState, useSearch) live in @reactjit/core. Schema validation, CRUD hooks, and adapters are in @reactjit/storage.'}
-            </Text>
+            </S.StoryBody>
             <TierOverview />
           </Box>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
@@ -459,12 +447,12 @@ export function StorageStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="save">{'useLocalStore'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Drop-in replacement for useState that persists to SQLite. Values are JSON-encoded with 300ms debounced writes. Optional namespace for grouping related keys.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Backed by lua/localstore.lua — a key-value table in localstore.db. The hook loads the initial value on mount via RPC, then debounces writes. Survives full app restart.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={LOCALSTORE_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -475,12 +463,12 @@ export function StorageStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="zap">{'useHotState'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Lives in Lua memory — survives HMR because the Lua process persists across JS reloads. Zero flash on mount: reads synchronously from __hotstateCache. No async delay.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Use for ephemeral UI state: active tab, sidebar open/closed, scroll position. Lost on full restart — upgrade to useLocalStore when you need true persistence.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={HOTSTATE_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
@@ -503,10 +491,10 @@ export function StorageStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'useHotState = fast, ephemeral, HMR-safe. useLocalStore = persistent, debounced, SQLite-backed. Both are drop-in useState replacements — same [value, setValue] API.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -515,16 +503,16 @@ export function StorageStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="hard-drive">{'DOCSTORE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'MongoDB-like document store built on SQLite. Save, find, update, remove — with query operators for filtering. All Lua-side, zero JS overhead.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Documents get auto-generated _id fields. Queries support gt, gte, lt, lte, ne, like, and contains operators. Results are plain Lua tables.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="lua" fontSize={9} code={DOCSTORE_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
-            <Text style={{ color: c.muted, fontSize: 9, marginBottom: 4 }}>{'Query operators:'}</Text>
+            <S.StoryCap style={{ marginBottom: 4 }}>{'Query operators:'}</S.StoryCap>
             <CodeBlock language="lua" fontSize={9} code={QUERY_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -536,12 +524,12 @@ export function StorageStory() {
           <CodeBlock language="lua" fontSize={9} code={SQLITE_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="terminal">{'SQLITE FFI'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Raw SQLite bindings via LuaJIT FFI. Full SQL — CREATE, INSERT, SELECT, joins, transactions. For when DocStore is too abstract and you need direct control.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'sqlite.open(path) for file-backed or sqlite.open() for in-memory. Parameterized queries prevent injection. db:changes() returns affected rows. db:busyTimeout(ms) handles lock contention.'}
-            </Text>
+            </S.StoryCap>
           </Box>
         </Box>
 
@@ -560,10 +548,10 @@ export function StorageStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'DocStore and SQLite run entirely in Lua via FFI — zero bridge round-trips for queries. useLocalStore and useHotState bridge to these via RPC for React integration.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -572,16 +560,16 @@ export function StorageStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="layers">{'CRUD + SCHEMAS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Define a Zod-inspired schema, get a typed CRUD handle with create, get, update, delete, list. Includes reactive hooks: useQuery and useListQuery for auto-refetching.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={CRUD_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="check-circle">{'SCHEMA VALIDATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The z builder supports string, number, boolean, object, array, optional, nullable, and default. parse() throws, safeParse() returns a result object.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={SCHEMA_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -592,13 +580,13 @@ export function StorageStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="settings">{'ADAPTERS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useCRUD reads its adapter from StorageProvider context. Swap backends without changing application code. Five built-in adapters cover every deployment target.'}
-            </Text>
+            </S.StoryBody>
             <AdapterList />
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            <S.StoryCap>
               {'All adapters implement the same interface: get, set, delete, list. Custom adapters just need those four methods.'}
-            </Text>
+            </S.StoryCap>
           </Box>
           <CodeBlock language="tsx" fontSize={9} code={ADAPTER_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
@@ -610,12 +598,12 @@ export function StorageStory() {
           <CodeBlock language="tsx" fontSize={9} code={MIGRATION_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="git-merge">{'MIGRATIONS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Schema versions are tracked via a _version field on each document. Migration functions transform old shapes to new. autoMigrate applies them on read — no separate migration step.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Each migration function receives the old document and returns the new shape. Versions are integers, applied in order. Missing fields get defaults from the schema.'}
-            </Text>
+            </S.StoryCap>
           </Box>
         </Box>
 
@@ -628,9 +616,9 @@ export function StorageStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="search">{'SEARCH'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useSearch filters in-memory arrays by substring match. useFuzzySearch adds scoring and ranking. Both auto-detect searchable fields (strings and numbers, skipping ids and URLs).'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={SEARCH_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -641,46 +629,34 @@ export function StorageStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row', paddingBottom: 24 }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="clock">{'SEARCH HISTORY & HIGHLIGHT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useSearchHistory persists recent queries to SQLite via useLocalStore. useSearchHighlight splits text into matched/unmatched parts for rendering highlighted results.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={SEARCH_HISTORY_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="command">{'COMMAND SEARCH'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useCommandSearch filters a list of command definitions by name, alias, and description — the backbone of command palette UIs. useSearchSchema introspects the searchable fields of any array.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Auto-detection skips id, key, uuid, type, kind, index, href, url, src, path, color, icon — focusing on human-readable string fields.'}
-            </Text>
+            </S.StoryCap>
           </Box>
         </Box>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="database" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Storage'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="database" />
+        <S.StoryBreadcrumbActive>{'Storage'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

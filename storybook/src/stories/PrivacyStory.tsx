@@ -79,12 +79,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -116,15 +116,11 @@ function PIIDemo() {
   ];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 6, flexBasis: 0 }}>
       <S.StoryCap>{'detectPII() \u2192 finds + classifies:'}</S.StoryCap>
 
       {detections.map(d => (
-        <Box key={d.type} style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-        }}>
+        <S.RowCenterG8 key={d.type}>
           <Box style={{
             backgroundColor: d.bg,
             borderRadius: 3,
@@ -138,20 +134,16 @@ function PIIDemo() {
             <Text style={{ fontSize: 8, color: d.color }}>{d.type}</Text>
           </Box>
           <Text style={{ fontSize: 10, color: d.color }}>{d.value}</Text>
-        </Box>
+        </S.RowCenterG8>
       ))}
 
-      <Text style={{ fontSize: 9, color: c.muted, paddingTop: 4 }}>{'redactPII() \u2192 masks in place:'}</Text>
-      <Box style={{
-        backgroundColor: c.surface,
-        borderRadius: 6,
-        padding: 8,
-      }}>
+      <S.StoryCap style={{ paddingTop: 4 }}>{'redactPII() \u2192 masks in place:'}</S.StoryCap>
+      <S.SurfaceR6 style={{ padding: 8 }}>
         <S.StoryMuted>
           {'*****@***.*** | ***-**** | ***-**-****'}
         </S.StoryMuted>
-      </Box>
-    </Box>
+      </S.SurfaceR6>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -161,9 +153,9 @@ function ShamirDemo() {
   const shareColors = [C.blue, C.green, C.peach, C.mauve, C.teal];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 6, flexBasis: 0 }}>
       {/* Secret in */}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <S.RowCenterG6>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 3,
@@ -175,16 +167,12 @@ function ShamirDemo() {
           <Text style={{ fontSize: 10, color: C.accent }}>{'deadbeef'}</Text>
         </Box>
         <S.StoryTiny>{'\u2192 split(5,3)'}</S.StoryTiny>
-      </Box>
+      </S.RowCenterG6>
 
       {/* 5 shares — vertical list, compact */}
       <Box style={{ gap: 3, paddingLeft: 8 }}>
         {[0, 1, 2, 3, 4].map(i => (
-          <Box key={i} style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-          }}>
+          <S.RowCenterG6 key={i}>
             <Box style={{
               width: 6,
               height: 6,
@@ -198,12 +186,12 @@ function ShamirDemo() {
             {used[i] && (
               <S.StoryTiny>{'\u2713'}</S.StoryTiny>
             )}
-          </Box>
+          </S.RowCenterG6>
         ))}
       </Box>
 
       {/* Recovered */}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <S.RowCenterG6>
         <S.StoryTiny>{'any 3 \u2192'}</S.StoryTiny>
         <Box style={{
           width: 6,
@@ -221,10 +209,10 @@ function ShamirDemo() {
         }}>
           <Text style={{ fontSize: 10, color: C.green }}>{'deadbeef'}</Text>
         </Box>
-      </Box>
+      </S.RowCenterG6>
 
       <S.StoryTiny>{'GF(256) / 0x11B / gen 3'}</S.StoryTiny>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -239,18 +227,18 @@ function NoiseDemo() {
   ];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 6, flexBasis: 0 }}>
       {/* Endpoints header */}
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 4, paddingRight: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowSpaceBetween style={{ paddingLeft: 4, paddingRight: 4 }}>
+        <S.RowCenterG6>
           <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.blue }} />
           <Text style={{ fontSize: 10, color: C.blue }}>{'Client'}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        </S.RowCenterG6>
+        <S.RowCenterG6>
           <Text style={{ fontSize: 10, color: C.teal }}>{'Server'}</Text>
           <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.teal }} />
-        </Box>
-      </Box>
+        </S.RowCenterG6>
+      </S.RowSpaceBetween>
 
       {/* Message arrows */}
       {steps.map((s, i) => (
@@ -272,14 +260,14 @@ function NoiseDemo() {
       ))}
 
       {/* Features */}
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', paddingTop: 4 }}>
+      <S.RowG6 style={{ flexWrap: 'wrap', paddingTop: 4 }}>
         {['forward secrecy', 'replay protection', 'HKDF session keys'].map(f => (
           <S.StoryChip key={f}>
-            <Text style={{ fontSize: 8, color: c.muted }}>{f}</Text>
+            <S.StoryTiny>{f}</S.StoryTiny>
           </S.StoryChip>
         ))}
-      </Box>
-    </Box>
+      </S.RowG6>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -294,33 +282,23 @@ function KeyringDemo() {
   ];
 
   return (
-    <Box style={{ gap: 6, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
-      <Box style={{
-        backgroundColor: c.surface,
-        borderRadius: 6,
-        padding: 10,
-        gap: 6,
-      }}>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Image src="lock" style={{ width: 10, height: 10 }} tintColor={C.accent} />
+    <S.GrowCenterAlign style={{ gap: 6, flexBasis: 0 }}>
+      <S.SurfaceR6 style={{ padding: 10, gap: 6 }}>
+        <S.RowCenterG6>
+          <S.StorySectionIcon src="lock" tintColor={C.accent} />
           <S.StoryBody>{'keys.kr'}</S.StoryBody>
           <S.StoryTiny>{'AEAD encrypted'}</S.StoryTiny>
-        </Box>
+        </S.RowCenterG6>
 
         {keys.map(k => (
-          <Box key={k.label} style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            paddingLeft: 16,
-          }}>
+          <S.RowCenterG8 key={k.label} style={{ paddingLeft: 16 }}>
             <Box style={{
               width: 6,
               height: 6,
               borderRadius: 3,
               backgroundColor: k.color,
             }} />
-            <Text style={{ fontSize: 10, color: c.text, width: 90 }}>{k.label}</Text>
+            <S.StoryBody style={{ width: 90 }}>{k.label}</S.StoryBody>
             <Box style={{
               backgroundColor: `${k.color}22`,
               borderRadius: 3,
@@ -332,13 +310,13 @@ function KeyringDemo() {
               <Text style={{ fontSize: 8, color: k.color }}>{k.type}</Text>
             </Box>
             <Text style={{ fontSize: 8, color: k.color }}>{k.status}</Text>
-          </Box>
+          </S.RowCenterG8>
         ))}
-      </Box>
+      </S.SurfaceR6>
       <S.StoryCap>
         {'generate \u2192 store \u2192 rotate \u2192 revoke \u2192 close/reopen'}
       </S.StoryCap>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -354,13 +332,8 @@ function SecureMemoryDemo() {
   ];
 
   return (
-    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
-      <Box style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingBottom: 4,
-      }}>
+    <S.GrowCenterAlign style={{ gap: 4, flexBasis: 0 }}>
+      <S.RowCenterG6 style={{ paddingBottom: 4 }}>
         <S.StoryCap>{'handle: opaque int'}</S.StoryCap>
         <Box style={{
           backgroundColor: C.accentDim,
@@ -373,24 +346,19 @@ function SecureMemoryDemo() {
           <Text style={{ fontSize: 10, color: C.accent }}>{'#7'}</Text>
         </Box>
         <S.StoryCap>{'(TS never sees raw bytes)'}</S.StoryCap>
-      </Box>
+      </S.RowCenterG6>
 
       {stages.map((s, i) => (
-        <Box key={s.label} style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          paddingLeft: 4,
-        }}>
+        <S.RowCenterG8 key={s.label} style={{ paddingLeft: 4 }}>
           <Text style={{ fontSize: 10, color: s.color }}>{s.icon}</Text>
           <Text style={{ fontSize: 10, color: s.color, width: 50 }}>{s.label}</Text>
           <S.StoryCap>{s.desc}</S.StoryCap>
           {i < stages.length - 1 && (
             <Text style={{ fontSize: 8, color: c.border }}>{''}</Text>
           )}
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -404,15 +372,15 @@ function StegDemo() {
   return (
     <S.StoryHalf>
       {/* Carrier text — looks innocent */}
-      <Text style={{ fontSize: 9, color: c.muted }}>{'carrier text (visible):'}</Text>
-      <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10 }}>
+      <S.StoryCap>{'carrier text (visible):'}</S.StoryCap>
+      <S.SurfaceR6 style={{ padding: 10 }}>
         <Text style={{ fontSize: 12, color: c.text }}>{carrier}</Text>
-      </Box>
+      </S.SurfaceR6>
 
       {/* Reveal: show which letters carry bits */}
-      <Text style={{ fontSize: 9, color: c.muted }}>{'what is actually there:'}</Text>
-      <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 10, gap: 6 }}>
-        <Box style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+      <S.StoryCap>{'what is actually there:'}</S.StoryCap>
+      <S.SurfaceR6 style={{ padding: 10, gap: 6 }}>
+        <S.RowWrap>
           {carrier.split('').map((ch, i) => (
             <Text key={i} style={{
               fontSize: 12,
@@ -420,18 +388,18 @@ function StegDemo() {
               backgroundColor: i < bitCount ? 'rgba(203,166,247,0.12)' : 'transparent',
             }}>{ch}</Text>
           ))}
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        </S.RowWrap>
+        <S.RowCenterG4>
           <Box style={{ width: 8, height: 3, backgroundColor: C.mauve, borderRadius: 1 }} />
           <Text style={{ fontSize: 8, color: C.mauve }}>
             {'zero-width U+200B/U+200C injected between highlighted chars'}
           </Text>
-        </Box>
-      </Box>
+        </S.RowCenterG4>
+      </S.SurfaceR6>
 
       {/* Extracted */}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontSize: 9, color: c.muted }}>{'extract \u2192'}</Text>
+      <S.RowCenterG8>
+        <S.StoryCap>{'extract \u2192'}</S.StoryCap>
         <Box style={{
           backgroundColor: 'rgba(203,166,247,0.15)',
           borderRadius: 4,
@@ -442,7 +410,7 @@ function StegDemo() {
         }}>
           <Text style={{ fontSize: 12, color: C.mauve }}>{secret}</Text>
         </Box>
-      </Box>
+      </S.RowCenterG8>
     </S.StoryHalf>
   );
 }
@@ -458,7 +426,7 @@ function AuditDemo() {
   ];
 
   return (
-    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 4, flexBasis: 0 }}>
       {entries.map((e, i) => (
         <Box key={i}>
           <Box style={{
@@ -472,7 +440,7 @@ function AuditDemo() {
             paddingRight: 10,
           }}>
             <Text style={{ fontSize: 9, color: e.color, width: 80 }}>{e.event}</Text>
-            <Text style={{ fontSize: 9, color: c.muted, flexGrow: 1 }}>{e.data}</Text>
+            <S.StoryCap style={{ flexGrow: 1 }}>{e.data}</S.StoryCap>
             <Text style={{ fontSize: 8, color: c.border }}>{`hmac: ${e.hash}`}</Text>
           </Box>
           {i < entries.length - 1 && (
@@ -482,11 +450,11 @@ function AuditDemo() {
           )}
         </Box>
       ))}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4 }}>
+      <S.RowCenterG6 style={{ paddingTop: 4 }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.green }} />
         <Text style={{ fontSize: 9, color: C.green }}>{'verifyAudit() \u2192 chain intact'}</Text>
-      </Box>
-    </Box>
+      </S.RowCenterG6>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -503,20 +471,16 @@ function AlgoSafetyDemo() {
   ];
 
   return (
-    <Box style={{ gap: 4, flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 4, flexBasis: 0 }}>
       {algos.map(a => (
-        <Box key={a.name} style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-        }}>
+        <S.RowCenterG8 key={a.name}>
           <Box style={{
             width: 6,
             height: 6,
             borderRadius: 3,
             backgroundColor: a.color,
           }} />
-          <Text style={{ fontSize: 10, color: c.text, width: 130 }}>{a.name}</Text>
+          <S.StoryBody style={{ width: 130 }}>{a.name}</S.StoryBody>
           <Box style={{
             backgroundColor: `${a.color}22`,
             borderRadius: 3,
@@ -527,12 +491,12 @@ function AlgoSafetyDemo() {
           }}>
             <Text style={{ fontSize: 8, color: a.color }}>{a.strength}</Text>
           </Box>
-        </Box>
+        </S.RowCenterG8>
       ))}
-      <Text style={{ fontSize: 8, color: c.muted, paddingTop: 4 }}>
+      <S.StoryTiny style={{ paddingTop: 4 }}>
         {'RECOMMENDED_DEFAULTS: xchacha20 / argon2id / blake3 / 32-byte keys'}
-      </Text>
-    </Box>
+      </S.StoryTiny>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -551,10 +515,10 @@ function EnvelopeDemo() {
         paddingBottom: 10,
         gap: 6,
       }}>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <S.RowCenterG6>
           <Image src="key" style={{ width: 9, height: 9 }} tintColor={C.peach} />
           <Text style={{ fontSize: 9, color: C.peach }}>{'KEK (your key)'}</Text>
-        </Box>
+        </S.RowCenterG6>
 
         <Box style={{
           backgroundColor: 'rgba(137,180,250,0.10)',
@@ -565,27 +529,20 @@ function EnvelopeDemo() {
           paddingBottom: 8,
           gap: 4,
         }}>
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <S.RowCenterG6>
             <Image src="key" style={{ width: 8, height: 8 }} tintColor={C.blue} />
             <Text style={{ fontSize: 9, color: C.blue }}>{'DEK (random per-op)'}</Text>
-          </Box>
+          </S.RowCenterG6>
 
-          <Box style={{
-            backgroundColor: c.surface,
-            borderRadius: 4,
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 6,
-            paddingBottom: 6,
-          }}>
-            <Text style={{ fontSize: 9, color: c.muted }}>{'your data \u2014 XChaCha20-Poly1305'}</Text>
-          </Box>
+          <S.PadV6 style={{ backgroundColor: c.surface, borderRadius: 4, paddingLeft: 10, paddingRight: 10 }}>
+            <S.StoryCap>{'your data \u2014 XChaCha20-Poly1305'}</S.StoryCap>
+          </S.PadV6>
         </Box>
       </Box>
 
-      <Text style={{ fontSize: 8, color: c.muted }}>
+      <S.StoryTiny>
         {'fresh DEK per encrypt \u2014 same plaintext never produces same ciphertext'}
-      </Text>
+      </S.StoryTiny>
     </S.StoryHalf>
   );
 }
@@ -599,23 +556,11 @@ export function PrivacyStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="shield" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="shield" tintColor={C.accent} />
+        <S.StoryTitle>
           {'usePrivacy'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -627,10 +572,10 @@ export function PrivacyStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/privacy'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Encryption, PII, keys, channels'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -645,12 +590,12 @@ export function PrivacyStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Privacy toolkit: PII detection, Shamir secret sharing, Noise-NK channels, encrypted keyrings, steganography.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Two tiers: Lua FFI for all crypto and string operations (PII regex, policy, audit — via libsodium, OpenSSL), and shell-out for battle-tested tools (GPG, exiftool). TypeScript is a one-liner hook.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -659,9 +604,9 @@ export function PrivacyStory() {
         <Box style={BAND_STYLE}>
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'usePrivacy() returns all operations namespaced by domain. Individual functions can also be imported directly.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
@@ -673,9 +618,9 @@ export function PrivacyStory() {
           <PIIDemo />
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="eye">{'PII DETECTION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Lua pattern scanner. Finds emails, phone numbers, SSNs, IPv4/v6, and credit cards with match boundaries for surgical redaction. All logic in LuaJIT — zero JS compute.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PII_CODE} />
           </Box>
         </Box>
@@ -686,9 +631,9 @@ export function PrivacyStory() {
         <Box style={BAND_STYLE}>
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="key">{'SHAMIR SECRET SHARING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Split a secret into N shares where any K can reconstruct it. Fewer than K shares reveal zero information. Bordered shares are the 3 used for recovery.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SHAMIR_CODE} />
           </Box>
           <ShamirDemo />
@@ -709,10 +654,10 @@ export function PrivacyStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All crypto runs in C via LuaJIT FFI. TypeScript never touches raw secret bytes \u2014 secure memory uses opaque integer handles.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -722,9 +667,9 @@ export function PrivacyStory() {
           <EnvelopeDemo />
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="lock">{'ENVELOPE ENCRYPTION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Two-layer encryption: a random DEK encrypts data, then the DEK itself is encrypted with your KEK. XChaCha20-Poly1305 AEAD throughout.'}
-            </Text>
+            </S.StoryBody>
           </Box>
         </Box>
 
@@ -734,9 +679,9 @@ export function PrivacyStory() {
         <Box style={BAND_STYLE}>
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="wifi">{'NOISE-NK CHANNELS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Noise-NK secure channel: ephemeral X25519 DH with HKDF-derived session keys. Bidirectional encrypted messaging with replay protection built in.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={NOISE_CODE} />
           </Box>
           <NoiseDemo />
@@ -757,10 +702,10 @@ export function PrivacyStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.warnBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.warnBorder} />
+          <S.StoryBody>
             {'Secure memory uses sodium_malloc with guard pages. Raw secret bytes never enter the JS heap or GC.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -770,9 +715,9 @@ export function PrivacyStory() {
           <KeyringDemo />
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="database">{'ENCRYPTED KEYRING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Password-protected keyring files. Generate, store, rotate, and revoke Ed25519/X25519 keys. Persists across close/reopen.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={KEYRING_CODE} />
           </Box>
         </Box>
@@ -783,9 +728,9 @@ export function PrivacyStory() {
         <Box style={BAND_STYLE}>
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="shield">{'SECURE MEMORY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Allocate secrets in sodium_malloc pages with guard-page overflow protection. Handle lifecycle is strictly enforced \u2014 read after free throws.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <SecureMemoryDemo />
         </Box>
@@ -797,9 +742,9 @@ export function PrivacyStory() {
           <StegDemo />
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="eye">{'STEGANOGRAPHY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Hide data in plain sight. Whitespace steganography encodes binary as zero-width Unicode between visible carrier text. Image steganography uses LSB encoding via Love2D ImageData.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={STEG_CODE} />
           </Box>
         </Box>
@@ -810,9 +755,9 @@ export function PrivacyStory() {
         <Box style={BAND_STYLE}>
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="terminal">{'AUDIT LOG'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Tamper-evident append-only log using HMAC-SHA256 hash chains. Each entry links to the previous. verifyAudit() walks the chain and detects any modification.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={AUDIT_CODE} />
           </Box>
           <AuditDemo />
@@ -825,36 +770,24 @@ export function PrivacyStory() {
           <AlgoSafetyDemo />
           <Box style={TEXT_SIDE}>
             <SectionLabel icon="settings">{'ALGORITHM SAFETY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Lua strength checker. Rates algorithms as strong/acceptable/weak/broken with deprecation flags. RECOMMENDED_DEFAULTS live in Lua — xchacha20 / argon2id / blake3 / 32-byte keys.'}
-            </Text>
+            </S.StoryBody>
           </Box>
         </Box>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="shield" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Privacy'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="shield" />
+        <S.StoryBreadcrumbActive>{'Privacy'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

@@ -8,7 +8,7 @@ export function GradientStory() {
   return (
     <StoryPage>
         <StorySection index={1} title="Gradients">
-          <Box style={{ width: '100%', flexDirection: 'row', gap: 8 }}>
+          <S.RowG8 style={{ width: '100%' }}>
             <Box style={{
               flexGrow: 1,
               height: 60,
@@ -49,58 +49,25 @@ export function GradientStory() {
             }}>
               <Text style={{ color: '#fff', fontSize: 11 }}>RGBA Colors</Text>
             </Box>
-          </Box>
+          </S.RowG8>
         </StorySection>
 
         <StorySection index={2} title="Box shadow">
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
-            <Box style={{
-              width: 150,
-              height: 56,
-              borderRadius: 8,
-              backgroundColor: c.surface,
-              shadowColor: c.primary,
-              shadowOffsetX: 0,
-              shadowOffsetY: 4,
-              shadowBlur: 12,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
+          <S.RowWrap style={{ gap: 12, justifyContent: 'center' }}>
+            <S.Center style={{ width: 150, height: 56, borderRadius: 8, backgroundColor: c.surface, shadowColor: c.primary, shadowOffsetX: 0, shadowOffsetY: 4, shadowBlur: 12 }}>
               <S.StoryBody>Blue glow</S.StoryBody>
-            </Box>
-            <Box style={{
-              width: 150,
-              height: 56,
-              borderRadius: 8,
-              backgroundColor: c.surface,
-              shadowColor: '#000000',
-              shadowOffsetX: 4,
-              shadowOffsetY: 4,
-              shadowBlur: 8,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
+            </S.Center>
+            <S.Center style={{ width: 150, height: 56, borderRadius: 8, backgroundColor: c.surface, shadowColor: '#000000', shadowOffsetX: 4, shadowOffsetY: 4, shadowBlur: 8 }}>
               <S.StoryBody>Drop shadow</S.StoryBody>
-            </Box>
-            <Box style={{
-              width: 150,
-              height: 56,
-              borderRadius: 8,
-              backgroundColor: c.surface,
-              shadowColor: c.error,
-              shadowOffsetX: 0,
-              shadowOffsetY: 0,
-              shadowBlur: 20,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
+            </S.Center>
+            <S.Center style={{ width: 150, height: 56, borderRadius: 8, backgroundColor: c.surface, shadowColor: c.error, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 20 }}>
               <S.StoryBody>Red halo</S.StoryBody>
-            </Box>
-          </Box>
+            </S.Center>
+          </S.RowWrap>
         </StorySection>
 
         <StorySection index={3} title="Border radius">
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
             {[0, 4, 8, 16, 24, 50].map(r => (
               <Box key={r} style={{
                 width: 58,
@@ -110,39 +77,23 @@ export function GradientStory() {
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>{`${r}`}</Text>
+                <S.WhiteBody>{`${r}`}</S.WhiteBody>
               </Box>
             ))}
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
-            <Box style={{
-              width: 68,
-              height: 68,
-              borderRadius: 34,
-              backgroundColor: c.accent,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>Circle</Text>
-            </Box>
-            <Box style={{
-              width: 100,
-              height: 44,
-              borderRadius: 14,
-              backgroundColor: c.surface,
-              borderWidth: 2,
-              borderColor: c.success,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
+          </S.RowG8>
+          <S.RowCenterG8 style={{ justifyContent: 'center' }}>
+            <S.Center style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: c.accent }}>
+              <S.WhiteBody>Circle</S.WhiteBody>
+            </S.Center>
+            <S.Center style={{ width: 100, height: 44, borderRadius: 14, backgroundColor: c.surface, borderWidth: 2, borderColor: c.success }}>
               <Text style={{ color: c.success, fontSize: 10 }}>Border + Radius</Text>
-            </Box>
-          </Box>
+            </S.Center>
+          </S.RowCenterG8>
         </StorySection>
 
         <StorySection index={4} title="Transforms">
-          <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, width: 62 }}>rotate</Text>
+          <S.RowCenter style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <S.SecondaryBody style={{ width: 62 }}>rotate</S.SecondaryBody>
             {[0, 15, 45, 90].map(deg => (
               <Box key={deg} style={{
                 width: 44,
@@ -153,12 +104,12 @@ export function GradientStory() {
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: '#fff', fontSize: 9 }}>{`${deg}`}</Text>
+                <S.WhiteCaption>{`${deg}`}</S.WhiteCaption>
               </Box>
             ))}
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, width: 62 }}>scale</Text>
+          </S.RowCenter>
+          <S.RowCenter style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <S.SecondaryBody style={{ width: 62 }}>scale</S.SecondaryBody>
             {[0.5, 0.75, 1.0, 1.25].map(s => (
               <Box key={s} style={{
                 width: 44,
@@ -169,12 +120,12 @@ export function GradientStory() {
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: '#fff', fontSize: 9 }}>{`${s}x`}</Text>
+                <S.WhiteCaption>{`${s}x`}</S.WhiteCaption>
               </Box>
             ))}
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10, width: 62 }}>translate</Text>
+          </S.RowCenter>
+          <S.RowCenter style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <S.SecondaryBody style={{ width: 62 }}>translate</S.SecondaryBody>
             <Box style={{
               width: 44,
               height: 44,
@@ -184,7 +135,7 @@ export function GradientStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: '#fff', fontSize: 8 }}>8,-5</Text>
+              <S.WhiteTiny>8,-5</S.WhiteTiny>
             </Box>
             <Box style={{
               width: 44,
@@ -195,7 +146,7 @@ export function GradientStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: '#fff', fontSize: 8 }}>0,10</Text>
+              <S.WhiteTiny>0,10</S.WhiteTiny>
             </Box>
             <Box style={{
               width: 44,
@@ -206,13 +157,13 @@ export function GradientStory() {
               justifyContent: 'center',
               alignItems: 'center',
             }}>
-              <Text style={{ color: '#fff', fontSize: 8 }}>all</Text>
+              <S.WhiteTiny>all</S.WhiteTiny>
             </Box>
-          </Box>
+          </S.RowCenter>
         </StorySection>
 
         <StorySection index={5} title="Opacity">
-          <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
             {[1.0, 0.75, 0.5, 0.25, 0.1].map(op => (
               <Box key={op} style={{
                 width: 46,
@@ -223,17 +174,17 @@ export function GradientStory() {
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: '#fff', fontSize: 9 }}>{`${op}`}</Text>
+                <S.WhiteCaption>{`${op}`}</S.WhiteCaption>
               </Box>
             ))}
-          </Box>
+          </S.RowG8>
           <Box style={{
             opacity: 0.8,
             backgroundColor: '#ef4444',
             borderRadius: 6,
             padding: 8,
           }}>
-            <Text style={{ color: '#fff', fontSize: 10 }}>Parent: 0.8</Text>
+            <S.WhiteBody>Parent: 0.8</S.WhiteBody>
             <Box style={{
               marginTop: 4,
               opacity: 0.5,
@@ -241,116 +192,66 @@ export function GradientStory() {
               borderRadius: 6,
               padding: 8,
             }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>Child: 0.5 (effective 0.4)</Text>
+              <S.WhiteBody>Child: 0.5 (effective 0.4)</S.WhiteBody>
             </Box>
           </Box>
         </StorySection>
 
         <StorySection index={6} title="Z-index">
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>Overlapping cards; blue (`z:3`) should be on top.</Text>
+          <S.SecondaryBody style={{ textAlign: 'center' }}>Overlapping cards; blue (`z:3`) should be on top.</S.SecondaryBody>
           <Box style={{ width: 180, height: 120, position: 'relative' }}>
-            <Box style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: 84,
-              height: 84,
-              borderRadius: 8,
-              backgroundColor: '#ef4444',
-              zIndex: 1,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>z:1</Text>
-            </Box>
-            <Box style={{
-              position: 'absolute',
-              top: 18,
-              left: 30,
-              width: 84,
-              height: 84,
-              borderRadius: 8,
-              backgroundColor: '#3b82f6',
-              zIndex: 3,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>z:3</Text>
-            </Box>
-            <Box style={{
-              position: 'absolute',
-              top: 36,
-              left: 60,
-              width: 84,
-              height: 84,
-              borderRadius: 8,
-              backgroundColor: '#22c55e',
-              zIndex: 2,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: '#fff', fontSize: 10 }}>z:2</Text>
-            </Box>
+            <S.Center style={{ position: 'absolute', top: 0, left: 0, width: 84, height: 84, borderRadius: 8, backgroundColor: '#ef4444', zIndex: 1 }}>
+              <S.WhiteBody>z:1</S.WhiteBody>
+            </S.Center>
+            <S.Center style={{ position: 'absolute', top: 18, left: 30, width: 84, height: 84, borderRadius: 8, backgroundColor: '#3b82f6', zIndex: 3 }}>
+              <S.WhiteBody>z:3</S.WhiteBody>
+            </S.Center>
+            <S.Center style={{ position: 'absolute', top: 36, left: 60, width: 84, height: 84, borderRadius: 8, backgroundColor: '#22c55e', zIndex: 2 }}>
+              <S.WhiteBody>z:2</S.WhiteBody>
+            </S.Center>
           </Box>
         </StorySection>
 
         <StorySection index={7} title="Per-side borders">
-          <Box style={{ gap: 4, alignItems: 'center' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Individual sides</Text>
-            <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
-              <Box style={{ width: 68, height: 68, backgroundColor: c.bg, borderTopWidth: 3, borderColor: c.error, justifyContent: 'center', alignItems: 'center' }}>
+          <S.CenterG4>
+            <S.SecondaryBody>Individual sides</S.SecondaryBody>
+            <S.RowG8 style={{ justifyContent: 'center' }}>
+              <S.Center style={{ width: 68, height: 68, backgroundColor: c.bg, borderTopWidth: 3, borderColor: c.error }}>
                 <Text style={{ color: c.textSecondary, fontSize: 9 }}>Top</Text>
-              </Box>
-              <Box style={{ width: 68, height: 68, backgroundColor: c.bg, borderRightWidth: 3, borderColor: c.primary, justifyContent: 'center', alignItems: 'center' }}>
+              </S.Center>
+              <S.Center style={{ width: 68, height: 68, backgroundColor: c.bg, borderRightWidth: 3, borderColor: c.primary }}>
                 <Text style={{ color: c.textSecondary, fontSize: 9 }}>Right</Text>
-              </Box>
-              <Box style={{ width: 68, height: 68, backgroundColor: c.bg, borderBottomWidth: 3, borderColor: c.success, justifyContent: 'center', alignItems: 'center' }}>
+              </S.Center>
+              <S.Center style={{ width: 68, height: 68, backgroundColor: c.bg, borderBottomWidth: 3, borderColor: c.success }}>
                 <Text style={{ color: c.textSecondary, fontSize: 9 }}>Bottom</Text>
-              </Box>
-              <Box style={{ width: 68, height: 68, backgroundColor: c.bg, borderLeftWidth: 3, borderColor: c.warning, justifyContent: 'center', alignItems: 'center' }}>
+              </S.Center>
+              <S.Center style={{ width: 68, height: 68, backgroundColor: c.bg, borderLeftWidth: 3, borderColor: c.warning }}>
                 <Text style={{ color: c.textSecondary, fontSize: 9 }}>Left</Text>
-              </Box>
-            </Box>
-          </Box>
+              </S.Center>
+            </S.RowG8>
+          </S.CenterG4>
 
-          <Box style={{ gap: 4, alignItems: 'center' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Combinations</Text>
-            <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
-              <Box style={{
-                width: 80, height: 58, backgroundColor: c.bg,
-                borderTopWidth: 2, borderBottomWidth: 2, borderColor: '#a855f7',
-                justifyContent: 'center', alignItems: 'center',
-              }}>
+          <S.CenterG4>
+            <S.SecondaryBody>Combinations</S.SecondaryBody>
+            <S.RowG8 style={{ justifyContent: 'center' }}>
+              <S.Center style={{ width: 80, height: 58, backgroundColor: c.bg, borderTopWidth: 2, borderBottomWidth: 2, borderColor: '#a855f7' }}>
                 <Text style={{ color: c.textSecondary, fontSize: 8 }}>Top+Bottom</Text>
-              </Box>
-              <Box style={{
-                width: 80, height: 58, backgroundColor: c.bg,
-                borderLeftWidth: 2, borderRightWidth: 2, borderColor: '#ec4899',
-                justifyContent: 'center', alignItems: 'center',
-              }}>
+              </S.Center>
+              <S.Center style={{ width: 80, height: 58, backgroundColor: c.bg, borderLeftWidth: 2, borderRightWidth: 2, borderColor: '#ec4899' }}>
                 <Text style={{ color: c.textSecondary, fontSize: 8 }}>Left+Right</Text>
-              </Box>
-              <Box style={{
-                width: 80, height: 58, backgroundColor: c.bg,
-                borderLeftWidth: 3, borderBottomWidth: 1, borderColor: c.info,
-                justifyContent: 'center', alignItems: 'center',
-              }}>
+              </S.Center>
+              <S.Center style={{ width: 80, height: 58, backgroundColor: c.bg, borderLeftWidth: 3, borderBottomWidth: 1, borderColor: c.info }}>
                 <Text style={{ color: c.textSecondary, fontSize: 8 }}>L thick+B thin</Text>
-              </Box>
-            </Box>
-          </Box>
+              </S.Center>
+            </S.RowG8>
+          </S.CenterG4>
 
-          <Box style={{ gap: 4, alignItems: 'center' }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Mixed widths (`1 / 2 / 4 / 6`)</Text>
-            <Box style={{
-              width: 150, height: 80, backgroundColor: c.bg,
-              borderTopWidth: 1, borderRightWidth: 2, borderBottomWidth: 4, borderLeftWidth: 6,
-              borderColor: c.text,
-              justifyContent: 'center', alignItems: 'center',
-            }}>
+          <S.CenterG4>
+            <S.SecondaryBody>Mixed widths (`1 / 2 / 4 / 6`)</S.SecondaryBody>
+            <S.Center style={{ width: 150, height: 80, backgroundColor: c.bg, borderTopWidth: 1, borderRightWidth: 2, borderBottomWidth: 4, borderLeftWidth: 6, borderColor: c.text }}>
               <Text style={{ color: c.textSecondary, fontSize: 9 }}>Top/Right/Bottom/Left</Text>
-            </Box>
-          </Box>
+            </S.Center>
+          </S.CenterG4>
         </StorySection>
     </StoryPage>
   );

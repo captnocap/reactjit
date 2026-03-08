@@ -180,19 +180,19 @@ function TimerDemo() {
   const [interval, setInterval_] = useState(1000);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>
         {`<Timer interval={${interval}} running={${running}} onTick={...} />`}
       </S.StoryCap>
 
       <Timer interval={interval} running={running} onTick={() => setCount(prev => prev + 1)} />
 
-      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
+      <S.RowCenterG12 style={{ justifyContent: 'center' }}>
         <Text style={{ fontSize: 24, color: c.text, fontWeight: 'normal' }}>{String(count)}</Text>
         <S.StoryMuted>{'ticks'}</S.StoryMuted>
-      </Box>
+      </S.RowCenterG12>
 
-      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+      <S.RowG8 style={{ justifyContent: 'center' }}>
         <Pressable onPress={() => setRunning(!running)}>
           <Box style={{ backgroundColor: running ? C.red : C.green, borderRadius: 6, padding: 6, paddingLeft: 12, paddingRight: 12 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{running ? 'Pause' : 'Resume'}</Text>
@@ -203,7 +203,7 @@ function TimerDemo() {
             <S.StoryBody>{'Reset'}</S.StoryBody>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG8>
 
       <Box style={{ gap: 4 }}>
         <S.StoryCap>{`Interval: ${interval}ms`}</S.StoryCap>
@@ -216,7 +216,7 @@ function TimerDemo() {
           activeTrackColor={C.accent}
         />
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -229,30 +229,30 @@ function DiscoveryDemo() {
   const entries = capabilities ? Object.entries(capabilities) : [];
 
   return (
-    <Box style={{ gap: 4, width: '100%' }}>
+    <S.StackG4W100>
       {loading && <S.StoryMuted>{'Loading schemas...'}</S.StoryMuted>}
 
       {entries.map(([name, cap]) => {
         const propCount = Object.keys(cap.schema).length;
         const evtCount = cap.events ? cap.events.length : 0;
         return (
-          <Box key={name} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <S.RowCenterG6 key={name}>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: cap.visual ? C.green : C.blue, flexShrink: 0 }} />
-            <Text style={{ fontSize: 9, color: c.text, flexShrink: 0 }}>{`<${name}>`}</Text>
+            <S.StoryBreadcrumbActive style={{ flexShrink: 0 }}>{`<${name}>`}</S.StoryBreadcrumbActive>
             <Text style={{ fontSize: 8, color: cap.visual ? C.green : C.blue, flexShrink: 0 }}>
               {cap.visual ? 'visual' : 'effect'}
             </Text>
-            <Text style={{ fontSize: 8, color: c.muted, flexShrink: 0 }}>
+            <S.StoryTiny style={{ flexShrink: 0 }}>
               {evtCount > 0 ? `${propCount}p ${evtCount}ev` : `${propCount}p`}
-            </Text>
-          </Box>
+            </S.StoryTiny>
+          </S.RowCenterG6>
         );
       })}
 
       {!loading && !capabilities && (
         <Text style={{ fontSize: 10, color: C.red }}>{'Not available (bridge not connected?)'}</Text>
       )}
-    </Box>
+    </S.StackG4W100>
   );
 }
 
@@ -282,12 +282,12 @@ function BasicBusDemo() {
   useEvent(bus, 'reset', () => setLog([]));
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+    <S.StackG8W100>
+      <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
         <BusSender bus={bus} channel="greet" label="Say Hello" payload="Hello!" color={C.blue} />
         <BusSender bus={bus} channel="greet" label="Say Bye" payload="Goodbye!" color={C.peach} />
         <BusSender bus={bus} channel="reset" label="Reset" payload={null} color={C.red} />
-      </Box>
+      </S.RowG8>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 3, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {log.length === 0 ? (
           <S.StoryCap>{'(click a button above)'}</S.StoryCap>
@@ -295,7 +295,7 @@ function BasicBusDemo() {
           <Text key={i} style={{ fontSize: 9, color: C.teal }}>{line}</Text>
         ))}
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -307,9 +307,9 @@ function StatefulBusDemo() {
   const lastItem = useEventState<{ name: string; price: number }>(bus, 'cart:add');
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{"useEventState(bus, 'cart:add') — re-renders with latest payload"}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+      <S.RowG8 style={{ justifyContent: 'center' }}>
         {CART_ITEMS.map(item => (
           <Pressable key={item.name} onPress={() => bus.emit('cart:add', item)}>
             <Box style={{ backgroundColor: C.green, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -317,13 +317,13 @@ function StatefulBusDemo() {
             </Box>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG8>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, alignItems: 'center', justifyContent: 'center' }}>
         <S.StoryBody>
           {lastItem ? `Last: ${lastItem.name} — $${lastItem.price.toFixed(2)}` : 'No items yet'}
         </S.StoryBody>
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -337,9 +337,9 @@ function WildcardDemo() {
   });
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{"useEvent(bus, '*', ...) — wildcard catches all channels"}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+      <S.RowG8 style={{ justifyContent: 'center' }}>
         <Pressable onPress={() => bus.emit('user:login', { name: 'Alice' })}>
           <Box style={{ backgroundColor: C.blue, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'Login'}</Text>
@@ -350,7 +350,7 @@ function WildcardDemo() {
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'Sync'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG8>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {log.length === 0 ? (
           <S.StoryCap>{'Waiting...'}</S.StoryCap>
@@ -358,7 +358,7 @@ function WildcardDemo() {
           <Text key={i} style={{ fontSize: 9, color: C.yellow }}>{line}</Text>
         ))}
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -372,9 +372,9 @@ function MultiChannelDemo() {
   });
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{"useEvent(bus, ['deposit', 'withdrawal'], ...)"}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+      <S.RowCenterG8 style={{ justifyContent: 'center' }}>
         <Pressable onPress={() => bus.emit('deposit', 10)}>
           <Box style={{ backgroundColor: C.green, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{'+$10'}</Text>
@@ -386,8 +386,8 @@ function MultiChannelDemo() {
           </Box>
         </Pressable>
         <Text style={{ fontSize: 14, color: total >= 0 ? C.green : C.red }}>{`$${total}`}</Text>
-      </Box>
-    </Box>
+      </S.RowCenterG8>
+    </S.StackG8W100>
   );
 }
 
@@ -400,14 +400,14 @@ function KeyToggleDemo() {
   useIFTTT('key:space', () => setPaused(!paused));
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{"useIFTTT('key:space', () => setPaused(!paused))"}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+      <S.RowCenterG8 style={{ justifyContent: 'center' }}>
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: paused ? C.red : C.green }} />
         <Text style={{ fontSize: 12, color: c.text }}>{paused ? 'Paused' : 'Running'}</Text>
-      </Box>
+      </S.RowCenterG8>
       <S.StoryCap>{'Press Space to toggle'}</S.StoryCap>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -423,9 +423,9 @@ function ToolSwitcherDemo() {
   useIFTTT('key:4', () => setTool('eyedropper'));
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{"4 rules, 4 one-liners"}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+      <S.RowG6 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
         {TOOLS.map(t => (
           <Box key={t.key} style={{
             backgroundColor: tool === t.name ? t.color : c.surface2,
@@ -436,8 +436,8 @@ function ToolSwitcherDemo() {
             </Text>
           </Box>
         ))}
-      </Box>
-    </Box>
+      </S.RowG6>
+    </S.StackG8W100>
   );
 }
 
@@ -452,9 +452,9 @@ function ThresholdDemo() {
   useIFTTT(() => count < 10, () => setAlert(''));
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{"useIFTTT(() => count >= 10, ...) — fires on false→true edge"}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+      <S.RowCenterG8 style={{ justifyContent: 'center' }}>
         <Text style={{ fontSize: 20, color: c.text }}>{String(count)}</Text>
         <Pressable onPress={() => setCount(n => n + 1)}>
           <Box style={{ backgroundColor: C.blue, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -466,13 +466,13 @@ function ThresholdDemo() {
             <S.StoryBody>{'Reset'}</S.StoryBody>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
       {alert ? (
         <Box style={{ backgroundColor: C.peach, borderRadius: 4, padding: 6, alignItems: 'center' }}>
           <Text style={{ fontSize: 11, color: '#1e1e2e' }}>{alert}</Text>
         </Box>
       ) : null}
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -486,10 +486,10 @@ function FireCountDemo() {
   useIFTTT('timer:every:2000', () => setTicks(t => t + 1));
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <Box style={{ gap: 4 }}>
         <S.StoryCap>{"const { fired, fire } = useIFTTT('key:f', 'log:F key pressed!')"}</S.StoryCap>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+        <S.RowCenterG8 style={{ justifyContent: 'center' }}>
           <Text style={{ fontSize: 12, color: c.text }}>{`Fired: ${fired}×`}</Text>
           <Pressable onPress={() => fire()}>
             <Box style={{ backgroundColor: C.mauve, borderRadius: 6, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
@@ -497,16 +497,16 @@ function FireCountDemo() {
             </Box>
           </Pressable>
           <S.StoryCap>{'(or press F)'}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       </Box>
       <Box style={{ gap: 4 }}>
         <S.StoryCap>{"useIFTTT('timer:every:2000', () => setTicks(t => t + 1))"}</S.StoryCap>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+        <S.RowCenterG8 style={{ justifyContent: 'center' }}>
           <Text style={{ fontSize: 16, color: C.teal }}>{String(ticks)}</Text>
           <S.StoryCap>{'ticks (every 2s)'}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -526,13 +526,13 @@ function IFTTTEventsCombo() {
   useEvent(bus, 'game:reset', () => setActions([]));
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{'Press J (jump), D (dash), R (reset)'}</S.StoryCap>
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 2, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
         {actions.length === 0 ? (
           <S.StoryCap>{'Waiting for input...'}</S.StoryCap>
         ) : (
-          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <S.RowG6 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
             {actions.map((a, i) => (
               <Box key={i} style={{
                 backgroundColor: a === 'JUMP!' ? C.green : C.blue,
@@ -541,10 +541,10 @@ function IFTTTEventsCombo() {
                 <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{a}</Text>
               </Box>
             ))}
-          </Box>
+          </S.RowG6>
         )}
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -553,30 +553,30 @@ function IFTTTEventsCombo() {
 function TriggerTable() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {TRIGGER_DSL.map(t => (
-        <Box key={t.trigger} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={t.trigger}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.color }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 140 }}>{t.trigger}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 140 }}>{t.trigger}</S.StoryBreadcrumbActive>
           <S.StoryCap>{t.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
 function ActionTable() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {ACTION_DSL.map(a => (
-        <Box key={a.action} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={a.action}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 160 }}>{a.action}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 160 }}>{a.action}</S.StoryBreadcrumbActive>
           <S.StoryCap>{a.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -589,23 +589,11 @@ export function CapabilitiesStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="zap" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="zap" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Capabilities'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -617,22 +605,22 @@ export function CapabilitiesStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Native features + events + trigger-action wiring'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Declare intent in React. Let Lua execute.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Three systems, one philosophy. Capabilities register native features as one-liner components. An event bus wires React-to-React pub/sub. IFTTT maps any trigger to any action in a single line. All three compose together.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -641,9 +629,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Everything lives in @reactjit/core. Capabilities, events, and IFTTT are all part of the core package — no extra dependencies.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Band>
@@ -657,12 +645,12 @@ export function CapabilitiesStory() {
           </Half>
           <Half>
             <SectionLabel icon="timer" accentColor={C.accent}>{'TIMER CAPABILITY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'A capability is a native feature registered in Lua and consumed as a React component. Timer is the simplest — React sets interval and running; Lua owns the clock and pushes onTick events back.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The pattern: React declares props → Lua capability module executes → events flow back as callbacks. No bridge-specific code needed.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={TIMER_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -673,19 +661,19 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="search" accentColor={C.accent}>{'AI DISCOVERY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'An AI calls useCapabilities() once to discover every registered capability. Each returns its prop schema, event list, and whether it renders visually.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The AI generates valid one-liner JSX from the schema alone — no docs needed. Schema is the contract: typed, bounded, defaulted props + named event callbacks.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={DISCOVERY_CODE} style={{ width: '100%' }} />
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            <S.StoryCap>
               {'Visual capabilities render into the layout tree. Effect capabilities (audio, timers, agents) are invisible — they skip paint and layout entirely.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
-            <Text style={{ color: c.muted, fontSize: 9, marginBottom: 4 }}>{'Live — all registered capabilities:'}</Text>
+            <S.StoryCap style={{ marginBottom: 4 }}>{'Live — all registered capabilities:'}</S.StoryCap>
             <DiscoveryDemo />
           </Half>
         </Band>
@@ -694,10 +682,10 @@ export function CapabilitiesStory() {
 
         {/* ── Callout: capabilities philosophy ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'React is a layout declaration engine. Capabilities are how Lua-side features (audio, timers, GPIO, 3D, agents) surface as one-liner components. Schema is the contract — the rest is Lua.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -706,9 +694,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="radio" accentColor={C.accent}>{'EVENT BUS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useEventBus creates an in-memory pub/sub channel. useEvent subscribes. useEmit creates a typed emitter. No prop drilling, no shared state.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={BUS_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -725,9 +713,9 @@ export function CapabilitiesStory() {
           </Half>
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'STATEFUL LISTENER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useEventState re-renders your component with the latest payload every time that channel fires. No manual state management — it tracks the most recent event for you.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={STATEFUL_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -738,9 +726,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="search" accentColor={C.accent}>{'WILDCARD & MULTI-CHANNEL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Listen to all channels with \'*\' for logging or debugging. Or pass an array of channel names to handle multiple events with one handler.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={WILDCARD_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -753,10 +741,10 @@ export function CapabilitiesStory() {
 
         {/* ── Callout: IFTTT intro ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'useIFTTT: If This Then That. Wire any trigger (key, timer, state, gamepad, MIDI) to any action (state change, notification, RPC, callback) in a single line. String DSL for simple cases, functions for complex logic.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -768,9 +756,9 @@ export function CapabilitiesStory() {
           </Half>
           <Half>
             <SectionLabel icon="zap" accentColor={C.accent}>{'IFTTT — KEY TOGGLE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The simplest IFTTT rule: one key, one state change. Space bar toggles a boolean. No event listeners, no cleanup — useIFTTT handles the full lifecycle.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={IFTTT_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -781,9 +769,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="sliders" accentColor={C.accent}>{'IFTTT — MULTI-RULE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Stack rules to build keybinding systems. Four rules, four one-liners — number keys switch the active tool. Each useIFTTT is independent and composable.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={TOOL_SWITCH_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -800,9 +788,9 @@ export function CapabilitiesStory() {
           </Half>
           <Half>
             <SectionLabel icon="gauge" accentColor={C.accent}>{'IFTTT — REACTIVE EDGE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Pass a function instead of a string. It fires on the false→true transition — edge detection, not polling. Tap +1 past 10 to see it fire. Reset drops below and re-arms.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={THRESHOLD_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -813,9 +801,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="hash" accentColor={C.accent}>{'IFTTT — COUNTERS & TIMERS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useIFTTT returns { fired, fire }. fired tracks how many times the rule has triggered. fire() lets you invoke the action manually. Timer triggers tick on Lua-managed intervals — no setInterval needed.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={FIRE_COUNT_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -832,9 +820,9 @@ export function CapabilitiesStory() {
           </Half>
           <Half>
             <SectionLabel icon="git-merge" accentColor={C.accent}>{'IFTTT + EVENTS — COMPOSED'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'All three systems compose. IFTTT wires keyboard triggers to bus events. The event bus distributes them. Components react. This is the full pipeline: input → intent → distribution → UI.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={COMBO_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -845,9 +833,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="list" accentColor={C.accent}>{'TRIGGER DSL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'String triggers are parsed into DSL tokens. Keys support modifiers (ctrl, shift, alt, meta). Timers are Lua-managed. State triggers match with type coercion. Function triggers edge-detect.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <TriggerTable />
@@ -863,9 +851,9 @@ export function CapabilitiesStory() {
           </Half>
           <Half>
             <SectionLabel icon="terminal" accentColor={C.accent}>{'ACTION DSL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'String actions execute without callbacks. Set state, toggle booleans, push notifications, copy to clipboard, fire bridge events, call RPCs. Or pass a function for full control.'}
-            </Text>
+            </S.StoryBody>
           </Half>
         </Band>
 
@@ -875,9 +863,9 @@ export function CapabilitiesStory() {
         <Band>
           <Half>
             <SectionLabel icon="code" accentColor={C.accent}>{'ONE-LINERS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The target user is someone who knows their domain but not bridges or RPCs. Everything is a one-liner. Audio, timers, notifications, custom capabilities — if it takes more than one line, wrap it until it doesn\'t.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={ONELINER_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Band>
@@ -885,27 +873,15 @@ export function CapabilitiesStory() {
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="zap" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Capabilities'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="zap" />
+        <S.StoryBreadcrumbActive>{'Capabilities'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

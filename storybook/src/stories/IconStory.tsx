@@ -31,9 +31,9 @@ export function IconStory() {
   return (
     <StoryPage>
       <StorySection index={1} title={`Icons — ${filtered.length} of ${iconNames.length}`}>
-        <Box style={{ width: '100%', gap: 8 }}>
+        <S.StackG8W100>
           {/* Search + size controls */}
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8>
             <Box style={{ flexGrow: 1 }}>
               <TextInput
                 placeholder={`Search ${iconNames.length} icons...`}
@@ -68,10 +68,10 @@ export function IconStory() {
                 </Text>
               </Pressable>
             ))}
-          </Box>
+          </S.RowCenterG8>
 
           {/* Icon grid */}
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+          <S.RowWrap style={{ gap: 4 }}>
             {pageIcons.map(name => {
               const data = iconMap[name];
               if (!data) return null;
@@ -96,89 +96,89 @@ export function IconStory() {
                 </Pressable>
               );
             })}
-          </Box>
+          </S.RowWrap>
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Box style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
+            <S.RowCenterG8 style={{ justifyContent: 'center' }}>
               <Pressable
                 onPress={() => setPage(Math.max(0, page - 1))}
                 style={{ paddingTop: 4, paddingBottom: 4, paddingLeft: 8, paddingRight: 8, backgroundColor: c.surface, borderRadius: 4 }}
               >
                 <Text style={{ color: c.text, fontSize: 11 }}>{`< Prev`}</Text>
               </Pressable>
-              <Text style={{ color: c.muted, fontSize: 11 }}>
+              <S.DimBody11>
                 {`Page ${page + 1} of ${totalPages}`}
-              </Text>
+              </S.DimBody11>
               <Pressable
                 onPress={() => setPage(Math.min(totalPages - 1, page + 1))}
                 style={{ paddingTop: 4, paddingBottom: 4, paddingLeft: 8, paddingRight: 8, backgroundColor: c.surface, borderRadius: 4 }}
               >
                 <Text style={{ color: c.text, fontSize: 11 }}>{`Next >`}</Text>
               </Pressable>
-            </Box>
+            </S.RowCenterG8>
           )}
-        </Box>
+        </S.StackG8W100>
       </StorySection>
 
       {/* Selected icon detail */}
       {selectedIcon && (
         <StorySection index={2} title="Selected Icon">
-          <Box style={{ width: '100%', alignItems: 'center', gap: 12 }}>
+          <S.CenterW100 style={{ gap: 12 }}>
             <Icon icon={iconMap[selectedIcon]} size={64} color={c.text} />
-            <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>
+            <S.BoldText style={{ fontSize: 14 }}>
               {selectedIcon}
-            </Text>
+            </S.BoldText>
             <Box style={{
               width: '100%',
               backgroundColor: c.bg,
               borderRadius: 6,
               padding: 10,
             }}>
-              <Text style={{ color: c.muted, fontSize: 11, fontFamily: 'monospace' }}>
+              <S.DimBody11 style={{ fontFamily: 'monospace' }}>
                 {`import { Icon, ${selectedIcon} } from '@reactjit/icons';\n\n<Icon icon={${selectedIcon}} size={24} color="#fff" />`}
-              </Text>
+              </S.DimBody11>
             </Box>
             {/* Size variants */}
             // rjit-ignore-next-line
             <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-end' }}>
               {SIZES.map(sz => (
-                <Box key={sz} style={{ alignItems: 'center', gap: 4 }}>
+                <S.CenterG4 key={sz}>
                   <Icon icon={iconMap[selectedIcon]} size={sz} color={c.text} />
                   <S.StoryCap>{`${sz}`}</S.StoryCap>
-                </Box>
+                </S.CenterG4>
               ))}
             </Box>
-          </Box>
+          </S.CenterW100>
         </StorySection>
       )}
 
       <StorySection index={3} title="Usage Examples">
         <Box style={{ width: '100%', gap: 12 }}>
           {/* Inline with text */}
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8>
             <Icon icon={iconMap.Home} size={16} color={c.text} />
             <Text style={{ color: c.text, fontSize: 13 }}>{`Home`}</Text>
-            <Box style={{ width: 1, height: 16, backgroundColor: c.border }} />
+            <S.VertDivider style={{ height: 16 }} />
             <Icon icon={iconMap.Settings} size={16} color={c.text} />
             <Text style={{ color: c.text, fontSize: 13 }}>{`Settings`}</Text>
-            <Box style={{ width: 1, height: 16, backgroundColor: c.border }} />
+            <S.VertDivider style={{ height: 16 }} />
             <Icon icon={iconMap.Search} size={16} color={c.text} />
             <Text style={{ color: c.text, fontSize: 13 }}>{`Search`}</Text>
-          </Box>
+          </S.RowCenterG8>
 
           {/* Color variants */}
-          <Box style={{ flexDirection: 'row', gap: 12 }}>
+          <S.RowG12>
             <Icon icon={iconMap.Heart} size={24} color="#ef4444" />
             <Icon icon={iconMap.Star} size={24} color="#eab308" />
             <Icon icon={iconMap.Zap} size={24} color="#3b82f6" />
             <Icon icon={iconMap.Leaf} size={24} color="#22c55e" />
             <Icon icon={iconMap.Flame} size={24} color="#f97316" />
             <Icon icon={iconMap.Sparkles} size={24} color="#a855f7" />
-          </Box>
+          </S.RowG12>
 
           {/* Button-like usage */}
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          <S.RowG8>
             <Pressable onPress={() => {}} style={{
               flexDirection: 'row',
               gap: 6,
@@ -191,7 +191,7 @@ export function IconStory() {
               paddingRight: 12,
             }}>
               <Icon icon={iconMap.Plus} size={14} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12 }}>{`New Item`}</Text>
+              <S.WhiteMedText>{`New Item`}</S.WhiteMedText>
             </Pressable>
             <Pressable onPress={() => {}} style={{
               flexDirection: 'row',
@@ -221,9 +221,9 @@ export function IconStory() {
               paddingRight: 12,
             }}>
               <Icon icon={iconMap.Trash2} size={14} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12 }}>{`Delete`}</Text>
+              <S.WhiteMedText>{`Delete`}</S.WhiteMedText>
             </Pressable>
-          </Box>
+          </S.RowG8>
         </Box>
       </StorySection>
     </StoryPage>

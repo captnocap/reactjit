@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from '../../../packages/core/src';
+import { Box, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const TSL_SOURCE = `// boids.tsl
@@ -102,11 +102,11 @@ function CodePane({ label, badge, code, badgeColor }: { label: string; badge: st
       {/* Code */}
       <Box style={{ flexGrow: 1, overflow: 'scroll', padding: 12 }}>
         {lines.map((line, i) => (
-          <Box key={i} style={{ flexDirection: 'row', gap: 12, minHeight: 18 }}>
+          <S.RowG12 key={i} style={{ minHeight: 18 }}>
             // rjit-ignore-next-line
             <Text style={{ fontSize: 10, color: c.overlay1, width: 24, textAlign: 'right' }}>{String(i + 1)}</Text>
-            <Text style={{ fontSize: 10, color: c.text, fontFamily: 'monospace' }}>{line || ' '}</Text>
-          </Box>
+            <S.StoryBody style={{ fontFamily: 'monospace' }}>{line || ' '}</S.StoryBody>
+          </S.RowG12>
         ))}
       </Box>
     </Box>
@@ -126,10 +126,10 @@ export function TslBoidsStory() {
       </Box>
 
       {/* Side-by-side code panels */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row', gap: 12, padding: 16, overflow: 'hidden' }}>
+      <S.RowG12 style={{ flexGrow: 1, padding: 16, overflow: 'hidden' }}>
         <CodePane label={'boids.tsl'} badge={'TSL'} code={TSL_SOURCE} badgeColor={c.sapphire} />
         <CodePane label={'boids.lua (generated)'} badge={'LUA'} code={LUA_OUTPUT} badgeColor={c.yellow} />
-      </Box>
+      </S.RowG12>
     </Box>
   );
 }

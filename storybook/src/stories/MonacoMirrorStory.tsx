@@ -140,29 +140,11 @@ export function MonacoMirrorStory() {
   }, [selectedFile]);
 
   return (
-    <Box
-      style={{
-        width: '100%',
-        height: '100%',
-        backgroundColor: c.bg,
-        paddingLeft: 12,
-        paddingRight: 12,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 8,
-      }}
-    >
-      <Box
-        style={{
-          flexShrink: 0,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
+    <S.StoryRoot style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 12, paddingBottom: 12, gap: 8 }}>
+      <S.RowCenter style={{ flexShrink: 0, justifyContent: 'space-between' }}>
         <S.StoryHeadline>{'Monaco Mirror'}</S.StoryHeadline>
         <S.StoryMuted>{`Last submit: ${lastSubmitChars} chars`}</S.StoryMuted>
-      </Box>
+      </S.RowCenter>
       <S.StoryCap>{`Selected: ${selectedFile}`}</S.StoryCap>
 
       <Box style={{ flexGrow: 1, minHeight: 0, gap: 10 }}>
@@ -210,6 +192,6 @@ export function MonacoMirrorStory() {
           />
         </Box>
       </Box>
-    </Box>
+    </S.StoryRoot>
   );
 }

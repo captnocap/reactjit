@@ -275,12 +275,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -324,14 +324,14 @@ function RackInfoDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>
         {ready ? 'Engine ready — live rack state:' : 'Initializing audio engine...'}
       </S.StoryCap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.blue }}>Modules:</Text>
-        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+        <S.RowWrap style={{ gap: 4 }}>
           {Object.entries(types).map(([type, count]) => (
             <Box key={type} style={{
               flexDirection: 'row', gap: 4,
@@ -342,22 +342,22 @@ function RackInfoDemo() {
               <S.StoryBreadcrumbActive>{String(count)}</S.StoryBreadcrumbActive>
             </Box>
           ))}
-        </Box>
+        </S.RowWrap>
       </Box>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.green }}>Connections:</Text>
         {rack.connections.map((conn, i) => (
-          <Box key={i} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <S.RowCenterG4 key={i}>
             <Text style={{ fontSize: 8, color: C.blue }}>{conn.fromId}</Text>
             <S.StoryTiny>{`.${conn.fromPort}`}</S.StoryTiny>
             <Text style={{ fontSize: 8, color: C.orange }}>{'>'}</Text>
             <Text style={{ fontSize: 8, color: C.green }}>{conn.toId}</Text>
             <S.StoryTiny>{`.${conn.toPort}`}</S.StoryTiny>
-          </Box>
+          </S.RowCenterG4>
         ))}
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -376,12 +376,12 @@ function ModuleParamDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Live param control via useModule + useParam'}</S.StoryCap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.blue }}>{'Oscillator waveform:'}</Text>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
+        <S.RowG4>
           {waveforms.map((w) => (
             <Pressable key={w} onPress={() => mod.setParam('waveform', w)}>
               <Box style={{
@@ -398,14 +398,14 @@ function ModuleParamDemo() {
               </Box>
             </Pressable>
           ))}
-        </Box>
+        </S.RowG4>
       </Box>
 
       <Box style={{ gap: 2 }}>
-        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+        <S.RowSpaceBetween style={{ width: '100%' }}>
           <Text style={{ fontSize: 10, color: C.pink }}>{'Filter cutoff:'}</Text>
           <Text style={{ fontSize: 10, color: C.pink }}>{`${Math.round(cutoff || 2000)} Hz`}</Text>
-        </Box>
+        </S.RowSpaceBetween>
         <Slider
           value={cutoff || 2000}
           minimumValue={20}
@@ -427,7 +427,7 @@ function ModuleParamDemo() {
           </S.StoryTiny>
         </Box>
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -452,10 +452,10 @@ function ClockDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Live transport via useClock'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <Pressable onPress={() => clock.running ? clock.stop() : clock.start()}>
           <Box style={{
             backgroundColor: clock.running ? C.red : C.green,
@@ -463,19 +463,15 @@ function ClockDemo() {
             paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6,
             flexDirection: 'row', alignItems: 'center', gap: 4,
           }}>
-            <Image
-              src={clock.running ? 'square' : 'play'}
-              style={{ width: 10, height: 10 }}
-              tintColor={'#1e1e2e'}
-            />
+            <S.StorySectionIcon src={clock.running ? 'square' : 'play'} tintColor={'#1e1e2e'} />
           </Box>
         </Pressable>
 
         <Box style={{ flexGrow: 1, gap: 2 }}>
-          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+          <S.RowSpaceBetween style={{ width: '100%' }}>
             <Text style={{ fontSize: 9, color: C.orange }}>{'BPM'}</Text>
             <Text style={{ fontSize: 9, color: C.orange }}>{String(clock.bpm)}</Text>
-          </Box>
+          </S.RowSpaceBetween>
           <Slider
             value={clock.bpm}
             minimumValue={40}
@@ -485,7 +481,7 @@ function ClockDemo() {
             thumbColor={C.orange}
           />
         </Box>
-      </Box>
+      </S.RowCenterG8>
 
       <Box style={{
         backgroundColor: c.surface1, borderRadius: 4, padding: 8,
@@ -504,7 +500,7 @@ function ClockDemo() {
           <Text style={{ fontSize: 14, color: C.yellow }}>{String((clock.step % 4) + 1)}</Text>
         </Box>
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -531,19 +527,19 @@ function SequencerDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+    <S.StackG6W100>
+      <S.RowCenter style={{ justifyContent: 'space-between', width: '100%' }}>
         <S.StoryCap>{'Live pattern via useSequencer — click to toggle'}</S.StoryCap>
         <Pressable onPress={() => seq.clearPattern()}>
           <Box style={{ backgroundColor: C.red, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
             <Text style={{ fontSize: 8, color: '#1e1e2e' }}>{'CLEAR'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenter>
 
       <Box style={{ gap: 2, alignItems: 'center' }}>
         {Array.from({ length: 4 }, (_, track) => (
-          <Box key={track} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <S.RowCenter key={track} style={{ gap: 2 }}>
             <Box style={{ width: 36 }}>
               <Text style={{ color: trackColors[track], fontSize: 8 }}>
                 {trackLabels[track]}
@@ -571,10 +567,10 @@ function SequencerDemo() {
                 </Pressable>
               );
             })}
-          </Box>
+          </S.RowCenter>
         ))}
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -600,10 +596,10 @@ function SamplerDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Live pads via useSampler — click to trigger'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+      <S.RowWrap style={{ gap: 3 }}>
         {Array.from({ length: 8 }, (_, i) => {
           const slot = sampler.slots[i + 1];
           const hasVoice = sampler.voices.some((v) => v.slot === i + 1);
@@ -631,7 +627,7 @@ function SamplerDemo() {
             </Pressable>
           );
         })}
-      </Box>
+      </S.RowWrap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 9, color: C.green }}>{'Active voices:'}</Text>
@@ -643,7 +639,7 @@ function SamplerDemo() {
           </S.StoryTiny>
         </Box>
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -659,8 +655,8 @@ function MIDIDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+    <S.StackG6W100>
+      <S.RowCenterG6>
         <Box style={{
           width: 8, height: 8, borderRadius: 4,
           backgroundColor: midi.available ? C.green : C.red,
@@ -668,20 +664,20 @@ function MIDIDemo() {
         <Text style={{ fontSize: 10, color: midi.available ? C.green : C.red }}>
           {midi.available ? 'MIDI available (ALSA)' : 'MIDI not available'}
         </Text>
-      </Box>
+      </S.RowCenterG6>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 10, color: C.cyan }}>{'Devices:'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 4 }}>
           {midi.devices.length > 0
             ? midi.devices.map((d) => (
-              <Box key={d.id} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <S.RowCenterG6 key={d.id}>
                 <Box style={{
                   width: 5, height: 5, borderRadius: 3,
                   backgroundColor: d.connected ? C.green : C.red,
                 }} />
                 <S.StoryTiny>{`${d.name} (${d.id})`}</S.StoryTiny>
-              </Box>
+              </S.RowCenterG6>
             ))
             : <S.StoryTiny>{'No MIDI devices detected'}</S.StoryTiny>
           }
@@ -703,14 +699,14 @@ function MIDIDemo() {
       </Box>
 
       {midi.learning && (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.yellow }} />
           <Text style={{ fontSize: 9, color: C.yellow }}>
             {`Learning: ${midi.learning.moduleId}.${midi.learning.param} — move a knob`}
           </Text>
-        </Box>
+        </S.RowCenterG6>
       )}
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -730,7 +726,7 @@ function RecorderDemo() {
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Live recording state via useRecorder'}</S.StoryCap>
 
       <Box style={{ gap: 2 }}>
@@ -747,7 +743,7 @@ function RecorderDemo() {
         </Box>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{
           width: 8, height: 8, borderRadius: 4,
           backgroundColor: recorder.recording.active ? C.red : c.muted,
@@ -757,8 +753,8 @@ function RecorderDemo() {
             ? `Recording: ${recorder.recording.duration.toFixed(1)}s`
             : 'Not recording'}
         </Text>
-      </Box>
-    </Box>
+      </S.RowCenterG6>
+    </S.StackG6W100>
   );
 }
 
@@ -799,21 +795,21 @@ function KnobFaderDemo() {
   const [pitchVal, setPitchVal] = useState(0);
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       {/* rjit-ignore-next-line */}
       <Box style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-end', justifyContent: 'center' }}>
-        <Box style={{ alignItems: 'center', gap: 4 }}>
+        <S.CenterG4>
           <Knob value={knob1} onChange={setKnob1} color={C.pink} label="Cutoff" />
           <S.StoryCap>{`${Math.round(knob1 * 100)}%`}</S.StoryCap>
-        </Box>
-        <Box style={{ alignItems: 'center', gap: 4 }}>
+        </S.CenterG4>
+        <S.CenterG4>
           <Knob value={knob2} onChange={setKnob2} color={C.teal} label="Reso" />
           <S.StoryCap>{`${Math.round(knob2 * 100)}%`}</S.StoryCap>
-        </Box>
+        </S.CenterG4>
         <Fader value={faderVal} onChange={setFaderVal} color={C.accent} label="Vol" />
         <PitchWheel value={pitchVal} onChange={setPitchVal} springReturn height={120} width={28} />
       </Box>
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -836,17 +832,17 @@ function MeterLEDDemo() {
   useLuaInterval(500, () => setLedBlink((b) => !b));
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       {/* rjit-ignore-next-line */}
-      <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end', justifyContent: 'center' }}>
+      <S.RowG12 style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
         <Meter value={levels[0]} peak={0.85} height={80} />
         <Meter value={levels[1]} height={80} />
         <Meter value={levels[2]} height={80} peak={0.9} />
         <Box style={{ marginLeft: 12 }}>
           <Meter value={levels[0]} orientation="horizontal" width={120} />
         </Box>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
+      </S.RowG12>
+      <S.RowCenter style={{ gap: 10, justifyContent: 'center' }}>
         <LEDIndicator on color={C.green} size={8} />
         <S.StoryTiny>{'Active'}</S.StoryTiny>
         <LEDIndicator on={ledBlink} color={C.red} size={8} />
@@ -855,8 +851,8 @@ function MeterLEDDemo() {
         <S.StoryTiny>{'Clipping'}</S.StoryTiny>
         <LEDIndicator on={false} color={C.blue} size={8} />
         <S.StoryTiny>{'Off'}</S.StoryTiny>
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.StackG10W100>
   );
 }
 
@@ -871,8 +867,8 @@ function PadXYDemo() {
   const padColors = [C.blue, C.green, C.orange, C.pink, C.cyan, C.mauve];
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
+    <S.StackG8W100>
+      <S.RowCenter style={{ gap: 10, justifyContent: 'center' }}>
         <XYPad
           x={xyX} y={xyY}
           onChange={(x: number, y: number) => { setXyX(x); setXyY(y); }}
@@ -882,7 +878,7 @@ function PadXYDemo() {
         />
         <Box style={{ gap: 4 }}>
           {[0, 2, 4].map(row => (
-            <Box key={row} style={{ flexDirection: 'row', gap: 4 }}>
+            <S.RowG4 key={row}>
               {[row, row + 1].map(i => (
                 <PadButton
                   key={padLabels[i]}
@@ -894,15 +890,15 @@ function PadXYDemo() {
                   onRelease={() => setPadActive(prev => ({ ...prev, [padLabels[i]]: false }))}
                 />
               ))}
-            </Box>
+            </S.RowG4>
           ))}
         </Box>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+      </S.RowCenter>
+      <S.RowG6 style={{ justifyContent: 'center' }}>
         <S.StoryTiny>{`X: ${xyX.toFixed(2)}`}</S.StoryTiny>
         <S.StoryTiny>{`Y: ${xyY.toFixed(2)}`}</S.StoryTiny>
-      </Box>
-    </Box>
+      </S.RowG6>
+    </S.StackG8W100>
   );
 }
 
@@ -918,7 +914,7 @@ function TransportSeqDemo() {
   });
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <TransportBar
         playing={playing}
         onPlay={() => { setPlaying(true); setStep(0); }}
@@ -942,7 +938,7 @@ function TransportSeqDemo() {
           });
         }}
       />
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -954,7 +950,7 @@ function PianoDemo() {
   const [lastNote, setLastNote] = useState('');
 
   return (
-    <Box style={{ gap: 6, width: '100%', alignItems: 'center' }}>
+    <S.CenterW100 style={{ gap: 6 }}>
       <PianoKeyboard
         whites={PIANO_WHITES}
         blacks={PIANO_BLACKS}
@@ -975,7 +971,7 @@ function PianoDemo() {
         }}
       />
       <S.StoryTiny>{lastNote ? `Last: ${lastNote}` : 'Click or drag across keys'}</S.StoryTiny>
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -984,15 +980,15 @@ function PianoDemo() {
 function ModuleCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {MODULE_TYPES.map(m => (
-        <Box key={m.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'start' }}>
+        <S.RowG8 key={m.label} style={{ alignItems: 'start' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: m.color, flexShrink: 0, marginTop: 3 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 80, flexShrink: 0 }}>{m.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted, flexShrink: 1 }}>{m.desc}</Text>
-        </Box>
+          <S.StoryBreadcrumbActive style={{ width: 80, flexShrink: 0 }}>{m.label}</S.StoryBreadcrumbActive>
+          <S.StoryCap style={{ flexShrink: 1 }}>{m.desc}</S.StoryCap>
+        </S.RowG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -1001,15 +997,15 @@ function ModuleCatalog() {
 function HookList() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {HOOK_LIST.map(h => (
-        <Box key={h.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'start' }}>
+        <S.RowG8 key={h.label} style={{ alignItems: 'start' }}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: h.color, flexShrink: 0, marginTop: 3 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{h.label}</Text>
-          <Text style={{ fontSize: 9, color: c.muted, flexShrink: 1 }}>{h.desc}</Text>
-        </Box>
+          <S.StoryBreadcrumbActive style={{ width: 120, flexShrink: 0 }}>{h.label}</S.StoryBreadcrumbActive>
+          <S.StoryCap style={{ flexShrink: 1 }}>{h.desc}</S.StoryCap>
+        </S.RowG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -1018,15 +1014,15 @@ function HookList() {
 function PortTypeList() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {PORT_TYPES.map(p => (
-        <Box key={p.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={p.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: p.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 60, flexShrink: 0 }}>{p.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 60, flexShrink: 0 }}>{p.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{p.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -1039,23 +1035,11 @@ export function AudioStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="music" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="music" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Audio'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -1067,10 +1051,10 @@ export function AudioStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/audio'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'bwaaaaaaaaaamp'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -1085,12 +1069,12 @@ export function AudioStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Modular audio synthesis in React, rendered in LuaJIT.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'@reactjit/audio gives you a virtual modular rack — oscillators, filters, envelopes, LFOs, delays, mixers, samplers, a step sequencer, and a BPM clock. Wire modules together with connect(). All DSP runs in LuaJIT at 44100 Hz / 512-sample buffers. React declares the patch, Lua renders it to audio. MIDI devices auto-connect via ALSA.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -1099,9 +1083,9 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'12 hooks cover the full audio lifecycle. useAudioInit() starts the engine, useRack() manages the module graph, useModule/useParam control individual modules. Clock, sequencer, sampler, recorder, and MIDI each have dedicated hooks.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <Box style={{ ...halfStyle }}>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
@@ -1117,12 +1101,12 @@ export function AudioStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="layers">{'RACK MANAGEMENT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useRack() is the top-level API. Add typed modules with initial params, wire them with connect(), remove with removeModule(). The rack is a directed acyclic graph — the engine topologically sorts modules and routes buffers automatically.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Options: topologyOnly skips high-frequency param updates. maxFps caps state updates for dashboards.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={RACK_CODE} />
           </Box>
         </Box>
@@ -1133,12 +1117,12 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="sliders">{'MODULE CONTROL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useModule(id) reads all params and provides setParam(). useParam(id, name) is the single-param shorthand — returns [value, setValue] like useState. Both update optimistically and sync via the bridge.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Params are validated against the module definition. Invalid values are clamped or rejected by Lua.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MODULE_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
@@ -1161,10 +1145,10 @@ export function AudioStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All DSP runs in LuaJIT at 44100 Hz. React never touches audio buffers — it only reads state snapshots and sends param changes via the bridge. Zero JS audio processing overhead.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -1176,12 +1160,12 @@ export function AudioStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="timer">{'CLOCK + TRANSPORT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useClock(id) gives you full transport control — start/stop, BPM, note division (1/4 to 1/32), swing. Position tracks beat, bar, step, and phase. The clock emits sample-accurate gate pulses for driving the sequencer.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'useClockEvent(fn) subscribes to tick events for custom logic (e.g., visual beat indicators, external sync).'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CLOCK_CODE} />
           </Box>
         </Box>
@@ -1192,12 +1176,12 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="grid">{'STEP SEQUENCER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useSequencer(id) edits patterns on a grid: up to 64 steps, 8 tracks. Each step has active, note, and velocity. Tracks route to target modules via setTrackTarget() — the sequencer sends noteOn/noteOff events when steps fire.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Driven by a clock module wired to clock_in. Rising edge detection advances the step. Pattern state is serialized to the bridge for live UI editing.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SEQ_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
@@ -1216,12 +1200,12 @@ export function AudioStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="mic">{'SAMPLER + RECORDING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useSampler(id) manages 16 sample slots. Load wav/ogg/mp3 files, trigger playback with velocity, clear slots. MIDI note 36 = slot 1 (GM drum map). Supports oneshot and loop modes with pitch shifting.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'useRecorder() records from a microphone directly into a sampler slot. List devices, start/stop recording, monitor duration. No file management — audio goes straight into the slot buffer.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SAMPLER_CODE} />
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={RECORDER_CODE} />
           </Box>
@@ -1233,12 +1217,12 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="toggle-left">{'MIDI INTEGRATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useMIDI() exposes connected devices, CC-to-param mappings, and MIDI learn mode. Call midi.learn(moduleId, param) and twist a knob to bind it. Auto-connects to all ALSA MIDI devices, re-scans every 5 seconds.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'useMIDINote(fn) and useMIDICC(fn) subscribe to raw events for custom handling. Built-in CC mappings: CC1 = FM amount, CC7 = volume, CC10 = pan, CC74 = filter cutoff.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MIDI_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
@@ -1252,9 +1236,9 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="sliders">{'KNOBS + FADERS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Knob is a 270-degree rotary with drag control. Fader is a vertical channel slider. PitchWheel springs back to center on release. All rendering and hit testing runs in Lua — drag a knob and it responds in the same frame.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={KNOB_FADER_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
@@ -1271,12 +1255,12 @@ export function AudioStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="gauge">{'METERS + LED INDICATORS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Meter is a segmented LED bar with peak hold — vertical or horizontal. LEDIndicator is a status light with configurable glow. Both update at 60fps in Lua with zero React overhead.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Wire meters to audio levels via useLuaInterval. LEDs toggle on/off for status feedback — recording, clipping, active channel.'}
-            </Text>
+            </S.StoryCap>
           </Box>
         </Box>
 
@@ -1289,12 +1273,12 @@ export function AudioStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="grid">{'PADS + XY CONTROL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'PadButton is a momentary trigger with press/release callbacks — wire them to sampler slots for a drum machine. XYPad is a 2D control surface — map X to filter cutoff and Y to resonance for hands-on sound design.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Both support custom colors, sizes, and disabled state. PadButton shows active state for sequencer step feedback.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PAD_XY_CODE} />
           </Box>
         </Box>
@@ -1305,9 +1289,9 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="timer">{'TRANSPORT + SEQUENCER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'TransportBar bundles play/stop/record buttons with BPM display, position readout, and LED indicators. StepSequencer is an interactive grid — click to toggle steps, drag to paint. Both are pure UI controls that pair with the audio hooks.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SEQ_TRANSPORT_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
@@ -1324,12 +1308,12 @@ export function AudioStory() {
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="music">{'PIANO KEYBOARD'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'PianoKeyboard renders a multi-octave piano with white and black keys. Click to play, drag across keys for glissando. activeKeys highlights currently pressed notes. All hit testing and drawing runs in Lua for instant response.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Fully customizable: key dimensions, colors via palette prop, note labels. Wire onKeyDown/onKeyUp to useMIDI or a polysynth module.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PIANO_CODE} />
           </Box>
         </Box>
@@ -1349,10 +1333,10 @@ export function AudioStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Controls are decoupled from audio — use them anywhere. Knobs work for color pickers, faders for opacity, meters for progress bars. import from @reactjit/controls.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -1370,10 +1354,10 @@ export function AudioStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'For a plug-and-play keyboard synth without manual patching, use the polysynth module. One addModule() call gives you a polyphonic instrument with ADSR, waveform selection, and keyboard mapping.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -1382,16 +1366,16 @@ export function AudioStory() {
         <Box style={{ ...bandStyle, flexDirection: 'row' }}>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="music">{'POLYSYNTH SHORTCUT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The polysynth module is an all-in-one instrument — oscillator + ADSR + polyphonic voice management in a single module. No manual patching needed. Keyboard keys map to notes (z=C3, a=C4, k=C5).'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={POLYSYNTH_CODE} />
           </Box>
           <Box style={{ ...halfStyle }}>
             <SectionLabel icon="git-merge">{'PATCH EXAMPLE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Classic subtractive synth: oscillator through filter, envelope-controlled amplifier, LFO modulating filter cutoff, delay for ambience. This is the modular equivalent of the polysynth — more control, more wiring.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PATCH_CODE} />
           </Box>
         </Box>
@@ -1401,7 +1385,7 @@ export function AudioStory() {
         {/* ── Band 9: HOOK CATALOG (full width) ── */}
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 8 }}>
           <SectionLabel icon="code">{'HOOK CATALOG'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'All 12 hooks in @reactjit/audio:'}</Text>
+          <S.StoryCap>{'All 12 hooks in @reactjit/audio:'}</S.StoryCap>
           <HookList />
         </Box>
 
@@ -1410,7 +1394,7 @@ export function AudioStory() {
         {/* ── Band 10: MODULE CATALOG (full width) ── */}
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 8 }}>
           <SectionLabel icon="list">{'MODULE CATALOG'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'All 11 built-in module types:'}</Text>
+          <S.StoryCap>{'All 11 built-in module types:'}</S.StoryCap>
           <ModuleCatalog />
         </Box>
 
@@ -1420,77 +1404,65 @@ export function AudioStory() {
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 12 }}>
           <Box style={{ gap: 8 }}>
             <SectionLabel icon="zap">{'PORT TYPES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Modules communicate through typed ports. connect() validates type compatibility — audio-to-audio and control-to-control only.'}
-            </Text>
+            </S.StoryBody>
             <PortTypeList />
           </Box>
           <Box style={{ height: 4 }} />
           <Box style={{ gap: 8 }}>
             <SectionLabel icon="gauge">{'ENGINE SPECS'}</SectionLabel>
-            <Box style={{ flexDirection: 'row', gap: 20, flexWrap: 'wrap' }}>
+            <S.RowWrap style={{ gap: 20 }}>
               <Box style={{ gap: 3 }}>
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <S.RowCenterG8>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.blue, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'Sample rate'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'44100 Hz'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <S.StoryBreadcrumbActive>{'Sample rate'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'44100 Hz'}</S.StoryCap>
+                </S.RowCenterG8>
+                <S.RowCenterG8>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.teal, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'Buffer size'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'512 samples (~11.6ms)'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <S.StoryBreadcrumbActive>{'Buffer size'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'512 samples (~11.6ms)'}</S.StoryCap>
+                </S.RowCenterG8>
+                <S.RowCenterG8>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.yellow, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'Graph sort'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{"Kahn's algorithm (topological)"}</Text>
-                </Box>
+                  <S.StoryBreadcrumbActive>{'Graph sort'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{"Kahn's algorithm (topological)"}</S.StoryCap>
+                </S.RowCenterG8>
               </Box>
               <Box style={{ gap: 3 }}>
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <S.RowCenterG8>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.pink, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'MIDI backend'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'ALSA sequencer via FFI'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <S.StoryBreadcrumbActive>{'MIDI backend'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'ALSA sequencer via FFI'}</S.StoryCap>
+                </S.RowCenterG8>
+                <S.RowCenterG8>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.green, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'State push'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'~30 FPS to bridge'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <S.StoryBreadcrumbActive>{'State push'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'~30 FPS to bridge'}</S.StoryCap>
+                </S.RowCenterG8>
+                <S.RowCenterG8>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.orange, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'Audio output'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'Love2D QueueableSource'}</Text>
-                </Box>
+                  <S.StoryBreadcrumbActive>{'Audio output'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'Love2D QueueableSource'}</S.StoryCap>
+                </S.RowCenterG8>
               </Box>
-            </Box>
+            </S.RowWrap>
           </Box>
         </Box>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="music" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Audio'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="music" />
+        <S.StoryBreadcrumbActive>{'Audio'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

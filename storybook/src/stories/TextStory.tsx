@@ -30,7 +30,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── Static data from content/sections/05-components/text.txt ──
@@ -180,57 +180,35 @@ export function TextStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="type" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="type" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Text'}
-        </Text>
+        </S.StoryTitle>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <S.StoryBtnSm style={{ flexDirection: 'row', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
           <Text style={{ color: SYN.component, fontSize: 10 }}>{'Text'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'fontSize'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <S.StoryMuted>{'='}</S.StoryMuted>
           <Text style={{ color: SYN.value, fontSize: 10 }}>{'{16}'}</Text>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'>'}</Text>
-        </Box>
+        </S.StoryBtnSm>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Literally just words'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -242,7 +220,7 @@ export function TextStory() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -253,7 +231,7 @@ export function TextStory() {
               <Box style={{ width: '100%', padding: 20, gap: 16 }}>
 
                 {/* Font size scale */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'FONT SIZE'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'FONT SIZE'}</S.StoryTiny>
                 <Box style={{ gap: 2, alignItems: 'center' }}>
                   <Text style={{ color: P.text, fontSize: 10 }}>{'10px — caption'}</Text>
                   <Text style={{ color: P.text, fontSize: 12 }}>{'12px — small'}</Text>
@@ -263,7 +241,7 @@ export function TextStory() {
                 </Box>
 
                 {/* Font weight */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'FONT WEIGHT'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'FONT WEIGHT'}</S.StoryTiny>
                 <Box style={{ gap: 2, alignItems: 'center' }}>
                   <Text style={{ color: P.text, fontSize: 13, fontWeight: 'normal' }}>{'normal'}</Text>
                   <Text style={{ color: P.text, fontSize: 13, fontWeight: 'bold' }}>{'bold'}</Text>
@@ -271,7 +249,7 @@ export function TextStory() {
                 </Box>
 
                 {/* Color palette */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'COLOR'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'COLOR'}</S.StoryTiny>
                 <Box style={{ gap: 2, alignItems: 'center' }}>
                   <Text style={{ color: P.blue, fontSize: 12 }}>{'blue — #89b4fa'}</Text>
                   <Text style={{ color: P.mauve, fontSize: 12 }}>{'mauve — #cba6f7'}</Text>
@@ -281,14 +259,14 @@ export function TextStory() {
                 </Box>
 
                 {/* Decoration */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'DECORATION'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'DECORATION'}</S.StoryTiny>
                 <Box style={{ flexDirection: 'row', gap: 16, justifyContent: 'center' }}>
                   <Text style={{ color: P.text, fontSize: 12, textDecorationLine: 'underline' }}>{'underline'}</Text>
                   <Text style={{ color: P.text, fontSize: 12, textDecorationLine: 'line-through' }}>{'line-through'}</Text>
                 </Box>
 
                 {/* Alignment */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'ALIGNMENT'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'ALIGNMENT'}</S.StoryTiny>
                 <Box style={{ gap: 2, width: 200, alignSelf: 'center' }}>
                   <Box style={{ backgroundColor: c.surface, borderRadius: 4, padding: 4 }}>
                     <Text style={{ color: P.subtext, fontSize: 10, textAlign: 'left' }}>{'left'}</Text>
@@ -302,7 +280,7 @@ export function TextStory() {
                 </Box>
 
                 {/* Letter spacing */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'LETTER SPACING'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'LETTER SPACING'}</S.StoryTiny>
                 <Box style={{ gap: 2, alignItems: 'center' }}>
                   <Text style={{ color: P.blue, fontSize: 12, letterSpacing: 0 }}>{'spacing: 0'}</Text>
                   <Text style={{ color: P.blue, fontSize: 12, letterSpacing: 1 }}>{'spacing: 1'}</Text>
@@ -310,7 +288,7 @@ export function TextStory() {
                 </Box>
 
                 {/* Shadow */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'TEXT SHADOW'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'TEXT SHADOW'}</S.StoryTiny>
                 <Box style={{ alignItems: 'center', backgroundColor: c.surface, borderRadius: 8, padding: 12 }}>
                   <Text style={{
                     color: P.text,
@@ -329,112 +307,100 @@ export function TextStory() {
 
             {/* ── Right: API Reference ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
                 {/* Overview */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'OVERVIEW'}
-                </Text>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                </S.StoryTiny>
+                <S.StoryBody>
                   {'Text is the primitive for rendering text content. It is the only element that carries intrinsic width — the layout engine measures the string against the font and fontSize to determine horizontal space. Text supports font styling (fontSize, fontFamily, fontWeight, color, textAlign, letterSpacing, lineHeight), truncation via numberOfLines, and keyboard event handlers.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
                 {/* Usage */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'USAGE'}
-                </Text>
+                </S.StoryTiny>
                 <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
                 {/* Behavior */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'BEHAVIOR'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                    <S.RowG6 key={i} style={{ alignItems: 'flex-start', width: '100%' }}>
                       <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</S.StoryBody>
+                    </S.RowG6>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* Props */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'PROPS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* Style Properties */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'STYLE PROPERTIES'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {STYLE_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.value} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.value} />
                       <Text style={{ color: SYN.value, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* Callbacks */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'CALLBACKS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {CALLBACKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.tag} />
                       <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                      <S.StoryCap>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="type" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Text'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="type" />
+        <S.StoryBreadcrumbActive>{'Text'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -452,11 +418,7 @@ export function TextStory() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,
@@ -466,8 +428,8 @@ export function TextStory() {
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

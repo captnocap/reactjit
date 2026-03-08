@@ -290,12 +290,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -325,7 +325,7 @@ function ScrapeDemo() {
   return (
     <Box style={{ gap: 10 }}>
       {/* Preset buttons */}
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         {SCRAPE_PRESETS.map(p => (
           <Pressable key={p.label} onPress={() => handlePreset(p)}>
             <Box style={{
@@ -337,10 +337,10 @@ function ScrapeDemo() {
             </Box>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG6>
 
       {/* URL bar */}
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ flexGrow: 1 }}>
           <Input
             value={url}
@@ -355,28 +355,28 @@ function ScrapeDemo() {
             <Text style={{ fontSize: 9, color: '#1e1e2e', fontWeight: 'bold' }}>{'Go'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG6>
 
       {/* Selectors being used */}
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+      <S.RowWrap style={{ gap: 4 }}>
         {Object.entries(selectors).map(([k, v]) => (
           <Box key={k} style={{ backgroundColor: C.accentDim, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 3 }}>
             <Text style={{ fontSize: 8, color: C.accent, fontFamily: 'monospace' }}>{`${k}: '${v}'`}</Text>
           </Box>
         ))}
-      </Box>
+      </S.RowWrap>
 
       {/* Results */}
       {loading ? (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.rss }} />
           <Text style={{ fontSize: 10, color: C.rss }}>{'Scraping...'}</Text>
-        </Box>
+        </S.RowCenterG6>
       ) : error ? (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.tor }} />
           <Text style={{ fontSize: 10, color: C.tor }}>{error}</Text>
-        </Box>
+        </S.RowCenterG6>
       ) : data ? (
         <Box style={{ gap: 3 }}>
           {Object.entries(data).map(([key, value]) => {
@@ -385,12 +385,12 @@ function ScrapeDemo() {
               : String(value).length > 120 ? String(value).slice(0, 120) + '\u2026'
               : String(value);
             return (
-              <Box key={key} style={{ flexDirection: 'row', gap: 8 }}>
+              <S.RowG8 key={key}>
                 <Box style={{ width: 70 }}>
                   <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>{key}</Text>
                 </Box>
-                <Text style={{ color: c.text, fontSize: 9, flexShrink: 1 }}>{display}</Text>
-              </Box>
+                <S.StoryBreadcrumbActive style={{ flexShrink: 1 }}>{display}</S.StoryBreadcrumbActive>
+              </S.RowG8>
             );
           })}
         </Box>
@@ -417,23 +417,11 @@ export function NetworkingStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="globe" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="globe" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Networking'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -445,10 +433,10 @@ export function NetworkingStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'multi-package'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Fetch, host, frag'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -463,97 +451,65 @@ export function NetworkingStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Every network primitive as a one-liner React hook.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Fetch JSON, open WebSockets, host game servers (Valve GoldSrc/Source/Source2 + Minecraft), scrape pages, subscribe to RSS, route through Tor, create encrypted P2P tunnels (userspace or real WireGuard), verify webhooks, and plug into Spotify, GitHub, TMDB, CoinGecko, NASA, and Philips Hue — all from declarative hooks backed by non-blocking Lua I/O.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
 
         {/* ── Band 1: INSTALL — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Networking spans multiple packages. Core hooks (useFetch, useWebSocket, useScrape) live in @reactjit/core. Server, RSS, and webhooks are separate packages.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 2: FETCH — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={FETCH_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="cloud">{'FETCH'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Universal HTTP client. Pass a URL, get typed data back with loading and error states. Pass null to conditionally skip the request. Backed by Lua async HTTP with thread pool workers — never blocks the render loop.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 3: WEBSOCKET — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="wifi">{'WEBSOCKET CLIENT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Persistent WebSocket connection with automatic reconnect. The Lua side handles the RFC 6455 handshake, frame parsing, and keepalive. React just sees status, send, and lastMessage. Supports .onion URLs via SOCKS5 tunneling.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WEBSOCKET_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 4: PEER SERVER — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={PEER_SERVER_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="wifi">{'PEER SERVER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Host a WebSocket server directly from your React app. Peers connect, you broadcast or send targeted messages. Perfect for local multiplayer, device sync, or P2P tooling. The Lua wsserver handles handshakes and frame masking.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
@@ -570,76 +526,60 @@ export function NetworkingStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All network I/O runs in Lua threads — zero JS overhead. HTTP uses a worker pool (4 threads), WebSockets poll non-blocking sockets each frame, and servers accept connections without blocking the render loop.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
 
         {/* ── Band 5: GAME SERVER — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="hard-drive">{'GAME SERVER HOSTING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One-liner dedicated game server hosting. Supports Valve engines by generation: GoldSrc (CS 1.6, HL1), Source (CS:S, TF2, GMod, L4D2), Source 2 (CS2, Deadlock), and Minecraft Java Edition. Spawns the server process, generates config files, connects RCON for remote admin, and polls the A2S query protocol for live status.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ gap: 3 }}>
-              <Box style={{ flexDirection: 'row', gap: 8 }}>
-                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              <S.RowG8>
+                <S.RowCenterG4>
                   <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.gameserver }} />
                   <Text style={{ color: c.muted, fontSize: 8 }}>{'GoldSrc'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                </S.RowCenterG4>
+                <S.RowCenterG4>
                   <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.accent }} />
                   <Text style={{ color: c.muted, fontSize: 8 }}>{'Source'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                </S.RowCenterG4>
+                <S.RowCenterG4>
                   <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.ws }} />
                   <Text style={{ color: c.muted, fontSize: 8 }}>{'Source 2'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                </S.RowCenterG4>
+                <S.RowCenterG4>
                   <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.server }} />
                   <Text style={{ color: c.muted, fontSize: 8 }}>{'Minecraft'}</Text>
-                </Box>
-              </Box>
+                </S.RowCenterG4>
+              </S.RowG8>
             </Box>
-          </Box>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={GAME_SERVER_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 6: GAME SERVER HOOKS — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={GAME_SERVER_HOOKS_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="terminal">{'SERVER MANAGEMENT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useGameServer returns full lifecycle control: start, stop, RCON commands, live player list, and server logs. usePlayerList and useServerStatus are lighter hooks for dashboard UIs that only need a slice. Config can be an inline object, a JSON file path, or a useLocalStore result for persistence across restarts.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Config changes flow through React props. The Lua capability diffs old vs new config and applies changes live via RCON when possible (hostname, password, map), or restarts when necessary (port, tickrate).'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryCap>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
@@ -656,83 +596,59 @@ export function NetworkingStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.gameserver} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.gameserver} />
+          <S.StoryBody>
             {'The GameServer capability manages an existing server binary — it does not include one. You provide the path to srcds, hlds, cs2, or a Minecraft .jar. SteamCMD downloads are handled automatically if steamcmdPath is set. Bundle everything with rjit build linux for a single self-extracting binary: your admin UI + config + server binary.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
 
         {/* ── Band 7: SCRAPE — demo | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <ScrapeDemo />
-          </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          </S.HalfCenter>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="globe">{'WEB SCRAPING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Two modes: expert (provide CSS selectors) or guided (browse an element catalog and pick by ID). Inline HTML parser runs in QuickJS — no DOM needed. Supports attribute extraction, descendant combinators, and auto-refetch intervals.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={SCRAPE_CODE} />
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 6: HTTP SERVER — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={SERVER_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="hard-drive">{'HTTP SERVER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three hooks, three levels of abstraction. useServer for full control with dynamic routes and static files. useStaticServer for one-liner directory serving. useLibrary for auto-indexed media serving with search, type filtering, and directory stats.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Static routes are handled entirely in Lua — files never cross the bridge. Dynamic route handlers run in React and return response objects.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryCap>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 7: TOR — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="shield">{'TOR NETWORK'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Hidden service networking built into the runtime. The Lua side manages the Tor subprocess, generates torrc, polls for the .onion hostname, and provides a SOCKS5 proxy. WebSocket connections to .onion addresses auto-route through the proxy. HTTP requests honor ALL_PROXY for transparent onion routing.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Requires tor binary in PATH or bundled. Hidden service directory lives at ~/.cache/reactjit-tor/.'}
-            </Text>
-          </Box>
+            </S.StoryCap>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={TOR_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
@@ -749,67 +665,51 @@ export function NetworkingStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="lock" style={{ width: 12, height: 12 }} tintColor={C.tor} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="lock" tintColor={C.tor} />
+          <S.StoryBody>
             {'SOCKS5 tunneling supports both blocking and async modes with RFC 1928 + RFC 1929 (username/password auth). The async state machine integrates with Love2D\'s frame loop — no threads needed for proxy negotiation.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
 
         {/* ── Band 8: ENCRYPTED P2P — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="lock">{'ENCRYPTED P2P (USERSPACE)'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Encrypted peer-to-peer data channels over UDP. X25519 key agreement + XChaCha20-Poly1305 AEAD — the same crypto primitives WireGuard uses. STUN resolves your public endpoint for NAT traversal. No root, no system deps, works everywhere Love2D runs.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ gap: 3 }}>
-              <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <S.RowCenterG6>
                 <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.wgUser }} />
                 <Text style={{ color: C.wgUser, fontSize: 9, fontWeight: 'bold' }}>{'Tier 2 — Userspace'}</Text>
-              </Box>
-              <Text style={{ color: c.muted, fontSize: 9 }}>{'Keys in process memory. Protects against network observers, not local attackers.'}</Text>
+              </S.RowCenterG6>
+              <S.StoryCap>{'Keys in process memory. Protects against network observers, not local attackers.'}</S.StoryCap>
             </Box>
-          </Box>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WG_PEER_TUNNEL_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 9: KERNEL WIREGUARD — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WG_KERNEL_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="shield">{'WIREGUARD (KERNEL)'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Real kernel WireGuard tunnel via the wg CLI. Creates a wg0 interface with OS-level routing. Keys generated by wg genkey go straight from CLI to kernel — never in Lua or JS process memory. Requires wireguard-tools and sudo.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ gap: 3 }}>
-              <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <S.RowCenterG6>
                 <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.wgKernel }} />
                 <Text style={{ color: C.wgKernel, fontSize: 9, fontWeight: 'bold' }}>{'Tier 1 — Kernel'}</Text>
-              </Box>
-              <Text style={{ color: c.muted, fontSize: 9 }}>{'Kernel trust boundary. Protects against local + network attackers.'}</Text>
+              </S.RowCenterG6>
+              <S.StoryCap>{'Kernel trust boundary. Protects against local + network attackers.'}</S.StoryCap>
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
@@ -826,74 +726,50 @@ export function NetworkingStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="lock" style={{ width: 12, height: 12 }} tintColor={C.wgUser} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="lock" tintColor={C.wgUser} />
+          <S.StoryBody>
             {'Both tiers use X25519 keys and the same wire encryption. The difference is where the trust boundary sits. Tier 2 (usePeerTunnel) is zero-config encrypted messaging. Tier 1 (useWireGuard) is a real VPN with kernel isolation. We ship both so you decide — not us. See the WireGuard story for the full threat model comparison.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
 
         {/* ── Band 10: RSS — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={RSS_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="globe">{'RSS FEEDS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Subscribe to RSS/Atom feeds with automatic polling, deduplication, and item limiting. useRSSAggregate merges multiple feeds sorted by date. Built-in XML parser works in QuickJS — no DOM or external dependencies.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 9: WEBHOOKS — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="lock">{'WEBHOOKS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Receive and send webhooks with HMAC-SHA256 signing and timing-safe verification. useWebhook spins up a listener on a port. sendWebhook fires outbound hooks with automatic signature headers.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={WEBHOOK_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 10: PROXY — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={PROXY_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="shield">{'PROXY SUPPORT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'All HTTP requests honor standard proxy environment variables. HTTP, HTTPS, and SOCKS5 proxies are supported with optional authentication. The Lua HTTP worker handles proxy negotiation in its thread pool — transparent to React.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         {/* ── Callout: API Integrations ── */}
         <Box style={{
@@ -908,10 +784,10 @@ export function NetworkingStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'API integrations are networking hooks with pre-built UI components. Each hook fetches from a public API via useFetch, returns typed data, and has a matching component for one-liner rendering.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -923,153 +799,93 @@ export function NetworkingStory() {
         <Divider />
 
         {/* ── Band 11: SPOTIFY / MUSIC — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="music">{'MUSIC — SPOTIFY / LAST.FM'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Now-playing, top tracks, and top artists from Spotify or Last.fm. NowPlayingCard shows live progress. TrackRow and ArtistRow for ranked lists with playcount badges. All data comes from one hook call.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={SPOTIFY_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 12: MEDIA — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={MEDIA_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="film">{'MEDIA — TMDB / TRAKT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Movie and TV lookups via TMDB. MediaPosterCard renders poster art with a score badge and year overlay. Pass posterUrl from tmdbImage() for real artwork, or leave blank for a placeholder.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 13: CRYPTO — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="bar-chart-2">{'CRYPTO — COINGECKO'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Live coin market data with price, 24h change, and optional sparkline chart. CoinTickerRow renders a compact row with green/red change indicator. Sparkline data comes from CoinGecko\'s 7-day price history.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={CRYPTO_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 14: GITHUB — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={GITHUB_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="github">{'GITHUB'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Profile, repos, stats, and activity feed. GitHubUserCard for the profile header. RepoCard for pinned repos with language dot and star count. StatCard for KPI tiles with trend arrows. ActivityRow for timeline events with colored dots.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 15: NASA — text | code ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="star">{'NASA — APOD'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Astronomy Picture of the Day. The zero-config <APOD /> component uses a built-in demo key. APODCard renders full-width image with title, date, explanation, and copyright.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={NASA_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band 16: HUE — code | text ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 24,
-          alignItems: 'center',
-        }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 24 }}>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={HUE_CODE} />
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="sun">{'SMART HOME — PHILIPS HUE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Bridge discovery and light control. useHueLights returns live state for all lights with toggle and brightness controls. HueLightBadge shows color, on/off state, and brightness level. Uses hueXYToHex() for CIE color conversion.'}
-            </Text>
-          </Box>
-        </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
+        </S.RowCenter>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="globe" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Networking'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="globe" />
+        <S.StoryBreadcrumbActive>{'Networking'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

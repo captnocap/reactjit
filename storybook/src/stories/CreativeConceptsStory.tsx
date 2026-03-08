@@ -90,39 +90,39 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
         <Box style={{ flexGrow: 1, backgroundColor: '#050510', position: 'relative', overflow: 'hidden' }}>
           {/* Hardware Transport & Synthesis Controls */}
           <Box style={{ position: 'absolute', top: 20, left: 20, width: 150, gap: 16, zIndex: 10 }}>
-            <Box style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: c.border }}>
+            <S.Bordered style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 16, borderRadius: 12 }}>
               <Text style={{ color: C.accent, fontSize: 12, fontWeight: 'bold', marginBottom: 16 }}>{'SYNTH CONTROL'}</Text>
               {/* Mock controls if actual Knobs/Faders aren't exported exactly this way in core/controls, assuming they are available or we mock them visually */}
-              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <S.RowCenter style={{ gap: 10, marginBottom: 12 }}>
                 <Box style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c.surface, borderWidth: 2, borderColor: C.accent, alignItems: 'center', justifyContent: 'center' }}>
                   <Box style={{ width: 4, height: 16, backgroundColor: C.accent, borderRadius: 2, marginTop: -16 }} />
                 </Box>
                 <S.StoryMuted>{'Luma Flux'}</S.StoryMuted>
-              </Box>
-              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              </S.RowCenter>
+              <S.RowCenter style={{ gap: 10, marginBottom: 12 }}>
                 <Box style={{ width: 8, height: 60, backgroundColor: c.surface, borderRadius: 4, alignItems: 'center' }}>
                   <Box style={{ width: 24, height: 12, backgroundColor: C.accent, borderRadius: 2, marginTop: 20 }} />
                 </Box>
                 <S.StoryMuted>{'Distortion'}</S.StoryMuted>
-              </Box>
-            </Box>
+              </S.RowCenter>
+            </S.Bordered>
           </Box>
 
-          <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <S.GrowCenterAlign>
             {/* The 3D Hologram, rendering at 60fps on SDL2/OpenGL */}
             <Box style={{ width: 400, height: 400, borderRadius: 200, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(0, 255, 255, 0.2)' }}>
               {/* Simulating the scene with a masked luma mesh to look like a geometric audio visualizer */}
               <VHS mask tracking={0.4} noise={0.15} colorBleed={1.5}>
                 <LumaMesh mask gridSize={20} displacement={50} lineWidth={1.5} colored={false}>
-                  <Box style={{ width: 400, height: 400, backgroundColor: '#050510', alignItems: 'center', justifyContent: 'center' }}>
+                  <S.Center style={{ width: 400, height: 400, backgroundColor: '#050510' }}>
                     {/* Mock sphere using a generic geometric Box pattern */}
                     <Box style={{ width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(0, 255, 255, 0.4)', borderWidth: 5, borderColor: '#00ffff' }} />
                     <Box style={{ position: 'absolute', width: 260, height: 260, borderRadius: 130, borderWidth: 2, borderColor: '#ff0055', opacity: 0.6 }} />
-                  </Box>
+                  </S.Center>
                 </LumaMesh>
               </VHS>
             </Box>
-          </Box>
+          </S.GrowCenterAlign>
         </Box>
       );
     case 'tactical-geo':
@@ -131,19 +131,19 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
           {/* Tactical Map mimicking an espionage feed */}
           <OpticalFlow mask decay={0.92} displacement={4} colorShift>
             <SoftGlitch mask drift={0.3} fringe={1}>
-              <Box style={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <S.GrowCenterAlign>
                 {/* Map mockup using generic grids to simulate vector tiles */}
-                <Box style={{ width: '100%', height: '100%', opacity: 0.3, flexDirection: 'row', flexWrap: 'wrap' }}>
+                <S.RowWrap style={{ width: '100%', height: '100%', opacity: 0.3 }}>
                   {Array.from({ length: 400 }).map((_, i) => (
                     <Box key={i} style={{ width: 40, height: 40, borderWidth: 1, borderColor: '#00ff00' }} />
                   ))}
-                </Box>
+                </S.RowWrap>
                 <Box style={{ position: 'absolute', width: 10, height: 10, backgroundColor: '#00ff00', borderRadius: 5, top: '40%', left: '60%' }} />
                 <Text style={{ position: 'absolute', color: '#00ff00', fontSize: 10, top: '40%', left: '62%' }}>{'ALPHA-1'}</Text>
 
                 <Box style={{ position: 'absolute', width: 10, height: 10, backgroundColor: '#00ff00', borderRadius: 5, top: '55%', left: '30%' }} />
                 <Text style={{ position: 'absolute', color: '#00ff00', fontSize: 10, top: '55%', left: '32%' }}>{'BRAVO-2'}</Text>
-              </Box>
+              </S.GrowCenterAlign>
             </SoftGlitch>
           </OpticalFlow>
 
@@ -153,14 +153,14 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
               DATALINK: ACTIVE
             </Text>
             {/* Mocking RadarSweep */}
-            <Box style={{ width: 174, height: 174, borderRadius: 87, borderWidth: 1, borderColor: '#00ff00', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <S.Center style={{ width: 174, height: 174, borderRadius: 87, borderWidth: 1, borderColor: '#00ff00', overflow: 'hidden' }}>
               <Box style={{ width: 87, height: 87, backgroundColor: 'rgba(0, 255, 0, 0.2)', position: 'absolute', top: 0, right: 0, transform: [{ rotate: '45deg' }] }} />
               {Array.from({ length: 4 }).map((_, i) => (
                 <Box key={i} style={{ width: (i + 1) * 40, height: (i + 1) * 40, borderRadius: (i + 1) * 20, borderWidth: 1, borderColor: 'rgba(0, 255, 0, 0.3)', position: 'absolute' }} />
               ))}
               <Box style={{ width: 2, height: 174, backgroundColor: 'rgba(0, 255, 0, 0.5)', position: 'absolute' }} />
               <Box style={{ width: 174, height: 2, backgroundColor: 'rgba(0, 255, 0, 0.5)', position: 'absolute' }} />
-            </Box>
+            </S.Center>
           </Box>
         </Box>
       );
@@ -178,7 +178,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── CreativeConceptsStory ─────────────────────────────────────────
@@ -192,23 +192,11 @@ export function CreativeConceptsStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="sparkles" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="sparkles" tintColor={C.accent} />
+        <S.StoryTitle>
           {'CreativeConcepts'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -220,15 +208,15 @@ export function CreativeConceptsStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/creativeconcepts'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'A showcase of crazy composite ideas built with the ReactJIT stack'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Preview area — LIVE DEMO of the active tab ── */}
-      <Box style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
+      <S.BorderBottom style={{ flexGrow: 1 }}>
         {renderPreview(tab, c)}
-      </Box>
+      </S.BorderBottom>
 
       {/* ── Info row — description | code | props ── */}
       <Box style={{
@@ -242,59 +230,59 @@ export function CreativeConceptsStory() {
       }}>
 
         {/* ── Description ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.BoldText style={{ fontSize: 14 }}>
             {tab.label}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.BoldText>
+          <S.StoryMuted>
             {tab.desc}
-          </Text>
-        </Box>
+          </S.StoryMuted>
+        </S.Half>
 
         <VerticalDivider />
 
         {/* ── Usage code ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>
             {'USAGE'}
-          </Text>
+          </S.StoryLabelText>
           <CodeBlock language="tsx" fontSize={9} code={tab.usage} />
-        </Box>
+        </S.Half>
 
         <VerticalDivider />
 
         {/* ── Props + callbacks ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>
             {'PROPS'}
-          </Text>
+          </S.StoryLabelText>
           <Box style={{ gap: 3 }}>
             {tab.props.map(([name, type, icon]) => (
-              <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-              </Box>
+              <S.RowCenterG5 key={name}>
+                <S.StorySectionIcon src={icon} tintColor={c.muted} />
+                <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                <S.StoryCap>{type}</S.StoryCap>
+              </S.RowCenterG5>
             ))}
           </Box>
           {tab.callbacks.length > 0 && (
             <>
               <HorizontalDivider />
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+              <S.StoryLabelText>
                 {'CALLBACKS'}
-              </Text>
+              </S.StoryLabelText>
               <Box style={{ gap: 3 }}>
                 {tab.callbacks.map(([name, sig, icon]) => (
-                  <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                    <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                    <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                    <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                  </Box>
+                  <S.RowCenterG5 key={name}>
+                    <S.StorySectionIcon src={icon} tintColor={c.muted} />
+                    <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                    <S.StoryCap>{sig}</S.StoryCap>
+                  </S.RowCenterG5>
                 ))}
               </Box>
             </>
           )}
-        </Box>
+        </S.Half>
 
       </Box>
 
@@ -306,16 +294,7 @@ export function CreativeConceptsStory() {
         borderColor: c.border,
         backgroundColor: c.bgElevated,
       }}>
-        <Box style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 8,
-          paddingBottom: 8,
-          gap: 8,
-        }}>
+        <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8 }}>
           {TABS.map(comp => {
             const active = comp.id === activeId;
             return (
@@ -339,34 +318,22 @@ export function CreativeConceptsStory() {
               </Pressable>
             );
           })}
-        </Box>
+        </S.RowG8>
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Demos'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="sparkles" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'CreativeConcepts'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{tab.label}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Demos'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.DimIcon12 src="sparkles" />
+        <S.StoryCap>{'CreativeConcepts'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src={tab.icon} />
+        <S.StoryBreadcrumbActive>{tab.label}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
-      </Box>
+        <S.StoryCap>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

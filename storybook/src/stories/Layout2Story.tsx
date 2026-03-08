@@ -61,23 +61,11 @@ export function Layout2Story() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="package" tintColor={C.accent} />
+        <S.StoryTitle>
           {'usePackage'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -89,22 +77,22 @@ export function Layout2Story() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/package'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Reactive state hooks for package integration'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Manage package state without the ceremony.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'usePackage gives you a reactive [state, actions] tuple — loading, error, and data tracking built in. Wrap once with a provider, subscribe from anywhere.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -113,9 +101,9 @@ export function Layout2Story() {
         <Band>
           <Half>
             <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Import the hook and the provider. The provider enables caching and manages the package registry.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
         </Band>
@@ -127,9 +115,9 @@ export function Layout2Story() {
           <CodeBlock language="tsx" fontSize={9} code={PROVIDER_CODE} />
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'PROVIDER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Wrap your app once at the root. Config options control caching, TTL, and error boundaries.'}
-            </Text>
+            </S.StoryBody>
           </Half>
         </Band>
 
@@ -137,10 +125,10 @@ export function Layout2Story() {
 
         {/* ── Callout ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'The hook is reactive — your component re-renders automatically when the package state changes. No manual subscriptions.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -149,9 +137,9 @@ export function Layout2Story() {
         <Band>
           <Half>
             <SectionLabel icon="code" accentColor={C.accent}>{'BASIC USAGE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Destructure state for loading, error, and data. The hook handles the lifecycle — you just read.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={BASIC_CODE} />
         </Band>
@@ -163,9 +151,9 @@ export function Layout2Story() {
           <CodeBlock language="tsx" fontSize={9} code={ACTIONS_CODE} />
           <Half>
             <SectionLabel icon="zap" accentColor={C.accent}>{'ACTIONS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The second element in the tuple. Set, merge, reset, or subscribe to changes imperatively.'}
-            </Text>
+            </S.StoryBody>
           </Half>
         </Band>
 
@@ -175,9 +163,9 @@ export function Layout2Story() {
         <Band>
           <Half>
             <SectionLabel icon="settings" accentColor={C.accent}>{'OPTIONS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Second argument configures caching, TTL, stale-while-revalidate, and error callbacks.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={OPTIONS_CODE} />
         </Band>
@@ -185,27 +173,15 @@ export function Layout2Story() {
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'usePackage'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="package" />
+        <S.StoryBreadcrumbActive>{'usePackage'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

@@ -21,41 +21,29 @@ export function TextStylesStory() {
   return (
     <>
       <StorySection index={1} title="Scaled text basics">
-        <Box
-          tooltip={{ content: `Why This Changes\n${scaleFormula(24, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
-          style={{ width: '100%', alignItems: 'center' }}
-        >
-          <Text style={{ color: c.text, fontSize: 24, fontWeight: 'bold' }}>
+        <S.CenterW100 tooltip={{ content: `Why This Changes\n${scaleFormula(24, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}>
+          <S.BoldText style={{ fontSize: 24 }}>
             {`Bold ${sz(24, scale)}`}
-          </Text>
-        </Box>
+          </S.BoldText>
+        </S.CenterW100>
 
-        <Box
-          tooltip={{ content: `Why This Changes\n${scaleFormula(16, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
-          style={{ width: '100%', alignItems: 'center' }}
-        >
+        <S.CenterW100 tooltip={{ content: `Why This Changes\n${scaleFormula(16, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}>
           <Text style={{ color: c.textSecondary, fontSize: 16 }}>
             {`Regular ${sz(16, scale)} gray`}
           </Text>
-        </Box>
+        </S.CenterW100>
 
-        <Box
-          tooltip={{ content: `Why This Changes\n${scaleFormula(2, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
-          style={{ width: '100%', alignItems: 'center' }}
-        >
+        <S.CenterW100 tooltip={{ content: `Why This Changes\n${scaleFormula(2, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}>
           <Text style={{ color: c.primary, fontSize: 14, letterSpacing: 2 }}>
             {`Letter spacing ${sz(2, scale)}`}
           </Text>
-        </Box>
+        </S.CenterW100>
 
-        <Box
-          tooltip={{ content: `Why This Changes\n${scaleFormula(28, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}
-          style={{ width: '100%', alignItems: 'center' }}
-        >
+        <S.CenterW100 tooltip={{ content: `Why This Changes\n${scaleFormula(28, scale)}\nScaled from viewport size (reference: 800x600).`, type: 'anchor', anchor: 'top', layout: 'descriptive' }}>
           <Text style={{ color: c.warning, fontSize: 14, lineHeight: 28 }}>
             {`Line height ${sz(28, scale)} shows extra spacing when text wraps to multiple lines.`}
           </Text>
-        </Box>
+        </S.CenterW100>
 
         <Box style={{
           width: 260,
@@ -80,7 +68,7 @@ export function TextStylesStory() {
       </StorySection>
 
       <StorySection index={2} title="Typography presets">
-        <Box style={{ width: '100%', gap: 8 }}>
+        <S.StackG8W100>
           <Typography.Heading style={{ color: c.text, fontSize: 24 }}>
             The quick brown fox jumps over the lazy dog
           </Typography.Heading>
@@ -99,12 +87,12 @@ export function TextStylesStory() {
           <Typography.Mono style={{ color: c.text, fontSize: 13 }}>
             Monospace: const x = "code";
           </Typography.Mono>
-        </Box>
+        </S.StackG8W100>
       </StorySection>
 
       <StorySection index={3} title="Emphasis and decoration">
-        <Box style={{ width: '100%', gap: 8 }}>
-          <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
+        <S.StackG8W100>
+          <S.SurfaceR6 style={{ width: 280, padding: 8, gap: 6 }}>
             <S.StoryMuted>Typography wrappers</S.StoryMuted>
             <Typography.Bold style={{ color: c.text, fontSize: 16 }}>
               Bold text stands out
@@ -118,9 +106,9 @@ export function TextStylesStory() {
             <Typography.Strike style={{ color: c.textDim, fontSize: 16 }}>
               Strikethrough removes
             </Typography.Strike>
-          </Box>
+          </S.SurfaceR6>
 
-          <Box style={{ width: 280, backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 6 }}>
+          <S.SurfaceR6 style={{ width: 280, padding: 8, gap: 6 }}>
             <S.StoryMuted>Raw textDecorationLine combinations</S.StoryMuted>
             <Text style={{ color: c.warning, fontSize: 16, fontWeight: 'bold', textDecorationLine: 'underline' }}>
               Bold + underline
@@ -128,37 +116,37 @@ export function TextStylesStory() {
             <Text style={{ color: c.error, fontSize: 14, fontWeight: 'bold', textDecorationLine: 'line-through' }}>
               Bold + strikethrough
             </Text>
-            <Text style={{ color: c.text, fontSize: 10, textDecorationLine: 'underline' }}>
+            <S.StoryBody style={{ textDecorationLine: 'underline' }}>
               Small underlined (10px)
-            </Text>
+            </S.StoryBody>
             <Text style={{ color: c.text, fontSize: 20, textDecorationLine: 'underline' }}>
               Large underlined (20px)
             </Text>
-          </Box>
-        </Box>
+          </S.SurfaceR6>
+        </S.StackG8W100>
       </StorySection>
 
       <StorySection index={4} title="Text truncation">
-        <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
+        <S.SurfaceR6 style={{ width: 260, padding: 8 }}>
           <S.StoryMuted>numberOfLines: 1</S.StoryMuted>
           <Text style={{ color: c.text, fontSize: 13 }} numberOfLines={1}>
             {LONG_TEXT}
           </Text>
-        </Box>
+        </S.SurfaceR6>
 
-        <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
+        <S.SurfaceR6 style={{ width: 260, padding: 8 }}>
           <S.StoryMuted>numberOfLines: 2</S.StoryMuted>
           <Text style={{ color: c.text, fontSize: 13 }} numberOfLines={2}>
             {LONG_TEXT}
           </Text>
-        </Box>
+        </S.SurfaceR6>
 
-        <Box style={{ width: 260, backgroundColor: c.surface, padding: 8, borderRadius: 6 }}>
+        <S.SurfaceR6 style={{ width: 260, padding: 8 }}>
           <S.StoryMuted>No limit</S.StoryMuted>
           <Text style={{ color: c.text, fontSize: 13 }}>
             {LONG_TEXT}
           </Text>
-        </Box>
+        </S.SurfaceR6>
       </StorySection>
     </>
   );

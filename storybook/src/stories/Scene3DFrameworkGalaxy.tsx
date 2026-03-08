@@ -76,12 +76,12 @@ function LabeledSlider({
   const c = useThemeColors();
   return (
     <Box style={{ gap: 4 }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ color: c.textSecondary, fontSize: 10 }}>{label}</Text>
+      <S.RowSpaceBetween>
+        <S.SecondaryBody>{label}</S.SecondaryBody>
         <S.StoryMuted>
           {value.toFixed(step < 1 ? 1 : 0)}
         </S.StoryMuted>
-      </Box>
+      </S.RowSpaceBetween>
       <Slider
         value={value}
         minimumValue={min}
@@ -134,7 +134,7 @@ export function Scene3DFrameworkGalaxyStory() {
   const fpsVariant = fps >= 55 ? 'success' : fps >= 40 ? 'warning' : 'error';
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
+    <S.FullSize style={{ padding: 16, gap: 12 }}>
       <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         Cube Galaxy Stress
       </Text>
@@ -142,45 +142,26 @@ export function Scene3DFrameworkGalaxyStory() {
         Stress test: galaxy field of `framework-canvas` cubes with real-time controls
       </Text>
 
-      <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1 }}>
-        <Box
-          style={{
-            width: 280,
-            padding: 12,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.bgElevated,
-            gap: 10,
-          }}
-        >
-          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <S.RowG12 style={{ flexGrow: 1 }}>
+        <S.Bordered style={{ width: 280, padding: 12, borderRadius: 10, backgroundColor: c.bgElevated, gap: 10 }}>
+          <S.RowG6 style={{ flexWrap: 'wrap' }}>
             <Badge label={`${cubeCount} cubes`} variant="info" />
             <Badge label={`${arms} arms`} variant="default" />
             <Badge label={denseMode ? 'dense mode' : 'edge mode'} variant={denseMode ? 'warning' : 'success'} />
             <Badge label={`FPS ${fps || '--'}`} variant={fpsVariant} />
-          </Box>
+          </S.RowG6>
 
           <LabeledSlider label="Cube Count" value={cubeCount} min={80} max={460} step={20} onChange={setCubeCount} />
           <LabeledSlider label="Galaxy Arms" value={arms} min={2} max={8} step={1} onChange={setArms} />
           <LabeledSlider label="Radius" value={radius} min={5} max={13} step={0.2} onChange={setRadius} />
           <LabeledSlider label="Speed" value={speed} min={0.2} max={2.5} step={0.1} onChange={setSpeed} />
 
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <S.RowCenterG8>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Animation</Text>
             <Switch value={running} onValueChange={setRunning} />
-          </Box>
+          </S.RowCenterG8>
 
-          <Box
-            style={{
-              backgroundColor: c.bg,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: c.border,
-              padding: 8,
-              gap: 3,
-            }}
-          >
+          <S.Bordered style={{ backgroundColor: c.bg, borderRadius: 8, padding: 8, gap: 3 }}>
             <Text style={{ color: c.text, fontSize: 10, fontWeight: 'normal' }}>
               Runtime Perf
             </Text>
@@ -190,12 +171,12 @@ export function Scene3DFrameworkGalaxyStory() {
             <S.StoryMuted>
               {`total frame work ${totalMs.toFixed(1)}ms | nodes ${nodeCount || '--'}`}
             </S.StoryMuted>
-          </Box>
+          </S.Bordered>
 
           <S.StoryMuted>
             Each cube uses the same 2D framework texture pipeline as the single-cube demo.
           </S.StoryMuted>
-        </Box>
+        </S.Bordered>
 
         <Scene style={{ flexGrow: 1 }} backgroundColor="#040812" stars>
           <Camera position={[0, -15, 8]} lookAt={[0, 0, 0.2]} fov={0.86} />
@@ -251,7 +232,7 @@ export function Scene3DFrameworkGalaxyStory() {
             />
           ))}
         </Scene>
-      </Box>
-    </Box>
+      </S.RowG12>
+    </S.FullSize>
   );
 }

@@ -80,65 +80,65 @@ function Dashboard() {
 
 export function ThumbCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 50, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: c.border, overflow: 'hidden' }}>
-        <Box style={{ paddingLeft: 4, paddingTop: 2, paddingBottom: 2, borderBottomWidth: 1, borderColor: c.border }}>
-          <Text style={{ color: c.text, fontSize: 4, fontWeight: 'bold' }}>{'Title'}</Text>
-        </Box>
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 50, borderRadius: 3, overflow: 'hidden' }}>
+        <S.BorderBottom style={{ paddingLeft: 4, paddingTop: 2, paddingBottom: 2 }}>
+          <S.BoldText style={{ fontSize: 4 }}>{'Title'}</S.BoldText>
+        </S.BorderBottom>
         <Box style={{ padding: 3, gap: 2 }}>
           <Box style={{ width: 30, height: 2, backgroundColor: c.muted, borderRadius: 1 }} />
           <Box style={{ width: 20, height: 2, backgroundColor: c.muted, borderRadius: 1, opacity: 0.5 }} />
         </Box>
-      </Box>
-    </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbBadge({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
-      <Box style={{ flexDirection: 'row', gap: 2 }}>
+    <S.FullCenter style={{ gap: 3 }}>
+      <S.RowG2>
         <Box style={{ backgroundColor: '#166534', borderRadius: 4, paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1 }}>
           <Text style={{ color: '#bbf7d0', fontSize: 3.5 }}>{'OK'}</Text>
         </Box>
         <Box style={{ backgroundColor: '#854d0e', borderRadius: 4, paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1 }}>
           <Text style={{ color: '#fef08a', fontSize: 3.5 }}>{'WARN'}</Text>
         </Box>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 2 }}>
+      </S.RowG2>
+      <S.RowG2>
         <Box style={{ backgroundColor: '#991b1b', borderRadius: 4, paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1 }}>
           <Text style={{ color: '#fecaca', fontSize: 3.5 }}>{'ERR'}</Text>
         </Box>
         <Box style={{ backgroundColor: '#1e40af', borderRadius: 4, paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1 }}>
           <Text style={{ color: '#bfdbfe', fontSize: 3.5 }}>{'INFO'}</Text>
         </Box>
-      </Box>
-    </Box>
+      </S.RowG2>
+    </S.FullCenter>
   );
 }
 
 export function ThumbTabs({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ flexDirection: 'row', gap: 1 }}>
         <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderBottomWidth: 2, borderColor: C.accent }}>
           <Text style={{ color: c.text, fontSize: 4 }}>{'Tab A'}</Text>
         </Box>
         <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2 }}>
-          <Text style={{ color: c.muted, fontSize: 4 }}>{'Tab B'}</Text>
+          <S.DimNano>{'Tab B'}</S.DimNano>
         </Box>
         <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2 }}>
-          <Text style={{ color: c.muted, fontSize: 4 }}>{'Tab C'}</Text>
+          <S.DimNano>{'Tab C'}</S.DimNano>
         </Box>
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbNavPanel({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 36, backgroundColor: c.surface, borderRadius: 2, borderWidth: 1, borderColor: c.border, padding: 3, gap: 2 }}>
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 36, borderRadius: 2, padding: 3, gap: 2 }}>
         <Text style={{ color: c.muted, fontSize: 3 }}>{'MENU'}</Text>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 2, paddingLeft: 3, paddingTop: 1, paddingBottom: 1, borderLeftWidth: 2, borderColor: C.accent }}>
           <Text style={{ color: c.text, fontSize: 3.5 }}>{'Home'}</Text>
@@ -149,46 +149,46 @@ export function ThumbNavPanel({ c }: { c: ThemeColors }) {
         <Box style={{ paddingLeft: 3, paddingTop: 1, paddingBottom: 1 }}>
           <Text style={{ color: c.muted, fontSize: 3.5 }}>{'Config'}</Text>
         </Box>
-      </Box>
-    </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbToolbar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 2, backgroundColor: c.surface, borderRadius: 3, padding: 3, borderWidth: 1, borderColor: c.border }}>
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ flexDirection: 'row', gap: 2, borderRadius: 3, padding: 3 }}>
         <Box style={{ width: 8, height: 8, backgroundColor: c.border, borderRadius: 2 }} />
         <Box style={{ width: 8, height: 8, backgroundColor: c.border, borderRadius: 2 }} />
-        <Box style={{ width: 1, height: 8, backgroundColor: c.border }} />
+        <S.VertDivider style={{ height: 8 }} />
         <Box style={{ width: 8, height: 8, backgroundColor: C.accentDim, borderRadius: 2 }} />
         <Box style={{ width: 8, height: 8, backgroundColor: c.border, borderRadius: 2 }} />
-      </Box>
-    </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbBreadcrumbs({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 2, alignItems: 'center' }}>
-        <Text style={{ color: c.muted, fontSize: 4 }}>{'Home'}</Text>
-        <Text style={{ color: c.muted, fontSize: 4 }}>{'/'}</Text>
-        <Text style={{ color: c.muted, fontSize: 4 }}>{'Docs'}</Text>
-        <Text style={{ color: c.muted, fontSize: 4 }}>{'/'}</Text>
+    <S.FullCenter>
+      <S.RowCenter style={{ gap: 2 }}>
+        <S.DimNano>{'Home'}</S.DimNano>
+        <S.DimNano>{'/'}</S.DimNano>
+        <S.DimNano>{'Docs'}</S.DimNano>
+        <S.DimNano>{'/'}</S.DimNano>
         <Text style={{ color: c.text, fontSize: 4 }}>{'API'}</Text>
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.FullCenter>
   );
 }
 
 export function ThumbTable({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 52, borderWidth: 1, borderColor: c.border, borderRadius: 2, overflow: 'hidden' }}>
+    <S.FullCenter>
+      <S.Bordered style={{ width: 52, borderRadius: 2, overflow: 'hidden' }}>
         <Box style={{ flexDirection: 'row', backgroundColor: c.surface, paddingLeft: 3, paddingTop: 2, paddingBottom: 2 }}>
-          <Text style={{ color: c.text, fontSize: 3, fontWeight: 'bold', width: 20 }}>{'Name'}</Text>
-          <Text style={{ color: c.text, fontSize: 3, fontWeight: 'bold' }}>{'Val'}</Text>
+          <S.BoldText style={{ fontSize: 3, width: 20 }}>{'Name'}</S.BoldText>
+          <S.BoldText style={{ fontSize: 3 }}>{'Val'}</S.BoldText>
         </Box>
         {[0, 1].map(i => (
           <Box key={i} style={{ flexDirection: 'row', paddingLeft: 3, paddingTop: 1, paddingBottom: 1, backgroundColor: i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
@@ -196,24 +196,24 @@ export function ThumbTable({ c }: { c: ThemeColors }) {
             <Box style={{ width: 10, height: 3, backgroundColor: c.muted, borderRadius: 1, opacity: 0.3, marginLeft: 4 }} />
           </Box>
         ))}
-      </Box>
-    </Box>
+      </S.Bordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbProgressBar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 4, padding: 6 }}>
-      <Box style={{ width: 50, height: 4, backgroundColor: c.surface, borderRadius: 2, overflow: 'hidden' }}>
+    <S.FullCenter style={{ gap: 4, padding: 6 }}>
+      <S.StoryFill style={{ width: 50, backgroundColor: c.surface, overflow: 'hidden' }}>
         <Box style={{ width: '85%', height: 4, backgroundColor: C.accent, borderRadius: 2 }} />
-      </Box>
-      <Box style={{ width: 50, height: 4, backgroundColor: c.surface, borderRadius: 2, overflow: 'hidden' }}>
-        <Box style={{ width: '45%', height: 4, backgroundColor: '#3b82f6', borderRadius: 2 }} />
-      </Box>
-      <Box style={{ width: 50, height: 4, backgroundColor: c.surface, borderRadius: 2, overflow: 'hidden' }}>
-        <Box style={{ width: '92%', height: 4, backgroundColor: '#10b981', borderRadius: 2 }} />
-      </Box>
-    </Box>
+      </S.StoryFill>
+      <S.StoryFill style={{ width: 50, backgroundColor: c.surface, overflow: 'hidden' }}>
+        <S.StoryFill style={{ width: '45%', backgroundColor: '#3b82f6' }} />
+      </S.StoryFill>
+      <S.StoryFill style={{ width: 50, backgroundColor: c.surface, overflow: 'hidden' }}>
+        <S.StoryFill style={{ width: '92%', backgroundColor: '#10b981' }} />
+      </S.StoryFill>
+    </S.FullCenter>
   );
 }
 
@@ -221,119 +221,119 @@ export function ThumbSparkline({ c }: { c: ThemeColors }) {
   const pts = [3, 5, 2, 7, 4, 8, 6, 9, 5, 7];
   const max = 9;
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'end', alignItems: 'center', paddingBottom: 8 }}>
+    <S.CenterW100 style={{ height: '100%', justifyContent: 'end', paddingBottom: 8 }}>
       <Box style={{ flexDirection: 'row', gap: 1, alignItems: 'end', height: 24 }}>
         {pts.map((v, i) => (
           <Box key={i} style={{ width: 3, height: (v / max) * 20 + 2, backgroundColor: '#10b981', borderRadius: 1, opacity: 0.6 + (v / max) * 0.4 }} />
         ))}
       </Box>
-    </Box>
+    </S.CenterW100>
   );
 }
 
 export function ThumbMessageBubble({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', padding: 4, gap: 3 }}>
+    <S.FullSize style={{ justifyContent: 'center', padding: 4, gap: 3 }}>
       <Box style={{ alignSelf: 'start', backgroundColor: '#1e293b', borderRadius: 4, borderTopLeftRadius: 1, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, maxWidth: 40 }}>
         <Text style={{ color: '#e2e8f0', fontSize: 3.5 }}>{'Hello!'}</Text>
       </Box>
       <Box style={{ alignSelf: 'end', backgroundColor: '#2563eb', borderRadius: 4, borderTopRightRadius: 1, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, maxWidth: 40 }}>
         <Text style={{ color: '#fff', fontSize: 3.5 }}>{'Hi there'}</Text>
       </Box>
-    </Box>
+    </S.FullSize>
   );
 }
 
 export function ThumbChatInput({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 4 }}>
-      <Box style={{ flexDirection: 'row', width: 54, gap: 2, alignItems: 'center', backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, borderColor: c.border, padding: 3 }}>
+    <S.FullCenter style={{ padding: 4 }}>
+      <S.RowCenterBorder style={{ width: 54, gap: 2, backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, padding: 3 }}>
         <Box style={{ flexGrow: 1, height: 6, backgroundColor: c.bg, borderRadius: 2 }}>
           <Text style={{ color: c.muted, fontSize: 3, paddingLeft: 2 }}>{'Type...'}</Text>
         </Box>
-        <Box style={{ width: 10, height: 8, backgroundColor: '#3b82f6', borderRadius: 2, justifyContent: 'center', alignItems: 'center' }}>
+        <S.Center style={{ width: 10, height: 8, backgroundColor: '#3b82f6', borderRadius: 2 }}>
           <Text style={{ color: '#fff', fontSize: 3 }}>{'>'}</Text>
-        </Box>
-      </Box>
-    </Box>
+        </S.Center>
+      </S.RowCenterBorder>
+    </S.FullCenter>
   );
 }
 
 export function ThumbSearchBar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 4 }}>
-      <Box style={{ flexDirection: 'row', width: 54, gap: 3, alignItems: 'center', backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, borderColor: c.border, padding: 3 }}>
-        <Box style={{ width: 6, height: 6, borderRadius: 3, borderWidth: 1, borderColor: c.muted }} />
+    <S.FullCenter style={{ padding: 4 }}>
+      <S.RowCenterBorder style={{ width: 54, gap: 3, backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, padding: 3 }}>
+        <S.Dot6 style={{ width: 6, borderWidth: 1, borderColor: c.muted }} />
         <Box style={{ flexGrow: 1, height: 3, backgroundColor: c.muted, borderRadius: 1, opacity: 0.3 }} />
-      </Box>
-    </Box>
+      </S.RowCenterBorder>
+    </S.FullCenter>
   );
 }
 
 export function ThumbCodeBlock({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 4 }}>
+    <S.FullCenter style={{ padding: 4 }}>
       <Box style={{ width: 52, backgroundColor: '#0d1117', borderRadius: 3, padding: 3, gap: 2, borderWidth: 1, borderColor: '#30363d' }}>
-        <Box style={{ flexDirection: 'row', gap: 2 }}>
+        <S.RowG2>
           <Box style={{ width: 12, height: 3, backgroundColor: '#ff7b72', borderRadius: 1 }} />
           <Box style={{ width: 16, height: 3, backgroundColor: '#79c0ff', borderRadius: 1 }} />
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 2, paddingLeft: 4 }}>
+        </S.RowG2>
+        <S.RowG2 style={{ paddingLeft: 4 }}>
           <Box style={{ width: 10, height: 3, backgroundColor: '#7ee787', borderRadius: 1 }} />
           <Box style={{ width: 8, height: 3, backgroundColor: '#d2a8ff', borderRadius: 1 }} />
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 2 }}>
+        </S.RowG2>
+        <S.RowG2>
           <Box style={{ width: 6, height: 3, backgroundColor: '#ff7b72', borderRadius: 1 }} />
-        </Box>
+        </S.RowG2>
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbLoadingDots({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 4 }}>
+    <S.FullCenter>
+      <S.RowG4>
         <Box style={{ width: 6, height: 6, backgroundColor: C.accent, borderRadius: 3 }} />
         <Box style={{ width: 6, height: 6, backgroundColor: C.accent, borderRadius: 3, opacity: 0.6 }} />
         <Box style={{ width: 6, height: 6, backgroundColor: C.accent, borderRadius: 3, opacity: 0.3 }} />
-      </Box>
-    </Box>
+      </S.RowG4>
+    </S.FullCenter>
   );
 }
 
 export function ThumbElementTile({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 32, height: 36, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: '#de9a9a', padding: 2, gap: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
+      <S.Center style={{ width: 32, height: 36, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: '#de9a9a', padding: 2, gap: 1 }}>
         <Text style={{ color: '#de9a9a', fontSize: 3 }}>{'26'}</Text>
-        <Text style={{ color: c.text, fontSize: 8, fontWeight: 'bold' }}>{'Fe'}</Text>
+        <S.BoldText style={{ fontSize: 8 }}>{'Fe'}</S.BoldText>
         <Text style={{ color: c.muted, fontSize: 3 }}>{'55.84'}</Text>
-      </Box>
-    </Box>
+      </S.Center>
+    </S.FullCenter>
   );
 }
 
 export function ThumbElementCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ width: 52, height: 44, backgroundColor: c.bgElevated, borderRadius: 4, borderWidth: 1, borderColor: '#de9a9a', padding: 3, gap: 1 }}>
-        <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-          <Box style={{ width: 12, height: 12, backgroundColor: '#de9a9a', borderRadius: 2, alignItems: 'center', justifyContent: 'center' }}>
+        <S.RowCenter style={{ gap: 3 }}>
+          <S.Center style={{ width: 12, height: 12, backgroundColor: '#de9a9a', borderRadius: 2 }}>
             <Text style={{ color: '#000', fontSize: 5, fontWeight: 'bold' }}>{'Au'}</Text>
-          </Box>
-          <Text style={{ color: c.text, fontSize: 5, fontWeight: 'bold' }}>{'Gold'}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          </S.Center>
+          <S.BoldText style={{ fontSize: 5 }}>{'Gold'}</S.BoldText>
+        </S.RowCenter>
+        <S.RowSpaceBetween>
           <Text style={{ color: c.muted, fontSize: 3 }}>{'Mass'}</Text>
           <Text style={{ color: c.text, fontSize: 3 }}>{'196.97'}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        </S.RowSpaceBetween>
+        <S.RowSpaceBetween>
           <Text style={{ color: c.muted, fontSize: 3 }}>{'Phase'}</Text>
           <Text style={{ color: c.text, fontSize: 3 }}>{'solid'}</Text>
-        </Box>
+        </S.RowSpaceBetween>
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
@@ -347,7 +347,7 @@ export function ThumbKnob({ c }: { c: ThemeColors }) {
   const normalized = 0.7;
   const activeDots = Math.floor(normalized * (dotCount - 1) + 0.5) + 1;
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+    <S.FullCenter style={{ gap: 2 }}>
       <Box style={{ width: 68, height: 30, position: 'relative' }}>
         {/* Arc dots */}
         {Array.from({ length: dotCount }).map((_, i) => {
@@ -391,7 +391,7 @@ export function ThumbKnob({ c }: { c: ThemeColors }) {
         })()}
       </Box>
       <Text style={{ color: c.muted, fontSize: 3.5 }}>{'Gain'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
@@ -405,7 +405,7 @@ export function ThumbFader({ c }: { c: ThemeColors }) {
   const fillH = trackH * ratio;
   const thumbY = trackH - fillH - thumbH / 2;
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ width: 20, height: trackH, position: 'relative' }}>
         {/* Inactive track */}
         <Box style={{ position: 'absolute', left: 9, top: 0, width: trackW, height: trackH, backgroundColor: '#1e1e1e', borderRadius: 1 }} />
@@ -414,14 +414,14 @@ export function ThumbFader({ c }: { c: ThemeColors }) {
         {/* Thumb bar */}
         <Box style={{ position: 'absolute', left: (20 - thumbW) / 2, top: thumbY, width: thumbW, height: thumbH, backgroundColor: '#ccc', borderRadius: 1, borderWidth: 1, borderColor: '#666' }} />
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMeter({ c }: { c: ThemeColors }) {
   const segs = [1, 1, 1, 1, 1, 0.6, 0.3, 0];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ gap: 1 }}>
         {segs.map((opacity, i) => {
           const color = i >= 6 ? '#ef4444' : i >= 4 ? '#f59e0b' : '#10b981';
@@ -430,35 +430,35 @@ export function ThumbMeter({ c }: { c: ThemeColors }) {
           );
         }).reverse()}
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbTickerSymbol({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.text, fontSize: 5, fontWeight: 'bold' }}>{'AAPL'}</Text>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.BoldText style={{ fontSize: 5 }}>{'AAPL'}</S.BoldText>
       <Text style={{ color: c.text, fontSize: 7 }}>{'$182.52'}</Text>
       <Text style={{ color: '#10b981', fontSize: 4 }}>{'+0.74%'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbClock({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>{'12:34'}</Text>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'PM'}</Text>
-    </Box>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.StoryBreadcrumbActive style={{ fontWeight: 'bold' }}>{'12:34'}</S.StoryBreadcrumbActive>
+      <S.DimNano>{'PM'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
 export function ThumbStopwatch({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.text, fontSize: 7, fontWeight: 'bold' }}>{'02:45'}</Text>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.BoldText style={{ fontSize: 7 }}>{'02:45'}</S.BoldText>
       <Text style={{ color: '#06b6d4', fontSize: 4 }}>{'.320'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
@@ -466,116 +466,116 @@ export function ThumbStopwatch({ c }: { c: ThemeColors }) {
 
 export function ThumbSlider({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 6 }}>
-      <Box style={{ width: 50, height: 4, backgroundColor: c.surface, borderRadius: 2, position: 'relative' }}>
-        <Box style={{ width: '60%', height: 4, backgroundColor: '#3b82f6', borderRadius: 2 }} />
+    <S.FullCenter style={{ padding: 6 }}>
+      <S.StoryFill style={{ width: 50, backgroundColor: c.surface, position: 'relative' }}>
+        <S.StoryFill style={{ width: '60%', backgroundColor: '#3b82f6' }} />
         <Box style={{ position: 'absolute', left: 28, top: -3, width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff', borderWidth: 1, borderColor: '#3b82f6' }} />
-      </Box>
-    </Box>
+      </S.StoryFill>
+    </S.FullCenter>
   );
 }
 
 export function ThumbSwitch({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+    <S.FullCenter style={{ gap: 3 }}>
       <Box style={{ width: 24, height: 12, backgroundColor: '#22c55e', borderRadius: 6, position: 'relative' }}>
         <Box style={{ position: 'absolute', right: 2, top: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' }} />
       </Box>
-      <Box style={{ width: 24, height: 12, backgroundColor: c.surface, borderRadius: 6, position: 'relative' }}>
+      <S.SurfaceR6 style={{ width: 24, height: 12, position: 'relative' }}>
         <Box style={{ position: 'absolute', left: 2, top: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#999' }} />
-      </Box>
-    </Box>
+      </S.SurfaceR6>
+    </S.FullCenter>
   );
 }
 
 export function ThumbCheckbox({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
-      <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter style={{ gap: 3 }}>
+      <S.RowCenter style={{ gap: 3 }}>
+        <S.Center style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#3b82f6' }}>
           <Text style={{ color: '#fff', fontSize: 5 }}>{'✓'}</Text>
-        </Box>
+        </S.Center>
         <Text style={{ color: c.text, fontSize: 4 }}>{'On'}</Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 2, borderWidth: 1, borderColor: c.border }} />
-        <Text style={{ color: c.muted, fontSize: 4 }}>{'Off'}</Text>
-      </Box>
-    </Box>
+      </S.RowCenter>
+      <S.RowCenter style={{ gap: 3 }}>
+        <S.Bordered style={{ width: 8, height: 8, borderRadius: 2 }} />
+        <S.DimNano>{'Off'}</S.DimNano>
+      </S.RowCenter>
+    </S.FullCenter>
   );
 }
 
 export function ThumbRadio({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+    <S.FullCenter style={{ gap: 3 }}>
       {['A', 'B', 'C'].map((l, i) => (
-        <Box key={l} style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+        <S.RowCenter key={l} style={{ gap: 3 }}>
           <Box style={{ width: 7, height: 7, borderRadius: 4, borderWidth: 1, borderColor: i === 0 ? '#3b82f6' : c.border, justifyContent: 'center', alignItems: 'center' }}>
             {i === 0 && <Box style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: '#3b82f6' }} />}
           </Box>
           <Text style={{ color: i === 0 ? c.text : c.muted, fontSize: 4 }}>{l}</Text>
-        </Box>
+        </S.RowCenter>
       ))}
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbSelect({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', width: 44, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: c.border, padding: 3, justifyContent: 'space-between', alignItems: 'center' }}>
+    <S.FullCenter>
+      <S.RowCenterBorder style={{ width: 44, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, padding: 3, justifyContent: 'space-between' }}>
         <Text style={{ color: c.text, fontSize: 4 }}>{'Option'}</Text>
         <Text style={{ color: c.muted, fontSize: 5 }}>{'▾'}</Text>
-      </Box>
-    </Box>
+      </S.RowCenterBorder>
+    </S.FullCenter>
   );
 }
 
 export function ThumbBarChart({ c }: { c: ThemeColors }) {
   const bars = [0.6, 0.9, 0.4, 0.7, 0.5];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'end', alignItems: 'center', paddingBottom: 6 }}>
-      <Box style={{ flexDirection: 'row', gap: 2, alignItems: 'end', height: 28 }}>
+    <S.CenterW100 style={{ height: '100%', justifyContent: 'end', paddingBottom: 6 }}>
+      <S.RowG2 style={{ alignItems: 'end', height: 28 }}>
         {bars.map((v, i) => (
           <Box key={i} style={{ width: 6, height: v * 26, backgroundColor: '#3b82f6', borderRadius: 1 }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowG2>
+    </S.CenterW100>
   );
 }
 
 export function ThumbLineChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ flexDirection: 'row', gap: 1, alignItems: 'end', height: 24 }}>
         {[4, 7, 3, 8, 5, 9, 6].map((v, i) => (
           <Box key={i} style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: '#3b82f6', marginBottom: v * 2 }} />
         ))}
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPieChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 4, borderColor: '#3b82f6', position: 'relative', overflow: 'hidden' }}>
         <Box style={{ position: 'absolute', top: 0, right: 0, width: 14, height: 14, backgroundColor: '#10b981' }} />
         <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 14, height: 8, backgroundColor: '#f59e0b' }} />
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbRadarChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 30, height: 30, borderWidth: 1, borderColor: c.border, borderRadius: 15, justifyContent: 'center', alignItems: 'center' }}>
-        <Box style={{ width: 18, height: 18, borderWidth: 1, borderColor: c.border, borderRadius: 9, justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
+      <S.Center style={{ width: 30, height: 30, borderWidth: 1, borderColor: c.border, borderRadius: 15 }}>
+        <S.Center style={{ width: 18, height: 18, borderWidth: 1, borderColor: c.border, borderRadius: 9 }}>
           <Box style={{ width: 8, height: 8, backgroundColor: 'rgba(59,130,246,0.3)', borderRadius: 4 }} />
-        </Box>
-      </Box>
-    </Box>
+        </S.Center>
+      </S.Center>
+    </S.FullCenter>
   );
 }
 
@@ -588,19 +588,19 @@ export function ThumbCandlestick({ c }: { c: ThemeColors }) {
     { h: 18, b: 7, y: 5, up: true },
   ];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'end', height: 28 }}>
         {candles.map((c2, i) => (
           <Box key={i} style={{ width: 4, height: c2.h, backgroundColor: c2.up ? '#22c55e' : '#ef4444', borderRadius: 1 }} />
         ))}
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbOrderBook({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
+    <S.FullCenter style={{ gap: 1 }}>
       {[0.8, 0.6, 0.4].map((w, i) => (
         <Box key={`b${i}`} style={{ flexDirection: 'row', width: 44, gap: 1 }}>
           <Box style={{ width: 44 * w, height: 4, backgroundColor: 'rgba(34,197,94,0.3)', borderRadius: 1 }} />
@@ -611,208 +611,208 @@ export function ThumbOrderBook({ c }: { c: ThemeColors }) {
           <Box style={{ width: 44 * w, height: 4, backgroundColor: 'rgba(239,68,68,0.3)', borderRadius: 1 }} />
         </Box>
       ))}
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbLED({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+    <S.FullCenter style={{ gap: 4 }}>
+      <S.RowG6>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' }} />
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' }} />
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#333' }} />
-      </Box>
-    </Box>
+      </S.RowG6>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPadButton({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 32, gap: 2 }}>
+    <S.FullCenter>
+      <S.RowWrap style={{ width: 32, gap: 2 }}>
         {['#ef4444', '#f59e0b', '#22c55e', '#3b82f6'].map(col => (
           <Box key={col} style={{ width: 14, height: 14, backgroundColor: col, borderRadius: 2, opacity: 0.8 }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.FullCenter>
   );
 }
 
 export function ThumbStepSequencer({ c }: { c: ThemeColors }) {
   const pattern = [1,0,1,0,0,1,0,1, 0,1,0,0,1,0,1,0];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 48, gap: 1 }}>
+    <S.FullCenter>
+      <S.RowWrap style={{ width: 48, gap: 1 }}>
         {pattern.map((on, i) => (
           <Box key={i} style={{ width: 5, height: 5, backgroundColor: on ? '#f59e0b' : '#222', borderRadius: 1 }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.FullCenter>
   );
 }
 
 export function ThumbTransport({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+    <S.FullCenter>
+      <S.RowCenterG4>
         <Box style={{ width: 0, height: 0, borderLeftWidth: 6, borderTopWidth: 4, borderBottomWidth: 4, borderColor: 'transparent', borderLeftColor: '#22c55e' }} />
         <Box style={{ width: 6, height: 8, backgroundColor: c.muted, borderRadius: 1 }} />
-        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' }} />
-      </Box>
-    </Box>
+        <S.Dot6 style={{ width: 6, backgroundColor: '#ef4444' }} />
+      </S.RowCenterG4>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPiano({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'end', alignItems: 'center', paddingBottom: 4 }}>
+    <S.CenterW100 style={{ height: '100%', justifyContent: 'end', paddingBottom: 4 }}>
       <Box style={{ flexDirection: 'row', gap: 1 }}>
         {[1,0,1,0,1,1,0,1,0,1,0,1].map((white, i) => (
           <Box key={i} style={{ width: white ? 4 : 3, height: white ? 20 : 13, backgroundColor: white ? '#eee' : '#222', borderRadius: 1 }} />
         ))}
       </Box>
-    </Box>
+    </S.CenterW100>
   );
 }
 
 export function ThumbXYPad({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 32, height: 32, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: c.border, position: 'relative' }}>
-        <Box style={{ position: 'absolute', left: 18, top: 10, width: 6, height: 6, borderRadius: 3, backgroundColor: '#8b5cf6' }} />
-      </Box>
-    </Box>
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 32, height: 32, borderRadius: 3, position: 'relative' }}>
+        <S.Dot6 style={{ position: 'absolute', left: 18, top: 10, width: 6, backgroundColor: '#8b5cf6' }} />
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPitchWheel({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 14, height: 30, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: c.border, position: 'relative' }}>
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 14, height: 30, borderRadius: 3, position: 'relative' }}>
         <Box style={{ position: 'absolute', left: 1, top: 12, width: 10, height: 6, backgroundColor: '#ccc', borderRadius: 2 }} />
-      </Box>
-    </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPeriodicTable({ c }: { c: ThemeColors }) {
   const colors = ['#7b6faa', '#9a9cc4', '#de9a9a', '#8fbc8f', '#c8c864', '#59b5e6', '#d4a844', '#c87e4a'];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 48, gap: 1 }}>
+    <S.FullCenter>
+      <S.RowWrap style={{ width: 48, gap: 1 }}>
         {colors.map((col, i) => (
           <Box key={i} style={{ width: 5, height: 5, backgroundColor: col, borderRadius: 1 }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMoleculeCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.text, fontSize: 8, fontWeight: 'bold' }}>{'H₂O'}</Text>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'18.015 g/mol'}</Text>
-    </Box>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.BoldText style={{ fontSize: 8 }}>{'H₂O'}</S.BoldText>
+      <S.DimNano>{'18.015 g/mol'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
 export function ThumbElectronShell({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
-        <Box style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
-          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#f59e0b' }} />
-        </Box>
-      </Box>
-    </Box>
+    <S.FullCenter>
+      <S.Center style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: c.border }}>
+        <S.Center style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: c.border }}>
+          <S.Dot6 style={{ width: 6, backgroundColor: '#f59e0b' }} />
+        </S.Center>
+      </S.Center>
+    </S.FullCenter>
   );
 }
 
 export function ThumbReactionView({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
-      <Box style={{ flexDirection: 'row', gap: 2, alignItems: 'center' }}>
+    <S.FullCenter style={{ gap: 1 }}>
+      <S.RowCenter style={{ gap: 2 }}>
         <Text style={{ color: c.text, fontSize: 5 }}>{'A+B'}</Text>
         <Text style={{ color: '#10b981', fontSize: 6 }}>{'→'}</Text>
         <Text style={{ color: c.text, fontSize: 5 }}>{'C'}</Text>
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.FullCenter>
   );
 }
 
 export function ThumbTickerTape({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+    <S.FullCenter>
+      <S.RowCenterG4>
         <Text style={{ color: '#22c55e', fontSize: 4 }}>{'AAPL↑'}</Text>
         <Text style={{ color: '#ef4444', fontSize: 4 }}>{'TSLA↓'}</Text>
-      </Box>
-    </Box>
+      </S.RowCenterG4>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPortfolioCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.text, fontSize: 5, fontWeight: 'bold' }}>{'$12.4k'}</Text>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.BoldText style={{ fontSize: 5 }}>{'$12.4k'}</S.BoldText>
       <Text style={{ color: '#22c55e', fontSize: 4 }}>{'+2.3%'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbRSIGauge({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 36, height: 4, backgroundColor: c.surface, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
-        <Box style={{ width: '65%', height: 4, backgroundColor: '#f59e0b', borderRadius: 2 }} />
-      </Box>
-      <Text style={{ color: c.muted, fontSize: 4, marginTop: 2 }}>{'RSI 65'}</Text>
-    </Box>
+    <S.FullCenter>
+      <S.StoryFill style={{ width: 36, backgroundColor: c.surface, overflow: 'hidden', position: 'relative' }}>
+        <S.StoryFill style={{ width: '65%', backgroundColor: '#f59e0b' }} />
+      </S.StoryFill>
+      <S.DimNano style={{ marginTop: 2 }}>{'RSI 65'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMACDPanel({ c }: { c: ThemeColors }) {
   const bars = [3, 5, -2, -4, 1, 6, 4, -1];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 1, alignItems: 'center', height: 24 }}>
+    <S.FullCenter>
+      <S.RowCenter style={{ gap: 1, height: 24 }}>
         {bars.map((v, i) => (
           <Box key={i} style={{ width: 3, height: Math.abs(v) * 2.5, backgroundColor: v >= 0 ? '#22c55e' : '#ef4444', borderRadius: 1, marginTop: v < 0 ? 0 : undefined, marginBottom: v >= 0 ? 0 : undefined }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.FullCenter>
   );
 }
 
 export function ThumbCountdown({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+    <S.FullCenter style={{ gap: 2 }}>
       <Text style={{ color: '#ef4444', fontSize: 8, fontWeight: 'bold' }}>{'0:30'}</Text>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'remaining'}</Text>
-    </Box>
+      <S.DimNano>{'remaining'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMinimalChat({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', padding: 4, gap: 2 }}>
+    <S.FullSize style={{ justifyContent: 'center', padding: 4, gap: 2 }}>
       <Box style={{ alignSelf: 'end', backgroundColor: '#2563eb', borderRadius: 3, paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1 }}>
         <Text style={{ color: '#fff', fontSize: 3 }}>{'Hi'}</Text>
       </Box>
       <Box style={{ alignSelf: 'start', backgroundColor: '#1e293b', borderRadius: 3, paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1 }}>
         <Text style={{ color: '#e2e8f0', fontSize: 3 }}>{'Hello!'}</Text>
       </Box>
-      <Box style={{ height: 6, backgroundColor: c.surface, borderRadius: 2, borderWidth: 1, borderColor: c.border }} />
-    </Box>
+      <S.SurfaceBordered style={{ height: 6, borderRadius: 2 }} />
+    </S.FullSize>
   );
 }
 
 export function ThumbSpreadsheet({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ borderWidth: 1, borderColor: c.border, borderRadius: 2, overflow: 'hidden' }}>
+    <S.FullCenter>
+      <S.Bordered style={{ borderRadius: 2, overflow: 'hidden' }}>
         {[0, 1, 2].map(r => (
           <Box key={r} style={{ flexDirection: 'row' }}>
             {[0, 1, 2].map(col => (
@@ -820,127 +820,127 @@ export function ThumbSpreadsheet({ c }: { c: ThemeColors }) {
             ))}
           </Box>
         ))}
-      </Box>
-    </Box>
+      </S.Bordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbCommandPalette({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 48, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: c.border, padding: 3, gap: 2 }}>
-        <Box style={{ height: 5, backgroundColor: c.bg, borderRadius: 2, borderWidth: 1, borderColor: c.border }} />
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 48, borderRadius: 3, padding: 3, gap: 2 }}>
+        <S.Bordered style={{ height: 5, backgroundColor: c.bg, borderRadius: 2 }} />
         <Box style={{ height: 3, backgroundColor: C.accentDim, borderRadius: 1 }} />
         <Box style={{ height: 3, backgroundColor: 'transparent', borderRadius: 1 }} />
-      </Box>
-    </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbStatCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'Revenue'}</Text>
-      <Text style={{ color: c.text, fontSize: 8, fontWeight: 'bold' }}>{'$12k'}</Text>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.DimNano>{'Revenue'}</S.DimNano>
+      <S.BoldText style={{ fontSize: 8 }}>{'$12k'}</S.BoldText>
       <Text style={{ color: '#22c55e', fontSize: 4 }}>{'↑ 12%'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbNowPlaying({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+    <S.FullCenter style={{ gap: 2 }}>
       <Box style={{ width: 20, height: 20, backgroundColor: c.surface, borderRadius: 3 }} />
       <Box style={{ width: 30, height: 2, backgroundColor: c.muted, borderRadius: 1 }} />
       <Box style={{ width: 36, height: 3, backgroundColor: '#22c55e', borderRadius: 1, overflow: 'hidden' }}>
         <Box style={{ width: '40%', height: 3, backgroundColor: '#22c55e' }} />
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbRepoCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
-      <Text style={{ color: c.text, fontSize: 5, fontWeight: 'bold' }}>{'repo'}</Text>
+    <S.FullCenter style={{ gap: 2 }}>
+      <S.BoldText style={{ fontSize: 5 }}>{'repo'}</S.BoldText>
       <Box style={{ flexDirection: 'row', gap: 3 }}>
         <Text style={{ color: '#f59e0b', fontSize: 4 }}>{'★ 2.1k'}</Text>
-        <Text style={{ color: c.muted, fontSize: 4 }}>{'TS'}</Text>
+        <S.DimNano>{'TS'}</S.DimNano>
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbImageGallery({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 34, gap: 2 }}>
+    <S.FullCenter>
+      <S.RowWrap style={{ width: 34, gap: 2 }}>
         {[c.surface, c.border, c.muted, c.surface].map((col, i) => (
           <Box key={i} style={{ width: 15, height: 12, backgroundColor: col, borderRadius: 2 }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.FullCenter>
   );
 }
 
 export function ThumbContextMenu({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ width: 36, backgroundColor: c.surface, borderRadius: 3, borderWidth: 1, borderColor: c.border, padding: 2, gap: 1 }}>
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 36, borderRadius: 3, padding: 2, gap: 1 }}>
         <Box style={{ height: 4, backgroundColor: C.accentDim, borderRadius: 1, paddingLeft: 2 }}>
           <Text style={{ color: c.text, fontSize: 3 }}>{'Copy'}</Text>
         </Box>
         <Box style={{ height: 4, borderRadius: 1, paddingLeft: 2 }}>
           <Text style={{ color: c.muted, fontSize: 3 }}>{'Paste'}</Text>
         </Box>
-        <Box style={{ height: 1, backgroundColor: c.border }} />
+        <S.HorzDivider />
         <Box style={{ height: 4, borderRadius: 1, paddingLeft: 2 }}>
           <Text style={{ color: '#ef4444', fontSize: 3 }}>{'Delete'}</Text>
         </Box>
-      </Box>
-    </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMath({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <S.StoryBreadcrumbActive>{'E=mc²'}</S.StoryBreadcrumbActive>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMessageList({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', padding: 4, gap: 2 }}>
+    <S.FullSize style={{ justifyContent: 'center', padding: 4, gap: 2 }}>
       <Box style={{ alignSelf: 'start', width: 28, height: 5, backgroundColor: '#1e293b', borderRadius: 2 }} />
       <Box style={{ alignSelf: 'end', width: 22, height: 5, backgroundColor: '#2563eb', borderRadius: 2 }} />
       <Box style={{ alignSelf: 'start', width: 32, height: 5, backgroundColor: '#1e293b', borderRadius: 2 }} />
-    </Box>
+    </S.FullSize>
   );
 }
 
 export function ThumbActionBar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 2 }}>
+    <S.FullCenter>
+      <S.RowG2>
         {['Copy', 'Edit', 'Del'].map(l => (
-          <Box key={l} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, backgroundColor: c.surface, borderRadius: 2, borderWidth: 1, borderColor: c.border }}>
+          <S.SurfaceBordered key={l} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 2 }}>
             <Text style={{ color: c.muted, fontSize: 3 }}>{l}</Text>
-          </Box>
+          </S.SurfaceBordered>
         ))}
-      </Box>
-    </Box>
+      </S.RowG2>
+    </S.FullCenter>
   );
 }
 
 export function ThumbFlatList({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+    <S.FullCenter style={{ gap: 2 }}>
       {[1, 2, 3, 4].map(i => (
         <Box key={i} style={{ width: 40, height: 5, backgroundColor: c.surface, borderRadius: 1, opacity: i > 2 ? 0.4 : 1 }} />
       ))}
-    </Box>
+    </S.FullCenter>
   );
 }
 
@@ -1016,7 +1016,7 @@ export const THUMBS: Record<string, (c: ThemeColors) => React.ReactNode> = {
 
 export function PreviewCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Card title="System Status" subtitle="All services operational">
         <Box style={{ padding: 12, gap: 8 }}>
           {[
@@ -1024,34 +1024,34 @@ export function PreviewCard({ c }: { c: ThemeColors }) {
             { name: 'Database', badge: 'Online', variant: 'success' as const },
             { name: 'CDN', badge: 'Degraded', variant: 'warning' as const },
           ].map(row => (
-            <Box key={row.name} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <S.RowCenter key={row.name} style={{ justifyContent: 'space-between' }}>
               <Text style={{ color: c.text, fontSize: 12 }}>{row.name}</Text>
               <Badge label={row.badge} variant={row.variant} />
-            </Box>
+            </S.RowCenter>
           ))}
         </Box>
       </Card>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewBadge({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
+      <S.RowWrap style={{ gap: 10, justifyContent: 'center' }}>
         <Badge label="Default" variant="default" />
         <Badge label="Success" variant="success" />
         <Badge label="Warning" variant="warning" />
         <Badge label="Error" variant="error" />
         <Badge label="Info" variant="info" />
-      </Box>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+      </S.RowWrap>
+      <S.RowWrap style={{ gap: 10, justifyContent: 'center' }}>
         <Badge label="v2.1.0" variant="info" />
         <Badge label="Stable" variant="success" />
         <Badge label="Beta" variant="warning" />
         <Badge label="Deprecated" variant="error" />
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1059,7 +1059,7 @@ export function PreviewTabs({ c }: { c: ThemeColors }) {
   const [underlineTab, setUnderlineTab] = useState('overview');
   const [pillTab, setPillTab] = useState('all');
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Box style={{ width: 320, gap: 16 }}>
         <Box style={{ gap: 4 }}>
           <S.StoryMuted>{'Underline variant'}</S.StoryMuted>
@@ -1079,14 +1079,14 @@ export function PreviewTabs({ c }: { c: ThemeColors }) {
           />
         </Box>
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewNavPanel({ c }: { c: ThemeColors }) {
   const [activeNav, setActiveNav] = useState('home');
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <NavPanel
         sections={[
           { title: 'Navigation', items: [{ id: 'home', label: 'Home' }, { id: 'explore', label: 'Explore' }, { id: 'search', label: 'Search' }] },
@@ -1096,13 +1096,13 @@ export function PreviewNavPanel({ c }: { c: ThemeColors }) {
         onSelect={setActiveNav}
         width={180}
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewToolbar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <Toolbar items={[
         { id: 'bold', icon: 'bold', label: 'Bold' },
         { id: 'italic', icon: 'italic', label: 'Italic' },
@@ -1113,13 +1113,13 @@ export function PreviewToolbar({ c }: { c: ThemeColors }) {
         'divider',
         { id: 'code', icon: 'code', label: 'Code' },
       ]} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewBreadcrumbs({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Breadcrumbs items={[
         { id: 'home', label: 'Home' },
         { id: 'components', label: 'Components' },
@@ -1131,23 +1131,23 @@ export function PreviewBreadcrumbs({ c }: { c: ThemeColors }) {
         { id: 'core', label: 'Core' },
         { id: 'gallery', label: 'Gallery' },
       ]} separator=">" />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewTable({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <Box style={{ width: 340 }}>
         <Table columns={SAMPLE_TABLE_COLS} data={SAMPLE_TABLE_DATA} striped />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewProgressBar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ width: 300, gap: 14 }}>
         {[
           { label: 'Build progress', value: 0.85, color: C.accent },
@@ -1161,32 +1161,32 @@ export function PreviewProgressBar({ c }: { c: ThemeColors }) {
           </Box>
         ))}
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewSparkline({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Box style={{ gap: 16, width: 300 }}>
         {[
           { label: 'Revenue', data: [4, 7, 2, 8, 5, 9, 3, 6, 8, 10, 7, 11], color: '#10b981' },
           { label: 'Users', data: [10, 12, 8, 15, 11, 18, 14, 20, 17, 22, 19, 25], color: '#3b82f6' },
           { label: 'Errors', data: [5, 3, 7, 2, 4, 1, 6, 3, 2, 1, 4, 2], color: '#ef4444' },
         ].map(({ label, data, color }) => (
-          <Box key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <S.RowCenter key={label} style={{ justifyContent: 'space-between' }}>
             <Text style={{ color: c.text, fontSize: 13 }}>{label}</Text>
             <Sparkline data={data} width={120} height={28} color={color} />
-          </Box>
+          </S.RowCenter>
         ))}
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewMessageBubble({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', padding: 20, gap: 8, width: 360, alignSelf: 'center' }}>
+    <S.GrowCenter style={{ padding: 20, gap: 8, width: 360, alignSelf: 'center' }}>
       <MessageBubble variant="left" label="Alice" timestamp="2:30 PM">
         {'Hey, have you seen the new component gallery?'}
       </MessageBubble>
@@ -1199,29 +1199,29 @@ export function PreviewMessageBubble({ c }: { c: ThemeColors }) {
       <MessageBubble variant="center" timestamp="2:32 PM">
         {'Bob joined the conversation'}
       </MessageBubble>
-    </Box>
+    </S.GrowCenter>
   );
 }
 
 export function PreviewChatInput({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ width: 360, gap: 12 }}>
         <ChatInput placeholder="Type a message..." sendColor="#3b82f6" />
         <ChatInput placeholder="Disabled while loading..." disabled sendColor="#3b82f6" />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewSearchBar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ width: 320, gap: 12 }}>
         <SearchBar placeholder="Search components..." />
         <SearchBar placeholder="Search with custom debounce..." debounce={500} />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1235,18 +1235,18 @@ export function PreviewCodeBlock({ c }: { c: ThemeColors }) {
 
 export function PreviewLoadingDots({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 24, padding: 20 }}>
       <Box style={{ gap: 16, alignItems: 'center' }}>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8>
           <Text style={{ color: c.text, fontSize: 14 }}>{'Loading'}</Text>
           <LoadingDots color={C.accent} />
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        </S.RowCenterG8>
+        <S.RowCenterG8>
           <Text style={{ color: c.muted, fontSize: 12 }}>{'Thinking'}</Text>
           <LoadingDots color="#3b82f6" />
-        </Box>
+        </S.RowCenterG8>
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1255,24 +1255,24 @@ export function PreviewElementTile({ c }: { c: ThemeColors }) {
     'H', 'Li', 'Be', 'Fe', 'Al', 'Si', 'Cl', 'Ne', 'Nd', 'U',
   ];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ padding: 16 }}>
+      <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
         {representatives.map(sym => (
           <ElementTile key={sym} element={sym} size={64} />
         ))}
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewElementCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
-      <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ padding: 16 }}>
+      <S.RowWrap style={{ gap: 12, justifyContent: 'center' }}>
         <ElementCard element="Fe" style={{ width: 220 }} />
         <ElementCard element="Au" style={{ width: 220 }} />
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1281,13 +1281,13 @@ export function PreviewKnob({ c }: { c: ThemeColors }) {
   const [pan, setPan] = useState(0.5);
   const [reverb, setReverb] = useState(0.3);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
-      <Box style={{ flexDirection: 'row', gap: 40, alignItems: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
+      <S.RowCenter style={{ gap: 40 }}>
         <Knob value={gain} onChange={setGain} label="Gain" color="#f59e0b" size={80} />
         <Knob value={pan} onChange={setPan} label="Pan" color="#3b82f6" size={80} />
         <Knob value={reverb} onChange={setReverb} label="Reverb" color="#10b981" size={80} />
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1297,20 +1297,20 @@ export function PreviewFader({ c }: { c: ThemeColors }) {
   const [ch3, setCh3] = useState(0.85);
   const [master, setMaster] = useState(0.6);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
       <Box style={{ flexDirection: 'row', gap: 28, alignItems: 'end' }}>
         <Fader value={ch1} onChange={setCh1} label="Ch 1" color="#f59e0b" height={140} />
         <Fader value={ch2} onChange={setCh2} label="Ch 2" color="#3b82f6" height={140} />
         <Fader value={ch3} onChange={setCh3} label="Ch 3" color="#10b981" height={140} />
         <Fader value={master} onChange={setMaster} label="Master" color="#ef4444" height={140} />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewMeter({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Box style={{ flexDirection: 'row', gap: 24, alignItems: 'end' }}>
         <Box style={{ alignItems: 'center', gap: 6 }}>
           <Meter value={0.72} peak={0.85} orientation="vertical" height={140} />
@@ -1325,7 +1325,7 @@ export function PreviewMeter({ c }: { c: ThemeColors }) {
         <S.StoryMuted>{'Horizontal'}</S.StoryMuted>
         <Meter value={0.65} orientation="horizontal" width={280} />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1337,19 +1337,19 @@ export function PreviewTickerSymbol({ c }: { c: ThemeColors }) {
     { symbol: 'NVDA', price: 875.30, change: 1.12, sparkline: [860, 862, 870, 868, 872, 875, 874, 875.3] },
   ];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
       <Box style={{ width: 340, gap: 8 }}>
         {tickers.map(t => (
           <TickerSymbol key={t.symbol} item={t} />
         ))}
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewClock({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 24, padding: 20 }}>
       <Box style={{ alignItems: 'center', gap: 12 }}>
         <S.StoryMuted>{'Time only'}</S.StoryMuted>
         <Clock format="time" />
@@ -1362,13 +1362,13 @@ export function PreviewClock({ c }: { c: ThemeColors }) {
         <S.StoryMuted>{'Date only'}</S.StoryMuted>
         <Clock format="date" />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewStopwatch({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 24, padding: 20 }}>
       <Box style={{ alignItems: 'center', gap: 12 }}>
         <S.StoryMuted>{'With controls + milliseconds'}</S.StoryMuted>
         <Stopwatch showMs controls />
@@ -1377,7 +1377,7 @@ export function PreviewStopwatch({ c }: { c: ThemeColors }) {
         <S.StoryMuted>{'Auto-start, no controls'}</S.StoryMuted>
         <Stopwatch autoStart controls={false} showMs />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1388,7 +1388,7 @@ export function PreviewSlider({ c }: { c: ThemeColors }) {
   const [v2, setV2] = useState(0.3);
   const [v3, setV3] = useState(0.8);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Box style={{ width: 300, gap: 16 }}>
         <Box style={{ gap: 4 }}>
           <S.StoryMuted>{'Volume'}</S.StoryMuted>
@@ -1403,7 +1403,7 @@ export function PreviewSlider({ c }: { c: ThemeColors }) {
           <Slider value={v3} onChange={setV3} color="#10b981" />
         </Box>
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1412,20 +1412,20 @@ export function PreviewSwitch({ c }: { c: ThemeColors }) {
   const [b, setB] = useState(false);
   const [d, setD] = useState(true);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ width: 240, gap: 12 }}>
         {[
           { label: 'Notifications', val: a, set: setA },
           { label: 'Dark mode', val: b, set: setB },
           { label: 'Auto-save', val: d, set: setD },
         ].map(s => (
-          <Box key={s.label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <S.RowCenter key={s.label} style={{ justifyContent: 'space-between' }}>
             <Text style={{ color: c.text, fontSize: 13 }}>{s.label}</Text>
             <Switch value={s.val} onChange={s.set} />
-          </Box>
+          </S.RowCenter>
         ))}
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1434,21 +1434,21 @@ export function PreviewCheckbox({ c }: { c: ThemeColors }) {
   const [b, setB] = useState(false);
   const [d, setD] = useState(true);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ gap: 10 }}>
         <Checkbox checked={a} onChange={setA} label="Accept terms of service" />
         <Checkbox checked={b} onChange={setB} label="Subscribe to newsletter" />
         <Checkbox checked={d} onChange={setD} label="Remember me" />
         <Checkbox checked={false} onChange={() => {}} label="Disabled option" disabled />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewRadio({ c }: { c: ThemeColors }) {
   const [val, setVal] = useState('medium');
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <RadioGroup
         value={val}
         onChange={setVal}
@@ -1459,14 +1459,14 @@ export function PreviewRadio({ c }: { c: ThemeColors }) {
           { value: 'xl', label: 'Extra Large' },
         ]}
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewSelect({ c }: { c: ThemeColors }) {
   const [val, setVal] = useState('tsx');
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ width: 260, gap: 12 }}>
         <Select
           value={val}
@@ -1479,13 +1479,13 @@ export function PreviewSelect({ c }: { c: ThemeColors }) {
           ]}
         />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewBarChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <BarChart
         data={[
           { label: 'Jan', value: 42 },
@@ -1499,13 +1499,13 @@ export function PreviewBarChart({ c }: { c: ThemeColors }) {
         height={220}
         color="#3b82f6"
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewLineChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <LineChart
         data={[10, 25, 18, 32, 28, 45, 38, 52, 48, 60, 55, 70]}
         width={360}
@@ -1513,13 +1513,13 @@ export function PreviewLineChart({ c }: { c: ThemeColors }) {
         color="#10b981"
         showDots
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewPieChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <PieChart
         data={[
           { label: 'React', value: 40, color: '#3b82f6' },
@@ -1529,20 +1529,20 @@ export function PreviewPieChart({ c }: { c: ThemeColors }) {
         ]}
         size={220}
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewRadarChart({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <RadarChart
         axes={['Strength', 'Dexterity', 'Intelligence', 'Wisdom', 'Charisma', 'Constitution']}
         data={[0.8, 0.6, 0.9, 0.7, 0.5, 0.75]}
         size={240}
         color="#8b5cf6"
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1558,9 +1558,9 @@ export function PreviewCandlestick({ c }: { c: ThemeColors }) {
     { open: 115, high: 119, low: 109, close: 118 },
   ];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <CandlestickChart data={candles} width={380} height={240} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1580,9 +1580,9 @@ export function PreviewOrderBook({ c }: { c: ThemeColors }) {
     { price: 182.75, size: 210 },
   ];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <OrderBook bids={bids} asks={asks} width={320} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1591,7 +1591,7 @@ export function PreviewLED({ c }: { c: ThemeColors }) {
   const [on2, setOn2] = useState(false);
   const [on3, setOn3] = useState(true);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Box style={{ flexDirection: 'row', gap: 24 }}>
         {[
           { on: on1, set: setOn1, color: '#22c55e', label: 'Power' },
@@ -1607,20 +1607,20 @@ export function PreviewLED({ c }: { c: ThemeColors }) {
         ))}
       </Box>
       <S.StoryCap>{'Click to toggle'}</S.StoryCap>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewPadButton({ c }: { c: ThemeColors }) {
   const colors = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 280, gap: 8, justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
+      <S.RowG8 style={{ flexWrap: 'wrap', width: 280, justifyContent: 'center' }}>
         {colors.map((col, i) => (
           <PadButton key={i} color={col} size={60} label={`${i + 1}`} />
         ))}
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1633,9 +1633,9 @@ export function PreviewStepSequencer({ c }: { c: ThemeColors }) {
     return p;
   });
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <StepSequencer steps={16} tracks={4} pattern={pattern} onChange={setPattern} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1643,7 +1643,7 @@ export function PreviewTransport({ c }: { c: ThemeColors }) {
   const [playing, setPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <TransportBar
         playing={playing}
         recording={recording}
@@ -1653,7 +1653,7 @@ export function PreviewTransport({ c }: { c: ThemeColors }) {
         onStop={() => { setPlaying(false); setRecording(false); }}
         onRecord={() => setRecording(!recording)}
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1677,7 +1677,7 @@ const GALLERY_PIANO_BLACK_AFTER = [0, 1, 3, 4, 5, 7, 8, 10, 11, 12];
 
 export function PreviewPiano({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <PianoKeyboard
         whites={GALLERY_PIANO_WHITES}
         blacks={GALLERY_PIANO_BLACKS}
@@ -1685,7 +1685,7 @@ export function PreviewPiano({ c }: { c: ThemeColors }) {
         whiteKeyWidth={28}
         whiteKeyHeight={80}
       />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1693,18 +1693,18 @@ export function PreviewXYPad({ c }: { c: ThemeColors }) {
   const [x, setX] = useState(0.5);
   const [y, setY] = useState(0.5);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
       <XYPad x={x} y={y} onChange={({ x: nx, y: ny }: { x: number; y: number }) => { setX(nx); setY(ny); }} size={200} color="#8b5cf6" />
       <S.StoryMuted>{`X: ${x.toFixed(2)}  Y: ${y.toFixed(2)}`}</S.StoryMuted>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewPitchWheel({ c }: { c: ThemeColors }) {
   const [val, setVal] = useState(0);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
-      <Box style={{ flexDirection: 'row', gap: 32, alignItems: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
+      <S.RowCenter style={{ gap: 32 }}>
         <Box style={{ alignItems: 'center', gap: 8 }}>
           <S.StoryMuted>{'Spring return'}</S.StoryMuted>
           <PitchWheel value={val} onChange={setVal} springReturn height={140} />
@@ -1713,53 +1713,53 @@ export function PreviewPitchWheel({ c }: { c: ThemeColors }) {
           <S.StoryMuted>{'Free'}</S.StoryMuted>
           <PitchWheel value={0.3} onChange={() => {}} height={140} />
         </Box>
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewPeriodicTable({ c }: { c: ThemeColors }) {
   const [selected, setSelected] = useState<number | undefined>(26);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 8 }}>
+    <S.GrowCenterAlign style={{ padding: 8 }}>
       <PeriodicTable onSelect={(el: any) => setSelected(el.number)} selected={selected} tileSize={28} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewMoleculeCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
+      <S.RowWrap style={{ gap: 12, justifyContent: 'center' }}>
         <MoleculeCard formula="H2O" style={{ width: 220 }} />
         <MoleculeCard formula="C6H12O6" style={{ width: 220 }} />
         <MoleculeCard formula="NaCl" style={{ width: 220 }} />
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewElectronShell({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
-      <Box style={{ flexDirection: 'row', gap: 20, alignItems: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
+      <S.RowCenter style={{ gap: 20 }}>
         <ElectronShell element="C" />
         <ElectronShell element="Fe" />
         <ElectronShell element="Ne" />
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewReactionView({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 16, padding: 20 }}>
       <Box style={{ width: 400, gap: 12 }}>
         <ReactionView equation="Fe + O2 -> Fe2O3" />
         <ReactionView equation="H2 + O2 -> H2O" />
         <ReactionView equation="NaOH + HCl -> NaCl + H2O" />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1772,15 +1772,15 @@ export function PreviewTickerTape({ c }: { c: ThemeColors }) {
     { symbol: 'NVDA', price: 875.30, change: 1.12 },
   ];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
+    <S.GrowCenter style={{ padding: 20 }}>
       <TickerTape items={items} speed={40} />
-    </Box>
+    </S.GrowCenter>
   );
 }
 
 export function PreviewPortfolioCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <PortfolioCard snapshot={{
         totalValue: 52480.75,
         dayChange: 1240.30,
@@ -1791,13 +1791,13 @@ export function PreviewPortfolioCard({ c }: { c: ThemeColors }) {
           { symbol: 'TSLA', quantity: 20, costBasis: 200.00, currentPrice: 248.42 },
         ],
       }} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewRSIGauge({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <Box style={{ gap: 16 }}>
         <Box style={{ gap: 4 }}>
           <S.StoryMuted>{'Overbought (RSI 78)'}</S.StoryMuted>
@@ -1812,7 +1812,7 @@ export function PreviewRSIGauge({ c }: { c: ThemeColors }) {
           <RSIGauge value={22} width={300} />
         </Box>
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1830,20 +1830,20 @@ export function PreviewMACDPanel({ c }: { c: ThemeColors }) {
     { macd: 0.6, signal: 0.1, histogram: 0.5 },
   ];
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <MACDPanel data={data} width={380} height={180} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewCountdown({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 24, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 24, padding: 20 }}>
       <Box style={{ alignItems: 'center', gap: 12 }}>
         <S.StoryMuted>{'60 second countdown'}</S.StoryMuted>
         <Countdown duration={60000} controls showMs />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -1866,11 +1866,11 @@ export function PreviewSpreadsheet({ c }: { c: ThemeColors }) {
 export function PreviewCommandPalette({ c }: { c: ThemeColors }) {
   const [open, setOpen] = useState(true);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <Pressable onPress={() => setOpen(true)}>
-        <Box style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: c.surface, borderRadius: 6, borderWidth: 1, borderColor: c.border }}>
+        <S.SurfaceBordered style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, borderRadius: 6 }}>
           <Text style={{ color: c.text, fontSize: 12 }}>{'Open Command Palette'}</Text>
-        </Box>
+        </S.SurfaceBordered>
       </Pressable>
       {open && (
         <CommandPalette
@@ -1888,26 +1888,26 @@ export function PreviewCommandPalette({ c }: { c: ThemeColors }) {
           onClose={() => setOpen(false)}
         />
       )}
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewStatCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
+      <S.RowWrap style={{ gap: 12, justifyContent: 'center' }}>
         <StatCard label="Revenue" value="$12.4k" sublabel="vs $10.2k last month" trend="up" />
         <StatCard label="Users" value="1,284" sublabel="vs 1,150 last month" trend="up" />
         <StatCard label="Errors" value="23" sublabel="vs 12 last month" trend="down" />
         <StatCard label="Uptime" value="99.9%" sublabel="30 day average" trend="flat" />
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewNowPlaying({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <NowPlayingCard track={{
         title: 'Midnight City',
         artist: 'M83',
@@ -1916,37 +1916,37 @@ export function PreviewNowPlaying({ c }: { c: ThemeColors }) {
         progress: 0.4,
         duration: 243000,
       }} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewRepoCard({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 12, padding: 20 }}>
       <Box style={{ width: 340, gap: 12 }}>
         <RepoCard repo={{ name: 'reactjit', fullName: 'user/reactjit', description: 'React rendering framework on Love2D', language: 'TypeScript', stars: 2100, forks: 180 }} />
         <RepoCard repo={{ name: 'love2d', fullName: 'love2d/love', description: 'LÖVE - Free 2D Game Engine', language: 'C++', stars: 4500, forks: 420 }} />
       </Box>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewImageGallery({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <Text style={{ color: c.muted, fontSize: 12 }}>{'ImageGallery requires image URLs — pass images={[...]} to populate'}</Text>
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewContextMenu({ c }: { c: ThemeColors }) {
   const [vis, setVis] = useState(true);
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+    <S.GrowCenterAlign style={{ padding: 20 }}>
       <Pressable onPress={() => setVis(true)}>
-        <Box style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: c.surface, borderRadius: 6, borderWidth: 1, borderColor: c.border }}>
+        <S.SurfaceBordered style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, borderRadius: 6 }}>
           <Text style={{ color: c.text, fontSize: 12 }}>{'Right-click area (click to show)'}</Text>
-        </Box>
+        </S.SurfaceBordered>
       </Pressable>
       {vis && (
         <ContextMenu
@@ -1964,23 +1964,23 @@ export function PreviewContextMenu({ c }: { c: ThemeColors }) {
           onClose={() => setVis(false)}
         />
       )}
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewMath({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <MathTex tex="E = mc^2" fontSize={24} />
       <MathTex tex="\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}" fontSize={18} />
       <MathTex tex="\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}" fontSize={18} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
 export function PreviewMessageList({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, padding: 20, gap: 8 }}>
+    <S.GrowG8 style={{ padding: 20 }}>
       <MessageBubble variant="left" label="Alice" timestamp="2:30 PM">
         {'Hey, how is the gallery coming along?'}
       </MessageBubble>
@@ -1993,20 +1993,20 @@ export function PreviewMessageList({ c }: { c: ThemeColors }) {
       <MessageBubble variant="right" label="You" timestamp="2:32 PM">
         {'Every single one.'}
       </MessageBubble>
-    </Box>
+    </S.GrowG8>
   );
 }
 
 export function PreviewActionBar({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 20, padding: 20 }}>
+    <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
       <ActionBar actions={[
         { id: 'copy', label: 'Copy' },
         { id: 'edit', label: 'Edit' },
         { id: 'share', label: 'Share' },
         { id: 'delete', label: 'Delete' },
       ]} onAction={() => {}} />
-    </Box>
+    </S.GrowCenterAlign>
   );
 }
 
@@ -2017,10 +2017,10 @@ export function PreviewFlatList({ c }: { c: ThemeColors }) {
       <FlatList
         data={data}
         renderItem={({ item }: { item: { id: string; label: string; desc: string } }) => (
-          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 1, borderColor: c.border }}>
+          <S.RowCenterBorder style={{ justifyContent: 'space-between', paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 1 }}>
             <Text style={{ color: c.text, fontSize: 12 }}>{item.label}</Text>
             <S.StoryMuted>{item.desc}</S.StoryMuted>
-          </Box>
+          </S.RowCenterBorder>
         )}
         itemHeight={36}
       />

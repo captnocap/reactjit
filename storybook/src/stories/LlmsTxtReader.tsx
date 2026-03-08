@@ -63,17 +63,17 @@ export function LlmsTxtReader() {
 
   if (loading) {
     return (
-      <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }}>
+      <S.FullCenter style={{ backgroundColor: c.bg }}>
         <Text style={{ fontSize: 14, color: c.textSecondary }}>Loading llms.txt...</Text>
-      </Box>
+      </S.FullCenter>
     );
   }
 
   if (error || !raw) {
     return (
-      <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+      <S.FullCenter style={{ backgroundColor: c.bg, padding: 20 }}>
         <Text style={{ fontSize: 14, color: c.error }}>{`${error?.message || 'No data'}`}</Text>
-      </Box>
+      </S.FullCenter>
     );
   }
 
@@ -83,19 +83,11 @@ export function LlmsTxtReader() {
   return (
     <S.StoryRoot>
       {/* Header */}
-      <Box style={{
-        height: 40,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingLeft: 12, paddingRight: 12,
-        gap: 10,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-      }}>
+      <S.RowCenterBorder style={{ height: 40, paddingLeft: 12, paddingRight: 12, gap: 10, borderBottomWidth: 1 }}>
         <Text style={{ fontSize: 13, color: c.textDim }}>
           {`llms.txt — ${lineCount} lines, ${sizeKB} KB`}
         </Text>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
+        <S.RowG4>
           <ModeButton
             label="1 node"
             active={mode === 'single'}
@@ -106,21 +98,21 @@ export function LlmsTxtReader() {
             active={mode === 'chunked'}
             onPress={() => setMode('chunked')}
           />
-        </Box>
-        <Text style={{ fontSize: 9, color: c.textDim }}>
+        </S.RowG4>
+        <S.StoryCap>
           {mode === 'single' ? 'brute force: 1 Text node, all content'
             : `${chunks.length} Text nodes, ${CHUNK_SIZE} lines each — paint culled`}
-        </Text>
-      </Box>
+        </S.StoryCap>
+      </S.RowCenterBorder>
 
       {/* Content */}
       <ScrollView style={{ width: '100%', height: '100%' }}>
         <Box style={{ padding: 12, backgroundColor: c.bg }}>
           {mode === 'single' ? (
-            <Text style={{ fontSize: 9, color: c.text }}>{raw}</Text>
+            <S.StoryBreadcrumbActive>{raw}</S.StoryBreadcrumbActive>
           ) : (
             chunks.map((chunk, i) => (
-              <Text key={i} style={{ fontSize: 9, color: c.text }}>{chunk}</Text>
+              <S.StoryBreadcrumbActive key={i}>{chunk}</S.StoryBreadcrumbActive>
             ))
           )}
         </Box>

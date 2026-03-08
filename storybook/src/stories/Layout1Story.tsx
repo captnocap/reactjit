@@ -90,7 +90,7 @@ function Wireframe({ label, style }: { label: string; style?: any }) {
       alignItems: 'center',
       ...style,
     }}>
-      <Text style={{ color: c.muted, fontSize: 9, textAlign: 'center' }}>{label}</Text>
+      <S.StoryCap style={{ textAlign: 'center' }}>{label}</S.StoryCap>
     </Box>
   );
 }
@@ -102,7 +102,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── Static data (hoisted — never recreated) ──────────────
@@ -194,58 +194,36 @@ export function Layout1Story() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="component" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="component" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Title'}
-        </Text>
+        </S.StoryTitle>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <S.StoryBtnSm style={{ flexDirection: 'row', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
           <Text style={{ color: SYN.component, fontSize: 10 }}>{'Component'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'prop'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <S.StoryMuted>{'='}</S.StoryMuted>
           <Text style={{ color: SYN.value, fontSize: 10 }}>{'{value}'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'/>'}</Text>
-        </Box>
+        </S.StoryBtnSm>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'A short description of the component and what it does.'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -257,7 +235,7 @@ export function Layout1Story() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -274,10 +252,10 @@ export function Layout1Story() {
                   <Text style={{ color: 'white', fontSize: 10 }}>{'Styled element'}</Text>
                 </Box>
 
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <S.RowCenterG8>
                   <Wireframe label="A" style={{ width: 40, height: 40 }} />
                   <Wireframe label="B" style={{ width: 40, height: 40 }} />
-                </Box>
+                </S.RowCenterG8>
 
                 <Box
                   style={{ ...STYLED_2, justifyContent: 'center', alignItems: 'center' }}
@@ -293,47 +271,47 @@ export function Layout1Story() {
 
             {/* ── Right: API Reference (centered) ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
                 {/* ── Overview ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'OVERVIEW'}
-                </Text>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                </S.StoryTiny>
+                <S.StoryBody>
                   {'A short paragraph describing what this component is and when to use it.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
                 {/* ── Usage ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'USAGE'}
-                </Text>
+                </S.StoryTiny>
                 <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
                 {/* ── Behavior ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'BEHAVIOR'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 4 }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                    <S.RowCenterG6 key={i}>
                       <Image src="chevron-right" style={{ width: 8, height: 8 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody>{note}</S.StoryBody>
+                    </S.RowCenterG6>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* ── Props ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'PROPS'}
-                </Text>
-                <Box style={{ flexDirection: 'row', gap: 8 }}>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
+                </S.StoryTiny>
+                <S.RowG8>
+                  <S.Half style={{ gap: 3 }}>
                     {col1.map(([prop, type, icon]) => (
                       <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
                         <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
@@ -341,8 +319,8 @@ export function Layout1Story() {
                         <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
                       </Box>
                     ))}
-                  </Box>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
+                  </S.Half>
+                  <S.Half style={{ gap: 3 }}>
                     {col2.map(([prop, type, icon]) => (
                       <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
                         <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
@@ -350,50 +328,38 @@ export function Layout1Story() {
                         <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
                       </Box>
                     ))}
-                  </Box>
-                </Box>
+                  </S.Half>
+                </S.RowG8>
 
                 <HorizontalDivider />
 
                 {/* ── Callbacks ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'CALLBACKS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {CALLBACKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={c.muted} />
+                      <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                      <S.StoryCap>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="component" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Component'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="component" />
+        <S.StoryBreadcrumbActive>{'Component'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -411,11 +377,7 @@ export function Layout1Story() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,
@@ -425,8 +387,8 @@ export function Layout1Story() {
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

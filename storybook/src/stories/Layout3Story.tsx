@@ -363,10 +363,10 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
     case 'blur':
       return (
         <Box style={{ ...fill, backgroundColor: 'rgba(139, 92, 246, 0.05)' }}>
-          <Box style={{ width: 280, height: 180, backgroundColor: c.surface, borderRadius: 16, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+          <S.Center style={{ width: 280, height: 180, backgroundColor: c.surface, borderRadius: 16, borderWidth: 1, borderColor: c.border }}>
             <Text style={{ color: c.muted, fontSize: 24, fontWeight: 'bold' }}>{'radius: 8'}</Text>
             <S.StoryMuted>{'Gaussian blur on children'}</S.StoryMuted>
-          </Box>
+          </S.Center>
         </Box>
       );
     case 'glow':
@@ -378,10 +378,10 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
     case 'shadow':
       return (
         <Box style={{ ...fill }}>
-          <Box style={{ width: 240, height: 160, backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+          <S.Center style={{ width: 240, height: 160, backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border }}>
             <Text style={{ color: c.text, fontSize: 14 }}>{'Card with shadow'}</Text>
             <S.StoryCap>{'offset: 4,4  blur: 8'}</S.StoryCap>
-          </Box>
+          </S.Center>
         </Box>
       );
     case 'gradient':
@@ -399,20 +399,20 @@ function renderPreview(tab: TabDef, c: ReturnType<typeof useThemeColors>) {
       );
     case 'noise':
       return (
-        <Box style={{ flexGrow: 1, backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center' }}>
+        <S.GrowCenterAlign style={{ backgroundColor: c.surface }}>
           <Text style={{ color: c.muted, fontSize: 48, fontWeight: 'bold', opacity: 0.2 }}>{'NOISE'}</Text>
           <S.StoryMuted>{'intensity: 0.15  scale: 2'}</S.StoryMuted>
-        </Box>
+        </S.GrowCenterAlign>
       );
     case 'pixelate':
       return (
-        <Box style={{ flexGrow: 1, backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center' }}>
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', width: 160, gap: 2 }}>
+        <S.GrowCenterAlign style={{ backgroundColor: c.surface }}>
+          <S.RowWrap style={{ width: 160, gap: 2 }}>
             {Array.from({ length: 64 }).map((_, i) => (
               <Box key={i} style={{ width: 18, height: 18, backgroundColor: i % 3 === 0 ? C.accent : i % 2 === 0 ? c.border : c.surface, opacity: 0.6 + (i % 5) * 0.08 }} />
             ))}
-          </Box>
-        </Box>
+          </S.RowWrap>
+        </S.GrowCenterAlign>
       );
     default:
       return (
@@ -434,7 +434,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── Layout3Story ─────────────────────────────────────────
@@ -448,23 +448,11 @@ export function Layout3Story() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="sparkles" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="sparkles" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Effects'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -476,15 +464,15 @@ export function Layout3Story() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/effects'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Visual effects — blur, glow, shadow, gradient, mask, noise'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Preview area — LIVE DEMO of the active tab ── */}
-      <Box style={{ flexGrow: 1, borderBottomWidth: 1, borderColor: c.border }}>
+      <S.BorderBottom style={{ flexGrow: 1 }}>
         {renderPreview(tab, c)}
-      </Box>
+      </S.BorderBottom>
 
       {/* ── Info row — description | code | props ── */}
       <Box style={{
@@ -498,59 +486,59 @@ export function Layout3Story() {
       }}>
 
         {/* ── Description ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.BoldText style={{ fontSize: 14 }}>
             {tab.label}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.BoldText>
+          <S.StoryMuted>
             {tab.desc}
-          </Text>
-        </Box>
+          </S.StoryMuted>
+        </S.Half>
 
         <VerticalDivider />
 
         {/* ── Usage code ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>
             {'USAGE'}
-          </Text>
+          </S.StoryLabelText>
           <CodeBlock language="tsx" fontSize={9} code={tab.usage} />
-        </Box>
+        </S.Half>
 
         <VerticalDivider />
 
         {/* ── Props + callbacks ── */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, padding: 12, gap: 6 }}>
-          <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+        <S.Half style={{ padding: 12, gap: 6 }}>
+          <S.StoryLabelText>
             {'PROPS'}
-          </Text>
+          </S.StoryLabelText>
           <Box style={{ gap: 3 }}>
             {tab.props.map(([name, type, icon]) => (
-              <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-              </Box>
+              <S.RowCenterG5 key={name}>
+                <S.StorySectionIcon src={icon} tintColor={c.muted} />
+                <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                <S.StoryCap>{type}</S.StoryCap>
+              </S.RowCenterG5>
             ))}
           </Box>
           {tab.callbacks.length > 0 && (
             <>
               <HorizontalDivider />
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>
+              <S.StoryLabelText>
                 {'CALLBACKS'}
-              </Text>
+              </S.StoryLabelText>
               <Box style={{ gap: 3 }}>
                 {tab.callbacks.map(([name, sig, icon]) => (
-                  <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                    <Image src={icon} style={{ width: 10, height: 10 }} tintColor={c.muted} />
-                    <Text style={{ color: c.text, fontSize: 9 }}>{name}</Text>
-                    <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                  </Box>
+                  <S.RowCenterG5 key={name}>
+                    <S.StorySectionIcon src={icon} tintColor={c.muted} />
+                    <S.StoryBreadcrumbActive>{name}</S.StoryBreadcrumbActive>
+                    <S.StoryCap>{sig}</S.StoryCap>
+                  </S.RowCenterG5>
                 ))}
               </Box>
             </>
           )}
-        </Box>
+        </S.Half>
 
       </Box>
 
@@ -562,16 +550,7 @@ export function Layout3Story() {
         borderColor: c.border,
         backgroundColor: c.bgElevated,
       }}>
-          <Box style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            paddingLeft: 8,
-            paddingRight: 8,
-            paddingTop: 8,
-            paddingBottom: 8,
-            gap: 8,
-          }}>
+          <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8 }}>
             {TABS.map(comp => {
               const active = comp.id === activeId;
               return (
@@ -595,34 +574,22 @@ export function Layout3Story() {
                 </Pressable>
               );
             })}
-          </Box>
+          </S.RowG8>
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="sparkles" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Effects'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{tab.label}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.DimIcon12 src="sparkles" />
+        <S.StoryCap>{'Effects'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src={tab.icon} />
+        <S.StoryBreadcrumbActive>{tab.label}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
-      </Box>
+        <S.StoryCap>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

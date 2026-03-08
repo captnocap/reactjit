@@ -806,7 +806,29 @@ function Testrunner.divider_audit(args)
     end
   end
 
-  return violations
+  return {
+    violations = violations,
+    stats = {
+      dividers = #dividers,
+      textNodes = #textParents,
+      vpW = vpW,
+      vpH = vpH,
+    },
+    -- Dump first 10 dividers for debugging
+    dividerDump = (function()
+      local dump = {}
+      for i = 1, math.min(10, #dividers) do
+        local d = dividers[i]
+        local dc = d.node.computed
+        dump[#dump + 1] = {
+          name = d.node.debugName or d.node.type,
+          horizontal = d.horizontal,
+          x = dc.x, y = dc.y, w = dc.w, h = dc.h,
+        }
+      end
+      return dump
+    end)(),
+  }
 end
 
 -- ---------------------------------------------------------------------------

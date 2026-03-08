@@ -155,7 +155,7 @@ function GifDemo() {
   }, [recording, start, stop]);
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       <Box style={ST_ROW}>
         <Pressable onPress={toggle}>
           <Box style={{ ...ST_BTN, backgroundColor: recording ? C.accent : C.gif }}>
@@ -170,7 +170,7 @@ function GifDemo() {
       {gifPath && !recording && (
         <S.StoryCap>{gifPath}</S.StoryCap>
       )}
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -199,7 +199,7 @@ function VideoDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       <Box style={ST_ROW}>
         {!recording && (
           <>
@@ -236,7 +236,7 @@ function VideoDemo() {
           <Text style={{ color: C.video, fontSize: 9, marginTop: 4 }}>{filePath}</Text>
         </Box>
       )}
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -249,20 +249,8 @@ export function CaptureStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="camera" style={{ width: 18, height: 18 }} tintColor={C.accent} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="camera" tintColor={C.accent} />
         <S.StoryTitle>{'Capture'}</S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
@@ -276,7 +264,7 @@ export function CaptureStory() {
         </Box>
         <Box style={{ flexGrow: 1 }} />
         <S.StoryCap>{'Screenshot · GIF · Video'}</S.StoryCap>
-      </Box>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -291,12 +279,12 @@ export function CaptureStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Screenshot, GIF, and video recording from one pipeline.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'PNG snapshots via F2 or headless CLI, animated GIFs with ffmpeg 2-pass palette optimization, and MP4/WebM video via raw RGBA pixel pipe. All three share the same Love2D captureScreenshot callback — React declares what to capture, Lua executes it.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -305,10 +293,10 @@ export function CaptureStory() {
         <Band>
           <Half>
             <SectionLabel icon="camera" accentColor={C.accent}>{'CAPTURE MODES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three output formats sharing one capture pipeline. Each mode is a toggle — start and stop. No file management, no format negotiation.'}
-            </Text>
-            <Box style={{ gap: 6, width: '100%' }}>
+            </S.StoryBody>
+            <S.StackG6W100>
               <Box style={ST_ROW}>
                 <Badge label="Screenshot" color={C.screenshot} />
                 <S.StoryCap>{'Single-frame PNG via F2 or CLI'}</S.StoryCap>
@@ -321,7 +309,7 @@ export function CaptureStory() {
                 <Badge label="Video" color={C.video} />
                 <S.StoryCap>{'MP4/WebM via raw RGBA pipe to ffmpeg'}</S.StoryCap>
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
           <Half>
             <CodeBlock language="lua" fontSize={9} code={SCREENSHOT_CODE} />
@@ -334,12 +322,12 @@ export function CaptureStory() {
         <Band>
           <Half>
             <SectionLabel icon="film" accentColor={C.gif}>{'GIF RECORDING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Captures frames at configurable FPS, saves numbered PNGs, then assembles via ffmpeg with a two-pass palette for high-quality 128-color GIFs with Bayer dithering.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'~2ms per frame (PNG encode + FS write). Use 15fps for CPU-bound apps.'}
-            </Text>
+            </S.StoryCap>
             <GifDemo />
           </Half>
           <Half>
@@ -356,12 +344,12 @@ export function CaptureStory() {
           </Half>
           <Half>
             <SectionLabel icon="video" accentColor={C.video}>{'VIDEO RECORDING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Pipes raw RGBA pixels directly to ffmpeg stdin. No temp files, no PNG encoding. ffmpeg runs in a separate process and encodes in parallel with Love2D rendering.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'H.264 ultrafast preset by default. ~0.3ms per frame — just a memcpy to the pipe buffer.'}
-            </Text>
+            </S.StoryCap>
             <VideoDemo />
           </Half>
         </Band>
@@ -381,10 +369,10 @@ export function CaptureStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All capture runs in Lua. React hooks poll status and surface the result path — no pixel data crosses the JS bridge. The RGBA pipe to ffmpeg is a direct memory write.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -393,10 +381,10 @@ export function CaptureStory() {
         <Band>
           <Half>
             <SectionLabel icon="terminal" accentColor={C.accent}>{'RPC API'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'All capture methods are available as Lua RPCs for direct control from any context. The React hooks are thin wrappers over these RPCs.'}
-            </Text>
-            <Box style={{ gap: 4, width: '100%' }}>
+            </S.StoryBody>
+            <S.StackG4W100>
               <Box style={ST_ROW}>
                 <Badge label="recorder:start" color={C.video} />
                 <Badge label="recorder:stop" color={C.video} />
@@ -409,7 +397,7 @@ export function CaptureStory() {
                 <Badge label="gif:stop" color={C.gif} />
                 <Badge label="gif:status" color={C.gif} />
               </Box>
-            </Box>
+            </S.StackG4W100>
           </Half>
           <Half>
             <CodeBlock language="lua" fontSize={9} code={RPC_CODE} />
@@ -422,12 +410,12 @@ export function CaptureStory() {
         <Band>
           <Half>
             <SectionLabel icon="zap" accentColor={C.perf}>{'PERFORMANCE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Video piping is ~6x faster than GIF per frame. Raw RGBA goes straight to ffmpeg stdin — no PNG encoding, no filesystem I/O.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'ffmpeg encodes in a separate process in parallel with rendering, so the per-frame cost is nearly free.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="text" fontSize={9} code={PERF_NOTES} />
@@ -449,36 +437,24 @@ export function CaptureStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'One hook. Toggle start/stop. Format, fps, and output path are options — the defaults work. Check filePath or gifPath when stopped for the result.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="camera" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Capture'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="camera" />
+        <S.StoryBreadcrumbActive>{'Capture'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

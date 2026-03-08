@@ -155,21 +155,12 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
   }, [tick, count]);
 
   return (
-    <Box style={{
-      width: '100%',
-      height: 200,
-      backgroundColor: c.bg,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      overflow: 'hidden',
-      position: 'relative',
-    }}>
+    <S.Bordered style={{ width: '100%', height: 200, backgroundColor: c.bg, borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
       {boxes}
       <Box style={{ position: 'absolute', right: 4, bottom: 4 }}>
         <S.StoryCap>{`${count} boxes`}</S.StoryCap>
       </Box>
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -197,25 +188,25 @@ function ResultsTable({ results }: { results: BenchResult[] }) {
   return (
     <Box style={{ ...S.card, gap: 4 }}>
       <Text style={{ color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 4 }}>Auto-Test Results</Text>
-      <Box style={{ flexDirection: 'row', gap: 4 }}>
+      <S.RowG4>
         <Text style={{ ...headerStyle, width: 140 }}>Phase</Text>
         <Text style={headerStyle}>FPS</Text>
         <Text style={headerStyle}>Layout</Text>
         <Text style={headerStyle}>Paint</Text>
         <Text style={headerStyle}>p95</Text>
         <Text style={headerStyle}>Dropped</Text>
-      </Box>
+      </S.RowG4>
       {results.map((r, i) => {
         const fpsColor = r.fps >= 55 ? C.green : r.fps >= 30 ? C.yellow : C.red;
         return (
-          <Box key={i} style={{ flexDirection: 'row', gap: 4 }}>
+          <S.RowG4 key={i}>
             <Text style={{ ...cellStyle, width: 140 }}>{r.label}</Text>
             <Text style={{ ...cellStyle, color: fpsColor }}>{`${Math.round(r.fps)}`}</Text>
             <Text style={cellStyle}>{`${r.layoutMs.toFixed(1)}ms`}</Text>
             <Text style={cellStyle}>{`${r.paintMs.toFixed(1)}ms`}</Text>
             <Text style={cellStyle}>{`${r.p95.toFixed(1)}ms`}</Text>
             <Text style={cellStyle}>{`${r.droppedFrames}`}</Text>
-          </Box>
+          </S.RowG4>
         );
       })}
     </Box>
@@ -363,7 +354,7 @@ export default function RecordingStressStory() {
 
   return (
     <ScrollView style={{ width: '100%', height: '100%' }}>
-      <Box style={{ width: '100%', padding: 16, gap: 14, alignItems: 'center' }}>
+      <S.CenterW100 style={{ padding: 16, gap: 14 }}>
         <Box style={{ width: '100%', maxWidth: 800, gap: 14 }}>
 
           {/* Header */}
@@ -421,9 +412,9 @@ export default function RecordingStressStory() {
           {/* Auto-Test */}
           <Box style={S.card}>
             <Text style={{ color: c.text, fontSize: 13, fontWeight: '700' }}>Auto-Test</Text>
-            <Text style={{ color: c.muted, fontSize: 11 }}>
+            <S.DimBody11>
               {`Runs 5 phases (5s each): idle baseline, 15fps rec, 30fps rec, 30fps+100 boxes, 30fps+500 boxes. Captures metrics per phase.`}
-            </Text>
+            </S.DimBody11>
             <Box style={S.row}>
               {!autoRunning ? (
                 <Pressable onPress={runAutoTest} style={{ ...S.btn, backgroundColor: C.green }}>
@@ -444,7 +435,7 @@ export default function RecordingStressStory() {
           <ResultsTable results={results} />
 
         </Box>
-      </Box>
+      </S.CenterW100>
     </ScrollView>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, TextInput, Slider, Switch } from '../../../packages/core/src';
+import { Box, Text, Pressable, TextInput, Slider, Switch, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Checkbox } from '../../../packages/core/src/Checkbox';
 import { Radio, RadioGroup } from '../../../packages/core/src/Radio';
@@ -19,10 +19,10 @@ function SectionHeader({ children }: { children: string }) {
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+    <S.RowCenter style={{ justifyContent: 'space-between', width: '100%' }}>
       <Text style={{ color: c.text, fontSize: 14 }}>{label}</Text>
       {children}
-    </Box>
+    </S.RowCenter>
   );
 }
 
@@ -112,17 +112,9 @@ export function SettingsDemoStory() {
             gap: 14,
           }}>
             {/* Avatar circle */}
-            <Box style={{
-              width: 56,
-              height: 56,
-              aspectRatio: 1,
-              borderRadius: 28,
-              backgroundColor: '#3b82f6',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
+            <S.Center style={{ width: 56, height: 56, aspectRatio: 1, borderRadius: 28, backgroundColor: '#3b82f6' }}>
               <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: 'normal' }}>CS</Text>
-            </Box>
+            </S.Center>
             <Box style={{ gap: 4, flexShrink: 1 }}>
               <TextInput
                 value={playerName}
@@ -137,7 +129,7 @@ export function SettingsDemoStory() {
                   backgroundColor: c.bg,
                 }}
               />
-              <Text style={{ color: c.textDim, fontSize: 11 }}>Level 42 -- Vanguard Class</Text>
+              <S.DimBody11>Level 42 -- Vanguard Class</S.DimBody11>
             </Box>
           </Box>
         </Box>
@@ -287,47 +279,17 @@ export function SettingsDemoStory() {
         </Box>
 
         {/* ── Status Bar (flexShrink demo) ────────── */}
-        <Box style={{
-          flexDirection: 'row',
-          gap: 8,
-          width: '100%',
-        }}>
-          <Box style={{
-            flexShrink: 0,
-            backgroundColor: '#22c55e',
-            borderRadius: 6,
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 6,
-            paddingBottom: 6,
-          }}>
+        <S.RowG8 style={{ width: '100%' }}>
+          <S.PadV6 style={{ flexShrink: 0, backgroundColor: '#22c55e', borderRadius: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ color: '#0f172a', fontSize: 11, fontWeight: 'normal' }}>CPU: 45%</Text>
-          </Box>
-          <Box style={{
-            flexShrink: 1,
-            flexGrow: 1,
-            backgroundColor: '#f59e0b',
-            borderRadius: 6,
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 6,
-            paddingBottom: 6,
-          }}>
+          </S.PadV6>
+          <S.PadV6 style={{ flexShrink: 1, flexGrow: 1, backgroundColor: '#f59e0b', borderRadius: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ color: '#0f172a', fontSize: 11, fontWeight: 'normal' }}>GPU: 72%</Text>
-          </Box>
-          <Box style={{
-            flexShrink: 1,
-            flexGrow: 1,
-            backgroundColor: '#3b82f6',
-            borderRadius: 6,
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 6,
-            paddingBottom: 6,
-          }}>
+          </S.PadV6>
+          <S.PadV6 style={{ flexShrink: 1, flexGrow: 1, backgroundColor: '#3b82f6', borderRadius: 6, paddingLeft: 10, paddingRight: 10 }}>
             <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'normal' }}>RAM: 8.2 GB</Text>
-          </Box>
-        </Box>
+          </S.PadV6>
+        </S.RowG8>
 
         {/* ── Action Buttons ─────────────────────── */}
         <Box style={{ flexDirection: 'row', gap: 10 }}>

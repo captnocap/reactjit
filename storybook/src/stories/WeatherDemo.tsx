@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import {
   Box, Text, Divider, Spacer,
-  BarChart, Sparkline, useLuaInterval,
-} from '../../../packages/core/src';
+  BarChart, Sparkline, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 
 /* ── sun pixel grid (11 wide x 11 tall) ──────────────── */
 
@@ -148,7 +147,7 @@ export function WeatherDemoStory() {
     <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 12, gap: 10 }}>
 
       {/* ── header: sun + identity ── */}
-      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+      <S.RowG12 style={{ width: '100%' }}>
         <Box style={{ width: SUN_W * PX, height: SUN_H * PX }}>
           {SUN_GRID.map((row, r) => (
             <Box key={r} style={{ flexDirection: 'row' }}>
@@ -168,38 +167,38 @@ export function WeatherDemoStory() {
             {`${Math.round(w.temp)}F@sanfrancisco`}
           </Text>
           <Divider color={DIM} />
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          <S.RowG8>
             <Label text="Sunny" color={BRIGHT} />
             <Label text={`Feels like ${w.feelsLike}F`} />
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          </S.RowG8>
+          <S.RowG8>
             <Label text={`Wind ${w.windSpeed}mph ${w.windDir}`} color={MID} />
             <Label text={`Humidity ${w.humidity}%`} />
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          </S.RowG8>
+          <S.RowG8>
             <Label text={`H:${w.high}F  L:${w.low}F`} color={GREEN} />
             <Label text={`UV ${w.uvIndex}`} color={w.uvIndex > 5 ? WARM : GREEN} />
-          </Box>
+          </S.RowG8>
         </Box>
-      </Box>
+      </S.RowG12>
 
       {/* ── palette + live badge ── */}
-      <Box style={{ flexDirection: 'row', gap: 2, width: '100%', alignItems: 'center' }}>
+      <S.RowCenter style={{ gap: 2, width: '100%' }}>
         <Box style={{ flexDirection: 'row', gap: 1 }}>
           {PALETTE.map((color, i) => (
             <Box key={i} style={{ width: 14, height: 10, backgroundColor: color, borderRadius: 1 }} />
           ))}
         </Box>
         <Spacer size={8} />
-        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        <S.RowCenterG4>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: GREEN }} />
           <Label text="live" color={GREEN} />
           <Label text={`(${timeLabel})`} />
-        </Box>
-      </Box>
+        </S.RowCenterG4>
+      </S.RowCenter>
 
       {/* ── two cards side by side ── */}
-      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+      <S.RowG12 style={{ width: '100%' }}>
 
         {/* left: conditions with bars */}
         <Box style={{
@@ -216,11 +215,11 @@ export function WeatherDemoStory() {
               { label: 'wind', val: `${w.windSpeed}mph`, raw: w.windSpeed, max: 40, color: BLUE },
               { label: 'humid', val: `${w.humidity}%`, raw: w.humidity, max: 100, color: COOL },
             ].map((row) => (
-              <Box key={row.label} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              <S.RowCenterG4 key={row.label}>
                 <Box style={{ width: 36 }}><Label text={row.label} /></Box>
                 <Box style={{ width: 48 }}><Val text={row.val} /></Box>
                 <Bar value={row.raw} max={row.max} width={130} color={row.color} />
-              </Box>
+              </S.RowCenterG4>
             ))}
           </Section>
         </Box>
@@ -241,10 +240,10 @@ export function WeatherDemoStory() {
                 { label: 'sunrise', val: '6:42 AM', color: WARM },
                 { label: 'sunset', val: '5:48 PM', color: '#F97316' },
               ].map((row) => (
-                <Box key={row.label} style={{ flexDirection: 'row', gap: 8 }}>
+                <S.RowG8 key={row.label}>
                   <Box style={{ width: 60 }}><Label text={row.label} /></Box>
                   <Val text={row.val} color={row.color} />
-                </Box>
+                </S.RowG8>
               ))}
             </Section>
           </Box>
@@ -257,7 +256,7 @@ export function WeatherDemoStory() {
             <Sparkline data={hourly} width={250} height={28} color={WARM} />
           </Box>
         </Box>
-      </Box>
+      </S.RowG12>
 
       {/* ── bottom: 7-day forecast ── */}
       <Box style={{

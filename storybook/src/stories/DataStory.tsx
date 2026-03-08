@@ -51,7 +51,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── Static data (hoisted — never recreated) ──────────────
@@ -227,12 +227,12 @@ const previewCardStyle = {
 function PreviewSection({ label, children }: { label: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
-      <Text style={{ color: c.muted, fontSize: 7, fontWeight: 'bold', letterSpacing: 1 }}>{label}</Text>
+    <S.CenterW100 style={{ gap: 6 }}>
+      <S.DimMicro style={{ fontWeight: 'bold', letterSpacing: 1 }}>{label}</S.DimMicro>
       <Box style={previewCardStyle}>
         {children}
       </Box>
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -256,7 +256,7 @@ function DataPreview() {
   ], []);
 
   return (
-    <Box style={{ gap: 14, alignItems: 'center', width: '100%' }}>
+    <S.CenterW100 style={{ gap: 14 }}>
       <PreviewSection label="BAR CHART">
         <BarChart data={DEMO_BAR_DATA} height={140} showValues interactive style={{ width: '100%' }} />
       </PreviewSection>
@@ -267,14 +267,14 @@ function DataPreview() {
 
       <PreviewSection label="PIE / DONUT">
         <PieChart data={DEMO_PIE_DATA} size={140} innerRadius={35} interactive />
-        <Box style={{ width: '100%', flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }}>
+        <S.RowG6 style={{ width: '100%', justifyContent: 'center', flexWrap: 'wrap' }}>
           {DEMO_PIE_DATA.map((s) => (
-            <Box key={s.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <S.RowCenter key={s.label} style={{ gap: 3 }}>
               <Box style={{ width: 6, height: 6, borderRadius: 2, backgroundColor: s.color }} />
               <S.StoryTiny>{s.label}</S.StoryTiny>
-            </Box>
+            </S.RowCenter>
           ))}
-        </Box>
+        </S.RowG6>
       </PreviewSection>
 
       <PreviewSection label="LINE CHART">
@@ -302,13 +302,13 @@ function DataPreview() {
       </PreviewSection>
 
       <PreviewSection label="PROGRESS BAR">
-        <Box style={{ width: '100%', gap: 6 }}>
+        <S.StackG6W100>
           <ProgressBar value={0.28} showLabel label="Build Queue" />
           <ProgressBar value={0.63} showLabel label="Data Sync" color="#f59e0b" />
           <ProgressBar value={0.91} showLabel label="Deploy" color="#22c55e" />
-        </Box>
+        </S.StackG6W100>
       </PreviewSection>
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -352,60 +352,38 @@ export function DataStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="bar-chart-2" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="bar-chart-2" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Data'}
-        </Text>
+        </S.StoryTitle>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <S.StoryBtnSm style={{ flexDirection: 'row', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
           <Text style={{ color: SYN.component, fontSize: 10 }}>{'BarChart'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'data'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <S.StoryMuted>{'='}</S.StoryMuted>
           <Text style={{ color: SYN.value, fontSize: 10 }}>{'{data}'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'interactive'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'/>'}</Text>
-        </Box>
+        </S.StoryBtnSm>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Numbers pretending to be shapes'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -417,7 +395,7 @@ export function DataStory() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -425,132 +403,120 @@ export function DataStory() {
           <>
             {/* ── Left: Preview (centered) ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
                 <DataPreview />
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
 
             <VerticalDivider />
 
             {/* ── Right: API Reference (centered) ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
                 {/* ── Overview ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'OVERVIEW'}
-                </Text>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                </S.StoryTiny>
+                <S.StoryBody>
                   {'Data visualization primitives: charts, tables, progress bars, sparklines, and badges. All chart components delegate to the native Chart2D element on the Lua side for GPU-accelerated rendering. Interactive mode enables hover tooltips and element highlighting.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
                 {/* ── Usage ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'USAGE'}
-                </Text>
+                </S.StoryTiny>
                 <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
                 {/* ── Behavior ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'BEHAVIOR'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                    <S.RowG6 key={i} style={{ alignItems: 'flex-start', width: '100%' }}>
                       <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</S.StoryBody>
+                    </S.RowG6>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* ── Components ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'COMPONENTS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {COMPONENTS.map(([name, desc, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.component} />
-                      <Text style={{ color: SYN.component, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{desc}</Text>
-                    </Box>
+                    <S.RowCenterG5 key={name} style={{ flexWrap: 'nowrap' }}>
+                      <S.StorySectionIcon src={icon} style={{ flexShrink: 0 }} tintColor={SYN.component} />
+                      <Text style={{ color: SYN.component, fontSize: 9, fontWeight: 'bold' }} numberOfLines={1}>{name}</Text>
+                      <S.StoryCap numberOfLines={1}>{desc}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* ── Props ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'PROPS'}
-                </Text>
-                <Box style={{ flexDirection: 'row', gap: 8 }}>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
+                </S.StoryTiny>
+                <S.RowG8>
+                  <S.Half style={{ gap: 3 }}>
                     {col1.map(([prop, type, icon]) => (
-                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                        <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
-                        <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                        <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center', flexWrap: 'nowrap' }}>
+                        <Image src={icon} style={{ width: 10, height: 10, flexShrink: 0 }} tintColor={SYN.prop} />
+                        <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }} numberOfLines={1}>{prop}</Text>
+                        <Text style={{ color: c.muted, fontSize: 9 }} numberOfLines={1}>{type}</Text>
                       </Box>
                     ))}
-                  </Box>
-                  <Box style={{ flexGrow: 1, flexBasis: 0, gap: 3 }}>
+                  </S.Half>
+                  <S.Half style={{ gap: 3 }}>
                     {col2.map(([prop, type, icon]) => (
-                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                        <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
-                        <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                        <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
+                      <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center', flexWrap: 'nowrap' }}>
+                        <Image src={icon} style={{ width: 10, height: 10, flexShrink: 0 }} tintColor={SYN.prop} />
+                        <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }} numberOfLines={1}>{prop}</Text>
+                        <Text style={{ color: c.muted, fontSize: 9 }} numberOfLines={1}>{type}</Text>
                       </Box>
                     ))}
-                  </Box>
-                </Box>
+                  </S.Half>
+                </S.RowG8>
 
                 <HorizontalDivider />
 
                 {/* ── Callbacks ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'CALLBACKS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {CALLBACKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
-                      <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                    <S.RowCenterG5 key={name} style={{ flexWrap: 'nowrap' }}>
+                      <S.StorySectionIcon src={icon} style={{ flexShrink: 0 }} tintColor={SYN.tag} />
+                      <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }} numberOfLines={1}>{name}</Text>
+                      <S.StoryCap numberOfLines={1}>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="bar-chart-2" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Data'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="bar-chart-2" />
+        <S.StoryBreadcrumbActive>{'Data'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -568,11 +534,7 @@ export function DataStory() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,
@@ -582,8 +544,8 @@ export function DataStory() {
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

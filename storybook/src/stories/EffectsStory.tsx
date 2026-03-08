@@ -249,7 +249,7 @@ const TABS: TabDef[] = [
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── EffectsStory ─────────────────────────────────────────
@@ -299,23 +299,11 @@ export function EffectsStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="sparkles" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="sparkles" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Effects'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -327,65 +315,45 @@ export function EffectsStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'23 generative effects — procedural, reactive, audio-driven'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Subtitle bar — two rows: title+snippet / description ── */}
-      <Box style={{
-        flexShrink: 0,
-        height: 46,
-        overflow: 'hidden',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 5,
-        paddingBottom: 5,
-        gap: 2,
-      }}>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={C.accent} />
-          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{tab.label}</Text>
+      <S.BorderBottom style={{ flexShrink: 0, height: 46, overflow: 'hidden', backgroundColor: c.bgElevated, paddingLeft: 20, paddingRight: 20, paddingTop: 5, paddingBottom: 5, gap: 2 }}>
+        <S.RowCenterG8>
+          <S.StoryInfoIcon src={tab.icon} tintColor={C.accent} />
+          <S.BoldText style={{ fontSize: 12 }}>{tab.label}</S.BoldText>
           <Box style={{
             backgroundColor: c.surface, borderRadius: 3,
             paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1,
           }}>
-            <Text style={{ color: c.muted, fontSize: 8 }}>{tab.cat}</Text>
+            <S.StoryTiny>{tab.cat}</S.StoryTiny>
           </Box>
           <Box style={{ flexGrow: 1 }} />
           <CodeBlock language="tsx" fontSize={8} code={tab.usage} />
-        </Box>
-        <Text style={{ color: c.muted, fontSize: 9 }} numberOfLines={1}>{tab.desc}</Text>
-      </Box>
+        </S.RowCenterG8>
+        <S.StoryCap numberOfLines={1}>{tab.desc}</S.StoryCap>
+      </S.BorderBottom>
 
       {/* ── Middle section: preview + command center share remaining space ── */}
       <Box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
 
       {/* ── Dual preview — standalone + as-background ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row', gap: 0, borderBottomWidth: 1, borderColor: c.border, minHeight: 0 }}>
+      <S.BorderBottom style={{ flexGrow: 1, flexDirection: 'row', gap: 0, minHeight: 0 }}>
 
         {/* Standalone effect */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, overflow: 'hidden', backgroundColor: '#0a0c12' }}>
+        <S.Half style={{ overflow: 'hidden', backgroundColor: '#0a0c12' }}>
           <EffComp style={{ width: '100%', height: '100%' }} {...effectProps} />
-        </Box>
+        </S.Half>
 
         <VerticalDivider />
 
         {/* As-background demo */}
         <Box style={{ width: 220, gap: 6, padding: 6 }}>
           {/* Card with effect background */}
-          <Box style={{
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            padding: 12,
-            overflow: 'hidden',
-            flexGrow: 1,
-            justifyContent: 'flex-end',
-          }}>
+          <S.Bordered style={{ borderRadius: 10, padding: 12, overflow: 'hidden', flexGrow: 1, justifyContent: 'flex-end' }}>
             <EffComp background {...effectProps} />
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'normal' }}>
               {tab.label}
@@ -393,70 +361,35 @@ export function EffectsStory() {
             <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 4 }}>
               {'Living background texture'}
             </Text>
-          </Box>
+          </S.Bordered>
 
           {/* Profile HUD card */}
-          <Box style={{
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            overflow: 'hidden',
-            flexShrink: 0,
-            height: 120,
-          }}>
+          <S.Bordered style={{ borderRadius: 10, overflow: 'hidden', flexShrink: 0, height: 120 }}>
             <EffComp background speed={0.55} />
-            <Box style={{
-              position: 'absolute',
-              left: 0, top: 0, width: '100%', height: '100%',
-              backgroundColor: 'rgba(8,10,18,0.34)',
-            }} />
-            <Box style={{
-              position: 'absolute',
-              left: 0, top: 0, width: '100%', height: '100%',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Box style={{
-                width: 52, height: 52, borderRadius: 26,
-                borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
-                backgroundColor: 'rgba(255,255,255,0.08)',
-                justifyContent: 'center', alignItems: 'center',
-              }}>
+            <S.FullSize style={{ position: 'absolute', left: 0, top: 0, backgroundColor: 'rgba(8,10,18,0.34)' }} />
+            <S.FullCenter style={{ position: 'absolute', left: 0, top: 0 }}>
+              <S.Center style={{ width: 52, height: 52, borderRadius: 26, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', backgroundColor: 'rgba(255,255,255,0.08)' }}>
                 <Image
                   src="lib/placeholders/avatar.png"
                   style={{ width: 44, height: 44, borderRadius: 22, objectFit: 'cover' }}
                 />
-              </Box>
+              </S.Center>
               <Box style={{
                 position: 'absolute', width: 68, height: 68, borderRadius: 34,
                 borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
               }} />
-            </Box>
-            <Box style={{
-              position: 'absolute', left: 0, bottom: 6, width: '100%',
-              alignItems: 'center', gap: 2,
-            }}>
+            </S.FullCenter>
+            <S.CenterW100 style={{ position: 'absolute', left: 0, bottom: 6, gap: 2 }}>
               <Text style={{ color: '#ffffff', fontSize: 9 }}>{'Nova Echo'}</Text>
-            </Box>
-          </Box>
+            </S.CenterW100>
+          </S.Bordered>
         </Box>
-      </Box>
+      </S.BorderBottom>
 
       {/* ── Command center — live-editable props ── */}
-      <Box style={{
-        flexShrink: 1,
-        overflow: 'hidden',
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        backgroundColor: c.bgElevated,
-        paddingLeft: 12,
-        paddingRight: 12,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 4,
-      }}>
+      <S.BorderBottom style={{ flexShrink: 1, overflow: 'hidden', backgroundColor: c.bgElevated, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, gap: 4 }}>
         {/* Main props row */}
-        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6 style={{ flexWrap: 'wrap' }}>
           {mainProps.map(p => {
             const val = resolved[p.name];
             if (p.kind === 'bool') {
@@ -482,15 +415,11 @@ export function EffectsStory() {
               const next = opts[(idx + 1) % opts.length];
               return (
                 <Pressable key={p.name} onPress={() => setVal(p.name, next)}>
-                  <Box style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 4,
-                    paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
-                    borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
-                  }}>
+                  <S.RowCenterBorder style={{ gap: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, borderWidth: 1, backgroundColor: c.surface }}>
                     <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={c.muted} />
-                    <Text style={{ color: c.muted, fontSize: 9 }}>{p.name}</Text>
+                    <S.StoryCap>{p.name}</S.StoryCap>
                     <Text style={{ color: C.accent, fontSize: 9 }}>{val}</Text>
-                  </Box>
+                  </S.RowCenterBorder>
                 </Pressable>
               );
             }
@@ -504,21 +433,13 @@ export function EffectsStory() {
             };
             const isEditing = editingProp === p.name;
             return (
-              <Box key={p.name} style={{
-                flexDirection: 'row', alignItems: 'center', gap: 2,
-                paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2,
-                borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
-                overflow: 'hidden',
-              }}>
+              <S.RowCenterBorder key={p.name} style={{ gap: 2, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, borderWidth: 1, backgroundColor: c.surface, overflow: 'hidden' }}>
                 <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={c.muted} />
-                <Text style={{ color: c.muted, fontSize: 9, marginRight: 2 }}>{p.name}</Text>
+                <S.StoryCap style={{ marginRight: 2 }}>{p.name}</S.StoryCap>
                 <Pressable onPress={() => setVal(p.name, clamp(val - step))}>
-                  <Box style={{
-                    width: 14, height: 14, borderRadius: 3,
-                    backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center',
-                  }}>
+                  <S.Center style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: c.bg }}>
                     <Text style={{ color: c.muted, fontSize: 10 }}>{'\u2212'}</Text>
-                  </Box>
+                  </S.Center>
                 </Pressable>
                 {isEditing ? (
                   <TextInput
@@ -538,28 +459,25 @@ export function EffectsStory() {
                   />
                 ) : (
                   <Pressable onPress={() => setEditingProp(p.name)}>
-                    <Text style={{ color: c.text, fontSize: 9, width: 30 }}>
+                    <S.StoryBreadcrumbActive style={{ width: 30 }}>
                       {step >= 1 ? String(val) : val.toFixed(2)}
-                    </Text>
+                    </S.StoryBreadcrumbActive>
                   </Pressable>
                 )}
                 <Pressable onPress={() => setVal(p.name, clamp(val + step))}>
-                  <Box style={{
-                    width: 14, height: 14, borderRadius: 3,
-                    backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center',
-                  }}>
+                  <S.Center style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: c.bg }}>
                     <Text style={{ color: c.muted, fontSize: 10 }}>{'+'}</Text>
-                  </Box>
+                  </S.Center>
                 </Pressable>
-              </Box>
+              </S.RowCenterBorder>
             );
           })}
-        </Box>
+        </S.RowCenterG6>
 
         {/* Audio props row */}
         {audioProps.length > 0 && (
-          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'AUDIO'}</Text>
+          <S.RowCenterG6 style={{ flexWrap: 'wrap' }}>
+            <S.StoryLabelText>{'AUDIO'}</S.StoryLabelText>
             {audioProps.map(p => {
               const val = resolved[p.name];
               if (p.kind === 'bool') {
@@ -587,41 +505,30 @@ export function EffectsStory() {
                 return r;
               };
               return (
-                <Box key={p.name} style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 2,
-                  paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2,
-                  borderRadius: 4, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
-                  overflow: 'hidden',
-                }}>
+                <S.RowCenterBorder key={p.name} style={{ gap: 2, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, borderWidth: 1, backgroundColor: c.surface, overflow: 'hidden' }}>
                   <Image src={p.icon} style={{ width: 9, height: 9 }} tintColor={c.muted} />
-                  <Text style={{ color: c.muted, fontSize: 9, marginRight: 2 }}>{p.name}</Text>
+                  <S.StoryCap style={{ marginRight: 2 }}>{p.name}</S.StoryCap>
                   <Pressable onPress={() => setVal(p.name, clamp(val - step))}>
-                    <Box style={{
-                      width: 14, height: 14, borderRadius: 3,
-                      backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center',
-                    }}>
+                    <S.Center style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: c.bg }}>
                       <Text style={{ color: c.muted, fontSize: 10 }}>{'\u2212'}</Text>
-                    </Box>
+                    </S.Center>
                   </Pressable>
                   <Pressable onPress={() => setEditingProp(p.name)}>
-                    <Text style={{ color: c.text, fontSize: 9, width: 30 }}>
+                    <S.StoryBreadcrumbActive style={{ width: 30 }}>
                       {val.toFixed(2)}
-                    </Text>
+                    </S.StoryBreadcrumbActive>
                   </Pressable>
                   <Pressable onPress={() => setVal(p.name, clamp(val + step))}>
-                    <Box style={{
-                      width: 14, height: 14, borderRadius: 3,
-                      backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center',
-                    }}>
+                    <S.Center style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: c.bg }}>
                       <Text style={{ color: c.muted, fontSize: 10 }}>{'+'}</Text>
-                    </Box>
+                    </S.Center>
                   </Pressable>
-                </Box>
+                </S.RowCenterBorder>
               );
             })}
-          </Box>
+          </S.RowCenterG6>
         )}
-      </Box>
+      </S.BorderBottom>
 
       </Box>{/* end middle section */}
 
@@ -633,16 +540,7 @@ export function EffectsStory() {
         borderColor: c.border,
         backgroundColor: c.bgElevated,
       }}>
-          <Box style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            paddingLeft: 8,
-            paddingRight: 8,
-            paddingTop: 8,
-            paddingBottom: 8,
-            gap: 8,
-          }}>
+          <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8 }}>
             {TABS.map(comp => {
               const active = comp.id === activeId;
               const hovered = comp.id === hoveredId;
@@ -683,34 +581,22 @@ export function EffectsStory() {
                 </Pressable>
               );
             })}
-          </Box>
+          </S.RowG8>
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="sparkles" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Effects'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src={tab.icon} style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{tab.label}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.DimIcon12 src="sparkles" />
+        <S.StoryCap>{'Effects'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src={tab.icon} />
+        <S.StoryBreadcrumbActive>{tab.label}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</Text>
-      </Box>
+        <S.StoryCap>{`${TABS.indexOf(tab) + 1} of ${TABS.length}`}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

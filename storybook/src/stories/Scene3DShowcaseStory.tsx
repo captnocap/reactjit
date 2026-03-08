@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene3DBasicStory } from './Scene3DBasic';
 import { Scene3DPlanetStory } from './Scene3DPlanet';
@@ -40,17 +40,17 @@ export function Scene3DShowcaseStory() {
   const ActiveStory = current.component;
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 12, gap: 10 }}>
+    <S.StoryRoot style={{ padding: 12, gap: 10 }}>
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
           3D Showcase
         </Text>
-        <Text style={{ fontSize: 11, color: c.textDim }}>
+        <S.DimBody11>
           Consolidated: Scene + Planet + Framework Cube
-        </Text>
+        </S.DimBody11>
       </Box>
 
-      <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      <S.RowG8 style={{ width: '100%', flexWrap: 'wrap' }}>
         {VARIANTS.map((variant) => (
           <Pressable
             key={variant.id}
@@ -71,36 +71,16 @@ export function Scene3DShowcaseStory() {
             </Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG8>
 
-      <Box
-        style={{
-          width: '100%',
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: c.border,
-          backgroundColor: c.bgElevated,
-          padding: 8,
-        }}
-      >
-        <Text style={{ fontSize: 10, color: c.textSecondary }}>{current.description}</Text>
-      </Box>
+      <S.Bordered style={{ width: '100%', borderRadius: 8, backgroundColor: c.bgElevated, padding: 8 }}>
+        <S.SecondaryBody>{current.description}</S.SecondaryBody>
+      </S.Bordered>
 
-      <Box
-        style={{
-          width: '100%',
-          flexGrow: 1,
-          minHeight: 0,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          overflow: 'hidden',
-          backgroundColor: c.bg,
-        }}
-      >
+      <S.Bordered style={{ width: '100%', flexGrow: 1, minHeight: 0, borderRadius: 10, overflow: 'hidden', backgroundColor: c.bg }}>
         <ActiveStory />
-      </Box>
-    </Box>
+      </S.Bordered>
+    </S.StoryRoot>
   );
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Text, Pressable, Slider, useLoveRPC } from '../../../packages/core/src';
+import { Box, Text, Pressable, Slider, useLoveRPC, classifiers as S} from '../../../packages/core/src';
 import {
   useAudioInit,
   useRack,
@@ -86,10 +86,10 @@ function ParamSlider({
 }) {
   return (
     <Box>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+      <S.RowSpaceBetween style={{ width: '100%' }}>
         <Label>{label}</Label>
         <Value color={color}>{`${Math.round(value)}${suffix || ''}`}</Value>
-      </Box>
+      </S.RowSpaceBetween>
       <Slider
         value={value}
         minimumValue={min}
@@ -145,17 +145,17 @@ function Transport({ clockId }: { clockId: string }) {
       width: '100%',
     }}>
       {/* Play/Stop */}
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <Btn
           label={clock.running ? 'STOP' : 'PLAY'}
           onPress={() => clock.running ? clock.stop() : clock.start()}
           color={clock.running ? C.red : C.green}
           active={clock.running}
         />
-      </Box>
+      </S.RowG6>
 
       {/* BPM */}
-      <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+      <S.Half>
         <ParamSlider
           label="BPM"
           value={clock.bpm}
@@ -164,7 +164,7 @@ function Transport({ clockId }: { clockId: string }) {
           color={C.orange}
           onChange={(v) => clock.setBpm(Math.round(v))}
         />
-      </Box>
+      </S.Half>
 
       {/* Swing */}
       <Box style={{ width: 100 }}>
@@ -205,7 +205,7 @@ function OscPanel({ moduleId }: { moduleId: string }) {
   return (
     <ModulePanel title="OSCILLATOR" color={C.accent}>
       <Label>Waveform</Label>
-      <Box style={{ flexDirection: 'row', gap: 4 }}>
+      <S.RowG4>
         {waveforms.map((w) => (
           <Btn
             key={w}
@@ -216,7 +216,7 @@ function OscPanel({ moduleId }: { moduleId: string }) {
             small
           />
         ))}
-      </Box>
+      </S.RowG4>
       <ParamSlider
         label="Frequency"
         value={mod.params.frequency || 440}
@@ -246,7 +246,7 @@ function FilterPanel({ moduleId }: { moduleId: string }) {
   return (
     <ModulePanel title="FILTER" color={C.pink}>
       <Label>Mode</Label>
-      <Box style={{ flexDirection: 'row', gap: 4 }}>
+      <S.RowG4>
         {modes.map((m) => (
           <Btn
             key={m}
@@ -257,7 +257,7 @@ function FilterPanel({ moduleId }: { moduleId: string }) {
             small
           />
         ))}
-      </Box>
+      </S.RowG4>
       <ParamSlider
         label="Cutoff"
         value={mod.params.cutoff || 1000}
@@ -345,7 +345,7 @@ function StepGrid({
   return (
     <Box style={{ gap: 3, alignItems: 'center' }}>
       {Array.from({ length: tracks }, (_, track) => (
-        <Box key={track} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+        <S.RowCenter key={track} style={{ gap: 3 }}>
           <Box style={{ width: 40 }}>
             <Text style={{
               color: trackColors[track] || C.dim,
@@ -390,7 +390,7 @@ function StepGrid({
               </Pressable>
             );
           })}
-        </Box>
+        </S.RowCenter>
       ))}
     </Box>
   );
@@ -405,7 +405,7 @@ function SamplerSlots({ moduleId }: { moduleId: string }) {
   return (
     <Box style={{ gap: 4 }}>
       <Label>SAMPLE SLOTS</Label>
-      <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+      <S.RowWrap style={{ gap: 3 }}>
         {Array.from({ length: 8 }, (_, i) => {
           const slot = sampler.slots[i + 1];
           const hasVoice = sampler.voices.some((v) => v.slot === i + 1);
@@ -445,7 +445,7 @@ function SamplerSlots({ moduleId }: { moduleId: string }) {
             </Pressable>
           );
         })}
-      </Box>
+      </S.RowWrap>
     </Box>
   );
 }
@@ -459,7 +459,7 @@ function ConnectionList() {
     <Box style={{ gap: 4 }}>
       <Label>SIGNAL CHAIN</Label>
       {rack.connections.map((conn, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        <S.RowCenterG4 key={i}>
           <Text style={{ color: C.accent, fontSize: 9, fontWeight: '600' }}>
             {conn.fromId}
           </Text>
@@ -473,7 +473,7 @@ function ConnectionList() {
           <Text style={{ color: C.dim, fontSize: 9 }}>
             {`.${conn.toPort}`}
           </Text>
-        </Box>
+        </S.RowCenterG4>
       ))}
     </Box>
   );
@@ -489,7 +489,7 @@ function RackInfo() {
   }
 
   return (
-    <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <S.RowG6 style={{ flexWrap: 'wrap' }}>
       {Object.entries(types).map(([type, count]) => (
         <Box key={type} style={{
           flexDirection: 'row',
@@ -505,7 +505,7 @@ function RackInfo() {
           <Text style={{ color: C.text, fontSize: 9, fontWeight: 'normal' }}>{String(count)}</Text>
         </Box>
       ))}
-    </Box>
+    </S.RowG6>
   );
 }
 
@@ -593,10 +593,10 @@ export function AudioRackStory() {
         padding: 8,
         gap: 6,
       }}>
-        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <S.RowCenter style={{ justifyContent: 'space-between', width: '100%' }}>
           <Text style={{ color: C.orange, fontSize: 11, fontWeight: 'normal' }}>STEP SEQUENCER</Text>
           <Label>Click steps to toggle</Label>
-        </Box>
+        </S.RowCenter>
         <StepGrid
           sequencerId="seq1"
           tracks={4}
@@ -607,14 +607,14 @@ export function AudioRackStory() {
       </Box>
 
       {/* Module panels row */}
-      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+      <S.StackG10W100 style={{ flexDirection: 'row' }}>
         <OscPanel moduleId="osc1" />
         <FilterPanel moduleId="filt1" />
         <EnvelopePanel moduleId="env1" />
-      </Box>
+      </S.StackG10W100>
 
       {/* Bottom row: sampler + connections */}
-      <Box style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+      <S.StackG10W100 style={{ flexDirection: 'row' }}>
         <Box style={{
           backgroundColor: C.panel,
           borderWidth: 1,
@@ -646,7 +646,7 @@ export function AudioRackStory() {
           <Text style={{ color: C.orange, fontSize: 11, fontWeight: 'normal' }}>PATCH BAY</Text>
           <ConnectionList />
         </Box>
-      </Box>
+      </S.StackG10W100>
     </Box>
   );
 }

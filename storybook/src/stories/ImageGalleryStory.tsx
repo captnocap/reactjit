@@ -10,28 +10,16 @@ import {
   HoverPreviewRowsGallery,
   BentoImageGallery,
 
-  type ImageGalleryItem,
-} from '../../../packages/core/src';
+  type ImageGalleryItem, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { StoryPage, StorySection } from './_shared/StoryScaffold';
 
 function StatusPill({ label }: { label: string }) {
   const c = useThemeColors();
   return (
-    <Box
-      style={{
-        backgroundColor: c.bgAlt,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 10,
-        paddingRight: 10,
-        paddingTop: 4,
-        paddingBottom: 4,
-      }}
-    >
-      <Text style={{ fontSize: 10, color: c.textSecondary }}>{label}</Text>
-    </Box>
+    <S.Bordered style={{ backgroundColor: c.bgAlt, borderRadius: 8, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
+      <S.SecondaryBody>{label}</S.SecondaryBody>
+    </S.Bordered>
   );
 }
 
@@ -45,7 +33,7 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
   if (!preview) return null;
 
   return (
-    <Box style={{ width: '100%', flexDirection: 'row', gap: 10 }}>
+    <S.StackG10W100 style={{ flexDirection: 'row' }}>
       <Pressable
         onPress={() => {
           setViewerIndex(previewIndex);
@@ -64,30 +52,18 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
         <Image src={preview.src} style={{ width: '100%', height: 360, objectFit: 'cover' }} />
         <Box style={{ padding: 8, gap: 2 }}>
           <Text style={{ fontSize: 11, color: c.text, fontWeight: 'normal' }}>{preview.title || 'Preview'}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>
+          <S.SecondaryBody>
             Hover or click tiles in the right panel to swap preview
-          </Text>
+          </S.SecondaryBody>
         </Box>
       </Pressable>
 
-      <Box
-        style={{
-          width: 350,
-          minWidth: 300,
-          height: 410,
-          backgroundColor: c.bgAlt,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 8,
-          gap: 8,
-        }}
-      >
-        <Text style={{ fontSize: 10, color: c.textSecondary, textAlign: 'center' }}>
+      <S.Bordered style={{ width: 350, minWidth: 300, height: 410, backgroundColor: c.bgAlt, borderRadius: 10, padding: 8, gap: 8 }}>
+        <S.SecondaryBody style={{ textAlign: 'center' }}>
           Gallery Panel
-        </Text>
+        </S.SecondaryBody>
         <ScrollView style={{ flexGrow: 1, width: '100%' }}>
-          <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', paddingBottom: 2 }}>
+          <S.RowG8 style={{ width: '100%', flexWrap: 'wrap', justifyContent: 'center', paddingBottom: 2 }}>
             {images.slice(0, 18).map((item, index) => (
               <Pressable
                 key={item.id ?? `${item.src}-${index}`}
@@ -110,9 +86,9 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
                 <Image src={item.thumbnailSrc || item.src} style={{ width: '100%', height: 75, objectFit: 'cover' }} />
               </Pressable>
             ))}
-          </Box>
+          </S.RowG8>
         </ScrollView>
-      </Box>
+      </S.Bordered>
 
       <ImageViewerModal
         visible={viewerOpen}
@@ -125,7 +101,7 @@ function HoverPreviewSplit({ images }: { images: ImageGalleryItem[] }) {
         onRequestClose={() => setViewerOpen(false)}
         showFilmstrip
       />
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -159,9 +135,9 @@ export function ImageGalleryStory() {
     <StoryPage>
       <Box style={{ gap: 2, alignItems: 'center' }}>
         <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal', textAlign: 'center' }}>Gallery Layout Setups</Text>
-        <Text style={{ fontSize: 11, color: c.textDim, textAlign: 'center' }}>
+        <S.DimBody11 style={{ textAlign: 'center' }}>
         Same image collection shown in different row/preview systems.
-        </Text>
+        </S.DimBody11>
       </Box>
 
       <StorySection index={1} title="Wrap Tiles">
@@ -180,11 +156,11 @@ export function ImageGalleryStory() {
             setWrapActiveIndex(index);
           }}
         />
-        <Box style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+        <S.RowG8 style={{ width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
           <StatusPill label={`Active: ${wrapImages[wrapActiveIndex]?.title || 'None'}`} />
           <StatusPill label={`Viewer: ${wrapViewerOpen ? 'Open' : 'Closed'}`} />
           <StatusPill label={`Tile: ${wrapThumb} x ${wrapThumb}`} />
-        </Box>
+        </S.RowG8>
       </StorySection>
 
       <StorySection index={2} title="Nested Rows + Hover Preview">

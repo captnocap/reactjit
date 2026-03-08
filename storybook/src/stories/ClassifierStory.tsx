@@ -66,7 +66,7 @@ classifier({
   TileBackSym:   { type: 'Text', size: 6, bold: true, color: '#000' },
 });
 
-const C = classifiers;
+const S = classifiers;
 
 // ── Category colors (same as chemistry package) ───────────
 
@@ -93,31 +93,31 @@ function V1Tile({ element }: { element: string }) {
 
   return (
     <Pressable onPress={() => setFlipped(f => !f)}>
-      <C.ETile style={{
+      <S.ETile style={{
         width: 64, height: 72,
         backgroundColor: showBack ? bg : tc.surface,
         borderRadius: 6, borderColor: bg, padding: 4,
         transform: { scaleX: Math.max(0.01, scaleX) },
       }}>
         {showBack ? (
-          <C.EBack>
+          <S.EBack>
             <Text style={{ color: '#000', fontSize: 6, fontWeight: 'bold' }}>{el.symbol}</Text>
-            <C.EPropRow><C.EPropLabel>{'Grp'}</C.EPropLabel><C.EPropValue>{`${el.group}`}</C.EPropValue></C.EPropRow>
-            <C.EPropRow><C.EPropLabel>{'Per'}</C.EPropLabel><C.EPropValue>{`${el.period}`}</C.EPropValue></C.EPropRow>
-            <C.EPropRow><C.EPropLabel>{'Phase'}</C.EPropLabel><C.EPropValue>{el.phase}</C.EPropValue></C.EPropRow>
+            <S.EPropRow><S.EPropLabel>{'Grp'}</S.EPropLabel><S.EPropValue>{`${el.group}`}</S.EPropValue></S.EPropRow>
+            <S.EPropRow><S.EPropLabel>{'Per'}</S.EPropLabel><S.EPropValue>{`${el.period}`}</S.EPropValue></S.EPropRow>
+            <S.EPropRow><S.EPropLabel>{'Phase'}</S.EPropLabel><S.EPropValue>{el.phase}</S.EPropValue></S.EPropRow>
             {el.electronegativity !== null && (
-              <C.EPropRow><C.EPropLabel>{'EN'}</C.EPropLabel><C.EPropValue>{`${el.electronegativity}`}</C.EPropValue></C.EPropRow>
+              <S.EPropRow><S.EPropLabel>{'EN'}</S.EPropLabel><S.EPropValue>{`${el.electronegativity}`}</S.EPropValue></S.EPropRow>
             )}
-            <C.EPropRow><C.EPropLabel>{'Mass'}</C.EPropLabel><C.EPropValue>{el.mass.toFixed(1)}</C.EPropValue></C.EPropRow>
-          </C.EBack>
+            <S.EPropRow><S.EPropLabel>{'Mass'}</S.EPropLabel><S.EPropValue>{el.mass.toFixed(1)}</S.EPropValue></S.EPropRow>
+          </S.EBack>
         ) : (
-          <C.EFront>
-            <C.ENumber style={{ color: bg }}>{`${el.number}`}</C.ENumber>
-            <C.ESymbol style={{ color: tc.text }}>{el.symbol}</C.ESymbol>
-            <C.EMass style={{ color: tc.muted }}>{el.mass.toFixed(2)}</C.EMass>
-          </C.EFront>
+          <S.EFront>
+            <S.ENumber style={{ color: bg }}>{`${el.number}`}</S.ENumber>
+            <S.ESymbol style={{ color: tc.text }}>{el.symbol}</S.ESymbol>
+            <S.EMass style={{ color: tc.muted }}>{el.mass.toFixed(2)}</S.EMass>
+          </S.EFront>
         )}
-      </C.ETile>
+      </S.ETile>
     </Pressable>
   );
 }
@@ -137,30 +137,30 @@ function V2Tile({ element }: { element: string }) {
 
   return (
     <Pressable onPress={() => setFlipped(f => !f)}>
-      <C.Tile style={{
+      <S.Tile style={{
         backgroundColor: showBack ? bg : tc.surface,
         borderColor: bg,
         transform: { scaleX: Math.max(0.01, scaleX) },
       }}>
         {showBack ? (
-          <C.TileBack>
-            <C.TileBackSym>{el.symbol}</C.TileBackSym>
-            <C.TilePropRow><C.TilePropLabel>{'Grp'}</C.TilePropLabel><C.TilePropVal>{`${el.group}`}</C.TilePropVal></C.TilePropRow>
-            <C.TilePropRow><C.TilePropLabel>{'Per'}</C.TilePropLabel><C.TilePropVal>{`${el.period}`}</C.TilePropVal></C.TilePropRow>
-            <C.TilePropRow><C.TilePropLabel>{'Phase'}</C.TilePropLabel><C.TilePropVal>{el.phase}</C.TilePropVal></C.TilePropRow>
+          <S.TileBack>
+            <S.TileBackSym>{el.symbol}</S.TileBackSym>
+            <S.TilePropRow><S.TilePropLabel>{'Grp'}</S.TilePropLabel><S.TilePropVal>{`${el.group}`}</S.TilePropVal></S.TilePropRow>
+            <S.TilePropRow><S.TilePropLabel>{'Per'}</S.TilePropLabel><S.TilePropVal>{`${el.period}`}</S.TilePropVal></S.TilePropRow>
+            <S.TilePropRow><S.TilePropLabel>{'Phase'}</S.TilePropLabel><S.TilePropVal>{el.phase}</S.TilePropVal></S.TilePropRow>
             {el.electronegativity !== null && (
-              <C.TilePropRow><C.TilePropLabel>{'EN'}</C.TilePropLabel><C.TilePropVal>{`${el.electronegativity}`}</C.TilePropVal></C.TilePropRow>
+              <S.TilePropRow><S.TilePropLabel>{'EN'}</S.TilePropLabel><S.TilePropVal>{`${el.electronegativity}`}</S.TilePropVal></S.TilePropRow>
             )}
-            <C.TilePropRow><C.TilePropLabel>{'Mass'}</C.TilePropLabel><C.TilePropVal>{el.mass.toFixed(1)}</C.TilePropVal></C.TilePropRow>
-          </C.TileBack>
+            <S.TilePropRow><S.TilePropLabel>{'Mass'}</S.TilePropLabel><S.TilePropVal>{el.mass.toFixed(1)}</S.TilePropVal></S.TilePropRow>
+          </S.TileBack>
         ) : (
-          <C.TileFront>
-            <C.TileNumber color={bg}>{`${el.number}`}</C.TileNumber>
-            <C.TileSymbol color={tc.text}>{el.symbol}</C.TileSymbol>
-            <C.TileMass color={tc.muted}>{el.mass.toFixed(2)}</C.TileMass>
-          </C.TileFront>
+          <S.TileFront>
+            <S.TileNumber color={bg}>{`${el.number}`}</S.TileNumber>
+            <S.TileSymbol color={tc.text}>{el.symbol}</S.TileSymbol>
+            <S.TileMass color={tc.muted}>{el.mass.toFixed(2)}</S.TileMass>
+          </S.TileFront>
         )}
-      </C.Tile>
+      </S.Tile>
     </Pressable>
   );
 }
@@ -169,41 +169,41 @@ function V2Tile({ element }: { element: string }) {
 
 function TypographyDemo() {
   return (
-    <C.Section>
-      <C.Label>{'Typography'}</C.Label>
-      <C.Divider />
-      <C.Title>{'The quick brown fox'}</C.Title>
-      <C.Subtitle>{'Jumps over the lazy dog'}</C.Subtitle>
-      <C.Body>{'Body text — 14px, standard weight, readable color. This is what most content looks like when rendered through a classifier.'}</C.Body>
-      <C.Caption>{'Caption — small, muted, for metadata and timestamps'}</C.Caption>
-      <C.Code>{'const x = classifier("Box", { padding: 16 })'}</C.Code>
-    </C.Section>
+    <S.Section>
+      <S.Label>{'Typography'}</S.Label>
+      <S.Divider />
+      <S.Title>{'The quick brown fox'}</S.Title>
+      <S.Subtitle>{'Jumps over the lazy dog'}</S.Subtitle>
+      <S.Body>{'Body text — 14px, standard weight, readable color. This is what most content looks like when rendered through a classifier.'}</S.Body>
+      <S.Caption>{'Caption — small, muted, for metadata and timestamps'}</S.Caption>
+      <S.Code>{'const x = classifier("Box", { padding: 16 })'}</S.Code>
+    </S.Section>
   );
 }
 
 function CardDemo() {
   return (
-    <C.Section>
-      <C.Label>{'Cards'}</C.Label>
-      <C.Divider />
-      <C.Row>
-        <C.Card style={{ flexGrow: 1 }}>
-          <C.Label>{'Metrics'}</C.Label>
-          <C.Title>{'1,247'}</C.Title>
-          <C.Caption>{'Active users today'}</C.Caption>
-        </C.Card>
-        <C.Card style={{ flexGrow: 1 }}>
-          <C.Label>{'Uptime'}</C.Label>
-          <C.Title>{'99.9%'}</C.Title>
-          <C.Caption>{'Last 30 days'}</C.Caption>
-        </C.Card>
-        <C.Card style={{ flexGrow: 1 }}>
-          <C.Label>{'Latency'}</C.Label>
-          <C.Title>{'12ms'}</C.Title>
-          <C.Caption>{'p95 response time'}</C.Caption>
-        </C.Card>
-      </C.Row>
-    </C.Section>
+    <S.Section>
+      <S.Label>{'Cards'}</S.Label>
+      <S.Divider />
+      <S.Row>
+        <S.Card style={{ flexGrow: 1 }}>
+          <S.Label>{'Metrics'}</S.Label>
+          <S.Title>{'1,247'}</S.Title>
+          <S.Caption>{'Active users today'}</S.Caption>
+        </S.Card>
+        <S.Card style={{ flexGrow: 1 }}>
+          <S.Label>{'Uptime'}</S.Label>
+          <S.Title>{'99.9%'}</S.Title>
+          <S.Caption>{'Last 30 days'}</S.Caption>
+        </S.Card>
+        <S.Card style={{ flexGrow: 1 }}>
+          <S.Label>{'Latency'}</S.Label>
+          <S.Title>{'12ms'}</S.Title>
+          <S.Caption>{'p95 response time'}</S.Caption>
+        </S.Card>
+      </S.Row>
+    </S.Section>
   );
 }
 
@@ -214,24 +214,24 @@ const SAMPLE = ['H', 'Li', 'Fe', 'Al', 'Si', 'Cl', 'Ne', 'Nd', 'Au', 'U'];
 function TileRow({ label, badgeColor, desc, children }: { label: string; badgeColor: string; desc: string; children: React.ReactNode }) {
   return (
     <>
-      <C.Row>
-        <C.Badge style={{ backgroundColor: badgeColor }}>
+      <S.Row>
+        <S.Badge style={{ backgroundColor: badgeColor }}>
           <Text size={11} bold color="#1e1e2e">{label}</Text>
-        </C.Badge>
-        <C.Caption>{desc}</C.Caption>
-      </C.Row>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+        </S.Badge>
+        <S.Caption>{desc}</S.Caption>
+      </S.Row>
+      <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
         {children}
-      </Box>
+      </S.RowG8>
     </>
   );
 }
 
 function ElementTileComparison() {
   return (
-    <C.Section>
-      <C.Label>{'ElementTile — Component vs Partial vs Classified Component'}</C.Label>
-      <C.Divider />
+    <S.Section>
+      <S.Label>{'ElementTile — Component vs Partial vs Classified Component'}</S.Label>
+      <S.Divider />
 
       <TileRow label="COMPONENT" badgeColor="#89b4fa" desc="Raw primitives with inline styles">
         {SAMPLE.map(sym => <ElementTile key={sym} element={sym} size={64} />)}
@@ -248,7 +248,7 @@ function ElementTileComparison() {
       <TileRow label="CLASSIFIED" badgeColor="#a6e3a1" desc="Classified Component — built from classifiers, only dynamic values in JSX">
         {SAMPLE.map(sym => <V2Tile key={sym} element={sym} />)}
       </TileRow>
-    </C.Section>
+    </S.Section>
   );
 }
 
@@ -256,16 +256,16 @@ function ElementTileComparison() {
 
 export function ClassifierStory() {
   return (
-    <C.Page style={{ backgroundColor: '#11111b' }}>
-      <C.Row>
-        <C.Title>{'Classifier'}</C.Title>
-        <C.Spacer />
-        <C.Caption>{`${Object.keys(classifiers).length} classifiers registered`}</C.Caption>
-      </C.Row>
-      <C.Subtitle>{'Global named primitives — one name, one definition, project-wide'}</C.Subtitle>
+    <S.Page style={{ backgroundColor: '#11111b' }}>
+      <S.Row>
+        <S.Title>{'Classifier'}</S.Title>
+        <S.Spacer />
+        <S.Caption>{`${Object.keys(classifiers).length} classifiers registered`}</S.Caption>
+      </S.Row>
+      <S.Subtitle>{'Global named primitives — one name, one definition, project-wide'}</S.Subtitle>
       <ElementTileComparison />
       <TypographyDemo />
       <CardDemo />
-    </C.Page>
+    </S.Page>
   );
 }

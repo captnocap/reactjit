@@ -118,12 +118,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -138,10 +138,10 @@ function Tag({ text, color }: { text: string; color: string }) {
 function Label({ label, value, color }: { label: string; value: string; color?: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.RowCenterG8>
       <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
-    </Box>
+    </S.RowCenterG8>
   );
 }
 
@@ -204,13 +204,13 @@ function FallingBodiesDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Tag text="PhysicsWorld" color={C.world} />
         <Tag text="RigidBody" color={C.body} />
         <Tag text="Collider" color={C.collider} />
         <Tag text="MouseJoint" color={C.mouse} />
-      </Box>
+      </S.RowG6>
 
       {/* Live physics scene */}
       <PhysicsWorld gravity={[0, 680]} debug={debug} style={{ width: 260, height: 200, backgroundColor: '#330000', borderRadius: 6, overflow: 'hidden' }}>
@@ -280,20 +280,20 @@ function FallingBodiesDemo() {
       </PhysicsWorld>
 
       <Label label="bodies" value={String(3 + bodies.length)} color={C.body} />
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: debug ? C.collider : c.textDim }} />
         <Text style={{ fontSize: 9, color: debug ? C.collider : c.textDim }}>
           {debug ? 'Debug wireframes on' : 'Debug wireframes off'}
         </Text>
-      </Box>
+      </S.RowCenterG6>
 
-      <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+      <S.RowG8 style={{ flexWrap: 'wrap' }}>
         <ActionBtn label="+ Box" color={C.collider} onPress={() => { shapeRef.current = 'rectangle'; spawn(); }} />
         <ActionBtn label="+ Ball" color={C.world} onPress={() => { shapeRef.current = 'circle'; spawn(); }} />
         <ActionBtn label="Debug" color={C.accent} onPress={() => setDebug(d => !d)} />
         <ActionBtn label="Clear" color={c.textDim} onPress={clear} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.CenterW100>
   );
 }
 
@@ -309,11 +309,11 @@ function ChainDemo() {
   const linkIds = Array.from({ length: LINKS }, (_, i) => `chain-link-${i}`);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Tag text="DistanceJoint" color={C.joint} />
         <Tag text="chain" color={C.joint} />
-      </Box>
+      </S.RowG6>
 
       <PhysicsWorld gravity={[0, 400]} debug style={{ width: 260, height: 180, backgroundColor: '#330000', borderRadius: 6, overflow: 'hidden' }}>
         <MouseJoint stiffness={10} damping={0.8} />
@@ -355,7 +355,7 @@ function ChainDemo() {
       <S.StoryCap>
         {'Drag any link with the mouse to swing the chain'}
       </S.StoryCap>
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -367,7 +367,7 @@ function SensorDemo() {
   const [hitCount, setHitCount] = useState(0);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
       <Tag text="Sensor" color={C.sensor} />
 
       <PhysicsWorld gravity={[0, 300]} debug style={{ width: 260, height: 160, backgroundColor: '#330000', borderRadius: 6, overflow: 'hidden' }}>
@@ -428,17 +428,17 @@ function SensorDemo() {
         </RigidBody>
       </PhysicsWorld>
 
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: entered ? C.sensor : c.textDim }} />
         <Text style={{ fontSize: 9, color: entered ? C.sensor : c.textDim }}>
           {entered ? 'Body inside sensor zone' : 'Sensor zone empty'}
         </Text>
-      </Box>
+      </S.RowCenterG6>
       <Label label="trigger count" value={String(hitCount)} color={C.sensor} />
       <S.StoryCap>
         {'Sensor detects overlap without pushing bodies away'}
       </S.StoryCap>
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -456,11 +456,11 @@ function ShapesCatalog() {
   return (
     <>
       {shapes.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 80 }}>{f.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
-        </Box>
+          <S.StoryBody style={{ fontWeight: 'normal', width: 80 }}>{f.label}</S.StoryBody>
+          <S.SecondaryBody>{f.desc}</S.SecondaryBody>
+        </S.RowCenterG8>
       ))}
     </>
   );
@@ -488,11 +488,11 @@ function FeatureCatalog() {
   return (
     <>
       {features.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 120 }}>{f.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
-        </Box>
+          <S.StoryBody style={{ fontWeight: 'normal', width: 120 }}>{f.label}</S.StoryBody>
+          <S.SecondaryBody>{f.desc}</S.SecondaryBody>
+        </S.RowCenterG8>
       ))}
     </>
   );
@@ -507,23 +507,11 @@ export function PhysicsStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="package" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Physics'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -535,10 +523,10 @@ export function PhysicsStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/physics'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Box2D at LuaJIT speed'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -553,12 +541,12 @@ export function PhysicsStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Declarative 2D physics. React declares the bodies, Lua runs the simulation.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'love.physics wraps Box2D \u2014 a battle-tested rigid body engine used in Angry Birds, Limbo, and Crayon Physics. Every component is a one-liner. PhysicsWorld steps the simulation, RigidBody creates bodies, Collider defines shapes. Position sync happens automatically \u2014 node.computed.x/y are overridden each frame from the Box2D solver.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -567,9 +555,9 @@ export function PhysicsStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Components for the world, bodies, shapes, joints, and sensors. Hooks for applying forces from React. Everything runs in Lua \u2014 React just declares the layout.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
@@ -583,9 +571,9 @@ export function PhysicsStory() {
           </Box>
           <Box style={HALF}>
             <SectionLabel icon="zap">{'SIMULATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Wrap everything in <PhysicsWorld>. Static bodies are immovable (ground, walls, platforms). Dynamic bodies fall with gravity and collide. The debug prop draws green wireframes for all collision shapes. MouseJoint enables click-drag on any dynamic body.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WORLD_CODE} />
           </Box>
         </Box>
@@ -596,9 +584,9 @@ export function PhysicsStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="code">{'RIGID BODIES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three body types: dynamic (moves with physics), static (immovable), kinematic (script-driven). Enable bullet for fast-moving objects that might tunnel through thin walls. fixedRotation prevents spinning. gravityScale lets individual bodies float or fall faster.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={BODY_CODE} />
         </Box>
@@ -610,9 +598,9 @@ export function PhysicsStory() {
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={COLLIDER_CODE} />
           <Box style={HALF}>
             <SectionLabel icon="layers">{'COLLIDER SHAPES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Five shape types. Rectangle auto-sizes from the sibling visual node if you omit width/height. Polygons must be convex with max 8 vertices (Box2D limit). Chains are great for terrain profiles.'}
-            </Text>
+            </S.StoryBody>
           </Box>
         </Box>
 
@@ -631,10 +619,10 @@ export function PhysicsStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Physics runs entirely in Lua. React never handles forces, collisions, or position updates \u2014 the capability\u2019s tick function mutates node.computed directly after each Box2D timestep. Zero bridge overhead per frame.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -646,9 +634,9 @@ export function PhysicsStory() {
           </Box>
           <Box style={HALF}>
             <SectionLabel icon="link">{'JOINTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Six joint types connect bodies together. DistanceJoint acts as a spring \u2014 chain N of them for rope. RevoluteJoint makes hinges (doors, ragdoll limbs). WeldJoint glues bodies (set stiffness > 0 for breakable). MouseJoint enables drag interaction. All joints reference bodies by node ID.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={JOINT_CODE} />
           </Box>
         </Box>
@@ -659,9 +647,9 @@ export function PhysicsStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="shield">{'SENSORS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Sensors detect overlap without pushing bodies away. Use them for trigger zones (enter zone \u2192 open door), pickup items (overlap \u2192 collect), or damage areas. Fires onCollide/onCollideEnd events with the other body\u2019s ID.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SENSOR_CODE} />
           </Box>
           <Box style={HALF}>
@@ -675,9 +663,9 @@ export function PhysicsStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="zap">{'FORCE HOOKS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Apply forces from React via RPC. useForce applies continuously (good for thrust, wind). useImpulse fires once (jump, explosion knockback). useTorque spins bodies. All resolve to physics:applyForce / physics:applyImpulse / physics:applyTorque RPCs that mutate the Box2D body directly.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={HOOKS_CODE} />
         </Box>
@@ -699,41 +687,23 @@ export function PhysicsStory() {
         <Divider />
 
         {/* ── Feature catalog ── */}
-        <Box style={{
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <S.StoryFullBand>
           <SectionLabel icon="terminal">{'API SURFACE'}</SectionLabel>
           <FeatureCatalog />
-        </Box>
+        </S.StoryFullBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Physics'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="package" />
+        <S.StoryBreadcrumbActive>{'Physics'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

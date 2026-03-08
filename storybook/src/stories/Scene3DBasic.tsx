@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh } from '../../../packages/3d/src';
 
@@ -12,7 +12,7 @@ export function Scene3DBasicStory() {
   });
 
   return (
-    <Box style={{ width: '100%', height: '100%', gap: 12, padding: 16 }}>
+    <S.FullSize style={{ gap: 12, padding: 16 }}>
       <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         3D Scene
       </Text>
@@ -57,10 +57,10 @@ export function Scene3DBasicStory() {
           borderRadius: 8,
         }}
       >
-        <Text style={{ fontSize: 11, color: c.textDim }}>
+        <S.DimBody11>
           Blue cube + Green cube (black edges) + Pink sphere
-        </Text>
+        </S.DimBody11>
       </Box>
-    </Box>
+    </S.FullSize>
   );
 }

@@ -518,37 +518,37 @@ function ProjectionDemo() {
   }, [latlngToPixel, pixelToLatlng, distance]);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Mercator projection (pure math, no bridge)'}</S.StoryCap>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 9, color: C.blue }}>{'latlngToPixel(37.7749, -122.4194, z12)'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
-          <Text style={{ fontSize: 10, color: c.text }}>{`x: ${results.px.toFixed(1)}, y: ${results.py.toFixed(1)}`}</Text>
+          <S.StoryBody>{`x: ${results.px.toFixed(1)}, y: ${results.py.toFixed(1)}`}</S.StoryBody>
         </Box>
       </Box>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 9, color: C.teal }}>{'pixelToLatlng round-trip'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
-          <Text style={{ fontSize: 10, color: c.text }}>{`lat: ${results.lat.toFixed(6)}, lng: ${results.lng.toFixed(6)}`}</Text>
+          <S.StoryBody>{`lat: ${results.lat.toFixed(6)}, lng: ${results.lng.toFixed(6)}`}</S.StoryBody>
         </Box>
       </Box>
 
       <Box style={{ gap: 2 }}>
         <Text style={{ fontSize: 9, color: C.peach }}>{'distance(SF → Tokyo)'}</Text>
         <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 6 }}>
-          <Text style={{ fontSize: 10, color: c.text }}>{`${(results.dist / 1000).toFixed(1)} km (${(results.dist / 1609.344).toFixed(1)} mi)`}</Text>
+          <S.StoryBody>{`${(results.dist / 1000).toFixed(1)} km (${(results.dist / 1609.344).toFixed(1)} mi)`}</S.StoryBody>
         </Box>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.green }} />
         <Text style={{ fontSize: 10, color: C.green }}>
           {Math.abs(results.lat - 37.7749) < 0.0001 ? 'Round-trip OK' : 'Precision loss'}
         </Text>
-      </Box>
-    </Box>
+      </S.RowCenterG6>
+    </S.StackG6W100>
   );
 }
 
@@ -571,38 +571,38 @@ function DistanceDemo() {
   const cycleTo = useCallback(() => setToIdx(i => (i + 1) % CITIES.length), []);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Haversine great-circle distance'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <Pressable onPress={cycleFrom}>
           <Box style={{ backgroundColor: C.blue, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{from.label}</Text>
           </Box>
         </Pressable>
-        <Text style={{ fontSize: 10, color: c.muted }}>{'to'}</Text>
+        <S.StoryMuted>{'to'}</S.StoryMuted>
         <Pressable onPress={cycleTo}>
           <Box style={{ backgroundColor: C.peach, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 10, color: '#1e1e2e' }}>{to.label}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
 
       <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.green }} />
           <Text style={{ fontSize: 12, color: c.text }}>{`${(dist / 1000).toFixed(1)} km`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        </S.RowCenterG8>
+        <S.RowCenterG8>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.yellow }} />
-          <Text style={{ fontSize: 10, color: c.muted }}>
+          <S.StoryMuted>
             {`${(dist / 1609.344).toFixed(1)} miles  ·  ${(dist / 1852).toFixed(1)} nmi`}
-          </Text>
-        </Box>
+          </S.StoryMuted>
+        </S.RowCenterG8>
       </Box>
 
       <S.StoryTiny>{'Tap city names to cycle through destinations'}</S.StoryTiny>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -626,17 +626,17 @@ function MiniMapDemo() {
   }, [city]);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.StackG6W100>
+      <S.RowCenterG8>
         <S.StoryCap>{'Live map preview'}</S.StoryCap>
         <Pressable onPress={cycleCity}>
           <Box style={{ backgroundColor: C.accent, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>{city.label}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
 
-      <Box style={{ width: '100%', height: 200, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: c.border }}>
+      <S.Bordered style={{ width: '100%', height: 200, borderRadius: 6, overflow: 'hidden' }}>
         <MapContainer center={city.center} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={false} attributionControl={false}>
           <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <Marker position={city.center}>
@@ -645,8 +645,8 @@ function MiniMapDemo() {
           <Polyline positions={route} pathOptions={{ color: C.route, weight: 3 }} />
           <Circle center={city.center} radius={800} pathOptions={{ color: C.zone, weight: 2, fillColor: C.zone, fillOpacity: 0.1 }} />
         </MapContainer>
-      </Box>
-    </Box>
+      </S.Bordered>
+    </S.StackG6W100>
   );
 }
 
@@ -680,10 +680,10 @@ function VectorLayersDemo() {
   }), []);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'All 6 vector layer types on one map'}</S.StoryCap>
 
-      <Box style={{ width: '100%', height: 220, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: c.border }}>
+      <S.Bordered style={{ width: '100%', height: 220, borderRadius: 6, overflow: 'hidden' }}>
         <MapContainer center={center} zoom={12.5} style={{ width: '100%', height: '100%' }} zoomControl={false} attributionControl={false}>
           <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <Polygon positions={polygonPositions} pathOptions={{ color: C.zone, weight: 2, fillColor: '#3b82f6', fillOpacity: 0.12 }} />
@@ -698,9 +698,9 @@ function VectorLayersDemo() {
             </Marker>
           ))}
         </MapContainer>
-      </Box>
+      </S.Bordered>
 
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      <S.RowG8 style={{ flexWrap: 'wrap' }}>
         {[
           { label: 'Polyline', color: C.route },
           { label: 'Polygon', color: C.zone },
@@ -709,13 +709,13 @@ function VectorLayersDemo() {
           { label: 'Rectangle', color: C.purple },
           { label: 'GeoJSON', color: C.teal },
         ].map(item => (
-          <Box key={item.label} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <S.RowCenterG4 key={item.label}>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color }} />
-            <Text style={{ fontSize: 9, color: c.muted }}>{item.label}</Text>
-          </Box>
+            <S.StoryCap>{item.label}</S.StoryCap>
+          </S.RowCenterG4>
         ))}
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG6W100>
   );
 }
 
@@ -726,10 +726,10 @@ function CircleCompareDemo() {
   const center: LatLngTuple = [37.7749, -122.4194];
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{'Circle (meters) vs CircleMarker (pixels)'}</S.StoryCap>
 
-      <Box style={{ width: '100%', height: 180, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: c.border }}>
+      <S.Bordered style={{ width: '100%', height: 180, borderRadius: 6, overflow: 'hidden' }}>
         <MapContainer center={center} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={false} attributionControl={false}>
           <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <Circle center={center} radius={500} pathOptions={{ color: C.green, weight: 2, fillColor: C.green, fillOpacity: 0.15 }} />
@@ -741,19 +741,19 @@ function CircleCompareDemo() {
             <Tooltip permanent direction="bottom">{'8px fixed'}</Tooltip>
           </Marker>
         </MapContainer>
-      </Box>
+      </S.Bordered>
 
       <Box style={{ flexDirection: 'row', gap: 16 }}>
-        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        <S.RowCenterG4>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.green }} />
-          <Text style={{ fontSize: 9, color: c.muted }}>{'Circle: scales with zoom'}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <S.StoryCap>{'Circle: scales with zoom'}</S.StoryCap>
+        </S.RowCenterG4>
+        <S.RowCenterG4>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.cyan }} />
-          <Text style={{ fontSize: 9, color: c.muted }}>{'CircleMarker: constant pixels'}</Text>
-        </Box>
+          <S.StoryCap>{'CircleMarker: constant pixels'}</S.StoryCap>
+        </S.RowCenterG4>
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -770,23 +770,23 @@ function TileSourceDemo() {
   };
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.StackG6W100>
+      <S.RowCenterG8>
         <S.StoryCap>{'Tile source switching'}</S.StoryCap>
         <Pressable onPress={() => setSource(s => s === 'osm' ? 'satellite' : 'osm')}>
           <Box style={{ backgroundColor: source === 'osm' ? C.blue : C.green, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>{source === 'osm' ? 'Streets' : 'Satellite'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
 
-      <Box style={{ width: '100%', height: 180, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: c.border }}>
+      <S.Bordered style={{ width: '100%', height: 180, borderRadius: 6, overflow: 'hidden' }}>
         <MapContainer center={center} zoom={14} style={{ width: '100%', height: '100%' }} zoomControl={false} attributionControl={false}>
           <TileLayer url={urls[source]} />
           <Marker position={center} />
         </MapContainer>
-      </Box>
-    </Box>
+      </S.Bordered>
+    </S.StackG6W100>
   );
 }
 
@@ -795,15 +795,15 @@ function TileSourceDemo() {
 function CatalogList({ items }: { items: { label: string; desc: string; color: string; def?: string }[] }) {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {items.map(a => (
-        <Box key={a.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={a.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 130, flexShrink: 0 }}>{a.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 130, flexShrink: 0 }}>{a.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{a.def ? `${a.desc} (default: ${a.def})` : a.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -816,31 +816,27 @@ export function GeoStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14,
-      }}>
-        <Image src="globe" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Geo'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="globe" tintColor={C.accent} />
+        <S.StoryTitle>{'Geo'}</S.StoryTitle>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/geo'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'18 components · 6 hooks · 17 events'}</Text>
-      </Box>
+        <S.StoryMuted>{'18 components · 6 hooks · 17 events'}</S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero ── */}
         <Box style={{ borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 25, paddingRight: 28, paddingTop: 24, paddingBottom: 24, gap: 8 }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Declarative maps rendered at 60fps by OpenGL.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'The full react-leaflet component API — MapContainer, TileLayer, Marker, Polyline, Polygon, Circle, GeoJSON, controls, layer management, and 6 hooks — all rendered by Lua via Love2D. No browser, no DOM, no Leaflet.js. Tile fetching, Mercator projection, hit testing, pan/zoom/pitch/bearing, offline caching, and the full event system all run in Lua. React just declares the map tree.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -849,15 +845,15 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Drop-in replacement for react-leaflet. Same component names, same props, same nesting. Import from @reactjit/geo instead of react-leaflet and your existing map code works unchanged.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'18 components and 6 hooks in one import. Components render to Lua host elements (Map2D, MapTileLayer, MapMarker, etc.) via React.createElement.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
-            <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
           </Half>
         </Band>
 
@@ -870,13 +866,13 @@ export function GeoStory() {
           </Half>
           <Half>
             <SectionLabel icon="map">{'MAPCONTAINER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The root viewport. Takes center, zoom, pitch (camera tilt), bearing (compass rotation), min/max zoom bounds, interaction flags, and style. All children (tiles, markers, vectors, controls) nest inside.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'scrollWheelZoom, dragging, doubleClickZoom, zoomControl, and attributionControl all default to true. Set any to false to disable. maxBounds constrains pan area.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MAPCONTAINER_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MAPCONTAINER_CODE} />
           </Half>
         </Band>
 
@@ -886,13 +882,13 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="grid">{'TILELAYER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Raster tile source for the base map. Supports any {z}/{x}/{y} tile URL — OpenStreetMap, satellite imagery, custom tile servers. Options for subdomains (load balancing), custom headers (API keys), tileSize, opacity, and z-index.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Lua fetches tiles asynchronously, caches them in memory (LRU) and SQLite (persistent). Tiles render as textured quads in the GL pipeline. Attribution string is forwarded to AttributionControl.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TILELAYER_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TILELAYER_CODE} />
           </Half>
           <Half>
             <TileSourceDemo />
@@ -905,20 +901,20 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="map-pin">{'MARKERS · POPUPS · TOOLTIPS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Marker places a point at a lat/lng. Supports draggable (with dragend callback), custom icon, opacity, z-index offset, and click/contextmenu event handlers. Nest Popup and Tooltip as children.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Popup opens on click with configurable maxWidth, close button, auto-close behavior, and escape key handling. Tooltip shows on hover or permanently with direction control (top/bottom/left/right/auto) and sticky mode (follows cursor).'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={MARKER_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MARKER_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="message-circle">{'POPUP & TOOLTIP PROPS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Popup and Tooltip both accept eventHandlers for open/close. Popup supports click-to-close and escape-to-close. Tooltip supports directional anchoring and sticky mode for following the cursor.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={POPUP_TOOLTIP_CODE} />
+            </S.StoryBody>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={POPUP_TOOLTIP_CODE} />
           </Half>
         </Band>
 
@@ -930,10 +926,10 @@ export function GeoStory() {
           paddingLeft: 25, paddingRight: 28, paddingTop: 14, paddingBottom: 14,
           flexDirection: 'row', gap: 8, alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'No Leaflet.js, no browser, no DOM. Lua implements tile fetching, Mercator math, vector rendering, hit testing, and the full event system natively. Tiles cache to SQLite for offline use. Every frame is pure OpenGL.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -942,19 +938,19 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="pen-tool">{'PATHOPTIONS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The shared styling interface for all vector layers — Polyline, Polygon, Circle, CircleMarker, Rectangle, and FeatureGroup. Every vector component accepts pathOptions with the same 8 properties.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'fillColor defaults to color if not specified. dashArray takes a [dash, gap] array for dashed strokes. Set fill or stroke to false to disable that part entirely.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PATHOPTIONS_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PATHOPTIONS_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'PathOptions reference'}</S.StoryCap>
               <CatalogList items={PATHOPTIONS_CATALOG} />
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -964,13 +960,13 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="trending-up">{'POLYLINE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Connected line segments for routes, paths, and tracks. Simple form takes a flat array of positions. Multi-polyline takes an array of arrays for separate, disconnected segments rendered as one component.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Supports eventHandlers.click for click detection on the line itself. Combine with Markers at waypoints for interactive route builders.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={POLYLINE_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={POLYLINE_CODE} />
           </Half>
           <Half>
             <VectorLayersDemo />
@@ -982,7 +978,7 @@ export function GeoStory() {
         {/* ── 7: POLYGON ── */}
         <Band>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Polygon nesting levels'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -990,24 +986,24 @@ export function GeoStory() {
                   { label: 'LatLng[][]', desc: 'Polygon with holes — outer ring + inner cutouts', color: C.teal },
                   { label: 'LatLng[][][]', desc: 'Multi-polygon — separate polygons as one component', color: C.green },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 80, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
           <Half>
             <SectionLabel icon="hexagon">{'POLYGON'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Closed shape for zones, boundaries, and regions. Three nesting levels: simple (flat array), with holes (array of rings — first is outer, rest are holes), and multi-polygon (array of polygons).'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The first ring is always the outer boundary. Subsequent rings at the same level are holes cut out of the polygon. Winding order doesn\'t matter — the renderer handles both CW and CCW.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={POLYGON_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={POLYGON_CODE} />
           </Half>
         </Band>
 
@@ -1017,13 +1013,13 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="circle">{'CIRCLE vs CIRCLEMARKER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Two circle components with a critical difference. Circle takes radius in meters — it grows and shrinks as you zoom, representing a real-world area. CircleMarker takes radius in pixels — it stays the same size at every zoom level, like a dot on a scatter plot.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Use Circle for geofences, blast radii, coverage areas. Use CircleMarker for fleet dots, sensor points, data markers. Both accept the same pathOptions and eventHandlers.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={CIRCLE_VS_MARKER_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CIRCLE_VS_MARKER_CODE} />
           </Half>
           <Half>
             <CircleCompareDemo />
@@ -1035,21 +1031,21 @@ export function GeoStory() {
         {/* ── 9: RECTANGLE ── */}
         <Band>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Rectangle as bounding box'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
-                <Text style={{ fontSize: 9, color: c.text }}>{'Rectangle takes bounds as [[sw], [ne]]'}</Text>
-                <Text style={{ fontSize: 9, color: c.muted }}>{'Or { southWest: {...}, northEast: {...} }'}</Text>
-                <Text style={{ fontSize: 9, color: c.muted }}>{'Same bounds format used by MapContainer.maxBounds and useMap().fitBounds()'}</Text>
+                <S.StoryBreadcrumbActive>{'Rectangle takes bounds as [[sw], [ne]]'}</S.StoryBreadcrumbActive>
+                <S.StoryCap>{'Or { southWest: {...}, northEast: {...} }'}</S.StoryCap>
+                <S.StoryCap>{'Same bounds format used by MapContainer.maxBounds and useMap().fitBounds()'}</S.StoryCap>
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
           <Half>
             <SectionLabel icon="square">{'RECTANGLE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Axis-aligned bounding box overlay. Takes bounds as two corners (southwest and northeast) — the same format used for MapContainer.maxBounds, fitBounds, and downloadRegion. Accepts pathOptions for styling.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={RECTANGLE_CODE} />
+            </S.StoryBody>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={RECTANGLE_CODE} />
           </Half>
         </Band>
 
@@ -1059,16 +1055,16 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="database">{'GEOJSON'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Render any GeoJSON FeatureCollection. Supports Point (→ Marker), LineString (→ Polyline), Polygon, MultiPolygon. Per-feature styling via properties or a style function. Filter function to show/hide features. onEachFeature callback for per-feature setup.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Note: GeoJSON coordinates are [longitude, latitude] (reversed from LatLngTuple). The component handles this automatically — you write standard GeoJSON and it just works.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={GEOJSON_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={GEOJSON_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'GeoJSON geometry types'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -1080,11 +1076,11 @@ export function GeoStory() {
                   { label: 'MultiPolygon', desc: 'Multiple Polygons', color: C.green },
                   { label: 'FeatureCollection', desc: 'Mix of all types', color: C.mauve },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 100, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
 
@@ -1096,14 +1092,14 @@ export function GeoStory() {
                   { label: 'filter', desc: '(feature) => boolean — hide features', color: C.green },
                   { label: 'onEachFeature', desc: '(feature, nodeId) => void', color: C.yellow },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 100, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1113,16 +1109,16 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="image">{'IMAGEOVERLAY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Stretch a raster image over geographic bounds. Use for historical maps, floor plans, radar imagery, heatmaps, or any image that needs to be pinned to real-world coordinates. Supports opacity and z-index.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The image scales with zoom — it covers the exact geographic area defined by bounds. Combine with Pane for z-ordering between tiles and vectors.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={IMAGEOVERLAY_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={IMAGEOVERLAY_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'ImageOverlay use cases'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -1133,14 +1129,14 @@ export function GeoStory() {
                   { label: 'Satellite patches', desc: 'High-res imagery for specific areas', color: C.teal },
                   { label: 'Game worlds', desc: 'Fantasy map textures over coordinate grids', color: C.mauve },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 110, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1150,20 +1146,20 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="layers">{'LAYER MANAGEMENT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three components for organizing map layers. LayerGroup is a logical container with no styling. FeatureGroup adds shared pathOptions that cascade to all children. Pane controls z-index draw order.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'LayerGroup and FeatureGroup are used inside LayersControl.Overlay to create toggleable overlays. Pane is for fine-grained z-ordering — higher zIndex renders on top.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={LAYERGROUP_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={LAYERGROUP_CODE} />
           </Half>
           <Half>
             <SectionLabel icon="toggle-left">{'LAYERSCONTROL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Toggle between base layers (radio — only one active) and overlays (checkbox — multiple active). Use BaseLayer for tile source switching and Overlay for data layer toggling. Position and collapsed state are configurable.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={LAYERSCONTROL_CODE} />
+            </S.StoryBody>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={LAYERSCONTROL_CODE} />
           </Half>
         </Band>
 
@@ -1173,19 +1169,19 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="zap">{'MAP EVENTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'17 event types across mouse, zoom, move, drag, and UI categories. useMapEvent() subscribes to one event, useMapEvents() subscribes to many. Both return the MapHandle for chaining. Mouse events carry latlng and pixel coordinates.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Events fire in Lua and cross the bridge to React handlers. Subscriptions are automatically cleaned up on unmount. Individual vector layers also accept eventHandlers for per-layer click/contextmenu.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={EVENTS_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={EVENTS_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Event catalog (17 events)'}</S.StoryCap>
               <CatalogList items={EVENT_CATALOG} />
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1194,7 +1190,7 @@ export function GeoStory() {
         {/* ── 14: useMap IMPERATIVE ── */}
         <Band>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'useMap() method reference'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -1208,26 +1204,26 @@ export function GeoStory() {
                   { method: 'getZoom()', desc: 'Returns zoom number', color: C.pink },
                   { method: 'getBounds()', desc: 'Returns [[sw], [ne]]', color: C.route },
                 ].map(item => (
-                  <Box key={item.method} style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+                  <S.RowG6 key={item.method} style={{ alignItems: 'start' }}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0, marginTop: 3 }} />
                     <Box style={{ gap: 1, flexShrink: 1 }}>
                       <Text style={{ fontSize: 9, color: item.color }}>{item.method}</Text>
                       <S.StoryTiny>{item.desc}</S.StoryTiny>
                     </Box>
-                  </Box>
+                  </S.RowG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
           <Half>
             <SectionLabel icon="navigation">{'useMap()'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Imperative handle to the nearest MapContainer. Pan, zoom, fly to locations, fit bounds, set pitch and bearing — all with optional animation. Same API as react-leaflet\'s useMap(). Must be called inside a MapContainer child.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'flyTo() is the most powerful — it animates center, zoom, bearing, and pitch simultaneously over a configurable duration. Each call is one bridge RPC to Lua. opts.animate defaults to true.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={USEMAP_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={USEMAP_CODE} />
           </Half>
         </Band>
 
@@ -1237,16 +1233,16 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="rotate-cw">{'PITCH & BEARING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'3D-like perspective on 2D maps. Pitch tilts the camera (0° = top-down, 60° = steep perspective). Bearing rotates the compass (0° = north up, 180° = south up, -90° = west up). Both can be set declaratively on MapContainer or imperatively via useMap().'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Pitch and bearing are tracked by useMapView() and animated by flyTo(). Vector layers, markers, and controls all render correctly under any pitch/bearing combination.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PITCH_BEARING_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PITCH_BEARING_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Pitch/Bearing reference'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 6 }}>
                 {[
@@ -1259,14 +1255,14 @@ export function GeoStory() {
                   { label: 'bearing: 180', desc: 'South up', color: C.red },
                   { label: 'bearing: -45', desc: 'Northeast up', color: C.pink },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 90, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1276,16 +1272,16 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="eye">{'useMapView()'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Reactive view state that updates on every pan, zoom, rotate, or tilt. Returns { center: [lat, lng], zoom, bearing, pitch }. Use for coordinate displays, HUD overlays, synchronized maps, or URL state encoding.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Subscribes to the bridge\'s map:viewchange event internally. Updates are debounced by Lua — you get one state update per frame, not per pixel of mouse movement.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={USEMAPVIEW_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={USEMAPVIEW_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'MapViewState shape'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -1294,14 +1290,14 @@ export function GeoStory() {
                   { label: 'bearing: number', desc: 'Compass rotation in degrees', color: C.green },
                   { label: 'pitch: number', desc: 'Camera tilt in degrees', color: C.yellow },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 120, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1314,13 +1310,13 @@ export function GeoStory() {
           </Half>
           <Half>
             <SectionLabel icon="compass">{'useProjection()'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Pure-math coordinate utilities. Convert between lat/lng and pixel coordinates at any zoom, or calculate great-circle distances. No bridge call — runs entirely in JS with Web Mercator (EPSG:3857).'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'256px tile size. Latitude clamped to ±85.0511° (Mercator limit). distance() uses the Haversine formula — within 0.5% accuracy for any two points on Earth (spherical WGS84 approximation).'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={PROJECTION_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PROJECTION_CODE} />
           </Half>
         </Band>
 
@@ -1330,9 +1326,9 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="ruler">{'DISTANCE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The distance() function returns meters. Common conversions: /1000 for km, /1609.344 for miles, /1852 for nautical miles. Uses Earth radius of 6,378,137m (WGS84 semi-major axis).'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <DistanceDemo />
@@ -1345,16 +1341,16 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="hard-drive">{'useTileCache()'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Offline tile management. Download tile regions by bounds and zoom range — Lua fetches all tiles in the area and stores them in SQLite. Track progress with getProgress() (total, done, failed, percent, complete). Inspect cache with stats() (memory tiles, db tiles, db bytes, per-source counts).'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The cache is shared across all MapContainers. Lookup order: memory LRU → SQLite → network. Online maps use the cache automatically with no extra config. Offline mode works seamlessly if tiles are pre-downloaded.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={TILECACHE_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TILECACHE_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Cache architecture'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -1362,11 +1358,11 @@ export function GeoStory() {
                   { label: 'SQLite DB', desc: 'Persistent, unlimited, survives restarts', color: C.teal },
                   { label: 'Network fetch', desc: 'Fallback when not cached, auto-populates both layers', color: C.green },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 100, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
 
@@ -1380,14 +1376,14 @@ export function GeoStory() {
                   { label: 'cancelled: boolean', desc: 'Download was cancelled', color: C.peach },
                   { label: 'complete: boolean', desc: 'All tiles done', color: C.teal },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 120, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1397,13 +1393,13 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="sliders">{'MAP CONTROLS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Four built-in control components. ZoomControl adds +/- buttons with customizable text. ScaleControl shows a distance bar in metric and/or imperial units. AttributionControl displays data source credits. All positioned with topleft/topright/bottomleft/bottomright.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={CONTROLS_CODE} />
+            </S.StoryBody>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CONTROLS_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Control positions'}</S.StoryCap>
               <CatalogList items={CONTROL_POSITIONS} />
 
@@ -1415,14 +1411,14 @@ export function GeoStory() {
                   { label: 'AttributionControl', desc: 'position, prefix', color: C.green },
                   { label: 'LayersControl', desc: 'position, collapsed + BaseLayer/Overlay children', color: C.yellow },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6 key={item.label}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 9, color: item.color, width: 120, flexShrink: 0 }}>{item.label}</Text>
                     <S.StoryTiny>{item.desc}</S.StoryTiny>
-                  </Box>
+                  </S.RowCenterG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1432,16 +1428,16 @@ export function GeoStory() {
         <Band>
           <Half>
             <SectionLabel icon="crosshair">{'COORDINATE FORMATS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Two interchangeable formats for specifying coordinates. Tuple form [lat, lng] is most common. Object form { lat, lng } matches react-leaflet. Both work everywhere — positions, centers, bounds. The components normalize internally.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Bounds accept either array form [[sw], [ne]] or object form { southWest, northEast }. Same flexibility, same normalization.'}
-            </Text>
-            <CodeBlock language="tsx" fontSize={9} code={LATLNG_CODE} />
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={LATLNG_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
+            <S.StackG6W100>
               <S.StoryCap>{'Type definitions'}</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 4, padding: 8, gap: 4 }}>
                 {[
@@ -1451,36 +1447,36 @@ export function GeoStory() {
                   { label: 'LatLngBoundsExpression', desc: '[LatLngExpr, LatLngExpr] | { southWest, northEast }', color: C.yellow },
                   { label: 'ControlPosition', desc: 'topleft | topright | bottomleft | bottomright', color: C.mauve },
                 ].map(item => (
-                  <Box key={item.label} style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+                  <S.RowG6 key={item.label} style={{ alignItems: 'start' }}>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: item.color, flexShrink: 0, marginTop: 3 }} />
                     <Box style={{ gap: 1, flexShrink: 1 }}>
                       <Text style={{ fontSize: 9, color: item.color }}>{item.label}</Text>
                       <S.StoryTiny>{item.desc}</S.StoryTiny>
                     </Box>
-                  </Box>
+                  </S.RowG6>
                 ))}
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
         <Divider />
 
         {/* ── Component Catalog (full width) ── */}
-        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 8 }}>
+        <S.StoryFullBand>
           <SectionLabel icon="layers">{'COMPONENT CATALOG'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'All 18 components + 1 sub-component (LayersControl.BaseLayer/Overlay) in @reactjit/geo:'}</Text>
+          <S.StoryCap>{'All 18 components + 1 sub-component (LayersControl.BaseLayer/Overlay) in @reactjit/geo:'}</S.StoryCap>
           <CatalogList items={COMPONENT_CATALOG} />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* ── Hook Catalog (full width) ── */}
-        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 8 }}>
+        <S.StoryFullBand>
           <SectionLabel icon="code">{'HOOK CATALOG'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'All 6 hooks in @reactjit/geo:'}</Text>
+          <S.StoryCap>{'All 6 hooks in @reactjit/geo:'}</S.StoryCap>
           <CatalogList items={HOOK_CATALOG} />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
@@ -1490,28 +1486,24 @@ export function GeoStory() {
           paddingLeft: 25, paddingRight: 28, paddingTop: 14, paddingBottom: 14,
           flexDirection: 'row', gap: 8, alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Same API as react-leaflet, rendered by OpenGL at 60fps. 18 components, 6 hooks, 17 events, offline SQLite tile cache, pitch/bearing perspective, and the full vector/GeoJSON/control stack. No Leaflet.js dependency. No browser required.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="globe" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Geo'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="globe" />
+        <S.StoryBreadcrumbActive>{'Geo'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

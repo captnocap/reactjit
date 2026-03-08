@@ -1645,6 +1645,325 @@ async function addCommand(args, ts) {
   console.log('');
 }
 
+// ── Partial pattern mining (frequent itemset analysis) ────────
+
+function binarySearchIdx(arr, val) {
+  let lo = 0, hi = arr.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid] === val) return true;
+    if (arr[mid] < val) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return false;
+}
+
+/**
+ * Mine frequent style property subsets using Apriori algorithm.
+ * Finds recurring partial patterns across elements with different full styles.
+ * Only reports subsets that appear in multiple distinct exact-match groups (spread > 1).
+ */
+function minePartialPatterns(elements, minOccurrences, maxSize) {
+  const byPrim = {};
+  for (const el of elements) {
+    if (!byPrim[el.primitive]) byPrim[el.primitive] = [];
+    byPrim[el.primitive].push(el);
+  }
+
+  const allResults = [];
+
+  for (const [primitive, els] of Object.entries(byPrim)) {
+    // Each element → set of "key=value" items
+    const transactions = els.map(el => {
+      const items = new Set();
+      for (const [k, v] of Object.entries(el.styleStatics)) {
+        items.add(`s:${k}=${JSON.stringify(v)}`);
+      }
+      for (const [k, v] of Object.entries(el.jsxProps)) {
+        items.add(`p:${k}=${JSON.stringify(v)}`);
+      }
+      return items;
+    });
+
+    // Full signatures for measuring spread across exact-match groups
+    const fullSigs = els.map(el =>
+      makeSignature(el.primitive, el.styleStatics, el.jsxProps)
+    );
+
+    // Level 1: count individual items
+    const itemFreq = new Map();
+    for (const t of transactions) {
+      for (const item of t) {
+        itemFreq.set(item, (itemFreq.get(item) || 0) + 1);
+      }
+    }
+
+    // Frequent 1-items (sorted for deterministic candidate generation)
+    const freq1 = [...itemFreq.entries()]
+      .filter(([, c]) => c >= minOccurrences)
+      .sort(([a], [b]) => a < b ? -1 : 1)
+      .map(([item]) => item);
+
+    if (freq1.length === 0) continue;
+
+    const itemIdx = new Map();
+    freq1.forEach((item, i) => itemIdx.set(item, i));
+
+    // Convert transactions to sorted index arrays for fast subset checks
+    const txIdx = transactions.map(t => {
+      const arr = [];
+      for (const item of t) {
+        const idx = itemIdx.get(item);
+        if (idx !== undefined) arr.push(idx);
+      }
+      return arr.sort((a, b) => a - b);
+    });
+
+    // Apriori: build levels 2..maxSize
+    let prevLevel = freq1.map((_, i) => [i]);
+
+    for (let k = 2; k <= maxSize && prevLevel.length > 0; k++) {
+      // Generate candidates: merge (k-1)-itemsets sharing first k-2 items
+      const candidates = [];
+      for (let i = 0; i < prevLevel.length; i++) {
+        for (let j = i + 1; j < prevLevel.length; j++) {
+          const a = prevLevel[i];
+          const b = prevLevel[j];
+          let ok = true;
+          for (let x = 0; x < k - 2; x++) {
+            if (a[x] !== b[x]) { ok = false; break; }
+          }
+          if (!ok) continue;
+          candidates.push([...a, b[k - 2]]);
+        }
+      }
+
+      // Safety cap to avoid OOM on pathological inputs
+      if (candidates.length > 50000) break;
+
+      const nextLevel = [];
+      for (const cand of candidates) {
+        let count = 0;
+        const sigs = new Set();
+        const files = new Set();
+
+        for (let ti = 0; ti < txIdx.length; ti++) {
+          const tx = txIdx[ti];
+          let all = true;
+          for (const idx of cand) {
+            if (!binarySearchIdx(tx, idx)) { all = false; break; }
+          }
+          if (all) {
+            count++;
+            sigs.add(fullSigs[ti]);
+            files.add(els[ti].file);
+          }
+        }
+
+        if (count >= minOccurrences) {
+          nextLevel.push(cand);
+          // Only report patterns spanning multiple distinct full-match groups
+          if (sigs.size > 1) {
+            const styleStatics = {};
+            const jsxProps = {};
+            for (const idx of cand) {
+              const item = freq1[idx];
+              const isStyle = item.startsWith('s:');
+              const rest = item.slice(2);
+              const eq = rest.indexOf('=');
+              const key = rest.slice(0, eq);
+              const val = JSON.parse(rest.slice(eq + 1));
+              if (isStyle) styleStatics[key] = val;
+              else jsxProps[key] = val;
+            }
+            allResults.push({
+              primitive,
+              styleStatics,
+              jsxProps,
+              count,
+              spread: sigs.size,
+              fileCount: files.size,
+              size: k,
+            });
+          }
+        }
+      }
+      prevLevel = nextLevel;
+    }
+  }
+
+  // Score: frequency × sqrt(size) — rewards both coverage and specificity
+  allResults.sort((a, b) => {
+    const sa = a.count * Math.sqrt(a.size);
+    const sb = b.count * Math.sqrt(b.size);
+    return sb - sa;
+  });
+
+  return allResults;
+}
+
+/**
+ * Filter dominated patterns: remove pattern P if a strict superset Q exists
+ * with >= 90% of P's support. Q is more specific and covers nearly the same
+ * elements, so P is redundant noise.
+ *
+ * Also handles exact closedness (superset with equal support) as a special case.
+ */
+function filterDominatedPatterns(patterns) {
+  const itemSets = patterns.map(p => new Set([
+    ...Object.entries(p.styleStatics).map(([k, v]) => `s:${k}=${JSON.stringify(v)}`),
+    ...Object.entries(p.jsxProps).map(([k, v]) => `p:${k}=${JSON.stringify(v)}`),
+  ]));
+
+  const dominated = new Set();
+  for (let i = 0; i < patterns.length; i++) {
+    if (dominated.has(i)) continue;
+    const p = patterns[i];
+    const pItems = itemSets[i];
+    for (let j = 0; j < patterns.length; j++) {
+      if (i === j || dominated.has(j)) continue;
+      const q = patterns[j];
+      if (q.primitive !== p.primitive) continue;
+      if (q.size <= p.size) continue;
+      // Q must cover >= 90% of P's elements to dominate
+      if (q.count < p.count * 0.9) continue;
+      // Check if Q ⊃ P (Q is a strict superset)
+      const qItems = itemSets[j];
+      let isSuperset = true;
+      for (const k of pItems) {
+        if (!qItems.has(k)) { isSuperset = false; break; }
+      }
+      if (isSuperset) { dominated.add(i); break; }
+    }
+  }
+
+  return patterns.filter((_, i) => !dominated.has(i));
+}
+
+/**
+ * Build a JSON definition string for `rjit classify add`.
+ */
+function buildAddCommand(primitive, styleStatics, jsxProps) {
+  const def = { type: primitive };
+  if (primitive === 'Text') {
+    if (styleStatics.fontSize != null) def.size = styleStatics.fontSize;
+    if (styleStatics.fontWeight === 'bold') def.bold = true;
+    if (styleStatics.color != null) def.color = styleStatics.color;
+    const remaining = {};
+    for (const [k, v] of Object.entries(styleStatics)) {
+      if (k !== 'fontSize' && k !== 'fontWeight' && k !== 'color') remaining[k] = v;
+    }
+    if (Object.keys(remaining).length > 0) def.style = remaining;
+  } else {
+    if (Object.keys(styleStatics).length > 0) def.style = styleStatics;
+  }
+  for (const [k, v] of Object.entries(jsxProps)) def[k] = v;
+  return JSON.stringify(def);
+}
+
+async function partialCommand(args, ts) {
+  const cwd = process.cwd();
+  let scanDir = join(cwd, 'src');
+  let minOccurrences = 10;
+  let maxSize = 12;
+  let top = 40;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--dir') { scanDir = join(cwd, args[++i]); continue; }
+    if (args[i] === '--min') { minOccurrences = parseInt(args[++i], 10); continue; }
+    if (args[i] === '--max-size') { maxSize = parseInt(args[++i], 10); continue; }
+    if (args[i] === '--top') { top = parseInt(args[++i], 10); continue; }
+    if (args[i] === '--help' || args[i] === '-h') {
+      console.log(`
+  rjit classify partial — Find recurring partial style patterns
+
+  Discovers style property subsets that recur across elements with different
+  full styles. Unlike the default mode (which requires ALL properties to
+  match), this finds partial overlaps — the building blocks that appear
+  in many different contexts.
+
+  Usage:
+    rjit classify partial                   Analyze src/
+    rjit classify partial --dir ./stories   Analyze a specific directory
+    rjit classify partial --min 15          Minimum occurrences (default: 10)
+    rjit classify partial --max-size 4      Max properties per pattern (default: 12)
+    rjit classify partial --top 20          Show top N patterns (default: 40)
+
+  Output columns:
+    Props   — number of style properties in the pattern
+    Hits    — total elements containing this property subset
+    Spread  — how many distinct full patterns contain it
+    Files   — how many source files
+
+  To add a discovered pattern as a classifier:
+    rjit classify add <Name> '<json_definition>'
+`);
+      return;
+    }
+  }
+
+  if (!existsSync(scanDir)) {
+    console.error(`  Directory not found: ${scanDir}`);
+    process.exit(1);
+  }
+
+  console.log(`\n  Scanning ${relative(cwd, scanDir) || '.'}/ for partial style patterns...`);
+  const { elements, fileCount } = scanElements(scanDir, ts);
+  console.log(`  Found ${elements.length} classifiable elements across ${fileCount} files.`);
+  console.log(`  Mining frequent property subsets (min: ${minOccurrences})...`);
+
+  if (elements.length === 0) {
+    console.log('  Nothing to analyze.\n');
+    return;
+  }
+
+  const raw = minePartialPatterns(elements, minOccurrences, maxSize);
+  const patterns = filterDominatedPatterns(raw);
+
+  if (patterns.length === 0) {
+    console.log(`  No partial patterns found with ${minOccurrences}+ occurrences spanning multiple groups.`);
+    console.log(`  Try lowering --min.\n`);
+    return;
+  }
+
+  const shown = patterns.slice(0, top);
+
+  console.log(`\n  ── Partial Patterns (${patterns.length} found, showing top ${shown.length}) ──\n`);
+  console.log(`  ${'#'.padStart(4)}  ${'Props'.padStart(5)}  ${'Hits'.padStart(5)}  ${'Spread'.padStart(6)}  ${'Files'.padStart(5)}  Pattern`);
+  console.log(`  ${'─'.repeat(4)}  ${'─'.repeat(5)}  ${'─'.repeat(5)}  ${'─'.repeat(6)}  ${'─'.repeat(5)}  ${'─'.repeat(50)}`);
+
+  for (let i = 0; i < shown.length; i++) {
+    const p = shown[i];
+    // Show ALL properties explicitly (formatTraits hides some)
+    const allProps = [];
+    for (const [k, v] of Object.entries(p.styleStatics)) {
+      const vs = typeof v === 'string' ? (v.length > 20 ? `'${v.slice(0, 17)}…'` : `'${v}'`) : v;
+      allProps.push(`${k}: ${vs}`);
+    }
+    for (const [k, v] of Object.entries(p.jsxProps)) {
+      const vs = typeof v === 'string' ? (v.length > 20 ? `'${v.slice(0, 17)}…'` : `'${v}'`) : v;
+      allProps.push(`${k}: ${vs}`);
+    }
+    console.log(
+      `  ${String(i + 1).padStart(4)}  ${String(p.size).padStart(5)}  ` +
+      `${String(p.count).padStart(5)}  ${String(p.spread).padStart(6)}  ` +
+      `${String(p.fileCount).padStart(5)}  ${p.primitive}: ${allProps.join(', ')}`
+    );
+  }
+
+  // Show add commands for top patterns
+  const exCount = Math.min(5, shown.length);
+  console.log(`\n  ── Quick-add commands for top ${exCount} ──\n`);
+  for (let i = 0; i < exCount; i++) {
+    const p = shown[i];
+    const name = suggestName(p.primitive, p.styleStatics, p.jsxProps, '')
+      .replace(/%/g, 'Pct').replace(/[^A-Za-z0-9]/g, '');
+    const json = buildAddCommand(p.primitive, p.styleStatics, p.jsxProps);
+    console.log(`  rjit classify add ${name} '${json}'`);
+  }
+  console.log('');
+}
+
 // ── Pick command ──────────────────────────────────────────────
 
 async function pickCommand(args, ts) {
@@ -2002,6 +2321,10 @@ export async function classifyCommand(args) {
 
   if (args[0] === 'add') {
     return addCommand(args.slice(1), ts);
+  }
+
+  if (args[0] === 'partial') {
+    return partialCommand(args.slice(1), ts);
   }
 
   // Parse args

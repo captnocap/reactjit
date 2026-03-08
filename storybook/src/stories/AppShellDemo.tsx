@@ -70,7 +70,7 @@ export function AppShellDemoStory() {
   const breadcrumbs = BREADCRUMB_MAP[activePage] ?? [{ id: 'home', label: 'Home' }];
 
   return (
-    <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: c.bg }}>
+    <S.StoryRoot style={{ flexDirection: 'row' }}>
 
       {/* Sidebar */}
       <NavPanel
@@ -81,7 +81,7 @@ export function AppShellDemoStory() {
           setActiveTab('overview');
         }}
         header={
-          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'normal' }}>ACME APP</Text>
+          <S.StoryMuted style={{ fontWeight: 'normal' }}>ACME APP</S.StoryMuted>
         }
       />
 
@@ -111,27 +111,19 @@ export function AppShellDemoStory() {
           <Text style={{ color: c.text, fontSize: 16, fontWeight: 'normal' }}>
             {breadcrumbs[breadcrumbs.length - 1].label}
           </Text>
-          <Text style={{ color: c.textDim, fontSize: 11 }}>
+          <S.DimBody11>
             {`Viewing: ${activeTab} tab`}
-          </Text>
+          </S.DimBody11>
 
           {/* Content card */}
-          <Box style={{
-            backgroundColor: c.bgElevated,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: c.border,
-            padding: 16,
-            gap: 8,
-            flexGrow: 1,
-          }}>
+          <S.Bordered style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 16, gap: 8, flexGrow: 1 }}>
             <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
               {`${breadcrumbs[breadcrumbs.length - 1].label} - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
             </Text>
-            <Box style={{ height: 1, backgroundColor: c.border }} />
-            <Text style={{ color: c.textDim, fontSize: 11 }}>
+            <S.HorzDivider />
+            <S.DimBody11>
               This area would contain the page content. All four navigation components are working together:
-            </Text>
+            </S.DimBody11>
             <Box style={{ gap: 4, paddingLeft: 8 }}>
               <S.StoryMuted>- NavPanel controls the page</S.StoryMuted>
               <S.StoryMuted>- Toolbar triggers actions</S.StoryMuted>
@@ -139,23 +131,18 @@ export function AppShellDemoStory() {
               <S.StoryMuted>- Tabs switch content views</S.StoryMuted>
             </Box>
             <Box style={{ flexGrow: 1 }} />
-            <Box style={{
-              flexDirection: 'row',
-              width: '100%',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
+            <S.RowCenter style={{ width: '100%', justifyContent: 'space-between' }}>
               <S.StoryMuted>
                 {`Last toolbar action: ${lastAction}`}
               </S.StoryMuted>
               <S.StoryMuted>
                 {`Page: ${activePage} | Tab: ${activeTab}`}
               </S.StoryMuted>
-            </Box>
-          </Box>
+            </S.RowCenter>
+          </S.Bordered>
         </Box>
 
       </Box>
-    </Box>
+    </S.StoryRoot>
   );
 }

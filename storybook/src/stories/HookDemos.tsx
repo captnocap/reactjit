@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Image } from '../../../packages/core/src';
+import { Box, Text, Image, classifiers as S} from '../../../packages/core/src';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -508,90 +508,90 @@ export const HOOKS: HookDef[] = [
 
 export function ThumbCounter({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-        <Box style={{ width: 10, height: 10, backgroundColor: c.surface, borderRadius: 2, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter style={{ gap: 3 }}>
+      <S.RowCenter style={{ gap: 3 }}>
+        <S.SurfaceBordered style={{ width: 10, height: 10, borderRadius: 2, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color: c.muted, fontSize: 5 }}>{'-'}</Text>
-        </Box>
-        <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>{'7'}</Text>
+        </S.SurfaceBordered>
+        <S.StoryBody style={{ fontWeight: 'bold' }}>{'7'}</S.StoryBody>
         <Box style={{ width: 10, height: 10, backgroundColor: A, borderRadius: 2, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color: '#fff', fontSize: 5 }}>{'+'}</Text>
         </Box>
-      </Box>
-    </Box>
+      </S.RowCenter>
+    </S.FullCenter>
   );
 }
 
 export function ThumbPalette({ c }: { c: ThemeColors }) {
   const colors = [c.primary, c.text, c.surface, c.border, c.muted, '#10b981'];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, width: 36, justifyContent: 'center' }}>
+    <S.FullCenter>
+      <S.RowWrap style={{ gap: 2, width: 36, justifyContent: 'center' }}>
         {colors.map((color, i) => (
           <Box key={i} style={{ width: 10, height: 10, backgroundColor: color, borderRadius: 2 }} />
         ))}
-      </Box>
-    </Box>
+      </S.RowWrap>
+    </S.FullCenter>
   );
 }
 
 export function ThumbTransform({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+    <S.FullCenter style={{ gap: 2 }}>
       <Text style={{ color: c.muted, fontSize: 5 }}>{'hello-world'}</Text>
       <Text style={{ color: A, fontSize: 4 }}>{'--->'}</Text>
-      <Text style={{ color: c.text, fontSize: 5, fontWeight: 'bold' }}>{'helloWorld'}</Text>
-    </Box>
+      <S.BoldText style={{ fontSize: 5 }}>{'helloWorld'}</S.BoldText>
+    </S.FullCenter>
   );
 }
 
 export function ThumbClock({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
-      <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>{'12:34'}</Text>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'ticking'}</Text>
-    </Box>
+    <S.FullCenter style={{ gap: 1 }}>
+      <S.StoryBody style={{ fontWeight: 'bold' }}>{'12:34'}</S.StoryBody>
+      <S.DimNano>{'ticking'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
 export function ThumbAnimated({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ width: 44, height: 12, position: 'relative' }}>
         <Box style={{ position: 'absolute', left: 0, top: 5, width: 44, height: 2, backgroundColor: c.border, borderRadius: 1 }} />
         <Box style={{ position: 'absolute', left: 28, top: 2, width: 8, height: 8, backgroundColor: A, borderRadius: 4 }} />
         <Box style={{ position: 'absolute', left: 12, top: 4, width: 4, height: 4, backgroundColor: A, borderRadius: 2, opacity: 0.3 }} />
         <Box style={{ position: 'absolute', left: 20, top: 3, width: 5, height: 5, backgroundColor: A, borderRadius: 3, opacity: 0.5 }} />
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbList({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+    <S.FullCenter style={{ gap: 3 }}>
       {[32, 24, 18].map((w, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+        <S.RowCenter key={i} style={{ gap: 3 }}>
           <Box style={{ width: 3, height: 3, backgroundColor: i === 0 ? A : c.muted, borderRadius: 2 }} />
           <Box style={{ width: w, height: 3, backgroundColor: i === 0 ? c.text : c.muted, borderRadius: 1, opacity: 1 - i * 0.2 }} />
-        </Box>
+        </S.RowCenter>
       ))}
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbFlash({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Image src="zap" style={{ width: 16, height: 16 }} tintColor={A} />
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbMath({ c }: { c: ThemeColors }) {
   const dots = [[10, 8], [30, 12], [20, 28], [38, 32], [14, 22], [28, 6]];
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+    <S.FullCenter>
       <Box style={{ width: 48, height: 36, position: 'relative' }}>
         {dots.map(([x, y], i) => (
           <Box key={i} style={{
@@ -602,45 +602,45 @@ export function ThumbMath({ c }: { c: ThemeColors }) {
           }} />
         ))}
       </Box>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbGauge({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+    <S.FullCenter style={{ gap: 4 }}>
       <Box style={{ width: 42, height: 5, backgroundColor: c.surface, borderRadius: 2, overflow: 'hidden' }}>
         <Box style={{ width: '62%', height: 5, backgroundColor: '#10b981', borderRadius: 2 }} />
       </Box>
       <Text style={{ color: c.muted, fontSize: 5 }}>{'62%'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbValue({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
-      <Text style={{ color: c.text, fontSize: 7, fontWeight: 'bold' }}>{'1280x720'}</Text>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'md'}</Text>
-    </Box>
+    <S.FullCenter style={{ gap: 1 }}>
+      <S.BoldText style={{ fontSize: 7 }}>{'1280x720'}</S.BoldText>
+      <S.DimNano>{'md'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
 export function ThumbBool({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+    <S.FullCenter style={{ gap: 3 }}>
       <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' }} />
       <Text style={{ color: c.text, fontSize: 5 }}>{'ready'}</Text>
-    </Box>
+    </S.FullCenter>
   );
 }
 
 export function ThumbSignature({ c }: { c: ThemeColors }) {
   return (
-    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+    <S.FullCenter style={{ gap: 2 }}>
       <Text style={{ color: A, fontSize: 5 }}>{'f(x)'}</Text>
-      <Text style={{ color: c.muted, fontSize: 4 }}>{'API'}</Text>
-    </Box>
+      <S.DimNano>{'API'}</S.DimNano>
+    </S.FullCenter>
   );
 }
 
