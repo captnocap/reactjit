@@ -8,6 +8,7 @@ Before doing anything, figure out what you can actually run:
 
 - **Sandboxed** (no network, no node_modules, no `rjit` CLI): You can only edit source files and verify by reading code. Skip all build/sync steps — leave a note in your PR description listing which sync commands the maintainer needs to run.
 - **Full environment** (npm works, `make` works, `rjit` CLI is installed): You MUST run the sync pipeline after framework-level changes. No excuses.
+- **Zig sandbox caveat**: In Codex's sandbox, Zig may partially work but `zig build ...` can still fail with `AccessDenied` on Zig's stdlib install path even when the files are world-readable on the real filesystem. Treat that as a sandbox filesystem restriction, not a repo/ownership issue. If a Zig build matters, rerun it outside the sandbox before concluding the repo is broken.
 
 ## Source-of-Truth Architecture (CRITICAL)
 
