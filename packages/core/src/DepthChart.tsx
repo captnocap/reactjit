@@ -24,6 +24,11 @@ export function DepthChart({ style, width, height, ...rest }: DepthChartProps) {
     ...rest,
     width,
     height,
-    style: { ...style, ...(width != null ? { width } : {}), ...(height != null ? { height } : {}) },
+    style: {
+      ...(width == null ? { width: '100%' } : {}),
+      ...style,
+      ...(width != null ? { width } : {}),
+      ...(height != null ? { height } : {}),
+    },
   });
 }
