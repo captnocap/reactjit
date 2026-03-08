@@ -125,7 +125,8 @@ export const ELEMENTS: Element[] = [
   { number: 118, symbol: 'Og', name: 'Oganesson', mass: 294, category: 'noble-gas', group: 18, period: 7, phase: 'unknown', electronegativity: null, electronConfig: '[Rn] 5f14 6d10 7s2 7p6', shells: [2, 8, 18, 32, 32, 18, 8], cpkColor: '#F00000', meltingPoint: null, boilingPoint: null, density: null },
 ];
 
-// Lookup indices
+// Sync lookup — used in render for immediate element data (e.g. color, symbol).
+// For filtered queries use the chemistry:elements RPC via usePeriodicTableFilter().
 const byNumber = new Map<number, Element>();
 const bySymbol = new Map<string, Element>();
 const byName = new Map<string, Element>();
@@ -140,20 +141,4 @@ export function getElement(key: number | string): Element | undefined {
   if (typeof key === 'number') return byNumber.get(key);
   if (key.length <= 3) return bySymbol.get(key) ?? byName.get(key.toLowerCase());
   return byName.get(key.toLowerCase());
-}
-
-export function getElementsByCategory(cat: Element['category']): Element[] {
-  return ELEMENTS.filter(el => el.category === cat);
-}
-
-export function getElementsByPeriod(period: number): Element[] {
-  return ELEMENTS.filter(el => el.period === period);
-}
-
-export function getElementsByGroup(group: number): Element[] {
-  return ELEMENTS.filter(el => el.group === group);
-}
-
-export function getElementsByPhase(phase: Element['phase']): Element[] {
-  return ELEMENTS.filter(el => el.phase === phase);
 }

@@ -16,8 +16,8 @@ export type {
   ElectronShellProps, ReactionViewProps,
 } from './types';
 
-// -- Element data (118 elements) ----------------------------------------------
-export { ELEMENTS, getElement, getElementsByCategory, getElementsByPeriod, getElementsByGroup, getElementsByPhase } from './elements';
+// -- Element data (118 elements) — sync lookup for render, filtered queries via RPC
+export { ELEMENTS, getElement } from './elements';
 
 // -- Compound library (data only — computation in Lua) ------------------------
 export { COMPOUNDS } from './molecules';
@@ -42,26 +42,16 @@ export {
 } from './capabilities';
 export type { ReagentTestProps, SpectrumViewProps, PhaseDiagramProps, BohrModelProps, StructureViewProps } from './capabilities';
 
-// -- Reagent test data (pure TS, also mirrored in Lua for rendering) ----------
-export {
-  runReagentTest, runMultiReagentTest,
-  getAvailableCompounds, getAllTestedCompounds,
-  REAGENT_INFO,
-} from './reagents';
-export type { ReagentType, ColorReaction, ReagentResult, MultiReagentResult } from './reagents';
+// -- Reagent tests (compute in Lua, RPC hooks here) ---------------------------
+export { useReagentTest, useReagentTestMulti, useReagentInfo, useAvailableCompounds, REAGENT_INFO } from './reagents';
+export type { ReagentType, ColorReaction, ReagentResult, MultiReagentResult, ReagentInfo } from './reagents';
 
-// -- Spectra data + IR absorption reference -----------------------------------
-export {
-  getSpectra, getSpectrum, listAvailableSpectra,
-  identifyIRPeaks, wavelengthToColor, absorptionToObservedColor,
-  IR_ABSORPTIONS,
-} from './spectra';
+// -- Spectra (compute in Lua, RPC hooks here) ---------------------------------
+export { useIdentifyIR, useWavelengthToColor, useAbsorptionColor, useIRAbsorptions } from './spectra';
 export type { SpectrumType, SpectralPeak, Spectrum, IRAbsorption } from './spectra';
 
-// -- PubChem API --------------------------------------------------------------
+// -- PubChem API (async fetch, no hooks — callers store results themselves) ----
 export {
   fetchCompound, searchCompoundsPubChem, fetchSynonyms, fetchDescription, fetchHazards,
 } from './pubchem';
 export type { PubChemCompound, PubChemSearchResult } from './pubchem';
-
-// Chemistry-specific unit conversions are registered in lua/capabilities/convert.lua

@@ -454,39 +454,261 @@ local function buildMolecule(formulaOrName)
 end
 
 -- ============================================================================
--- Reagent test lookup (data owned by reagent_test.lua, mirrored here for RPC)
+-- Spectra data + helpers
 -- ============================================================================
 
-local REAGENT_RESULTS = {
+local IR_ABSORPTIONS = {
+  { group='Alcohol',         bond='O-H stretch',     rangeMin=3200, rangeMax=3550, intensity='strong',   description='Broad peak, hydrogen bonding' },
+  { group='Carboxylic Acid', bond='O-H stretch',     rangeMin=2500, rangeMax=3300, intensity='strong',   description='Very broad, overlaps C-H' },
+  { group='Amine',           bond='N-H stretch',     rangeMin=3300, rangeMax=3500, intensity='medium',   description='Primary: two peaks; secondary: one peak' },
+  { group='Alkane',          bond='C-H stretch',     rangeMin=2850, rangeMax=2960, intensity='strong',   description='sp3 C-H' },
+  { group='Alkene',          bond='C-H stretch',     rangeMin=3020, rangeMax=3100, intensity='medium',   description='sp2 C-H' },
+  { group='Alkyne',          bond='C-H stretch',     rangeMin=3300, rangeMax=3320, intensity='strong',   description='sp C-H, sharp' },
+  { group='Aldehyde',        bond='C-H stretch',     rangeMin=2700, rangeMax=2850, intensity='medium',   description='Two peaks (Fermi resonance)' },
+  { group='Nitrile',         bond='C≡N stretch',     rangeMin=2210, rangeMax=2260, intensity='medium',   description='Sharp, characteristic' },
+  { group='Alkyne',          bond='C≡C stretch',     rangeMin=2100, rangeMax=2260, intensity='weak',     description='May be absent if symmetric' },
+  { group='Carbonyl',        bond='C=O stretch',     rangeMin=1680, rangeMax=1750, intensity='strong',   description='Very characteristic, exact position varies' },
+  { group='Ketone',          bond='C=O stretch',     rangeMin=1705, rangeMax=1725, intensity='strong',   description='Conjugation lowers frequency' },
+  { group='Aldehyde',        bond='C=O stretch',     rangeMin=1720, rangeMax=1740, intensity='strong',   description='Higher than ketone' },
+  { group='Ester',           bond='C=O stretch',     rangeMin=1735, rangeMax=1750, intensity='strong',   description='Highest carbonyl frequency' },
+  { group='Amide',           bond='C=O stretch',     rangeMin=1630, rangeMax=1690, intensity='strong',   description='Amide I band' },
+  { group='Carboxylic Acid', bond='C=O stretch',     rangeMin=1700, rangeMax=1725, intensity='strong',   description='Dimeric form' },
+  { group='Alkene',          bond='C=C stretch',     rangeMin=1620, rangeMax=1680, intensity='variable', description='Weak if symmetric' },
+  { group='Aromatic',        bond='C=C stretch',     rangeMin=1450, rangeMax=1600, intensity='variable', description='Ring stretching, multiple peaks' },
+  { group='Nitro',           bond='N=O stretch',     rangeMin=1515, rangeMax=1560, intensity='strong',   description='Asymmetric stretch' },
+  { group='Ether',           bond='C-O stretch',     rangeMin=1000, rangeMax=1300, intensity='strong',   description='Broad region' },
+  { group='Alcohol',         bond='C-O stretch',     rangeMin=1000, rangeMax=1260, intensity='strong',   description='Primary/secondary/tertiary differ' },
+  { group='Aromatic',        bond='C-H bend (OOP)',  rangeMin=675,  rangeMax=900,  intensity='strong',   description='Substitution pattern diagnostic' },
+}
+
+local function identifyIRPeaks(wavenumber, tolerance)
+  tolerance = tolerance or 50
+  local result = {}
+  for _, a in ipairs(IR_ABSORPTIONS) do
+    if wavenumber >= a.rangeMin - tolerance and wavenumber <= a.rangeMax + tolerance then
+      result[#result + 1] = a
+    end
+  end
+  return result
+end
+
+local function wavelengthToColor(nm)
+  if nm < 380 then return '#7F00FF' end
+  if nm < 440 then
+    local t = (nm - 380) / 60
+    return string.format('rgb(%d, 0, 255)', math.floor(255 * (1 - t) + 0.5))
+  end
+  if nm < 490 then
+    local t = (nm - 440) / 50
+    return string.format('rgb(0, %d, 255)', math.floor(255 * t + 0.5))
+  end
+  if nm < 510 then
+    local t = (nm - 490) / 20
+    return string.format('rgb(0, 255, %d)', math.floor(255 * (1 - t) + 0.5))
+  end
+  if nm < 580 then
+    local t = (nm - 510) / 70
+    return string.format('rgb(%d, 255, 0)', math.floor(255 * t + 0.5))
+  end
+  if nm < 645 then
+    local t = (nm - 580) / 65
+    return string.format('rgb(255, %d, 0)', math.floor(255 * (1 - t) + 0.5))
+  end
+  if nm < 780 then return '#FF0000' end
+  return '#7F0000'
+end
+
+local function absorptionToObservedColor(absorbedNm)
+  local COMPLEMENTARY = {
+    {380, 430, '#FFFF00'},
+    {430, 480, '#FF8C00'},
+    {480, 500, '#FF0000'},
+    {500, 530, '#FF00FF'},
+    {530, 560, '#8B00FF'},
+    {560, 580, '#0000FF'},
+    {580, 620, '#00BFFF'},
+    {620, 780, '#00FF00'},
+  }
+  for _, c in ipairs(COMPLEMENTARY) do
+    if absorbedNm >= c[1] and absorbedNm < c[2] then return c[3] end
+  end
+  return '#FFFFFF'
+end
+
+-- ============================================================================
+-- Reagent test compute (full databases + correlation logic)
+-- ============================================================================
+
+local REAGENT_INFO = {
+  marquis    = { name='Marquis',    formula='H2SO4 + HCHO',                 color='#8B4513', description='Formaldehyde + sulfuric acid. Primary test for alkaloids and phenethylamines.' },
+  mecke      = { name='Mecke',      formula='H2SeO3 + H2SO4',               color='#556B2F', description='Selenious acid + sulfuric acid. Distinguishes between opioids and phenethylamines.' },
+  mandelin   = { name='Mandelin',   formula='NH4VO3 + H2SO4',               color='#B8860B', description='Ammonium vanadate + sulfuric acid. Broad spectrum alkaloid detection.' },
+  simons     = { name="Simon's",    formula='NaHCO3 + Na2[Fe(CN)5NO] + CH3CHO', color='#4682B4', description='Sodium nitroprusside + acetaldehyde. Detects secondary amines.' },
+  ehrlich    = { name='Ehrlich',    formula='DMAB + HCl',                   color='#DAA520', description='p-Dimethylaminobenzaldehyde + HCl. Detects indole-containing compounds.' },
+  liebermann = { name='Liebermann', formula='NaNO2 + H2SO4',                color='#2F4F4F', description='Sodium nitrite + sulfuric acid. Detects phenols and aromatic amines.' },
+  froehde    = { name='Froehde',    formula='Na2MoO4 + H2SO4',              color='#696969', description='Sodium molybdate + sulfuric acid. Alkaloid differentiation.' },
+  ['gallic-acid'] = { name='Gallic Acid', formula='C7H6O5 + H2SO4',        color='#8B0000', description='Gallic acid + sulfuric acid. Tests for alkaloids and glycosides.' },
+}
+
+local REAGENT_DATABASES = {
   marquis = {
-    MDMA            = { color='#1a0a2e', description='Deep purple to black',      confidence=0.65 },
-    MDA             = { color='#1a0a2e', description='Black/dark purple',          confidence=0.65 },
-    Amphetamine     = { color='#8B4513', description='Orange to reddish-brown',   confidence=0.65 },
-    Methamphetamine = { color='#FF4500', description='Orange to dark orange',      confidence=0.65 },
-    Heroin          = { color='#800080', description='Purple',                     confidence=0.65 },
-    Morphine        = { color='#800080', description='Deep purple',                confidence=0.65 },
-    Cocaine         = { color='#f5f5dc', description='No reaction',                confidence=0    },
-    LSD             = { color='#808000', description='Olive to black',             confidence=0.65 },
+    MDMA            = { color='#1a0a2e', description='Deep purple to black',    timeMs=13000, intermediates={'#f5f5dc','#9370DB','#4B0082','#1a0a2e'} },
+    MDA             = { color='#1a0a2e', description='Black/dark purple',        timeMs=11500, intermediates={'#f5f5dc','#8B008B','#2d0047','#1a0a2e'} },
+    Amphetamine     = { color='#FF8C00', description='Orange to dark reddish-brown', timeMs=16000, intermediates={'#f5f5dc','#FFA500','#FF6347','#8B4513'} },
+    Methamphetamine = { color='#FF4500', description='Orange to dark orange',    timeMs=14500, intermediates={'#f5f5dc','#FFD700','#FF8C00','#FF4500'} },
+    Heroin          = { color='#800080', description='Purple',                   timeMs=10000, intermediates={'#f5f5dc','#DDA0DD','#9932CC','#800080'} },
+    Morphine        = { color='#800080', description='Deep purple',              timeMs=11500, intermediates={'#f5f5dc','#DA70D6','#9400D3','#800080'} },
+    Codeine         = { color='#800080', description='Deep purple',              timeMs=13000, intermediates={'#f5f5dc','#EE82EE','#9932CC','#800080'} },
+    Cocaine         = { color='#f5f5dc', description='No reaction (remains clear)', timeMs=7000, intermediates={'#f5f5dc'} },
+    LSD             = { color='#808000', description='Olive to black',           timeMs=19000, intermediates={'#f5f5dc','#BDB76B','#808000','#2F4F4F'} },
+    Aspirin         = { color='#FF6347', description='Reddish',                  timeMs=10000, intermediates={'#f5f5dc','#FFA07A','#FF6347'} },
+    Sugar           = { color='#f5f5dc', description='No significant reaction',  timeMs=7000,  intermediates={'#f5f5dc'} },
+    Caffeine        = { color='#f5f5dc', description='No significant reaction',  timeMs=7000,  intermediates={'#f5f5dc'} },
   },
   mecke = {
-    MDMA            = { color='#006400', description='Blue-green to dark green',   confidence=0.65 },
-    Heroin          = { color='#006400', description='Deep blue-green',            confidence=0.65 },
-    Cocaine         = { color='#808000', description='Slow olive green',           confidence=0.40 },
-    Amphetamine     = { color='#f5f5dc', description='No reaction',                confidence=0    },
+    MDMA            = { color='#006400', description='Blue-green to dark green', timeMs=13000, intermediates={'#f5f5dc','#20B2AA','#008080','#006400'} },
+    MDA             = { color='#006400', description='Green to blue-green',      timeMs=11500, intermediates={'#f5f5dc','#3CB371','#2E8B57','#006400'} },
+    Heroin          = { color='#006400', description='Deep blue-green',          timeMs=10000, intermediates={'#f5f5dc','#66CDAA','#2E8B57','#006400'} },
+    Morphine        = { color='#006400', description='Deep green',               timeMs=11500, intermediates={'#f5f5dc','#90EE90','#228B22','#006400'} },
+    Cocaine         = { color='#808000', description='Slow olive green',         timeMs=28000, intermediates={'#f5f5dc','#BDB76B','#808000'} },
+    Amphetamine     = { color='#f5f5dc', description='No reaction',              timeMs=7000,  intermediates={'#f5f5dc'} },
+    Methamphetamine = { color='#f5f5dc', description='No reaction',              timeMs=7000,  intermediates={'#f5f5dc'} },
+    LSD             = { color='#8B4513', description='Brownish-black',           timeMs=16000, intermediates={'#f5f5dc','#D2B48C','#A0522D','#8B4513'} },
+  },
+  mandelin = {
+    MDMA            = { color='#1a0a2e', description='Black',                    timeMs=10000, intermediates={'#f5f5dc','#696969','#2F2F2F','#1a0a2e'} },
+    MDA             = { color='#1a0a2e', description='Black to dark green',      timeMs=11500, intermediates={'#f5f5dc','#556B2F','#2F4F4F','#1a0a2e'} },
+    Amphetamine     = { color='#006400', description='Dark green',               timeMs=13000, intermediates={'#f5f5dc','#8FBC8F','#2E8B57','#006400'} },
+    Methamphetamine = { color='#006400', description='Green',                    timeMs=14500, intermediates={'#f5f5dc','#90EE90','#32CD32','#006400'} },
+    Cocaine         = { color='#FF8C00', description='Orange',                   timeMs=10000, intermediates={'#f5f5dc','#FFD700','#FF8C00'} },
+    Heroin          = { color='#808080', description='Brownish gray',            timeMs=13000, intermediates={'#f5f5dc','#D2B48C','#808080'} },
+    Ketamine        = { color='#FF4500', description='Orange',                   timeMs=10000, intermediates={'#f5f5dc','#FFA500','#FF4500'} },
   },
   simons = {
-    MDMA            = { color='#00008B', description='Blue (secondary amine)',     confidence=0.75 },
-    Methamphetamine = { color='#00008B', description='Blue (secondary amine)',     confidence=0.75 },
-    MDA             = { color='#f5f5dc', description='No reaction (primary amine)',confidence=0    },
-    Amphetamine     = { color='#f5f5dc', description='No reaction (primary amine)',confidence=0    },
+    MDMA            = { color='#00008B', description='Blue (secondary amine)',   timeMs=8500,  intermediates={'#f5f5dc','#87CEEB','#4169E1','#00008B'} },
+    Methamphetamine = { color='#00008B', description='Blue (secondary amine)',   timeMs=8500,  intermediates={'#f5f5dc','#87CEEB','#4169E1','#00008B'} },
+    MDA             = { color='#f5f5dc', description='No reaction (primary amine)', timeMs=7000, intermediates={'#f5f5dc'} },
+    Amphetamine     = { color='#f5f5dc', description='No reaction (primary amine)', timeMs=7000, intermediates={'#f5f5dc'} },
   },
   ehrlich = {
-    LSD             = { color='#800080', description='Purple (indole ring)',       confidence=0.85 },
-    Psilocybin      = { color='#800080', description='Purple (indole ring)',       confidence=0.80 },
-    DMT             = { color='#800080', description='Purple to pink-purple',      confidence=0.80 },
-    MDMA            = { color='#f5f5dc', description='No reaction (no indole)',    confidence=0    },
+    LSD             = { color='#800080', description='Purple (indole ring)',     timeMs=19000, intermediates={'#f5f5dc','#DDA0DD','#BA55D3','#800080'} },
+    Psilocybin      = { color='#800080', description='Purple (indole ring)',     timeMs=28000, intermediates={'#f5f5dc','#EE82EE','#9932CC','#800080'} },
+    DMT             = { color='#800080', description='Purple to pink-purple',    timeMs=13000, intermediates={'#f5f5dc','#FF69B4','#C71585','#800080'} },
+    Tryptophan      = { color='#DDA0DD', description='Light purple (indole)',    timeMs=22000, intermediates={'#f5f5dc','#E6E6FA','#DDA0DD'} },
+    MDMA            = { color='#f5f5dc', description='No reaction (no indole ring)', timeMs=7000, intermediates={'#f5f5dc'} },
+    Cocaine         = { color='#f5f5dc', description='No reaction',              timeMs=7000,  intermediates={'#f5f5dc'} },
+  },
+  liebermann = {
+    MDMA            = { color='#1a0a2e', description='Black',                    timeMs=10000, intermediates={'#f5f5dc','#696969','#1a0a2e'} },
+    MDA             = { color='#1a0a2e', description='Black',                    timeMs=10000, intermediates={'#f5f5dc','#696969','#1a0a2e'} },
+    Cocaine         = { color='#FFD700', description='Yellow to orange',         timeMs=13000, intermediates={'#f5f5dc','#FFFACD','#FFD700'} },
+    Morphine        = { color='#1a0a2e', description='Black',                    timeMs=11500, intermediates={'#f5f5dc','#556B2F','#1a0a2e'} },
+  },
+  froehde = {
+    MDMA            = { color='#1a0a2e', description='Purple to black',          timeMs=13000, intermediates={'#f5f5dc','#9370DB','#4B0082','#1a0a2e'} },
+    Heroin          = { color='#006400', description='Green to blue-green',      timeMs=11500, intermediates={'#f5f5dc','#3CB371','#008080','#006400'} },
+    Morphine        = { color='#800080', description='Purple',                   timeMs=10000, intermediates={'#f5f5dc','#DDA0DD','#800080'} },
+    Codeine         = { color='#006400', description='Green',                    timeMs=13000, intermediates={'#f5f5dc','#90EE90','#006400'} },
+    Cocaine         = { color='#f5f5dc', description='No reaction',              timeMs=7000,  intermediates={'#f5f5dc'} },
+  },
+  ['gallic-acid'] = {},
+}
+
+local MECHANISMS = {
+  marquis = {
+    MDMA = 'Formaldehyde attacks the methylenedioxy ring via electrophilic aromatic substitution. The electron-rich aromatic system donates electrons to the aldehyde, forming a carbocation intermediate that absorbs in the visible spectrum (purple). The 3,4-methylenedioxy group is the chromophore.',
+    Amphetamine = 'The primary amine undergoes condensation with formaldehyde forming a Schiff base. Sulfuric acid catalyzes further oxidation, producing orange quinone-like chromophores.',
+    Heroin = 'The phenolic hydroxyl group (exposed after ester hydrolysis by H2SO4) reacts with formaldehyde. The resulting conjugated system absorbs yellow-green light, appearing purple.',
+    Cocaine = 'No reactive functional groups accessible to formaldehyde under these conditions. The tropane nitrogen is tertiary and sterically hindered; the benzoyl ester is stable in concentrated H2SO4.',
+  },
+  ehrlich = {
+    LSD = 'DMAB attacks position 2 of the indole ring via electrophilic substitution. The resulting azomethine dye has extended conjugation spanning the indole + DMAB systems, absorbing in the yellow-green range (appearing purple). This is specific to the indole NH.',
+    Psilocybin = 'Same indole ring mechanism as LSD. The 4-phosphoryloxy group does not interfere with position 2 substitution. Slower reaction due to the electron-withdrawing phosphate.',
+    DMT = 'Fastest Ehrlich reaction — unsubstituted indole with electron-donating dimethylamine. DMAB attacks C-2 readily.',
+  },
+  simons = {
+    MDMA = 'Sodium nitroprusside forms a colored complex specifically with secondary amines. The nitrogen lone pair coordinates to iron in the [Fe(CN)5NO]2- complex. MDMA has a secondary amine (N-methyl); MDA has a primary amine and does not react.',
+    Methamphetamine = 'Same mechanism — secondary amine (N-methyl) coordinates to the nitroprusside iron center.',
+    MDA = "Primary amines do not form the colored nitroprusside complex. This is the key distinction: Marquis alone cannot distinguish MDA from MDMA; adding Simon's resolves the ambiguity.",
   },
 }
+
+local FUNCTIONAL_GROUPS = {'indole','methylenedioxy','phenol','primary amine','secondary amine','tertiary amine','hydroxyl','ester','tropane'}
+
+local function extractFunctionalGroup(mechanism)
+  local mech_lower = mechanism:lower()
+  for _, g in ipairs(FUNCTIONAL_GROUPS) do
+    if mech_lower:find(g, 1, true) then return g end
+  end
+  return nil
+end
+
+local function runReagentTest(reagent, compound)
+  local db = REAGENT_DATABASES[reagent]
+  local reaction = db and db[compound] or nil
+  local mechanism = MECHANISMS[reagent] and MECHANISMS[reagent][compound] or nil
+  local confidence = 0
+  if reaction then
+    confidence = reaction.color == '#f5f5dc' and 0 or 0.65
+  end
+  return {
+    reagent = reagent,
+    compound = compound,
+    reaction = reaction,
+    confidence = confidence,
+    functionalGroup = mechanism and extractFunctionalGroup(mechanism) or nil,
+    mechanism = mechanism,
+  }
+end
+
+local function runMultiReagentTest(reagents, compound)
+  local results = {}
+  for _, r in ipairs(reagents) do
+    results[#results + 1] = runReagentTest(r, compound)
+  end
+  local reacting = {}
+  for _, r in ipairs(results) do
+    if r.reaction and r.reaction.color ~= '#f5f5dc' then
+      reacting[#reacting + 1] = r
+    end
+  end
+  local confidence = math.min(1, #reacting * 0.3 + (#reacting >= 3 and 0.15 or 0))
+  local identification = nil
+  local reasoning = ''
+  if #reacting == 0 then
+    reasoning = 'No color change observed with any reagent. Compound is either inert to these tests or not in the database.'
+  elseif #reacting == 1 then
+    identification = compound
+    reasoning = string.format('Single reagent match (%s). Presumptive identification only — additional tests recommended.', REAGENT_INFO[reacting[1].reagent].name)
+  elseif #reacting >= 2 then
+    identification = compound
+    local names = {}
+    for _, r in ipairs(reacting) do names[#names + 1] = REAGENT_INFO[r.reagent].name end
+    reasoning = string.format('Corroborated by %d reagents (%s). %s confidence identification.', #reacting, table.concat(names, ', '), confidence >= 0.8 and 'High' or 'Moderate')
+  end
+  return { results = results, identification = identification, confidence = confidence, reasoning = reasoning }
+end
+
+local function getAvailableCompounds(reagent)
+  local db = REAGENT_DATABASES[reagent]
+  if not db then return {} end
+  local result = {}
+  for k in pairs(db) do result[#result + 1] = k end
+  table.sort(result)
+  return result
+end
+
+local function getAllTestedCompounds()
+  local seen = {}
+  local result = {}
+  for _, db in pairs(REAGENT_DATABASES) do
+    for k in pairs(db) do
+      if not seen[k] then seen[k] = true; result[#result + 1] = k end
+    end
+  end
+  table.sort(result)
+  return result
+end
 
 -- ============================================================================
 -- Capability registration (non-visual — no render)
@@ -557,9 +779,50 @@ function M.getHandlers()
 
     ["chemistry:reagent"] = function(args)
       if not args or not args.type or not args.compound then return nil end
-      local db = REAGENT_RESULTS[args.type]
+      local db = REAGENT_DATABASES[args.type]
       if not db then return nil end
       return db[args.compound]
+    end,
+
+    -- ── Spectra ──────────────────────────────────────────────────────────────
+    ["chemistry:identifyIR"] = function(args)
+      if not args or not args.wavenumber then return {} end
+      return identifyIRPeaks(args.wavenumber, args.tolerance)
+    end,
+
+    ["chemistry:wavelengthToColor"] = function(args)
+      if not args or not args.nm then return '#000000' end
+      return wavelengthToColor(args.nm)
+    end,
+
+    ["chemistry:absorptionColor"] = function(args)
+      if not args or not args.nm then return '#FFFFFF' end
+      return absorptionToObservedColor(args.nm)
+    end,
+
+    ["chemistry:irAbsorptions"] = function()
+      return IR_ABSORPTIONS
+    end,
+
+    -- ── Reagent tests ─────────────────────────────────────────────────────────
+    ["chemistry:reagentTest"] = function(args)
+      if not args or not args.type or not args.compound then return nil end
+      return runReagentTest(args.type, args.compound)
+    end,
+
+    ["chemistry:reagentTestMulti"] = function(args)
+      if not args or not args.reagents or not args.compound then return nil end
+      return runMultiReagentTest(args.reagents, args.compound)
+    end,
+
+    ["chemistry:reagentInfo"] = function(args)
+      if args and args.type then return REAGENT_INFO[args.type] end
+      return REAGENT_INFO
+    end,
+
+    ["chemistry:availableCompounds"] = function(args)
+      if not args or not args.type then return getAllTestedCompounds() end
+      return getAvailableCompounds(args.type)
     end,
 
     ["chemistry:compounds"] = function(args)
