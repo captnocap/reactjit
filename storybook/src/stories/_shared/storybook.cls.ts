@@ -255,46 +255,46 @@ classifier({
   // Footer icon (12x12)
   StoryFooterIcon: { type: 'Image', style: { width: 12, height: 12 } },
 
-  // 0 occurrences
+  // 79 usages across 27 files
   RowCenter: { type: 'Box', style: { alignItems: 'center', flexDirection: 'row' } },
 
-  // 0 occurrences
+  // 62 usages across 12 files
   Center: { type: 'Box', style: { alignItems: 'center', justifyContent: 'center' } },
 
-  // 36 occurrences
+  // 81 usages across 40 files
   RowG8: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
 
-  // 25 occurrences
+  // 87 usages across 37 files
   RowG6: { type: 'Box', style: { flexDirection: 'row', gap: 6 } },
 
-  // 100 occurrences
+  // 115 usages across 39 files
   RowCenterG8: { type: 'Box', style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
 
-  // 2 occurrences
+  // 0 usages across 0 files
   Icon12: { type: 'Image', style: { width: 12, height: 12 } },
 
-  // 77 occurrences
+  // 89 usages across 32 files
   RowCenterG6: { type: 'Box', style: { alignItems: 'center', flexDirection: 'row', gap: 6 } },
 
-  // 0 occurrences
+  // 96 usages across 45 files
   RowCenterBorder: { type: 'Box', style: { alignItems: 'center', borderColor: 'theme:border', flexDirection: 'row' } },
 
-  // 7 occurrences
+  // 43 usages across 18 files
   CenterW100: { type: 'Box', style: { alignItems: 'center', width: '100%' } },
 
-  // 2 occurrences
+  // 57 usages across 24 files
   RowWrap: { type: 'Box', style: { flexDirection: 'row', flexWrap: 'wrap' } },
 
-  // 0 occurrences
+  // 50 usages across 20 files
   Bordered: { type: 'Box', style: { borderColor: 'theme:border', borderWidth: 1 } },
 
-  // 0 occurrences
+  // 2 usages across 1 files
   GrowCenter: { type: 'Box', style: { flexGrow: 1, justifyContent: 'center' } },
 
-  // 2 occurrences
+  // 17 usages across 13 files
   FullSize: { type: 'Box', style: { width: '100%', height: '100%' } },
 
-  // 36 occurrences
+  // 73 usages across 6 files
   FullCenter: { type: 'Box', style: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -302,141 +302,141 @@ classifier({
       height: '100%',
     } },
 
-  // 3 occurrences
+  // 66 usages across 5 files
   GrowCenterAlign: { type: 'Box', style: { alignItems: 'center', flexGrow: 1, justifyContent: 'center' } },
 
-  // 0 occurrences
+  // 2 usages across 1 files
   CenterW100J: { type: 'Box', style: { justifyContent: 'center', width: '100%' } },
 
-  // 13 occurrences
+  // 24 usages across 17 files
   RowG12: { type: 'Box', style: { flexDirection: 'row', gap: 12 } },
 
-  // 12 occurrences
+  // 33 usages across 19 files
   Half: { type: 'Box', style: { flexBasis: 0, flexGrow: 1 } },
 
-  // 52 occurrences
+  // 53 usages across 14 files
   StackG6W100: { type: 'Box', style: { gap: 6, width: '100%' } },
 
-  // 22 occurrences
+  // 26 usages across 13 files
   RowG4: { type: 'Box', style: { flexDirection: 'row', gap: 4 } },
 
-  // 22 occurrences
+  // 25 usages across 14 files
   RowCenterG4: { type: 'Box', style: { alignItems: 'center', flexDirection: 'row', gap: 4 } },
 
-  // 2 occurrences
+  // 4 usages across 3 files
   RowCenterG12: { type: 'Box', style: { alignItems: 'center', flexDirection: 'row', gap: 12 } },
 
-  // 0 occurrences
+  // 0 usages across 0 files
   RowG5: { type: 'Box', style: { flexDirection: 'row', gap: 5 } },
 
-  // 29 occurrences
+  // 29 usages across 12 files
   RowCenterG5: { type: 'Box', style: { alignItems: 'center', flexDirection: 'row', gap: 5 } },
 
-  // 0 occurrences
+  // 39 usages across 21 files
   BoldText: { type: 'Text', bold: true, color: 'theme:text' },
 
-  // 1 occurrences
+  // 45 usages across 39 files
   DimIcon12: { type: 'Image', tintColor: 'theme:textDim', style: { height: 12, width: 12 } },
 
-  // 4 occurrences
+  // 37 usages across 37 files
   TextIcon12: { type: 'Image', tintColor: 'theme:text', style: { height: 12, width: 12 } },
 
-  // 27 occurrences
+  // 0 usages across 0 files
   Icon10: { type: 'Image', style: { width: 10, height: 10 } },
 
-  // 0 occurrences
+  // 18 usages across 5 files
   SurfaceBordered: { type: 'Box', style: { backgroundColor: 'theme:surface', borderColor: 'theme:border', borderWidth: 1 } },
 
-  // 6 occurrences
+  // 40 usages across 3 files
   HalfCenter: { type: 'Box', style: { flexBasis: 0, flexGrow: 1, justifyContent: 'center' } },
 
-  // 0 occurrences
+  // 2 usages across 2 files
   GrowG8: { type: 'Box', style: { flexGrow: 1, gap: 8 } },
 
-  // 38 occurrences
+  // 38 usages across 13 files
   StackG8W100: { type: 'Box', style: { gap: 8, width: '100%' } },
 
-  // 49 occurrences
+  // 52 usages across 18 files
   SecondaryBody: { type: 'Text', size: 10, color: 'theme:textSecondary' },
 
-  // 41 occurrences
+  // 41 usages across 7 files
   WhiteBody: { type: 'Text', size: 10, color: '#fff' },
 
-  // 30 occurrences
+  // 33 usages across 8 files
   CenterG4: { type: 'Box', style: { alignItems: 'center', gap: 4 } },
 
-  // 28 occurrences
+  // 31 usages across 18 files
   DimBody11: { type: 'Text', size: 11, color: 'theme:textDim' },
 
-  // 11 occurrences
+  // 27 usages across 20 files
   StackG10W100: { type: 'Box', style: { gap: 10, width: '100%' } },
 
-  // 23 occurrences
+  // 24 usages across 13 files
   StackG3W100: { type: 'Box', style: { gap: 3, width: '100%' } },
 
-  // 22 occurrences
+  // 13 usages across 7 files
   StackG4W100: { type: 'Box', style: { gap: 4, width: '100%' } },
 
-  // 0 occurrences
+  // 22 usages across 19 files
   VertDivider: { type: 'Box', style: { backgroundColor: 'theme:border', width: 1 } },
 
-  // 0 occurrences
+  // 18 usages across 6 files
   SurfaceR6: { type: 'Box', style: { backgroundColor: 'theme:surface', borderRadius: 6 } },
 
-  // 8 occurrences
+  // 20 usages across 7 files
   HorzDivider: { type: 'Box', style: { backgroundColor: 'theme:border', height: 1 } },
 
-  // 20 occurrences
+  // 15 usages across 6 files
   WhiteTiny: { type: 'Text', size: 8, color: '#fff' },
 
-  // 17 occurrences
+  // 19 usages across 5 files
   WhiteCaption: { type: 'Text', size: 9, color: '#fff' },
 
-  // 16 occurrences
+  // 13 usages across 8 files
   DimMicro: { type: 'Text', size: 7, color: 'theme:textDim' },
 
-  // 1 occurrences
+  // 0 usages across 0 files
   ScrollHalf: { type: 'ScrollView', style: { flexBasis: 0, flexGrow: 1 } },
 
-  // 0 occurrences
+  // 7 usages across 4 files
   Dot6: { type: 'Box', style: { borderRadius: 3, height: 6 } },
 
-  // 5 occurrences
+  // 14 usages across 9 files
   RowSpaceBetween: { type: 'Box', style: { flexDirection: 'row', justifyContent: 'space-between' } },
 
-  // 1 occurrences
+  // 0 usages across 0 files
   DimChevron8: { type: 'Image', src: 'chevron-right', tintColor: 'theme:textDim', style: { height: 8, width: 8 } },
 
-  // 0 occurrences
+  // 14 usages across 8 files
   BorderBottom: { type: 'Box', style: { borderBottomWidth: 1, borderColor: 'theme:border' } },
 
-  // 10 occurrences
+  // 12 usages across 11 files
   RowGrow: { type: 'Box', style: { flexDirection: 'row', flexGrow: 1 } },
 
-  // 0 occurrences
+  // 4 usages across 1 files
   Icon20: { type: 'Image', style: { height: 20, width: 20 } },
 
-  // 0 occurrences
+  // 9 usages across 9 files
   PrimaryIcon20: { type: 'Image', tintColor: 'theme:primary', style: { height: 20, width: 20 } },
 
-  // 5 occurrences
+  // 8 usages across 2 files
   RowG2: { type: 'Box', style: { flexDirection: 'row', gap: 2 } },
 
-  // 0 occurrences
+  // 10 usages across 3 files
   PadV6: { type: 'Box', style: { paddingBottom: 6, paddingTop: 6 } },
 
-  // 0 occurrences
+  // 5 usages across 4 files
   PadH6: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6 } },
 
-  // 0 occurrences
+  // 1 usages across 1 files
   RowW100: { type: 'Box', style: { flexDirection: 'row', width: '100%' } },
 
-  // 15 occurrences
+  // 16 usages across 2 files
   DimNano: { type: 'Text', size: 4, color: 'theme:textDim' },
 
-  // 13 occurrences
+  // 16 usages across 6 files
   WhiteMedText: { type: 'Text', size: 12, color: '#fff' },
 
-  // 0 occurrences
+  // 2 usages across 2 files
   DimIcon8: { type: 'Image', tintColor: 'theme:textDim', style: { height: 8, width: 8 } },
 });

@@ -1518,22 +1518,44 @@ async function addCommand(args, ts) {
     jsxProps[k] = v;
   }
 
-  // Count matches in codebase
-  let matchCount = 0;
+  // Count matches in codebase (both exact and partial)
+  let exactCount = 0;
+  let partialCount = 0;
   let matchFileCount = 0;
   if (existsSync(scanDir)) {
     const sig = makeSignature(primitive, styleStatics, jsxProps);
     const { elements } = scanElements(scanDir, ts);
     const matchFiles = new Set();
     for (const el of elements) {
+      if (el.primitive !== primitive) continue;
       const elSig = makeSignature(el.primitive, el.styleStatics, el.jsxProps);
       if (elSig === sig) {
-        matchCount++;
+        exactCount++;
         matchFiles.add(el.file);
+      } else {
+        // Partial: all classifier props must exist in element with matching values
+        let isPartial = true;
+        for (const [k, v] of Object.entries(styleStatics)) {
+          if (el.styleStatics[k] === undefined || JSON.stringify(el.styleStatics[k]) !== JSON.stringify(v)) {
+            isPartial = false; break;
+          }
+        }
+        if (isPartial) {
+          for (const [k, v] of Object.entries(jsxProps)) {
+            if (el.jsxProps[k] === undefined || JSON.stringify(el.jsxProps[k]) !== JSON.stringify(v)) {
+              isPartial = false; break;
+            }
+          }
+        }
+        if (isPartial) {
+          partialCount++;
+          matchFiles.add(el.file);
+        }
       }
     }
     matchFileCount = matchFiles.size;
   }
+  const matchCount = exactCount + partialCount;
 
   // Generate the entry — styleStatics for generatePickEntry must include
   // Text shorthand props (size→fontSize, bold→fontWeight, color) so the
@@ -1590,7 +1612,7 @@ async function addCommand(args, ts) {
   console.log(`\n  ${name}: ${primitive}`);
   const traits = formatTraits(styleStatics, jsxProps);
   if (traits) console.log(`    ${traits}`);
-  console.log(`    ${matchCount} exact matches across ${matchFileCount} files`);
+  console.log(`    ${exactCount} exact + ${partialCount} partial = ${matchCount} matches across ${matchFileCount} files`);
 
   if (dryRun) {
     console.log(`\n  Entry that would be added:\n${entry}\n`);
