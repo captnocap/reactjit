@@ -345,6 +345,7 @@ export function DataSpreadsheetStory() {
             onColumnWidthsChange={setColumnWidths}
             minColumnWidth={72}
             maxColumnWidth={420}
+            fitColumnsToViewport
             viewportHeight={scalePreset.viewportHeight}
             showStatusBar
           />
@@ -373,6 +374,7 @@ export function DataSpreadsheetStory() {
                 onSelectedAddressChange={setSelectedAddress}
                 autoScrollToSelection
                 columnWidths={columnWidths.slice(0, 8)}
+                fitColumnsToViewport
                 viewportHeight={MINI_VIEWPORT_HEIGHT}
                 minVisibleRows={4}
                 maxVisibleRows={8}
@@ -398,6 +400,7 @@ export function DataSpreadsheetStory() {
                 onSelectedAddressChange={setSelectedAddress}
                 autoScrollToSelection
                 columnWidths={columnWidths.slice(0, 12)}
+                fitColumnsToViewport
                 viewportHeight={MEDIUM_VIEWPORT_HEIGHT}
                 minVisibleRows={6}
                 maxVisibleRows={12}
